@@ -96,6 +96,7 @@ class DecisionCheckpointRepository:
         """Persist a checkpoint to the decision_snapshots table."""
         try:
             from database.connection import db_cursor
+
             with db_cursor() as cursor:
                 cursor.execute(
                     """
@@ -127,6 +128,7 @@ class DecisionCheckpointRepository:
         """Retrieve a checkpoint by action_id."""
         try:
             from database.connection import db_cursor
+
             with db_cursor() as cursor:
                 cursor.execute(
                     """
@@ -144,12 +146,21 @@ class DecisionCheckpointRepository:
                 row = cursor.fetchone()
                 if row:
                     cols = [
-                        "checkpoint_id", "engagement_id", "action_id",
-                        "observation_hash", "reasoning_hash", "selected_tool",
-                        "arguments", "tool_cost_usd", "state_version",
-                        "execution_success", "execution_error",
+                        "checkpoint_id",
+                        "engagement_id",
+                        "action_id",
+                        "observation_hash",
+                        "reasoning_hash",
+                        "selected_tool",
+                        "arguments",
+                        "tool_cost_usd",
+                        "state_version",
+                        "execution_success",
+                        "execution_error",
                     ]
-                    return DecisionCheckpoint.from_dict(dict(zip(cols, row, strict=False)))
+                    return DecisionCheckpoint.from_dict(
+                        dict(zip(cols, row, strict=False))
+                    )
         except Exception as e:
             logger.warning("Failed to load DecisionCheckpoint: %s", e)
         return None
@@ -160,6 +171,7 @@ class DecisionCheckpointRepository:
         """Get the most recent checkpoints for an engagement."""
         try:
             from database.connection import db_cursor
+
             with db_cursor() as cursor:
                 cursor.execute(
                     """
@@ -175,10 +187,17 @@ class DecisionCheckpointRepository:
                     (engagement_id, limit),
                 )
                 cols = [
-                    "checkpoint_id", "engagement_id", "action_id",
-                    "observation_hash", "reasoning_hash", "selected_tool",
-                    "arguments", "tool_cost_usd", "state_version",
-                    "execution_success", "execution_error",
+                    "checkpoint_id",
+                    "engagement_id",
+                    "action_id",
+                    "observation_hash",
+                    "reasoning_hash",
+                    "selected_tool",
+                    "arguments",
+                    "tool_cost_usd",
+                    "state_version",
+                    "execution_success",
+                    "execution_error",
                 ]
                 return [
                     DecisionCheckpoint.from_dict(dict(zip(cols, row, strict=False)))
@@ -194,6 +213,7 @@ class DecisionCheckpointRepository:
         """Mark a checkpoint's execution as success or failure."""
         try:
             from database.connection import db_cursor
+
             with db_cursor() as cursor:
                 cursor.execute(
                     """

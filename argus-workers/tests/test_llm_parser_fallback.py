@@ -23,8 +23,7 @@ from llm_parser_fallback import (
 @pytest.fixture(autouse=True)
 def mock_llm_services():
     """Mock LLMClient + LLMService to avoid real API calls during _ensure_service."""
-    with patch("llm_client.LLMClient") as mock_client, \
-         patch("llm_service.LLMService"):
+    with patch("llm_client.LLMClient") as mock_client, patch("llm_service.LLMService"):
         client_instance = MagicMock()
         client_instance.is_available.return_value = False
         mock_client.return_value = client_instance
@@ -95,7 +94,9 @@ class TestLLMParserFallback:
     def test_sanitize_called_on_extract(self):
         fb = LLMParserFallback()
 
-        with patch("llm_parser_fallback._sanitize_parser_input", return_value="sanitized"):
+        with patch(
+            "llm_parser_fallback._sanitize_parser_input", return_value="sanitized"
+        ):
             # Should call sanitize but fail at ensure_service
             fb.extract_findings("test", "  some output  ")
             # _sanitize_parser_input is called inside extract_findings

@@ -2,6 +2,7 @@
 MCP Protocol Server - Wraps tool execution with discoverable schemas
 Implements Model Context Protocol for standardized tool calling
 """
+
 import logging
 import os
 import shutil
@@ -18,6 +19,7 @@ from tracing import setup_tracing
 
 # ── Signal quality tiers for planner intelligence ──
 
+
 class SignalQuality:
     """Signal quality tier for a tool's findings reliability.
 
@@ -26,12 +28,14 @@ class SignalQuality:
         PROBABLE   → MEDIUM (e.g. dalfox, semgrep)
         CANDIDATE  → LOW    (e.g. ffuf, nikto, passive recon)
     """
+
     CONFIRMED = "CONFIRMED"
     PROBABLE = "PROBABLE"
     CANDIDATE = "CANDIDATE"
 
 
 # ── Tool cost tiers for planner ranking ──
+
 
 class ToolCost:
     """Relative execution cost for a tool.
@@ -41,6 +45,7 @@ class ToolCost:
         medium → full assessment (run by default)
         high   → deep scan (only when explicitly requested)
     """
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -53,9 +58,18 @@ logger = logging.getLogger(__name__)
 
 class ToolSchema:
     """JSON Schema definition for a tool parameter."""
-    def __init__(self, name: str, type: str, description: str = "",
-                 required: bool = False, enum: list[str] = None,
-                 default: Any = None, flag: str = None, **_kwargs):
+
+    def __init__(
+        self,
+        name: str,
+        type: str,
+        description: str = "",
+        required: bool = False,
+        enum: list[str] = None,
+        default: Any = None,
+        flag: str = None,
+        **_kwargs,
+    ):
         self.name = name
         self.type = type
         self.description = description
@@ -78,21 +92,31 @@ class ToolDefinition:
         priority       — ranking weight (0-100, higher = preferred)
         cost           — execution cost tier for scan-depth filtering
     """
-    def __init__(self, name: str, command: str, description: str = "",
-                 args: list[str] = None, parameters: list[dict] = None,
-                 enabled: bool = True, timeout: int = 300,
-                 env: dict[str, str] = None,
-                 binary: str | None = None,
-                 capabilities: list[str] = None,
-                 signal_quality: str = None,
-                 requires: dict = None,
-                 priority: int = None,
-                 cost: str = None):
+
+    def __init__(
+        self,
+        name: str,
+        command: str,
+        description: str = "",
+        args: list[str] = None,
+        parameters: list[dict] = None,
+        enabled: bool = True,
+        timeout: int = 300,
+        env: dict[str, str] = None,
+        binary: str | None = None,
+        capabilities: list[str] = None,
+        signal_quality: str = None,
+        requires: dict = None,
+        priority: int = None,
+        cost: str = None,
+    ):
         self.name = name
         self.command = command
         self.description = description
         self.args = args or []
-        self.parameters = [ToolSchema(**p) if isinstance(p, dict) else p for p in (parameters or [])]
+        self.parameters = [
+            ToolSchema(**p) if isinstance(p, dict) else p for p in (parameters or [])
+        ]
         self.enabled = enabled
         self.timeout = timeout
         self.env = env or {}
@@ -134,9 +158,17 @@ class ToolDefinition:
 
 class MCPToolResult:
     """Result of an MCP tool execution."""
-    def __init__(self, success: bool, output: str = "", error: str = "",
-                 duration_ms: int = 0, tool: str = "", data: dict = None,
-                 signal_quality: str = None):
+
+    def __init__(
+        self,
+        success: bool,
+        output: str = "",
+        error: str = "",
+        duration_ms: int = 0,
+        tool: str = "",
+        data: dict = None,
+        signal_quality: str = None,
+    ):
         self.success = success
         self.output = output
         self.error = error
@@ -195,21 +227,66 @@ class MCPServer:
 
         # Blocklist of dangerous command patterns for YAML-defined tools
         blocked_command_patterns = {
-            "sh", "bash", "zsh", "dash", "/bin/sh", "/bin/bash",
-            "rm", "mv", "cp", "dd", "mkfs", "chmod", "chown",
-            "nc", "netcat", "curl", "wget", "telnet", "ssh",
-            "ruby", "perl", "node", "php",
+            "sh",
+            "bash",
+            "zsh",
+            "dash",
+            "/bin/sh",
+            "/bin/bash",
+            "rm",
+            "mv",
+            "cp",
+            "dd",
+            "mkfs",
+            "chmod",
+            "chown",
+            "nc",
+            "netcat",
+            "curl",
+            "wget",
+            "telnet",
+            "ssh",
+            "ruby",
+            "perl",
+            "node",
+            "php",
         }
         # Agent-internal tools use a runner script — allow python3 for whitelisted scripts
         server_dir = os.path.dirname(os.path.abspath(__file__))  # .../argus-workers/
-        project_dir = os.path.dirname(server_dir)                 # project root
+        project_dir = os.path.dirname(server_dir)  # project root
         # The YAML args use "argus-workers/tools/run_agent_tool.py" which call_tool
         # resolves to project_dir/argus-workers/tools/run_agent_tool.py
         allowed_python_scripts = {
-            os.path.normpath(os.path.join(project_dir, "argus-workers", "tools", "run_agent_tool.py")),
-            os.path.normpath(os.path.join(project_dir, "argus-workers", "tools", "scripts", "playwright_bola.py")),
-            os.path.normpath(os.path.join(project_dir, "argus-workers", "tools", "scripts", "playwright_xss.py")),
-            os.path.normpath(os.path.join(project_dir, "argus-workers", "tools", "scripts", "playwright_privesc.py")),
+            os.path.normpath(
+                os.path.join(project_dir, "argus-workers", "tools", "run_agent_tool.py")
+            ),
+            os.path.normpath(
+                os.path.join(
+                    project_dir,
+                    "argus-workers",
+                    "tools",
+                    "scripts",
+                    "playwright_bola.py",
+                )
+            ),
+            os.path.normpath(
+                os.path.join(
+                    project_dir,
+                    "argus-workers",
+                    "tools",
+                    "scripts",
+                    "playwright_xss.py",
+                )
+            ),
+            os.path.normpath(
+                os.path.join(
+                    project_dir,
+                    "argus-workers",
+                    "tools",
+                    "scripts",
+                    "playwright_privesc.py",
+                )
+            ),
         }
 
         try:
@@ -234,14 +311,21 @@ class MCPServer:
                     if args:
                         # Resolve path the same way call_tool does
                         script_arg = args[0]
-                        if script_arg.startswith("argus-workers/") or script_arg.startswith("tools/"):
-                            script_path = os.path.normpath(os.path.join(project_dir, script_arg))
+                        if script_arg.startswith(
+                            "argus-workers/"
+                        ) or script_arg.startswith("tools/"):
+                            script_path = os.path.normpath(
+                                os.path.join(project_dir, script_arg)
+                            )
                         else:
-                            script_path = os.path.normpath(os.path.join(server_dir, script_arg))
+                            script_path = os.path.normpath(
+                                os.path.join(server_dir, script_arg)
+                            )
                         if script_path not in allowed_python_scripts:
                             logger.warning(
                                 "Skipping tool '%s': python3 script '%s' is not whitelisted",
-                                data.get("name", "unknown"), args[0],
+                                data.get("name", "unknown"),
+                                args[0],
                             )
                             continue
                     else:
@@ -249,7 +333,8 @@ class MCPServer:
                 elif ".." in command or cmd_basename in blocked_command_patterns:
                     logger.warning(
                         "Skipping tool '%s': command '%s' is blocked",
-                        data.get("name", "unknown"), command,
+                        data.get("name", "unknown"),
+                        command,
                     )
                     continue
 
@@ -261,14 +346,17 @@ class MCPServer:
                     _venv_bin = str(Path(sys.executable).parent)
                     _go_bin = os.path.expanduser("~/go/bin")
                     _homebrew_bin = "/opt/homebrew/bin"
-                    _project_venv = str(Path(__file__).resolve().parent.parent / "venv" / "bin")
+                    _project_venv = str(
+                        Path(__file__).resolve().parent.parent / "venv" / "bin"
+                    )
                     _existing_path = os.environ.get("PATH", "")
                     _augmented_path = f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:/usr/local/bin:/usr/bin:/bin:{_existing_path}"
                     if not shutil.which(command, path=_augmented_path):
                         logger.warning(
                             "Skipping tool '%s': binary '%s' not found on PATH. "
                             "Install it or add its directory to PATH.",
-                            data.get("name", "unknown"), command,
+                            data.get("name", "unknown"),
+                            command,
                         )
                         continue
 
@@ -295,7 +383,10 @@ class MCPServer:
         """Register a tool definition."""
         self._tools[tool.name] = tool
         self._execution_stats[tool.name] = {
-            "calls": 0, "successes": 0, "failures": 0, "total_duration_ms": 0
+            "calls": 0,
+            "successes": 0,
+            "failures": 0,
+            "total_duration_ms": 0,
         }
 
     def get_tools(self) -> list[dict]:
@@ -321,7 +412,13 @@ class MCPServer:
                     f"Argument at position {i} contains shell metacharacters: {arg!r}"
                 )
 
-    def call_tool(self, name: str, arguments: dict = None, timeout: int = None, cache_mode: str | None = None) -> dict:
+    def call_tool(
+        self,
+        name: str,
+        arguments: dict = None,
+        timeout: int = None,
+        cache_mode: str | None = None,
+    ) -> dict:
         """
         Execute a tool by name with arguments (mcp.tools/call equivalent).
 
@@ -353,7 +450,9 @@ class MCPServer:
                 success=False, error=f"Tool disabled: {name}", tool=name
             ).to_dict()
 
-        tool_signal_quality = tool.signal_quality if hasattr(tool, 'signal_quality') else None
+        tool_signal_quality = (
+            tool.signal_quality if hasattr(tool, "signal_quality") else None
+        )
 
         # Build command line from tool definition + arguments
         cmd = [tool.command]
@@ -361,7 +460,9 @@ class MCPServer:
         server_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = os.path.dirname(server_dir)  # parent of argus-workers/
         for static_arg in tool.args:
-            if static_arg.startswith("argus-workers/") or static_arg.startswith("tools/"):
+            if static_arg.startswith("argus-workers/") or static_arg.startswith(
+                "tools/"
+            ):
                 static_arg = os.path.join(project_dir, static_arg)
             cmd.append(static_arg)
 
@@ -377,27 +478,52 @@ class MCPServer:
                 # gospider (-s), katana (-u) DO expect full URLs with paths.
                 # gau and waybackurls are ambiguous - they accept URLs but work
                 # better with bare domains. Keep them in the URL group (H3).
-                if isinstance(value, str) and (value.startswith("http://") or value.startswith("https://")):
+                if isinstance(value, str) and (
+                    value.startswith("http://") or value.startswith("https://")
+                ):
                     from urllib.parse import urlparse
+
                     parsed = urlparse(value)
                     # Tools that strictly expect bare hostnames/domains
-                    _HOSTNAME_TOOLS = frozenset({
-                        "nmap", "nikto", "subfinder", "amass",
-                        "dnsx", "naabu", "masscan",
-                        "shuffledns", "alterx", "github-endpoints",
-                        "cloud_enum", "s3scanner", "bucket_upload",
-                    })
+                    _HOSTNAME_TOOLS = frozenset(
+                        {
+                            "nmap",
+                            "nikto",
+                            "subfinder",
+                            "amass",
+                            "dnsx",
+                            "naabu",
+                            "masscan",
+                            "shuffledns",
+                            "alterx",
+                            "github-endpoints",
+                            "cloud_enum",
+                            "s3scanner",
+                            "bucket_upload",
+                        }
+                    )
                     # Tools that accept domains but usually expect URLs -
                     # these are NOT in _HOSTNAME_TOOLS so they keep the full URL
-                    _URL_TOOLS = frozenset({
-                        "gau", "waybackurls", "chaos",
-                    })
+                    _URL_TOOLS = frozenset(
+                        {
+                            "gau",
+                            "waybackurls",
+                            "chaos",
+                        }
+                    )
                     if tool.name in _HOSTNAME_TOOLS:
-                        stripped = parsed.hostname or value.split("://", 1)[1].split("/")[0]
-                        logger.debug("Stripped scheme from target '%s' -> '%s' for tool '%s'", value, stripped, tool.name)
+                        stripped = (
+                            parsed.hostname or value.split("://", 1)[1].split("/")[0]
+                        )
+                        logger.debug(
+                            "Stripped scheme from target '%s' -> '%s' for tool '%s'",
+                            value,
+                            stripped,
+                            tool.name,
+                        )
                         value = stripped
                     # For URL-expecting tools and ambiguous tools, keep full URL
-                if hasattr(param, 'flag') and param.flag:
+                if hasattr(param, "flag") and param.flag:
                     cmd.append(param.flag)
                     cmd.append(str(value))
                 else:
@@ -426,11 +552,22 @@ class MCPServer:
             _env = os.environ.copy()
             # Strip sensitive variables that should not leak to tool subprocesses
             BLOCKED_ENV_VARS = {
-                "DATABASE_URL", "REDIS_URL", "OPENAI_API_KEY", "LLM_API_KEY",
-                "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "AZURE_OPENAI_API_KEY",
-                "OPENROUTER_API_KEY", "AWS_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID",
-                "AWS_SESSION_TOKEN", "GITLAB_TOKEN", "GITHUB_TOKEN", "SLACK_TOKEN",
-                "ARGUS_API_KEY", "ARGUS_ALLOWED_GIT_HOSTS",
+                "DATABASE_URL",
+                "REDIS_URL",
+                "OPENAI_API_KEY",
+                "LLM_API_KEY",
+                "ANTHROPIC_API_KEY",
+                "GEMINI_API_KEY",
+                "AZURE_OPENAI_API_KEY",
+                "OPENROUTER_API_KEY",
+                "AWS_SECRET_ACCESS_KEY",
+                "AWS_ACCESS_KEY_ID",
+                "AWS_SESSION_TOKEN",
+                "GITLAB_TOKEN",
+                "GITHUB_TOKEN",
+                "SLACK_TOKEN",
+                "ARGUS_API_KEY",
+                "ARGUS_ALLOWED_GIT_HOSTS",
             }
             for _key in BLOCKED_ENV_VARS:
                 _env.pop(_key, None)
@@ -441,7 +578,9 @@ class MCPServer:
             _project_venv = str(Path(__file__).resolve().parent.parent / "venv" / "bin")
             # Preserve any existing PATH customizations (e.g. from start-argus.sh)
             _existing_path = _env.get("PATH", "")
-            _env["PATH"] = f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:/usr/local/bin:/usr/bin:/bin:{_existing_path}"
+            _env["PATH"] = (
+                f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:/usr/local/bin:/usr/bin:/bin:{_existing_path}"
+            )
             _env["PYTHONDONTWRITEBYTECODE"] = "1"
 
             result = subprocess.run(  # noqa: S603 — safe: cmd is list form, validated by _validate_args_safe()
@@ -538,12 +677,15 @@ class MCPServer:
             if tool_name and tool_name in self._tools:
                 tool_order.append(tool_name)
             elif tool_name:
-                logger.warning("Pipeline references unknown tool '%s', skipping", tool_name)
+                logger.warning(
+                    "Pipeline references unknown tool '%s', skipping", tool_name
+                )
 
         # If no pipeline, use a sensible default ordering.
         # Import from assessment_orchestrator to keep a single source of truth (P2).
         if not tool_order:
             from tools.assessment_orchestrator import PHASE_PIPELINE_TOOLS
+
             phase = session.phase
             # Map legacy phase names to canonical keys
             phase_map = {
@@ -657,8 +799,11 @@ def get_mcp_server() -> MCPServer:
 
 def main():
     """Entry point for stdio JSON-RPC transport mode."""
-    logging.basicConfig(level=logging.INFO, stream=sys.stderr,
-                        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stderr,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
 
     from mcp_transport import MCPTransport, create_ping_handler
 

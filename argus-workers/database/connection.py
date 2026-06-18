@@ -61,11 +61,15 @@ class ConnectionManager:
         self._min_connections = int(os.getenv("DB_POOL_MIN", "2"))
         self._max_connections = int(os.getenv("DB_POOL_MAX", "20"))
         self._slow_query_threshold_ms = int(os.getenv("DB_SLOW_QUERY_MS", "500"))
-        self._statement_timeout_ms = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "30000"))  # 30s default
+        self._statement_timeout_ms = int(
+            os.getenv("DB_STATEMENT_TIMEOUT_MS", "30000")
+        )  # 30s default
         self._pgbouncer_mode = os.getenv(
             "PGBOUNCER_MODE", "session"
         )  # session or transaction
-        self._ssl_mode = os.getenv("DB_SSLMODE", "prefer")  # prefer, require, verify-ca, verify-full
+        self._ssl_mode = os.getenv(
+            "DB_SSLMODE", "prefer"
+        )  # prefer, require, verify-ca, verify-full
         self._metrics: dict[str, Any] = {
             "active_connections": 0,
             "idle_connections": 0,
@@ -114,10 +118,15 @@ class ConnectionManager:
                             self._min_connections, self._max_connections, conn_string
                         )
                         logger.info(
-                            f"Database pool initialized (min={self._min_connections}, "
-                            f"max={self._max_connections}, pgbouncer_mode={self._pgbouncer_mode}, "
-                            f"ssl_mode={self._ssl_mode}, "
-                            f"statement_timeout={self._statement_timeout_ms}ms)"
+                            "Database pool initialized (min=%d, "
+                            "max=%d, pgbouncer_mode=%s, "
+                            "ssl_mode=%s, "
+                            "statement_timeout=%dms)",
+                            self._min_connections,
+                            self._max_connections,
+                            self._pgbouncer_mode,
+                            self._ssl_mode,
+                            self._statement_timeout_ms,
                         )
                     except psycopg2.Error as e:
                         raise DatabaseConnectionError(
@@ -186,15 +195,17 @@ class ConnectionManager:
             try:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SET statement_timeout = %s",
-                        (self._statement_timeout_ms,)
+                        "SET statement_timeout = %s", (self._statement_timeout_ms,)
                     )
             except psycopg2.Error as st_err:
                 # M-v4-02: Log warning when statement_timeout can't be set.
                 # Without this, the connection returns to the pool without
                 # query timeout, allowing runaway queries.
-                logger.warning("Failed to set statement_timeout on connection %s: %s",
-                               id(conn), st_err)
+                logger.warning(
+                    "Failed to set statement_timeout on connection %s: %s",
+                    id(conn),
+                    st_err,
+                )
 
             with self._metrics_lock:
                 self._metrics["active_connections"] += 1
@@ -202,7 +213,7 @@ class ConnectionManager:
 
             # Log slow connection acquisition
             if wait_time > self._slow_query_threshold_ms:
-                logger.warning(f"Slow connection acquisition: {wait_time:.1f}ms")
+                logger.warning("Slow connection acquisition: %.1fms", wait_time)
 
             return conn
         except psycopg2.Error as e:
@@ -266,7 +277,9 @@ class ConnectionManager:
             if org_id:
                 try:
                     with conn.cursor() as cursor:
-                        cursor.execute("SELECT set_tenant_context('00000000-0000-0000-0000-000000000000')")
+                        cursor.execute(
+                            "SELECT set_tenant_context('00000000-0000-0000-0000-000000000000')"
+                        )
                 except Exception as ctx_e:
                     logger.debug("Failed to reset tenant context: %s", ctx_e)
             self.release_connection(conn)

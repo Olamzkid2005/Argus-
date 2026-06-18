@@ -1,4 +1,5 @@
 """OpenTelemetry tracing — replaces custom ExecutionSpan."""
+
 import json
 import logging
 import os
@@ -41,6 +42,7 @@ tracer = trace.get_tracer(__name__)
 
 class TracingError(Exception):
     """Raised when tracing operations fail"""
+
     pass
 
 
@@ -78,7 +80,7 @@ class TraceContext:
 
     @classmethod
     def get_context(cls) -> ExecutionContext | None:
-        return getattr(cls._local, 'current_context', None)
+        return getattr(cls._local, "current_context", None)
 
     @classmethod
     def get_trace_id(cls) -> str | None:
@@ -110,12 +112,13 @@ class StructuredLogger:
 
     def log(self, event_type: str, message: str, metadata: dict = None) -> None:
         from utils.logging_utils import ScanLogger
+
         trace_id = TraceContext.get_trace_id()
         context = TraceContext.get_context()
         slog = ScanLogger("tracing")
 
         if not trace_id:
-            slog.info(f"[NO_TRACE] {event_type}: {message}")
+            slog.info("[NO_TRACE] %s: %s", event_type, message)
             return
 
         log_entry = {
@@ -128,7 +131,7 @@ class StructuredLogger:
         }
 
         self._store_log(log_entry)
-        slog.info(f"[{trace_id[:8]}] {event_type}: {message}")
+        slog.info("[%s] %s: %s", trace_id[:8], event_type, message)
 
     def _store_log(self, log_entry: dict) -> None:
         if not self.connection_string:
@@ -138,26 +141,33 @@ class StructuredLogger:
             try:
                 engagement_id = validate_uuid(engagement_id, "engagement_id")
             except ValueError:
-                logger.error("Failed to store log: invalid engagement_id UUID: '%s'", engagement_id)
+                logger.error(
+                    "Failed to store log: invalid engagement_id UUID: '%s'",
+                    engagement_id,
+                )
                 return
         try:
             from database.connection import get_db
+
             db = get_db()
             conn = db.get_connection()
             cursor = conn.cursor()
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO execution_logs
                     (engagement_id, trace_id, event_type, message, metadata, created_at)
                     VALUES (%s, %s, %s, %s, %s, %s)
-                """, (
-                    engagement_id,
-                    log_entry["trace_id"],
-                    log_entry["event_type"],
-                    log_entry["message"],
-                    json.dumps(log_entry.get("metadata", {})),
-                    log_entry.get("created_at"),
-                ))
+                """,
+                    (
+                        engagement_id,
+                        log_entry["trace_id"],
+                        log_entry["event_type"],
+                        log_entry["message"],
+                        json.dumps(log_entry.get("metadata", {})),
+                        log_entry.get("created_at"),
+                    ),
+                )
                 conn.commit()
             finally:
                 cursor.close()
@@ -165,32 +175,59 @@ class StructuredLogger:
         except Exception as e:
             logger.error("Failed to store log: %s", e)
 
-    def log_job_started(self, job_type: str, engagement_id: str, target: str = None) -> None:
+    def log_job_started(
+        self, job_type: str, engagement_id: str, target: str = None
+    ) -> None:
         self.log(
             self.EVENT_JOB_STARTED,
             f"Job started: {job_type}",
             {"job_type": job_type, "engagement_id": engagement_id, "target": target},
         )
 
-    def log_tool_executed(self, tool_name: str, arguments: list, duration_ms: int, success: bool, return_code: int = None) -> None:
+    def log_tool_executed(
+        self,
+        tool_name: str,
+        arguments: list,
+        duration_ms: int,
+        success: bool,
+        return_code: int = None,
+    ) -> None:
         self.log(
             self.EVENT_TOOL_EXECUTED,
             f"Tool executed: {tool_name}",
-            {"tool_name": tool_name, "arguments": arguments, "duration_ms": duration_ms, "success": success, "return_code": return_code},
+            {
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "duration_ms": duration_ms,
+                "success": success,
+                "return_code": return_code,
+            },
         )
 
-    def log_parser_completed(self, tool_name: str, findings_count: int, parse_time_ms: int = None) -> None:
+    def log_parser_completed(
+        self, tool_name: str, findings_count: int, parse_time_ms: int = None
+    ) -> None:
         self.log(
             self.EVENT_PARSER_COMPLETED,
             f"Parser completed: {tool_name}",
-            {"tool_name": tool_name, "findings_count": findings_count, "parse_time_ms": parse_time_ms},
+            {
+                "tool_name": tool_name,
+                "findings_count": findings_count,
+                "parse_time_ms": parse_time_ms,
+            },
         )
 
-    def log_intelligence_decision(self, actions: list, findings_analyzed: int, reasoning: str = None) -> None:
+    def log_intelligence_decision(
+        self, actions: list, findings_analyzed: int, reasoning: str = None
+    ) -> None:
         self.log(
             self.EVENT_INTELLIGENCE_DECISION,
             f"Intelligence decision: {len(actions)} actions generated",
-            {"actions": actions, "findings_analyzed": findings_analyzed, "reasoning": reasoning},
+            {
+                "actions": actions,
+                "findings_analyzed": findings_analyzed,
+                "reasoning": reasoning,
+            },
         )
 
 
@@ -215,6 +252,7 @@ class ExecutionSpan:
     @contextmanager
     def span(self, span_name: str, metadata: dict = None):
         from utils.logging_utils import ScanLogger
+
         slog = ScanLogger("tracing")
 
         trace_id = TraceContext.get_trace_id()
@@ -232,7 +270,7 @@ class ExecutionSpan:
                 "start_time": start_time,
             }
 
-            slog.info(f"SPAN START: {span_name}")
+            slog.info("SPAN START: %s", span_name)
 
             try:
                 yield span_data
@@ -246,7 +284,7 @@ class ExecutionSpan:
                 # write to Postgres instead.
 
                 otel_span.set_attribute("duration_ms", duration_ms)
-                slog.info(f"SPAN END: {span_name} ({duration_ms}ms)")
+                slog.info("SPAN END: %s (%dms)", span_name, duration_ms)
 
     # DEPRECATED: _store_span() removed 2026-06-04 (B.06).
     # The execution_spans table is preserved for backward compatibility
@@ -256,11 +294,14 @@ class ExecutionSpan:
     # The table definition in the database migration is marked @deprecated
     # and can be dropped once all deployments confirm they don't rely on it.
 
-    def record_span(self, span_name: str, duration_ms: int, trace_id: str = None) -> None:
+    def record_span(
+        self, span_name: str, duration_ms: int, trace_id: str = None
+    ) -> None:
         """Record a span duration. Span is exported via OTel, not written to DB."""
         from utils.logging_utils import ScanLogger
+
         slog = ScanLogger("tracing")
-        slog.info(f"SPAN RECORD: {span_name} ({duration_ms}ms)")
+        slog.info("SPAN RECORD: %s (%dms)", span_name, duration_ms)
 
 
 class TracingManager:
@@ -273,7 +314,9 @@ class TracingManager:
     def generate_trace_id() -> str:
         return str(uuid.uuid4())
 
-    def create_context(self, engagement_id: str, job_type: str, trace_id: str = None) -> ExecutionContext:
+    def create_context(
+        self, engagement_id: str, job_type: str, trace_id: str = None
+    ) -> ExecutionContext:
         if not trace_id:
             trace_id = self.generate_trace_id()
         return ExecutionContext(

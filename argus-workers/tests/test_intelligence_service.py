@@ -19,9 +19,7 @@ class TestIntelligenceService:
         assert svc.llm_client == "mock_client"
 
     @patch("intelligence_engine.IntelligenceEngine")
-    def test_evaluate_creates_intelligence_engine_and_calls_evaluate(
-        self, MockEngine
-    ):
+    def test_evaluate_creates_intelligence_engine_and_calls_evaluate(self, MockEngine):
         mock_engine = MagicMock()
         mock_engine.evaluate.return_value = {"result": "ok"}
         MockEngine.return_value = mock_engine
@@ -77,7 +75,8 @@ class TestIntelligenceService:
             max_cost="unused",
         )
         MockLLMService.assert_called_once_with(
-            mock_llm_client, cost_tracker=mock_tracker,
+            mock_llm_client,
+            cost_tracker=mock_tracker,
         )
         mock_load_recon.assert_called_once_with("eng-123")
         MockSynthesizer.assert_called_once_with(mock_llm_svc)

@@ -38,10 +38,13 @@ class TestReconContextService:
         """Patch tasks.utils in sys.modules before recon_context_service loads."""
         mock_utils = MagicMock()
         mock_utils.save_recon_context = MagicMock()
-        with patch.dict(sys.modules, {
-            "tasks": MagicMock(),
-            "tasks.utils": mock_utils,
-        }):
+        with patch.dict(
+            sys.modules,
+            {
+                "tasks": MagicMock(),
+                "tasks.utils": mock_utils,
+            },
+        ):
             yield mock_utils.save_recon_context
 
     # ── Fixtures ────────────────────────────────────────────────
@@ -51,23 +54,55 @@ class TestReconContextService:
         """Diverse set of findings exercising all detection paths."""
         return [
             # Language: Python (.py)
-            {"type": "SQL_INJECTION", "severity": "CRITICAL", "file_path": "src/api/flask_login.py"},
+            {
+                "type": "SQL_INJECTION",
+                "severity": "CRITICAL",
+                "file_path": "src/api/flask_login.py",
+            },
             # Language: JavaScript (.js) + Framework: Express
-            {"type": "XSS", "severity": "HIGH", "file_path": "src/express/routes/user.js"},
+            {
+                "type": "XSS",
+                "severity": "HIGH",
+                "file_path": "src/express/routes/user.js",
+            },
             # Language: TypeScript (.ts) + Framework: NestJS -> Express
-            {"type": "CSRF", "severity": "MEDIUM", "file_path": "src/nestjs/controller.ts"},
+            {
+                "type": "CSRF",
+                "severity": "MEDIUM",
+                "file_path": "src/nestjs/controller.ts",
+            },
             # Language: Java (.java) + Framework: Spring
-            {"type": "AUTH_BYPASS", "severity": "HIGH", "file_path": "src/spring/security/LoginController.java"},
+            {
+                "type": "AUTH_BYPASS",
+                "severity": "HIGH",
+                "file_path": "src/spring/security/LoginController.java",
+            },
             # Language: Go (.go)
-            {"type": "COMMAND_INJECTION", "severity": "CRITICAL", "file_path": "src/main/handler.go"},
+            {
+                "type": "COMMAND_INJECTION",
+                "severity": "CRITICAL",
+                "file_path": "src/main/handler.go",
+            },
             # Secret type finding
             {"type": "EXPOSED_SECRET", "severity": "CRITICAL", "file_path": ".env"},
             # Dependency vulnerability
-            {"type": "DEPENDENCY_VULNERABILITY", "severity": "HIGH", "file_path": "package.json"},
+            {
+                "type": "DEPENDENCY_VULNERABILITY",
+                "severity": "HIGH",
+                "file_path": "package.json",
+            },
             # Low severity (non-critical, non-high)
-            {"type": "INFO_LEAK", "severity": "LOW", "file_path": "src/config/readme.md"},
+            {
+                "type": "INFO_LEAK",
+                "severity": "LOW",
+                "file_path": "src/config/readme.md",
+            },
             # No file_path -> uses endpoint fallback
-            {"type": "MISCONFIGURATION", "severity": "MEDIUM", "endpoint": "aws/s3/bucket"},
+            {
+                "type": "MISCONFIGURATION",
+                "severity": "MEDIUM",
+                "endpoint": "aws/s3/bucket",
+            },
             # Unknown language (no file_path or endpoint)
             {"type": "UNKNOWN", "severity": "INFO"},
         ]
@@ -127,7 +162,8 @@ class TestReconContextService:
         from orchestrator_pkg.recon_context_service import ReconContextService
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-lang", findings=sample_findings,
+            engagement_id="eng-lang",
+            findings=sample_findings,
             repo_url="https://github.com/example/repo",
         )
 
@@ -149,7 +185,8 @@ class TestReconContextService:
         ]
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-endpoint-lang", findings=findings,
+            engagement_id="eng-endpoint-lang",
+            findings=findings,
             repo_url="https://github.com/example/repo",
         )
 
@@ -167,12 +204,13 @@ class TestReconContextService:
         from orchestrator_pkg.recon_context_service import ReconContextService
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-fw", findings=sample_findings,
+            engagement_id="eng-fw",
+            findings=sample_findings,
             repo_url="https://github.com/example/repo",
         )
 
         assert "Express" in ctx.frameworks_detected  # from express/ and nestjs/
-        assert "Spring" in ctx.frameworks_detected   # from spring/
+        assert "Spring" in ctx.frameworks_detected  # from spring/
 
     # ── Severity breakdown ──────────────────────────────────────
 
@@ -185,7 +223,8 @@ class TestReconContextService:
         from orchestrator_pkg.recon_context_service import ReconContextService
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-sev", findings=sample_findings,
+            engagement_id="eng-sev",
+            findings=sample_findings,
             repo_url="https://github.com/example/repo",
         )
 
@@ -207,7 +246,8 @@ class TestReconContextService:
         from orchestrator_pkg.recon_context_service import ReconContextService
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-secrets", findings=sample_findings,
+            engagement_id="eng-secrets",
+            findings=sample_findings,
             repo_url="https://github.com/example/repo",
         )
 
@@ -222,7 +262,8 @@ class TestReconContextService:
         ]
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-no-secrets", findings=findings,
+            engagement_id="eng-no-secrets",
+            findings=findings,
             repo_url="https://github.com/example/repo",
         )
 
@@ -239,7 +280,8 @@ class TestReconContextService:
         from orchestrator_pkg.recon_context_service import ReconContextService
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-dep", findings=sample_findings,
+            engagement_id="eng-dep",
+            findings=sample_findings,
             repo_url="https://github.com/example/repo",
         )
 
@@ -256,7 +298,8 @@ class TestReconContextService:
         from orchestrator_pkg.recon_context_service import ReconContextService
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-critical", findings=sample_findings,
+            engagement_id="eng-critical",
+            findings=sample_findings,
             repo_url="https://github.com/example/repo",
         )
 
@@ -282,14 +325,22 @@ class TestReconContextService:
         from orchestrator_pkg.recon_context_service import ReconContextService
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-vtypes", findings=sample_findings,
+            engagement_id="eng-vtypes",
+            findings=sample_findings,
             repo_url="https://github.com/example/repo",
         )
 
         expected_types = {
-            "SQL_INJECTION", "XSS", "CSRF", "AUTH_BYPASS",
-            "COMMAND_INJECTION", "EXPOSED_SECRET", "DEPENDENCY_VULNERABILITY",
-            "INFO_LEAK", "MISCONFIGURATION", "UNKNOWN",
+            "SQL_INJECTION",
+            "XSS",
+            "CSRF",
+            "AUTH_BYPASS",
+            "COMMAND_INJECTION",
+            "EXPOSED_SECRET",
+            "DEPENDENCY_VULNERABILITY",
+            "INFO_LEAK",
+            "MISCONFIGURATION",
+            "UNKNOWN",
         }
         assert set(ctx.vulnerability_types) == expected_types
 
@@ -300,7 +351,8 @@ class TestReconContextService:
         from orchestrator_pkg.recon_context_service import ReconContextService
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-empty", findings=[],
+            engagement_id="eng-empty",
+            findings=[],
             repo_url="https://github.com/example/empty",
         )
 
@@ -325,7 +377,8 @@ class TestReconContextService:
         ]
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-cap", findings=findings,
+            engagement_id="eng-cap",
+            findings=findings,
             repo_url="https://github.com/example/repo",
         )
 
@@ -341,7 +394,9 @@ class TestReconContextService:
 
         with patch("orchestrator_pkg.recon_context_service.logger") as mock_logger:
             ctx = ReconContextService.build_and_save(
-                engagement_id="eng-err", findings=[], repo_url="https://example.com",
+                engagement_id="eng-err",
+                findings=[],
+                repo_url="https://example.com",
             )
 
         assert ctx is None
@@ -366,7 +421,8 @@ class TestReconContextService:
         ]
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-counts", findings=findings,
+            engagement_id="eng-counts",
+            findings=findings,
             repo_url="https://github.com/example/repo",
         )
 
@@ -392,7 +448,8 @@ class TestReconContextService:
         ]
 
         ctx = ReconContextService.build_and_save(
-            engagement_id="eng-dedup", findings=findings,
+            engagement_id="eng-dedup",
+            findings=findings,
             repo_url="https://github.com/example/repo",
         )
 

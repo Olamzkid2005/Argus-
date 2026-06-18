@@ -5,19 +5,31 @@ import os
 
 _spec = importlib.util.spec_from_file_location(
     "auth_injectors",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "agent", "auth_injectors.py"),
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "..",
+        "agent",
+        "auth_injectors.py",
+    ),
 )
 _ai = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_ai)
 
 _spec_ctx = importlib.util.spec_from_file_location(
     "auth_context",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "agent", "auth_context.py"),
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "..",
+        "agent",
+        "auth_context.py",
+    ),
 )
 _ctx_mod = importlib.util.module_from_spec(_spec_ctx)
 _spec_ctx.loader.exec_module(_ctx_mod)
 
-import requests
+import requests  # noqa: E402
 
 
 def _make_ctx(cookie_str="session=abc123") -> _ctx_mod.AuthContext:
@@ -73,9 +85,12 @@ class TestAuthInjectors:
         ctx = _make_ctx()
         # Include both headers that would be injected
         args = [
-            "-u", "http://test.com",
-            "-H", "Cookie: session=abc123",
-            "-H", "Authorization: Bearer test-jwt-token",
+            "-u",
+            "http://test.com",
+            "-H",
+            "Cookie: session=abc123",
+            "-H",
+            "Authorization: Bearer test-jwt-token",
         ]
         result = _ai.inject_nuclei_auth(args, ctx)
         assert result == args
@@ -133,7 +148,10 @@ class TestHelperFunctions:
 
     def test_has_header_flag_true(self):
         assert _ai._has_header_flag(["-H", "Cookie: abc"], "Cookie") is True
-        assert _ai._has_header_flag(["-H", "Authorization: Bearer x"], "Authorization") is True
+        assert (
+            _ai._has_header_flag(["-H", "Authorization: Bearer x"], "Authorization")
+            is True
+        )
 
     def test_has_header_flag_false(self):
         assert _ai._has_header_flag(["-H", "Cookie: abc"], "Authorization") is False

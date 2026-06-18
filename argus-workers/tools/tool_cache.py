@@ -3,6 +3,7 @@ Tool caching and optimization for workers.
 
 Caches downloaded tools to avoid re-downloading.
 """
+
 import hashlib
 import logging
 import os
@@ -21,32 +22,34 @@ TOOL_CACHE_DIR.mkdir(exist_ok=True)
 
 # Strict allowlist of tool names that can be installed via pip.
 # Only known, vetted tool names are allowed to prevent supply-chain injection.
-PIP_ALLOWLIST = frozenset({
-    "semgrep",
-    "bandit",
-    "gitleaks",
-    "trufflehog",
-    "trivy",
-    "pip-audit",
-    "sqlmap",
-    "dalfox",
-    "commix",
-    "gospider",
-    "arjun",
-    "naabu",
-    "httpx",
-    "subfinder",
-    "katana",
-    "gau",
-    "waybackurls",
-    "whatweb",
-    "wafw00f",
-    "wpscan",
-    "alterx",
-    "nikto",
-    "jwt_tool",
-    "testssl",
-})
+PIP_ALLOWLIST = frozenset(
+    {
+        "semgrep",
+        "bandit",
+        "gitleaks",
+        "trufflehog",
+        "trivy",
+        "pip-audit",
+        "sqlmap",
+        "dalfox",
+        "commix",
+        "gospider",
+        "arjun",
+        "naabu",
+        "httpx",
+        "subfinder",
+        "katana",
+        "gau",
+        "waybackurls",
+        "whatweb",
+        "wafw00f",
+        "wpscan",
+        "alterx",
+        "nikto",
+        "jwt_tool",
+        "testssl",
+    }
+)
 
 # Tool versions for security
 TOOL_VERSIONS = {
@@ -96,7 +99,9 @@ class ToolCache:
     def _validate_download_url(self, url: str) -> str:
         """Validate download URL to prevent injection."""
         if not url or not url.startswith(("http://", "https://")):
-            raise ValueError(f"Invalid download URL (must start with http:// or https://): {url!r}")
+            raise ValueError(
+                f"Invalid download URL (must start with http:// or https://): {url!r}"
+            )
         return url
 
     def cache_tool(self, tool_name: str, download_url: str | None = None) -> bool:
@@ -105,8 +110,8 @@ class ToolCache:
         self._validate_tool_name(tool_name)
 
         if self.is_cached(tool_name):
-            slog.info(f"Tool {tool_name} already cached")
-            logger.info(f"Tool {tool_name} already cached")
+            slog.info("Tool %s already cached", tool_name)
+            logger.info("Tool %s already cached", tool_name)
             return True
 
         slog.tool_start("cache_tool", tool=tool_name)
@@ -124,30 +129,45 @@ class ToolCache:
                 else:
                     pip_cmd.append(tool_name)
                 result = subprocess.run(  # noqa: S603 — safe: pip_cmd built from allowlisted tool names
-                    pip_cmd,
-                    capture_output=True, text=True, timeout=300
+                    pip_cmd, capture_output=True, text=True, timeout=300
                 )
                 if result.returncode == 0:
-                    slog.info(f"Installed {tool_name} via pip (version={version or 'latest'})")
-                    logger.info("Installed %s via pip (version=%s, hashes=%s)",
-                                tool_name, version or 'latest', 'enabled' if hashes_env else 'disabled')
+                    slog.info(
+                        f"Installed {tool_name} via pip (version={version or 'latest'})"
+                    )
+                    logger.info(
+                        "Installed %s via pip (version=%s, hashes=%s)",
+                        tool_name,
+                        version or "latest",
+                        "enabled" if hashes_env else "disabled",
+                    )
                     # Verify installation succeeded by checking --version
                     verify = subprocess.run(  # noqa: S603 — safe: tool_name is from allowlist
                         [tool_name, "--version"],
-                        capture_output=True, text=True, timeout=10,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
                     )
-                    slog.info(f"{tool_name} version: {verify.stdout.strip()}")
-                    logger.info("Installed %s version: %s", tool_name, verify.stdout.strip())
+                    slog.info("%s version: %s", tool_name, verify.stdout.strip())
+                    logger.info(
+                        "Installed %s version: %s", tool_name, verify.stdout.strip()
+                    )
                     return True
                 else:
-                    slog.warn(f"pip install {tool_name} failed: {result.stderr[:200]}")
-                    logger.error("pip install %s failed: %s", tool_name, result.stderr[:500])
+                    slog.warn(
+                        "pip install %s failed: %s", tool_name, result.stderr[:200]
+                    )
+                    logger.error(
+                        "pip install %s failed: %s", tool_name, result.stderr[:500]
+                    )
             except Exception as e:
-                slog.warn(f"Failed to install {tool_name} via pip: {e}")
-                logger.warning(f"Failed to install {tool_name} via pip: {e}")
+                slog.warn("Failed to install %s via pip: %s", tool_name, e)
+                logger.warning("Failed to install %s via pip: %s", tool_name, e)
         else:
-            slog.info(f"{tool_name} not in pip allowlist, trying download")
-            logger.warning(f"Tool {tool_name!r} is not in pip allowlist, skipping pip install")
+            slog.info("%s not in pip allowlist, trying download", tool_name)
+            logger.warning(
+                "Tool %r is not in pip allowlist, skipping pip install", tool_name
+            )
 
         # Otherwise download
         if download_url:
@@ -159,15 +179,21 @@ class ToolCache:
                     ["curl", "-L", "-o", dl_path, download_url],  # noqa: S607
                     capture_output=True,
                     text=True,
-                    timeout=300
+                    timeout=300,
                 )
                 if result.returncode == 0:
                     # H-v3-16: Verify downloaded file integrity
                     dl_path_obj = Path(dl_path)
                     if not dl_path_obj.exists() or dl_path_obj.stat().st_size < 1024:
-                        slog.warn(f"Downloaded {tool_name} is too small or missing — possible corrupt download")
-                        logger.warning("Downloaded %s from %s is too small (%d bytes) — rejecting",
-                                       tool_name, download_url, dl_path_obj.stat().st_size if dl_path_obj.exists() else 0)
+                        slog.warn(
+                            f"Downloaded {tool_name} is too small or missing — possible corrupt download"
+                        )
+                        logger.warning(
+                            "Downloaded %s from %s is too small (%d bytes) — rejecting",
+                            tool_name,
+                            download_url,
+                            dl_path_obj.stat().st_size if dl_path_obj.exists() else 0,
+                        )
                         shutil.rmtree(temp_dir, ignore_errors=True)
                         return False
 
@@ -179,21 +205,27 @@ class ToolCache:
                             for chunk in iter(lambda: f.read(65536), b""):
                                 actual_hash.update(chunk)
                         if actual_hash.hexdigest() != expected_hash:
-                            slog.warn(f"SHA256 mismatch for {tool_name} — expected {expected_hash}, got {actual_hash.hexdigest()}")
-                            logger.error("SHA256 mismatch for %s downloaded from %s", tool_name, download_url)
+                            slog.warn(
+                                f"SHA256 mismatch for {tool_name} — expected {expected_hash}, got {actual_hash.hexdigest()}"
+                            )
+                            logger.error(
+                                "SHA256 mismatch for %s downloaded from %s",
+                                tool_name,
+                                download_url,
+                            )
                             shutil.rmtree(temp_dir, ignore_errors=True)
                             return False
-                        slog.info(f"SHA256 verification passed for {tool_name}")
+                        slog.info("SHA256 verification passed for %s", tool_name)
 
                     tool_path = self.tools_dir / tool_name / tool_name
                     shutil.move(dl_path, tool_path)
                     os.chmod(tool_path, 0o755)
-                    slog.info(f"Cached {tool_name} from {download_url}")
-                    logger.info(f"Cached {tool_name} from {download_url}")
+                    slog.info("Cached %s from %s", tool_name, download_url)
+                    logger.info("Cached %s from %s", tool_name, download_url)
                     return True
             except Exception as e:
-                slog.warn(f"Failed to download {tool_name}: {e}")
-                logger.error(f"Failed to download {tool_name}: {e}")
+                slog.warn("Failed to download %s: %s", tool_name, e)
+                logger.error("Failed to download %s: %s", tool_name, e)
 
         return False
 
@@ -205,16 +237,14 @@ class ToolCache:
 
         # Get versions by modification time
         versions = sorted(
-            tool_dir.iterdir(),
-            key=lambda x: x.stat().st_mtime,
-            reverse=True
+            tool_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True
         )
 
         # Remove old versions
         for old_version in versions[keep_versions:]:
             if old_version.is_file():
                 old_version.unlink()
-                logger.info(f"Removed old version: {old_version}")
+                logger.info("Removed old version: %s", old_version)
 
     def verify_tool(self, tool_name: str) -> bool:
         """Verify tool is working."""
@@ -227,7 +257,7 @@ class ToolCache:
                 [str(tool_path), "--version"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
             return result.returncode == 0
         except Exception:

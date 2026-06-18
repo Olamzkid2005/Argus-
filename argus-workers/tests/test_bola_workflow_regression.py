@@ -25,8 +25,8 @@ pytestmark = pytest.mark.skipif(
     reason="Integration test requires Unix-compatible HTTP server behavior",
 )
 
-from runtime.engagement_state import EngagementState
-from runtime.workflows.bola import BolaWorkflow
+from runtime.engagement_state import EngagementState  # noqa: E402
+from runtime.workflows.bola import BolaWorkflow  # noqa: E402
 
 # ── Test Server ────────────────────────────────────────────────────────
 
@@ -44,20 +44,33 @@ class RegressionTestServerHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/accounts":
-            self._send_json(200, {
-                "accounts": [{"id": 1, "owner": "user_a", "balance": 100}],
-                "_links": ["/api/accounts/1"],
-            })
+            self._send_json(
+                200,
+                {
+                    "accounts": [{"id": 1, "owner": "user_a", "balance": 100}],
+                    "_links": ["/api/accounts/1"],
+                },
+            )
         elif self.path.startswith("/api/accounts/"):
-            self._send_json(200, {
-                "id": 1, "owner": "user_a", "balance": 100,
-                "description": "User A's primary checking account.",
-            })
+            self._send_json(
+                200,
+                {
+                    "id": 1,
+                    "owner": "user_a",
+                    "balance": 100,
+                    "description": "User A's primary checking account.",
+                },
+            )
         elif self.path == "/api/profile":
-            self._send_json(200, {
-                "username": "user_a", "email": "a@example.com",
-                "ssn": "123-45-6789", "credit_card": "4111-1111-1111-1111",
-            })
+            self._send_json(
+                200,
+                {
+                    "username": "user_a",
+                    "email": "a@example.com",
+                    "ssn": "123-45-6789",
+                    "credit_card": "4111-1111-1111-1111",
+                },
+            )
         elif self.path == "/api/me":
             self._send_json(200, {"id": 1, "username": "user_a"})
         else:
@@ -74,6 +87,7 @@ class RegressionTestServerHandler(BaseHTTPRequestHandler):
 
     def _send_json(self, status: int, data: dict | list) -> None:
         import json
+
         body = json.dumps(data).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -109,21 +123,25 @@ def _run_dual_auth_scanner(server_url: str) -> list[dict]:
 
     scanner = DualAuthScanner()
     # Mock the auth_manager to avoid real auth flow
-    with patch.object(scanner, "auth_manager_a") as mgr_a, \
-         patch.object(scanner, "auth_manager_b") as mgr_b:
+    with (
+        patch.object(scanner, "auth_manager_a") as mgr_a,
+        patch.object(scanner, "auth_manager_b") as mgr_b,
+    ):
         mock_session = Mock()
         mock_session.headers = {}
         mock_session.request.return_value = Mock(status_code=200, text="{}")
         mgr_a.authenticate.return_value = mock_session
         mgr_b.authenticate.return_value = Mock()
 
-        scanner.execute(ToolContext(
-            target=server_url,
-            dual_auth=DualAuthConfig(
-                auth_a={"token": "tok_a", "token_header": "Authorization"},
-                auth_b={"token": "tok_b", "token_header": "Authorization"},
-            ),
-        ))
+        scanner.execute(
+            ToolContext(
+                target=server_url,
+                dual_auth=DualAuthConfig(
+                    auth_a={"token": "tok_a", "token_header": "Authorization"},
+                    auth_b={"token": "tok_b", "token_header": "Authorization"},
+                ),
+            )
+        )
 
     return scanner.findings
 

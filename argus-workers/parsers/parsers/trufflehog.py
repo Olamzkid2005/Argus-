@@ -1,4 +1,5 @@
 """Parser for trufflehog JSON output (trufflehog git --json)."""
+
 import json
 import logging
 

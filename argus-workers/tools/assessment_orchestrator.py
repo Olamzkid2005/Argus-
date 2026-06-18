@@ -5,6 +5,7 @@ Executes tools in each phase by delegating to the MCP server's
 planning pipeline (handle_agent_init / handle_agent_next / handle_agent_observe).
 Fixes H7: orchestrator actually executes tools instead of just logging phases.
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,8 +51,12 @@ class AssessmentOrchestrator(AbstractTool):
         start_phase = getattr(ctx, "_orchestrator_start_phase", "recon")
         end_phase = getattr(ctx, "_orchestrator_end_phase", "report")
         start_idx = PHASE_ORDER.index(start_phase) if start_phase in PHASE_ORDER else 0
-        end_idx = PHASE_ORDER.index(end_phase) if end_phase in PHASE_ORDER else len(PHASE_ORDER) - 1
-        planned_phases = PHASE_ORDER[start_idx:end_idx + 1]
+        end_idx = (
+            PHASE_ORDER.index(end_phase)
+            if end_phase in PHASE_ORDER
+            else len(PHASE_ORDER) - 1
+        )
+        planned_phases = PHASE_ORDER[start_idx : end_idx + 1]
 
         builder.info(
             "ORCHESTRATION_PLAN",
@@ -107,25 +112,35 @@ class AssessmentOrchestrator(AbstractTool):
                             )
 
                     # Record observation for planning engine
-                    mcp.handle_agent_observe({
-                        "session_id": session_id,
-                        "tool": tool_name,
-                        "arguments": {"target": ctx.target},
-                        "success": tool_result.get("isError", False) is False,
-                        "findingCount": len(tool_result.get("meta", {}).get("data", {}).get("structured", [])),
-                        "summary": f"Executed {tool_name} against {ctx.target}",
-                    })
+                    mcp.handle_agent_observe(
+                        {
+                            "session_id": session_id,
+                            "tool": tool_name,
+                            "arguments": {"target": ctx.target},
+                            "success": tool_result.get("isError", False) is False,
+                            "findingCount": len(
+                                tool_result.get("meta", {})
+                                .get("data", {})
+                                .get("structured", [])
+                            ),
+                            "summary": f"Executed {tool_name} against {ctx.target}",
+                        }
+                    )
                 except Exception as tool_err:
-                    logger.warning("Tool %s failed in phase %s: %s", tool_name, phase, tool_err)
+                    logger.warning(
+                        "Tool %s failed in phase %s: %s", tool_name, phase, tool_err
+                    )
                     phase_tool_results.append({"error": str(tool_err)})
-                    mcp.handle_agent_observe({
-                        "session_id": session_id,
-                        "tool": tool_name,
-                        "arguments": {"target": ctx.target},
-                        "success": False,
-                        "findingCount": 0,
-                        "summary": f"Tool {tool_name} failed: {tool_err}",
-                    })
+                    mcp.handle_agent_observe(
+                        {
+                            "session_id": session_id,
+                            "tool": tool_name,
+                            "arguments": {"target": ctx.target},
+                            "success": False,
+                            "findingCount": 0,
+                            "summary": f"Tool {tool_name} failed: {tool_err}",
+                        }
+                    )
 
             phase_results[phase] = phase_tool_results
             builder.info(
@@ -141,7 +156,10 @@ class AssessmentOrchestrator(AbstractTool):
         builder.info(
             "ORCHESTRATION_COMPLETE",
             ctx.target,
-            {"total_phases": len(planned_phases), "results_by_phase": {k: len(v) for k, v in phase_results.items()}},
+            {
+                "total_phases": len(planned_phases),
+                "results_by_phase": {k: len(v) for k, v in phase_results.items()},
+            },
         )
 
         result.findings = builder.findings

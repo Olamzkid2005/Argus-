@@ -1,6 +1,7 @@
 """
 Finding repository for database operations on vulnerability findings
 """
+
 import logging
 import os
 import uuid
@@ -23,6 +24,7 @@ MAX_FINDINGS_PER_ENGAGEMENT = int(os.getenv("MAX_FINDINGS_PER_ENGAGEMENT", "5000
 
 class FindingCapExceededError(Exception):
     """Raised when the maximum number of findings per engagement is reached."""
+
     pass
 
 
@@ -82,13 +84,15 @@ class FindingRepository(BaseRepository):
             # on the engagement row and serializing all inserts.
             cursor.execute(
                 "SELECT COUNT(*) FROM findings WHERE engagement_id = %s",
-                (engagement_id,)
+                (engagement_id,),
             )
             count = cursor.fetchone()[0]
             if count >= MAX_FINDINGS_PER_ENGAGEMENT:
                 logger.error(
                     "Engagement %s has %d findings (limit %d) — finding cap exceeded",
-                    engagement_id, count, MAX_FINDINGS_PER_ENGAGEMENT
+                    engagement_id,
+                    count,
+                    MAX_FINDINGS_PER_ENGAGEMENT,
                 )
                 raise FindingCapExceededError(
                     f"Engagement {engagement_id} has {count} findings (limit {MAX_FINDINGS_PER_ENGAGEMENT})"
@@ -121,11 +125,20 @@ class FindingRepository(BaseRepository):
                 RETURNING id
                 """,
                 (
-                    source_tool, severity, confidence, Json(evidence),
-                    cvss_score, owasp_category, cwe_id,
-                    evidence_strength, tool_agreement_level, fp_likelihood,
-                    engagement_id, endpoint, finding_type,
-                )
+                    source_tool,
+                    severity,
+                    confidence,
+                    Json(evidence),
+                    cvss_score,
+                    owasp_category,
+                    cwe_id,
+                    evidence_strength,
+                    tool_agreement_level,
+                    fp_likelihood,
+                    engagement_id,
+                    endpoint,
+                    finding_type,
+                ),
             )
             row = cursor.fetchone()
             if row:
@@ -162,15 +175,20 @@ class FindingRepository(BaseRepository):
                         evidence_strength,
                         tool_agreement_level,
                         fp_likelihood,
-                    )
+                    ),
                 )
-            except (psycopg2_errors.UniqueViolation, psycopg2_errors.InvalidColumnReference):
+            except (
+                psycopg2_errors.UniqueViolation,
+                psycopg2_errors.InvalidColumnReference,
+            ):
                 # ON CONFLICT clause requires the constraint to exist on the table.
                 # PostgreSQL raises InvalidColumnReference (SQLSTATE 42P10) when the
                 # constraint is missing, and UniqueViolation (SQLSTATE 23505) when a
                 # concurrent insert triggered a real conflict (H-02).
                 # Fall back to SELECT-then-UPDATE-else-INSERT approach.
-                logger.warning("ON CONFLICT not applicable for this constraint — using SELECT-then-INSERT fallback")
+                logger.warning(
+                    "ON CONFLICT not applicable for this constraint — using SELECT-then-INSERT fallback"
+                )
                 cursor.execute(
                     "SELECT id FROM findings WHERE engagement_id = %s AND endpoint = %s AND type = %s AND source_tool = %s",
                     (engagement_id, endpoint, finding_type, source_tool),
@@ -206,7 +224,7 @@ class FindingRepository(BaseRepository):
                             evidence_strength,
                             tool_agreement_level,
                             fp_likelihood,
-                        )
+                        ),
                     )
                     row = cursor.fetchone()
                     if row:
@@ -228,9 +246,17 @@ class FindingRepository(BaseRepository):
                     fallback_row = cursor.fetchone()
                     if fallback_row:
                         finding_id = str(fallback_row[0])
-                        logger.debug("Retrieved finding ID via fallback query for %s", engagement_id)
+                        logger.debug(
+                            "Retrieved finding ID via fallback query for %s",
+                            engagement_id,
+                        )
                     else:
-                        logger.warning("Fallback query also returned no row for engagement=%s endpoint=%s type=%s", engagement_id, endpoint, finding_type)
+                        logger.warning(
+                            "Fallback query also returned no row for engagement=%s endpoint=%s type=%s",
+                            engagement_id,
+                            endpoint,
+                            finding_type,
+                        )
                         return None
                 except Exception as fb_err:
                     logger.error("Fallback query failed: %s", fb_err)
@@ -294,8 +320,15 @@ class FindingRepository(BaseRepository):
                   AND source_tool IS NULL
                 RETURNING id
                 """,
-                (severity, confidence, Json(evidence), cvss_score,
-                 engagement_id, finding_type, endpoint),
+                (
+                    severity,
+                    confidence,
+                    Json(evidence),
+                    cvss_score,
+                    engagement_id,
+                    finding_type,
+                    endpoint,
+                ),
             )
             row = cursor.fetchone()
             if row:
@@ -321,17 +354,22 @@ class FindingRepository(BaseRepository):
                 RETURNING id
                 """,
                 (
-                    str(uuid.uuid4()), engagement_id, finding_type, severity,
-                    confidence, endpoint, Json(evidence), source_tool, cvss_score,
-                )
+                    str(uuid.uuid4()),
+                    engagement_id,
+                    finding_type,
+                    severity,
+                    confidence,
+                    endpoint,
+                    Json(evidence),
+                    source_tool,
+                    cvss_score,
+                ),
             )
             row = cursor.fetchone()
             return str(row[0]) if row else None
 
     def find_high_confidence(
-        self,
-        engagement_id: str,
-        threshold: float = 0.7
+        self, engagement_id: str, threshold: float = 0.7
     ) -> list[dict]:
         """
         Find high confidence findings
@@ -351,7 +389,7 @@ class FindingRepository(BaseRepository):
                 ORDER BY confidence DESC
                 LIMIT 500
                 """,
-                (engagement_id, threshold)
+                (engagement_id, threshold),
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
@@ -378,11 +416,13 @@ class FindingRepository(BaseRepository):
                     FROM mv_engagement_findings
                     WHERE engagement_id = %s
                     """,
-                    (engagement_id,)
+                    (engagement_id,),
                 )
                 row = cursor.fetchone()
             except psycopg2_errors.UndefinedTable:
-                logger.debug("Materialized view mv_engagement_findings does not exist — falling back to direct query")
+                logger.debug(
+                    "Materialized view mv_engagement_findings does not exist — falling back to direct query"
+                )
                 row = None
 
             if row:
@@ -415,19 +455,23 @@ class FindingRepository(BaseRepository):
                 WHERE engagement_id = %s
                 GROUP BY severity
                 """,
-                (engagement_id,)
+                (engagement_id,),
             )
             rows = cursor.fetchall()
             summary = {}
             for row in rows:
                 summary[row["severity"]] = {
                     "count": row["count"],
-                    "avg_confidence": float(row["avg_confidence"]) if row["avg_confidence"] else 0,
+                    "avg_confidence": float(row["avg_confidence"])
+                    if row["avg_confidence"]
+                    else 0,
                     "avg_cvss": float(row["avg_cvss"]) if row["avg_cvss"] else 0,
                 }
             return summary
 
-    def find_by_engagement_with_details(self, engagement_id: str, limit: int = 50, offset: int = 0) -> list[dict]:
+    def find_by_engagement_with_details(
+        self, engagement_id: str, limit: int = 50, offset: int = 0
+    ) -> list[dict]:
         """
         Find findings with engagement details in a single query.
         Avoids N+1 query problem by using JOINs.
@@ -453,7 +497,7 @@ class FindingRepository(BaseRepository):
                 ORDER BY f.created_at DESC
                 LIMIT %s OFFSET %s
                 """,
-                (engagement_id, limit, offset)
+                (engagement_id, limit, offset),
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
@@ -473,7 +517,7 @@ class FindingRepository(BaseRepository):
                 SET confidence = %s
                 WHERE id = %s
                 """,
-                (float(confidence), finding_id)
+                (float(confidence), finding_id),
             )
 
     def add_llm_evidence(self, finding_id: str, llm_result: dict) -> None:
@@ -492,12 +536,16 @@ class FindingRepository(BaseRepository):
                     llm_analysis = %s
                 WHERE id = %s
                 """,
-                (Json(llm_result), finding_id)
+                (Json(llm_result), finding_id),
             )
 
     def get_findings_by_engagement(
-        self, engagement_id: str, limit: int = 100, offset: int = 0,
-        severity: str | None = None, finding_type: str | None = None,
+        self,
+        engagement_id: str,
+        limit: int = 100,
+        offset: int = 0,
+        severity: str | None = None,
+        finding_type: str | None = None,
     ) -> tuple[list[dict], int]:
         """
         Get findings for an engagement with pagination and optional filters.
@@ -547,7 +595,7 @@ class FindingRepository(BaseRepository):
         engagement_id: str,
         threshold: float = 0.7,
         min_confidence: float = 0.3,
-        limit: int = 50
+        limit: int = 50,
     ) -> list[dict]:
         """
         Find findings for an engagement that:
@@ -578,7 +626,7 @@ class FindingRepository(BaseRepository):
                 LIMIT %s
                 FOR UPDATE SKIP LOCKED
                 """,
-                (engagement_id, min_confidence, threshold, limit)
+                (engagement_id, min_confidence, threshold, limit),
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
@@ -659,10 +707,20 @@ class FindingRepository(BaseRepository):
                         RETURNING id, (xmax = 0) AS is_insert
                         """,
                         (
-                            finding_id, engagement_id, _type, _severity,
-                            _confidence, _endpoint, Json(_evidence),
-                            _source_tool, _cvss, _owasp, _cwe,
-                            _ev_strength, _tool_agree, _fp_like,
+                            finding_id,
+                            engagement_id,
+                            _type,
+                            _severity,
+                            _confidence,
+                            _endpoint,
+                            Json(_evidence),
+                            _source_tool,
+                            _cvss,
+                            _owasp,
+                            _cwe,
+                            _ev_strength,
+                            _tool_agree,
+                            _fp_like,
                         ),
                     )
                     row = cursor.fetchone()
@@ -675,20 +733,32 @@ class FindingRepository(BaseRepository):
                     else:
                         logger.warning(
                             "batch_create_or_update: no row returned for type=%s endpoint=%s",
-                            _type, _endpoint,
+                            _type,
+                            _endpoint,
                         )
 
                     # Release the savepoint on success
                     try:
-                        cursor.execute(SQL("RELEASE SAVEPOINT {}").format(Identifier(sp_name)))
+                        cursor.execute(
+                            SQL("RELEASE SAVEPOINT {}").format(Identifier(sp_name))
+                        )
                     except psycopg2.Error as sp_err:
-                        logger.debug("Failed to release savepoint %s: %s", sp_name, sp_err)
-                except (psycopg2_errors.UniqueViolation, psycopg2_errors.InvalidColumnReference):
+                        logger.debug(
+                            "Failed to release savepoint %s: %s", sp_name, sp_err
+                        )
+                except (
+                    psycopg2_errors.UniqueViolation,
+                    psycopg2_errors.InvalidColumnReference,
+                ):
                     # Rollback savepoint to clear aborted transaction state
                     try:
-                        cursor.execute(SQL("ROLLBACK TO SAVEPOINT {}").format(Identifier(sp_name)))
+                        cursor.execute(
+                            SQL("ROLLBACK TO SAVEPOINT {}").format(Identifier(sp_name))
+                        )
                     except psycopg2.Error as sp_err:
-                        logger.debug("Failed to rollback savepoint %s: %s", sp_name, sp_err)
+                        logger.debug(
+                            "Failed to rollback savepoint %s: %s", sp_name, sp_err
+                        )
                     # ON CONFLICT didn't catch it — fall back to SELECT
                     try:
                         cursor.execute(
@@ -704,17 +774,22 @@ class FindingRepository(BaseRepository):
                 except psycopg2.Error as db_err:
                     logger.warning(
                         "batch_create_or_update: DB error for type=%s endpoint=%s: %s — rolling back savepoint, continuing batch",
-                        _type, _endpoint, db_err,
+                        _type,
+                        _endpoint,
+                        db_err,
                     )
                     # Rollback savepoint to clear aborted transaction state.
                     # Without this, PostgreSQL rejects all subsequent statements
                     # with "current transaction is aborted, commands ignored".
                     try:
-                        cursor.execute(SQL("ROLLBACK TO SAVEPOINT {}").format(Identifier(sp_name)))
+                        cursor.execute(
+                            SQL("ROLLBACK TO SAVEPOINT {}").format(Identifier(sp_name))
+                        )
                     except Exception as sp_err:
                         logger.warning(
                             "batch_create_or_update: savepoint rollback also failed for %s — aborting batch: %s",
-                            _endpoint, sp_err,
+                            _endpoint,
+                            sp_err,
                         )
                         raise
 

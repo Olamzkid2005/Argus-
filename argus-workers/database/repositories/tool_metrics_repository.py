@@ -3,6 +3,7 @@ Tool Metrics Repository - Records and queries tool performance metrics
 
 Requirements: 22.1, 22.2
 """
+
 import uuid
 
 from psycopg2.extras import RealDictCursor
@@ -21,11 +22,7 @@ class ToolMetricsRepository(BaseRepository):
     id_column = "id"
 
     def record_metric(
-        self,
-        tool_name: str,
-        duration_ms: int,
-        success: bool,
-        engagement_id: str = None
+        self, tool_name: str, duration_ms: int, success: bool, engagement_id: str = None
     ) -> str:
         """
         Record a tool execution metric
@@ -48,7 +45,7 @@ class ToolMetricsRepository(BaseRepository):
                 VALUES (%s, %s, %s, %s, %s, NOW())
                 RETURNING id
                 """,
-                (metric_id, tool_name, duration_ms, success, engagement_id)
+                (metric_id, tool_name, duration_ms, success, engagement_id),
             )
 
             result = cursor.fetchone()
@@ -74,13 +71,15 @@ class ToolMetricsRepository(BaseRepository):
                 ORDER BY created_at DESC
                 LIMIT %s
                 """,
-                (tool_name, limit)
+                (tool_name, limit),
             )
 
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
-    def get_performance_stats(self, days: int = 1, org_id: str | None = None) -> list[dict]:
+    def get_performance_stats(
+        self, days: int = 1, org_id: str | None = None
+    ) -> list[dict]:
         """
         Get performance statistics for all tools within the specified period.
 
@@ -109,7 +108,7 @@ class ToolMetricsRepository(BaseRepository):
                     GROUP BY tm.tool_name
                     ORDER BY tm.tool_name
                     """,
-                    (days, org_id)
+                    (days, org_id),
                 )
             else:
                 cursor.execute(
@@ -125,12 +124,14 @@ class ToolMetricsRepository(BaseRepository):
                     GROUP BY tool_name
                     ORDER BY tool_name
                     """,
-                    (days,)
+                    (days,),
                 )
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_tool_stats(self, tool_name: str, days: int = 1, org_id: str | None = None) -> dict | None:
+    def get_tool_stats(
+        self, tool_name: str, days: int = 1, org_id: str | None = None
+    ) -> dict | None:
         """
         Get performance statistics for a specific tool.
 
@@ -160,7 +161,7 @@ class ToolMetricsRepository(BaseRepository):
                       AND e.org_id = %s
                     GROUP BY tm.tool_name
                     """,
-                    (tool_name, days, org_id)
+                    (tool_name, days, org_id),
                 )
             else:
                 cursor.execute(
@@ -175,7 +176,7 @@ class ToolMetricsRepository(BaseRepository):
                     WHERE tool_name = %s AND created_at >= NOW() - INTERVAL '%s days'
                     GROUP BY tool_name
                     """,
-                    (tool_name, days)
+                    (tool_name, days),
                 )
 
             row = cursor.fetchone()
@@ -197,7 +198,7 @@ class ToolMetricsRepository(BaseRepository):
                 DELETE FROM tool_metrics
                 WHERE created_at < NOW() - INTERVAL '%s days'
                 """,
-                (days,)
+                (days,),
             )
 
             deleted_count = cursor.rowcount

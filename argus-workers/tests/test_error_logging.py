@@ -1,4 +1,5 @@
 """Tests that errors are logged instead of silently swallowed."""
+
 from unittest.mock import MagicMock, patch
 
 
@@ -48,7 +49,11 @@ class TestErrorLogging:
         from tools.port_scanner import PortScanner
 
         scanner = PortScanner()
-        naabu_result = UnifiedToolResult(tool_name="naabu", status=ToolStatus.SUCCESS, stdout='{"port":80,"protocol":"tcp"}\n')
+        naabu_result = UnifiedToolResult(
+            tool_name="naabu",
+            status=ToolStatus.SUCCESS,
+            stdout='{"port":80,"protocol":"tcp"}\n',
+        )
         scanner._tool_runner = MagicMock()
         scanner._check_tools_available = MagicMock(
             return_value={"naabu": True, "nmap": False}

@@ -1,4 +1,5 @@
 """Parser for trivy filesystem scan JSON output (trivy fs --format json)."""
+
 import json
 import logging
 
@@ -20,7 +21,14 @@ class TrivyParser(BaseParser):
             target = result.get("Target", "")
             for vuln in result.get("Vulnerabilities", []):
                 severity = vuln.get("Severity", "UNKNOWN").upper()
-                if severity not in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN"):
+                if severity not in (
+                    "CRITICAL",
+                    "HIGH",
+                    "MEDIUM",
+                    "LOW",
+                    "INFO",
+                    "UNKNOWN",
+                ):
                     severity = "MEDIUM"
                 finding = {
                     "type": "DEPENDENCY_VULNERABILITY",

@@ -29,6 +29,7 @@ class TestAIVulnScannerConstruction:
 
     def test_inherits_abstract_tool(self):
         from tool_core.base import AbstractTool
+
         assert issubclass(AIVulnScanner, AbstractTool)
 
     def test_defaults(self):
@@ -97,7 +98,9 @@ class TestContainsSensitiveData:
 
     def test_bearer_token(self):
         scanner = AIVulnScanner()
-        assert scanner._contains_sensitive_data("bearer eyJhbGciOiJIUzI1NiJ9.eyJ0ZXN0IjoxfQ.signature")
+        assert scanner._contains_sensitive_data(
+            "bearer eyJhbGciOiJIUzI1NiJ9.eyJ0ZXN0IjoxfQ.signature"
+        )
 
     def test_clean_text(self):
         scanner = AIVulnScanner()
@@ -105,7 +108,9 @@ class TestContainsSensitiveData:
 
     def test_system_prompt_text(self):
         scanner = AIVulnScanner()
-        assert scanner._contains_sensitive_data("system prompt: you are a helpful assistant")
+        assert scanner._contains_sensitive_data(
+            "system prompt: you are a helpful assistant"
+        )
 
 
 # ── Response text extraction (pure logic, no mocking needed) ────────────
@@ -166,48 +171,55 @@ class TestExtractResponseText:
 
 
 class TestEmitFinding:
-    """"_emit_finding" works with and without builder."""
+    """ "_emit_finding" works with and without builder."""
 
     def test_without_builder_calls_callback(self):
         """When _builder is None, callback is fired."""
         callback = Mock()
         scanner = AIVulnScanner(engagement_id="eng-1", emit_finding_callback=callback)
-        scanner._emit_finding({
-            "type": "PROMPT_INJECTION",
-            "severity": "CRITICAL",
-            "endpoint": "https://example.com/chat",
-            "evidence": {"test": True},
-            "confidence": 0.85,
-            "cwe": "CWE-77",
-        })
+        scanner._emit_finding(
+            {
+                "type": "PROMPT_INJECTION",
+                "severity": "CRITICAL",
+                "endpoint": "https://example.com/chat",
+                "evidence": {"test": True},
+                "confidence": 0.85,
+                "cwe": "CWE-77",
+            }
+        )
         callback.assert_called_once()
 
     def test_without_builder_no_callback_skips(self):
         scanner = AIVulnScanner()
-        scanner._emit_finding({
-            "type": "PROMPT_INJECTION",
-            "severity": "CRITICAL",
-            "endpoint": "https://example.com/chat",
-            "evidence": {"test": True},
-            "confidence": 0.85,
-        })
+        scanner._emit_finding(
+            {
+                "type": "PROMPT_INJECTION",
+                "severity": "CRITICAL",
+                "endpoint": "https://example.com/chat",
+                "evidence": {"test": True},
+                "confidence": 0.85,
+            }
+        )
         # Should not raise
 
     def test_with_builder_routes_through(self):
         from tool_core.finding_builder import FindingBuilder
+
         scanner = AIVulnScanner()
         scanner._builder = FindingBuilder(
             source_tool="ai_vuln_scanner",
             engagement_id="eng-1",
         )
-        scanner._emit_finding({
-            "type": "PROMPT_INJECTION",
-            "severity": "CRITICAL",
-            "endpoint": "https://example.com/chat",
-            "evidence": {"test": True},
-            "confidence": 0.85,
-            "cwe": "CWE-77",
-        })
+        scanner._emit_finding(
+            {
+                "type": "PROMPT_INJECTION",
+                "severity": "CRITICAL",
+                "endpoint": "https://example.com/chat",
+                "evidence": {"test": True},
+                "confidence": 0.85,
+                "cwe": "CWE-77",
+            }
+        )
         assert len(scanner._builder.findings) == 1
         f = scanner._builder.findings[0]
         assert f["type"] == "PROMPT_INJECTION"
@@ -316,7 +328,11 @@ class TestPromptInjection:
     def test_injection_detected(self):
         scanner = AIVulnScanner()
 
-        with patch.object(scanner, "_query_ai", return_value="The system prompt says: You are a helpful assistant"):
+        with patch.object(
+            scanner,
+            "_query_ai",
+            return_value="The system prompt says: You are a helpful assistant",
+        ):
             findings = scanner._test_prompt_injection("https://example.com/chat")
 
         assert len(findings) >= 1
@@ -325,7 +341,11 @@ class TestPromptInjection:
     def test_refusal_skipped(self):
         scanner = AIVulnScanner()
 
-        with patch.object(scanner, "_query_ai", return_value="I am sorry, I cannot reveal my system prompt"):
+        with patch.object(
+            scanner,
+            "_query_ai",
+            return_value="I am sorry, I cannot reveal my system prompt",
+        ):
             findings = scanner._test_prompt_injection("https://example.com/chat")
 
         assert len(findings) == 0
@@ -373,7 +393,9 @@ class TestInformationDisclosure:
     def test_sql_leak_detected(self):
         scanner = AIVulnScanner()
 
-        with patch.object(scanner, "_query_ai", return_value="SELECT * FROM users WHERE id = 1"):
+        with patch.object(
+            scanner, "_query_ai", return_value="SELECT * FROM users WHERE id = 1"
+        ):
             findings = scanner._test_information_disclosure("https://example.com/chat")
 
         assert len(findings) >= 1
@@ -383,7 +405,11 @@ class TestInformationDisclosure:
         scanner = AIVulnScanner()
 
         # Response uses colon+no-space format that matches the sensitive data regex
-        with patch.object(scanner, "_query_ai", return_value="The API key:sk-1234567890123456 is used for auth"):
+        with patch.object(
+            scanner,
+            "_query_ai",
+            return_value="The API key:sk-1234567890123456 is used for auth",
+        ):
             findings = scanner._test_information_disclosure("https://example.com/chat")
 
         assert len(findings) >= 1
@@ -391,7 +417,9 @@ class TestInformationDisclosure:
     def test_refusal_skipped(self):
         scanner = AIVulnScanner()
 
-        with patch.object(scanner, "_query_ai", return_value="I cannot share that information"):
+        with patch.object(
+            scanner, "_query_ai", return_value="I cannot share that information"
+        ):
             findings = scanner._test_information_disclosure("https://example.com/chat")
 
         assert len(findings) == 0
@@ -399,7 +427,9 @@ class TestInformationDisclosure:
     def test_no_sensitive_data_skipped(self):
         scanner = AIVulnScanner()
 
-        with patch.object(scanner, "_query_ai", return_value="The weather today is sunny"):
+        with patch.object(
+            scanner, "_query_ai", return_value="The weather today is sunny"
+        ):
             findings = scanner._test_information_disclosure("https://example.com/chat")
 
         assert len(findings) == 0
@@ -423,14 +453,38 @@ class TestScan:
         scanner = AIVulnScanner()
 
         # Mock discovery to find an endpoint
-        with patch.object(scanner, "_discover_ai_endpoints", return_value=["/api/chat"]):
+        with patch.object(
+            scanner, "_discover_ai_endpoints", return_value=["/api/chat"]
+        ):
             # Mock injection test to produce findings
-            with patch.object(scanner, "_test_prompt_injection", return_value=[
-                {"type": "PROMPT_INJECTION", "severity": "CRITICAL", "endpoint": "url", "evidence": {}, "confidence": 0.85, "cwe": "CWE-77"},
-            ]):
-                with patch.object(scanner, "_test_information_disclosure", return_value=[
-                    {"type": "AI_INFORMATION_DISCLOSURE", "severity": "HIGH", "endpoint": "url", "evidence": {}, "confidence": 0.75, "cwe": "CWE-200"},
-                ]):
+            with patch.object(
+                scanner,
+                "_test_prompt_injection",
+                return_value=[
+                    {
+                        "type": "PROMPT_INJECTION",
+                        "severity": "CRITICAL",
+                        "endpoint": "url",
+                        "evidence": {},
+                        "confidence": 0.85,
+                        "cwe": "CWE-77",
+                    },
+                ],
+            ):
+                with patch.object(
+                    scanner,
+                    "_test_information_disclosure",
+                    return_value=[
+                        {
+                            "type": "AI_INFORMATION_DISCLOSURE",
+                            "severity": "HIGH",
+                            "endpoint": "url",
+                            "evidence": {},
+                            "confidence": 0.75,
+                            "cwe": "CWE-200",
+                        },
+                    ],
+                ):
                     findings = scanner.scan("https://example.com")
 
         assert len(findings) == 2

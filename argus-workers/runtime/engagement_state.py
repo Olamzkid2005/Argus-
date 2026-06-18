@@ -107,7 +107,9 @@ class EngagementState:
         self._bug_bounty_mode: bool = False
         self._agent_mode_enabled: bool = True
         self._last_agent_tried_tools: set[str] = set()
-        self.obstacles: list[dict] = []  # NEW — BolaWorkflow obstacles (in-memory only; count exposed via to_dict)
+        self.obstacles: list[
+            dict
+        ] = []  # NEW — BolaWorkflow obstacles (in-memory only; count exposed via to_dict)
 
     # ── Versioned mutation ──
 
@@ -179,12 +181,14 @@ class EngagementState:
 
     def add_observation(self, role: str, content: str, data: dict | None = None):
         """Add an observation to history (replaces ReActAgent.history)."""
-        self.observations.append({
-            "role": role,
-            "content": content[:2000],
-            "data": data or {},
-            "timestamp": time.time(),
-        })
+        self.observations.append(
+            {
+                "role": role,
+                "content": content[:2000],
+                "data": data or {},
+                "timestamp": time.time(),
+            }
+        )
         # Cap to last 50 entries
         if len(self.observations) > 50:
             self.observations = self.observations[-50:]
@@ -274,7 +278,10 @@ class EngagementState:
         """
         from feature_flags import is_enabled as _ff_enabled
 
-        if _ff_enabled("ATTACK_GRAPH_V2", default=False) and self._attack_graph_instance is not None:
+        if (
+            _ff_enabled("ATTACK_GRAPH_V2", default=False)
+            and self._attack_graph_instance is not None
+        ):
             try:
                 snapshot = self._attack_graph_instance.to_snapshot_dict()
                 attack_paths = snapshot.get("paths", [])[:5]
@@ -289,9 +296,7 @@ class EngagementState:
             "execution_iteration": self.execution_iteration,
             "recent_observations": self.get_context(max_entries=5),
             "findings_count": len(self.findings),
-            "recent_tools": [
-                t.to_dict() for t in self.tool_history[-10:]
-            ],
+            "recent_tools": [t.to_dict() for t in self.tool_history[-10:]],
             "failed_actions": self.failed_actions[-5:],
             "attack_graph_paths": attack_paths,
             "budget_status": self.budget_manager.get_status(),
@@ -312,7 +317,9 @@ class EngagementState:
             "current_state": self.current_state,
             "execution_iteration": self.execution_iteration,
             "state_version": self.state_version,
-            "obstacles_count": len(self.obstacles),  # count only; full list is in-memory
+            "obstacles_count": len(
+                self.obstacles
+            ),  # count only; full list is in-memory
             "findings_count": len(self.findings),
             "observations_count": len(self.observations),
             "tool_history_count": len(self.tool_history),
@@ -331,7 +338,9 @@ class EngagementState:
             "state_version": self.state_version,
             "execution_iteration": self.execution_iteration,
             "observations": self.observations[-10:],  # last 10 observations
-            "tool_history": [t.to_dict() for t in self.tool_history[-20:]],  # last 20 tools
+            "tool_history": [
+                t.to_dict() for t in self.tool_history[-20:]
+            ],  # last 20 tools
             "tried_tools": list(self._last_agent_tried_tools),
             "attack_graph": self.attack_graph,
             "budget": self.budget_manager.to_dict(),

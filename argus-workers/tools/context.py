@@ -75,6 +75,7 @@ class ToolContext:
     def _normalize_finding(self, raw_finding: dict, tool: str) -> dict | None:
         if self.normalizer is not None:
             from orchestrator_pkg.normalizer_utils import normalize_finding
+
             return normalize_finding(self.normalizer, raw_finding, tool)
         return raw_finding
 
@@ -100,6 +101,4 @@ class ScanContext:
     target_url: str = ""
     aggressiveness: str = "default"
     db_connection_string: str = ""
-    created_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())

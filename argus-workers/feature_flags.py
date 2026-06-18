@@ -12,6 +12,7 @@ Usage:
 
 Requirements: 4.9
 """
+
 import logging
 import os
 import threading
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 class FlagSource(Enum):
     """Source of the feature flag value."""
+
     ENV = "environment"
     DB = "database"
     DEFAULT = "default"
@@ -98,7 +100,7 @@ class FeatureFlags:
         if env_value is not None:
             parsed = self._parse_value(env_value)
             self._cache[flag_name] = (parsed, FlagSource.ENV)
-            logger.debug(f"Feature flag {flag_name}={parsed} from env")
+            logger.debug("Feature flag %s=%s from env", flag_name, parsed)
             return self._cache[flag_name]
 
         # 2. Check database
@@ -107,10 +109,10 @@ class FeatureFlags:
                 db_value = self._load_flag_from_db(flag_name)
                 if db_value is not None:
                     self._cache[flag_name] = (db_value, FlagSource.DB)
-                    logger.debug(f"Feature flag {flag_name}={db_value} from db")
+                    logger.debug("Feature flag %s=%s from db", flag_name, db_value)
                     return self._cache[flag_name]
             except Exception as e:
-                logger.warning(f"Failed to read feature flag from DB: {e}")
+                logger.warning("Failed to read feature flag from DB: %s", e)
 
         # 3. Use default
         self._cache[flag_name] = (default, FlagSource.DEFAULT)
@@ -135,6 +137,7 @@ class FeatureFlags:
         """Load flag value from database. Returns None if not found."""
         try:
             from database.connection import get_db
+
             db = get_db()
             conn = db.get_connection()
             cursor = None
@@ -142,7 +145,7 @@ class FeatureFlags:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT enabled FROM feature_flags WHERE flag_name = %s",
-                    (flag_name,)
+                    (flag_name,),
                 )
                 row = cursor.fetchone()
                 return row[0] if row else None

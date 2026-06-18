@@ -1,4 +1,5 @@
 """Tests for ReconContext dataclass."""
+
 import os
 import sys
 
@@ -14,10 +15,15 @@ class TestReconContext:
             target_url="https://example.com",
             live_endpoints=[f"https://example.com/page/{i}" for i in range(100)],
             subdomains=[f"sub{i}.example.com" for i in range(50)],
-            open_ports=[{"port": 80, "service": "http"}, {"port": 443, "service": "https"}],
+            open_ports=[
+                {"port": 80, "service": "http"},
+                {"port": 443, "service": "https"},
+            ],
             tech_stack=["WordPress 6.4", "PHP 8.1", "nginx", "MySQL"],
             crawled_paths=[f"/path/{i}" for i in range(50)],
-            parameter_bearing_urls=[f"https://example.com/api?id={i}" for i in range(30)],
+            parameter_bearing_urls=[
+                f"https://example.com/api?id={i}" for i in range(30)
+            ],
             auth_endpoints=["/login", "/oauth/authorize"],
             api_endpoints=["/api/v1/users", "/api/v1/posts", "/graphql"],
             findings_count=500,

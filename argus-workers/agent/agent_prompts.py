@@ -13,6 +13,7 @@ Bug-Reaper Integration:
   - BUGBOUNTY_STOPPING_RULES: Stricter stopping rules for bug bounty mode
   - _load_bugbounty_context(): Loads Bug-Reaper methodology .md files into agent context
 """
+
 import json
 import logging
 import re
@@ -542,6 +543,7 @@ Return ONLY valid JSON. No markdown, no explanation outside the JSON.
 }}
 """
 
+
 def build_tech_aware_system_prompt(recon_context) -> str:
     """
     Builds a system prompt enriched with tech-stack-specific threat guidance.
@@ -567,10 +569,7 @@ def build_tech_aware_system_prompt(recon_context) -> str:
     tech_section += "\n"
 
     catalogue_header = "TOOL CATALOGUE — WEB APPLICATION SCAN"
-    result = base.replace(
-        catalogue_header,
-        tech_section + "\n" + catalogue_header
-    )
+    result = base.replace(catalogue_header, tech_section + "\n" + catalogue_header)
     if result == base:
         logger.warning(
             "Tech threat section not injected — catalogue header mismatch "
@@ -588,28 +587,57 @@ def _load_bugbounty_context(recon_context, tried_tools: set) -> str:
 
     # Bug-Reaper's priority-ordered hunting classes with their associated tools
     priority_order = [
-        ("idor", ["arjun", "jwt_tool", "web_scanner"],
-         "Test every ?id=, ?user_id=, /api/*/[id] endpoint with two-account swap"),
-        ("auth-bypass", ["jwt_tool", "web_scanner"],
-         "Test password reset reuse, role field in API responses, OAuth state parameter"),
-        ("api-graphql", ["web_scanner", "nuclei"],
-         "Test BOLA, BFLA, introspection, mass assignment on API endpoints"),
-        ("ssrf", ["nuclei", "web_scanner"],
-         "Test URL parameters, webhooks, file fetch, PDF generation endpoints"),
-        ("xss", ["dalfox", "web_scanner"],
-         "Test parameter-bearing URLs, form inputs, JSON reflection points"),
-        ("sqli", ["sqlmap", "nuclei"],
-         "Test login forms, search, filter, sort parameters"),
-        ("subdomain-takeover", ["nuclei"],
-         "Test dangling CNAME records - GitHub Pages, Heroku, AWS S3, etc."),
-        ("cors", ["nuclei", "web_scanner"],
-         "Test Origin reflection with Access-Control-Allow-Credentials"),
-        ("rce", ["commix", "nuclei"],
-         "Test cmd, exec, ping, system parameters for command injection"),
-        ("ssti", ["nuclei"],
-         "Test template injection with {{7*7}} probes"),
-        ("lfi", ["nuclei", "web_scanner"],
-         "Test ?file=, ?page=, ?template= parameters for path traversal"),
+        (
+            "idor",
+            ["arjun", "jwt_tool", "web_scanner"],
+            "Test every ?id=, ?user_id=, /api/*/[id] endpoint with two-account swap",
+        ),
+        (
+            "auth-bypass",
+            ["jwt_tool", "web_scanner"],
+            "Test password reset reuse, role field in API responses, OAuth state parameter",
+        ),
+        (
+            "api-graphql",
+            ["web_scanner", "nuclei"],
+            "Test BOLA, BFLA, introspection, mass assignment on API endpoints",
+        ),
+        (
+            "ssrf",
+            ["nuclei", "web_scanner"],
+            "Test URL parameters, webhooks, file fetch, PDF generation endpoints",
+        ),
+        (
+            "xss",
+            ["dalfox", "web_scanner"],
+            "Test parameter-bearing URLs, form inputs, JSON reflection points",
+        ),
+        (
+            "sqli",
+            ["sqlmap", "nuclei"],
+            "Test login forms, search, filter, sort parameters",
+        ),
+        (
+            "subdomain-takeover",
+            ["nuclei"],
+            "Test dangling CNAME records - GitHub Pages, Heroku, AWS S3, etc.",
+        ),
+        (
+            "cors",
+            ["nuclei", "web_scanner"],
+            "Test Origin reflection with Access-Control-Allow-Credentials",
+        ),
+        (
+            "rce",
+            ["commix", "nuclei"],
+            "Test cmd, exec, ping, system parameters for command injection",
+        ),
+        ("ssti", ["nuclei"], "Test template injection with {{7*7}} probes"),
+        (
+            "lfi",
+            ["nuclei", "web_scanner"],
+            "Test ?file=, ?page=, ?template= parameters for path traversal",
+        ),
     ]
 
     # Find the first priority class where none of its tools have run yet
@@ -630,7 +658,9 @@ def _load_bugbounty_context(recon_context, tried_tools: set) -> str:
 QUICK WIN: {quick_win}
 """
                 except (OSError, UnicodeDecodeError) as e:
-                    logger.warning("Failed to load bugbounty knowledge file %s: %s", ref_file, e)
+                    logger.warning(
+                        "Failed to load bugbounty knowledge file %s: %s", ref_file, e
+                    )
 
     return ""
 
@@ -638,7 +668,6 @@ QUICK WIN: {quick_win}
 # ---------------------------------------------------------------------------
 # USER PROMPT BUILDER
 # ---------------------------------------------------------------------------
-
 
 
 def _sanitize_for_prompt(value: str) -> str:
@@ -655,10 +684,10 @@ def _sanitize_for_prompt(value: str) -> str:
         Sanitized string, max 200 chars
     """
     # Remove control characters
-    sanitized = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', str(value))
+    sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", str(value))
     # Escape prompt-injection markers
-    sanitized = sanitized.replace('```', '`"`')
-    sanitized = sanitized.replace('${', '{dollar}')
+    sanitized = sanitized.replace("```", '`"`')
+    sanitized = sanitized.replace("${", "{dollar}")
     # Truncate to prevent context window abuse
     return sanitized[:200]
 
@@ -693,13 +722,13 @@ def _build_target_context_paragraph(profile: dict) -> str:
         )
 
     best = [
-        t["tool"] for t in profile.get("best_tools", [])[:3]
+        t["tool"]
+        for t in profile.get("best_tools", [])[:3]
         if isinstance(t, dict) and "tool" in t
     ]
     if best:
         parts.append(
-            f"Tools that found real issues: "
-            f"{_sanitize_for_prompt(', '.join(best))}."
+            f"Tools that found real issues: {_sanitize_for_prompt(', '.join(best))}."
         )
 
     noisy = profile.get("noisy_tools", [])[:3]
@@ -712,9 +741,7 @@ def _build_target_context_paragraph(profile: dict) -> str:
 
     tech = profile.get("known_tech_stack", [])[:5]
     if tech:
-        parts.append(
-            f"Detected stack: {_sanitize_for_prompt(', '.join(tech))}."
-        )
+        parts.append(f"Detected stack: {_sanitize_for_prompt(', '.join(tech))}.")
 
     return "=== WHAT WE KNOW ABOUT THIS TARGET ===\n" + " ".join(parts)  # noqa: S608
 
@@ -728,7 +755,7 @@ def build_tool_selection_prompt(
     mode: str | None = None,
     bugbounty_context: str = "",
     priority_classes: list[str] | None = None,
-    candidate_list = None,
+    candidate_list=None,
     memory_context: str = "",
 ) -> str:
     """
@@ -782,9 +809,7 @@ def build_tool_selection_prompt(
 
     # ── Section 2: Bug-Reaper methodology context ──────────────────
     if bugbounty_context:
-        prompt_parts.append(
-            f"=== BUG BOUNTY METHODOLOGY ===\n{bugbounty_context}"
-        )
+        prompt_parts.append(f"=== BUG BOUNTY METHODOLOGY ===\n{bugbounty_context}")
 
     # ── Section 3: Recon findings ──────────────────────────────────
     prompt_parts.append(f"=== RECON FINDINGS ===\n{recon_context}")
@@ -800,9 +825,7 @@ def build_tool_selection_prompt(
         desc = _sanitize_for_prompt(t.get("description", ""))
         tried = " (already tried)" if name in tried_tools else ""
         tool_lines.append(f"  - {name}: {desc}{tried}")
-    prompt_parts.append(
-        "=== AVAILABLE TOOLS ===\n" + "\n".join(tool_lines)
-    )
+    prompt_parts.append("=== AVAILABLE TOOLS ===\n" + "\n".join(tool_lines))
 
     # ── Combine ────────────────────────────────────────────────────
     prompt = "\n\n".join(prompt_parts)
@@ -817,8 +840,7 @@ def build_tool_selection_prompt(
         if mid > 0:
             prompt = prompt[:mid]
             prompt += (
-                f"\n\n{obs_marker}\n"
-                f"[truncated — observations exceed token budget]"
+                f"\n\n{obs_marker}\n[truncated — observations exceed token budget]"
             )
 
     return prompt
@@ -826,16 +848,17 @@ def build_tool_selection_prompt(
 
 _PROMPT_INJECTION_PATTERNS = [
     # System prompt override attempts
-    r'(?i)ignore\s+(all\s+)?(previous|above|prior)\s+instructions',
-    r'(?i)forget\s+(all\s+)?(previous|earlier)\s+(instructions|prompts)',
-    r'(?i)override\s+(system|assistant)\s+(prompt|message)',
-    r'(?i)you\s+are\s+now\s+(a|an|acting\s+as)\s+(different|new)',
+    r"(?i)ignore\s+(all\s+)?(previous|above|prior)\s+instructions",
+    r"(?i)forget\s+(all\s+)?(previous|earlier)\s+(instructions|prompts)",
+    r"(?i)override\s+(system|assistant)\s+(prompt|message)",
+    r"(?i)you\s+are\s+now\s+(a|an|acting\s+as)\s+(different|new)",
     # Command injection patterns in output
-    r'(?i)(curl|wget)\s+\S+.*(exfil|extract|steal|upload)',
-    r'(?i)(subprocess|os\.system|eval|exec)\s*\(',
-    r'(?i)run\s+(the\s+following|this)\s+(command|tool)',
-    r'(?i)system\s+prompt\s*(=|\s+is\s*)',
+    r"(?i)(curl|wget)\s+\S+.*(exfil|extract|steal|upload)",
+    r"(?i)(subprocess|os\.system|eval|exec)\s*\(",
+    r"(?i)run\s+(the\s+following|this)\s+(command|tool)",
+    r"(?i)system\s+prompt\s*(=|\s+is\s*)",
 ]
+
 
 def _sanitize_for_llm(text: str) -> str:
     """Remove prompt injection patterns from tool output before feeding to LLM.
@@ -845,15 +868,16 @@ def _sanitize_for_llm(text: str) -> str:
     from attacker-controlled target servers.
     """
     import re as _re
+
     # Truncate first to limit regex work on large outputs
     text = text[:3000]
     # Strip control characters (except newline/tab)
-    text = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+    text = _re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]", "", text)
     # Remove backtick fences that could break prompt structure
-    text = text.replace('```', '` ` `')
+    text = text.replace("```", "` ` `")
     # Replace injection patterns with redacted markers
     for pattern in _PROMPT_INJECTION_PATTERNS:
-        text = _re.sub(pattern, '[REDACTED_INJECTION]', text)
+        text = _re.sub(pattern, "[REDACTED_INJECTION]", text)
     return text
 
 
@@ -1035,8 +1059,12 @@ def build_report_prompt(
     sanitized_target = _sanitize_for_llm(str(engagement.get("target_url", "N/A")))
     sanitized_scan_type = _sanitize_for_llm(str(engagement.get("scan_type", "N/A")))
     sanitized_recon = _sanitize_for_llm(recon_summary)
-    sanitized_synthesis = _sanitize_for_llm(json.dumps(synthesis, indent=2, default=str))
-    sanitized_findings = _sanitize_for_llm(json.dumps(scored_findings[:100], indent=2, default=str))
+    sanitized_synthesis = _sanitize_for_llm(
+        json.dumps(synthesis, indent=2, default=str)
+    )
+    sanitized_findings = _sanitize_for_llm(
+        json.dumps(scored_findings[:100], indent=2, default=str)
+    )
 
     return f"""
 === ENGAGEMENT ===

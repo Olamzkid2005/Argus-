@@ -4,6 +4,7 @@ Attack Graph Engine - Computes probabilistic risk scores with confidence decay
 Includes Bug-Reaper vulnerability chaining templates for detecting
 high-value attack chains that escalate individual findings to critical severity.
 """
+
 import math
 from enum import StrEnum
 
@@ -12,12 +13,14 @@ from models.finding import VulnerabilityFinding
 
 class RelationshipType(StrEnum):
     """Semantic relationship between graph nodes."""
+
     CAUSES = "causes"
     AMPLIFIES = "amplifies"
     ENABLES = "enables"
     DEPENDS_ON = "depends_on"
     MITIGATES = "mitigates"
     INDEPENDENT = "independent"
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Bug-Reaper Chain Templates
@@ -279,7 +282,7 @@ class AttackGraph:
 
     def _get_severity_value(self, severity) -> int:
         """Get numeric severity value for comparison"""
-        sev = severity.value if hasattr(severity, 'value') else severity
+        sev = severity.value if hasattr(severity, "value") else severity
         return self.SEVERITY_VALUES.get(sev, 3)
 
     def add_finding(self, finding: VulnerabilityFinding) -> None:
@@ -293,7 +296,11 @@ class AttackGraph:
             finding: VulnerabilityFinding instance
         """
         # Get severity value for the new finding
-        finding_severity = finding.severity.value if hasattr(finding.severity, 'value') else finding.severity
+        finding_severity = (
+            finding.severity.value
+            if hasattr(finding.severity, "value")
+            else finding.severity
+        )
 
         # Create vulnerability node ID (without severity to track uniqueness)
         vuln_node_id = f"vuln_{finding.type}_{finding.endpoint}"
@@ -309,9 +316,15 @@ class AttackGraph:
             if new_severity_value > existing_severity_value:
                 existing_node.data["severity"] = finding_severity
                 existing_node.data["source_tool"] = finding.source_tool
-                existing_node.cvss = finding.cvss_score if finding.cvss_score is not None else self._estimate_cvss(finding_severity)
+                existing_node.cvss = (
+                    finding.cvss_score
+                    if finding.cvss_score is not None
+                    else self._estimate_cvss(finding_severity)
+                )
                 # Update confidence to max of existing and new
-                if finding.confidence and finding.confidence > (existing_node.confidence or 0):
+                if finding.confidence and finding.confidence > (
+                    existing_node.confidence or 0
+                ):
                     existing_node.confidence = finding.confidence
             return
 
@@ -325,7 +338,9 @@ class AttackGraph:
                 "endpoint": finding.endpoint,
                 "source_tool": finding.source_tool,
             },
-            cvss=finding.cvss_score if finding.cvss_score is not None else self._estimate_cvss(finding_severity),
+            cvss=finding.cvss_score
+            if finding.cvss_score is not None
+            else self._estimate_cvss(finding_severity),
             confidence=finding.confidence,
         )
         self.nodes[vuln_node_id] = vuln_node
@@ -370,12 +385,31 @@ class AttackGraph:
         Vulnerabilities that increase impact severity get AMPLIFIES.
         All others default to INDEPENDENT.
         """
-        enables_types = {"SSRF", "RCE", "COMMAND_INJECTION", "IDOR", "BOLA", "LFI",
-                         "PATH_TRAVERSAL", "DIRECTORY_TRAVERSAL", "AUTH_BYPASS",
-                         "BROKEN_AUTH", "BROKEN_AUTHENTICATION"}
-        amplifies_types = {"XSS", "REFLECTED_XSS", "STORED_XSS", "DOM_XSS",
-                           "BLIND_XSS", "CSRF", "CORS", "CORS_MISCONFIGURATION",
-                           "SUBDOMAIN_TAKEOVER", "OPEN_REDIRECT"}
+        enables_types = {
+            "SSRF",
+            "RCE",
+            "COMMAND_INJECTION",
+            "IDOR",
+            "BOLA",
+            "LFI",
+            "PATH_TRAVERSAL",
+            "DIRECTORY_TRAVERSAL",
+            "AUTH_BYPASS",
+            "BROKEN_AUTH",
+            "BROKEN_AUTHENTICATION",
+        }
+        amplifies_types = {
+            "XSS",
+            "REFLECTED_XSS",
+            "STORED_XSS",
+            "DOM_XSS",
+            "BLIND_XSS",
+            "CSRF",
+            "CORS",
+            "CORS_MISCONFIGURATION",
+            "SUBDOMAIN_TAKEOVER",
+            "OPEN_REDIRECT",
+        }
 
         ft = finding_type.upper()
         if ft in enables_types:
@@ -402,7 +436,8 @@ class AttackGraph:
 
         # Get all vulnerability nodes
         vuln_nodes = [
-            (node_id, node) for node_id, node in self.nodes.items()
+            (node_id, node)
+            for node_id, node in self.nodes.items()
             if node.type == "vulnerability"
         ]
 
@@ -411,7 +446,8 @@ class AttackGraph:
 
             # Find nodes matching prerequisite type
             prereq_nodes = [
-                (node_id, node) for node_id, node in vuln_nodes
+                (node_id, node)
+                for node_id, node in vuln_nodes
                 if self._get_chain_prereq(node.data.get("type", "")) == prereq_type
             ]
 
@@ -422,17 +458,24 @@ class AttackGraph:
                     for node_id, node in vuln_nodes:
                         if node_id == prereq_node_id:
                             continue
-                        if self._get_chain_prereq(node.data.get("type", "")) == chain_type:
+                        if (
+                            self._get_chain_prereq(node.data.get("type", ""))
+                            == chain_type
+                        ):
                             # Chain detected
-                            chains.append({
-                                "chain_id": chain_rule["id"],
-                                "name": chain_rule["name"],
-                                "severity": chain_rule["severity"],
-                                "correlation_factor": chain_rule["correlation_factor"],
-                                "prereq_node": prereq_node,
-                                "chain_node": node,
-                                "description": chain_rule["description"],
-                            })
+                            chains.append(
+                                {
+                                    "chain_id": chain_rule["id"],
+                                    "name": chain_rule["name"],
+                                    "severity": chain_rule["severity"],
+                                    "correlation_factor": chain_rule[
+                                        "correlation_factor"
+                                    ],
+                                    "prereq_node": prereq_node,
+                                    "chain_node": node,
+                                    "description": chain_rule["description"],
+                                }
+                            )
 
         return chains
 
@@ -454,10 +497,7 @@ class AttackGraph:
             to_node = self.nodes.get(edge.to_node)
 
             if from_node and to_node:
-                path = Path(
-                    nodes=[from_node, to_node],
-                    edges=[edge]
-                )
+                path = Path(nodes=[from_node, to_node], edges=[edge])
                 paths.append(path)
 
         # Add chain-enhanced paths
@@ -465,8 +505,7 @@ class AttackGraph:
         for chain in chains:
             # Create a chain path with both vulnerabilities
             chain_path = Path(
-                nodes=[chain["prereq_node"], chain["chain_node"]],
-                edges=[]
+                nodes=[chain["prereq_node"], chain["chain_node"]], edges=[]
             )
             paths.append(chain_path)
 
@@ -490,6 +529,7 @@ class AttackGraph:
         path_risks = []
         chains = self.find_chains()
         from collections import defaultdict
+
         chain_map: dict[str, list[dict]] = defaultdict(list)
         for c in chains:
             chain_map[c["prereq_node"].id].append(c)
@@ -502,18 +542,20 @@ class AttackGraph:
                 chain = chain_map[path.nodes[0].id][0]
                 risk *= chain["correlation_factor"]
 
-            path_risks.append({
-                "path": path,
-                "risk_score": risk,
-                "nodes": [
-                    {
-                        "id": node.id,
-                        "type": node.type,
-                        "data": node.data,
-                    }
-                    for node in path.nodes
-                ],
-            })
+            path_risks.append(
+                {
+                    "path": path,
+                    "risk_score": risk,
+                    "nodes": [
+                        {
+                            "id": node.id,
+                            "type": node.type,
+                            "data": node.data,
+                        }
+                        for node in path.nodes
+                    ],
+                }
+            )
 
         # Sort by risk score descending
         path_risks.sort(key=lambda x: x["risk_score"], reverse=True)
@@ -560,10 +602,7 @@ class AttackGraph:
         Returns:
             Base risk score
         """
-        cvss_scores = [
-            node.cvss for node in path.nodes
-            if node.cvss is not None
-        ]
+        cvss_scores = [node.cvss for node in path.nodes if node.cvss is not None]
 
         if not cvss_scores:
             return 5.0  # Default medium risk
@@ -583,8 +622,7 @@ class AttackGraph:
             Confidence weight (0.0-1.0)
         """
         confidences = [
-            node.confidence for node in path.nodes
-            if node.confidence is not None
+            node.confidence for node in path.nodes if node.confidence is not None
         ]
 
         if not confidences:
@@ -631,7 +669,9 @@ class AttackGraph:
 
         return severity_to_cvss.get(severity, 5.0)
 
-    def compute_exploitability(self, path: Path, satisfied_prerequisites: set[str]) -> float:
+    def compute_exploitability(
+        self, path: Path, satisfied_prerequisites: set[str]
+    ) -> float:
         """
         Compute how exploitable a path is given satisfied prerequisites.
 
@@ -681,19 +721,23 @@ class AttackGraph:
             if edge.from_node == node_id:
                 to_node = self.nodes.get(edge.to_node)
                 if to_node:
-                    downstream.append(Path(
-                        nodes=[start_node, to_node],
-                        edges=[edge],
-                    ))
+                    downstream.append(
+                        Path(
+                            nodes=[start_node, to_node],
+                            edges=[edge],
+                        )
+                    )
 
         # Also check chain rules where this node is the prerequisite
         chains = self.find_chains()
         for chain in chains:
             if chain["prereq_node"].id == node_id:
-                downstream.append(Path(
-                    nodes=[chain["prereq_node"], chain["chain_node"]],
-                    edges=[],
-                ))
+                downstream.append(
+                    Path(
+                        nodes=[chain["prereq_node"], chain["chain_node"]],
+                        edges=[],
+                    )
+                )
 
         return downstream
 
@@ -712,31 +756,33 @@ class AttackGraph:
         serialized_paths = []
         for path in paths:
             risk = self.compute_risk(path)
-            serialized_paths.append({
-                "risk_score": round(risk, 2),
-                "nodes": [
-                    {
-                        "id": node.id,
-                        "type": node.type,
-                        "data": node.data,
-                        "cvss": node.cvss,
-                        "confidence": node.confidence,
-                        "prerequisites": list(node.prerequisites),
-                        "downstream_impacts": list(node.downstream_impacts),
-                    }
-                    for node in path.nodes
-                ],
-                "edges": [
-                    {
-                        "from_node": edge.from_node,
-                        "to_node": edge.to_node,
-                        "type": edge.type,
-                        "correlation_factor": edge.correlation_factor,
-                        "relationship_type": str(edge.relationship_type),
-                    }
-                    for edge in path.edges
-                ],
-            })
+            serialized_paths.append(
+                {
+                    "risk_score": round(risk, 2),
+                    "nodes": [
+                        {
+                            "id": node.id,
+                            "type": node.type,
+                            "data": node.data,
+                            "cvss": node.cvss,
+                            "confidence": node.confidence,
+                            "prerequisites": list(node.prerequisites),
+                            "downstream_impacts": list(node.downstream_impacts),
+                        }
+                        for node in path.nodes
+                    ],
+                    "edges": [
+                        {
+                            "from_node": edge.from_node,
+                            "to_node": edge.to_node,
+                            "type": edge.type,
+                            "correlation_factor": edge.correlation_factor,
+                            "relationship_type": str(edge.relationship_type),
+                        }
+                        for edge in path.edges
+                    ],
+                }
+            )
 
         return {"paths": serialized_paths}
 
@@ -755,10 +801,7 @@ class AttackGraph:
             to_node = self.nodes.get(edge.to_node)
 
             if from_node and to_node:
-                path = Path(
-                    nodes=[from_node, to_node],
-                    edges=[edge]
-                )
+                path = Path(nodes=[from_node, to_node], edges=[edge])
                 paths.append(path)
 
         return paths

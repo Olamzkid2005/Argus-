@@ -4,6 +4,7 @@ Celery Worker Launcher
 
 Simple wrapper to launch the Celery worker with proper Python environment.
 """
+
 import os
 import signal
 import subprocess
@@ -28,6 +29,7 @@ PROJECT_ROOT = SCRIPT_DIR
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+
 def main():
     """Launch the Celery worker."""
     # Read concurrency from environment, default to 8 (H-22)
@@ -35,11 +37,14 @@ def main():
     args = [
         VENV_PYTHON,
         CELERY_BIN,
-        "-A", "celery_app",
+        "-A",
+        "celery_app",
         "worker",
         "--loglevel=info",
-        "--concurrency", concurrency,
-        "-Q", "celery,recon,scan,analyze,report,repo_scan",
+        "--concurrency",
+        concurrency,
+        "-Q",
+        "celery,recon,scan,analyze,report,repo_scan",
     ]
 
     print(f"Starting Celery worker with: {' '.join(args)}")
@@ -72,6 +77,7 @@ def main():
     except KeyboardInterrupt:
         proc.terminate()
         proc.wait()
+
 
 if __name__ == "__main__":
     main()

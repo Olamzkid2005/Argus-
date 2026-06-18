@@ -4,6 +4,7 @@ LLM Report Generator - Uses LLM to write the final human-readable security repor
 Produces: executive summary, technical findings with remediation,
 and CVSS-prioritized action items.
 """
+
 import json
 import logging
 from collections.abc import Generator
@@ -40,20 +41,28 @@ class LLMReportGenerator:
                 else str(recon_context)
             )
 
-        prompt = build_report_prompt(synthesis, scored_findings, engagement, recon_summary)
+        prompt = build_report_prompt(
+            synthesis, scored_findings, engagement, recon_summary
+        )
         result = self._llm.chat_json(
-            REPORT_SYSTEM_PROMPT, prompt,
+            REPORT_SYSTEM_PROMPT,
+            prompt,
             max_tokens=LLM_AGENT_MAX_TOKENS_REPORT,
         )
         if result.get("_fallback"):
-            logger.warning("LLM report generation failed — using fallback report for %s",
-                           engagement.get("target_url", "unknown"))
+            logger.warning(
+                "LLM report generation failed — using fallback report for %s",
+                engagement.get("target_url", "unknown"),
+            )
             return self._fallback_report(engagement, scored_findings)
         return result
 
     def stream_report(
-        self, synthesis: dict, scored_findings: list[dict],
-        engagement: dict, recon_context: Any = None,
+        self,
+        synthesis: dict,
+        scored_findings: list[dict],
+        engagement: dict,
+        recon_context: Any = None,
     ) -> Generator[str, None, None]:
         recon_summary = ""
         if recon_context is not None:
@@ -63,7 +72,9 @@ class LLMReportGenerator:
                 else str(recon_context)
             )
 
-        prompt = build_report_prompt(synthesis, scored_findings, engagement, recon_summary)
+        prompt = build_report_prompt(
+            synthesis, scored_findings, engagement, recon_summary
+        )
 
         if hasattr(self._llm._client, "chat_stream"):
             yield from self._llm._client.chat_stream(
@@ -75,7 +86,9 @@ class LLMReportGenerator:
                 max_tokens=LLM_AGENT_MAX_TOKENS_REPORT,
             )
         else:
-            report = self.generate_report(synthesis, scored_findings, engagement, recon_context)
+            report = self.generate_report(
+                synthesis, scored_findings, engagement, recon_context
+            )
             yield json.dumps(report)
 
     def _fallback_report(self, engagement: dict, scored_findings: list[dict]) -> dict:
@@ -90,11 +103,14 @@ class LLMReportGenerator:
                 f"A security assessment of {engagement.get('target_url', 'N/A')} "
                 f"identified {total} findings."
             ),
-            "scope_and_methodology": {"target": engagement.get("target_url", "N/A"),
-                                       "findings_analyzed": total},
+            "scope_and_methodology": {
+                "target": engagement.get("target_url", "N/A"),
+                "findings_analyzed": total,
+            },
             "findings_summary_table": [
                 {"severity": sev, "count": count}
-                for sev, count in severity_counts.items() if count > 0
+                for sev, count in severity_counts.items()
+                if count > 0
             ],
             "detailed_findings": [],
             "remediation_roadmap": [],

@@ -17,12 +17,17 @@ from tool_core.parser.parsers import (
 
 class TestNucleiParser:
     def test_valid_json_line(self):
-        line = json.dumps({
-            "info": {"name": "SQL Injection", "severity": "high",
-                     "classification": {"cwe": ["CWE-89"], "cve": ["CVE-2021-1234"]}},
-            "matched-at": "https://example.com/api",
-            "template-id": "sqli-test",
-        })
+        line = json.dumps(
+            {
+                "info": {
+                    "name": "SQL Injection",
+                    "severity": "high",
+                    "classification": {"cwe": ["CWE-89"], "cve": ["CVE-2021-1234"]},
+                },
+                "matched-at": "https://example.com/api",
+                "template-id": "sqli-test",
+            }
+        )
         findings = nuclei.parse(line)
         assert len(findings) == 1
         assert findings[0].title == "SQL Injection"
@@ -33,29 +38,49 @@ class TestNucleiParser:
 
     def test_multiple_lines(self):
         lines = [
-            json.dumps({"info": {"name": "XSS", "severity": "medium"}, "matched-at": "/x"}),
-            json.dumps({"info": {"name": "IDOR", "severity": "high"}, "matched-at": "/y"}),
+            json.dumps(
+                {"info": {"name": "XSS", "severity": "medium"}, "matched-at": "/x"}
+            ),
+            json.dumps(
+                {"info": {"name": "IDOR", "severity": "high"}, "matched-at": "/y"}
+            ),
         ]
         findings = nuclei.parse("\n".join(lines))
         assert len(findings) == 2
 
     def test_skips_empty_lines(self):
-        output = "\n\n" + json.dumps({"info": {"name": "Test", "severity": "low"}, "matched-at": "/x"}) + "\n\n"
+        output = (
+            "\n\n"
+            + json.dumps(
+                {"info": {"name": "Test", "severity": "low"}, "matched-at": "/x"}
+            )
+            + "\n\n"
+        )
         findings = nuclei.parse(output)
         assert len(findings) == 1
 
     def test_handles_invalid_json(self):
-        output = "not json\n" + json.dumps({"info": {"name": "Test", "severity": "low"}, "matched-at": "/x"})
+        output = "not json\n" + json.dumps(
+            {"info": {"name": "Test", "severity": "low"}, "matched-at": "/x"}
+        )
         findings = nuclei.parse(output)
         assert len(findings) == 1
 
     def test_cwe_cve_as_list(self):
         """cwe/cve can be lists in nuclei JSON; parser must join them."""
-        line = json.dumps({
-            "info": {"name": "Test", "severity": "medium",
-                     "classification": {"cwe": ["CWE-79", "CWE-80"], "cve": ["CVE-2021-1", "CVE-2021-2"]}},
-            "matched-at": "/x",
-        })
+        line = json.dumps(
+            {
+                "info": {
+                    "name": "Test",
+                    "severity": "medium",
+                    "classification": {
+                        "cwe": ["CWE-79", "CWE-80"],
+                        "cve": ["CVE-2021-1", "CVE-2021-2"],
+                    },
+                },
+                "matched-at": "/x",
+            }
+        )
         findings = nuclei.parse(line)
         assert findings[0].cwe == "CWE-79,CWE-80"
         assert findings[0].cve == "CVE-2021-1,CVE-2021-2"
@@ -106,22 +131,26 @@ class TestNmapParser:
 
 
 class TestSemgrepParser:
-    SAMPLE_JSON = json.dumps({
-        "results": [{
-            "check_id": "python.flask.security.xss",
-            "path": "app.py",
-            "start": {"line": 42},
-            "extra": {
-                "severity": "high",
-                "message": "XSS vulnerability",
-                "lines": "return render_template(...)",
-                "metadata": {
-                    "cwe": ["CWE-79", "CWE-80"],
-                    "owasp": "A7",
-                },
-            },
-        }]
-    })
+    SAMPLE_JSON = json.dumps(
+        {
+            "results": [
+                {
+                    "check_id": "python.flask.security.xss",
+                    "path": "app.py",
+                    "start": {"line": 42},
+                    "extra": {
+                        "severity": "high",
+                        "message": "XSS vulnerability",
+                        "lines": "return render_template(...)",
+                        "metadata": {
+                            "cwe": ["CWE-79", "CWE-80"],
+                            "owasp": "A7",
+                        },
+                    },
+                }
+            ]
+        }
+    )
 
     def test_parses_results(self):
         findings = semgrep.parse(self.SAMPLE_JSON)
@@ -154,17 +183,21 @@ class TestSemgrepParser:
 
 
 class TestGitleaksParser:
-    SAMPLE_JSON = json.dumps([{
-        "RuleID": "aws-key",
-        "Severity": "high",
-        "Description": "AWS Access Key",
-        "File": "config.py",
-        "StartLine": 10,
-        "Commit": "abc123",
-        "Author": "dev",
-        "Secret": "AKIA123456",
-        "Match": "AKIA...",
-    }])
+    SAMPLE_JSON = json.dumps(
+        [
+            {
+                "RuleID": "aws-key",
+                "Severity": "high",
+                "Description": "AWS Access Key",
+                "File": "config.py",
+                "StartLine": 10,
+                "Commit": "abc123",
+                "Author": "dev",
+                "Secret": "AKIA123456",
+                "Match": "AKIA...",
+            }
+        ]
+    )
 
     def test_parses_leaks(self):
         findings = gitleaks.parse(self.SAMPLE_JSON)
@@ -186,11 +219,15 @@ class TestGitleaksParser:
 
 
 class TestWhatwebParser:
-    SAMPLE_JSON = json.dumps([{
-        "url": "https://example.com",
-        "WordPress": {"version": "5.8"},
-        "PHP": {"version": "7.4"},
-    }])
+    SAMPLE_JSON = json.dumps(
+        [
+            {
+                "url": "https://example.com",
+                "WordPress": {"version": "5.8"},
+                "PHP": {"version": "7.4"},
+            }
+        ]
+    )
 
     def test_parses_technologies(self):
         findings = whatweb.parse(self.SAMPLE_JSON)
@@ -200,8 +237,9 @@ class TestWhatwebParser:
 
     def test_multiple_entries(self):
         findings = whatweb.parse(
-            json.dumps({"url": "https://a.com", "Nginx": {}}) + "\n" +
-            json.dumps({"url": "https://b.com", "Apache": {}})
+            json.dumps({"url": "https://a.com", "Nginx": {}})
+            + "\n"
+            + json.dumps({"url": "https://b.com", "Apache": {}})
         )
         assert len(findings) == 2
 
@@ -211,11 +249,15 @@ class TestWhatwebParser:
 
 class TestNiktoParser:
     def test_parse_json(self):
-        output = json.dumps([{
-            "msg": "High vulnerability found",
-            "OSVDB": "1234",
-            "url": "https://example.com/test",
-        }])
+        output = json.dumps(
+            [
+                {
+                    "msg": "High vulnerability found",
+                    "OSVDB": "1234",
+                    "url": "https://example.com/test",
+                }
+            ]
+        )
         findings = nikto.parse(output)
         assert len(findings) == 1
         assert findings[0].tool == "nikto"
@@ -236,23 +278,28 @@ class TestNiktoParser:
     def test_infer_severity_word_boundary(self):
         """'high' substring in 'higher' or 'highly' should not match \bhigh\b."""
         from tool_core.parser.parsers.nikto import _infer_severity
+
         assert _infer_severity("higher education") == 2  # default medium, not 3
         assert _infer_severity("highlighting info") == 0  # 'info' matches \binfo\b
         assert _infer_severity("this is high risk") == 3  # word boundary match
 
 
 class TestSqlmapParser:
-    SAMPLE_JSON = json.dumps({
-        "data": [{
-            "url": "https://example.com/page",
-            "parameters": {
-                "id": {
-                    "title": "boolean blind SQL injection",
-                    "payload": "1 AND 1=1",
+    SAMPLE_JSON = json.dumps(
+        {
+            "data": [
+                {
+                    "url": "https://example.com/page",
+                    "parameters": {
+                        "id": {
+                            "title": "boolean blind SQL injection",
+                            "payload": "1 AND 1=1",
+                        }
+                    },
                 }
-            },
-        }]
-    })
+            ]
+        }
+    )
 
     def test_parse_json(self):
         findings = sqlmap.parse(self.SAMPLE_JSON)
@@ -262,7 +309,9 @@ class TestSqlmapParser:
         assert findings[0].tool == "sqlmap"
 
     def test_parse_text(self):
-        output = "sqlmap identified the following injection point: https://example.com?id=1"
+        output = (
+            "sqlmap identified the following injection point: https://example.com?id=1"
+        )
         findings = sqlmap.parse(output)
         assert len(findings) == 1
         assert findings[0].severity == 4
@@ -273,7 +322,9 @@ class TestSqlmapParser:
 
 class TestGenericParser:
     def test_parse_json(self):
-        output = json.dumps({"title": "custom finding", "severity": "high", "tool": "custom"})
+        output = json.dumps(
+            {"title": "custom finding", "severity": "high", "tool": "custom"}
+        )
         findings = generic.parse(output)
         assert len(findings) == 1
         assert findings[0].title == "custom finding"
@@ -288,11 +339,16 @@ class TestGenericParser:
 
 class TestDispatch:
     def test_dispatches_to_correct_parser(self):
-        output = json.dumps({
-            "info": {"name": "SQLI", "severity": "high",
-                     "classification": {"cwe": ["CWE-89"], "cve": []}},
-            "matched-at": "/x",
-        })
+        output = json.dumps(
+            {
+                "info": {
+                    "name": "SQLI",
+                    "severity": "high",
+                    "classification": {"cwe": ["CWE-89"], "cve": []},
+                },
+                "matched-at": "/x",
+            }
+        )
         findings = dispatch("nuclei", output)
         assert len(findings) == 1
         assert findings[0].tool == "nuclei"

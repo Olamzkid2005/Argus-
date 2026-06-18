@@ -5,6 +5,7 @@ Handles credential-based login, cookie injection, token-based auth,
 OAuth/SSO/SAML, and headless browser authentication via Playwright
 so all subsequent scanner requests carry the authenticated context.
 """
+
 import json
 import logging
 from dataclasses import dataclass
@@ -49,6 +50,7 @@ class AuthConfig:
     # SAML assertion
     saml_assertion: str = ""
 
+
 COMMON_LOGIN_PATHS = [
     "/login",
     "/signin",
@@ -63,9 +65,18 @@ COMMON_PASSWORD_FIELDS = ["password", "passwd", "pass", "user_pass"]
 
 # Common CSRF token field names in login forms
 CSRF_TOKEN_FIELDS = [
-    "csrf_token", "csrf", "_csrf", "csrfmiddlewaretoken",
-    "authenticity_token", "__csrf", "csrf-token", "xsrf-token",
-    "_token", "token", "csrfKey", "csrf_param",
+    "csrf_token",
+    "csrf",
+    "_csrf",
+    "csrfmiddlewaretoken",
+    "authenticity_token",
+    "__csrf",
+    "csrf-token",
+    "xsrf-token",
+    "_token",
+    "token",
+    "csrfKey",
+    "csrf_param",
 ]
 
 
@@ -115,14 +126,12 @@ class AuthManager:
             return session
 
         if self._config.token:
-            slog.info(f"Setting {self._config.token_header} header with Bearer token")
-            session.headers[self._config.token_header] = (
-                f"Bearer {self._config.token}"
-            )
+            slog.info("Setting %s header with Bearer token", self._config.token_header)
+            session.headers[self._config.token_header] = f"Bearer {self._config.token}"
             return session
 
         if self._config.api_key:
-            slog.info(f"Setting {self._config.api_key_header} header with API key")
+            slog.info("Setting %s header with API key", self._config.api_key_header)
             session.headers[self._config.api_key_header] = self._config.api_key
             return session
 
@@ -131,7 +140,9 @@ class AuthManager:
                 return self._login(session, target_url, auth_endpoints, slog)
             except AuthError:
                 if self._config.login_url and not self._config.browser_auth:
-                    logger.debug("Form login failed; no browser_auth fallback configured")
+                    logger.debug(
+                        "Form login failed; no browser_auth fallback configured"
+                    )
                     raise
 
         # OAuth 2.0 client credentials
@@ -145,7 +156,9 @@ class AuthManager:
             return self._saml_login(session, target_url)
 
         # Headless browser auth — explicit request or fallback from failed form login
-        if self._config.browser_auth or (self._config.login_url and self._config.username):
+        if self._config.browser_auth or (
+            self._config.login_url and self._config.username
+        ):
             slog.info("Authenticating via headless browser (Playwright)")
             return self.browser_authenticate(target_url)
 
@@ -162,9 +175,7 @@ class AuthManager:
                     session.cookies.set(key.strip(), value.strip())
 
         if self._config.token:
-            session.headers[self._config.token_header] = (
-                f"Bearer {self._config.token}"
-            )
+            session.headers[self._config.token_header] = f"Bearer {self._config.token}"
 
         if self._config.api_key:
             session.headers[self._config.api_key_header] = self._config.api_key
@@ -211,9 +222,7 @@ class AuthManager:
             body = resp.json()
             access_token = body.get("access_token")
             if not access_token:
-                raise AuthError(
-                    "OAuth response did not contain 'access_token'"
-                )
+                raise AuthError("OAuth response did not contain 'access_token'")
 
             session.headers["Authorization"] = f"Bearer {access_token}"
             logger.debug("OAuth 2.0 authentication succeeded")
@@ -228,9 +237,7 @@ class AuthManager:
                 f"OAuth token endpoint returned non-JSON response: {exc}"
             ) from exc
         except RequestException as exc:
-            raise AuthError(
-                f"Request failed during OAuth login: {exc}"
-            ) from exc
+            raise AuthError(f"Request failed during OAuth login: {exc}") from exc
 
     def _saml_login(
         self, session: requests.Session, target_url: str
@@ -266,7 +273,9 @@ class AuthManager:
                     return session
 
             if resp.ok:
-                logger.debug("SAML auth: POST succeeded but no session cookies/tokens found")
+                logger.debug(
+                    "SAML auth: POST succeeded but no session cookies/tokens found"
+                )
                 return session
 
             if resp.status_code in (401, 403):
@@ -283,9 +292,7 @@ class AuthManager:
                 f"Connection error during SAML login at {target_url}: {exc}"
             ) from exc
         except RequestException as exc:
-            raise AuthError(
-                f"Request failed during SAML login: {exc}"
-            ) from exc
+            raise AuthError(f"Request failed during SAML login: {exc}") from exc
 
     # ------------------------------------------------------------------
     # Headless browser auth (Playwright)
@@ -328,41 +335,81 @@ class AuthManager:
                 if self._config.username:
                     for selector in username_fields:
                         try:
-                            page.fill(f'[name="{selector}"]', self._config.username, timeout=5000)
+                            page.fill(
+                                f'[name="{selector}"]',
+                                self._config.username,
+                                timeout=5000,
+                            )
                             filled_username = True
-                            logger.debug("Browser auth: filled username field '%s'", selector)
+                            logger.debug(
+                                "Browser auth: filled username field '%s'", selector
+                            )
                             break
                         except Exception as exc:
                             # M-04: Log unexpected errors (e.g. page navigation crashes, detached elements)
                             # Expected TimeoutErrors are normal — multiple selectors are tried.
-                            logger.log(5, "Browser auth: username field '%s' failed: %s", selector, exc)
+                            logger.log(
+                                5,
+                                "Browser auth: username field '%s' failed: %s",
+                                selector,
+                                exc,
+                            )
                             continue
                     if not filled_username:
-                        logger.debug("Browser auth: could not find username field with common selectors")
+                        logger.debug(
+                            "Browser auth: could not find username field with common selectors"
+                        )
 
                 if self._config.password:
                     for selector in password_fields:
                         try:
-                            page.fill(f'[name="{selector}"]', self._config.password, timeout=5000)
+                            page.fill(
+                                f'[name="{selector}"]',
+                                self._config.password,
+                                timeout=5000,
+                            )
                             filled_password = True
-                            logger.debug("Browser auth: filled password field '%s'", selector)
+                            logger.debug(
+                                "Browser auth: filled password field '%s'", selector
+                            )
                             break
                         except Exception as exc:
-                            logger.log(5, "Browser auth: password field '%s' failed: %s", selector, exc)
+                            logger.log(
+                                5,
+                                "Browser auth: password field '%s' failed: %s",
+                                selector,
+                                exc,
+                            )
                             continue
                     if not filled_password:
-                        logger.debug("Browser auth: could not find password field with common selectors")
+                        logger.debug(
+                            "Browser auth: could not find password field with common selectors"
+                        )
 
                 # For login_data, submit custom payload fields
-                if self._config.login_data and isinstance(self._config.login_data, dict):
+                if self._config.login_data and isinstance(
+                    self._config.login_data, dict
+                ):
                     for field_name, field_value in self._config.login_data.items():
-                        if field_name.lower() in username_fields or field_name.lower() in password_fields:
+                        if (
+                            field_name.lower() in username_fields
+                            or field_name.lower() in password_fields
+                        ):
                             continue
                         try:
-                            page.fill(f'[name="{field_name}"]', str(field_value), timeout=5000)
-                            logger.debug("Browser auth: filled custom field '%s'", field_name)
+                            page.fill(
+                                f'[name="{field_name}"]', str(field_value), timeout=5000
+                            )
+                            logger.debug(
+                                "Browser auth: filled custom field '%s'", field_name
+                            )
                         except Exception as exc:
-                            logger.log(5, "Browser auth: custom field '%s' failed: %s", field_name, exc)
+                            logger.log(
+                                5,
+                                "Browser auth: custom field '%s' failed: %s",
+                                field_name,
+                                exc,
+                            )
                             continue
 
                 # Submit form via button click or Enter key
@@ -383,7 +430,9 @@ class AuthManager:
                         logger.debug("Browser auth: clicked submit '%s'", selector)
                         break
                     except Exception as exc:
-                        logger.log(5, "Browser auth: submit '%s' failed: %s", selector, exc)
+                        logger.log(
+                            5, "Browser auth: submit '%s' failed: %s", selector, exc
+                        )
                         continue
 
                 if not submitted:
@@ -392,11 +441,15 @@ class AuthManager:
                         page.press('[name="password"]', "Enter", timeout=5000)
                         submitted = True
                     except Exception as exc:
-                        logger.log(5, "Browser auth: Enter key fallback failed: %s", exc)
+                        logger.log(
+                            5, "Browser auth: Enter key fallback failed: %s", exc
+                        )
                         pass
 
                 if not submitted:
-                    raise AuthError("Browser auth: could not find submit button or submit the form")
+                    raise AuthError(
+                        "Browser auth: could not find submit button or submit the form"
+                    )
 
                 # Wait for post-login navigation
                 page.wait_for_load_state("networkidle", timeout=30000)
@@ -409,12 +462,15 @@ class AuthManager:
 
         except Exception as exc:
             hint = ""
-            if "playwright" in str(type(exc)).lower() or "No module named 'playwright'" in str(exc):
+            if "playwright" in str(
+                type(exc)
+            ).lower() or "No module named 'playwright'" in str(exc):
                 hint = " Install Playwright with: pip install playwright && python -m playwright install chromium"
             raise AuthError(f"Browser authentication failed: {exc}.{hint}") from exc
         finally:
             if browser:
                 import contextlib as _cl
+
                 with _cl.suppress(Exception):
                     browser.close()
 
@@ -469,13 +525,23 @@ class AuthManager:
                 session.cookies.set(c["name"], c["value"])
             logger.debug("Browser auth: extracted %d cookies", len(cookies))
         except Exception as e:
-            logger.warning("Browser auth: failed to extract cookies: %s — session may be incomplete", e)
+            logger.warning(
+                "Browser auth: failed to extract cookies: %s — session may be incomplete",
+                e,
+            )
 
         # Extract localStorage tokens
         try:
             local_storage = page.evaluate("() => JSON.stringify(window.localStorage)")
             storage_data = json.loads(local_storage)
-            token_keys = ["token", "access_token", "refresh_token", "jwt", "auth", "session"]
+            token_keys = [
+                "token",
+                "access_token",
+                "refresh_token",
+                "jwt",
+                "auth",
+                "session",
+            ]
             for key in token_keys:
                 val = storage_data.get(key) or storage_data.get(f"access_{key}")
                 if val:
@@ -483,7 +549,10 @@ class AuthManager:
                     logger.debug("Browser auth: extracted %s from localStorage", key)
                     break
         except Exception as e:
-            logger.warning("Browser auth: no localStorage tokens found: %s — session may be incomplete", e)
+            logger.warning(
+                "Browser auth: no localStorage tokens found: %s — session may be incomplete",
+                e,
+            )
 
         return session
 
@@ -518,7 +587,12 @@ class AuthManager:
 
             # Check body for login page indicators
             body_lower = (resp.text or "").lower()
-            login_body_patterns = ["<form", 'name="password"', 'name="login"', 'type="password"']
+            login_body_patterns = [
+                "<form",
+                'name="password"',
+                'name="login"',
+                'type="password"',
+            ]
             if resp.status_code == 200:
                 matches = sum(1 for p in login_body_patterns if p in body_lower)
                 if matches >= 2:
@@ -548,7 +622,9 @@ class AuthManager:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _extract_csrf_token(self, login_page_url: str, session: requests.Session) -> str | None:
+    def _extract_csrf_token(
+        self, login_page_url: str, session: requests.Session
+    ) -> str | None:
         """Fetch the login page and extract CSRF token from hidden form fields.
 
         Many web applications embed a CSRF token in the login form that must
@@ -572,6 +648,7 @@ class AuthManager:
                 return None
 
             import re
+
             body = resp.text
 
             # Search for hidden input fields with CSRF token names
@@ -591,7 +668,11 @@ class AuthManager:
                     match = pat.search(body)
                     if match:
                         token = match.group(1)
-                        logger.debug("Extracted CSRF token '%s' from field '%s'", token[:20], field_name)
+                        logger.debug(
+                            "Extracted CSRF token '%s' from field '%s'",
+                            token[:20],
+                            field_name,
+                        )
                         return token
 
             # Also check for meta tags with CSRF tokens (common in SPAs)
@@ -661,7 +742,9 @@ class AuthManager:
             f"(tried {len(seen)} URLs)"
         )
 
-    def _try_login(self, session: requests.Session, url: str, csrf_token: str | None = None) -> bool:
+    def _try_login(
+        self, session: requests.Session, url: str, csrf_token: str | None = None
+    ) -> bool:
         """
         Attempt a single login POST.
 
@@ -695,8 +778,7 @@ class AuthManager:
         if login_data and isinstance(login_data, dict):
             value_sample = next(iter(login_data.values()), "")
             if isinstance(value_sample, (dict, list)) or any(
-                str(v).strip().startswith(("{", "["))
-                for v in login_data.values()
+                str(v).strip().startswith(("{", "[")) for v in login_data.values()
             ):
                 is_json = True
 
@@ -746,9 +828,7 @@ class AuthManager:
             raise AuthError(f"Request failed during login at {url}: {exc}") from exc
 
     @staticmethod
-    def _build_form_payload(
-        username: str, password: str
-    ) -> dict[str, str]:
+    def _build_form_payload(username: str, password: str) -> dict[str, str]:
         """Build a form-urlencoded payload trying common field names."""
         payload: dict[str, str] = {}
         payload[COMMON_USERNAME_FIELDS[0]] = username
@@ -756,9 +836,7 @@ class AuthManager:
         return payload
 
     @staticmethod
-    def _extract_from_body(
-        resp: requests.Response, key: str
-    ) -> str | None:
+    def _extract_from_body(resp: requests.Response, key: str) -> str | None:
         """Try to extract *key* from a JSON or HTML response body."""
         ct = (resp.headers.get("Content-Type") or "").lower()
         if "json" in ct:

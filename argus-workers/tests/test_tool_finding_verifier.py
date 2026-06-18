@@ -1,6 +1,7 @@
 """
 Tests for finding_verifier module.
 """
+
 import urllib.parse
 from unittest.mock import MagicMock, patch
 
@@ -47,7 +48,9 @@ def mock_httpx_client():
         async def __aexit__(self, *args):
             return None
 
-    with patch("tools.finding_verifier.httpx.AsyncClient", return_value=_MockContextManager()):
+    with patch(
+        "tools.finding_verifier.httpx.AsyncClient", return_value=_MockContextManager()
+    ):
         yield client_instance
 
 
@@ -55,11 +58,17 @@ def mock_httpx_client():
 # _validate_verification_url
 # ---------------------------------------------------------------------------
 
+
 class TestValidateVerificationUrl:
     """Tests for _validate_verification_url."""
 
     def test_blocks_internal_ips(self):
-        for ip in ("http://10.0.0.1", "http://192.168.1.1", "http://127.0.0.1", "http://169.254.1.1"):
+        for ip in (
+            "http://10.0.0.1",
+            "http://192.168.1.1",
+            "http://127.0.0.1",
+            "http://169.254.1.1",
+        ):
             with pytest.raises(ValueError, match="Blocked internal IP"):
                 _validate_verification_url(ip)
 
@@ -90,6 +99,7 @@ class TestValidateVerificationUrl:
 # ---------------------------------------------------------------------------
 # verify_sqli
 # ---------------------------------------------------------------------------
+
 
 class TestVerifySqli:
     """Tests for verify_sqli."""
@@ -173,12 +183,15 @@ class TestVerifySqli:
 # verify_xss
 # ---------------------------------------------------------------------------
 
+
 class TestVerifyXss:
     """Tests for verify_xss."""
 
     async def test_returns_early_when_feature_flag_disabled(self):
         with patch("tools.finding_verifier.is_enabled", return_value=False):
-            result = await verify_xss("https://example.com", "<script>alert(1)</script>")
+            result = await verify_xss(
+                "https://example.com", "<script>alert(1)</script>"
+            )
 
         assert result["verified"] is False
         assert "disabled" in result["reason"]
@@ -246,6 +259,7 @@ class TestVerifyXss:
 # ---------------------------------------------------------------------------
 # verify_open_redirect
 # ---------------------------------------------------------------------------
+
 
 class TestVerifyOpenRedirect:
     """Tests for verify_open_redirect."""
@@ -315,6 +329,7 @@ class TestVerifyOpenRedirect:
 # verify_finding
 # ---------------------------------------------------------------------------
 
+
 class TestVerifyFinding:
     """Tests for verify_finding dispatch."""
 
@@ -324,15 +339,25 @@ class TestVerifyFinding:
             _Awaitable(MagicMock(text="normal")),
         ]
 
-        finding = {"type": "sql-injection", "endpoint": "https://example.com", "evidence": {"payload": "' OR 1=1--"}}
+        finding = {
+            "type": "sql-injection",
+            "endpoint": "https://example.com",
+            "evidence": {"payload": "' OR 1=1--"},
+        }
         result = await verify_finding(finding)
 
         assert result["verification"]["confidence"] == "high"
 
     async def test_dispatches_to_xss_verifier(self, mock_httpx_client):
-        mock_httpx_client.get.return_value = _Awaitable(MagicMock(text="<script>alert(1)</script>"))
+        mock_httpx_client.get.return_value = _Awaitable(
+            MagicMock(text="<script>alert(1)</script>")
+        )
 
-        finding = {"type": "xss", "endpoint": "https://example.com", "evidence": {"payload": "<script>alert(1)</script>"}}
+        finding = {
+            "type": "xss",
+            "endpoint": "https://example.com",
+            "evidence": {"payload": "<script>alert(1)</script>"},
+        }
         result = await verify_finding(finding)
 
         assert result["verification"]["verified"] is True
@@ -375,21 +400,33 @@ class TestVerifyFinding:
 
     async def test_uses_url_when_endpoint_missing(self, mock_httpx_client):
         """Fallback to finding.url when endpoint is absent."""
-        mock_httpx_client.get.return_value = _Awaitable(MagicMock(text="<script>alert(1)</script>"))
+        mock_httpx_client.get.return_value = _Awaitable(
+            MagicMock(text="<script>alert(1)</script>")
+        )
 
-        finding = {"type": "xss", "url": "https://example.com", "evidence": {"payload": "<script>alert(1)</script>"}}
+        finding = {
+            "type": "xss",
+            "url": "https://example.com",
+            "evidence": {"payload": "<script>alert(1)</script>"},
+        }
         result = await verify_finding(finding)
 
         assert result["verification"]["verified"] is True
 
-    async def test_uses_top_level_payload_when_evidence_missing(self, mock_httpx_client):
+    async def test_uses_top_level_payload_when_evidence_missing(
+        self, mock_httpx_client
+    ):
         """Fallback to finding.payload when evidence.payload is absent."""
         mock_httpx_client.get.side_effect = [
             _Awaitable(MagicMock(text="SQL error")),
             _Awaitable(MagicMock(text="normal")),
         ]
 
-        finding = {"type": "sqli", "endpoint": "https://example.com", "payload": "' OR 1=1--"}
+        finding = {
+            "type": "sqli",
+            "endpoint": "https://example.com",
+            "payload": "' OR 1=1--",
+        }
         result = await verify_finding(finding)
 
         assert result["verification"]["confidence"] == "high"

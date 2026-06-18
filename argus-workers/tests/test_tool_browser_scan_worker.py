@@ -12,7 +12,7 @@ _playwright_mock = MagicMock()
 sys.modules["playwright"] = _playwright_mock
 sys.modules["playwright.sync_api"] = _playwright_mock
 
-from tools._browser_scan_worker import _validate_url, scan
+from tools._browser_scan_worker import _validate_url, scan  # noqa: E402
 
 
 class TestValidateURL:
@@ -139,7 +139,7 @@ class TestScan:
         handler_storage = {}
 
         def on_side_effect(event, handler):
-            if event == 'console':
+            if event == "console":
                 handler_storage["console"] = handler
             return None
 
@@ -151,8 +151,8 @@ class TestScan:
             call_count[0] += 1
             if call_count[0] > 1 and "console" in handler_storage:
                 msg = MagicMock()
-                msg.type = 'error'
-                msg.text = 'Refused to execute alert(1)'
+                msg.type = "error"
+                msg.text = "Refused to execute alert(1)"
                 handler_storage["console"](msg)
             return MagicMock()
 
@@ -237,7 +237,7 @@ class TestScan:
         handler_storage = {}
 
         def on_side_effect(event, handler):
-            if event == 'console':
+            if event == "console":
                 handler_storage["console"] = handler
             return None
 
@@ -249,8 +249,8 @@ class TestScan:
             call_count[0] += 1
             if call_count[0] > 1 and "console" in handler_storage:
                 msg = MagicMock()
-                msg.type = 'error'
-                msg.text = 'some other error'
+                msg.type = "error"
+                msg.text = "some other error"
                 handler_storage["console"](msg)
             return MagicMock()
 

@@ -26,8 +26,9 @@ class TestCreate:
         assert session.plan_step == 0
 
     def test_creates_with_tech_stack(self, store):
-        sid = store.create(target="https://example.com", phase="scan",
-                           tech_stack=["python", "flask"])
+        sid = store.create(
+            target="https://example.com", phase="scan", tech_stack=["python", "flask"]
+        )
         session = store.get(sid)
         assert session.tech_stack == ["python", "flask"]
 
@@ -49,17 +50,30 @@ class TestGet:
 
 class TestAddExecution:
     def test_adds_execution(self, store, session_id):
-        exec = ToolExecution(tool="nuclei", arguments={"target": "x"},
-                             reasoning="test", success=True, duration_ms=100,
-                             finding_count=1, summary="ok")
+        exec = ToolExecution(
+            tool="nuclei",
+            arguments={"target": "x"},
+            reasoning="test",
+            success=True,
+            duration_ms=100,
+            finding_count=1,
+            summary="ok",
+        )
         store.add_execution(session_id, exec)
         session = store.get(session_id)
         assert len(session.tool_history) == 1
         assert session.tool_history[0].tool == "nuclei"
 
     def test_raises_on_missing_session(self, store):
-        exec = ToolExecution(tool="nuclei", arguments={}, reasoning="",
-                             success=True, duration_ms=0, finding_count=0, summary="")
+        exec = ToolExecution(
+            tool="nuclei",
+            arguments={},
+            reasoning="",
+            success=True,
+            duration_ms=0,
+            finding_count=0,
+            summary="",
+        )
         with pytest.raises(ValueError, match="not found"):
             store.add_execution("nonexistent", exec)
 

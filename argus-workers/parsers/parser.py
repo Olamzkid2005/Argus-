@@ -37,7 +37,11 @@ class Parser:
         Call _invalidate_parser_cache() to force re-discovery after hot-reload.
         """
         from parsers.parsers import _parser_registry
-        return {tool_name: parser_cls() for tool_name, parser_cls in _parser_registry.items()}
+
+        return {
+            tool_name: parser_cls()
+            for tool_name, parser_cls in _parser_registry.items()
+        }
 
     @staticmethod
     def _invalidate_parser_cache():
@@ -99,9 +103,7 @@ class Parser:
 
                 # ── LLM Parser Fallback on empty result ──
                 if not findings:
-                    llm_findings = self._try_llm_fallback(
-                        tool_name, raw_output
-                    )
+                    llm_findings = self._try_llm_fallback(tool_name, raw_output)
                     if llm_findings:
                         logger.info(
                             "LLM parser fallback recovered %d findings from "
@@ -126,7 +128,9 @@ class Parser:
                 # Log parser failure
                 self.logger.log(
                     "parser_failed",
-                    f"Parser failed for {tool_name}: {str(e)}",
+                    "Parser failed for %s: %s",
+                    tool_name,
+                    str(e),
                     {
                         "tool_name": tool_name,
                         "error": str(e),
@@ -140,7 +144,9 @@ class Parser:
                     logger.info(
                         "LLM parser fallback recovered %d findings from %s "
                         "output after parser error: %s",
-                        len(findings), tool_name, str(e)[:120],
+                        len(findings),
+                        tool_name,
+                        str(e)[:120],
                     )
                     return findings
 
@@ -172,9 +178,7 @@ class Parser:
             fallback = LLMParserFallback()
             return fallback.extract_findings(tool_name, raw_output)
         except Exception as e:
-            logger.warning(
-                "LLM parser fallback failed for %s: %s", tool_name, e
-            )
+            logger.warning("LLM parser fallback failed for %s: %s", tool_name, e)
             return []
 
     def parse_stream(
@@ -244,7 +248,9 @@ class Parser:
 
                 self.logger.log(
                     "parser_failed",
-                    f"Stream parser failed for {tool_name}: {str(e)}",
+                    "Stream parser failed for %s: %s",
+                    tool_name,
+                    str(e),
                     {
                         "tool_name": tool_name,
                         "error": str(e),
@@ -254,13 +260,16 @@ class Parser:
 
                 try:
                     from llm_parser_fallback import LLMParserFallback
+
                     fallback = LLMParserFallback()
                     llm_findings = fallback.extract_findings(tool_name, raw_output)
                     for i in range(0, len(llm_findings), batch_size):
-                        yield llm_findings[i:i + batch_size]
+                        yield llm_findings[i : i + batch_size]
                     return
                 except Exception as llm_err:
-                    logger.warning("LLM fallback also failed for %s: %s", tool_name, llm_err)
+                    logger.warning(
+                        "LLM fallback also failed for %s: %s", tool_name, llm_err
+                    )
 
                 raise ParserError(
                     f"Failed to stream parse {tool_name} output: {e}"

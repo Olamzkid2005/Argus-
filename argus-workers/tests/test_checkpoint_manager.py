@@ -1,6 +1,7 @@
 """
 Tests for checkpoint_manager.py
 """
+
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
@@ -106,8 +107,18 @@ class TestCheckpointManager:
         """Test listing checkpoints"""
         mock_db, mock_conn, mock_cursor = mock_db_conn
         mock_cursor.fetchall.return_value = [
-            {"id": "chk-002", "engagement_id": "ENG-001", "phase": "analyze", "created_at": datetime(2024, 1, 2)},
-            {"id": "chk-001", "engagement_id": "ENG-001", "phase": "scan", "created_at": datetime(2024, 1, 1)},
+            {
+                "id": "chk-002",
+                "engagement_id": "ENG-001",
+                "phase": "analyze",
+                "created_at": datetime(2024, 1, 2),
+            },
+            {
+                "id": "chk-001",
+                "engagement_id": "ENG-001",
+                "phase": "scan",
+                "created_at": datetime(2024, 1, 1),
+            },
         ]
 
         results = manager.list_checkpoints("ENG-001")
@@ -285,5 +296,7 @@ class TestCheckpointContext:
             ctx.add_result("domains", ["example.com"])
 
         mock_manager.save_checkpoint.assert_called_once_with(
-            "ENG-001", "recon", {"endpoints": ["/api", "/admin"], "domains": ["example.com"]}
+            "ENG-001",
+            "recon",
+            {"endpoints": ["/api", "/admin"], "domains": ["example.com"]},
         )

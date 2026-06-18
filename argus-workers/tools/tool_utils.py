@@ -51,7 +51,9 @@ def get_augmented_path() -> str:
     return current_path
 
 
-def resolve_tool_binary(tool_name: str, extra_dirs: list[str] | None = None) -> str | None:
+def resolve_tool_binary(
+    tool_name: str, extra_dirs: list[str] | None = None
+) -> str | None:
     """Resolve the full path to a tool binary.
 
     Checks the augmented PATH (venv, Go, Homebrew) via :func:`get_augmented_path`.

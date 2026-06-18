@@ -1,4 +1,5 @@
 """Parser for gitleaks JSON output (gitleaks detect --json)."""
+
 import hashlib
 import json
 import logging
@@ -24,7 +25,9 @@ class GitleaksParser(BaseParser):
             finding = {
                 "type": "SECRET_LEAK",
                 "severity": (item.get("Severity") or "high").upper(),
-                "endpoint": item.get("File") or item.get("Commit") or f"gitleaks:{item.get('RuleID', 'unknown')}",
+                "endpoint": item.get("File")
+                or item.get("Commit")
+                or f"gitleaks:{item.get('RuleID', 'unknown')}",
                 "evidence": {
                     "description": item.get("Description", ""),
                     "file": item.get("File"),
@@ -35,7 +38,11 @@ class GitleaksParser(BaseParser):
                     "repository": item.get("Repo"),
                     # Hash the secret instead of storing plaintext (fix 6.6)
                     # SHA-256 hash allows dedup without leaking secrets
-                    "offender_hash": hashlib.sha256((item.get("Secret") or "").encode()).hexdigest()[:16] if item.get("Secret") else "",
+                    "offender_hash": hashlib.sha256(
+                        (item.get("Secret") or "").encode()
+                    ).hexdigest()[:16]
+                    if item.get("Secret")
+                    else "",
                     "has_secret": bool(item.get("Secret")),
                     "match": item.get("Match"),
                 },

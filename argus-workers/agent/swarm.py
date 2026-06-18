@@ -20,6 +20,7 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from scan_diff_engine import ScanDiffEngine
 from streaming import (
     emit_swarm_agent_action,
     emit_swarm_agent_complete,
@@ -56,9 +57,7 @@ class SpecialistAgent(ABC):
         bug_bounty_mode: bool = False,
     ):
         # IMPORTANT: deep copy — never share mutable state across agents
-        self.recon_context = (
-            copy.deepcopy(recon_context) if recon_context else None
-        )
+        self.recon_context = copy.deepcopy(recon_context) if recon_context else None
         self.llm_service = llm_service
         self.tool_runner = tool_runner
         self.engagement_id = engagement_id
@@ -86,7 +85,9 @@ class SpecialistAgent(ABC):
             self._parser = Parser()
         return self._parser
 
-    def _log_decision(self, tool_name: str, args: list, findings_count: int, success: bool):
+    def _log_decision(
+        self, tool_name: str, args: list, findings_count: int, success: bool
+    ):
         """Log a tool execution decision to the decision repository."""
         if not self.decision_repo:
             return
@@ -105,14 +106,18 @@ class SpecialistAgent(ABC):
         except Exception as e:
             logger.debug("%s/log_decision failed (non-fatal): %s", self.DOMAIN, e)
 
-    def _run_tool(self, tool_name: str, args: list, timeout: int = TOOL_TIMEOUT_DEFAULT) -> list[dict]:
+    def _run_tool(
+        self, tool_name: str, args: list, timeout: int = TOOL_TIMEOUT_DEFAULT
+    ) -> list[dict]:
         """Run a single tool and return parsed findings."""
         self.tools_attempted.add(tool_name)
         findings = []
         success = False
         try:
             emit_swarm_agent_action(
-                self.engagement_id, self.DOMAIN, tool_name,
+                self.engagement_id,
+                self.DOMAIN,
+                tool_name,
                 reasoning=f"Running {tool_name} with args: {' '.join(args[:4])}...",
             )
             result = self.tool_runner.run(tool_name, args, timeout=timeout)
@@ -122,7 +127,9 @@ class SpecialistAgent(ABC):
                 for p in parsed:
                     findings.append(p)
             elif result.stderr:
-                logger.debug("%s/%s stderr: %s", self.DOMAIN, tool_name, result.stderr[:200])
+                logger.debug(
+                    "%s/%s stderr: %s", self.DOMAIN, tool_name, result.stderr[:200]
+                )
         except ImportError as e:
             logger.error("%s/%s missing dependency: %s", self.DOMAIN, tool_name, e)
         except Exception as e:
@@ -143,16 +150,23 @@ class SpecialistAgent(ABC):
             targets.extend(rc.api_endpoints)
         if not targets and hasattr(rc, "crawled_paths") and rc.crawled_paths:
             # Build full URLs from crawled paths
-            base = rc.target_url.rstrip("/") if hasattr(rc, "target_url") and rc.target_url else ""
+            base = (
+                rc.target_url.rstrip("/")
+                if hasattr(rc, "target_url") and rc.target_url
+                else ""
+            )
             for path in rc.crawled_paths[:20]:
                 if path.startswith("http"):
                     targets.append(path)
                 elif base:
-                    targets.append(f"{base}{path}" if path.startswith("/") else f"{base}/{path}")
+                    targets.append(
+                        f"{base}{path}" if path.startswith("/") else f"{base}/{path}"
+                    )
         if not targets and hasattr(rc, "target_url") and rc.target_url:
             targets = [rc.target_url]
         # Filter to authorized scope
         from tools.scope_validator import validate_target_scope
+
         return [t for t in targets if validate_target_scope(t, self.engagement_id)]
 
     @staticmethod
@@ -164,7 +178,10 @@ class SpecialistAgent(ABC):
         meaningful attack surface. Raw page count alone is not enough.
         """
         return (
-            (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0)
+            (
+                hasattr(rc, "parameter_bearing_urls")
+                and len(rc.parameter_bearing_urls) > 0
+            )
             or (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0)
             or (hasattr(rc, "has_api") and rc.has_api)
         )
@@ -187,13 +204,20 @@ class IDORAgent(SpecialistAgent):
             return False
         rc = self.recon_context
         specific = (
-            (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0)
+            (
+                hasattr(rc, "parameter_bearing_urls")
+                and len(rc.parameter_bearing_urls) > 0
+            )
             or (hasattr(rc, "has_api") and rc.has_api)
             or (hasattr(rc, "api_endpoints") and len(rc.api_endpoints) > 0)
         )
         if specific:
             return True
-        return bool(hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 25 and self._has_dynamic_surface(rc))
+        return bool(
+            hasattr(rc, "crawled_paths")
+            and len(rc.crawled_paths) >= 25
+            and self._has_dynamic_surface(rc)
+        )
 
     def run(self) -> list[dict]:
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
@@ -204,11 +228,20 @@ class IDORAgent(SpecialistAgent):
             # 1. Arjun parameter discovery on API endpoints
             logger.info("[IDOR] Running arjun on %s", target)
             try:
-                sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
+                sandbox = (
+                    self.tool_runner.sandbox_dir
+                    if hasattr(self.tool_runner, "sandbox_dir")
+                    and self.tool_runner.sandbox_dir
+                    else None
+                )
                 if sandbox:
-                    arjun_out = str(sandbox / "tmp" / f"arjun_idor_{self.engagement_id}.json")
+                    arjun_out = str(
+                        sandbox / "tmp" / f"arjun_idor_{self.engagement_id}.json"
+                    )
                 else:
-                    arjun_out = os.path.join(tempfile.gettempdir(), f"arjun_idor_{self.engagement_id}.json")
+                    arjun_out = os.path.join(
+                        tempfile.gettempdir(), f"arjun_idor_{self.engagement_id}.json"
+                    )
                 arjun_findings = self._run_tool(
                     "arjun",
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", "20"],
@@ -242,7 +275,9 @@ class IDORAgent(SpecialistAgent):
             self.tools_attempted.add("web_scanner")
             logger.info("[IDOR] Running web_scanner on %d targets", len(targets))
             for target in targets:
-                web_findings = self._run_tool("web_scanner", [target], timeout=TOOL_TIMEOUT_LONG)
+                web_findings = self._run_tool(
+                    "web_scanner", [target], timeout=TOOL_TIMEOUT_LONG
+                )
                 all_findings.extend(web_findings)
 
         logger.info("[IDOR] Total findings: %d", len(all_findings))
@@ -266,7 +301,11 @@ class AuthAgent(SpecialistAgent):
         )
         if specific:
             return True
-        return bool(hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 25 and self._has_dynamic_surface(rc))
+        return bool(
+            hasattr(rc, "crawled_paths")
+            and len(rc.crawled_paths) >= 25
+            and self._has_dynamic_surface(rc)
+        )
 
     def run(self) -> list[dict]:
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
@@ -279,7 +318,11 @@ class AuthAgent(SpecialistAgent):
         )
 
         scan_targets = list(set(targets + auth_endpoints))
-        if not scan_targets and self.recon_context and hasattr(self.recon_context, "target_url"):
+        if (
+            not scan_targets
+            and self.recon_context
+            and hasattr(self.recon_context, "target_url")
+        ):
             scan_targets = [self.recon_context.target_url]
 
         for target in scan_targets:
@@ -302,16 +345,21 @@ class AuthAgent(SpecialistAgent):
 
                 templates_path = get_nuclei_templates_path()
                 nuclei_cmd = [
-                    "-u", target,
+                    "-u",
+                    target,
                     "-jsonl",
                     "-silent",
-                    "-severity", "medium,high,critical",
+                    "-severity",
+                    "medium,high,critical",
                 ]
                 if templates_path.exists():
                     nuclei_cmd.extend(["-t", str(templates_path)])
-                nuclei_cmd.extend([
-                    "-tags", "auth,login,jwt,oauth,session,default-login,bruteforce",
-                ])
+                nuclei_cmd.extend(
+                    [
+                        "-tags",
+                        "auth,login,jwt,oauth,session,default-login,bruteforce",
+                    ]
+                )
                 nuclei_findings = self._run_tool(
                     "nuclei",
                     nuclei_cmd,
@@ -326,7 +374,9 @@ class AuthAgent(SpecialistAgent):
             self.tools_attempted.add("web_scanner")
             logger.info("[Auth] Running web_scanner on %d targets", len(scan_targets))
             for target in scan_targets:
-                web_findings = self._run_tool("web_scanner", [target], timeout=TOOL_TIMEOUT_LONG)
+                web_findings = self._run_tool(
+                    "web_scanner", [target], timeout=TOOL_TIMEOUT_LONG
+                )
                 all_findings.extend(web_findings)
 
         logger.info("[Auth] Total findings: %d", len(all_findings))
@@ -342,9 +392,11 @@ class APIAgent(SpecialistAgent):
     @staticmethod
     def _has_api_signals(rc) -> bool:
         """Check for actual API signals, not just crawled paths."""
-        if not hasattr(rc, 'live_endpoints'):
+        if not hasattr(rc, "live_endpoints"):
             return False
-        api_paths = [ep for ep in (rc.live_endpoints or []) if '/api/' in (ep or '').lower()]
+        api_paths = [
+            ep for ep in (rc.live_endpoints or []) if "/api/" in (ep or "").lower()
+        ]
         return len(api_paths) >= 2
 
     def should_activate(self) -> bool:
@@ -352,12 +404,18 @@ class APIAgent(SpecialistAgent):
             return False
         rc = self.recon_context
         specific = (
-            (hasattr(rc, "has_api") and rc.has_api and hasattr(rc, "api_endpoints") and len(rc.api_endpoints) > 1)
-            or (hasattr(rc, "api_endpoints") and len(rc.api_endpoints) > 5)
-        )
+            hasattr(rc, "has_api")
+            and rc.has_api
+            and hasattr(rc, "api_endpoints")
+            and len(rc.api_endpoints) > 1
+        ) or (hasattr(rc, "api_endpoints") and len(rc.api_endpoints) > 5)
         if specific:
             return True
-        return bool(self._has_api_signals(rc) and hasattr(rc, "crawled_paths") and len(rc.crawled_paths) >= 5)
+        return bool(
+            self._has_api_signals(rc)
+            and hasattr(rc, "crawled_paths")
+            and len(rc.crawled_paths) >= 5
+        )
 
     def run(self) -> list[dict]:
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
@@ -370,18 +428,31 @@ class APIAgent(SpecialistAgent):
         )
 
         scan_targets = list(set(targets + api_endpoints))
-        if not scan_targets and self.recon_context and hasattr(self.recon_context, "target_url"):
+        if (
+            not scan_targets
+            and self.recon_context
+            and hasattr(self.recon_context, "target_url")
+        ):
             scan_targets = [self.recon_context.target_url]
 
         for target in scan_targets:
             # 1. arjun parameter discovery on API paths
             logger.info("[API] Running arjun on %s", target)
             try:
-                sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
+                sandbox = (
+                    self.tool_runner.sandbox_dir
+                    if hasattr(self.tool_runner, "sandbox_dir")
+                    and self.tool_runner.sandbox_dir
+                    else None
+                )
                 if sandbox:
-                    arjun_out = str(sandbox / "tmp" / f"arjun_api_{self.engagement_id}.json")
+                    arjun_out = str(
+                        sandbox / "tmp" / f"arjun_api_{self.engagement_id}.json"
+                    )
                 else:
-                    arjun_out = os.path.join(tempfile.gettempdir(), f"arjun_api_{self.engagement_id}.json")
+                    arjun_out = os.path.join(
+                        tempfile.gettempdir(), f"arjun_api_{self.engagement_id}.json"
+                    )
                 arjun_findings = self._run_tool(
                     "arjun",
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", "20"],
@@ -405,16 +476,21 @@ class APIAgent(SpecialistAgent):
 
                 templates_path = get_nuclei_templates_path()
                 nuclei_cmd = [
-                    "-u", target,
+                    "-u",
+                    target,
                     "-jsonl",
                     "-silent",
-                    "-severity", "medium,high,critical",
+                    "-severity",
+                    "medium,high,critical",
                 ]
                 if templates_path.exists():
                     nuclei_cmd.extend(["-t", str(templates_path)])
-                nuclei_cmd.extend([
-                    "-tags", "api,graphql,swagger,openapi,rest,injection,idor,ssrf",
-                ])
+                nuclei_cmd.extend(
+                    [
+                        "-tags",
+                        "api,graphql,swagger,openapi,rest,injection,idor,ssrf",
+                    ]
+                )
                 nuclei_findings = self._run_tool(
                     "nuclei",
                     nuclei_cmd,
@@ -439,16 +515,27 @@ class APIAgent(SpecialistAgent):
             # 4. sqlmap injection testing on API params
             # Re-validate target is in authorized scope before sqlmap execution
             if not validate_target_scope(target, self.engagement_id):
-                logger.warning("[API] Skipping sqlmap for %s — not in authorized scope", target)
+                logger.warning(
+                    "[API] Skipping sqlmap for %s — not in authorized scope", target
+                )
                 continue
 
             logger.info("[API] Running sqlmap on %s", target)
             try:
-                sandbox = self.tool_runner.sandbox_dir if hasattr(self.tool_runner, 'sandbox_dir') and self.tool_runner.sandbox_dir else None
+                sandbox = (
+                    self.tool_runner.sandbox_dir
+                    if hasattr(self.tool_runner, "sandbox_dir")
+                    and self.tool_runner.sandbox_dir
+                    else None
+                )
                 if sandbox:
-                    sqlmap_out = str(sandbox / "tmp" / f"sqlmap_api_{self.engagement_id}.json")
+                    sqlmap_out = str(
+                        sandbox / "tmp" / f"sqlmap_api_{self.engagement_id}.json"
+                    )
                 else:
-                    sqlmap_out = os.path.join(tempfile.gettempdir(), f"sqlmap_api_{self.engagement_id}.json")
+                    sqlmap_out = os.path.join(
+                        tempfile.gettempdir(), f"sqlmap_api_{self.engagement_id}.json"
+                    )
                 sqlmap_findings = self._run_tool(
                     "sqlmap",
                     ["-u", target, "--batch", "--json-output", sqlmap_out],
@@ -515,7 +602,9 @@ class SwarmOrchestrator:
             (deduplicated findings list, set of all tools executed)
         """
         active = [a for a in self.agents if a.should_activate()]
-        slog = ScanLogger("swarm", engagement_id=active[0].engagement_id if active else "")
+        slog = ScanLogger(
+            "swarm", engagement_id=active[0].engagement_id if active else ""
+        )
 
         if not active:
             logger.info("Swarm: no specialists activated")
@@ -534,7 +623,9 @@ class SwarmOrchestrator:
         all_findings: list[dict] = []
         all_findings_lock = threading.Lock()
         completed: set[str] = set()
-        per_agent_timeout = max(timeout // max(len(active), 1), 300)  # at least 5 min per agent
+        per_agent_timeout = max(
+            timeout // max(len(active), 1), 300
+        )  # at least 5 min per agent
 
         with ThreadPoolExecutor(max_workers=len(active)) as pool:
             futures_map: dict[concurrent.futures.Future, str] = {}
@@ -544,15 +635,22 @@ class SwarmOrchestrator:
 
             try:
                 for future in concurrent.futures.as_completed(
-                    futures_map, timeout=timeout,
+                    futures_map,
+                    timeout=timeout,
                 ):
                     domain = futures_map.get(future, "?")
                     try:
                         result = future.result(timeout=per_agent_timeout)
                         if result:
-                            logger.info("Specialist %s returned %d findings", domain, len(result))
+                            logger.info(
+                                "Specialist %s returned %d findings",
+                                domain,
+                                len(result),
+                            )
                             emit_swarm_agent_complete(
-                                active[0].engagement_id, domain, findings_count=len(result),
+                                active[0].engagement_id,
+                                domain,
+                                findings_count=len(result),
                             )
                             with all_findings_lock:
                                 all_findings.extend(result)
@@ -560,19 +658,33 @@ class SwarmOrchestrator:
                         else:
                             logger.info("Specialist %s returned no findings", domain)
                             emit_swarm_agent_complete(
-                                active[0].engagement_id, domain, findings_count=0,
+                                active[0].engagement_id,
+                                domain,
+                                findings_count=0,
                             )
                     except concurrent.futures.TimeoutError:
-                        logger.warning("Swarm: agent %s timed out per-task (%ds)", domain, per_agent_timeout)
-                        emit_swarm_agent_complete(active[0].engagement_id, domain, findings_count=0)
+                        logger.warning(
+                            "Swarm: agent %s timed out per-task (%ds)",
+                            domain,
+                            per_agent_timeout,
+                        )
+                        emit_swarm_agent_complete(
+                            active[0].engagement_id, domain, findings_count=0
+                        )
                     except Exception as e:
                         logger.warning("Swarm agent %s failed: %s", domain, e)
-                        emit_swarm_agent_complete(active[0].engagement_id, domain, findings_count=0)
+                        emit_swarm_agent_complete(
+                            active[0].engagement_id, domain, findings_count=0
+                        )
             except concurrent.futures.TimeoutError:
                 remaining = set(futures_map.values()) - completed
                 for domain in remaining:
-                    logger.warning("Swarm: agent %s timed out — global timeout reached", domain)
-                    emit_swarm_agent_complete(active[0].engagement_id, domain, findings_count=0)
+                    logger.warning(
+                        "Swarm: agent %s timed out — global timeout reached", domain
+                    )
+                    emit_swarm_agent_complete(
+                        active[0].engagement_id, domain, findings_count=0
+                    )
                 # Shut down the pool immediately — without this, ThreadPoolExecutor.__exit__
                 # calls shutdown(wait=True) which blocks indefinitely on hung threads.
                 pool.shutdown(wait=False, cancel_futures=True)
@@ -590,19 +702,34 @@ class SwarmOrchestrator:
             # Kill orphaned tool subprocesses spawned by timed-out agents.
             # Only kill processes matching known scan tool names to avoid
             # killing subprocesses from concurrent tasks in the same worker.
-            _KNOWN_TOOL_PROCS = {"nuclei", "sqlmap", "dalfox", "nikto", "nmap",
-                                 "arjun", "jwt_tool", "ffuf", "commix", "testssl"}
+            _KNOWN_TOOL_PROCS = {
+                "nuclei",
+                "sqlmap",
+                "dalfox",
+                "nikto",
+                "nmap",
+                "arjun",
+                "jwt_tool",
+                "ffuf",
+                "commix",
+                "testssl",
+            }
             try:
                 from contextlib import suppress
 
                 import psutil
+
                 current_process = psutil.Process()
                 for child in current_process.children(recursive=True):
                     with suppress(psutil.NoSuchProcess):
                         try:
                             child_name = child.name().lower()
                             if any(tool in child_name for tool in _KNOWN_TOOL_PROCS):
-                                logger.info("Swarm cleanup: killing orphaned %s (pid=%d)", child_name, child.pid)
+                                logger.info(
+                                    "Swarm cleanup: killing orphaned %s (pid=%d)",
+                                    child_name,
+                                    child.pid,
+                                )
                                 child.kill()
                         except (psutil.NoSuchProcess, psutil.AccessDenied):
                             pass
@@ -630,7 +757,7 @@ class SwarmOrchestrator:
 
         all_tools_attempted: set[str] = set()
         for agent in self.agents:
-            tools = getattr(agent, 'tools_attempted', set())
+            tools = getattr(agent, "tools_attempted", set())
             all_tools_attempted.update(tools)
 
         return deduped, all_tools_attempted
@@ -644,8 +771,6 @@ class SwarmOrchestrator:
         with different payload examples gets merged into one finding.
         The finding with richer evidence or higher confidence wins.
         """
-        from scan_diff_engine import ScanDiffEngine
-
         seen: dict[str, dict] = {}
         for f in findings:
             fp = ScanDiffEngine._fallback_fingerprint(f)
@@ -674,11 +799,19 @@ class SwarmOrchestrator:
             if isinstance(existing_ev, dict) and isinstance(new_ev, dict):
                 merged_evidence = {**existing_ev, **new_ev}
             else:
-                merged_evidence = new_ev if len(str(new_ev)) > len(str(existing_ev)) else existing_ev
+                merged_evidence = (
+                    new_ev if len(str(new_ev)) > len(str(existing_ev)) else existing_ev
+                )
 
             # Keys that should NOT be carried over from the existing finding
             # (the new finding's values take priority).
-            _overwrite_keys = {"confidence", "evidence", "source_agent", "source_agents", "source_tool"}
+            _overwrite_keys = {
+                "confidence",
+                "evidence",
+                "source_agent",
+                "source_agents",
+                "source_tool",
+            }
 
             if new_conf > existing_conf:
                 # Merge: use higher-confidence finding as base but preserve

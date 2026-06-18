@@ -116,23 +116,26 @@ class TestFeatureFlags:
         # After clear, env var is gone, should fall back to default
         assert flags.is_enabled("TEST_FLAG") is False
 
-    @pytest.mark.parametrize("raw,expected", [
-        ("1", True),
-        ("true", True),
-        ("yes", True),
-        ("on", True),
-        ("enabled", True),
-        ("TRUE", True),
-        ("0", False),
-        ("false", False),
-        ("no", False),
-        ("off", False),
-        ("disabled", False),
-        ("42", 42),
-        ("3.14", 3.14),
-        ("hello", "hello"),
-        ("", ""),
-    ])
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("1", True),
+            ("true", True),
+            ("yes", True),
+            ("on", True),
+            ("enabled", True),
+            ("TRUE", True),
+            ("0", False),
+            ("false", False),
+            ("no", False),
+            ("off", False),
+            ("disabled", False),
+            ("42", 42),
+            ("3.14", 3.14),
+            ("hello", "hello"),
+            ("", ""),
+        ],
+    )
     def test_parse_value(self, raw, expected):
         flags = FeatureFlags()
         assert flags._parse_value(raw) == expected
@@ -145,11 +148,15 @@ class TestFeatureFlags:
 
     def test_get_all_flags_with_env(self):
         flags = FeatureFlags()
-        with patch.dict(os.environ, {
-            "ARGUS_FF_FEATURE_A": "true",
-            "ARGUS_FF_FEATURE_B": "false",
-            "OTHER_VAR": "ignored",
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "ARGUS_FF_FEATURE_A": "true",
+                "ARGUS_FF_FEATURE_B": "false",
+                "OTHER_VAR": "ignored",
+            },
+            clear=False,
+        ):
             result = flags.get_all_flags()
         assert "feature_a" in result
         assert "feature_b" in result

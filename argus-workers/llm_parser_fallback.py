@@ -41,14 +41,14 @@ FALLBACK_SYSTEM_PROMPT = (
 # Prevents attacker-controlled target responses (which were scanned by security
 # tools) from injecting instructions into the LLM parser (H-v4-08).
 _FALLBACK_INJECTION_PATTERNS = [
-    r'(?i)ignore\s+(all\s+)?(previous|above|prior)\s+instructions',
-    r'(?i)forget\s+(all\s+)?(previous|earlier)\s+(instructions|prompts)',
-    r'(?i)override\s+(system|assistant)\s+(prompt|message)',
-    r'(?i)you\s+are\s+now\s+(a|an|acting\s+as)\s+(different|new)',
-    r'(?i)(curl|wget)\s+\S+.*(exfil|extract|steal|upload)',
-    r'(?i)(subprocess|os\.system|eval|exec)\s*\(',
-    r'(?i)run\s+(the\s+following|this)\s+(command|tool)',
-    r'(?i)system\s+prompt\s*(=|\s+is\s*)',
+    r"(?i)ignore\s+(all\s+)?(previous|above|prior)\s+instructions",
+    r"(?i)forget\s+(all\s+)?(previous|earlier)\s+(instructions|prompts)",
+    r"(?i)override\s+(system|assistant)\s+(prompt|message)",
+    r"(?i)you\s+are\s+now\s+(a|an|acting\s+as)\s+(different|new)",
+    r"(?i)(curl|wget)\s+\S+.*(exfil|extract|steal|upload)",
+    r"(?i)(subprocess|os\.system|eval|exec)\s*\(",
+    r"(?i)run\s+(the\s+following|this)\s+(command|tool)",
+    r"(?i)system\s+prompt\s*(=|\s+is\s*)",
 ]
 
 
@@ -66,13 +66,14 @@ def _sanitize_parser_input(text: str) -> str:
         Sanitized text safe to insert into LLM prompts
     """
     import re as _re
+
     # Strip control characters (except newline/tab)
-    text = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+    text = _re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]", "", text)
     # Remove backtick fences that could break prompt structure
-    text = text.replace('```', '` ` `')
+    text = text.replace("```", "` ` `")
     # Redact injection patterns
     for pattern in _FALLBACK_INJECTION_PATTERNS:
-        text = _re.sub(pattern, '[REDACTED]', text)
+        text = _re.sub(pattern, "[REDACTED]", text)
     return text
 
 
@@ -124,9 +125,7 @@ class LLMParserFallback:
             self._llm_service = LLMService(llm_client=client)
             return True
         except Exception as e:
-            logger.warning(
-                "LLMParserFallback: failed to initialize LLM service: %s", e
-            )
+            logger.warning("LLMParserFallback: failed to initialize LLM service: %s", e)
             return False
 
     def extract_findings(self, tool_name: str, raw_output: str) -> list[dict]:
@@ -140,6 +139,7 @@ class LLMParserFallback:
             List of finding dicts in standard format, or empty list
         """
         from utils.logging_utils import ScanLogger
+
         slog = ScanLogger("llm_parser_fallback")
         slog.llm_start(tool_name, f"{len(raw_output)} chars")
 
@@ -167,6 +167,7 @@ class LLMParserFallback:
         # attacker-controlled data that may appear in tool output (H-v4-08).
         sanitized_output = _sanitize_parser_input(truncated)
         import base64
+
         encoded_output = base64.b64encode(sanitized_output.encode()).decode()
         user_prompt = (
             f"Tool: {tool_name}\n\n"
@@ -184,10 +185,8 @@ class LLMParserFallback:
             )
 
             if result.get("_fallback"):
-                slog.llm_result(f"LLM call failed for {tool_name}")
-                logger.debug(
-                    "LLMParserFallback: LLM call failed for %s", tool_name
-                )
+                slog.llm_result("LLM call failed for %s", tool_name)
+                logger.debug("LLMParserFallback: LLM call failed for %s", tool_name)
                 return []
 
             findings = result if isinstance(result, list) else []
@@ -210,7 +209,9 @@ class LLMParserFallback:
                     logger.debug(
                         "LLMParserFallback: discarded hallucinated/invalid finding "
                         "type=%r severity=%r endpoint=%r",
-                        ftype, fseverity, fendpoint,
+                        ftype,
+                        fseverity,
+                        fendpoint,
                     )
                     continue
                 validated_count += 1
@@ -218,19 +219,27 @@ class LLMParserFallback:
             if validated_count < len(findings):
                 logger.warning(
                     "LLMParserFallback: %d/%d findings discarded by post-validation for %s",
-                    len(findings) - validated_count, len(findings), tool_name,
+                    len(findings) - validated_count,
+                    len(findings),
+                    tool_name,
                 )
-                findings = [f for f in findings if isinstance(f, dict) and f.get("ai_generated")
-                           and str(f.get("type", "")).strip()
-                           and str(f.get("severity", "")).strip().upper() in {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
-                           and str(f.get("endpoint", "")).strip()]
+                findings = [
+                    f
+                    for f in findings
+                    if isinstance(f, dict)
+                    and f.get("ai_generated")
+                    and str(f.get("type", "")).strip()
+                    and str(f.get("severity", "")).strip().upper()
+                    in {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
+                    and str(f.get("endpoint", "")).strip()
+                ]
 
             slog.llm_complete(tool_name, tokens=len(raw_output) // 4)
-            slog.llm_result(f"Extracted {len(findings)} findings from {tool_name}")
+            slog.llm_result("Extracted %d findings from %s", len(findings), tool_name)
             return findings
 
         except Exception as e:
-            slog.llm_result(f"Failed: {e}")
+            slog.llm_result("Failed: %s", e)
             logger.warning(
                 "LLMParserFallback: extraction failed for %s: %s", tool_name, e
             )

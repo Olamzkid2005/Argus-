@@ -4,6 +4,7 @@ Exponential Backoff Retry Utility
 Mirrors CyberStrikeAI's exponential backoff retry + orphan tool message repair pattern.
 Provides decorator and function for retrying operations with configurable backoff.
 """
+
 import functools
 import logging
 import random
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class RetryExhaustedError(Exception):
     """Raised when all retry attempts are exhausted."""
+
     pass
 
 
@@ -42,6 +44,7 @@ def retry(
         def call_api():
             return requests.get("https://api.example.com")
     """
+
     def decorator(func: Callable):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -52,25 +55,36 @@ def retry(
                 except exceptions as e:
                     last_exception = e
                     if attempt < max_attempts:
-                        delay = min(base_delay * (backoff_multiplier ** (attempt - 1)), max_delay)
+                        delay = min(
+                            base_delay * (backoff_multiplier ** (attempt - 1)),
+                            max_delay,
+                        )
                         if jitter:
                             delay = delay * (0.5 + random.random() * 0.5)
                         logger.warning(
                             "Attempt %d/%d failed for %s: %s. Retrying in %.1fs...",
-                            attempt, max_attempts, func.__name__, e, delay,
+                            attempt,
+                            max_attempts,
+                            func.__name__,
+                            e,
+                            delay,
                             exc_info=True,
                         )
                         time.sleep(delay)
                     else:
                         logger.error(
                             "All %d attempts failed for %s: %s",
-                            max_attempts, func.__name__, e,
+                            max_attempts,
+                            func.__name__,
+                            e,
                         )
 
             raise RetryExhaustedError(
                 f"Function {func.__name__} failed after {max_attempts} attempts: {last_exception}"
             ) from last_exception
+
         return wrapper
+
     return decorator
 
 
@@ -100,12 +114,17 @@ def retry_function(
         except exceptions as e:
             last_exception = e
             if attempt < max_attempts:
-                delay = min(base_delay * (backoff_multiplier ** (attempt - 1)), max_delay)
+                delay = min(
+                    base_delay * (backoff_multiplier ** (attempt - 1)), max_delay
+                )
                 if jitter:
                     delay = delay * (0.5 + random.random() * 0.5)
                 logger.warning(
                     "Attempt %d/%d failed: %s. Retrying in %.1fs...",
-                    attempt, max_attempts, e, delay,
+                    attempt,
+                    max_attempts,
+                    e,
+                    delay,
                 )
                 time.sleep(delay)
 

@@ -5,6 +5,7 @@ Every LLM tool selection is logged to the agent_decisions table.
 This is the data source for debugging bad agent choices and
 for the cost guard to track cumulative spend.
 """
+
 import json
 import logging
 
@@ -28,6 +29,7 @@ class AgentDecisionRepository:
             db_conn: Database connection string. Defaults to DATABASE_URL env var.
         """
         import os
+
         self.db_conn = db_conn or os.getenv("DATABASE_URL")
 
     def log_decision(
@@ -88,7 +90,7 @@ class AgentDecisionRepository:
                 row = cursor.fetchone()
                 return str(row[0]) if row else None
         except Exception as e:
-            logger.warning(f"Failed to log agent decision: {e}")
+            logger.warning("Failed to log agent decision: %s", e)
             return None
 
     def get_decisions(self, engagement_id: str) -> list[dict]:
@@ -115,9 +117,11 @@ class AgentDecisionRepository:
                     (engagement_id,),
                 )
                 columns = [desc[0] for desc in cursor.description]
-                return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+                return [
+                    dict(zip(columns, row, strict=False)) for row in cursor.fetchall()
+                ]
         except Exception as e:
-            logger.warning(f"Failed to get decisions: {e}")
+            logger.warning("Failed to get decisions: %s", e)
             return []
 
     def get_total_cost(self, engagement_id: str) -> float:
@@ -143,7 +147,7 @@ class AgentDecisionRepository:
                 row = cursor.fetchone()
                 return float(row[0]) if row else 0.0
         except Exception as e:
-            logger.warning(f"Failed to get total cost: {e}")
+            logger.warning("Failed to get total cost: %s", e)
             return 0.0
 
     def get_stats_since(self, since_hours: int = 24) -> dict:
@@ -172,14 +176,18 @@ class AgentDecisionRepository:
                 )
                 columns = [desc[0] for desc in cursor.description]
                 row = cursor.fetchone()
-                return dict(zip(columns, row, strict=False)) if row else {
-                    "total_decisions": 0,
-                    "total_cost_usd": 0.0,
-                    "fallback_count": 0,
-                    "llm_count": 0,
-                }
+                return (
+                    dict(zip(columns, row, strict=False))
+                    if row
+                    else {
+                        "total_decisions": 0,
+                        "total_cost_usd": 0.0,
+                        "fallback_count": 0,
+                        "llm_count": 0,
+                    }
+                )
         except Exception as e:
-            logger.warning(f"Failed to get agent stats: {e}")
+            logger.warning("Failed to get agent stats: %s", e)
             return {
                 "total_decisions": 0,
                 "total_cost_usd": 0.0,
@@ -211,15 +219,21 @@ class AgentDecisionRepository:
                     (limit,),
                 )
                 columns = [desc[0] for desc in cursor.description]
-                return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+                return [
+                    dict(zip(columns, row, strict=False)) for row in cursor.fetchall()
+                ]
         except Exception as e:
-            logger.warning(f"Failed to get recent decisions: {e}")
+            logger.warning("Failed to get recent decisions: %s", e)
             return []
 
-    def _estimate_cost(self, input_tokens: int | None, output_tokens: int | None) -> float:
+    def _estimate_cost(
+        self, input_tokens: int | None, output_tokens: int | None
+    ) -> float:
         """Estimate cost based on token counts."""
         if not input_tokens and not output_tokens:
             return 0.0
         inp = input_tokens or 0
         out = output_tokens or 0
-        return (inp / 1000 * LLM_AGENT_COST_PER_1K_INPUT) + (out / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
+        return (inp / 1000 * LLM_AGENT_COST_PER_1K_INPUT) + (
+            out / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT
+        )

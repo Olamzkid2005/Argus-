@@ -2,6 +2,7 @@
 Scope Validator - Ensures LLM-selected tools stay within authorized scope.
 Prevents prompt injection from tricking the agent into scanning unauthorized targets.
 """
+
 import json
 import logging
 from urllib.parse import urlparse
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class ScopeViolationError(Exception):
     """Raised when a tool is requested for an out-of-scope target."""
+
     pass
 
 
@@ -36,7 +38,9 @@ class ScopeValidator:
         self._scope = self._parse_scope(authorized_scope)
         if self._scope["domains"] or self._scope["ipRanges"]:
             slog = ScanLogger("scope_validator", engagement_id=engagement_id)
-            slog.info(f"Scope loaded: {len(self._scope['domains'])} domains, {len(self._scope['ipRanges'])} IP ranges")
+            slog.info(
+                f"Scope loaded: {len(self._scope['domains'])} domains, {len(self._scope['ipRanges'])} IP ranges"
+            )
 
     def _parse_scope(self, scope) -> dict:
         """Parse authorized scope from dict or JSON string."""
@@ -71,14 +75,14 @@ class ScopeValidator:
         hostname = self._extract_hostname(target)
 
         if self._matches_domain(hostname):
-            slog.info(f"Target {target} in scope (domain match)")
+            slog.info("Target %s in scope (domain match)", target)
             return True
 
         if self._matches_ip_range(hostname):
-            slog.info(f"Target {target} in scope (IP range match)")
+            slog.info("Target %s in scope (IP range match)", target)
             return True
 
-        slog.warn(f"Target {target} OUT of scope (hostname: {hostname})")
+        slog.warn("Target %s OUT of scope (hostname: %s)", target, hostname)
         raise ScopeViolationError(
             f"Target '{target}' (hostname: {hostname}) is not in authorized scope. "
             f"Authorized domains: {self._scope['domains']}"
@@ -130,7 +134,7 @@ class ScopeValidator:
                 # Wildcard: match exactly one DNS label
                 suffix = domain[1:]  # ".example.com"
                 if hostname.endswith(suffix):
-                    prefix = hostname[:-len(suffix)]
+                    prefix = hostname[: -len(suffix)]
                     if prefix and "." not in prefix:
                         return True
         return False
@@ -154,7 +158,9 @@ class ScopeValidator:
         return False
 
 
-def validate_target_scope(target: str, engagement_id: str, authorized_scope: dict | None = None) -> bool:
+def validate_target_scope(
+    target: str, engagement_id: str, authorized_scope: dict | None = None
+) -> bool:
     """Standalone convenience wrapper around ScopeValidator.
 
     Fail-Closed: If scope validation encounters an error (DB unavailable,
@@ -197,13 +203,15 @@ def validate_target_scope(target: str, engagement_id: str, authorized_scope: dic
             logger.warning(
                 "Scope validation: DB lookup timed out after %ss for %s — "
                 "defaulting to deny (L-20 fail-closed)",
-                SCOPE_VALIDATION_TIMEOUT, engagement_id,
+                SCOPE_VALIDATION_TIMEOUT,
+                engagement_id,
             )
             return False
         except Exception as e:
             logger.warning(
                 "Scope validation: DB unavailable for %s — defaulting to deny: %s",
-                target, e,
+                target,
+                e,
             )
             return False
 
@@ -217,6 +225,7 @@ def validate_target_scope(target: str, engagement_id: str, authorized_scope: dic
     except Exception as e:
         logger.warning(
             "Scope validation failed for %s — failing closed (deny): %s",
-            target, e,
+            target,
+            e,
         )
         return False

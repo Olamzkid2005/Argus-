@@ -35,6 +35,7 @@ def reset_rate_limit_repo_singleton():
     """Reset _RATE_LIMIT_REPO singleton between tests so test ordering
     doesn't pollute results."""
     import orchestrator_pkg.scan as scan_module
+
     old = scan_module._RATE_LIMIT_REPO
     scan_module._RATE_LIMIT_REPO = None
     yield
@@ -52,7 +53,14 @@ class TestRateLimitRepositoryCreateEvent:
     def test_creates_event_with_correct_query_and_params(self):
         """Verifies create_event builds correct SQL and passes all params."""
         mock_db, mock_cursor = _make_mock_db()
-        mock_cursor.fetchone.return_value = (1, "example.com", "tool_rate_limited", 429, 0.0, "2025-01-01T00:00:00Z")
+        mock_cursor.fetchone.return_value = (
+            1,
+            "example.com",
+            "tool_rate_limited",
+            429,
+            0.0,
+            "2025-01-01T00:00:00Z",
+        )
         repo = RateLimitRepository(mock_db)
 
         result = repo.create_event(
@@ -108,7 +116,14 @@ class TestRateLimitRepositoryCreateEvent:
     def test_create_event_with_null_status_code(self):
         """status_code can be None (e.g., connection timeout)."""
         mock_db, mock_cursor = _make_mock_db()
-        mock_cursor.fetchone.return_value = (2, "test.dev", "timeout", None, 0.0, "2025-01-01T00:00:00Z")
+        mock_cursor.fetchone.return_value = (
+            2,
+            "test.dev",
+            "timeout",
+            None,
+            0.0,
+            "2025-01-01T00:00:00Z",
+        )
         repo = RateLimitRepository(mock_db)
 
         result = repo.create_event(
@@ -124,7 +139,14 @@ class TestRateLimitRepositoryCreateEvent:
     def test_create_event_with_nonzero_rps(self):
         """current_rps reflects actual rate when limit was hit."""
         mock_db, mock_cursor = _make_mock_db()
-        mock_cursor.fetchone.return_value = (3, "bursty.app", "tool_rate_limited", 429, 45.5, "2025-01-01T00:00:00Z")
+        mock_cursor.fetchone.return_value = (
+            3,
+            "bursty.app",
+            "tool_rate_limited",
+            429,
+            45.5,
+            "2025-01-01T00:00:00Z",
+        )
         repo = RateLimitRepository(mock_db)
 
         result = repo.create_event(
@@ -198,16 +220,23 @@ class TestRateLimitRepositoryWiring:
         """Without DATABASE_URL in env, returns a RateLimitRepository instance
         (connection is lazy — only created when create_event is called)."""
         from orchestrator_pkg.scan import _get_rate_limit_repo
+
         with patch.dict("os.environ", {}, clear=True):
             repo = _get_rate_limit_repo()
-            assert repo is not None, "Expected a RateLimitRepository instance even without DATABASE_URL"
+            assert repo is not None, (
+                "Expected a RateLimitRepository instance even without DATABASE_URL"
+            )
             from database.repositories.rate_limit_repository import RateLimitRepository
+
             assert isinstance(repo, RateLimitRepository)
 
     def test_get_rate_limit_repo_with_db_url(self):
         """With DATABASE_URL set, returns a RateLimitRepository instance."""
         from orchestrator_pkg.scan import _get_rate_limit_repo
-        with patch.dict("os.environ", {"DATABASE_URL": "postgresql://localhost/argus"}, clear=False):
+
+        with patch.dict(
+            "os.environ", {"DATABASE_URL": "postgresql://localhost/argus"}, clear=False
+        ):
             repo = _get_rate_limit_repo()
             assert repo is not None
             assert isinstance(repo, RateLimitRepository)
@@ -229,9 +258,11 @@ class TestRateLimitRepositoryWiring:
         ctx.tool_runner.sandbox_dir = None
         ctx.publish_activity = MagicMock()
 
-        with patch("orchestrator_pkg.scan._is_reachable", return_value=True), \
-             patch("orchestrator_pkg.scan._feature_enabled", return_value=False), \
-             patch("tools.scope_validator.validate_target_scope", return_value=True):
+        with (
+            patch("orchestrator_pkg.scan._is_reachable", return_value=True),
+            patch("orchestrator_pkg.scan._feature_enabled", return_value=False),
+            patch("tools.scope_validator.validate_target_scope", return_value=True),
+        ):
             results = execute_scan_tools(ctx, ["https://example.test/"], {}, "default")
 
         assert mock_get_repo.called
@@ -242,14 +273,19 @@ class TestRateLimitRepositoryWiring:
         a 429 error triggers create_event on the repo."""
         mock_repo = MagicMock()
         mock_repo.create_event.return_value = {
-            "id": 1, "domain": "target.test", "event_type": "tool_rate_limited",
-            "status_code": 429, "current_rps": 0.0,
+            "id": 1,
+            "domain": "target.test",
+            "event_type": "tool_rate_limited",
+            "status_code": 429,
+            "current_rps": 0.0,
         }
 
         # Simulate the exact code from execute_scan_tools per-target loop
         target = "https://target.test"
         err_str = "429 Too Many Requests"
-        if any(kw in err_str.lower() for kw in ["429", "rate limit", "too many requests"]):
+        if any(
+            kw in err_str.lower() for kw in ["429", "rate limit", "too many requests"]
+        ):
             mock_repo.create_event(
                 domain=target,
                 event_type="tool_rate_limited",

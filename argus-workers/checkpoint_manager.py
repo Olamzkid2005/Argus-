@@ -28,12 +28,16 @@ class CheckpointManager:
         try:
             db = get_db()
             if db is None:
-                raise RuntimeError("Database pool is not initialized (get_db() returned None)")
+                raise RuntimeError(
+                    "Database pool is not initialized (get_db() returned None)"
+                )
             # Quick connectivity check
             conn = db.get_connection()
             db.release_connection(conn)
         except (DatabaseConnectionError, RuntimeError, Exception) as e:
-            raise RuntimeError(f"Cannot access database for checkpoint operations: {e}") from e
+            raise RuntimeError(
+                f"Cannot access database for checkpoint operations: {e}"
+            ) from e
 
     def save_checkpoint(self, engagement_id: str, phase: str, data: dict) -> str:
         """
@@ -74,8 +78,12 @@ class CheckpointManager:
         except Exception as e:
             if conn:
                 conn.rollback()
-            logger.error("Failed to save checkpoint for %s/%s: %s", engagement_id, phase, e)
-            raise RuntimeError(f"Failed to save checkpoint for {engagement_id}/{phase}: {e}") from e
+            logger.error(
+                "Failed to save checkpoint for %s/%s: %s", engagement_id, phase, e
+            )
+            raise RuntimeError(
+                f"Failed to save checkpoint for {engagement_id}/{phase}: {e}"
+            ) from e
         finally:
             if cursor:
                 cursor.close()
@@ -153,7 +161,9 @@ class CheckpointManager:
             return cursor.fetchone() is not None
 
         except Exception as e:
-            logger.error("Failed to check checkpoint existence for %s: %s", engagement_id, e)
+            logger.error(
+                "Failed to check checkpoint existence for %s: %s", engagement_id, e
+            )
             return False
         finally:
             if cursor:
@@ -222,7 +232,9 @@ class CheckpointManager:
             if conn:
                 conn.rollback()
             logger.error("Failed to delete checkpoints for %s: %s", engagement_id, e)
-            raise RuntimeError(f"Failed to delete checkpoints for {engagement_id}: {e}") from e
+            raise RuntimeError(
+                f"Failed to delete checkpoints for {engagement_id}: {e}"
+            ) from e
         finally:
             if cursor:
                 cursor.close()
@@ -246,7 +258,9 @@ class CheckpointManager:
             row = cursor.fetchone()
             return row[0] if row else None
         except Exception:
-            logger.debug("Could not read engagement status for %s", engagement_id, exc_info=True)
+            logger.debug(
+                "Could not read engagement status for %s", engagement_id, exc_info=True
+            )
             return None
         finally:
             if cursor:
@@ -273,18 +287,25 @@ class CheckpointManager:
         if checkpoint["phase"] in ("complete", "failed"):
             logger.info(
                 "Checkpoint for %s is in terminal phase '%s' — skipping resume",
-                engagement_id, checkpoint["phase"],
+                engagement_id,
+                checkpoint["phase"],
             )
             return None
 
         # P3: Verify that the checkpoint phase matches the current engagement
         # phase to avoid resuming from stale/superseded checkpoint data.
         current_phase = self._get_engagement_current_phase(engagement_id)
-        if current_phase and checkpoint.get("phase") == "scan" and current_phase == "recon":
+        if (
+            current_phase
+            and checkpoint.get("phase") == "scan"
+            and current_phase == "recon"
+        ):
             logger.info(
                 "Checkpoint for %s is from phase '%s' but engagement is now '%s' — "
                 "engagement was reset after checkpoint was created, skipping resume",
-                engagement_id, checkpoint["phase"], current_phase,
+                engagement_id,
+                checkpoint["phase"],
+                current_phase,
             )
             return None
 
@@ -323,8 +344,10 @@ class CheckpointManager:
 
         if phase in phases:
             current_idx = phases.index(phase)
-            next_phase = phases[current_idx + 1] if current_idx + 1 < len(phases) else None
-            remaining = phases[current_idx + 1:] if next_phase else []
+            next_phase = (
+                phases[current_idx + 1] if current_idx + 1 < len(phases) else None
+            )
+            remaining = phases[current_idx + 1 :] if next_phase else []
         else:
             # Unknown phase — reset to beginning
             return {
@@ -334,7 +357,8 @@ class CheckpointManager:
                 "partial_results": data,
                 "remaining_phases": ["scan", "analyze", "report"],
                 "checkpoint_timestamp": checkpoint["created_at"].isoformat()
-                if checkpoint["created_at"] else None,
+                if checkpoint["created_at"]
+                else None,
                 "can_resume": True,
                 "reason": f"Phase '{phase}' not recognized, starting from beginning",
             }

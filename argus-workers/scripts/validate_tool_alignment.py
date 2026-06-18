@@ -32,7 +32,17 @@ except ImportError:
 _SCRIPT_DIR = Path(__file__).resolve().parent.parent
 
 PYTHON_DEFS_DIR = _SCRIPT_DIR / "tools" / "definitions"
-TUI_DEFS_PATH = _SCRIPT_DIR / ".." / "Argus-Tui" / "packages" / "opencode" / "src" / "argus" / "workflows" / "tool-definitions.yaml"
+TUI_DEFS_PATH = (
+    _SCRIPT_DIR
+    / ".."
+    / "Argus-Tui"
+    / "packages"
+    / "opencode"
+    / "src"
+    / "argus"
+    / "workflows"
+    / "tool-definitions.yaml"
+)
 
 
 def load_python_definitions() -> dict:
@@ -131,9 +141,13 @@ def validate() -> list[str]:
             only_py = py_caps - ts_caps
             only_ts = ts_caps - py_caps
             if only_py:
-                errors.append(f"CAPABILITY_MISMATCH [{name}]: in Python YAML only: {sorted(only_py)}")
+                errors.append(
+                    f"CAPABILITY_MISMATCH [{name}]: in Python YAML only: {sorted(only_py)}"
+                )
             if only_ts:
-                errors.append(f"CAPABILITY_MISMATCH [{name}]: in TUI YAML only: {sorted(only_ts)}")
+                errors.append(
+                    f"CAPABILITY_MISMATCH [{name}]: in TUI YAML only: {sorted(only_ts)}"
+                )
 
         # Validate risk level classification consistency
         py_risky = _is_destructive(py)
@@ -180,7 +194,9 @@ def main():
         if args.check:
             sys.exit(1)
     else:
-        print("Tool alignment validation PASSED — all overlapping fields are consistent")
+        print(
+            "Tool alignment validation PASSED — all overlapping fields are consistent"
+        )
         sys.exit(0)
 
 

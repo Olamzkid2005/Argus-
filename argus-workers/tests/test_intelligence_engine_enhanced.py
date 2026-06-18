@@ -2,6 +2,7 @@
 Tests for intelligence engine enhancements
 (CVE enrichment, EPSS scoring, threat feed matching, false positive detection)
 """
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,8 +19,10 @@ def _no_cache():
     for a later test that expects an API failure or different results.
     No tests in this module are testing the caching behavior itself.
     """
-    with patch.object(IntelligenceEngine, '_cache_get', return_value=None), \
-         patch.object(IntelligenceEngine, '_cache_set'):
+    with (
+        patch.object(IntelligenceEngine, "_cache_get", return_value=None),
+        patch.object(IntelligenceEngine, "_cache_set"),
+    ):
         yield
 
 
@@ -34,9 +37,7 @@ class TestCVEEnrichment:
         """Test extracting CVE IDs from evidence"""
         finding = {
             "type": "VULNERABLE_COMPONENT",
-            "evidence": {
-                "details": "Vulnerable to CVE-2021-44228 and CVE-2022-22965"
-            }
+            "evidence": {"details": "Vulnerable to CVE-2021-44228 and CVE-2022-22965"},
         }
         cves = engine._extract_cve_ids(finding)
         assert "CVE-2021-44228" in cves
@@ -44,19 +45,13 @@ class TestCVEEnrichment:
 
     def test_extract_cve_ids_from_type(self, engine):
         """Test extracting CVE IDs from finding type field"""
-        finding = {
-            "type": "CVE-2023-12345-exploit",
-            "evidence": {}
-        }
+        finding = {"type": "CVE-2023-12345-exploit", "evidence": {}}
         cves = engine._extract_cve_ids(finding)
         assert "CVE-2023-12345" in cves
 
     def test_extract_cve_ids_no_matches(self, engine):
         """Test extracting CVE IDs when none present"""
-        finding = {
-            "type": "SQL_INJECTION",
-            "evidence": {"payload": "' OR 1=1--"}
-        }
+        finding = {"type": "SQL_INJECTION", "evidence": {"payload": "' OR 1=1--"}}
         cves = engine._extract_cve_ids(finding)
         assert cves == []
 
@@ -65,8 +60,8 @@ class TestCVEEnrichment:
         finding = {
             "type": "",
             "evidence": {
-                "details": " ".join([f"CVE-2021-{1000+i}" for i in range(10)])
-            }
+                "details": " ".join([f"CVE-2021-{1000 + i}" for i in range(10)])
+            },
         }
         cves = engine._extract_cve_ids(finding)
         assert len(cves) == 5
@@ -81,22 +76,26 @@ class TestCVEEnrichment:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "vulnerabilities": [{
-                "cve": {
-                    "descriptions": [{"value": "Test vulnerability"}],
-                    "metrics": {
-                        "cvssMetricV31": [{
-                            "cvssData": {
-                                "baseScore": 9.8,
-                                "baseSeverity": "CRITICAL"
-                            }
-                        }]
-                    },
-                    "published": "2021-01-01",
-                    "lastModified": "2021-02-01",
-                    "references": [{"url": "https://example.com/ref"}]
+            "vulnerabilities": [
+                {
+                    "cve": {
+                        "descriptions": [{"value": "Test vulnerability"}],
+                        "metrics": {
+                            "cvssMetricV31": [
+                                {
+                                    "cvssData": {
+                                        "baseScore": 9.8,
+                                        "baseSeverity": "CRITICAL",
+                                    }
+                                }
+                            ]
+                        },
+                        "published": "2021-01-01",
+                        "lastModified": "2021-02-01",
+                        "references": [{"url": "https://example.com/ref"}],
+                    }
                 }
-            }]
+            ]
         }
         mock_client.get.return_value = mock_response
 
@@ -363,19 +362,22 @@ class TestEnrichFindings:
         mock_threat.return_value = [{"feed": "exploitdb"}]
         mock_fp.return_value = {"verdict": "true_positive"}
 
-        findings = [{
-            "type": "VULNERABLE_COMPONENT",
-            "evidence": {"details": "CVE-2021-44228"}
-        }]
+        findings = [
+            {"type": "VULNERABLE_COMPONENT", "evidence": {"details": "CVE-2021-44228"}}
+        ]
 
         enriched = engine.enrich_findings_with_threat_intel(findings)
 
         assert len(enriched) == 1
         assert "threat_intel" in enriched[0]
         assert enriched[0]["threat_intel"]["cve_ids"] == ["CVE-2021-44228"]
-        assert enriched[0]["threat_intel"]["cve_details"] == {"CVE-2021-44228": {"cvss_score": 9.8}}
+        assert enriched[0]["threat_intel"]["cve_details"] == {
+            "CVE-2021-44228": {"cvss_score": 9.8}
+        }
         assert enriched[0]["threat_intel"]["epss_scores"] == {"CVE-2021-44228": 0.95}
-        assert enriched[0]["threat_intel"]["fp_assessment"] == {"verdict": "true_positive"}
+        assert enriched[0]["threat_intel"]["fp_assessment"] == {
+            "verdict": "true_positive"
+        }
 
     @patch.object(IntelligenceEngine, "_extract_cve_ids")
     def test_enrich_findings_without_cve(self, mock_extract, engine):
@@ -405,8 +407,8 @@ class TestThreatSummary:
                     "cve_details": {"CVE-2021-44228": {}},
                     "epss_scores": {"CVE-2021-44228": 0.95},
                     "threat_feed_hits": [{"feed": "exploitdb"}],
-                    "fp_assessment": {"verdict": "true_positive"}
-                }
+                    "fp_assessment": {"verdict": "true_positive"},
+                },
             },
             {
                 "severity": "HIGH",
@@ -414,9 +416,9 @@ class TestThreatSummary:
                     "cve_details": {},
                     "epss_scores": {},
                     "threat_feed_hits": [],
-                    "fp_assessment": {"verdict": "likely_false_positive"}
-                }
-            }
+                    "fp_assessment": {"verdict": "likely_false_positive"},
+                },
+            },
         ]
 
         summary = engine.get_threat_summary(findings)

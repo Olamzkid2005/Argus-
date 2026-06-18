@@ -1,6 +1,7 @@
 """
 Tests for new parsers: GospiderParser and WpscanParser
 """
+
 import json
 
 from parsers.parser import Parser
@@ -12,7 +13,13 @@ class TestGospiderParser:
     """Test GospiderParser"""
 
     def test_parse_json_output(self):
-        raw = json.dumps({"output": "https://example.com/js/app.js", "source": "js", "type": "javascript"})
+        raw = json.dumps(
+            {
+                "output": "https://example.com/js/app.js",
+                "source": "js",
+                "type": "javascript",
+            }
+        )
         parser = GospiderParser()
         findings = parser.parse(raw)
         assert len(findings) == 1
@@ -39,7 +46,7 @@ class TestGospiderParser:
             json.dumps({"output": "https://example.com/js/main.js", "source": "js"}),
             "https://example.com/api/users",
             "",
-            "not-a-url"
+            "not-a-url",
         ]
         parser = GospiderParser()
         findings = parser.parse("\n".join(lines))
@@ -52,9 +59,14 @@ class TestWpscanParser:
     def test_parse_interesting_findings(self):
         data = {
             "interesting_findings": [
-                {"type": "db_backup", "url": "https://wp.com/backup.sql", "to_s": "DB backup found", "found_by": "Direct Access"}
+                {
+                    "type": "db_backup",
+                    "url": "https://wp.com/backup.sql",
+                    "to_s": "DB backup found",
+                    "found_by": "Direct Access",
+                }
             ],
-            "vulnerabilities": {}
+            "vulnerabilities": {},
         }
         parser = WpscanParser()
         findings = parser.parse(json.dumps(data))
@@ -71,10 +83,10 @@ class TestWpscanParser:
                     {
                         "title": "SQL Injection",
                         "cvss": {"score": 9.5},
-                        "references": {"url": ["https://cve.example.com/123"]}
+                        "references": {"url": ["https://cve.example.com/123"]},
                     }
                 ]
-            }
+            },
         }
         parser = WpscanParser()
         findings = parser.parse(json.dumps(data))
@@ -87,16 +99,22 @@ class TestWpscanParser:
 
     def test_parse_empty(self):
         parser = WpscanParser()
-        findings = parser.parse(json.dumps({"interesting_findings": [], "vulnerabilities": {}}))
+        findings = parser.parse(
+            json.dumps({"interesting_findings": [], "vulnerabilities": {}})
+        )
         assert findings == []
 
     def test_parse_version_info(self):
         data = {
-            "version": {"number": "5.8.1", "status": "outdated", "vulnerabilities": [
-                {"title": "RCE in WordPress Core", "fixed_in": "5.8.2"}
-            ]},
+            "version": {
+                "number": "5.8.1",
+                "status": "outdated",
+                "vulnerabilities": [
+                    {"title": "RCE in WordPress Core", "fixed_in": "5.8.2"}
+                ],
+            },
             "interesting_findings": [],
-            "vulnerabilities": {}
+            "vulnerabilities": {},
         }
         parser = WpscanParser()
         findings = parser.parse(json.dumps(data))
@@ -108,7 +126,7 @@ class TestWpscanParser:
         data = {
             "version": {"number": "5.8.1", "status": "outdated", "vulnerabilities": []},
             "interesting_findings": [],
-            "vulnerabilities": {}
+            "vulnerabilities": {},
         }
         parser = WpscanParser()
         findings = parser.parse(json.dumps(data))
@@ -139,9 +157,14 @@ class TestParserRegistry:
         p = Parser()
         data = {
             "interesting_findings": [
-                {"type": "log_file", "url": "https://wp.com/debug.log", "to_s": "Log file", "found_by": "Dirb"}
+                {
+                    "type": "log_file",
+                    "url": "https://wp.com/debug.log",
+                    "to_s": "Log file",
+                    "found_by": "Dirb",
+                }
             ],
-            "vulnerabilities": {}
+            "vulnerabilities": {},
         }
         findings = p.parse("wpscan", json.dumps(data))
         assert len(findings) == 1

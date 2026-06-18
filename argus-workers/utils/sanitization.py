@@ -2,24 +2,25 @@
 Input sanitization utilities for security.
 Sanitizes HTML/JS in evidence before DB storage.
 """
+
 import html
 import re
 from typing import Any
 
 # Patterns that indicate potentially dangerous content
 DANGEROUS_PATTERNS = [
-    (r'<script[^>]*>.*?</script>', 'script tag'),
-    (r'javascript:', 'javascript: protocol'),
-    (r'on\w+\s*=', 'event handler'),
-    (r'<iframe[^>]*>.*?</iframe>', 'iframe'),
-    (r'<object[^>]*>.*?</object>', 'object'),
-    (r'<embed[^>]*>', 'embed'),
-    (r'<applet[^>]*>.*?</applet>', 'applet'),
-    (r'<svg[^>]*>.*?</svg>', 'svg'),
-    (r'<meta[^>]*>', 'meta refresh'),
-    (r'eval\s*\(', 'eval()'),
-    (r'document\.', 'document access'),
-    (r'window\.', 'window access'),
+    (r"<script[^>]*>.*?</script>", "script tag"),
+    (r"javascript:", "javascript: protocol"),
+    (r"on\w+\s*=", "event handler"),
+    (r"<iframe[^>]*>.*?</iframe>", "iframe"),
+    (r"<object[^>]*>.*?</object>", "object"),
+    (r"<embed[^>]*>", "embed"),
+    (r"<applet[^>]*>.*?</applet>", "applet"),
+    (r"<svg[^>]*>.*?</svg>", "svg"),
+    (r"<meta[^>]*>", "meta refresh"),
+    (r"eval\s*\(", "eval()"),
+    (r"document\.", "document access"),
+    (r"window\.", "window access"),
 ]
 
 
@@ -62,8 +63,7 @@ def sanitize_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
             sanitized[key] = sanitize_evidence(value)
         elif isinstance(value, list):
             sanitized[key] = [
-                sanitize_string(v) if isinstance(v, str) else v
-                for v in value
+                sanitize_string(v) if isinstance(v, str) else v for v in value
             ]
         else:
             # Keep non-string values as-is
@@ -104,6 +104,6 @@ def strip_dangerous_tags(value: str) -> str:
     result = value
 
     for pattern, _ in DANGEROUS_PATTERNS:
-        result = re.sub(pattern, '[removed]', result, flags=re.IGNORECASE | re.DOTALL)
+        result = re.sub(pattern, "[removed]", result, flags=re.IGNORECASE | re.DOTALL)
 
     return result

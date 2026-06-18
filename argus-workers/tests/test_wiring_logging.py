@@ -16,7 +16,7 @@ import pytest
 pytestmark = pytest.mark.skipif(
     True,
     reason="These tests require a running scan environment with tools installed. "
-           "Run manually to verify wiring: cd argus-workers && python scripts/verify_wiring_logs.py",
+    "Run manually to verify wiring: cd argus-workers && python scripts/verify_wiring_logs.py",
 )
 
 # ── helpers ──────────────────────────────────────────────────────────────
@@ -111,9 +111,10 @@ class TestFindingVerifierLogging:
         osc.finding_repo = MagicMock()
         osc.finding_repo.create_finding.return_value = str(uuid.uuid4())
 
-        with patch.object(
-            osc, "_normalize_finding", return_value=None
-        ), patch.object(osc, "_classify_finding_type", return_value={}):
+        with (
+            patch.object(osc, "_normalize_finding", return_value=None),
+            patch.object(osc, "_classify_finding_type", return_value={}),
+        ):
             failed = osc._save_findings(
                 [
                     {
@@ -148,10 +149,10 @@ class TestFindingVerifierLogging:
         osc.finding_repo = MagicMock()
         osc.finding_repo.create_finding.return_value = str(uuid.uuid4())
 
-        with patch.object(
-            osc, "_normalize_finding", return_value=None
-        ), patch.object(osc, "_classify_finding_type", return_value={}), patch(
-            "orchestrator_pkg.orchestrator.logger"
+        with (
+            patch.object(osc, "_normalize_finding", return_value=None),
+            patch.object(osc, "_classify_finding_type", return_value={}),
+            patch("orchestrator_pkg.orchestrator.logger"),
         ):
             failed = osc._save_findings(
                 [
@@ -171,6 +172,7 @@ class TestFindingVerifierLogging:
 
         # The find_verifier import path is valid
         from tools.finding_verifier import VERIFIERS
+
         assert len(VERIFIERS) >= 5
 
     def test_finding_verifier_direct_slog_output(self, _capture_argus_logs):
@@ -265,16 +267,19 @@ class TestWiringIntegration:
 
     def test_orchestrator_has_rate_limit_repo(self):
         """Orchestrator init wires RateLimitRepository."""
-        with patch("orchestrator_pkg.orchestrator.os.getenv", return_value=None), \
-             patch("orchestrator_pkg.orchestrator.get_websocket_publisher"), \
-             patch("orchestrator_pkg.orchestrator.get_mcp_server"), \
-             patch("orchestrator_pkg.orchestrator.get_stream_manager"), \
-             patch("orchestrator_pkg.orchestrator.ToolRunner"), \
-             patch("orchestrator_pkg.orchestrator.Parser"), \
-             patch("orchestrator_pkg.orchestrator.TracingManager"), \
-             patch("orchestrator_pkg.orchestrator.StructuredLogger"), \
-             patch("orchestrator_pkg.orchestrator.ExecutionSpan"):
+        with (
+            patch("orchestrator_pkg.orchestrator.os.getenv", return_value=None),
+            patch("orchestrator_pkg.orchestrator.get_websocket_publisher"),
+            patch("orchestrator_pkg.orchestrator.get_mcp_server"),
+            patch("orchestrator_pkg.orchestrator.get_stream_manager"),
+            patch("orchestrator_pkg.orchestrator.ToolRunner"),
+            patch("orchestrator_pkg.orchestrator.Parser"),
+            patch("orchestrator_pkg.orchestrator.TracingManager"),
+            patch("orchestrator_pkg.orchestrator.StructuredLogger"),
+            patch("orchestrator_pkg.orchestrator.ExecutionSpan"),
+        ):
             from orchestrator_pkg.orchestrator import Orchestrator
+
             osc = Orchestrator(ENGAGEMENT_ID)
             # Without DATABASE_URL, rate_limit_repo should be None
             assert osc.rate_limit_repo is None
@@ -291,10 +296,11 @@ class TestWiringIntegration:
         mock_id = str(uuid.uuid4())
         osc.finding_repo.create_finding.return_value = mock_id
 
-        with patch.object(
-            osc, "_normalize_finding", return_value=None
-        ), patch.object(osc, "_classify_finding_type", return_value={}), \
-            patch("feature_flags.is_enabled", return_value=False):
+        with (
+            patch.object(osc, "_normalize_finding", return_value=None),
+            patch.object(osc, "_classify_finding_type", return_value={}),
+            patch("feature_flags.is_enabled", return_value=False),
+        ):
             failed = osc._save_findings(
                 [
                     {

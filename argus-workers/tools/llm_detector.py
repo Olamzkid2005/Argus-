@@ -8,6 +8,7 @@ verifier for low-confidence findings.
 Graceful degradation: All methods return None on failure.
 The system works exactly as today when LLM is unavailable.
 """
+
 import json
 import logging
 import re
@@ -23,13 +24,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LLMAnalysisResult:
     """Structured result from LLM response analysis."""
+
     vulnerable: bool
-    confidence: float          # 0.0-1.0, how confident LLM is in the finding
-    evidence_quote: str        # Exact string from response that indicates vuln
-    vuln_type: str             # e.g., "XSS", "SQL_INJECTION", "SSTI", "LFI"
-    reasoning: str             # 1-sentence explanation
-    model: str                 # LLM model used
-    timestamp: str             # ISO timestamp
+    confidence: float  # 0.0-1.0, how confident LLM is in the finding
+    evidence_quote: str  # Exact string from response that indicates vuln
+    vuln_type: str  # e.g., "XSS", "SQL_INJECTION", "SSTI", "LFI"
+    reasoning: str  # 1-sentence explanation
+    model: str  # LLM model used
+    timestamp: str  # ISO timestamp
 
 
 class LLMDetector:
@@ -87,9 +89,14 @@ If NOT vulnerable:
 
     # Headers that may be useful for vulnerability analysis
     RELEVANT_HEADERS = [
-        "content-type", "x-frame-options", "x-xss-protection",
-        "content-security-policy", "set-cookie", "location",
-        "www-authenticate", "access-control-allow-origin",
+        "content-type",
+        "x-frame-options",
+        "x-xss-protection",
+        "content-security-policy",
+        "set-cookie",
+        "location",
+        "www-authenticate",
+        "access-control-allow-origin",
     ]
 
     def __init__(
@@ -107,7 +114,7 @@ If NOT vulnerable:
             max_retries: Max retry attempts for LLM calls
         """
         self.llm = llm_client
-        self.model = model or getattr(llm_client, 'model', 'gpt-4o-mini')
+        self.model = model or getattr(llm_client, "model", "gpt-4o-mini")
         self.max_retries = max_retries
 
     async def analyze_async(
@@ -143,11 +150,11 @@ If NOT vulnerable:
                 return None
 
             # Extract response data
-            status_code = getattr(response, 'status_code', 0)
-            headers = getattr(response, 'headers', {})
-            body = getattr(response, 'text', getattr(response, 'content', b''))
+            status_code = getattr(response, "status_code", 0)
+            headers = getattr(response, "headers", {})
+            body = getattr(response, "text", getattr(response, "content", b""))
             if isinstance(body, bytes):
-                body = body.decode('utf-8', errors='replace')
+                body = body.decode("utf-8", errors="replace")
 
             # Truncate body
             body_snippet = body[:max_response_chars]
@@ -157,7 +164,8 @@ If NOT vulnerable:
 
             # Filter relevant headers
             header_str = "; ".join(
-                f"{k}: {v}" for k, v in headers.items()
+                f"{k}: {v}"
+                for k, v in headers.items()
                 if k.lower() in self.RELEVANT_HEADERS
             )
             content_type = headers.get("Content-Type", "unknown")
@@ -179,7 +187,10 @@ If NOT vulnerable:
             )
 
             messages = [
-                {"role": "system", "content": "You are a security analysis assistant. Always return valid JSON."},
+                {
+                    "role": "system",
+                    "content": "You are a security analysis assistant. Always return valid JSON.",
+                },
                 {"role": "user", "content": prompt_text},
             ]
 
@@ -196,15 +207,21 @@ If NOT vulnerable:
             if result:
                 result.model = self.model
                 result.timestamp = datetime.now(UTC).isoformat()
-                slog.llm_complete("response_analysis", vulnerable=result.vulnerable, confidence=result.confidence)
+                slog.llm_complete(
+                    "response_analysis",
+                    vulnerable=result.vulnerable,
+                    confidence=result.confidence,
+                )
                 return result
 
-            slog.llm_result("response_analysis", vulnerable=False, reason="parse_failed")
+            slog.llm_result(
+                "response_analysis", vulnerable=False, reason="parse_failed"
+            )
             return None
 
         except Exception as e:
-            slog.warn(f"LLM response analysis failed: {e}")
-            logger.warning(f"LLM response analysis failed: {e}")
+            slog.warn("LLM response analysis failed: %s", e)
+            logger.warning("LLM response analysis failed: %s", e)
             return None
 
     def analyze_sync(
@@ -239,13 +256,21 @@ If NOT vulnerable:
         LLM providers. H-v3-15.
         """
         # Redact common credential patterns
-        text = re.sub(r'(?i)(api[_-]?key|secret|token|password|passwd|auth|credential)\s*[:=]\s*["\']?[^\s"\'&]+', r'\1=__REDACTED__', text)
+        text = re.sub(
+            r'(?i)(api[_-]?key|secret|token|password|passwd|auth|credential)\s*[:=]\s*["\']?[^\s"\'&]+',
+            r"\1=__REDACTED__",
+            text,
+        )
         # Redact bearer tokens
-        text = re.sub(r'(?i)(bearer\s+)[a-z0-9_.-]{20,}', r'\1__REDACTED__', text)
+        text = re.sub(r"(?i)(bearer\s+)[a-z0-9_.-]{20,}", r"\1__REDACTED__", text)
         # Redact AWS keys
-        text = re.sub(r'(?i)(AKIA[0-9A-Z]{16})', '__AWS_KEY_REDACTED__', text)
+        text = re.sub(r"(?i)(AKIA[0-9A-Z]{16})", "__AWS_KEY_REDACTED__", text)
         # Redact internal IPs
-        text = re.sub(r'\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b', 'INTERNAL_IP_REDACTED', text)
+        text = re.sub(
+            r"\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b",
+            "INTERNAL_IP_REDACTED",
+            text,
+        )
         return text
 
     def should_skip(self, finding: dict, response: Any) -> bool:
@@ -274,19 +299,19 @@ If NOT vulnerable:
         if not response:
             return True
 
-        body = getattr(response, 'text', '')
+        body = getattr(response, "text", "")
         if not body:
-            body = getattr(response, 'content', b'')
+            body = getattr(response, "content", b"")
             if isinstance(body, bytes):
                 try:
-                    body = body.decode('utf-8', errors='replace')
+                    body = body.decode("utf-8", errors="replace")
                 except Exception:
-                    body = ''
+                    body = ""
         if len(body.strip()) < 50:
             return True  # Response too short to analyze
 
         # Skip binary-looking responses
-        return bool(body and '\x00' in body[:100])
+        return bool(body and "\x00" in body[:100])
 
     def _parse_response(self, raw_text: str) -> LLMAnalysisResult | None:
         """
@@ -303,7 +328,9 @@ If NOT vulnerable:
         # Try JSON parsing
         try:
             # Extract JSON from markdown code blocks if present
-            json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', raw_text, re.DOTALL)
+            json_match = re.search(
+                r"```(?:json)?\s*\n?(.*?)\n?```", raw_text, re.DOTALL
+            )
             if json_match:
                 raw_text = json_match.group(1)
 
@@ -319,14 +346,25 @@ If NOT vulnerable:
                 timestamp="",
             )
         except (json.JSONDecodeError, ValueError, TypeError) as e:
-            logger.debug(f"Failed to parse LLM response as JSON: {e}")
+            logger.debug("Failed to parse LLM response as JSON: %s", e)
 
             # Fallback: try regex extraction
             try:
-                vulnerable = "true" in re.search(r'"vulnerable"\s*:\s*(true|false)', raw_text, re.IGNORECASE).group(1).lower()
+                vulnerable = (
+                    "true"
+                    in re.search(
+                        r'"vulnerable"\s*:\s*(true|false)', raw_text, re.IGNORECASE
+                    )
+                    .group(1)
+                    .lower()
+                )
                 confidence_match = re.search(r'"confidence"\s*:\s*([0-9.]+)', raw_text)
-                confidence = float(confidence_match.group(1)) if confidence_match else 0.0
-                evidence_match = re.search(r'"evidence_quote"\s*:\s*"([^"]*)"', raw_text)
+                confidence = (
+                    float(confidence_match.group(1)) if confidence_match else 0.0
+                )
+                evidence_match = re.search(
+                    r'"evidence_quote"\s*:\s*"([^"]*)"', raw_text
+                )
                 evidence_quote = evidence_match.group(1) if evidence_match else ""
 
                 return LLMAnalysisResult(

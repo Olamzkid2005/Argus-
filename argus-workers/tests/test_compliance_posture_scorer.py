@@ -29,8 +29,14 @@ class TestFrameworkPosture:
     """Tests for FrameworkPosture dataclass."""
 
     def test_defaults(self):
-        fp = FrameworkPosture(framework="owasp_top10", score=85.0, total_findings=5,
-                              critical_count=1, high_count=2, medium_count=0)
+        fp = FrameworkPosture(
+            framework="owasp_top10",
+            score=85.0,
+            total_findings=5,
+            critical_count=1,
+            high_count=2,
+            medium_count=0,
+        )
         assert fp.framework == "owasp_top10"
         assert fp.score == 85.0
         assert fp.total_findings == 5
@@ -97,8 +103,12 @@ class TestCompliancePostureScorer:
         assert snapshot.trend == "stable"
 
     def test_map_finding(self, scorer):
-        with patch.object(scorer._mapper, "map_to_owasp", return_value="A03:2021 - Injection"), \
-             patch.object(scorer._mapper, "map_to_pci", return_value="6.5.1"):
+        with (
+            patch.object(
+                scorer._mapper, "map_to_owasp", return_value="A03:2021 - Injection"
+            ),
+            patch.object(scorer._mapper, "map_to_pci", return_value="6.5.1"),
+        ):
             result = scorer._map_finding({"type": "SQL_INJECTION"})
             assert "owasp_top10" in result
             assert "pci_dss" in result

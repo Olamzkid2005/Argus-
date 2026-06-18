@@ -40,20 +40,57 @@ class FindingBuilder:
     # Severity → allowed values
     SEVERITIES = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"})
 
-    KNOWN_VULN_TYPES = frozenset({
-        "XSS", "SQL_INJECTION", "COMMAND_INJECTION", "SSTI", "LFI", "XXE",
-        "SSRF", "IDOR", "CSRF", "OPEN_REDIRECT", "HOST_HEADER_INJECTION",
-        "CACHE_POISONING", "HTTP_REQUEST_SMUGGLING", "PROTOTYPE_POLLUTION",
-        "JWT_ALGORITHM_CONFUSION", "INSECURE_COOKIE", "MISSING_SECURITY_HEADERS",
-        "MISSING_CSP", "WEAK_CSP", "WILDCARD_CORS", "REFLECTED_ORIGIN_CORS",
-        "REFLECTED_XSS", "DOM_BASED_XSS", "CORS_MISCONFIGURATION",
-        "AUTH_BYPASS", "SESSION_FIXATION", "RATE_LIMIT_BYPASS",
-        "INFO_LEAKAGE", "DIRECTORY_LISTING", "WEAK_TLS", "DEPRECATED_TLS",
-        "MISSING_HSTS", "PARAMETER_DISCOVERY", "HIDDEN_ENDPOINT",
-        "OPEN_PORT", "UNENCRYPTED_SERVICE", "DEFAULT_CREDENTIALS",
-        "MISSING_AUTH", "MASS_ASSIGNMENT", "NOSQL_INJECTION",
-        "LDAP_INJECTION", "XPATH_INJECTION", "UNVALIDATED_REDIRECT",
-    })
+    KNOWN_VULN_TYPES = frozenset(
+        {
+            "XSS",
+            "SQL_INJECTION",
+            "COMMAND_INJECTION",
+            "SSTI",
+            "LFI",
+            "XXE",
+            "SSRF",
+            "IDOR",
+            "CSRF",
+            "OPEN_REDIRECT",
+            "HOST_HEADER_INJECTION",
+            "CACHE_POISONING",
+            "HTTP_REQUEST_SMUGGLING",
+            "PROTOTYPE_POLLUTION",
+            "JWT_ALGORITHM_CONFUSION",
+            "INSECURE_COOKIE",
+            "MISSING_SECURITY_HEADERS",
+            "MISSING_CSP",
+            "WEAK_CSP",
+            "WILDCARD_CORS",
+            "REFLECTED_ORIGIN_CORS",
+            "REFLECTED_XSS",
+            "DOM_BASED_XSS",
+            "CORS_MISCONFIGURATION",
+            "AUTH_BYPASS",
+            "SESSION_FIXATION",
+            "RATE_LIMIT_BYPASS",
+            "INFO_LEAKAGE",
+            "DIRECTORY_LISTING",
+            "WEAK_TLS",
+            "DEPRECATED_TLS",
+            "MISSING_HSTS",
+            "PARAMETER_DISCOVERY",
+            "HIDDEN_ENDPOINT",
+            "OPEN_PORT",
+            "UNENCRYPTED_SERVICE",
+            "DEFAULT_CREDENTIALS",
+            "MISSING_AUTH",
+            "MASS_ASSIGNMENT",
+            "NOSQL_INJECTION",
+            "LDAP_INJECTION",
+            "XPATH_INJECTION",
+            "UNVALIDATED_REDIRECT",
+            "SSL_CERTIFICATE_ERROR",
+            "NULL_ORIGIN_CORS",
+            "HTTP_VERB_TAMPERING",
+            "EXPOSED_SENSITIVE_FILE",
+        }
+    )
 
     def __init__(
         self,
@@ -119,7 +156,11 @@ class FindingBuilder:
             try:
                 self.emit_finding(self.engagement_id, finding, self.source_tool)
             except Exception:
-                logger.warning("Failed to emit finding via callback for engagement %s", self.engagement_id, exc_info=True)
+                logger.warning(
+                    "Failed to emit finding via callback for engagement %s",
+                    self.engagement_id,
+                    exc_info=True,
+                )
 
         return finding
 
@@ -182,6 +223,8 @@ class FindingBuilder:
         try:
             from utils.sanitization import sanitize_evidence
         except ImportError:
-            raise RuntimeError("Sanitization module required but not available")
+            raise RuntimeError(
+                "Sanitization module required but not available"
+            ) from None
 
         return sanitize_evidence(evidence)

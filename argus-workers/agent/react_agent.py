@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 class _DoneSentinel:
     """Sentinel value returned when LLM signals __done__."""
+
     pass
 
 
@@ -78,13 +79,21 @@ class ReActAgent:
         """Lazy-load PHASE_TOOLS and PHASE_AGENTS from tool_definitions SSOT."""
         if not cls._phase_tools_loaded:
             from tool_definitions import build_phase_tools_dict, get_tools_for_phase
+
             cls.PHASE_TOOLS = build_phase_tools_dict()
             cls.PHASE_AGENTS = {
                 phase: {
                     "description": f"{phase.capitalize().replace('_', ' ')}",
                     "tools": [t.name for t in get_tools_for_phase(phase)],
                 }
-                for phase in ["recon", "scan", "deep_scan", "repo_scan", "analyze", "report"]
+                for phase in [
+                    "recon",
+                    "scan",
+                    "deep_scan",
+                    "repo_scan",
+                    "analyze",
+                    "report",
+                ]
             }
             cls._phase_tools_loaded = True
 
@@ -153,6 +162,7 @@ class ReActAgent:
                         if target:
                             args = [target] + (args or [])
                         return tool_runner.run(tn, args, timeout=timeout)
+
                     run_tool.__name__ = tn
                     return run_tool
 
@@ -172,12 +182,22 @@ class ReActAgent:
                         parameters = []
                 else:
                     description = f"Security tool: {tool_name}"
-                    parameters = [{"name": "target", "description": "Target URL or path", "required": True}]
+                    parameters = [
+                        {
+                            "name": "target",
+                            "description": "Target URL or path",
+                            "required": True,
+                        }
+                    ]
 
                 registry.register(
                     tool_name,
                     make_runner(tool_name),
-                    {"name": tool_name, "description": description, "parameters": parameters},
+                    {
+                        "name": tool_name,
+                        "description": description,
+                        "parameters": parameters,
+                    },
                 )
 
         return cls(
@@ -252,7 +272,9 @@ class ReActAgent:
             and self.engagement_state is not None
             and hasattr(self.engagement_state, "add_observation")
         ):
-            self.engagement_state.add_observation(role, content[:max_history_entry], data)
+            self.engagement_state.add_observation(
+                role, content[:max_history_entry], data
+            )
         else:
             self.history.append(
                 {
@@ -305,7 +327,8 @@ class ReActAgent:
         if not self.can_transition_to(next_phase):
             logger.warning(
                 "Invalid phase transition: %s -> %s",
-                self._phase, next_phase,
+                self._phase,
+                next_phase,
             )
             return False
         self._phase = next_phase
@@ -339,18 +362,23 @@ class ReActAgent:
                     # Inject auth context for tools that support it
                     if self._auth_context:
                         from agent.auth_injectors import inject_auth
+
                         args = inject_auth(tn, args, self._auth_context)
                     return tool_runner.run(tn, args, timeout=timeout)
+
                 run_tool.__name__ = tn
                 return run_tool
 
             def make_auth_tool(tn):
                 """Factory for register/login tools that wire AuthContext."""
+
                 def run_auth_tool(target: str = "", **kwargs):
                     import requests
+
                     http_session = requests.Session()
                     if tn == "register":
                         from agent.tools.register_tool import run_register
+
                         result, ctx = run_register(
                             target=target,
                             http_session=http_session,
@@ -358,6 +386,7 @@ class ReActAgent:
                         )
                     else:
                         from agent.tools.login_tool import run_login
+
                         email = kwargs.pop("email", None)
                         password = kwargs.pop("password", None)
                         result, ctx = run_login(
@@ -372,8 +401,10 @@ class ReActAgent:
                         # Persist for Celery retry resilience
                         if self.engagement_id:
                             from agent.auth_checkpoint import save_auth_checkpoint
+
                             save_auth_checkpoint(self.engagement_id, ctx)
                     return result
+
                 run_auth_tool.__name__ = tn
                 return run_auth_tool
 
@@ -395,7 +426,13 @@ class ReActAgent:
                         parameters = []
                 else:
                     description = f"Security tool: {tool_name}"
-                    parameters = [{"name": "target", "description": "Target URL or path", "required": True}]
+                    parameters = [
+                        {
+                            "name": "target",
+                            "description": "Target URL or path",
+                            "required": True,
+                        }
+                    ]
 
                 # register and login are agent-internal tools — use make_auth_tool
                 if tool_name in ("register", "login"):
@@ -424,7 +461,11 @@ class ReActAgent:
         if self._mode == "bugbounty":
             return BUGBOUNTY_TOOL_SELECTION_SYSTEM_PROMPT
 
-        if recon_context and hasattr(recon_context, "scan_type") and recon_context.scan_type == "repo":
+        if (
+            recon_context
+            and hasattr(recon_context, "scan_type")
+            and recon_context.scan_type == "repo"
+        ):
             return REPO_TOOL_SELECTION_SYSTEM_PROMPT
 
         return build_tech_aware_system_prompt(recon_context)
@@ -485,7 +526,8 @@ class ReActAgent:
         ):
             try:
                 _memory_context = self.memory_retriever.get_observation_summary(
-                    self, max_tokens=800,
+                    self,
+                    max_tokens=800,
                 )
             except Exception as e:
                 logger.debug("Memory retrieval failed: %s", e)
@@ -521,7 +563,9 @@ class ReActAgent:
                 return _DONE
 
             if not self.registry.get_tool(tool_name):
-                logger.warning("LLM selected unknown tool '%s', falling back", tool_name)
+                logger.warning(
+                    "LLM selected unknown tool '%s', falling back", tool_name
+                )
                 raise ValueError(f"Unknown tool: {tool_name}")
 
             return AgentAction(
@@ -532,7 +576,9 @@ class ReActAgent:
             )
 
         except Exception as e:
-            logger.warning("LLM tool selection failed: %s. Using deterministic fallback.", e)
+            logger.warning(
+                "LLM tool selection failed: %s. Using deterministic fallback.", e
+            )
             return None
 
     def _deterministic_plan(self, task: str, tried_tools: set) -> AgentAction | None:
@@ -553,10 +599,10 @@ class ReActAgent:
             return None
 
         for tool_name in phase_tools:
-            if tool_name not in tried_tools and self.registry.get_tool(tool_name) is not None:
-                    return AgentAction(
-                        tool_name, {"target": task}, f"Phase tool: {tool_name}"
-                    )
+            if tool_name not in tried_tools:
+                return AgentAction(
+                    tool_name, {"target": task}, f"Phase tool: {tool_name}"
+                )
 
         for tool_meta in self.registry.list_tools():
             tool_name = tool_meta.get("name", "")
@@ -583,7 +629,9 @@ class ReActAgent:
             if param.get("required", False):
                 param_name = param.get("name", "")
                 if param_name not in action.arguments:
-                    logger.warning("Missing required param '%s' for %s", param_name, action.tool)
+                    logger.warning(
+                        "Missing required param '%s' for %s", param_name, action.tool
+                    )
                     return False
 
         # Validate target is not internal/private if present.
@@ -595,6 +643,7 @@ class ReActAgent:
                 try:
                     import ipaddress
                     from urllib.parse import urlparse
+
                     hostname = urlparse(target).hostname
                     if hostname:
                         try:
@@ -602,28 +651,38 @@ class ReActAgent:
                             if ip.is_private or ip.is_loopback or ip.is_link_local:
                                 logger.warning(
                                     "Blocked internal target '%s' (param=%s) for tool '%s'",
-                                    target, param_name, action.tool,
+                                    target,
+                                    param_name,
+                                    action.tool,
                                 )
                                 return False
                         except ValueError:
                             # M-v4-08: Block known cloud metadata hostnames to prevent SSRF.
                             # Covers AWS, GCP, Azure, and Alibaba metadata endpoints.
                             _blocked_metadata_hostnames = {
-                                "localhost", "169.254.169.254",
-                                "metadata.google.internal",          # GCP
-                                "metadata",                          # GCP short name
-                                "instance-data",                     # AWS short name
+                                "localhost",
+                                "169.254.169.254",
+                                "metadata.google.internal",  # GCP
+                                "metadata",  # GCP short name
+                                "instance-data",  # AWS short name
                                 "instance-data.us-east-1.compute.internal",  # AWS regional
-                                "100.100.100.200",                   # Alibaba Cloud
+                                "100.100.100.200",  # Alibaba Cloud
                             }
                             if hostname.lower() in _blocked_metadata_hostnames:
                                 logger.warning(
                                     "Blocked internal hostname '%s' (param=%s) for tool '%s'",
-                                    hostname, param_name, action.tool,
+                                    hostname,
+                                    param_name,
+                                    action.tool,
                                 )
                                 return False
                 except Exception as e:
-                    logger.debug("Target validation failed for '%s' (param=%s): %s", target, param_name, e)
+                    logger.debug(
+                        "Target validation failed for '%s' (param=%s): %s",
+                        target,
+                        param_name,
+                        e,
+                    )
 
         return True
 
@@ -660,7 +719,9 @@ class ReActAgent:
 
         return self._deterministic_plan(task, tried_tools)
 
-    def _persist_decision_checkpoint(self, action: AgentAction, observation_context: str, reasoning: str) -> str | None:
+    def _persist_decision_checkpoint(
+        self, action: AgentAction, observation_context: str, reasoning: str
+    ) -> str | None:
         """Persist a DecisionCheckpoint for replay safety.
 
         This ensures that on Celery retry, the original LLM decision is
@@ -680,6 +741,7 @@ class ReActAgent:
                 engagement_id=self.engagement_id or "",
             )
             from runtime.decision_checkpoint import DecisionCheckpointRepository
+
             repo = DecisionCheckpointRepository()
             repo.save(checkpoint)
             return checkpoint.checkpoint_id
@@ -729,11 +791,14 @@ class ReActAgent:
         if self._auth_context is None and self.engagement_id:
             try:
                 from agent.auth_checkpoint import load_auth_checkpoint
+
                 checkpoint = load_auth_checkpoint(self.engagement_id)
                 if checkpoint and checkpoint.email and checkpoint.password:
                     import requests
+
                     http_session = requests.Session()
                     from agent.tools.login_tool import run_login
+
                     result, ctx = run_login(
                         target=initial_target,
                         http_session=http_session,
@@ -742,7 +807,10 @@ class ReActAgent:
                     )
                     if ctx and ctx.is_authenticated():
                         self.set_auth_context(ctx)
-                        slog.info("Auth session restored from checkpoint for %s", checkpoint.email)
+                        slog.info(
+                            "Auth session restored from checkpoint for %s",
+                            checkpoint.email,
+                        )
             except Exception as exc:
                 slog.warning("Failed to restore auth checkpoint: %s", exc)
 
@@ -782,17 +850,26 @@ class ReActAgent:
             # ── Governance check (Phase 6) ──
             # When GOVERNANCE_V2 flag is enabled and a Governance instance
             # is provided, use unified safety controls instead of ad-hoc cost guard.
-            if _ff_enabled("GOVERNANCE_V2", default=False) and self.governance is not None:
+            if (
+                _ff_enabled("GOVERNANCE_V2", default=False)
+                and self.governance is not None
+            ):
                 can_proceed, reason = self.governance.check(action)
                 if not can_proceed:
                     logger.warning(
                         "Governance: %s — engagement %s, switching to deterministic for remaining tools",
-                        reason, self.engagement_id,
+                        reason,
+                        self.engagement_id,
                     )
                     # Run remaining phase tools deterministically before shutdown
                     for tool_name in self.PHASE_TOOLS.get(self._phase, []):
-                        if tool_name not in tried_tools and self.registry.get_tool(tool_name) is not None:
-                            result = self.registry.call(tool_name, target=initial_target)
+                        if (
+                            tool_name not in tried_tools
+                            and self.registry.get_tool(tool_name) is not None
+                        ):
+                            result = self.registry.call(
+                                tool_name, target=initial_target
+                            )
                             results.append(result)
                     break
             else:
@@ -801,15 +878,26 @@ class ReActAgent:
                 if total_cost_usd > LLM_AGENT_MAX_COST_USD:
                     logger.warning(
                         "Cost guard: $%.4f exceeds $%.4f. Switching to deterministic for remaining tools.",
-                        total_cost_usd, LLM_AGENT_MAX_COST_USD,
+                        total_cost_usd,
+                        LLM_AGENT_MAX_COST_USD,
                     )
                     for tool_name in self.PHASE_TOOLS.get(self._phase, []):
-                        if tool_name not in tried_tools and self.registry.get_tool(tool_name) is not None:
-                            result = self.registry.call(tool_name, target=initial_target)
+                        if (
+                            tool_name not in tried_tools
+                            and self.registry.get_tool(tool_name) is not None
+                        ):
+                            result = self.registry.call(
+                                tool_name, target=initial_target
+                            )
                             results.append(result)
                     break
 
-            slog.agent_iteration(iteration, action.tool, action.reasoning[:80] if action.reasoning else "", cost=action.cost_usd)
+            slog.agent_iteration(
+                iteration,
+                action.tool,
+                action.reasoning[:80] if action.reasoning else "",
+                cost=action.cost_usd,
+            )
             logger.info(
                 "Agent iteration %d: %s — %s (cost: $%.6f)",
                 iteration,
@@ -821,28 +909,40 @@ class ReActAgent:
             # ── Persist DecisionCheckpoint for replay safety (Phase 2) ──
             observation_context = self.get_context()
             checkpoint_id = self._persist_decision_checkpoint(
-                action, observation_context, action.reasoning,
+                action,
+                observation_context,
+                action.reasoning,
             )
 
             # Emit agent decision event for frontend reasoning feed
             try:
                 from streaming import emit_agent_decision
+
                 if self.engagement_id:
                     emit_agent_decision(
                         engagement_id=self.engagement_id,
                         iteration=iteration,
                         tool=action.tool,
                         reasoning=action.reasoning,
-                        was_fallback=not (self.llm_client and self.llm_client.is_available()),
+                        was_fallback=not (
+                            self.llm_client and self.llm_client.is_available()
+                        ),
                     )
             except Exception:
-                logger.warning("Agent: failed to emit decision event (non-fatal)", exc_info=True)
+                logger.warning(
+                    "Agent: failed to emit decision event (non-fatal)", exc_info=True
+                )
 
             # Execute tool with scope validation
             if not self._validate_arguments(action):
-                logger.warning("Blocked tool %s due to scope validation failure", action.tool)
-                result = AgentResult(tool=action.tool, success=False,
-                                     error=f"Blocked by scope validation: {action.tool}")
+                logger.warning(
+                    "Blocked tool %s due to scope validation failure", action.tool
+                )
+                result = AgentResult(
+                    tool=action.tool,
+                    success=False,
+                    error=f"Blocked by scope validation: {action.tool}",
+                )
                 tried_tools.add(action.tool)
                 results.append(result)
                 continue
@@ -857,15 +957,20 @@ class ReActAgent:
                 and hasattr(self.engagement_state, "record_tool_execution")
             ):
                 from runtime import ToolExecutionRecord
+
                 try:
                     record = ToolExecutionRecord(
                         tool=action.tool,
                         args=action.arguments,
                         timestamp=time.time(),
-                        result_summary=str(result.output)[:500] if hasattr(result, "output") and result.output else "",
+                        result_summary=str(result.output)[:500]
+                        if hasattr(result, "output") and result.output
+                        else "",
                         execution_cost=getattr(action, "cost_usd", 0.0),
                         success=getattr(result, "success", False),
-                        failure_state=getattr(result, "stderr", "")[:200] if not getattr(result, "success", True) else "",
+                        failure_state=getattr(result, "stderr", "")[:200]
+                        if not getattr(result, "success", True)
+                        else "",
                     )
                     self.engagement_state.record_tool_execution(record)
                 except Exception as e:
@@ -875,37 +980,48 @@ class ReActAgent:
             if checkpoint_id:
                 try:
                     from runtime.decision_checkpoint import DecisionCheckpointRepository
+
                     repo = DecisionCheckpointRepository()
                     repo.mark_execution_result(
                         checkpoint_id,
                         success=result.success,
-                        error=result.stderr if hasattr(result, "stderr") and not result.success else "",
+                        error=result.stderr
+                        if hasattr(result, "stderr") and not result.success
+                        else "",
                     )
                 except Exception as e:
                     logger.debug("Failed to mark checkpoint result: %s", e)
 
             # ── Record result with governance (Phase 6) ──
-            if _ff_enabled("GOVERNANCE_V2", default=False) and self.governance is not None:
+            if (
+                _ff_enabled("GOVERNANCE_V2", default=False)
+                and self.governance is not None
+            ):
                 self.governance.record_result(result, action)
                 # Check low-signal threshold
                 is_low_signal, signal_reason = self.governance.check_low_signal()
                 if is_low_signal:
                     logger.warning(
                         "Governance: %s — stopping agent for engagement %s",
-                        signal_reason, self.engagement_id,
+                        signal_reason,
+                        self.engagement_id,
                     )
                     break
 
             # Legacy empty-output detection (only when governance is not active)
-            if not (_ff_enabled("GOVERNANCE_V2", default=False) and self.governance is not None):
+            if not (
+                _ff_enabled("GOVERNANCE_V2", default=False)
+                and self.governance is not None
+            ):
                 if not result.success:
                     pass
                 else:
                     output_content = (result.output or "").strip()
                     if len(output_content) < 30:
-                        if output_content.startswith(('{', '[')):
+                        if output_content.startswith(("{", "[")):
                             try:
                                 import json as _json
+
                                 _json.loads(output_content)
                                 empty_output_consecutive = 0
                             except (ValueError, _json.JSONDecodeError):
@@ -922,7 +1038,10 @@ class ReActAgent:
 
                 # Only stop on empty output if we've already run at least 4 tools
                 # This prevents stopping before critical tools (nuclei, web_scanner) run
-                if empty_output_consecutive >= LLM_AGENT_ZERO_FINDING_STOP and len(tried_tools) >= 4:
+                if (
+                    empty_output_consecutive >= LLM_AGENT_ZERO_FINDING_STOP
+                    and len(tried_tools) >= 4
+                ):
                     logger.info(
                         "Agent: %d consecutive empty tools after %d runs — stopping",
                         empty_output_consecutive,
@@ -954,7 +1073,9 @@ class ReActAgent:
                         tool_selected=action.tool,
                         arguments=action.arguments,
                         reasoning=action.reasoning,
-                        was_fallback=not (self.llm_client and self.llm_client.is_available()),
+                        was_fallback=not (
+                            self.llm_client and self.llm_client.is_available()
+                        ),
                         input_tokens=None,
                         output_tokens=None,
                     )
@@ -1007,12 +1128,11 @@ class ReActAgent:
             if tool_runner is not None:
                 self.set_tool_runner(tool_runner)
 
-            task_desc = self.PHASE_AGENTS.get(phase, {}).get(
-                "description", phase
-            )
+            task_desc = self.PHASE_AGENTS.get(phase, {}).get("description", phase)
             logger.info(
                 "Agent lifecycle: running phase '%s' — %s",
-                phase, task_desc,
+                phase,
+                task_desc,
             )
 
             # Run the phase with history preserved across phases
@@ -1035,7 +1155,8 @@ class ReActAgent:
                 logger.info(
                     "Agent lifecycle: engagement %s is terminal — "
                     "stopping after phase %s",
-                    self.engagement_id, phase,
+                    self.engagement_id,
+                    phase,
                 )
                 break
 
@@ -1043,6 +1164,7 @@ class ReActAgent:
             if phase != phases[-1]:
                 try:
                     from streaming import emit_thinking
+
                     if self.engagement_id:
                         emit_thinking(
                             self.engagement_id,
@@ -1054,6 +1176,7 @@ class ReActAgent:
 
         logger.info(
             "Agent lifecycle complete for %s — ran %d phases",
-            self.engagement_id, len(lifecycle_results),
+            self.engagement_id,
+            len(lifecycle_results),
         )
         return lifecycle_results

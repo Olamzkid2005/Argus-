@@ -79,9 +79,7 @@ class TargetProfileService:
             # Load recon context from Redis
             recon_ctx = load_recon_context(self.engagement_id)
             recon_ctx_dict = (
-                recon_ctx.to_dict()
-                if hasattr(recon_ctx, "to_dict")
-                else {}
+                recon_ctx.to_dict() if hasattr(recon_ctx, "to_dict") else {}
             )
 
             # Load tool accuracy for noisy-tool detection
@@ -100,9 +98,11 @@ class TargetProfileService:
                 tool_accuracy_fp_rates=fp_rates,
             )
             logger.info(
-                "Target profile updated for %s", target_domain,
+                "Target profile updated for %s",
+                target_domain,
             )
         except Exception as e:
             logger.warning(
-                "Target profile update failed (non-fatal): %s", e,
+                "Target profile update failed (non-fatal): %s",
+                e,
             )

@@ -22,6 +22,7 @@ Semgrep output format:
       ]
     }
 """
+
 import json
 import logging
 

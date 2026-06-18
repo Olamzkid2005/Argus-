@@ -23,6 +23,7 @@ def find_paths(
         ftype = (f.get("type", "") or "").upper().replace(" ", "_").replace("-", "_")
 
         from urllib.parse import urlparse
+
         try:
             host = urlparse(endpoint).hostname or endpoint
         except Exception:
@@ -30,8 +31,22 @@ def find_paths(
 
         node_id = f"host:{host}"
 
-        ENTRY_TYPES = {"RECON", "SUBDOMAIN_TAKEOVER", "OPEN_REDIRECT", "INFORMATION_DISCLOSURE", "MISCONFIGURATION", "WEAK_AUTHENTICATION"}
-        CROWN_JEWEL_TYPES = {"DATA_EXFILTRATION", "SQL_INJECTION", "COMMAND_INJECTION", "RCE", "PRIVILEGE_ESCALATION", "AUTH_BYPASS"}
+        ENTRY_TYPES = {
+            "RECON",
+            "SUBDOMAIN_TAKEOVER",
+            "OPEN_REDIRECT",
+            "INFORMATION_DISCLOSURE",
+            "MISCONFIGURATION",
+            "WEAK_AUTHENTICATION",
+        }
+        CROWN_JEWEL_TYPES = {
+            "DATA_EXFILTRATION",
+            "SQL_INJECTION",
+            "COMMAND_INJECTION",
+            "RCE",
+            "PRIVILEGE_ESCALATION",
+            "AUTH_BYPASS",
+        }
 
         if ftype in ENTRY_TYPES and node_id not in entry_nodes:
             entry_nodes.append(node_id)

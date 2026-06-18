@@ -25,8 +25,13 @@ class TestToolSchema:
 
     def test_full(self):
         ts = ToolSchema(
-            name="target", type="string", description="The target",
-            required=True, enum=["a", "b"], default="x", flag="-u",
+            name="target",
+            type="string",
+            description="The target",
+            required=True,
+            enum=["a", "b"],
+            default="x",
+            flag="-u",
         )
         assert ts.required is True
         assert ts.enum == ["a", "b"]
@@ -49,7 +54,8 @@ class TestToolDefinition:
 
     def test_parameters_from_dict(self):
         td = ToolDefinition(
-            name="test", command="test",
+            name="test",
+            command="test",
             parameters=[{"name": "target", "type": "string", "required": True}],
         )
         assert len(td.parameters) == 1
@@ -58,7 +64,8 @@ class TestToolDefinition:
 
     def test_to_dict(self):
         td = ToolDefinition(
-            name="nmap", command="nmap",
+            name="nmap",
+            command="nmap",
             description="Port scanner",
         )
         d = td.to_dict()
@@ -68,7 +75,8 @@ class TestToolDefinition:
 
     def test_to_dict_with_params(self):
         td = ToolDefinition(
-            name="nuclei", command="nuclei",
+            name="nuclei",
+            command="nuclei",
             parameters=[{"name": "target", "type": "string", "required": True}],
         )
         d = td.to_dict()
@@ -109,7 +117,9 @@ class TestMCPServer:
     def test_get_tools_returns_enabled(self):
         server = MCPServer()
         server.register_tool(ToolDefinition(name="enabled", command="e", enabled=True))
-        server.register_tool(ToolDefinition(name="disabled", command="d", enabled=False))
+        server.register_tool(
+            ToolDefinition(name="disabled", command="d", enabled=False)
+        )
         tools = server.get_tools()
         names = [t["name"] for t in tools]
         assert "enabled" in names
@@ -136,7 +146,8 @@ class TestMCPServer:
         """Shell injection chars in args should be rejected."""
         server = MCPServer()
         td = ToolDefinition(
-            name="test", command="echo",
+            name="test",
+            command="echo",
             parameters=[{"name": "target", "type": "string", "flag": "-n"}],
         )
         server.register_tool(td)
@@ -148,7 +159,8 @@ class TestMCPServer:
         """Backtick injection should be rejected."""
         server = MCPServer()
         td = ToolDefinition(
-            name="test", command="echo",
+            name="test",
+            command="echo",
             parameters=[{"name": "msg", "type": "string", "flag": "-n"}],
         )
         server.register_tool(td)

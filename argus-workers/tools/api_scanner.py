@@ -69,8 +69,13 @@ class LegacyAPISecurityScanner(AbstractTool):
     ]
 
     def __init__(
-        self, timeout: int = 15, rate_limit: float = 0.05, llm_payload_generator=None, authorized_scope: str | None = None,
-        session: requests.Session | None = None, tech_stack: list[str] | None = None,
+        self,
+        timeout: int = 15,
+        rate_limit: float = 0.05,
+        llm_payload_generator=None,
+        authorized_scope: str | None = None,
+        session: requests.Session | None = None,
+        tech_stack: list[str] | None = None,
         engagement_id: str = "",
     ):
         """
@@ -130,21 +135,28 @@ class LegacyAPISecurityScanner(AbstractTool):
         api_type = getattr(self, "_scan_api_type", "rest")
         auth_config = getattr(self, "_scan_auth_config", None)
 
-        slog = ScanLogger("api_scanner", engagement_id=getattr(self, 'engagement_id', ''))
+        slog = ScanLogger(
+            "api_scanner", engagement_id=getattr(self, "engagement_id", "")
+        )
         slog.phase_header("API SCAN", f"target={target_url}, type={api_type}")
 
         # L-17: Validate target URL before scanning
         from urllib.parse import urlparse as _urlparse
 
         from tools.scope_validator import validate_target_scope
+
         parsed = _urlparse(target_url)
         if parsed.scheme not in ("http", "https"):
-            slog.warn(f"Rejected scan with scheme '{parsed.scheme}': {target_url}")
+            slog.warn("Rejected scan with scheme '%s': %s", parsed.scheme, target_url)
             result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)
             result.mark_finished()
             return result
-        if self.engagement_id and not validate_target_scope(target_url, self.engagement_id):
-            slog.warn(f"Target {target_url} is outside authorized scope — scan aborted")
+        if self.engagement_id and not validate_target_scope(
+            target_url, self.engagement_id
+        ):
+            slog.warn(
+                "Target %s is outside authorized scope — scan aborted", target_url
+            )
             result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)
             result.mark_finished()
             return result
@@ -155,7 +167,9 @@ class LegacyAPISecurityScanner(AbstractTool):
 
         # Apply authentication if configured
         if self.auth_config.get("type") == "api_key":
-            slog.info(f"Applying API key auth to header: {self.auth_config.get('header', 'X-API-Key')}")
+            slog.info(
+                f"Applying API key auth to header: {self.auth_config.get('header', 'X-API-Key')}"
+            )
             self.session.headers[self.auth_config.get("header", "X-API-Key")] = (
                 self.auth_config.get("key", "")
             )
@@ -199,7 +213,7 @@ class LegacyAPISecurityScanner(AbstractTool):
             self.findings = self._builder.findings
 
         slog.tool_complete("api_scan", success=True, findings=len(self.findings))
-        slog.info(f"API scan complete: {len(self.findings)} total findings")
+        slog.info("API scan complete: %d total findings", len(self.findings))
 
         result = UnifiedToolResult(
             tool_name=self.tool_name,
@@ -267,7 +281,9 @@ class LegacyAPISecurityScanner(AbstractTool):
                 source_tool=self.tool_name,
                 engagement_id=self.engagement_id,
             )
-        finding = self._builder.add(finding_type, severity, endpoint, evidence, confidence)
+        finding = self._builder.add(
+            finding_type, severity, endpoint, evidence, confidence
+        )
         self.findings.append(finding)
 
     def check_security_headers(self):
@@ -390,16 +406,16 @@ class LegacyAPISecurityScanner(AbstractTool):
             url = urljoin(self.target_url, path)
             resp = self._safe_request("GET", url)
             if resp and resp.status_code in (401, 403) and len(resp.text) > 50:
-                    self._add_finding(
-                        finding_type="VERBOSE_API_ERROR",
-                        severity="LOW",
-                        endpoint=url,
-                        evidence={
-                            "status_code": resp.status_code,
-                            "response_preview": resp.text[:200],
-                        },
-                        confidence=0.70,
-                    )
+                self._add_finding(
+                    finding_type="VERBOSE_API_ERROR",
+                    severity="LOW",
+                    endpoint=url,
+                    evidence={
+                        "status_code": resp.status_code,
+                        "response_preview": resp.text[:200],
+                    },
+                    confidence=0.70,
+                )
 
     def test_authentication(self):
         """Test API authentication mechanisms."""
@@ -458,7 +474,9 @@ class LegacyAPISecurityScanner(AbstractTool):
                     self.llm_payload_generator
                     and self.llm_payload_generator.is_available()
                 ):
-                    tech_hints = ", ".join(self.tech_stack[:8]) if self.tech_stack else "unknown"
+                    tech_hints = (
+                        ", ".join(self.tech_stack[:8]) if self.tech_stack else "unknown"
+                    )
                     llm_payloads = self.llm_payload_generator.generate_sync(
                         vuln_class="JWT_WEAKNESS",
                         param_name="jwt",
@@ -545,10 +563,13 @@ class LegacyAPISecurityScanner(AbstractTool):
 
     def test_rate_limiting(self):
         """Test API rate limiting with controlled burst requests."""
-        if self.authorized_scope and not self.target_url.startswith(self.authorized_scope):
+        if self.authorized_scope and not self.target_url.startswith(
+            self.authorized_scope
+        ):
             logger.warning(
                 "Target %s is outside authorized scope %s — skipping rate limit test",
-                self.target_url, self.authorized_scope,
+                self.target_url,
+                self.authorized_scope,
             )
             return
 
@@ -573,8 +594,9 @@ class LegacyAPISecurityScanner(AbstractTool):
 
             # L-15: Use the configured request count, not a hard cap of 20.
             for _i in range(requests_count):
-                resp = self._safe_request("POST", test_url,
-                    json={"username": "test", "password": "test"})
+                resp = self._safe_request(
+                    "POST", test_url, json={"username": "test", "password": "test"}
+                )
                 if resp:
                     if resp.status_code == 429:
                         rate_limited_count += 1

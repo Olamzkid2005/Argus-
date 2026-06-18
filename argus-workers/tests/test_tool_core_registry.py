@@ -30,7 +30,6 @@ class TestToolRegistryIsAvailable:
             assert reg.is_available("nonexistent") is False
             assert "nonexistent" in reg._cache
 
-
     def test_scans_augmented_path(self):
         reg = ToolRegistry()
         with patch.object(reg, "_get_augmented_path", return_value="/usr/bin:/bin"):

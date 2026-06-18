@@ -20,6 +20,7 @@ SQLMap JSON output (from --json or log files) has findings in a data array:
 SQLMap text output contains the phrase:
     "sqlmap identified the following injection point"
 """
+
 import json
 import logging
 
@@ -53,7 +54,11 @@ class SqlmapParser(BaseParser):
         findings = []
 
         # Format 1: {"data": [...]}
-        entries = data if isinstance(data, list) else data.get("data", data.get("entries", []))
+        entries = (
+            data
+            if isinstance(data, list)
+            else data.get("data", data.get("entries", []))
+        )
         if not isinstance(entries, list):
             entries = [entries]
 
@@ -70,11 +75,16 @@ class SqlmapParser(BaseParser):
                     payload = param_info.get("payload", "")
                     vuln_type = param_info.get("type", "")
                     technique = (
-                        "BOOLEAN_BLIND" if "boolean" in title.lower()
-                        else "TIME_BLIND" if "time" in title.lower()
-                        else "UNION" if "union" in title.lower()
-                        else "ERROR" if "error" in title.lower()
-                        else "STACKED" if "stacked" in title.lower()
+                        "BOOLEAN_BLIND"
+                        if "boolean" in title.lower()
+                        else "TIME_BLIND"
+                        if "time" in title.lower()
+                        else "UNION"
+                        if "union" in title.lower()
+                        else "ERROR"
+                        if "error" in title.lower()
+                        else "STACKED"
+                        if "stacked" in title.lower()
                         else "SQL_INJECTION"
                     )
                     finding = {
@@ -118,6 +128,7 @@ class SqlmapParser(BaseParser):
         if "sqlmap identified the following injection point" in raw_output.lower():
             # Extract target URL from text output if possible
             import re
+
             url_match = re.search(r"(https?://[^\s]+)", raw_output)
             endpoint = url_match.group(1) if url_match else "unknown_target"
             finding = {

@@ -34,6 +34,7 @@ class AttackSurfaceMapper(AbstractTool):
         )
 
         from urllib.parse import urlparse
+
         parsed = urlparse(ctx.target)
         domain = parsed.hostname or ctx.target
 
@@ -47,7 +48,9 @@ class AttackSurfaceMapper(AbstractTool):
 
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures = {
-                executor.submit(subdomain_disc.discover, domain, ctx.timeout): "subdomains",
+                executor.submit(
+                    subdomain_disc.discover, domain, ctx.timeout
+                ): "subdomains",
                 executor.submit(port_disc.discover, domain, ctx.timeout): "ports",
                 executor.submit(url_disc.discover, ctx.target, ctx.timeout): "urls",
             }
@@ -67,12 +70,17 @@ class AttackSurfaceMapper(AbstractTool):
                         for url in data:
                             graph.add_url(url)
                             from urllib.parse import urlparse as _up
+
                             try:
                                 path = _up(url).path
                                 if "/api" in path.lower():
                                     graph.add_api_endpoint(url)
                             except Exception:
-                                logger.warning("Failed to parse URL path for API endpoint detection: %s", url, exc_info=True)
+                                logger.warning(
+                                    "Failed to parse URL path for API endpoint detection: %s",
+                                    url,
+                                    exc_info=True,
+                                )
                 except Exception as e:
                     logger.warning("Attack surface %s failed: %s", task, e)
 
@@ -94,7 +102,10 @@ class AttackSurfaceMapper(AbstractTool):
                 builder.info(
                     "OPEN_PORT",
                     host,
-                    {"port": port_info.get("port"), "service": port_info.get("service", "")},
+                    {
+                        "port": port_info.get("port"),
+                        "service": port_info.get("service", ""),
+                    },
                 )
 
         result.findings = builder.findings

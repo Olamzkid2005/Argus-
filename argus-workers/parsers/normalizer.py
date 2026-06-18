@@ -33,13 +33,18 @@ def _load_mappings() -> dict:
 
     try:
         import yaml
+
         if _MAPPINGS_FILE.exists():
             with open(_MAPPINGS_FILE) as f:
                 _MAPPINGS_CACHE = yaml.safe_load(f)
             logger.info("Loaded CWE/OWASP mappings from %s", _MAPPINGS_FILE)
             return _MAPPINGS_CACHE
     except Exception as e:
-        logger.warning("Failed to load CWE/OWASP mappings from %s: %s. Using hardcoded defaults.", _MAPPINGS_FILE, e)
+        logger.warning(
+            "Failed to load CWE/OWASP mappings from %s: %s. Using hardcoded defaults.",
+            _MAPPINGS_FILE,
+            e,
+        )
 
     _MAPPINGS_CACHE = {}
     return _MAPPINGS_CACHE
@@ -200,31 +205,79 @@ class FindingNormalizer:
     # Used by both normalizer and orchestrator. Add new types here only.
     TYPE_CLASSIFICATION_MAP = {
         "OPEN_PORT": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-200"},
-        "HISTORICAL_URL": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-200"},
+        "HISTORICAL_URL": {
+            "owasp": "A05:2021-Security Misconfiguration",
+            "cwe": "CWE-200",
+        },
         "SQL_INJECTION": {"owasp": "A03:2021-Injection", "cwe": "CWE-89"},
         "XSS": {"owasp": "A03:2021-Injection", "cwe": "CWE-79"},
         "IDOR": {"owasp": "A01:2021-Broken Access Control", "cwe": "CWE-639"},
-        "COMMITTED_SECRET": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-798"},
-        "EXPOSED_SECRET": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-798"},
+        "COMMITTED_SECRET": {
+            "owasp": "A07:2021-Identification and Authentication Failures",
+            "cwe": "CWE-798",
+        },
+        "EXPOSED_SECRET": {
+            "owasp": "A07:2021-Identification and Authentication Failures",
+            "cwe": "CWE-798",
+        },
         "REMOTE_CODE_EXECUTION": {"owasp": "A03:2021-Injection", "cwe": "CWE-78"},
         "SSRF": {"owasp": "A10:2021-Server-Side Request Forgery", "cwe": "CWE-918"},
         "PATH_TRAVERSAL": {"owasp": "A01:2021-Broken Access Control", "cwe": "CWE-22"},
-        "MISCONFIGURATION": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-16"},
-        "SECURITY_MISCONFIGURATION": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-16"},
-        "AUTH_BYPASS": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-287"},
-        "SENSITIVE_INFO_DISCLOSURE": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-200"},
-        "INFORMATION_DISCLOSURE": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-200"},
-        "SERVER_INFO_DISCLOSURE": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-200"},
-        "CORS_MISCONFIGURATION": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-942"},
-        "WEB_SERVER_VULNERABILITY": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-16"},
-        "DIFFERENTIAL_ANOMALY": {"owasp": "A06:2021-Vulnerable and Outdated Components", "cwe": "CWE-1104"},
-        "CRAWLED_ENDPOINT": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-200"},
-        "HARDCODED_CREDENTIAL": {"owasp": "A07:2021-Identification and Authentication Failures", "cwe": "CWE-798"},
-        "MISSING_SECURITY_HEADERS": {"owasp": "A05:2021-Security Misconfiguration", "cwe": "CWE-693"},
+        "MISCONFIGURATION": {
+            "owasp": "A05:2021-Security Misconfiguration",
+            "cwe": "CWE-16",
+        },
+        "SECURITY_MISCONFIGURATION": {
+            "owasp": "A05:2021-Security Misconfiguration",
+            "cwe": "CWE-16",
+        },
+        "AUTH_BYPASS": {
+            "owasp": "A07:2021-Identification and Authentication Failures",
+            "cwe": "CWE-287",
+        },
+        "SENSITIVE_INFO_DISCLOSURE": {
+            "owasp": "A04:2021-Insecure Design",
+            "cwe": "CWE-200",
+        },
+        "INFORMATION_DISCLOSURE": {
+            "owasp": "A04:2021-Insecure Design",
+            "cwe": "CWE-200",
+        },
+        "SERVER_INFO_DISCLOSURE": {
+            "owasp": "A04:2021-Insecure Design",
+            "cwe": "CWE-200",
+        },
+        "CORS_MISCONFIGURATION": {
+            "owasp": "A05:2021-Security Misconfiguration",
+            "cwe": "CWE-942",
+        },
+        "WEB_SERVER_VULNERABILITY": {
+            "owasp": "A05:2021-Security Misconfiguration",
+            "cwe": "CWE-16",
+        },
+        "DIFFERENTIAL_ANOMALY": {
+            "owasp": "A06:2021-Vulnerable and Outdated Components",
+            "cwe": "CWE-1104",
+        },
+        "CRAWLED_ENDPOINT": {
+            "owasp": "A05:2021-Security Misconfiguration",
+            "cwe": "CWE-200",
+        },
+        "HARDCODED_CREDENTIAL": {
+            "owasp": "A07:2021-Identification and Authentication Failures",
+            "cwe": "CWE-798",
+        },
+        "MISSING_SECURITY_HEADERS": {
+            "owasp": "A05:2021-Security Misconfiguration",
+            "cwe": "CWE-693",
+        },
         "WEAK_CRYPTO": {"owasp": "A02:2021-Cryptographic Failures", "cwe": "CWE-327"},
         "FILE_UPLOAD_VULNERABILITY": {"owasp": "A03:2021-Injection", "cwe": "CWE-434"},
         "RATE_LIMIT_MISSING": {"owasp": "A04:2021-Insecure Design", "cwe": "CWE-770"},
-        "LOG_FORGING": {"owasp": "A09:2021-Security Logging and Monitoring Failures", "cwe": "CWE-117"},
+        "LOG_FORGING": {
+            "owasp": "A09:2021-Security Logging and Monitoring Failures",
+            "cwe": "CWE-117",
+        },
     }
 
     # Severity mappings (tool-specific → Severity enum)
@@ -341,9 +394,9 @@ class FindingNormalizer:
             return finding
 
         except ValidationError as e:
-            raise FindingValidationError(f"Validation failed: {e}") from e
+            raise FindingValidationError("Validation failed: %s", e) from e
         except Exception as e:
-            raise FindingValidationError(f"Normalization failed: {e}") from e
+            raise FindingValidationError("Normalization failed: %s", e) from e
 
     def _normalize_type(
         self, raw_type: str, _source_tool: str, raw_finding: dict = None
@@ -377,7 +430,7 @@ class FindingNormalizer:
             if cwe:
                 # Handle formats like "CWE-78", "CWE:78", "78"
                 if not cwe.startswith("CWE-"):
-                    cwe = f"CWE-{cwe}"
+                    cwe = "CWE-%s", cwe
 
                 if cwe in self.CWE_TYPE_MAPPINGS:
                     return self.CWE_TYPE_MAPPINGS[cwe]
@@ -489,6 +542,7 @@ class FindingNormalizer:
 
     def _calculate_confidence(self, raw_finding: dict, source_tool: str) -> float:
         from models.confidence_scorer import ConfidenceScorer
+
         evidence_strength = self._get_evidence_strength_score(raw_finding)
         fp_likelihood = self._estimate_fp_likelihood(raw_finding, source_tool)
         return ConfidenceScorer.compute(0.7, evidence_strength, fp_likelihood)
@@ -582,7 +636,7 @@ class FindingNormalizer:
                 normalized.append(finding)
             except FindingValidationError as e:
                 # Log validation error but continue
-                logger.warning(f"Skipping invalid finding: {e}")
+                logger.warning("Skipping invalid finding: %s", e)
                 continue
 
         return normalized
@@ -599,4 +653,6 @@ if _yaml_data:
     if "owasp_type_mappings" in _yaml_data:
         FindingNormalizer.OWASP_TYPE_MAPPINGS.update(_yaml_data["owasp_type_mappings"])
     if "type_classification_map" in _yaml_data:
-        FindingNormalizer.TYPE_CLASSIFICATION_MAP.update(_yaml_data["type_classification_map"])
+        FindingNormalizer.TYPE_CLASSIFICATION_MAP.update(
+            _yaml_data["type_classification_map"]
+        )

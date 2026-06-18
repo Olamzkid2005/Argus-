@@ -52,7 +52,9 @@ def _patch_safe_request(response_or_callable):
             ``(method, url, **kwargs)`` and returning a response/None.
     """
     if callable(response_or_callable) and not isinstance(response_or_callable, Mock):
-        return patch.object(WebScanner, "_safe_request", side_effect=response_or_callable)
+        return patch.object(
+            WebScanner, "_safe_request", side_effect=response_or_callable
+        )
     return patch.object(WebScanner, "_safe_request", return_value=response_or_callable)
 
 
@@ -75,6 +77,7 @@ class TestWebScannerConstruction:
 
     def test_inherits_abstract_tool(self):
         from tool_core.base import AbstractTool
+
         assert issubclass(WebScanner, AbstractTool)
 
     def test_custom_params(self):
@@ -149,7 +152,10 @@ class TestConnectionErrors:
         """On SSLError, scanner reports finding and retries without SSL."""
         scanner = WebScanner()
         import requests
-        ssl_err = Mock(side_effect=requests.exceptions.SSLError("SSL: CERTIFICATE_VERIFY_FAILED"))
+
+        ssl_err = Mock(
+            side_effect=requests.exceptions.SSLError("SSL: CERTIFICATE_VERIFY_FAILED")
+        )
 
         with patch.object(scanner.session, "get", ssl_err):
             # scan() internally calls _add_finding which routes to builder
@@ -157,7 +163,9 @@ class TestConnectionErrors:
 
         # Findings are stored in the builder after _add_finding
         assert scanner._builder is not None
-        ssl_findings = [f for f in scanner._builder.findings if f["type"] == "SSL_CERTIFICATE_ERROR"]
+        ssl_findings = [
+            f for f in scanner._builder.findings if f["type"] == "SSL_CERTIFICATE_ERROR"
+        ]
         assert len(ssl_findings) == 1
         assert ssl_findings[0]["type"] == "SSL_CERTIFICATE_ERROR"
 
@@ -165,7 +173,9 @@ class TestConnectionErrors:
         """Generic connection error returns []."""
         scanner = WebScanner()
 
-        with patch.object(scanner.session, "get", side_effect=ConnectionError("Connection refused")):
+        with patch.object(
+            scanner.session, "get", side_effect=ConnectionError("Connection refused")
+        ):
             findings = scanner.scan("https://unreachable.example.com")
 
         assert findings == []
@@ -234,9 +244,11 @@ class TestCheckCSP:
     def test_unsafe_inline(self):
         scanner = WebScanner()
         scanner.target_url = "https://example.com"
-        resp = _mock_response(headers={
-            "Content-Security-Policy": "script-src 'unsafe-inline' 'self'",
-        })
+        resp = _mock_response(
+            headers={
+                "Content-Security-Policy": "script-src 'unsafe-inline' 'self'",
+            }
+        )
 
         with patch.object(scanner, "_safe_request", return_value=resp):
             scanner.check_csp()
@@ -249,9 +261,11 @@ class TestCheckCSP:
     def test_strong_csp(self):
         scanner = WebScanner()
         scanner.target_url = "https://example.com"
-        resp = _mock_response(headers={
-            "Content-Security-Policy": "default-src 'self'; script-src 'self'",
-        })
+        resp = _mock_response(
+            headers={
+                "Content-Security-Policy": "default-src 'self'; script-src 'self'",
+            }
+        )
 
         with patch.object(scanner, "_safe_request", return_value=resp):
             scanner.check_csp()
@@ -310,9 +324,11 @@ class TestCheckCORS:
     def test_wildcard_cors(self):
         scanner = WebScanner()
         scanner.target_url = "https://example.com"
-        resp = _mock_response(headers={
-            "Access-Control-Allow-Origin": "*",
-        })
+        resp = _mock_response(
+            headers={
+                "Access-Control-Allow-Origin": "*",
+            }
+        )
         null_resp = _mock_response(headers={})
 
         def _fake_safe(method, url, **kw):
@@ -331,9 +347,11 @@ class TestCheckCORS:
     def test_reflected_origin(self):
         scanner = WebScanner()
         scanner.target_url = "https://example.com"
-        resp = _mock_response(headers={
-            "Access-Control-Allow-Origin": "http://evil.com",
-        })
+        resp = _mock_response(
+            headers={
+                "Access-Control-Allow-Origin": "http://evil.com",
+            }
+        )
         null_resp = _mock_response(headers={})
 
         def _fake_safe(method, url, **kw):
@@ -352,9 +370,11 @@ class TestCheckCORS:
         scanner = WebScanner()
         scanner.target_url = "https://example.com"
         empty_resp = _mock_response(headers={})
-        null_resp = _mock_response(headers={
-            "Access-Control-Allow-Origin": "null",
-        })
+        null_resp = _mock_response(
+            headers={
+                "Access-Control-Allow-Origin": "null",
+            }
+        )
 
         def _fake_safe(method, url, **kw):
             if kw.get("headers", {}).get("Origin") == "null":
@@ -425,14 +445,19 @@ class TestCheckSensitiveFiles:
             # Match .env URL
             if ".env" in url:
                 # Must be > 50 chars to pass the content-length gate
-                return _mock_response(status_code=200, text="DATABASE_URL=postgres://user:pass@localhost:5432/mydb?sslmode=require&pool_size=10")
+                return _mock_response(
+                    status_code=200,
+                    text="DATABASE_URL=postgres://user:pass@localhost:5432/mydb?sslmode=require&pool_size=10",
+                )
             return None
 
         with patch.object(scanner, "_safe_request", side_effect=_fake_safe):
             scanner.check_sensitive_files()
 
         all_findings = scanner._builder.findings if scanner._builder else []
-        sensitive_findings = [f for f in all_findings if f["type"] == "EXPOSED_SENSITIVE_FILE"]
+        sensitive_findings = [
+            f for f in all_findings if f["type"] == "EXPOSED_SENSITIVE_FILE"
+        ]
         assert len(sensitive_findings) >= 1
         assert ".env" in sensitive_findings[0]["evidence"]["file"]
 
@@ -443,7 +468,10 @@ class TestCheckSensitiveFiles:
 
         def _fake_safe(method, url, **kw):
             if ".env" in url:
-                return _mock_response(status_code=200, text="<!DOCTYPE html><html><body>Not found</body></html>")
+                return _mock_response(
+                    status_code=200,
+                    text="<!DOCTYPE html><html><body>Not found</body></html>",
+                )
             return None
 
         with patch.object(scanner, "_safe_request", side_effect=_fake_safe):
@@ -467,7 +495,9 @@ class TestCheckJwtAlgConfusion:
             scanner.check_jwt_algorithm_confusion()
 
         # Should have attempted JWT none-alg test
-        assert scanner._builder is None or len(scanner._builder.findings) >= 0  # May or may not flag
+        assert (
+            scanner._builder is None or len(scanner._builder.findings) >= 0
+        )  # May or may not flag
 
 
 # ── execute(ctx) integration ────────────────────────────────────────────
@@ -538,9 +568,12 @@ class TestExecute:
         ctx = ToolContext(target="https://example.com")
 
         import requests
+
         # Simulate SSLError on first request, success on retry
         ssl_err = requests.exceptions.SSLError("SSL: CERTIFICATE_VERIFY_FAILED")
-        ok_resp = _mock_response(headers={"Content-Type": "text/html"}, text="<html></html>")
+        ok_resp = _mock_response(
+            headers={"Content-Type": "text/html"}, text="<html></html>"
+        )
         calls = [ssl_err, ok_resp]
 
         with patch.object(scanner.session, "get", side_effect=calls):
@@ -716,7 +749,14 @@ class TestGoldenScan:
 class TestFindingSchema:
     """All findings conform to expected schema."""
 
-    REQUIRED_KEYS = {"type", "severity", "endpoint", "evidence", "confidence", "source_tool"}
+    REQUIRED_KEYS = {
+        "type",
+        "severity",
+        "endpoint",
+        "evidence",
+        "confidence",
+        "source_tool",
+    }
     VALID_SEVERITIES = {"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
 
     def test_all_findings_have_required_schema(self):

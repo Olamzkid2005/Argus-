@@ -31,15 +31,15 @@ class DualAuthScanner(AbstractTool):
 
     # Resource patterns to discover in API responses
     RESOURCE_PATTERNS = {
-        "accounts": r'/(?:api/)?accounts?/(\d+)',
-        "users": r'/(?:api/)?users?/(\d+)',
-        "cards": r'/(?:api/)?cards?/(\d+)',
-        "payments": r'/(?:api/)?payments?/(\d+)',
-        "transactions": r'/(?:api/)?transactions?/(\d+)',
-        "orders": r'/(?:api/)?orders?/(\d+)',
-        "profiles": r'/(?:api/)?profiles?/(\d+)',
-        "documents": r'/(?:api/)?documents?/(\d+)',
-        "invoices": r'/(?:api/)?invoices?/(\d+)',
+        "accounts": r"/(?:api/)?accounts?/(\d+)",
+        "users": r"/(?:api/)?users?/(\d+)",
+        "cards": r"/(?:api/)?cards?/(\d+)",
+        "payments": r"/(?:api/)?payments?/(\d+)",
+        "transactions": r"/(?:api/)?transactions?/(\d+)",
+        "orders": r"/(?:api/)?orders?/(\d+)",
+        "profiles": r"/(?:api/)?profiles?/(\d+)",
+        "documents": r"/(?:api/)?documents?/(\d+)",
+        "invoices": r"/(?:api/)?invoices?/(\d+)",
     }
 
     # HTTP methods to test for each discovered resource.
@@ -54,9 +54,15 @@ class DualAuthScanner(AbstractTool):
 
     # Known "access denied" indicators
     ACCESS_DENIED_INDICATORS = [
-        "access denied", "forbidden", "unauthorized", "not authorized",
-        "permission denied", "insufficient privilege", "not found",
-        "does not exist", "cannot access",
+        "access denied",
+        "forbidden",
+        "unauthorized",
+        "not authorized",
+        "permission denied",
+        "insufficient privilege",
+        "not found",
+        "does not exist",
+        "cannot access",
     ]
 
     def __init__(
@@ -87,10 +93,18 @@ class DualAuthScanner(AbstractTool):
         self.auth_manager_a = None
         self.auth_manager_b = None
         if auth_config_a:
-            self.auth_config_a = AuthConfig(**auth_config_a) if isinstance(auth_config_a, dict) else auth_config_a
+            self.auth_config_a = (
+                AuthConfig(**auth_config_a)
+                if isinstance(auth_config_a, dict)
+                else auth_config_a
+            )
             self.auth_manager_a = AuthManager(self.auth_config_a)
         if auth_config_b:
-            self.auth_config_b = AuthConfig(**auth_config_b) if isinstance(auth_config_b, dict) else auth_config_b
+            self.auth_config_b = (
+                AuthConfig(**auth_config_b)
+                if isinstance(auth_config_b, dict)
+                else auth_config_b
+            )
             self.auth_manager_b = AuthManager(self.auth_config_b)
         self.timeout = timeout
         self.rate_limit = rate_limit
@@ -164,7 +178,11 @@ class DualAuthScanner(AbstractTool):
         original_safe_request = cls._safe_request
 
         def wrapped_safe_request(
-            self_: "DualAuthScanner", method: str, url: str, session: requests.Session, **kwargs: object
+            self_: "DualAuthScanner",
+            method: str,
+            url: str,
+            session: requests.Session,
+            **kwargs: object,
         ) -> requests.Response | None:
             result = original_safe_request(self_, method, url, session, **kwargs)
             if result is not None:
@@ -194,9 +212,13 @@ class DualAuthScanner(AbstractTool):
         self.findings.append(finding)
         if self.emit_finding_callback and self.engagement_id:
             try:
-                self.emit_finding_callback(self.engagement_id, finding, "dual_auth_scanner")
+                self.emit_finding_callback(
+                    self.engagement_id, finding, "dual_auth_scanner"
+                )
             except Exception:
-                logger.debug("Inline finding emission failed (non-fatal)", exc_info=True)
+                logger.debug(
+                    "Inline finding emission failed (non-fatal)", exc_info=True
+                )
 
     tool_name = "dual_auth_scanner"
 
@@ -233,6 +255,7 @@ class DualAuthScanner(AbstractTool):
         if ctx.dual_auth:
             from tools.auth_manager import AuthConfig as _AuthCfg
             from tools.auth_manager import AuthManager as _AuthMgr
+
             self.auth_config_a = _AuthCfg(**ctx.dual_auth.auth_a)
             self.auth_config_b = _AuthCfg(**ctx.dual_auth.auth_b)
             self.auth_manager_a = _AuthMgr(self.auth_config_a)
@@ -244,7 +267,7 @@ class DualAuthScanner(AbstractTool):
         self.findings: list[dict] = []
 
         slog.phase_header("Dual-Auth Scan", target=self.target_url)
-        logger.info(f"Starting dual-auth scan: {self.target_url}")
+        logger.info("Starting dual-auth scan: %s", self.target_url)
 
         # Phase 1: Authenticate as User A and discover owned resources
         slog.info("Phase 1: Authenticating as User A")
@@ -255,15 +278,15 @@ class DualAuthScanner(AbstractTool):
             slog.info("User A authenticated")
             logger.info("User A authenticated successfully")
         except Exception as e:
-            slog.warn(f"User A authentication failed: {e}")
-            logger.warning(f"User A authentication failed: {e}")
+            slog.warn("User A authentication failed: %s", e)
+            logger.warning("User A authentication failed: %s", e)
 
         if session_a:
             slog.tool_start("resource_discovery")
             owned_resources = self._discover_owned_resources(session_a)
             resource_count = sum(len(v) for v in owned_resources.values())
             slog.tool_complete("resource_discovery", findings=resource_count)
-            logger.info(f"Discovered {resource_count} resources as User A")
+            logger.info("Discovered %d resources as User A", resource_count)
 
             if not owned_resources:
                 slog.info("No owned resources — skipping cross-account tests")
@@ -278,15 +301,19 @@ class DualAuthScanner(AbstractTool):
                     slog.info("User B authenticated")
                     logger.info("User B authenticated successfully")
                 except Exception as e:
-                    slog.warn(f"User B authentication failed: {e}")
-                    logger.warning(f"User B authentication failed: {e}")
+                    slog.warn("User B authentication failed: %s", e)
+                    logger.warning("User B authentication failed: %s", e)
 
                 if session_b:
                     slog.tool_start("cross_account_access")
-                    bola_findings = self._test_cross_account_access(session_b, owned_resources)
+                    bola_findings = self._test_cross_account_access(
+                        session_b, owned_resources
+                    )
                     for bf in bola_findings:
                         self._emit_finding(bf)
-                    slog.tool_complete("cross_account_access", findings=len(bola_findings))
+                    slog.tool_complete(
+                        "cross_account_access", findings=len(bola_findings)
+                    )
 
                     # Phase 3: BOPLA check on both sessions
                     slog.info("Phase 3: Checking BOPLA on both sessions")
@@ -300,7 +327,7 @@ class DualAuthScanner(AbstractTool):
                         self._emit_finding(bopla)
 
         slog.tool_complete("dual_auth_scan", findings=len(self.findings))
-        logger.info(f"Dual-auth scan complete: {len(self.findings)} findings")
+        logger.info("Dual-auth scan complete: %d findings", len(self.findings))
 
         result = UnifiedToolResult(
             tool_name=self.tool_name,
@@ -334,8 +361,10 @@ class DualAuthScanner(AbstractTool):
     def _is_in_scope(self, url: str) -> bool:
         parsed_url = urlparse(url)
         parsed_target = urlparse(self.target_url)
-        return (parsed_url.hostname == parsed_target.hostname or
-                parsed_url.hostname.endswith("." + parsed_target.hostname))
+        return (
+            parsed_url.hostname == parsed_target.hostname
+            or parsed_url.hostname.endswith("." + parsed_target.hostname)
+        )
 
     def _safe_request(
         self,
@@ -359,21 +388,41 @@ class DualAuthScanner(AbstractTool):
 
             resp = session.request(method, url, **kwargs)
             return resp
-        except (TimeoutError, RequestException, Timeout, ConnectionError, urllib3.exceptions.SSLError) as e:
-            logger.debug(f"DualAuth request failed: {e}")
+        except (
+            TimeoutError,
+            RequestException,
+            Timeout,
+            ConnectionError,
+            urllib3.exceptions.SSLError,
+        ) as e:
+            logger.debug("DualAuth request failed: %s", e)
             return None
 
-    def _discover_owned_resources(self, session: requests.Session) -> dict[str, list[str]]:
+    def _discover_owned_resources(
+        self, session: requests.Session
+    ) -> dict[str, list[str]]:
         """Crawl target as User A and discover resource IDs owned by this user."""
         discovered: dict[str, list[str]] = {}
 
         # Phase A: Fetch the target root and common API entrypoints
         endpoints_to_probe = [self.target_url]
         api_paths = [
-            "/api/v1/accounts", "/api/accounts", "/api/v1/users", "/api/users",
-            "/api/v1/cards", "/api/cards", "/api/v1/payments", "/api/payments",
-            "/api/v1/transactions", "/api/transactions", "/api/v1/orders", "/api/orders",
-            "/api/v1/profile", "/api/profile", "/api/v1/me", "/api/me",
+            "/api/v1/accounts",
+            "/api/accounts",
+            "/api/v1/users",
+            "/api/users",
+            "/api/v1/cards",
+            "/api/cards",
+            "/api/v1/payments",
+            "/api/payments",
+            "/api/v1/transactions",
+            "/api/transactions",
+            "/api/v1/orders",
+            "/api/orders",
+            "/api/v1/profile",
+            "/api/profile",
+            "/api/v1/me",
+            "/api/me",
         ]
         for api_path in api_paths:
             endpoints_to_probe.append(urljoin(self.target_url, api_path))
@@ -437,9 +486,20 @@ class DualAuthScanner(AbstractTool):
         if isinstance(data, dict):
             for key, value in data.items():
                 # If key looks like an ID field and value is a number
-                if key in ("id", "user_id", "account_id", "card_id", "payment_id",
-                            "transaction_id", "order_id") and isinstance(value, (int, str)):
-                    resource_type = key.replace("_id", "").replace("id", "generic") if key != "id" else "generic"
+                if key in (
+                    "id",
+                    "user_id",
+                    "account_id",
+                    "card_id",
+                    "payment_id",
+                    "transaction_id",
+                    "order_id",
+                ) and isinstance(value, (int, str)):
+                    resource_type = (
+                        key.replace("_id", "").replace("id", "generic")
+                        if key != "id"
+                        else "generic"
+                    )
                     if resource_type not in discovered:
                         discovered[resource_type] = []
                     discovered[resource_type].append(str(value))
@@ -501,37 +561,41 @@ class DualAuthScanner(AbstractTool):
 
                         if not is_access_denied and len(resp.text) > 50:
                             # Confirmed BOLA — User B can see/use User A's resource
-                            findings.append({
-                                "type": "CONFIRMED_BOLA",
-                                "severity": "CRITICAL",
-                                "endpoint": url,
-                                "evidence": {
-                                    "resource_type": resource_type,
-                                    "resource_id": resource_id,
-                                    "method": method,
-                                    "response_status": resp.status_code,
-                                    "response_preview": resp.text[:200],
-                                    "message": f"User B successfully accessed User A's {resource_type} resource via {method}",
-                                },
-                                "confidence": 0.9,
-                            })
+                            findings.append(
+                                {
+                                    "type": "CONFIRMED_BOLA",
+                                    "severity": "CRITICAL",
+                                    "endpoint": url,
+                                    "evidence": {
+                                        "resource_type": resource_type,
+                                        "resource_id": resource_id,
+                                        "method": method,
+                                        "response_status": resp.status_code,
+                                        "response_preview": resp.text[:200],
+                                        "message": f"User B successfully accessed User A's {resource_type} resource via {method}",
+                                    },
+                                    "confidence": 0.9,
+                                }
+                            )
                             break  # One confirmed BOLA per resource is enough
                         elif resp.status_code == 200:
                             # Potential BOLA — response exists but unclear if access was granted
-                            findings.append({
-                                "type": "POTENTIAL_BOLA",
-                                "severity": "MEDIUM",
-                                "endpoint": url,
-                                "evidence": {
-                                    "resource_type": resource_type,
-                                    "resource_id": resource_id,
-                                    "method": method,
-                                    "response_status": resp.status_code,
-                                    "response_size": len(resp.text),
-                                    "message": f"User B received 200 for User A's {resource_type} — response ambiguous",
-                                },
-                                "confidence": 0.5,
-                            })
+                            findings.append(
+                                {
+                                    "type": "POTENTIAL_BOLA",
+                                    "severity": "MEDIUM",
+                                    "endpoint": url,
+                                    "evidence": {
+                                        "resource_type": resource_type,
+                                        "resource_id": resource_id,
+                                        "method": method,
+                                        "response_status": resp.status_code,
+                                        "response_size": len(resp.text),
+                                        "message": f"User B received 200 for User A's {resource_type} — response ambiguous",
+                                    },
+                                    "confidence": 0.5,
+                                }
+                            )
 
         return findings
 
@@ -540,14 +604,23 @@ class DualAuthScanner(AbstractTool):
         findings = []
 
         api_endpoints = [
-            "/api/v1/users", "/api/users", "/api/v1/accounts", "/api/accounts",
-            "/api/v1/me", "/api/me", "/api/profile",
+            "/api/v1/users",
+            "/api/users",
+            "/api/v1/accounts",
+            "/api/accounts",
+            "/api/v1/me",
+            "/api/me",
+            "/api/profile",
         ]
 
         for path in api_endpoints:
             url = urljoin(self.target_url, path.lstrip("/"))
-            resp = self._safe_request("GET", url, session=session,
-                                       headers={"Content-Type": "application/json"})
+            resp = self._safe_request(
+                "GET",
+                url,
+                session=session,
+                headers={"Content-Type": "application/json"},
+            )
             if not resp or resp.status_code != 200:
                 continue
 
@@ -560,23 +633,28 @@ class DualAuthScanner(AbstractTool):
             exposed_fields = []
             # Shared source of truth with WebScanner.SENSITIVE_RESPONSE_FIELDS
             from tools.web_scanner import WebScanner
+
             sensitive_fields = WebScanner.SENSITIVE_RESPONSE_FIELDS
             for field in sensitive_fields:
                 if f'"{field}"' in data_str:
                     exposed_fields.append(field)
 
             if exposed_fields:
-                findings.append({
-                    "type": "BOPLA_SENSITIVE_FIELDS",
-                    "severity": "HIGH",
-                    "endpoint": url,
-                    "evidence": {
-                        "role": role_label,
-                        "exposed_fields": exposed_fields,
-                        "response_keys": list(data.keys()) if isinstance(data, dict) else ["array"],
-                        "message": f"API response for {role_label} exposes {len(exposed_fields)} sensitive fields",
-                    },
-                    "confidence": 0.85,
-                })
+                findings.append(
+                    {
+                        "type": "BOPLA_SENSITIVE_FIELDS",
+                        "severity": "HIGH",
+                        "endpoint": url,
+                        "evidence": {
+                            "role": role_label,
+                            "exposed_fields": exposed_fields,
+                            "response_keys": list(data.keys())
+                            if isinstance(data, dict)
+                            else ["array"],
+                            "message": f"API response for {role_label} exposes {len(exposed_fields)} sensitive fields",
+                        },
+                        "confidence": 0.85,
+                    }
+                )
 
         return findings

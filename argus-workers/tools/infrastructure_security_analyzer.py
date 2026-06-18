@@ -87,7 +87,13 @@ class InfrastructureSecurityAnalyzer(AbstractTool):
                         {"header": "X-Powered-By", "value": x_powered},
                         confidence=0.6,
                     )
-                if server.lower() in ("apache", "nginx", "iis", "cloudflare", "aws cloudfront"):
+                if server.lower() in (
+                    "apache",
+                    "nginx",
+                    "iis",
+                    "cloudflare",
+                    "aws cloudfront",
+                ):
                     builder.info(
                         "INFRA_WEB_SERVER",
                         target,
@@ -100,35 +106,79 @@ class InfrastructureSecurityAnalyzer(AbstractTool):
         for tf_file in path.glob("**/*.tf"):
             try:
                 content = tf_file.read_text(encoding="utf-8", errors="replace").lower()
-                if "acl" in content and ("public-read" in content or '"public"' in content):
-                    builder.vulnerability("TF_PUBLIC_ACL", "MEDIUM", str(tf_file), {"description": "S3 bucket has public ACL"})
+                if "acl" in content and (
+                    "public-read" in content or '"public"' in content
+                ):
+                    builder.vulnerability(
+                        "TF_PUBLIC_ACL",
+                        "MEDIUM",
+                        str(tf_file),
+                        {"description": "S3 bucket has public ACL"},
+                    )
                 if "0.0.0.0/0" in content and "ingress" in content:
-                    builder.vulnerability("TF_OPEN_SG", "HIGH", str(tf_file), {"description": "Security group allows 0.0.0.0/0"})
+                    builder.vulnerability(
+                        "TF_OPEN_SG",
+                        "HIGH",
+                        str(tf_file),
+                        {"description": "Security group allows 0.0.0.0/0"},
+                    )
             except Exception:
-                logger.warning("Failed to scan Terraform file %s", tf_file, exc_info=True)
+                logger.warning(
+                    "Failed to scan Terraform file %s", tf_file, exc_info=True
+                )
 
     def _scan_kubernetes(self, path: Path, builder: FindingBuilder) -> None:
         for ext in ("*.yaml", "*.yml"):
             for k8s_file in path.glob(f"**/{ext}"):
                 try:
-                    content = k8s_file.read_text(encoding="utf-8", errors="replace").lower()
+                    content = k8s_file.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).lower()
                     if "kind:" not in content:
                         continue
                     if "privileged: true" in content:
-                        builder.vulnerability("K8S_PRIVILEGED", "HIGH", str(k8s_file), {"description": "Container runs in privileged mode"})
+                        builder.vulnerability(
+                            "K8S_PRIVILEGED",
+                            "HIGH",
+                            str(k8s_file),
+                            {"description": "Container runs in privileged mode"},
+                        )
                     if "hostnetwork: true" in content:
-                        builder.vulnerability("K8S_HOST_NETWORK", "MEDIUM", str(k8s_file), {"description": "Pod uses host network namespace"})
+                        builder.vulnerability(
+                            "K8S_HOST_NETWORK",
+                            "MEDIUM",
+                            str(k8s_file),
+                            {"description": "Pod uses host network namespace"},
+                        )
                 except Exception:
-                    logger.warning("Failed to scan Kubernetes manifest %s", k8s_file, exc_info=True)
+                    logger.warning(
+                        "Failed to scan Kubernetes manifest %s", k8s_file, exc_info=True
+                    )
 
     def _scan_docker(self, path: Path, builder: FindingBuilder) -> None:
         for dockerfile in path.glob("**/Dockerfile*"):
             try:
-                for line in dockerfile.read_text(encoding="utf-8", errors="replace").splitlines():
+                for line in dockerfile.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines():
                     stripped = line.strip()
                     if stripped.startswith("FROM") and ":latest" in stripped:
-                        builder.vulnerability("DOCKER_LATEST_TAG", "LOW", str(dockerfile), {"description": "Using 'latest' tag"})
-                    if stripped.upper().startswith("ENV") and any(kw in stripped.upper() for kw in ("SECRET", "PASSWORD", "TOKEN")):
-                        builder.vulnerability("DOCKER_SECRETS_IN_ENV", "HIGH", str(dockerfile), {"description": "Secrets in environment variables"})
+                        builder.vulnerability(
+                            "DOCKER_LATEST_TAG",
+                            "LOW",
+                            str(dockerfile),
+                            {"description": "Using 'latest' tag"},
+                        )
+                    if stripped.upper().startswith("ENV") and any(
+                        kw in stripped.upper() for kw in ("SECRET", "PASSWORD", "TOKEN")
+                    ):
+                        builder.vulnerability(
+                            "DOCKER_SECRETS_IN_ENV",
+                            "HIGH",
+                            str(dockerfile),
+                            {"description": "Secrets in environment variables"},
+                        )
             except Exception:
-                logger.warning("Failed to scan Dockerfile %s", dockerfile, exc_info=True)
+                logger.warning(
+                    "Failed to scan Dockerfile %s", dockerfile, exc_info=True
+                )

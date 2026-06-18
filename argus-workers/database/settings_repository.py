@@ -4,6 +4,7 @@ Settings Repository - Retrieve user API keys and settings
 Uses the shared ConnectionManager pool instead of creating one-off
 connections to prevent connection exhaustion (H-29).
 """
+
 import logging
 import os
 
@@ -65,7 +66,7 @@ class SettingsRepository:
             with db_cursor() as cursor:
                 cursor.execute(
                     "SELECT value FROM user_settings WHERE user_email = %s AND key = %s",
-                    (user_email, key)
+                    (user_email, key),
                 )
                 row = cursor.fetchone()
                 value = row[0] if row else None
@@ -88,7 +89,7 @@ class SettingsRepository:
             with db_cursor() as cursor:
                 cursor.execute(
                     "SELECT key, value FROM user_settings WHERE user_email = %s",
-                    (user_email,)
+                    (user_email,),
                 )
                 rows = cursor.fetchall()
                 return {row[0]: _decrypt(row[1]) for row in rows if row[1]}
@@ -110,12 +111,15 @@ class SettingsRepository:
         """
         try:
             with db_cursor(commit=True) as cursor:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO user_settings (user_email, key, value)
                     VALUES (%s, %s, %s)
                     ON CONFLICT (user_email, key)
                     DO UPDATE SET value = %s, updated_at = CURRENT_TIMESTAMP
-                """, (user_email, key, _encrypt(value), _encrypt(value)))
+                """,
+                    (user_email, key, _encrypt(value), _encrypt(value)),
+                )
                 return True
         except Exception as e:
             logger.error("Failed to set user setting: %s", e)
@@ -136,7 +140,7 @@ class SettingsRepository:
             with db_cursor(commit=True) as cursor:
                 cursor.execute(
                     "DELETE FROM user_settings WHERE user_email = %s AND key = %s",
-                    (user_email, key)
+                    (user_email, key),
                 )
                 return True
         except Exception as e:

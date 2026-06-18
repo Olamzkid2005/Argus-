@@ -36,6 +36,7 @@ class DualAuthConfig:
     auth_a: Auth config for User A (resource owner who creates resources).
     auth_b: Auth config for User B (attacker who tries cross-account access).
     """
+
     auth_a: dict
     auth_b: dict
 

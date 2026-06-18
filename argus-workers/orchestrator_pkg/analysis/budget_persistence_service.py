@@ -35,5 +35,6 @@ class BudgetPersistenceService:
             budget_mgr.persist_to_db()
         except Exception as e:
             logger.warning(
-                "Failed to persist loop budget (non-fatal): %s", e,
+                "Failed to persist loop budget (non-fatal): %s",
+                e,
             )

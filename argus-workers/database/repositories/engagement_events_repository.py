@@ -1,6 +1,7 @@
 """
 Engagement events repository for event sourcing operations
 """
+
 import uuid
 
 from psycopg2.extras import Json, RealDictCursor
@@ -100,7 +101,9 @@ class EngagementEventsRepository(BaseRepository):
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
-    def get_event_timeline(self, engagement_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
+    def get_event_timeline(
+        self, engagement_id: str, limit: int = 100, offset: int = 0
+    ) -> list[dict]:
         """
         Retrieve chronological event timeline for an engagement.
 

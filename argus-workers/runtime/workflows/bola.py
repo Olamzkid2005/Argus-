@@ -89,14 +89,16 @@ class BolaWorkflow:
                         f"Obstacle: {obstacle_type}",
                         extra={"step": step.name, "error": str(e)[:200]},
                     )
-                    self.ctx.state.add_obstacle({
-                        "type": obstacle_type,
-                        "detected_at": time.time(),
-                        "step": step.name,
-                        "recoverable": False,
-                        "recovery_paths": ["skip"],
-                        "metadata": {"error_class": type(e).__name__},
-                    })
+                    self.ctx.state.add_obstacle(
+                        {
+                            "type": obstacle_type,
+                            "detected_at": time.time(),
+                            "step": step.name,
+                            "recoverable": False,
+                            "recovery_paths": ["skip"],
+                            "metadata": {"error_class": type(e).__name__},
+                        }
+                    )
         finally:
             # Always close sessions to prevent FD leaks across engagements.
             for session_attr in ("session_a", "session_b"):
@@ -105,7 +107,11 @@ class BolaWorkflow:
                     try:
                         session.close()
                     except Exception:
-                        logger.warning("Failed to close session %s in BOLA workflow cleanup", session_attr, exc_info=True)
+                        logger.warning(
+                            "Failed to close session %s in BOLA workflow cleanup",
+                            session_attr,
+                            exc_info=True,
+                        )
 
         outcome = "partial" if len(self.ctx.state.obstacles) > 0 else "complete"
         return WorkflowResult(

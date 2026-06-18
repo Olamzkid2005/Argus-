@@ -5,6 +5,7 @@ Prevents cascading failures by stopping calls to failing tools.
 
 Requirements: 4.2
 """
+
 import threading
 import time
 from collections.abc import Callable
@@ -16,8 +17,9 @@ from utils.logging_utils import ScanLogger
 
 class CircuitState(Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Failing, reject calls
+
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing, reject calls
     HALF_OPEN = "half_open"  # Testing if recovery is possible
 
 
@@ -40,7 +42,7 @@ class CircuitBreaker:
         self,
         failure_threshold: int = 3,
         cooldown_seconds: int = 300,
-        name: str | None = None
+        name: str | None = None,
     ):
         """
         Initialize circuit breaker.
@@ -85,7 +87,9 @@ class CircuitBreaker:
                 if elapsed >= self.cooldown_seconds:
                     self._state = CircuitState.HALF_OPEN
                     slog = ScanLogger("circuit_breaker", engagement_id=self.name)
-                    slog.info(f"Circuit {self.name}: OPEN -> HALF_OPEN (cooldown expired)")
+                    slog.info(
+                        f"Circuit {self.name}: OPEN -> HALF_OPEN (cooldown expired)"
+                    )
             return self._state != CircuitState.OPEN
 
     def record_success(self):
@@ -93,11 +97,13 @@ class CircuitBreaker:
         slog = ScanLogger("circuit_breaker", engagement_id=self.name)
         with self._lock:
             if self._failure_count > 0:
-                slog.info(f"Circuit {self.name}: success — resetting (was {self._failure_count} failures)")
+                slog.info(
+                    f"Circuit {self.name}: success — resetting (was {self._failure_count} failures)"
+                )
             self._failure_count = 0
             if self._state == CircuitState.HALF_OPEN:
                 self._state = CircuitState.CLOSED
-                slog.info(f"Circuit {self.name}: HALF_OPEN -> CLOSED (recovered)")
+                slog.info("Circuit %s: HALF_OPEN -> CLOSED (recovered)", self.name)
 
     def record_failure(self):
         """Record a failed call, potentially opening the circuit."""
@@ -108,7 +114,9 @@ class CircuitBreaker:
 
             if self._failure_count >= self.failure_threshold:
                 self._state = CircuitState.OPEN
-                slog.warn(f"Circuit {self.name}: OPEN after {self._failure_count} failures (cooldown={self.cooldown_seconds}s)")
+                slog.warn(
+                    f"Circuit {self.name}: OPEN after {self._failure_count} failures (cooldown={self.cooldown_seconds}s)"
+                )
 
     def __call__(self, func: Callable) -> Callable:
         """
@@ -121,6 +129,7 @@ class CircuitBreaker:
             def run_semgrep():
                 return tool_runner.run_semgrep(...)
         """
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             if not self.is_available():
@@ -155,6 +164,7 @@ class CircuitBreaker:
 
 class CircuitOpenError(Exception):
     """Raised when circuit breaker is open and call is attempted."""
+
     pass
 
 
@@ -173,10 +183,7 @@ class ToolCircuitBreakerManager:
         self._lock = threading.RLock()
 
     def get_breaker(
-        self,
-        tool_name: str,
-        failure_threshold: int = 3,
-        cooldown_seconds: int = 300
+        self, tool_name: str, failure_threshold: int = 3, cooldown_seconds: int = 300
     ) -> CircuitBreaker:
         """Get or create circuit breaker for a tool."""
         with self._lock:
@@ -184,7 +191,7 @@ class ToolCircuitBreakerManager:
                 self._breakers[tool_name] = CircuitBreaker(
                     failure_threshold=failure_threshold,
                     cooldown_seconds=cooldown_seconds,
-                    name=tool_name
+                    name=tool_name,
                 )
             return self._breakers[tool_name]
 
@@ -192,6 +199,5 @@ class ToolCircuitBreakerManager:
         """Get status of all circuit breakers."""
         with self._lock:
             return {
-                name: breaker.state.value
-                for name, breaker in self._breakers.items()
+                name: breaker.state.value for name, breaker in self._breakers.items()
             }

@@ -1,6 +1,7 @@
 """
 Tests for API Security Scanner
 """
+
 from unittest.mock import Mock, patch
 
 import pytest
@@ -24,7 +25,9 @@ class TestAPISecurityScanner:
         with patch.object(scanner.session, "request", return_value=mock_response):
             findings = scanner.scan("https://api.example.com")
 
-        header_findings = [f for f in findings if f["type"] == "MISSING_API_SECURITY_HEADERS"]
+        header_findings = [
+            f for f in findings if f["type"] == "MISSING_API_SECURITY_HEADERS"
+        ]
         assert len(header_findings) == 1
         assert header_findings[0]["severity"] == "MEDIUM"
 
@@ -32,7 +35,7 @@ class TestAPISecurityScanner:
         mock_response = Mock()
         mock_response.headers = {
             "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
+            "Access-Control-Allow-Origin": "*",
         }
         mock_response.status_code = 200
 
@@ -52,14 +55,20 @@ class TestAPISecurityScanner:
         with patch.object(scanner.session, "request", return_value=mock_response):
             findings = scanner.scan("https://api.example.com", api_type="graphql")
 
-        intro_findings = [f for f in findings if "INTROSPECTION" in f["type"] or "GRAPHQL" in f["type"]]
+        intro_findings = [
+            f
+            for f in findings
+            if "INTROSPECTION" in f["type"] or "GRAPHQL" in f["type"]
+        ]
         assert len(intro_findings) >= 1
 
     def test_scan_graphql_introspection_disabled(self, scanner):
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/json"}
-        mock_response.json.return_value = {"errors": [{"message": "Introspection is disabled"}]}
+        mock_response.json.return_value = {
+            "errors": [{"message": "Introspection is disabled"}]
+        }
 
         with patch.object(scanner.session, "request", return_value=mock_response):
             findings = scanner.scan("https://api.example.com", api_type="graphql")
@@ -74,7 +83,11 @@ class TestAPISecurityScanner:
         with patch.object(scanner.session, "request", return_value=mock_response):
             findings = scanner.scan(
                 "https://api.example.com",
-                auth_config={"type": "api_key", "header": "X-API-Key", "key": "test-key-123"}
+                auth_config={
+                    "type": "api_key",
+                    "header": "X-API-Key",
+                    "key": "test-key-123",
+                },
             )
 
         assert isinstance(findings, list)
@@ -90,7 +103,11 @@ class TestAPISecurityScanner:
         assert isinstance(findings, list)
 
     def test_scan_request_failure(self, scanner):
-        with patch.object(scanner.session, "request", side_effect=RequestsConnectionError("Connection error")):
+        with patch.object(
+            scanner.session,
+            "request",
+            side_effect=RequestsConnectionError("Connection error"),
+        ):
             findings = scanner.scan("https://api.example.com")
         assert isinstance(findings, list)
         assert len(findings) == 0

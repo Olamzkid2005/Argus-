@@ -61,14 +61,24 @@ def build_task_args(
         ],
         # tasks.scan.run_scan(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None, auth_config=None, dual_auth_config=None)
         "scan": [
-            engagement_id, [target], budget, trace_id, agent_mode,
-            kwargs.get("scan_mode"), kwargs.get("aggressiveness"),
+            engagement_id,
+            [target],
+            budget,
+            trace_id,
+            agent_mode,
+            kwargs.get("scan_mode"),
+            kwargs.get("aggressiveness"),
             kwargs.get("bug_bounty_mode"),
             kwargs.get("auth_config"),
             kwargs.get("dual_auth_config"),
         ],
         # tasks.analyze.run_analysis(self, engagement_id, budget, trace_id=None, generate_chain_exploits=None)
-        "analyze": [engagement_id, budget, trace_id, kwargs.get("generate_chain_exploits")],
+        "analyze": [
+            engagement_id,
+            budget,
+            trace_id,
+            kwargs.get("generate_chain_exploits"),
+        ],
         # tasks.report.generate_report(self, engagement_id, trace_id=None, budget=None)
         "report": [engagement_id, trace_id, kwargs.get("budget_for_report") or budget],
         # tasks.repo_scan.run_repo_scan(self, engagement_id, repo_url, budget, trace_id=None, ...)
@@ -89,7 +99,9 @@ def build_task_args(
     # Unknown job type — raise rather than silently returning a partial arg list
     # that would cause a TypeError at call time.
     if job_type not in args_map:
-        raise ValueError(f"Unknown job type: {job_type}. Valid types: {list(args_map.keys())}")
+        raise ValueError(
+            f"Unknown job type: {job_type}. Valid types: {list(args_map.keys())}"
+        )
     return args_map[job_type]
 
 
@@ -124,15 +136,22 @@ class JobMessage:
             logger.warning(
                 "JobMessage received %d unknown field(s): %s — silently dropped. "
                 "This may indicate a schema version mismatch between frontend and workers.",
-                len(unknown), sorted(unknown),
+                len(unknown),
+                sorted(unknown),
             )
             # Increment a metric for monitoring schema drift
             try:
                 from metrics import increment_counter
-                increment_counter("job_schema.unknown_fields", len(unknown),
-                                  tags={"engagement_id": data.get("engagement_id", "unknown")})
+
+                increment_counter(
+                    "job_schema.unknown_fields",
+                    len(unknown),
+                    tags={"engagement_id": data.get("engagement_id", "unknown")},
+                )
             except Exception as e:
-                logger.debug("Failed to increment job_schema.unknown_fields metric: %s", e)
+                logger.debug(
+                    "Failed to increment job_schema.unknown_fields metric: %s", e
+                )
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     def to_celery_args(self) -> list:

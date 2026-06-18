@@ -151,7 +151,9 @@ class ToolRegistry:
         go_bin = os.path.expanduser("~/go/bin")
 
         project_venv = os.path.abspath(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "venv", "bin")
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "..", "venv", "bin"
+            )
         )
 
         extra_dirs = [

@@ -13,20 +13,20 @@ class TestSCAScanning:
 
     # Modules that need to be mocked to prevent real imports during testing.
     MOCKED_MODULES = {
-        'psycopg2': MagicMock(),
-        'tracing': MagicMock(),
-        'websocket_events': MagicMock(),
-        'tools.tool_runner': MagicMock(),
-        'tools.web_scanner': MagicMock(),
-        'parsers.parser': MagicMock(),
-        'parsers.normalizer': MagicMock(),
-        'database.repositories.finding_repository': MagicMock(),
-        'database.repositories.engagement_repository': MagicMock(),
+        "psycopg2": MagicMock(),
+        "tracing": MagicMock(),
+        "websocket_events": MagicMock(),
+        "tools.tool_runner": MagicMock(),
+        "tools.web_scanner": MagicMock(),
+        "parsers.parser": MagicMock(),
+        "parsers.normalizer": MagicMock(),
+        "database.repositories.finding_repository": MagicMock(),
+        "database.repositories.engagement_repository": MagicMock(),
     }
 
     # ── npm audit tests ──
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_npm_audit_success(self, mock_run):
         """Test npm audit with vulnerabilities found."""
         from orchestrator_pkg.repo_scan import run_npm_audit
@@ -44,41 +44,37 @@ class TestSCAScanning:
                     "version": "4.16.0",
                     "via": [],
                     "fixAvailable": False,
-                }
+                },
             }
         }
         mock_run.return_value = MagicMock(
-            returncode=1,
-            stdout=json.dumps(npm_output),
-            stderr=""
+            returncode=1, stdout=json.dumps(npm_output), stderr=""
         )
 
         findings = run_npm_audit("/tmp/fake_repo")
 
         assert len(findings) == 2
-        assert findings[0]['type'] == 'DEPENDENCY_VULNERABILITY'
-        assert findings[0]['severity'] == 'HIGH'
-        assert 'lodash' in findings[0]['endpoint']
-        assert findings[1]['severity'] == 'MEDIUM'
-        assert 'express' in findings[1]['endpoint']
+        assert findings[0]["type"] == "DEPENDENCY_VULNERABILITY"
+        assert findings[0]["severity"] == "HIGH"
+        assert "lodash" in findings[0]["endpoint"]
+        assert findings[1]["severity"] == "MEDIUM"
+        assert "express" in findings[1]["endpoint"]
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_npm_audit_no_vulns(self, mock_run):
         """Test npm audit with no vulnerabilities."""
         from orchestrator_pkg.repo_scan import run_npm_audit
 
         npm_output = {"vulnerabilities": {}}
         mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps(npm_output),
-            stderr=""
+            returncode=0, stdout=json.dumps(npm_output), stderr=""
         )
 
         findings = run_npm_audit("/tmp/fake_repo")
 
         assert len(findings) == 0
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_npm_audit_failure(self, mock_run):
         """Test npm audit when command fails."""
         from orchestrator_pkg.repo_scan import run_npm_audit
@@ -91,7 +87,7 @@ class TestSCAScanning:
 
     # ── pip-audit tests ──
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_pip_audit_success(self, mock_run):
         """Test pip-audit with vulnerabilities found."""
         from orchestrator_pkg.repo_scan import run_pip_audit
@@ -110,23 +106,21 @@ class TestSCAScanning:
                 "vulnerability_id": "PYSEC-2018-456",
                 "severity": "MEDIUM",
                 "fix_version": "2.22.0",
-            }
+            },
         ]
         mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps(pip_audit_output),
-            stderr=""
+            returncode=0, stdout=json.dumps(pip_audit_output), stderr=""
         )
 
         findings = run_pip_audit("/tmp/fake_repo")
 
         assert len(findings) == 2
-        assert findings[0]['type'] == 'DEPENDENCY_VULNERABILITY'
-        assert findings[0]['severity'] == 'HIGH'
-        assert 'flask' in findings[0]['endpoint']
-        assert findings[1]['severity'] == 'MEDIUM'
+        assert findings[0]["type"] == "DEPENDENCY_VULNERABILITY"
+        assert findings[0]["severity"] == "HIGH"
+        assert "flask" in findings[0]["endpoint"]
+        assert findings[1]["severity"] == "MEDIUM"
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_pip_audit_failure(self, mock_run):
         """Test pip-audit when command fails."""
         from orchestrator_pkg.repo_scan import run_pip_audit
@@ -139,51 +133,50 @@ class TestSCAScanning:
 
     # ── govulncheck tests ──
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_govulncheck_success(self, mock_run):
         """Test govulncheck with vulnerabilities found."""
         from orchestrator_pkg.repo_scan import run_govulncheck
 
-        govulncheck_output = json.dumps({
-            "module": "github.com/gin-gonic/gin",
-            "version": "v1.7.0",
-            "fixed_version": "v1.7.7",
-            "severity": "HIGH",
-            "vulnerability": {
-                "title": "Gin Path Traversal",
-                "cve": "CVE-2021-7531",
-            }
-        }) + "\n"
+        govulncheck_output = (
+            json.dumps(
+                {
+                    "module": "github.com/gin-gonic/gin",
+                    "version": "v1.7.0",
+                    "fixed_version": "v1.7.7",
+                    "severity": "HIGH",
+                    "vulnerability": {
+                        "title": "Gin Path Traversal",
+                        "cve": "CVE-2021-7531",
+                    },
+                }
+            )
+            + "\n"
+        )
 
         mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout=govulncheck_output,
-            stderr=""
+            returncode=0, stdout=govulncheck_output, stderr=""
         )
 
         findings = run_govulncheck("/tmp/fake_repo")
 
         assert len(findings) == 1
-        assert findings[0]['type'] == 'DEPENDENCY_VULNERABILITY'
-        assert findings[0]['severity'] == 'HIGH'
-        assert 'gin-gonic' in findings[0]['endpoint']
+        assert findings[0]["type"] == "DEPENDENCY_VULNERABILITY"
+        assert findings[0]["severity"] == "HIGH"
+        assert "gin-gonic" in findings[0]["endpoint"]
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_govulncheck_no_vulns(self, mock_run):
         """Test govulncheck with no vulnerabilities."""
         from orchestrator_pkg.repo_scan import run_govulncheck
 
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="",
-            stderr=""
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
 
         findings = run_govulncheck("/tmp/fake_repo")
 
         assert len(findings) == 0
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_govulncheck_failure(self, mock_run):
         """Test govulncheck when command fails."""
         from orchestrator_pkg.repo_scan import run_govulncheck
@@ -196,8 +189,8 @@ class TestSCAScanning:
 
     # ── Maven dependency check tests ──
 
-    @patch('glob.glob')
-    @patch('xml.etree.ElementTree.parse')
+    @patch("glob.glob")
+    @patch("xml.etree.ElementTree.parse")
     def test_check_maven_dependencies(self, mock_parse, mock_glob):
         """Test Maven dependency checking."""
         from orchestrator_pkg.repo_scan import check_maven_dependencies
@@ -213,15 +206,15 @@ class TestSCAScanning:
         mock_root.findall.return_value = [mock_dep1, mock_dep2]
 
         mock_dep1.find.side_effect = lambda x, _ns: {
-            'maven:groupId': MagicMock(text='org.springframework'),
-            'maven:artifactId': MagicMock(text='spring-core'),
-            'maven:version': MagicMock(text='4.3.0'),
+            "maven:groupId": MagicMock(text="org.springframework"),
+            "maven:artifactId": MagicMock(text="spring-core"),
+            "maven:version": MagicMock(text="4.3.0"),
         }.get(x)
 
         mock_dep2.find.side_effect = lambda x, _ns: {
-            'maven:groupId': MagicMock(text='com.google.guava'),
-            'maven:artifactId': MagicMock(text='guava'),
-            'maven:version': MagicMock(text='20.0'),
+            "maven:groupId": MagicMock(text="com.google.guava"),
+            "maven:artifactId": MagicMock(text="guava"),
+            "maven:version": MagicMock(text="20.0"),
         }.get(x)
 
         mock_tree = MagicMock()
@@ -231,9 +224,9 @@ class TestSCAScanning:
         findings = check_maven_dependencies("/tmp/fake_repo")
 
         assert len(findings) == 2
-        assert findings[0]['type'] == 'DEPENDENCY_LISTING'
-        assert findings[0]['severity'] == 'INFO'
-        assert 'spring-core' in findings[0]['endpoint']
+        assert findings[0]["type"] == "DEPENDENCY_LISTING"
+        assert findings[0]["severity"] == "INFO"
+        assert "spring-core" in findings[0]["endpoint"]
 
     # ── Project type detection tests ──
 

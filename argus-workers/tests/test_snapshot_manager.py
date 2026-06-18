@@ -40,10 +40,12 @@ class TestSnapshotManager:
         assert isinstance(result, str)
 
     def test_to_jsonable_recursive_dict(self, manager):
-        result = manager._to_jsonable({
-            "a": Decimal("1.0"),
-            "b": {"c": datetime(2026, 1, 1, tzinfo=UTC)},
-        })
+        result = manager._to_jsonable(
+            {
+                "a": Decimal("1.0"),
+                "b": {"c": datetime(2026, 1, 1, tzinfo=UTC)},
+            }
+        )
         assert result["a"] == 1.0
         assert "2026" in result["b"]["c"]
 

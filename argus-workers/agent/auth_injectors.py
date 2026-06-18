@@ -133,5 +133,5 @@ def _has_header_flag(args: list[str], header_name: str) -> bool:
     prefix = header_name.lower() + ":"
     for i, arg in enumerate(args):
         if arg == "-H" and i + 1 < len(args) and args[i + 1].lower().startswith(prefix):
-                return True
+            return True
     return False

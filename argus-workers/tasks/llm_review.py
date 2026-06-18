@@ -7,6 +7,7 @@ findings with LLM-verified results.
 
 Respects budget limits and gracefully degrades when LLM is unavailable.
 """
+
 import contextlib
 import logging
 import os
@@ -26,9 +27,10 @@ def _get_llm_client():
     if _llm_client is None:
         try:
             from llm_client import LLMClient
+
             _llm_client = LLMClient()
         except ImportError as e:
-            logger.warning(f"LLMClient not available: {e}")
+            logger.warning("LLMClient not available: %s", e)
             _llm_client = None
     return _llm_client
 
@@ -38,18 +40,20 @@ def _get_llm_detector():
     if _llm_detector is None:
         try:
             from tools.llm_detector import LLMDetector
+
             client = _get_llm_client()
             if client and client.is_available():
                 from config.constants import LLM_RESPONSE_ANALYSIS_MODEL
+
                 _llm_detector = LLMDetector(
                     llm_client=client,
                     model=LLM_RESPONSE_ANALYSIS_MODEL,
                 )
         except ImportError as e:
-            logger.warning(f"LLMDetector not available (import error): {e}")
+            logger.warning("LLMDetector not available (import error): %s", e)
             _llm_detector = None
         except Exception as e:
-            logger.warning(f"LLMDetector not available: {type(e).__name__}: {e}")
+            logger.warning("LLMDetector not available: %s: %s", type(e).__name__, e)
             _llm_detector = None
     return _llm_detector
 
@@ -59,14 +63,20 @@ def _get_finding_repo(db_conn_string: str):
     if _finding_repo is None:
         try:
             from database.repositories.finding_repository import FindingRepository
+
             _finding_repo = FindingRepository(db_conn_string)
         except Exception as e:
-            logger.warning(f"FindingRepository not available: {e}")
+            logger.warning("FindingRepository not available: %s", e)
             _finding_repo = None
     return _finding_repo
 
 
-@app.task(bind=True, name="tasks.llm_review.run_llm_review", soft_time_limit=1200, time_limit=1800)
+@app.task(
+    bind=True,
+    name="tasks.llm_review.run_llm_review",
+    soft_time_limit=1200,
+    time_limit=1800,
+)
 def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str = None):
     """
     Post-scan LLM review task.
@@ -80,12 +90,14 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
         trace_id: Optional trace ID for distributed tracing
     """
     from utils.logging_utils import ScanLogger
+
     slog = ScanLogger("llm_review", engagement_id=engagement_id)
     slog.phase_header("LLM REVIEW")
 
     # ── Guard: skip if engagement already in terminal state ──
     try:
         from database.connection import db_cursor
+
         with db_cursor() as cursor:
             cursor.execute(
                 "SELECT status FROM engagements WHERE id = %s",
@@ -93,18 +105,22 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             )
             row = cursor.fetchone()
             if row and row[0] in ("complete", "failed"):
-                slog.info(f"Engagement already in terminal state ({row[0]}) — skipping LLM review")
+                slog.info(
+                    f"Engagement already in terminal state ({row[0]}) — skipping LLM review"
+                )
                 return {"status": "skipped", "reason": f"engagement_in_{row[0]}_state"}
     except Exception as e:
-        slog.warning(f"Could not check engagement state: {e}")
-
+        slog.warning("Could not check engagement state: %s", e)
 
     def _is_terminal_state() -> bool:
         """Check if engagement is in a terminal state (re-check during processing)."""
         try:
             from database.connection import db_cursor
+
             with db_cursor() as cursor:
-                cursor.execute("SELECT status FROM engagements WHERE id = %s", (engagement_id,))
+                cursor.execute(
+                    "SELECT status FROM engagements WHERE id = %s", (engagement_id,)
+                )
                 row = cursor.fetchone()
                 return row and row[0] in ("complete", "failed")
         except Exception:
@@ -121,6 +137,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             LLM_REVIEW_MIN_CONFIDENCE,
             LLM_REVIEW_TIMEOUT,
         )
+
         llm_review_confidence_threshold = LLM_REVIEW_CONFIDENCE_THRESHOLD
         llm_review_min_confidence = LLM_REVIEW_MIN_CONFIDENCE
         llm_review_max_per_engagement = LLM_REVIEW_MAX_PER_ENGAGEMENT
@@ -136,6 +153,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     # Load feature flag dynamically from Redis (set via UI Settings page)
     try:
         from llm_client import load_llm_setting
+
         llm_review_enabled = load_llm_setting("llm_review_enabled", "true") == "true"
     except ImportError:
         llm_review_enabled = True
@@ -146,7 +164,9 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
 
     # Load live replay setting once to avoid per-finding Redis lookups
     try:
-        live_replay_enabled = load_llm_setting("llm_review_live_replay", "false") == "true"
+        live_replay_enabled = (
+            load_llm_setting("llm_review_live_replay", "false") == "true"
+        )
     except Exception:
         live_replay_enabled = False
 
@@ -166,9 +186,10 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
     budget_manager = None
     try:
         from loop_budget_manager import LoopBudgetManager
+
         budget_manager = LoopBudgetManager(engagement_id, budget or {})
     except Exception as e:
-        slog.warning(f"Budget manager not available: {e}")
+        slog.warning("Budget manager not available: %s", e)
 
     # Load candidate findings
     try:
@@ -179,14 +200,14 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             limit=llm_review_max_per_engagement,
         )
     except Exception as e:
-        slog.error(f"Failed to load candidate findings: {e}")
+        slog.error("Failed to load candidate findings: %s", e)
         return {"status": "error", "error": str(e)}
 
     if not candidate_findings:
         slog.info("No candidate findings for LLM review")
         return {"status": "completed", "analyzed": 0, "total": 0}
 
-    slog.info(f"LLM review: {len(candidate_findings)} candidate findings")
+    slog.info("LLM review: %d candidate findings", len(candidate_findings))
 
     # Analyze each finding
     analyzed_count = 0
@@ -216,20 +237,29 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             payload = evidence.get("payload", "")
 
             # Replay HTTP request to get fresh response (falls back to stored evidence)
-            response = _replay_request(finding.get("endpoint", ""), evidence, live_replay_enabled)
+            response = _replay_request(
+                finding.get("endpoint", ""), evidence, live_replay_enabled
+            )
             if not response:
                 response = evidence.get("response", "")
             if not response:
-                slog.tool_result("LLM Review", f"Skipping finding {finding.get('id', '?')[:8]}: no response")
+                slog.tool_result(
+                    "LLM Review",
+                    f"Skipping finding {finding.get('id', '?')[:8]}: no response",
+                )
                 continue
 
             # Skip if detector says skip
             if detector.should_skip(finding, response):
-                slog.tool_result("LLM Review", f"Skipping finding {finding.get('id', '?')[:8]}: should_skip=True")
+                slog.tool_result(
+                    "LLM Review",
+                    f"Skipping finding {finding.get('id', '?')[:8]}: should_skip=True",
+                )
                 continue
 
             # LLM analysis
             import asyncio
+
             try:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
@@ -240,19 +270,28 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
                 # separate thread with a fresh event loop to avoid
                 # blocking the existing loop.
                 import threading
+
                 done = threading.Event()
                 result_container = {}
 
-                def _run_in_new_loop(finding=finding, payload=payload, response=response, result_container=result_container, done=done):
+                def _run_in_new_loop(
+                    finding=finding,
+                    payload=payload,
+                    response=response,
+                    result_container=result_container,
+                    done=done,
+                ):
                     inner = asyncio.new_event_loop()
                     try:
-                        res = inner.run_until_complete(detector.analyze_async(
-                            test_url=finding.get("endpoint", ""),
-                            vuln_class=finding.get("type", "UNKNOWN"),
-                            payload=payload,
-                            response=response,
-                            max_response_chars=llm_review_max_response_chars,
-                        ))
+                        res = inner.run_until_complete(
+                            detector.analyze_async(
+                                test_url=finding.get("endpoint", ""),
+                                vuln_class=finding.get("type", "UNKNOWN"),
+                                payload=payload,
+                                response=response,
+                                max_response_chars=llm_review_max_response_chars,
+                            )
+                        )
                         result_container["result"] = res
                     finally:
                         inner.close()
@@ -263,19 +302,26 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
                 thread.join(timeout=llm_review_timeout)
                 result = result_container.get("result")
             else:
-                result = asyncio.run(detector.analyze_async(
-                    test_url=finding.get("endpoint", ""),
-                    vuln_class=finding.get("type", "UNKNOWN"),
-                    payload=payload,
-                    response=response,
-                    max_response_chars=llm_review_max_response_chars,
-                ))
+                result = asyncio.run(
+                    detector.analyze_async(
+                        test_url=finding.get("endpoint", ""),
+                        vuln_class=finding.get("type", "UNKNOWN"),
+                        payload=payload,
+                        response=response,
+                        max_response_chars=llm_review_max_response_chars,
+                    )
+                )
 
             if result is None:
-                slog.tool_result("LLM Review", f"Returned None for finding {finding.get('id', '?')[:8]}")
+                slog.tool_result(
+                    "LLM Review",
+                    f"Returned None for finding {finding.get('id', '?')[:8]}",
+                )
                 # Still mark as reviewed to avoid re-analyzing
                 with contextlib.suppress(Exception):
-                    repo.add_llm_evidence(finding["id"], {"error": "LLM returned no result"})
+                    repo.add_llm_evidence(
+                        finding["id"], {"error": "LLM returned no result"}
+                    )
                 continue
 
             analyzed_count += 1
@@ -298,23 +344,32 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
             try:
                 repo.add_llm_evidence(finding["id"], llm_data)
             except Exception as e:
-                logger.warning(f"Failed to store LLM evidence: {e}")
+                logger.warning("Failed to store LLM evidence: %s", e)
 
             # If LLM confirms with higher confidence, update the finding
             if llm_confirmed and result.confidence > float(current_confidence):
-                new_confidence = min(1.0, float(current_confidence) + result.confidence * 0.3)
+                new_confidence = min(
+                    1.0, float(current_confidence) + result.confidence * 0.3
+                )
                 try:
                     repo.update_confidence(finding["id"], new_confidence)
                     confirmed_count += 1
-                    slog.tool_result("LLM Review", f"Confirmed {finding.get('type')} at {finding.get('endpoint')}: confidence {current_confidence:.2f} -> {new_confidence:.2f}")
+                    slog.tool_result(
+                        "LLM Review",
+                        f"Confirmed {finding.get('type')} at {finding.get('endpoint')}: confidence {current_confidence:.2f} -> {new_confidence:.2f}",
+                    )
                 except Exception as e:
-                    logger.warning(f"Failed to update confidence: {e}")
+                    logger.warning("Failed to update confidence: %s", e)
 
         except Exception as e:
-            slog.warning(f"LLM review failed for finding {finding.get('id', '?')[:8]}: {e}")
+            slog.warning(
+                f"LLM review failed for finding {finding.get('id', '?')[:8]}: {e}"
+            )
             continue
 
-    slog.info(f"LLM review complete: {analyzed_count} analyzed, {confirmed_count} confirmed, {'budget exhausted' if budget_was_exhausted else 'all candidates processed'}")
+    slog.info(
+        f"LLM review complete: {analyzed_count} analyzed, {confirmed_count} confirmed, {'budget exhausted' if budget_was_exhausted else 'all candidates processed'}"
+    )
 
     return {
         "status": "completed",
@@ -341,7 +396,9 @@ def _replay_request(endpoint: str, evidence: dict, live_replay_enabled: bool = F
         Response object or None on failure
     """
     if not live_replay_enabled:
-        logger.debug("Live replay disabled — using stored evidence for endpoint %s", endpoint)
+        logger.debug(
+            "Live replay disabled — using stored evidence for endpoint %s", endpoint
+        )
         return None
 
     try:
@@ -357,17 +414,21 @@ def _replay_request(endpoint: str, evidence: dict, live_replay_enabled: bool = F
             # Parse the endpoint URL and merge payload param to avoid double ? markers
             parsed = urlparse(endpoint)
             params = parse_qs(parsed.query)
-            params['q'] = payload
+            params["q"] = payload
             new_query = urlencode(params, doseq=True)
             test_url = urlunparse(parsed._replace(query=new_query))
-            resp = requests.get(test_url, headers=headers, timeout=timeout, allow_redirects=True)
+            resp = requests.get(
+                test_url, headers=headers, timeout=timeout, allow_redirects=True
+            )
         else:
             # No payload — still try to GET the endpoint for analysis
             # This covers EXPOSED_SECRET, SERVER_INFO_DISCLOSURE, etc.
-            resp = requests.get(endpoint, headers=headers, timeout=timeout, allow_redirects=True)
+            resp = requests.get(
+                endpoint, headers=headers, timeout=timeout, allow_redirects=True
+            )
 
         return resp
 
     except Exception as e:
-        logger.debug(f"Request replay failed for {endpoint}: {e}")
+        logger.debug("Request replay failed for %s: %s", endpoint, e)
         return None

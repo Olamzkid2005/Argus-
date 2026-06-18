@@ -8,6 +8,7 @@ API key resolution order (first found wins):
 3. LLM_API_KEY environment variable
 4. Redis key settings:*:openrouter_api_key (configured via UI Settings page)
 """
+
 import asyncio
 import logging
 import os
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LLMResponse:
     """Response from an LLM call with token and cost tracking."""
+
     text: str
     input_tokens: int = 0
     output_tokens: int = 0
@@ -93,19 +95,26 @@ class LLMClient:
             elif self.api_key.startswith("AIzaSy") or self.api_key.startswith("AQ."):
                 # Google Gemini / AI Studio (AIzaSy=old format, AQ.=new format)
                 self.provider = "generic"
-                self.api_url = api_url or os.getenv("LLM_API_URL",
-                    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+                self.api_url = api_url or os.getenv(
+                    "LLM_API_URL",
+                    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
                 )
                 # Default model for Gemini if not explicitly set
                 if not model and not os.getenv("LLM_MODEL"):
                     self.model = "gemini-2.0-flash"
             else:
-                self.api_url = api_url or os.getenv("LLM_API_URL",
-                    "https://api.openai.com/v1/chat/completions" if self.provider == "openai" else ""
+                self.api_url = api_url or os.getenv(
+                    "LLM_API_URL",
+                    "https://api.openai.com/v1/chat/completions"
+                    if self.provider == "openai"
+                    else "",
                 )
         else:
-            self.api_url = api_url or os.getenv("LLM_API_URL",
-                "https://api.openai.com/v1/chat/completions" if self.provider == "openai" else ""
+            self.api_url = api_url or os.getenv(
+                "LLM_API_URL",
+                "https://api.openai.com/v1/chat/completions"
+                if self.provider == "openai"
+                else "",
             )
 
         # OpenAI SDK client (lazy init)
@@ -144,7 +153,7 @@ class LLMClient:
 
             key_names = ("openrouter_api_key", "openai_api_key", "llm_api_key")
 
-            if getattr(self, '_user_email', None):
+            if getattr(self, "_user_email", None):
                 # Tenant-scoped lookup (M-v5-01): only return this user's key
                 with db_cursor() as cursor:
                     cursor.execute(
@@ -162,7 +171,10 @@ class LLMClient:
                     )
                     row = cursor.fetchone()
                     if row and row[1] and len(str(row[1])) > 10:
-                        logger.info("Loaded API key from database for user %s (redacted)", self._user_email)
+                        logger.info(
+                            "Loaded API key from database for user %s (redacted)",
+                            self._user_email,
+                        )
                         return row[1]
             return None
         except Exception as e:
@@ -190,25 +202,39 @@ class LLMClient:
         try:
             import redis as redis_module
 
-            r = redis_module.from_url(redis_url, socket_connect_timeout=3, socket_timeout=3)
+            r = redis_module.from_url(
+                redis_url, socket_connect_timeout=3, socket_timeout=3
+            )
 
             # Try multiple key patterns in priority order
-            key_patterns = ["gemini_api_key", "openrouter_api_key", "openai_api_key", "llm_api_key"]
+            key_patterns = [
+                "gemini_api_key",
+                "openrouter_api_key",
+                "openai_api_key",
+                "llm_api_key",
+            ]
 
-            if getattr(self, '_user_email', None):
+            if getattr(self, "_user_email", None):
                 # Tenant-scoped lookup (M-v5-01): exact key for this user
                 for pattern in key_patterns:
                     key = f"settings:{self._user_email}:{pattern}"
                     value = r.get(key)
-                    if value and isinstance(value, (str, bytes)) and len(str(value)) > 10:
+                    if (
+                        value
+                        and isinstance(value, (str, bytes))
+                        and len(str(value)) > 10
+                    ):
                         api_key = value.decode() if isinstance(value, bytes) else value
-                        logger.info("Loaded API key from Redis for user %s (redacted)", self._user_email)
+                        logger.info(
+                            "Loaded API key from Redis for user %s (redacted)",
+                            self._user_email,
+                        )
                         return api_key
             logger.debug("No API key found in Redis settings")
             return None
 
         except Exception as e:
-            logger.debug(f"Could not load API key from Redis: {e}")
+            logger.debug("Could not load API key from Redis: %s", e)
             return None
 
     def _get_openai_client(self):
@@ -216,6 +242,7 @@ class LLMClient:
         if self._openai_client is None and self.api_key:
             try:
                 from openai import AsyncOpenAI, OpenAI
+
                 self._openai_client = OpenAI(api_key=self.api_key)
                 self._async_openai_client = AsyncOpenAI(api_key=self.api_key)
             except ImportError:
@@ -246,7 +273,9 @@ class LLMClient:
 
                 import redis as redis_module
 
-                r = redis_module.from_url(self._redis_url, socket_connect_timeout=1, socket_timeout=1)
+                r = redis_module.from_url(
+                    self._redis_url, socket_connect_timeout=1, socket_timeout=1
+                )
                 rate_key = f"llm_rate:{self.provider}"
 
                 # Remove timestamps outside the window
@@ -261,7 +290,10 @@ class LLMClient:
                     if earliest:
                         sleep_time = earliest[0][1] + self._rate_limit_window - now
                         if sleep_time > 0:
-                            logger.warning("LLM rate limit hit (cross-worker) — sleeping %.1fs", sleep_time)
+                            logger.warning(
+                                "LLM rate limit hit (cross-worker) — sleeping %.1fs",
+                                sleep_time,
+                            )
                             time.sleep(sleep_time)
 
                 # Record this request
@@ -270,15 +302,21 @@ class LLMClient:
                 r.expire(rate_key, int(self._rate_limit_window) + 10)
                 return
             except (ConnectionError, OSError, ValueError) as e:
-                logger.debug("Redis rate limiter unavailable — falling back to in-process: %s", e)
+                logger.debug(
+                    "Redis rate limiter unavailable — falling back to in-process: %s", e
+                )
 
         # Fallback: in-process rate limiter
         with self._rate_lock:
-            self._request_timestamps = [t for t in self._request_timestamps if t > window_start]
+            self._request_timestamps = [
+                t for t in self._request_timestamps if t > window_start
+            ]
             if len(self._request_timestamps) >= self._rate_limit_max:
                 sleep_time = self._request_timestamps[0] + self._rate_limit_window - now
                 if sleep_time > 0:
-                    logger.warning("LLM rate limit hit (in-process) — sleeping %.1fs", sleep_time)
+                    logger.warning(
+                        "LLM rate limit hit (in-process) — sleeping %.1fs", sleep_time
+                    )
                     time.sleep(sleep_time)
             self._request_timestamps.append(now)
 
@@ -294,7 +332,9 @@ class LLMClient:
 
                 import redis.asyncio as aioredis
 
-                r = await aioredis.from_url(self._redis_url, socket_connect_timeout=1, socket_timeout=1)
+                r = await aioredis.from_url(
+                    self._redis_url, socket_connect_timeout=1, socket_timeout=1
+                )
                 rate_key = f"llm_rate:{self.provider}"
 
                 await r.zremrangebyscore(rate_key, 0, window_start)
@@ -305,7 +345,10 @@ class LLMClient:
                     if earliest:
                         sleep_time = earliest[0][1] + self._rate_limit_window - now
                         if sleep_time > 0:
-                            logger.warning("LLM rate limit hit (cross-worker) — sleeping %.1fs", sleep_time)
+                            logger.warning(
+                                "LLM rate limit hit (cross-worker) — sleeping %.1fs",
+                                sleep_time,
+                            )
                             await asyncio.sleep(sleep_time)
 
                 member = f"{uuid.uuid4()}:{now}"
@@ -314,15 +357,21 @@ class LLMClient:
                 await r.aclose()
                 return
             except (ConnectionError, OSError, ValueError) as e:
-                logger.debug("Redis rate limiter unavailable — falling back to in-process: %s", e)
+                logger.debug(
+                    "Redis rate limiter unavailable — falling back to in-process: %s", e
+                )
 
         # Fallback: in-process rate limiter
         with self._rate_lock:
-            self._request_timestamps = [t for t in self._request_timestamps if t > window_start]
+            self._request_timestamps = [
+                t for t in self._request_timestamps if t > window_start
+            ]
             if len(self._request_timestamps) >= self._rate_limit_max:
                 sleep_time = self._request_timestamps[0] + self._rate_limit_window - now
                 if sleep_time > 0:
-                    logger.warning("LLM rate limit hit (in-process) — sleeping %.1fs", sleep_time)
+                    logger.warning(
+                        "LLM rate limit hit (in-process) — sleeping %.1fs", sleep_time
+                    )
                     await asyncio.sleep(sleep_time)
             self._request_timestamps.append(now)
 
@@ -383,9 +432,10 @@ class LLMClient:
                         kwargs["response_format"] = response_format
 
                     import asyncio
+
                     response = await asyncio.wait_for(
                         self._async_openai_client.chat.completions.create(**kwargs),
-                        timeout=30
+                        timeout=30,
                     )
                     self._circuit_failures = 0
                     duration_ms = int((time.time() - start) * 1000)
@@ -395,7 +445,10 @@ class LLMClient:
                     # Generic HTTP API
                     import certifi
                     import httpx
-                    async with httpx.AsyncClient(timeout=30, verify=certifi.where()) as client:
+
+                    async with httpx.AsyncClient(
+                        timeout=30, verify=certifi.where()
+                    ) as client:
                         payload = {
                             "model": self.model,
                             "messages": messages,
@@ -409,7 +462,9 @@ class LLMClient:
                         if self.api_key:
                             headers["Authorization"] = f"Bearer {self.api_key}"
 
-                        resp = await client.post(self.api_url, json=payload, headers=headers)
+                        resp = await client.post(
+                            self.api_url, json=payload, headers=headers
+                        )
                         resp.raise_for_status()
                         data = resp.json()
                         self._circuit_failures = 0
@@ -435,17 +490,24 @@ class LLMClient:
                         self._circuit_open_until = time.time() + self._circuit_cooldown
                         logger.warning(
                             "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
-                            self._circuit_failures, self._circuit_cooldown,
+                            self._circuit_failures,
+                            self._circuit_cooldown,
                         )
-                logger.warning(f"LLM chat attempt {attempt + 1} failed: {e}")
+                logger.warning("LLM chat attempt %d failed: %s", attempt + 1, e)
                 if attempt < self.max_retries:
-                    if self._circuit_open_until and time.time() < self._circuit_open_until:
+                    if (
+                        self._circuit_open_until
+                        and time.time() < self._circuit_open_until
+                    ):
                         logger.warning("Circuit breaker still open — aborting retries")
                         break
                     import asyncio
-                    await asyncio.sleep(2 ** attempt)
 
-        raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")
+                    await asyncio.sleep(2**attempt)
+
+        raise LLMUnavailableError(
+            f"LLM call failed after {self.max_retries + 1} retries: {last_error}"
+        )
 
     def chat_sync(
         self,
@@ -507,12 +569,16 @@ class LLMClient:
                     usage = response.usage
                     input_tokens = usage.prompt_tokens if usage else 0
                     output_tokens = usage.completion_tokens if usage else 0
-                    cost = (
-                        (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT)
-                        + (output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
+                    cost = (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT) + (
+                        output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT
                     )
                     duration_ms = int((time.time() - start) * 1000)
-                    slog.llm_complete(self.model, duration_ms=duration_ms, tokens=input_tokens + output_tokens, cost=cost)
+                    slog.llm_complete(
+                        self.model,
+                        duration_ms=duration_ms,
+                        tokens=input_tokens + output_tokens,
+                        cost=cost,
+                    )
                     return LLMResponse(
                         text=response.choices[0].message.content,
                         input_tokens=input_tokens,
@@ -522,7 +588,10 @@ class LLMClient:
                 else:
                     import certifi
                     import httpx
-                    with httpx.Client(timeout=req_timeout, verify=certifi.where()) as client:
+
+                    with httpx.Client(
+                        timeout=req_timeout, verify=certifi.where()
+                    ) as client:
                         payload = {
                             "model": self.model,
                             "messages": messages,
@@ -546,12 +615,16 @@ class LLMClient:
                         if "usage" in data:
                             input_tokens = data["usage"].get("prompt_tokens", 0)
                             output_tokens = data["usage"].get("completion_tokens", 0)
-                        cost = (
-                            (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT)
-                            + (output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
+                        cost = (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT) + (
+                            output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT
                         )
                         duration_ms = int((time.time() - start) * 1000)
-                        slog.llm_complete(self.model, duration_ms=duration_ms, tokens=input_tokens + output_tokens, cost=cost)
+                        slog.llm_complete(
+                            self.model,
+                            duration_ms=duration_ms,
+                            tokens=input_tokens + output_tokens,
+                            cost=cost,
+                        )
 
                         if "choices" in data and len(data["choices"]) > 0:
                             text = data["choices"][0]["message"]["content"]
@@ -578,16 +651,22 @@ class LLMClient:
                         self._circuit_open_until = time.time() + self._circuit_cooldown
                         logger.warning(
                             "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
-                            self._circuit_failures, self._circuit_cooldown,
+                            self._circuit_failures,
+                            self._circuit_cooldown,
                         )
-                logger.warning(f"LLM chat_sync attempt {attempt + 1} failed: {e}")
+                logger.warning("LLM chat_sync attempt %d failed: %s", attempt + 1, e)
                 if attempt < self.max_retries:
-                    if self._circuit_open_until and time.time() < self._circuit_open_until:
+                    if (
+                        self._circuit_open_until
+                        and time.time() < self._circuit_open_until
+                    ):
                         logger.warning("Circuit breaker still open — aborting retries")
                         break
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
 
-        raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")
+        raise LLMUnavailableError(
+            f"LLM call failed after {self.max_retries + 1} retries: {last_error}"
+        )
 
     async def chat_async(
         self,
@@ -648,12 +727,16 @@ class LLMClient:
                     usage = response.usage
                     input_tokens = usage.prompt_tokens if usage else 0
                     output_tokens = usage.completion_tokens if usage else 0
-                    cost = (
-                        (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT)
-                        + (output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
+                    cost = (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT) + (
+                        output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT
                     )
                     duration_ms = int((time.time() - start) * 1000)
-                    slog.llm_complete(self.model, duration_ms=duration_ms, tokens=input_tokens + output_tokens, cost=cost)
+                    slog.llm_complete(
+                        self.model,
+                        duration_ms=duration_ms,
+                        tokens=input_tokens + output_tokens,
+                        cost=cost,
+                    )
                     return LLMResponse(
                         text=response.choices[0].message.content,
                         input_tokens=input_tokens,
@@ -663,7 +746,10 @@ class LLMClient:
                 else:
                     import certifi
                     import httpx
-                    async with httpx.AsyncClient(timeout=req_timeout, verify=certifi.where()) as client:
+
+                    async with httpx.AsyncClient(
+                        timeout=req_timeout, verify=certifi.where()
+                    ) as client:
                         payload = {
                             "model": self.model,
                             "messages": messages,
@@ -677,7 +763,9 @@ class LLMClient:
                         if self.api_key:
                             headers["Authorization"] = f"Bearer {self.api_key}"
 
-                        resp = await client.post(self.api_url, json=payload, headers=headers)
+                        resp = await client.post(
+                            self.api_url, json=payload, headers=headers
+                        )
                         resp.raise_for_status()
                         data = resp.json()
                         self._circuit_failures = 0
@@ -687,12 +775,16 @@ class LLMClient:
                         if "usage" in data:
                             input_tokens = data["usage"].get("prompt_tokens", 0)
                             output_tokens = data["usage"].get("completion_tokens", 0)
-                        cost = (
-                            (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT)
-                            + (output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT)
+                        cost = (input_tokens / 1000 * LLM_AGENT_COST_PER_1K_INPUT) + (
+                            output_tokens / 1000 * LLM_AGENT_COST_PER_1K_OUTPUT
                         )
                         duration_ms = int((time.time() - start) * 1000)
-                        slog.llm_complete(self.model, duration_ms=duration_ms, tokens=input_tokens + output_tokens, cost=cost)
+                        slog.llm_complete(
+                            self.model,
+                            duration_ms=duration_ms,
+                            tokens=input_tokens + output_tokens,
+                            cost=cost,
+                        )
 
                         if "choices" in data and len(data["choices"]) > 0:
                             text = data["choices"][0]["message"]["content"]
@@ -718,16 +810,22 @@ class LLMClient:
                         self._circuit_open_until = time.time() + self._circuit_cooldown
                         logger.warning(
                             "LLM circuit breaker OPEN after %d failures — cooling down for %.0fs",
-                            self._circuit_failures, self._circuit_cooldown,
+                            self._circuit_failures,
+                            self._circuit_cooldown,
                         )
-                logger.warning(f"LLM chat_async attempt {attempt + 1} failed: {e}")
+                logger.warning("LLM chat_async attempt %d failed: %s", attempt + 1, e)
                 if attempt < self.max_retries:
-                    if self._circuit_open_until and time.time() < self._circuit_open_until:
+                    if (
+                        self._circuit_open_until
+                        and time.time() < self._circuit_open_until
+                    ):
                         logger.warning("Circuit breaker still open — aborting retries")
                         break
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
 
-        raise LLMUnavailableError(f"LLM call failed after {self.max_retries + 1} retries: {last_error}")
+        raise LLMUnavailableError(
+            f"LLM call failed after {self.max_retries + 1} retries: {last_error}"
+        )
 
     def is_available(self) -> bool:
         """Check if the LLM client is configured and potentially reachable.
@@ -745,7 +843,10 @@ class LLMClient:
         if not self.api_key:
             return False
         with self._circuit_lock:
-            if self._circuit_failures >= self._circuit_threshold and time.time() < self._circuit_open_until:
+            if (
+                self._circuit_failures >= self._circuit_threshold
+                and time.time() < self._circuit_open_until
+            ):
                 return False  # Circuit is OPEN
             # Cooldown expired — transition to HALF-OPEN.
             # The next call will be a probe; if it succeeds, failures
@@ -760,6 +861,7 @@ class LLMClient:
 
 class LLMUnavailableError(Exception):
     """Raised when LLM is not configured or all retries fail."""
+
     pass
 
 
@@ -799,7 +901,11 @@ def load_llm_setting(key: str, default: str = "", user_email: str | None = None)
             if value is not None:
                 val = value.decode() if isinstance(value, bytes) else value
                 if val:
-                    logger.debug("Loaded LLM setting '%s' for user '%s' from Redis", key, user_email)
+                    logger.debug(
+                        "Loaded LLM setting '%s' for user '%s' from Redis",
+                        key,
+                        user_email,
+                    )
                     return val
 
         # Global fallback: check the global default setting

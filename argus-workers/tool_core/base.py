@@ -94,7 +94,10 @@ class AbstractTool(ABC):
             result = await loop.run_in_executor(None, self.execute, ctx)
         except Exception as e:
             result = UnifiedToolResult.from_exception(
-                self.tool_name, [self.tool_name], e, target=ctx.target,
+                self.tool_name,
+                [self.tool_name],
+                e,
+                target=ctx.target,
             )
         finally:
             result.mark_finished()
@@ -148,7 +151,10 @@ class AsyncTool(ABC):
             result = await self.async_execute(ctx)
         except Exception as e:
             result = UnifiedToolResult.from_exception(
-                self.tool_name, [self.tool_name], e, target=ctx.target,
+                self.tool_name,
+                [self.tool_name],
+                e,
+                target=ctx.target,
             )
         finally:
             result.mark_finished()

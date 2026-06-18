@@ -48,7 +48,9 @@ class MCPTransport:
             logger.error("Invalid JSON-RPC request: %s", e)
             return None
 
-    def _send_response(self, request: dict, result: Any = None, error: dict | None = None):
+    def _send_response(
+        self, request: dict, result: Any = None, error: dict | None = None
+    ):
         response = {"jsonrpc": "2.0", "id": request.get("id")}
         if error:
             response["error"] = error
@@ -62,14 +64,20 @@ class MCPTransport:
         params = request.get("params", {})
 
         if not method:
-            self._send_response(request, error={"code": -32600, "message": "Method not specified"})
+            self._send_response(
+                request, error={"code": -32600, "message": "Method not specified"}
+            )
             return
 
         handler = self.handlers.get(method)
         if not handler:
-            self._send_response(request, error={
-                "code": -32601, "message": f"Method not found: {method}",
-            })
+            self._send_response(
+                request,
+                error={
+                    "code": -32601,
+                    "message": f"Method not found: {method}",
+                },
+            )
             return
 
         try:
@@ -77,9 +85,13 @@ class MCPTransport:
             self._send_response(request, result=result)
         except Exception as e:
             logger.error("Handler error for %s: %s", method, traceback.format_exc())
-            self._send_response(request, error={
-                "code": -32603, "message": str(e),
-            })
+            self._send_response(
+                request,
+                error={
+                    "code": -32603,
+                    "message": str(e),
+                },
+            )
 
     def run(self):
         self._running = True
@@ -99,4 +111,5 @@ class MCPTransport:
 def create_ping_handler():
     def ping(params: dict) -> str:
         return "pong"
+
     return ping

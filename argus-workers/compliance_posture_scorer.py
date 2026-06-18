@@ -37,6 +37,7 @@ MIN_POSTURE_SCORE = 0.0
 @dataclass
 class FrameworkPosture:
     """Posture snapshot for a single compliance framework."""
+
     framework: str  # "owasp_top10", "pci_dss", "soc2"
     score: float  # 0-100
     total_findings: int
@@ -51,6 +52,7 @@ class FrameworkPosture:
 @dataclass
 class PostureSnapshot:
     """Full posture snapshot for an engagement at a point in time."""
+
     engagement_id: str
     composite_score: float  # 0-100 average across all frameworks
     frameworks: dict[str, FrameworkPosture] = field(default_factory=dict)
@@ -69,7 +71,14 @@ class CompliancePostureScorer:
     regulatory framework supported by Argus.
     """
 
-    SUPPORTED_FRAMEWORKS = ["owasp_top10", "pci_dss", "soc2", "nist_csf", "hipaa", "iso_27001"]
+    SUPPORTED_FRAMEWORKS = [
+        "owasp_top10",
+        "pci_dss",
+        "soc2",
+        "nist_csf",
+        "hipaa",
+        "iso_27001",
+    ]
 
     def __init__(self, engagement_id: str):
         self.engagement_id = engagement_id
@@ -214,8 +223,12 @@ class CompliancePostureScorer:
                 composite_score=100.0,
                 frameworks={
                     fw: FrameworkPosture(
-                        framework=fw, score=100.0, total_findings=0,
-                        critical_count=0, high_count=0, medium_count=0,
+                        framework=fw,
+                        score=100.0,
+                        total_findings=0,
+                        critical_count=0,
+                        high_count=0,
+                        medium_count=0,
                     )
                     for fw in self.SUPPORTED_FRAMEWORKS
                 },
@@ -275,6 +288,7 @@ class CompliancePostureScorer:
     def get_db_cursor():
         """Get a database cursor for the posture snapshots table."""
         from database.connection import db_cursor
+
         return db_cursor()
 
     def save_snapshot(self, snapshot: PostureSnapshot) -> str | None:
@@ -296,17 +310,19 @@ class CompliancePostureScorer:
                     (
                         self.engagement_id,
                         snapshot.composite_score,
-                        json.dumps({
-                            fw: {
-                                "score": fp.score,
-                                "total_findings": fp.total_findings,
-                                "critical_count": fp.critical_count,
-                                "high_count": fp.high_count,
-                                "medium_count": fp.medium_count,
-                                "finding_breakdown": fp.finding_breakdown,
+                        json.dumps(
+                            {
+                                fw: {
+                                    "score": fp.score,
+                                    "total_findings": fp.total_findings,
+                                    "critical_count": fp.critical_count,
+                                    "high_count": fp.high_count,
+                                    "medium_count": fp.medium_count,
+                                    "finding_breakdown": fp.finding_breakdown,
+                                }
+                                for fw, fp in snapshot.frameworks.items()
                             }
-                            for fw, fp in snapshot.frameworks.items()
-                        }),
+                        ),
                         snapshot.total_findings,
                         snapshot.trend,
                         snapshot.previous_score,
@@ -319,7 +335,8 @@ class CompliancePostureScorer:
         except Exception as e:
             logger.warning(
                 "Failed to save compliance posture snapshot for %s: %s",
-                self.engagement_id, e,
+                self.engagement_id,
+                e,
             )
             return None
 
@@ -335,6 +352,7 @@ class CompliancePostureScorer:
         """
         try:
             from database.connection import db_cursor
+
             with db_cursor() as cursor:
                 cursor.execute(
                     """
@@ -351,8 +369,14 @@ class CompliancePostureScorer:
                 if not row:
                     return None
                 columns = [
-                    "id", "engagement_id", "composite_score", "framework_scores",
-                    "total_findings", "trend", "previous_score", "computed_at",
+                    "id",
+                    "engagement_id",
+                    "composite_score",
+                    "framework_scores",
+                    "total_findings",
+                    "trend",
+                    "previous_score",
+                    "computed_at",
                 ]
                 result = dict(zip(columns, row, strict=False))
                 if isinstance(result.get("framework_scores"), str):
@@ -363,7 +387,8 @@ class CompliancePostureScorer:
         except Exception as e:
             logger.warning(
                 "Failed to load compliance posture snapshot for %s: %s",
-                engagement_id, e,
+                engagement_id,
+                e,
             )
             return None
 
@@ -383,6 +408,7 @@ class CompliancePostureScorer:
         """
         try:
             from database.connection import db_cursor
+
             with db_cursor() as cursor:
                 cursor.execute(
                     """
@@ -397,8 +423,13 @@ class CompliancePostureScorer:
                 )
                 rows = cursor.fetchall()
                 columns = [
-                    "id", "engagement_id", "composite_score", "framework_scores",
-                    "total_findings", "trend", "computed_at",
+                    "id",
+                    "engagement_id",
+                    "composite_score",
+                    "framework_scores",
+                    "total_findings",
+                    "trend",
+                    "computed_at",
                 ]
                 results = []
                 for row in rows:
@@ -412,7 +443,8 @@ class CompliancePostureScorer:
         except Exception as e:
             logger.warning(
                 "Failed to load posture history for %s: %s",
-                engagement_id, e,
+                engagement_id,
+                e,
             )
             return []
 
@@ -429,6 +461,7 @@ class CompliancePostureScorer:
         """
         try:
             from database.connection import db_cursor
+
             with db_cursor() as cursor:
                 # Latest snapshot per engagement
                 cursor.execute(
@@ -449,8 +482,12 @@ class CompliancePostureScorer:
                 )
                 rows = cursor.fetchall()
                 columns = [
-                    "engagement_id", "target_url", "composite_score",
-                    "total_findings", "trend", "computed_at",
+                    "engagement_id",
+                    "target_url",
+                    "composite_score",
+                    "total_findings",
+                    "trend",
+                    "computed_at",
                 ]
                 engagements = []
                 total_score = 0.0
@@ -461,8 +498,12 @@ class CompliancePostureScorer:
                     engagements.append(snap)
                     total_score += float(snap.get("composite_score", 0))
 
-                avg_score = round(total_score / len(engagements), 1) if engagements else 100.0
-                worst = sorted(engagements, key=lambda e: e.get("composite_score", 100))[:5]
+                avg_score = (
+                    round(total_score / len(engagements), 1) if engagements else 100.0
+                )
+                worst = sorted(
+                    engagements, key=lambda e: e.get("composite_score", 100)
+                )[:5]
 
                 return {
                     "org_id": org_id,
@@ -475,7 +516,8 @@ class CompliancePostureScorer:
         except Exception as e:
             logger.warning(
                 "Failed to load org posture summary for %s: %s",
-                org_id, e,
+                org_id,
+                e,
             )
             return {
                 "org_id": org_id,
@@ -517,6 +559,7 @@ class CompliancePostureScorer:
         if not org_id:
             try:
                 from database.connection import db_cursor
+
                 with db_cursor() as cursor:
                     cursor.execute(
                         "SELECT org_id FROM engagements WHERE id = %s",
@@ -557,7 +600,13 @@ class CompliancePostureScorer:
                         }
                     ctrl = control_map[fw_name][ref]
                     sev = f.get("severity", "INFO")
-                    severity_rank = {"INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+                    severity_rank = {
+                        "INFO": 0,
+                        "LOW": 1,
+                        "MEDIUM": 2,
+                        "HIGH": 3,
+                        "CRITICAL": 4,
+                    }
                     sev_level = severity_rank.get(sev, -1)
                     worst_level = severity_rank.get(ctrl["worst_severity"], -1)
                     if sev_level > worst_level:
@@ -612,18 +661,22 @@ class CompliancePostureScorer:
 
             logger.info(
                 "Saved %d control-level compliance scores for engagement %s",
-                saved, self.engagement_id,
+                saved,
+                self.engagement_id,
             )
         except Exception as e:
             logger.warning(
                 "Failed to save compliance control scores for %s: %s",
-                self.engagement_id, e,
+                self.engagement_id,
+                e,
             )
         return saved
 
     # ── Convenience: compute and save in one call ──
 
-    def compute_and_save(self, findings: list[dict], org_id: str | None = None) -> PostureSnapshot:
+    def compute_and_save(
+        self, findings: list[dict], org_id: str | None = None
+    ) -> PostureSnapshot:
         """Compute posture snapshot and persist it to the database.
 
         Also persists per-control scores to the compliance_scores table
@@ -643,11 +696,14 @@ class CompliancePostureScorer:
         # Publish real-time posture update
         try:
             from websocket_events import get_websocket_publisher
+
             ws = get_websocket_publisher()
             ws.publish_posture_update(
                 engagement_id=self.engagement_id,
                 composite_score=snapshot.composite_score,
-                framework_scores={fw: fp.score for fw, fp in snapshot.frameworks.items()},
+                framework_scores={
+                    fw: fp.score for fw, fp in snapshot.frameworks.items()
+                },
                 trend=snapshot.trend,
                 total_findings=snapshot.total_findings,
             )

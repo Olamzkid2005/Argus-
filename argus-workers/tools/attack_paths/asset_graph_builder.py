@@ -18,6 +18,7 @@ def build_asset_graph(findings: list[dict]) -> dict[str, list[dict]]:
         severity = f.get("severity", "INFO")
 
         from urllib.parse import urlparse
+
         try:
             parsed = urlparse(endpoint)
             host = parsed.hostname or endpoint
@@ -27,37 +28,51 @@ def build_asset_graph(findings: list[dict]) -> dict[str, list[dict]]:
             path = "/"
 
         asset_id = f"host:{host}"
-        graph[asset_id].append({
-            "type": "host",
-            "value": host,
-            "finding_type": ftype,
-            "severity": severity,
-        })
+        graph[asset_id].append(
+            {
+                "type": "host",
+                "value": host,
+                "finding_type": ftype,
+                "severity": severity,
+            }
+        )
 
         if path and path != "/":
             page_id = f"page:{host}{path}"
-            graph[page_id].append({
-                "type": "page",
-                "value": f"{host}{path}",
-                "finding_type": ftype,
-                "severity": severity,
-            })
-            graph[asset_id].append({
-                "type": "contains",
-                "target": page_id,
-                "finding_type": ftype,
-                "severity": severity,
-            })
+            graph[page_id].append(
+                {
+                    "type": "page",
+                    "value": f"{host}{path}",
+                    "finding_type": ftype,
+                    "severity": severity,
+                }
+            )
+            graph[asset_id].append(
+                {
+                    "type": "contains",
+                    "target": page_id,
+                    "finding_type": ftype,
+                    "severity": severity,
+                }
+            )
 
     return dict(graph)
 
 
 ENTRY_TYPES = {
-    "RECON", "SUBDOMAIN_TAKEOVER", "OPEN_REDIRECT", "INFORMATION_DISCLOSURE",
-    "MISCONFIGURATION", "WEAK_AUTHENTICATION",
+    "RECON",
+    "SUBDOMAIN_TAKEOVER",
+    "OPEN_REDIRECT",
+    "INFORMATION_DISCLOSURE",
+    "MISCONFIGURATION",
+    "WEAK_AUTHENTICATION",
 }
 
 CROWN_JEWEL_TYPES = {
-    "DATA_EXFILTRATION", "SQL_INJECTION", "COMMAND_INJECTION",
-    "RCE", "PRIVILEGE_ESCALATION", "AUTH_BYPASS",
+    "DATA_EXFILTRATION",
+    "SQL_INJECTION",
+    "COMMAND_INJECTION",
+    "RCE",
+    "PRIVILEGE_ESCALATION",
+    "AUTH_BYPASS",
 }

@@ -49,7 +49,11 @@ class ScanDiffEngine:
         if not endpoint:
             return endpoint
         parsed = urlparse(endpoint)
-        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme else parsed.path
+        return (
+            f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+            if parsed.scheme
+            else parsed.path
+        )
 
     @staticmethod
     def fallback_fingerprint(finding: dict) -> str:
@@ -104,9 +108,7 @@ class ScanDiffEngine:
             payload = evidence
 
         if payload and payload != "None":
-            payload_hash = hashlib.sha256(
-                str(payload).encode()
-            ).hexdigest()[:8]
+            payload_hash = hashlib.sha256(str(payload).encode()).hexdigest()[:8]
             key = f"{finding_type}:{endpoint}:{payload_hash}"
         else:
             key = f"{finding_type}:{endpoint}"
@@ -164,17 +166,18 @@ class ScanDiffEngine:
                     logger.warning(
                         "Column/row length mismatch in _load_findings: "
                         "%d columns vs %d rows — using strict zip",
-                        len(columns), len(row),
+                        len(columns),
+                        len(row),
                     )
                 finding = dict(zip(columns, row, strict=False))
                 fp = self._fingerprint(finding)
                 findings[fp] = finding
             return findings
         except Exception as e:
-            logger.error(
-                "Failed to load findings for %s: %s", engagement_id, e
-            )
-            raise RuntimeError(f"Failed to load findings for engagement {engagement_id}: {e}") from e
+            logger.error("Failed to load findings for %s: %s", engagement_id, e)
+            raise RuntimeError(
+                f"Failed to load findings for engagement {engagement_id}: {e}"
+            ) from e
         finally:
             if conn:
                 with contextlib.suppress(Exception):
@@ -186,12 +189,22 @@ class ScanDiffEngine:
     def _empty_diff() -> dict:
         """Return an empty diff result with zero counts and action_required=False."""
         return {
-            "new": [], "fixed": [], "regressed": [],
-            "persistent": [], "severity_changed": [],
-            "summary": {"new_count": 0, "fixed_count": 0, "regressed_count": 0,
-                        "persistent_count": 0, "severity_changed_count": 0,
-                        "action_required": False, "total_current": 0, "total_previous": 0,
-                        "_error": "load_failure"},
+            "new": [],
+            "fixed": [],
+            "regressed": [],
+            "persistent": [],
+            "severity_changed": [],
+            "summary": {
+                "new_count": 0,
+                "fixed_count": 0,
+                "regressed_count": 0,
+                "persistent_count": 0,
+                "severity_changed_count": 0,
+                "action_required": False,
+                "total_current": 0,
+                "total_previous": 0,
+                "_error": "load_failure",
+            },
         }
 
     def diff(
@@ -213,11 +226,21 @@ class ScanDiffEngine:
         """
         if prev_id is None:
             return {
-                "new": [], "fixed": [], "regressed": [],
-                "persistent": [], "severity_changed": [],
-                "summary": {"new_count": 0, "fixed_count": 0, "regressed_count": 0,
-                            "persistent_count": 0, "severity_changed_count": 0,
-                            "action_required": False, "total_current": 0, "total_previous": 0},
+                "new": [],
+                "fixed": [],
+                "regressed": [],
+                "persistent": [],
+                "severity_changed": [],
+                "summary": {
+                    "new_count": 0,
+                    "fixed_count": 0,
+                    "regressed_count": 0,
+                    "persistent_count": 0,
+                    "severity_changed_count": 0,
+                    "action_required": False,
+                    "total_current": 0,
+                    "total_previous": 0,
+                },
             }
         try:
             prev = self._load_findings(prev_id)
@@ -248,6 +271,7 @@ class ScanDiffEngine:
         # the same fallback fingerprint. We accumulate all matching
         # primary fingerprints so the diff can check all candidates.
         from collections import defaultdict
+
         curr_fallback: dict[str, list[str]] = defaultdict(list)
         for fp, f in curr.items():
             curr_fallback[self._fallback_fingerprint(f)].append(fp)
@@ -328,12 +352,16 @@ class ScanDiffEngine:
 
         # Changed: in both but severity differs
         for fp in curr_fps & prev_fps:
-            if curr[fp].get("severity", "UNKNOWN") != prev[fp].get("severity", "UNKNOWN"):
-                result[self.CAT_SEVERITY_CHANGED].append({
-                    "finding": curr[fp],
-                    "old_severity": prev[fp].get("severity", "UNKNOWN"),
-                    "new_severity": curr[fp].get("severity", "UNKNOWN"),
-                })
+            if curr[fp].get("severity", "UNKNOWN") != prev[fp].get(
+                "severity", "UNKNOWN"
+            ):
+                result[self.CAT_SEVERITY_CHANGED].append(
+                    {
+                        "finding": curr[fp],
+                        "old_severity": prev[fp].get("severity", "UNKNOWN"),
+                        "new_severity": curr[fp].get("severity", "UNKNOWN"),
+                    }
+                )
             else:
                 result[self.CAT_PERSISTENT].append(curr[fp])
 
@@ -343,14 +371,13 @@ class ScanDiffEngine:
             "fixed_count": len(result[self.CAT_FIXED]),
             "regressed_count": len(result[self.CAT_REGRESSED]),
             "persistent_count": len(result[self.CAT_PERSISTENT]),
-            "severity_changed_count": len(
-                result[self.CAT_SEVERITY_CHANGED]
-            ),
+            "severity_changed_count": len(result[self.CAT_SEVERITY_CHANGED]),
             "action_required": (
                 len(result[self.CAT_NEW])
                 + len(result[self.CAT_REGRESSED])
                 + len(result[self.CAT_SEVERITY_CHANGED])
-            ) > 0,
+            )
+            > 0,
             "total_current": len(curr),
             "total_previous": len(prev),
         }
@@ -359,9 +386,7 @@ class ScanDiffEngine:
 
     # ── Auto-close ─────────────────────────────────────────────────
 
-    def mark_fixed(
-        self, finding_id: str, closed_in_engagement_id: str
-    ) -> bool:
+    def mark_fixed(self, finding_id: str, closed_in_engagement_id: str) -> bool:
         """Mark a finding as fixed (soft-delete + record in engagement).
 
         Uses SELECT ... FOR UPDATE to prevent concurrent diff tasks from
@@ -406,7 +431,8 @@ class ScanDiffEngine:
         except Exception as e:
             logger.error(
                 "Failed to mark finding %s as fixed: %s",
-                finding_id, e,
+                finding_id,
+                e,
             )
             if conn:
                 with contextlib.suppress(Exception):
@@ -472,7 +498,8 @@ class ScanDiffEngine:
         except Exception as e:
             logger.error(
                 "Failed to batch-mark %d findings as fixed: %s",
-                len(finding_ids), e,
+                len(finding_ids),
+                e,
             )
             if conn:
                 with contextlib.suppress(Exception):
@@ -581,7 +608,8 @@ class ScanDiffEngine:
         except Exception as e:
             logger.error(
                 "Failed to batch-mark %d findings as fixed with fps: %s",
-                len(finding_ids), e,
+                len(finding_ids),
+                e,
             )
             if conn:
                 with contextlib.suppress(Exception):
@@ -592,9 +620,7 @@ class ScanDiffEngine:
                 with contextlib.suppress(Exception):
                     conn.close()
 
-    def store_diff_in_profile(
-        self, org_id: str, domain: str, diff: dict
-    ) -> bool:
+    def store_diff_in_profile(self, org_id: str, domain: str, diff: dict) -> bool:
         """Store the diff summary in the target profile.
 
         Args:
@@ -623,9 +649,7 @@ class ScanDiffEngine:
             conn.commit()
             return cursor.rowcount > 0
         except Exception as e:
-            logger.warning(
-                "Failed to store diff in profile: %s", e
-            )
+            logger.warning("Failed to store diff in profile: %s", e)
             if conn:
                 with contextlib.suppress(Exception):
                     conn.rollback()

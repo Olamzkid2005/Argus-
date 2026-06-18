@@ -32,11 +32,7 @@ class RateLimitRepository:
         return dict(zip(columns, row, strict=False))
 
     def create_event(
-        self,
-        domain: str,
-        event_type: str,
-        status_code: int | None,
-        current_rps: float
+        self, domain: str, event_type: str, status_code: int | None, current_rps: float
     ) -> dict | None:
         """
         Create rate limit event record.
@@ -65,23 +61,23 @@ class RateLimitRepository:
         try:
             if self.db:
                 with self.db.cursor() as cursor:
-                    cursor.execute(query, (domain, event_type, status_code, current_rps))
+                    cursor.execute(
+                        query, (domain, event_type, status_code, current_rps)
+                    )
                     row = cursor.fetchone()
                     return self._row_to_dict(cursor, row)
             else:
                 with db_cursor() as cursor:
-                    cursor.execute(query, (domain, event_type, status_code, current_rps))
+                    cursor.execute(
+                        query, (domain, event_type, status_code, current_rps)
+                    )
                     row = cursor.fetchone()
                     return self._row_to_dict(cursor, row)
         except Exception as e:
             logger.error("Failed to create rate limit event: %s", e)
             raise
 
-    def get_recent_events(
-        self,
-        domain: str,
-        limit: int = 100
-    ) -> list[dict]:
+    def get_recent_events(self, domain: str, limit: int = 100) -> list[dict]:
         """
         Get recent rate limit events for domain.
 

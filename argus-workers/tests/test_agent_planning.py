@@ -1,4 +1,5 @@
 """Tests for ReActAgent planning with LLM and deterministic fallback."""
+
 import os
 import sys
 from unittest.mock import Mock
@@ -17,10 +18,20 @@ class TestPlanNextAction:
     @pytest.fixture
     def agent(self):
         registry = ToolRegistry()
-        registry.register("nuclei", lambda _target="", **_kw: AgentResult(tool="nuclei", success=True, output="ok"),
-                          {"name": "nuclei", "description": "Vuln scanner", "parameters": []})
-        registry.register("dalfox", lambda _target="", **_kw: AgentResult(tool="dalfox", success=True, output="ok"),
-                          {"name": "dalfox", "description": "XSS scanner", "parameters": []})
+        registry.register(
+            "nuclei",
+            lambda _target="", **_kw: AgentResult(
+                tool="nuclei", success=True, output="ok"
+            ),
+            {"name": "nuclei", "description": "Vuln scanner", "parameters": []},
+        )
+        registry.register(
+            "dalfox",
+            lambda _target="", **_kw: AgentResult(
+                tool="dalfox", success=True, output="ok"
+            ),
+            {"name": "dalfox", "description": "XSS scanner", "parameters": []},
+        )
         return ReActAgent(registry)
 
     @pytest.fixture
@@ -54,7 +65,9 @@ class TestPlanNextAction:
         """LLM returns __done__, verify None returned."""
         mock_llm = Mock()
         mock_llm.is_available.return_value = True
-        mock_llm.chat_sync.return_value = '{"tool": "__done__", "arguments": {}, "reasoning": "All tools covered"}'
+        mock_llm.chat_sync.return_value = (
+            '{"tool": "__done__", "arguments": {}, "reasoning": "All tools covered"}'
+        )
 
         action = agent.plan_next_action(
             task="scan: https://example.com",
@@ -69,7 +82,9 @@ class TestPlanNextAction:
         """LLM returns unregistered tool, verify deterministic fallback used."""
         mock_llm = Mock()
         mock_llm.is_available.return_value = True
-        mock_llm.chat_sync.return_value = '{"tool": "nonexistent_tool", "arguments": {}, "reasoning": "Testing"}'
+        mock_llm.chat_sync.return_value = (
+            '{"tool": "nonexistent_tool", "arguments": {}, "reasoning": "Testing"}'
+        )
 
         action = agent.plan_next_action(
             task="scan: https://example.com",
@@ -122,8 +137,13 @@ class TestReActAgentRun:
     @pytest.fixture
     def agent(self):
         registry = ToolRegistry()
-        registry.register("nuclei", lambda _target="", **_kw: AgentResult(tool="nuclei", success=True, output="ok"),
-                          {"name": "nuclei", "description": "Vuln scanner", "parameters": []})
+        registry.register(
+            "nuclei",
+            lambda _target="", **_kw: AgentResult(
+                tool="nuclei", success=True, output="ok"
+            ),
+            {"name": "nuclei", "description": "Vuln scanner", "parameters": []},
+        )
         return ReActAgent(registry, max_iterations=5)
 
     def test_run_respects_max_iterations(self, agent):

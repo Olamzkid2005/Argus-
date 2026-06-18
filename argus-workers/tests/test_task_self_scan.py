@@ -11,7 +11,9 @@ class TestRunSelfScan:
     """Test suite for run_self_scan"""
 
     @patch("security_audit.SecurityAudit")
-    def test_runs_security_audit_and_returns_completed_with_summary(self, mock_security_audit):
+    def test_runs_security_audit_and_returns_completed_with_summary(
+        self, mock_security_audit
+    ):
         mock_audit = MagicMock()
         mock_audit.generate_report.return_value = {
             "summary": {
@@ -33,7 +35,9 @@ class TestRunSelfScan:
         mock_audit.generate_report.assert_called_once()
 
     @patch("security_audit.SecurityAudit")
-    def test_logs_critical_message_when_critical_findings_exist(self, mock_security_audit):
+    def test_logs_critical_message_when_critical_findings_exist(
+        self, mock_security_audit
+    ):
         mock_audit = MagicMock()
         mock_audit.generate_report.return_value = {
             "summary": {

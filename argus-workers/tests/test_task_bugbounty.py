@@ -167,11 +167,12 @@ class TestGenerateBugBountyReport:
         self, mock_fetch_findings, mock_fetch_engagement
     ):
         mock_fetch_findings.return_value = []
-        mock_fetch_engagement.return_value = {"id": "eng-001", "target_url": "https://example.com"}
+        mock_fetch_engagement.return_value = {
+            "id": "eng-001",
+            "target_url": "https://example.com",
+        }
 
-        result = generate_bugbounty_report(
-            "eng-001", "hackerone", output_path=""
-        )
+        result = generate_bugbounty_report("eng-001", "hackerone", output_path="")
 
         assert result["status"] == "no_findings"
         assert result["engagement_id"] == "eng-001"
@@ -189,8 +190,13 @@ class TestGenerateBugBountyReport:
         mock_mkdir,
         mock_write_text,
     ):
-        mock_fetch_findings.return_value = [{"id": "f1", "type": "SQL_INJECTION", "severity": "HIGH"}]
-        mock_fetch_engagement.return_value = {"id": "eng-001", "target_url": "https://example.com"}
+        mock_fetch_findings.return_value = [
+            {"id": "f1", "type": "SQL_INJECTION", "severity": "HIGH"}
+        ]
+        mock_fetch_engagement.return_value = {
+            "id": "eng-001",
+            "target_url": "https://example.com",
+        }
         mock_generator = MagicMock()
         mock_generator_cls.return_value = mock_generator
         mock_generator.generate.return_value = "# Report content"
@@ -213,8 +219,13 @@ class TestGenerateBugBountyReport:
         mock_fetch_engagement,
         mock_generator_cls,
     ):
-        mock_fetch_findings.return_value = [{"id": "f1", "type": "SQL_INJECTION", "severity": "HIGH"}]
-        mock_fetch_engagement.return_value = {"id": "eng-001", "target_url": "https://example.com"}
+        mock_fetch_findings.return_value = [
+            {"id": "f1", "type": "SQL_INJECTION", "severity": "HIGH"}
+        ]
+        mock_fetch_engagement.return_value = {
+            "id": "eng-001",
+            "target_url": "https://example.com",
+        }
         mock_generator = MagicMock()
         mock_generator_cls.return_value = mock_generator
         mock_generator.generate.side_effect = ValueError("Unsupported platform")
@@ -239,27 +250,29 @@ class TestGenerateBugBountyReport:
         mock_mkdir,
         mock_write_text,
     ):
-        mock_fetch_findings.return_value = [{"id": "f1", "type": "SQL_INJECTION", "severity": "HIGH"}]
-        mock_fetch_engagement.return_value = {"id": "eng-001", "target_url": "https://example.com"}
+        mock_fetch_findings.return_value = [
+            {"id": "f1", "type": "SQL_INJECTION", "severity": "HIGH"}
+        ]
+        mock_fetch_engagement.return_value = {
+            "id": "eng-001",
+            "target_url": "https://example.com",
+        }
         mock_generator = MagicMock()
         mock_generator_cls.return_value = mock_generator
         mock_generator.generate.return_value = "# Report content"
 
-        result = generate_bugbounty_report(
-            "eng-001", "intigriti", output_path=""
-        )
+        result = generate_bugbounty_report("eng-001", "intigriti", output_path="")
 
         assert result["status"] == "completed"
         assert "reports/bugbounty_intigriti_" in result["output_path"]
 
     @patch("tasks.bugbounty._fetch_engagement")
     @patch("tasks.bugbounty._fetch_findings")
-    def test_retries_on_fetch_failure(
-        self, mock_fetch_findings, mock_fetch_engagement
-    ):
+    def test_retries_on_fetch_failure(self, mock_fetch_findings, mock_fetch_engagement):
         mock_fetch_findings.side_effect = Exception("DB connection lost")
         # The bound task's self is the real Celery task — patch retry on it
         from tasks.bugbounty import generate_bugbounty_report as _task
+
         bound_self = _task._orig_run.__self__
         bound_self.request.retries = 0
         orig_retry = bound_self.retry

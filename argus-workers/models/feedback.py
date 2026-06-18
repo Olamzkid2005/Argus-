@@ -3,6 +3,7 @@ Feedback learning loop — learns from analyst corrections to improve accuracy.
 
 Gated behind ARGUS_FF_FEEDBACK_LOOP feature flag (checked via is_enabled("FEEDBACK_LOOP")).
 """
+
 import logging
 import uuid
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FindingFeedback:
     """Analyst feedback on a finding's accuracy."""
+
     finding_id: str
     engagement_id: str
     is_true_positive: bool
@@ -44,6 +46,7 @@ class FeedbackLearningLoop:
         from database.repositories.tool_accuracy_repository import (
             ToolAccuracyRepository,
         )
+
         self._accuracy_repo = ToolAccuracyRepository()
 
     def on_feedback(self, feedback: FindingFeedback) -> dict | None:
@@ -134,7 +137,12 @@ class FeedbackLearningLoop:
                 updated_at = NOW()
             WHERE id = %s
             """,
-            (feedback.is_true_positive, feedback.is_true_positive, feedback.corrected_severity, feedback.finding_id),
+            (
+                feedback.is_true_positive,
+                feedback.is_true_positive,
+                feedback.corrected_severity,
+                feedback.finding_id,
+            ),
         )
 
     def _get_finding_source_tool(self, finding_id: str) -> str | None:
@@ -144,11 +152,15 @@ class FeedbackLearningLoop:
         try:
             conn = get_db().get_connection()
             cursor = conn.cursor()
-            cursor.execute("SELECT source_tool FROM findings WHERE id = %s", (finding_id,))
+            cursor.execute(
+                "SELECT source_tool FROM findings WHERE id = %s", (finding_id,)
+            )
             row = cursor.fetchone()
             return row[0] if row else None
         except Exception as e:
-            logger.error("Failed to query finding source tool for %s: %s", finding_id, e)
+            logger.error(
+                "Failed to query finding source tool for %s: %s", finding_id, e
+            )
             return None
         finally:
             if cursor:
@@ -166,12 +178,17 @@ class FeedbackLearningLoop:
         """
         source_tool = self._get_finding_source_tool(feedback.finding_id)
         if not source_tool:
-            logger.warning("Cannot update tool accuracy: finding %s not found", feedback.finding_id)
+            logger.warning(
+                "Cannot update tool accuracy: finding %s not found", feedback.finding_id
+            )
             return False
 
         org_id = self._get_finding_org_id(feedback.finding_id)
         if not org_id:
-            logger.warning("Cannot update tool accuracy: org not found for finding %s", feedback.finding_id)
+            logger.warning(
+                "Cannot update tool accuracy: org not found for finding %s",
+                feedback.finding_id,
+            )
             return False
 
         return self._accuracy_repo.record_verdict(
@@ -249,7 +266,9 @@ class FeedbackLearningLoop:
         fp_rate = self._get_tool_fp_rate(source_tool)
         logger.info(
             "Confidence model: tool=%s fp_rate=%.2f verdict=%s",
-            source_tool, fp_rate, feedback.is_true_positive,
+            source_tool,
+            fp_rate,
+            feedback.is_true_positive,
         )
         return True
 

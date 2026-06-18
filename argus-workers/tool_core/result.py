@@ -36,15 +36,15 @@ from typing import Any
 class ToolStatus(StrEnum):
     """Granular outcome for a single tool run."""
 
-    SUCCESS = "success"              # Ran, exit 0, produced output
+    SUCCESS = "success"  # Ran, exit 0, produced output
     SUCCESS_EMPTY = "success_empty"  # Ran, exit 0, but produced no findings (not a bug)
-    TIMEOUT = "timeout"              # Exceeded time limit
+    TIMEOUT = "timeout"  # Exceeded time limit
     NOT_INSTALLED = "not_installed"  # Binary not found on PATH
-    IMPORT_ERROR = "import_error"    # Python ModuleNotFoundError in subprocess
+    IMPORT_ERROR = "import_error"  # Python ModuleNotFoundError in subprocess
     SANDBOX_ERROR = "sandbox_error"  # Generic environment/permission problem
-    NONZERO_EXIT = "nonzero_exit"    # Ran but returned non-zero (tool-level error)
-    EXCEPTION = "exception"          # Python exception inside ToolRunner itself
-    SKIPPED = "skipped"              # Deliberately not run (wrong language, etc.)
+    NONZERO_EXIT = "nonzero_exit"  # Ran but returned non-zero (tool-level error)
+    EXCEPTION = "exception"  # Python exception inside ToolRunner itself
+    SKIPPED = "skipped"  # Deliberately not run (wrong language, etc.)
 
     @property
     def is_fatal(self) -> bool:
@@ -54,7 +54,7 @@ class ToolStatus(StrEnum):
             self.IMPORT_ERROR,
             self.SANDBOX_ERROR,
             self.EXCEPTION,
-            self.TIMEOUT,       # timed-out tool produces no findings
+            self.TIMEOUT,  # timed-out tool produces no findings
         }
 
     @property
@@ -107,14 +107,16 @@ class UnifiedToolResult:
     duration_seconds: float = 0.0
 
     # ── Error details (populated on any non-success) ───────────────────────────
-    error_type: str = ""          # e.g. "ModuleNotFoundError", "TimeoutExpired"
-    error_message: str = ""       # Human-readable one-liner
-    error_detail: str = ""        # Full traceback or extended stderr
-    fix_hint: str = ""            # Actionable remediation hint
+    error_type: str = ""  # e.g. "ModuleNotFoundError", "TimeoutExpired"
+    error_message: str = ""  # Human-readable one-liner
+    error_detail: str = ""  # Full traceback or extended stderr
+    fix_hint: str = ""  # Actionable remediation hint
 
     # ── Sandbox metadata ──────────────────────────────────────────────────────
     sandbox_dir: str = ""
-    effective_env: dict[str, str] = field(default_factory=dict)  # PATH, PYTHONPATH, etc.
+    effective_env: dict[str, str] = field(
+        default_factory=dict
+    )  # PATH, PYTHONPATH, etc.
 
     # ── Internal notes (debug-only, stripped from engagement reports) ──────────
     debug_notes: list[str] = field(default_factory=list)
@@ -139,7 +141,9 @@ class UnifiedToolResult:
     # ── Convenience constructors ──────────────────────────────────────────────
 
     @classmethod
-    def not_installed(cls, tool_name: str, command: list[str], target: str = "") -> UnifiedToolResult:
+    def not_installed(
+        cls, tool_name: str, command: list[str], target: str = ""
+    ) -> UnifiedToolResult:
         return cls(
             tool_name=tool_name,
             command=command,
@@ -165,12 +169,20 @@ class UnifiedToolResult:
     ) -> UnifiedToolResult:
         tb = traceback.format_exc()
         error_type = type(exc).__name__
-        status = ToolStatus.IMPORT_ERROR if isinstance(exc, ModuleNotFoundError) else ToolStatus.EXCEPTION
+        status = (
+            ToolStatus.IMPORT_ERROR
+            if isinstance(exc, ModuleNotFoundError)
+            else ToolStatus.EXCEPTION
+        )
 
         fix_hint = ""
         if isinstance(exc, ModuleNotFoundError):
             _raw_name = getattr(exc, "name", None)
-            missing = _raw_name if _raw_name else str(exc).replace("No module named ", "").strip("'\" ")
+            missing = (
+                _raw_name
+                if _raw_name
+                else str(exc).replace("No module named ", "").strip("'\" ")
+            )
             fix_hint = (
                 f"Python cannot find '{missing}' inside the sandbox. "
                 f"Add the user site-packages directory to PYTHONPATH in _locked_env(). "
@@ -216,7 +228,9 @@ class UnifiedToolResult:
         return result
 
     @classmethod
-    def skipped(cls, tool_name: str, reason: str, target: str = "") -> UnifiedToolResult:
+    def skipped(
+        cls, tool_name: str, reason: str, target: str = ""
+    ) -> UnifiedToolResult:
         return cls(
             tool_name=tool_name,
             target=target,
@@ -334,7 +348,9 @@ class UnifiedToolResult:
         }
 
     @classmethod
-    def from_legacy_dict(cls, data: dict[str, Any], tool_name_hint: str = "") -> UnifiedToolResult:
+    def from_legacy_dict(
+        cls, data: dict[str, Any], tool_name_hint: str = ""
+    ) -> UnifiedToolResult:
         """
         Reconstruct from a legacy ``tools.models.ToolResult.as_dict()`` dict.
 

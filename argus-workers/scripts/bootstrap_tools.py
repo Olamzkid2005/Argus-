@@ -2,6 +2,7 @@
 Run once at worker startup (before Celery starts accepting jobs).
 Downloads all tool assets that cannot be fetched inside the sandbox.
 """
+
 import os
 import subprocess
 import sys
@@ -25,7 +26,9 @@ def bootstrap_nuclei_templates():
     # Check if already present
     if nuclei_templates.exists() and any(nuclei_templates.rglob("*.yaml")):
         count = len(list(nuclei_templates.rglob("*.yaml")))
-        print(f"[bootstrap] nuclei-templates already present ({count} templates). Skipping.")
+        print(
+            f"[bootstrap] nuclei-templates already present ({count} templates). Skipping."
+        )
         return True
 
     print("[bootstrap] Downloading nuclei-templates from GitHub...")
@@ -34,8 +37,10 @@ def bootstrap_nuclei_templates():
     try:
         result = subprocess.run(  # noqa: S603 — safe: list form, git command is controlled
             [  # noqa: S607
-                "git", "clone",
-                "--depth", "1",
+                "git",
+                "clone",
+                "--depth",
+                "1",
                 "--filter=blob:none",
                 "https://github.com/projectdiscovery/nuclei-templates.git",
                 str(nuclei_templates),
@@ -77,6 +82,7 @@ def bootstrap_nuclei_templates():
         if default_path.exists():
             # Move to expected location
             import shutil
+
             if nuclei_templates.exists():
                 shutil.rmtree(nuclei_templates)
             shutil.move(str(default_path), str(nuclei_templates))
@@ -89,7 +95,9 @@ def bootstrap_nuclei_templates():
     except Exception as e:
         print(f"[bootstrap] Fallback error: {e}")
 
-    print("[bootstrap] WARNING: Nuclei templates not available. Web scans will be limited.")
+    print(
+        "[bootstrap] WARNING: Nuclei templates not available. Web scans will be limited."
+    )
     return False
 
 

@@ -44,7 +44,10 @@ if not os.getenv("DATABASE_URL"):
                         os.environ[key] = value.strip()
                         break
     else:
-        logger.debug("Fallback .env.local not found at %s — DATABASE_URL must be set via environment", platform_env)
+        logger.debug(
+            "Fallback .env.local not found at %s — DATABASE_URL must be set via environment",
+            platform_env,
+        )
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,7 +67,7 @@ def dispatch_task(task_name: str, args: list, task_id: str = None) -> dict:
     Returns:
         Dictionary with task ID and status
     """
-    logger.info(f"Dispatching task {task_name} with args {args}")
+    logger.info("Dispatching task %s with args %s", task_name, args)
 
     # Ensure the correct Python path is used by setting environment
     os.environ["PYTHONPATH"] = f"{PROJECT_ROOT}:{os.environ.get('PYTHONPATH', '')}"
@@ -83,7 +86,7 @@ def dispatch_task(task_name: str, args: list, task_id: str = None) -> dict:
         task_id=task_id,
     )
 
-    logger.info(f"Task dispatched with ID: {result.id}")
+    logger.info("Task dispatched with ID: %s", result.id)
 
     return {
         "task_id": result.id,
@@ -118,7 +121,7 @@ def main():
         sys.stdout.write(json.dumps(result) + "\n")
 
     except Exception as e:
-        logger.error(f"Error dispatching task: {e}")
+        logger.error("Error dispatching task: %s", e)
         sys.exit(1)
 
 

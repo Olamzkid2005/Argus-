@@ -61,14 +61,13 @@ class AIExplainabilityRepository:
         try:
             self.close()
         except Exception:
-            logger.warning("Failed to close AI explainability repository connection during shutdown", exc_info=True)
+            logger.warning(
+                "Failed to close AI explainability repository connection during shutdown",
+                exc_info=True,
+            )
 
     def create_explanation(
-        self,
-        cluster_id: str,
-        explanation: str,
-        model_version: str,
-        token_count: int
+        self, cluster_id: str, explanation: str, model_version: str, token_count: int
     ) -> dict | None:
         query = """
             INSERT INTO ai_explanations (
@@ -79,20 +78,28 @@ class AIExplainabilityRepository:
         """
         try:
             with self.db.cursor() as cursor:
-                cursor.execute(query, (cluster_id, explanation, model_version, token_count))
+                cursor.execute(
+                    query, (cluster_id, explanation, model_version, token_count)
+                )
                 result = cursor.fetchone()
                 self.db.commit()
-                return dict(zip([desc[0] for desc in cursor.description], result, strict=False)) if result else None
+                return (
+                    dict(
+                        zip(
+                            [desc[0] for desc in cursor.description],
+                            result,
+                            strict=False,
+                        )
+                    )
+                    if result
+                    else None
+                )
         except Exception as e:
             self.db.rollback()
             logger.error("Failed to create AI explanation: %s", e)
             raise
 
-    def create_trace(
-        self,
-        cluster_id: str,
-        trace_data: dict
-    ) -> dict | None:
+    def create_trace(self, cluster_id: str, trace_data: dict) -> dict | None:
         query = """
             INSERT INTO ai_explainability_traces (
                 cluster_id, trace_data, created_at
@@ -105,7 +112,17 @@ class AIExplainabilityRepository:
                 cursor.execute(query, (cluster_id, json.dumps(trace_data)))
                 result = cursor.fetchone()
                 self.db.commit()
-                return dict(zip([desc[0] for desc in cursor.description], result, strict=False)) if result else None
+                return (
+                    dict(
+                        zip(
+                            [desc[0] for desc in cursor.description],
+                            result,
+                            strict=False,
+                        )
+                    )
+                    if result
+                    else None
+                )
         except Exception as e:
             self.db.rollback()
             logger.error("Failed to create explainability trace: %s", e)

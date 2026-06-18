@@ -87,9 +87,7 @@ class ReconContextService:
             # ── Framework detection ──
             frameworks: list[str] = []
             for f in findings:
-                fp = (
-                    f.get("file_path") or f.get("endpoint", "")
-                ).lower()
+                fp = (f.get("file_path") or f.get("endpoint", "")).lower()
                 for keyword, framework in _FRAMEWORK_PATTERNS:
                     if keyword in fp:
                         frameworks.append(framework)
@@ -118,6 +116,7 @@ class ReconContextService:
             return ctx
         except Exception as e:
             logger.warning(
-                "Failed to build repo recon context (non-fatal): %s", e,
+                "Failed to build repo recon context (non-fatal): %s",
+                e,
             )
             return None

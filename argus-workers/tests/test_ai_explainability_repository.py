@@ -12,8 +12,12 @@ from database.repositories.ai_explainability_repository import (
 def mock_db():
     mock_cursor = MagicMock()
     mock_cursor.description = [
-        ("id",), ("cluster_id",), ("explanation",),
-        ("model_version",), ("token_count",), ("created_at",),
+        ("id",),
+        ("cluster_id",),
+        ("explanation",),
+        ("model_version",),
+        ("token_count",),
+        ("created_at",),
     ]
 
     mock_conn = MagicMock()
@@ -46,7 +50,14 @@ class TestAIExplainabilityRepositoryInit:
 
 class TestCreateExplanation:
     def test_inserts_and_returns_dict(self, mock_db):
-        mock_db.fetchone.return_value = (1, "cluster-1", "explanation text", "gpt-4", 150, "2025-01-01")
+        mock_db.fetchone.return_value = (
+            1,
+            "cluster-1",
+            "explanation text",
+            "gpt-4",
+            150,
+            "2025-01-01",
+        )
 
         repo = AIExplainabilityRepository()
         result = repo.create_explanation(
@@ -93,9 +104,17 @@ class TestCreateExplanation:
 class TestCreateTrace:
     def test_inserts_and_returns_dict(self, mock_db):
         mock_db.description = [
-            ("id",), ("cluster_id",), ("trace_data",), ("created_at",),
+            ("id",),
+            ("cluster_id",),
+            ("trace_data",),
+            ("created_at",),
         ]
-        mock_db.fetchone.return_value = (1, "cluster-1", json.dumps({"step": "1"}), "2025-01-01")
+        mock_db.fetchone.return_value = (
+            1,
+            "cluster-1",
+            json.dumps({"step": "1"}),
+            "2025-01-01",
+        )
 
         repo = AIExplainabilityRepository()
         result = repo.create_trace(cluster_id="cluster-1", trace_data={"step": "1"})
@@ -115,7 +134,14 @@ class TestCreateTrace:
 
 class TestGetExplanation:
     def test_returns_dict(self, mock_db):
-        mock_db.fetchone.return_value = (1, "cluster-1", "explanation", "gpt-4", 150, "2025-01-01")
+        mock_db.fetchone.return_value = (
+            1,
+            "cluster-1",
+            "explanation",
+            "gpt-4",
+            150,
+            "2025-01-01",
+        )
 
         repo = AIExplainabilityRepository()
         result = repo.get_explanation(cluster_id="cluster-1")
@@ -143,9 +169,17 @@ class TestGetExplanation:
 class TestGetTrace:
     def test_returns_dict_with_json_loaded_trace_data(self, mock_db):
         mock_db.description = [
-            ("id",), ("cluster_id",), ("trace_data",), ("created_at",),
+            ("id",),
+            ("cluster_id",),
+            ("trace_data",),
+            ("created_at",),
         ]
-        mock_db.fetchone.return_value = (1, "cluster-1", json.dumps({"key": "value"}), "2025-01-01")
+        mock_db.fetchone.return_value = (
+            1,
+            "cluster-1",
+            json.dumps({"key": "value"}),
+            "2025-01-01",
+        )
 
         repo = AIExplainabilityRepository()
         result = repo.get_trace(cluster_id="cluster-1")

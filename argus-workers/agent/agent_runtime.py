@@ -90,7 +90,9 @@ class AgentRuntime:
 
             self._execution_engine = ExecutionEngine(
                 tool_runner=self.tool_runner,
-                scope_validator=ScopeValidator(self.engagement_id, self.authorized_scope),
+                scope_validator=ScopeValidator(
+                    self.engagement_id, self.authorized_scope
+                ),
             )
             # Wrap agent registry.call with scope middleware
             _original_call = agent.registry.call
@@ -102,7 +104,12 @@ class AgentRuntime:
                     result = fn(name, args, kwargs)
                     if result is None:
                         from .agent_result import AgentResult
-                        return AgentResult(tool=name, success=False, error="Blocked by scope validation")
+
+                        return AgentResult(
+                            tool=name,
+                            success=False,
+                            error="Blocked by scope validation",
+                        )
                     if isinstance(result, tuple) and len(result) == 3:
                         name, args, kwargs = result
                 return _orig(name, **kwargs)

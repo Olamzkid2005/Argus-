@@ -4,6 +4,7 @@ Analyzes findings and generates recommended actions
 
 Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 20.6, 21.1, 21.2, 18.1, 18.2, 18.3, 18.4
 """
+
 import asyncio
 import json
 import logging
@@ -104,12 +105,13 @@ class IntelligenceEngine:
                 - reasoning: Explanation of decisions
         """
         from utils.logging_utils import ScanLogger
+
         slog = ScanLogger("intelligence_engine")
         slog.phase_header("INTELLIGENCE EVALUATION")
         start = _time.time()
 
         findings = snapshot.get("findings", [])
-        slog.info(f"Evaluating {len(findings)} findings")
+        slog.info("Evaluating %d findings", len(findings))
 
         # Sort findings by signal quality so confirmed findings get analysis
         # budget first — candidates get processed last when time is short.
@@ -118,7 +120,7 @@ class IntelligenceEngine:
         # Execute with span tracing
         with self.span_recorder.span(
             ExecutionSpan.SPAN_INTELLIGENCE_EVALUATION,
-            {"findings_count": len(findings)}
+            {"findings_count": len(findings)},
         ):
             # Assign confidence scores (with learned FP rates if org_id provided)
             scored_findings = self.assign_confidence_scores(findings, org_id=org_id)
@@ -136,8 +138,12 @@ class IntelligenceEngine:
                 )
             except Exception:
                 # Fall back to sync enrichment if async fails (e.g., event loop issue)
-                logger.warning("Async enrichment failed — falling back to sync", exc_info=True)
-                enriched_findings = self.enrich_findings_with_threat_intel(scored_findings)
+                logger.warning(
+                    "Async enrichment failed — falling back to sync", exc_info=True
+                )
+                enriched_findings = self.enrich_findings_with_threat_intel(
+                    scored_findings
+                )
 
             # Build and persist attack graph for snapshot consumption
             self._build_and_persist_attack_graph(enriched_findings, snapshot)
@@ -187,8 +193,9 @@ class IntelligenceEngine:
             Findings with updated confidence scores
         """
         from utils.logging_utils import ScanLogger
+
         slog = ScanLogger("intelligence_engine")
-        slog.info(f"Assigning confidence scores to {len(findings)} findings")
+        slog.info("Assigning confidence scores to %d findings", len(findings))
 
         # Load learned FP rates for this org (if available)
         tool_fp_rates: dict[str, float] = {}
@@ -197,18 +204,21 @@ class IntelligenceEngine:
                 from database.repositories.tool_accuracy_repository import (
                     ToolAccuracyRepository,
                 )
+
                 repo = ToolAccuracyRepository()
                 tool_fp_rates = repo.load_fp_rates(org_id)
-                slog.info(f"Loaded FP rates for {len(tool_fp_rates)} tools")
+                slog.info("Loaded FP rates for %d tools", len(tool_fp_rates))
             except Exception as e:
                 logger.warning(
-                    "Could not load tool_accuracy for org %s: %s", org_id, e,
+                    "Could not load tool_accuracy for org %s: %s",
+                    org_id,
+                    e,
                 )
                 # Fallback: empty dict — every lookup falls through to default 0.2
 
         # Group findings by normalized vulnerability family for tool agreement
         finding_groups = self._group_findings_for_agreement(findings)
-        slog.info(f"Grouped into {len(finding_groups)} vulnerability families")
+        slog.info("Grouped into %d vulnerability families", len(finding_groups))
 
         scored_findings = []
 
@@ -222,7 +232,7 @@ class IntelligenceEngine:
 
                 # --- Learned FP rate resolution ---
                 source_tool = finding.get("source_tool", "")
-                learned_fp = tool_fp_rates.get(source_tool)   # from tool_accuracy DB
+                learned_fp = tool_fp_rates.get(source_tool)  # from tool_accuracy DB
                 stored_fp = finding.get("fp_likelihood")
 
                 # ── Robust type coercion and validation ──
@@ -234,9 +244,17 @@ class IntelligenceEngine:
                         if 0.0 <= _val <= 1.0:
                             _learned_fp_valid = _val
                         else:
-                            logger.debug("learned_fp out of range for tool %s: %s", source_tool, _val)
+                            logger.debug(
+                                "learned_fp out of range for tool %s: %s",
+                                source_tool,
+                                _val,
+                            )
                     except (ValueError, TypeError):
-                        logger.debug("learned_fp non-numeric for tool %s: %s", source_tool, learned_fp)
+                        logger.debug(
+                            "learned_fp non-numeric for tool %s: %s",
+                            source_tool,
+                            learned_fp,
+                        )
 
                 # Validate stored_fp is a numeric float in [0.0, 1.0]
                 _stored_fp_valid: float | None = None
@@ -248,7 +266,11 @@ class IntelligenceEngine:
                         else:
                             logger.debug("stored_fp out of range: %s", _val)
                     except (ValueError, TypeError):
-                        logger.debug("stored_fp non-numeric: %s (type=%s)", stored_fp, type(stored_fp).__name__)
+                        logger.debug(
+                            "stored_fp non-numeric: %s (type=%s)",
+                            stored_fp,
+                            type(stored_fp).__name__,
+                        )
 
                 # Weighted blend: 60% historical (DB) + 40% scanner metadata
                 if _learned_fp_valid is not None and _stored_fp_valid is not None:
@@ -264,7 +286,9 @@ class IntelligenceEngine:
                 fp_likelihood = max(0.001, min(1.0, fp_likelihood))
 
                 # Calculate confidence using shared formula
-                confidence = ConfidenceScorer.compute(tool_agreement, evidence_strength, fp_likelihood)
+                confidence = ConfidenceScorer.compute(
+                    tool_agreement, evidence_strength, fp_likelihood
+                )
 
                 # Bug-Reaper integration: cap confidence at 0.7 for unvalidated findings.
                 # Two paths:
@@ -273,8 +297,13 @@ class IntelligenceEngine:
                 # 2. All findings tagged by the orchestrator (bugbounty_source=True) when
                 #    bug bounty mode is active — these lack explicit validation metadata
                 #    and should be treated conservatively.
-                if finding.get("bugbounty_source") or finding.get("source") == "bugbounty" or (
-                    finding.get("requires_validation") and finding.get("source") == "bugbounty"
+                if (
+                    finding.get("bugbounty_source")
+                    or finding.get("source") == "bugbounty"
+                    or (
+                        finding.get("requires_validation")
+                        and finding.get("source") == "bugbounty"
+                    )
                 ):
                     confidence = min(confidence, 0.70)
 
@@ -282,12 +311,18 @@ class IntelligenceEngine:
                 scored_finding = finding.copy()
                 scored_finding["confidence"] = confidence
                 # Count unique source tools for agreement level, not total findings
-                _unique_tools = {f.get("source_tool") for f in group if f.get("source_tool")}
-                scored_finding["tool_agreement_level"] = self._get_agreement_level(len(_unique_tools))
+                _unique_tools = {
+                    f.get("source_tool") for f in group if f.get("source_tool")
+                }
+                scored_finding["tool_agreement_level"] = self._get_agreement_level(
+                    len(_unique_tools)
+                )
                 # Tag fp_rate source for auditability
                 scored_finding["fp_rate_source"] = (
-                    "learned" if _learned_fp_valid is not None
-                    else "scanner_metadata" if _stored_fp_valid is not None
+                    "learned"
+                    if _learned_fp_valid is not None
+                    else "scanner_metadata"
+                    if _stored_fp_valid is not None
                     else "default_0.2"
                 )
 
@@ -312,7 +347,9 @@ class IntelligenceEngine:
         # Only count non-empty source tools to prevent None/empty values
         # from inflating agreement. A finding with no source_tool should
         # not count as evidence of multi-tool confirmation.
-        source_tools = {f.get("source_tool") for f in findings_group if f.get("source_tool")}
+        source_tools = {
+            f.get("source_tool") for f in findings_group if f.get("source_tool")
+        }
         num_tools = len(source_tools)
 
         if num_tools >= 3:
@@ -358,8 +395,21 @@ class IntelligenceEngine:
     def _group_findings_for_agreement(self, findings: list[dict]) -> dict:
         """Group findings that represent the same vulnerability family for tool agreement."""
         type_families = {
-            "XSS": ["XSS", "REFLECTED_XSS", "STORED_XSS", "DOM_XSS", "BLIND_XSS", "CROSS_SITE_SCRIPTING"],
-            "SQLI": ["SQL_INJECTION", "BLIND_SQLI", "TIME_BASED_SQLI", "TIME_BASED_SQL_INJECTION", "ERROR_SQLI"],
+            "XSS": [
+                "XSS",
+                "REFLECTED_XSS",
+                "STORED_XSS",
+                "DOM_XSS",
+                "BLIND_XSS",
+                "CROSS_SITE_SCRIPTING",
+            ],
+            "SQLI": [
+                "SQL_INJECTION",
+                "BLIND_SQLI",
+                "TIME_BASED_SQLI",
+                "TIME_BASED_SQL_INJECTION",
+                "ERROR_SQLI",
+            ],
             "RCE": ["RCE", "COMMAND_INJECTION", "SSTI"],
             "LFI": ["LFI", "PATH_TRAVERSAL", "DIRECTORY_TRAVERSAL"],
             "SSRF": ["SSRF", "OPEN_REDIRECT"],
@@ -384,7 +434,12 @@ class IntelligenceEngine:
             if not normalized_endpoint:
                 evidence = finding.get("evidence") or {}
                 if isinstance(evidence, dict):
-                    pkg = evidence.get("package") or evidence.get("name") or evidence.get("module") or evidence.get("cve_id")
+                    pkg = (
+                        evidence.get("package")
+                        or evidence.get("name")
+                        or evidence.get("module")
+                        or evidence.get("cve_id")
+                    )
                     if pkg:
                         normalized_endpoint = f"_pkg_{pkg}"
                     else:
@@ -405,7 +460,9 @@ class IntelligenceEngine:
 
         return groups
 
-    def _build_and_persist_attack_graph(self, enriched_findings: list[dict], context: dict) -> tuple[dict, Any]:
+    def _build_and_persist_attack_graph(
+        self, enriched_findings: list[dict], context: dict
+    ) -> tuple[dict, Any]:
         """
         Build AttackGraph from scored findings and persist to database.
 
@@ -448,6 +505,7 @@ class IntelligenceEngine:
                 evidence = finding_dict.get("evidence", {})
                 if isinstance(evidence, str):
                     import json
+
                     try:
                         evidence = json.loads(evidence)
                     except (json.JSONDecodeError, TypeError):
@@ -465,7 +523,8 @@ class IntelligenceEngine:
                 graph.add_finding(finding)
             except Exception as e:
                 logger.warning(
-                    "Could not add finding to attack graph: %s", e,
+                    "Could not add finding to attack graph: %s",
+                    e,
                     exc_info=logger.isEnabledFor(logging.DEBUG),
                 )
                 continue
@@ -474,11 +533,13 @@ class IntelligenceEngine:
         saved_count = 0
         try:
             from attack_graph_db import AttackGraphRepository
+
             repo = AttackGraphRepository(self.connection_string)
             saved_count = repo.save_paths(engagement_id, graph)
             logger.info(
                 "Persisted %d attack paths for engagement %s",
-                saved_count, engagement_id,
+                saved_count,
+                engagement_id,
             )
         except Exception as e:
             logger.warning("Could not persist attack graph: %s", e)
@@ -490,6 +551,7 @@ class IntelligenceEngine:
         # to the state so build_observation() includes live attack paths.
         try:
             from feature_flags import is_enabled as _ff_enabled
+
             if _ff_enabled("ATTACK_GRAPH_V2", default=False):
                 _state = context.get("_engagement_state")
                 if _state is not None and hasattr(_state, "set_attack_graph_instance"):
@@ -501,14 +563,19 @@ class IntelligenceEngine:
                         )
                     except Exception as e:
                         logger.warning(
-                            "Could not attach AttackGraph to state: %s", e,
+                            "Could not attach AttackGraph to state: %s",
+                            e,
                         )
         except ImportError:
-            logger.debug("feature_flags module not available — skipping AttackGraph attachment")
+            logger.debug(
+                "feature_flags module not available — skipping AttackGraph attachment"
+            )
 
         return snapshot_dict, graph
 
-    def analyze_state(self, state: Any, enriched_findings: list[dict] | None = None) -> dict:
+    def analyze_state(
+        self, state: Any, enriched_findings: list[dict] | None = None
+    ) -> dict:
         """
         Analyze engagement state and return analysis for the agent loop.
 
@@ -530,12 +597,13 @@ class IntelligenceEngine:
                 - reasoning: Analysis reasoning text
         """
         from utils.logging_utils import ScanLogger
+
         slog = ScanLogger("intelligence_engine")
 
         # If enriched_findings not provided, do our own scoring/enrichment
         if enriched_findings is None:
             findings = getattr(state, "findings", [])
-            slog.info(f"Analyzing state: {len(findings)} findings")
+            slog.info("Analyzing state: %d findings", len(findings))
             # Sort by signal quality
             findings = self._sort_findings_by_signal_quality(findings)
             # Assign confidence scores
@@ -543,7 +611,9 @@ class IntelligenceEngine:
             # Enrich with threat intel
             enriched_findings = self.enrich_findings_with_threat_intel(scored_findings)
         else:
-            slog.info(f"Analyzing state with {len(enriched_findings)} pre-enriched findings")
+            slog.info(
+                f"Analyzing state with {len(enriched_findings)} pre-enriched findings"
+            )
 
         # Build analysis
         coverage_gaps = []
@@ -608,11 +678,13 @@ class IntelligenceEngine:
         # Suggest common subdomains
         suggestions = []
         for domain in domains:
-            suggestions.extend([
-                f"https://api.{domain}",
-                f"https://admin.{domain}",
-                f"https://dev.{domain}",
-            ])
+            suggestions.extend(
+                [
+                    f"https://api.{domain}",
+                    f"https://admin.{domain}",
+                    f"https://dev.{domain}",
+                ]
+            )
 
         return suggestions[:5]  # Limit to 5 suggestions
 
@@ -810,20 +882,24 @@ class IntelligenceEngine:
 
         # Check evidence for CVE references
         evidence = finding.get("evidence", {})
-        evidence_str = json.dumps(evidence) if isinstance(evidence, dict) else str(evidence)
+        evidence_str = (
+            json.dumps(evidence) if isinstance(evidence, dict) else str(evidence)
+        )
 
         # Also check type and any description fields
         text_to_search = f"{finding.get('type', '')} {evidence_str}"
 
         # CVE pattern matching
-        cve_pattern = r'CVE-\d{4}-\d{4,}'
+        cve_pattern = r"CVE-\d{4}-\d{4,}"
         matches = re.findall(cve_pattern, text_to_search, re.IGNORECASE)
         cve_ids.extend([m.upper() for m in matches])
 
         # Deduplicate
         return list(set(cve_ids))[:5]  # Limit to 5 CVEs
 
-    async def enrich_findings_with_threat_intel_async(self, findings: list[dict]) -> list[dict]:
+    async def enrich_findings_with_threat_intel_async(
+        self, findings: list[dict]
+    ) -> list[dict]:
         """
         Async enrichment of findings with CVE data, EPSS scores, and threat intel.
 
@@ -837,6 +913,7 @@ class IntelligenceEngine:
         Returns:
             Enriched findings with threat intel metadata
         """
+
         async def _enrich_one(finding: dict) -> dict:
             enriched_finding = finding.copy()
             threat_intel = {}
@@ -880,7 +957,9 @@ class IntelligenceEngine:
         if cached is not None:
             return cached
 
-        async def _fetch_single(client: httpx.AsyncClient, cve_id: str) -> tuple[str, dict | None]:
+        async def _fetch_single(
+            client: httpx.AsyncClient, cve_id: str
+        ) -> tuple[str, dict | None]:
             try:
                 response = await client.get(
                     f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}",
@@ -901,15 +980,24 @@ class IntelligenceEngine:
                             cvss_data = metrics["cvssMetricV2"][0].get("cvssData", {})
 
                         return cve_id, {
-                            "description": vuln.get("descriptions", [{}])[0].get("value", ""),
-                            "cvss_score": cvss_data.get("baseScore") if cvss_data else None,
-                            "severity": cvss_data.get("baseSeverity") if cvss_data else None,
+                            "description": vuln.get("descriptions", [{}])[0].get(
+                                "value", ""
+                            ),
+                            "cvss_score": cvss_data.get("baseScore")
+                            if cvss_data
+                            else None,
+                            "severity": cvss_data.get("baseSeverity")
+                            if cvss_data
+                            else None,
                             "published": vuln.get("published", ""),
                             "last_modified": vuln.get("lastModified", ""),
-                            "references": [ref.get("url", "") for ref in vuln.get("references", [])[:3]],
+                            "references": [
+                                ref.get("url", "")
+                                for ref in vuln.get("references", [])[:3]
+                            ],
                         }
             except Exception as e:
-                logger.warning(f"Failed to fetch NVD data for {cve_id}: {e}")
+                logger.warning("Failed to fetch NVD data for %s: %s", cve_id, e)
             return cve_id, None
 
         try:
@@ -920,7 +1008,7 @@ class IntelligenceEngine:
                     if result:
                         results[cve_id] = result
         except Exception as e:
-            logger.warning(f"NVD API async fetch failed: {e}")
+            logger.warning("NVD API async fetch failed: %s", e)
 
         self._cache_set(cache_key, results)
         return results
@@ -964,7 +1052,7 @@ class IntelligenceEngine:
                             except (ValueError, TypeError):
                                 continue
         except Exception as e:
-            logger.warning(f"EPSS API async fetch failed: {e}")
+            logger.warning("EPSS API async fetch failed: %s", e)
 
         self._cache_set(cache_key, scores)
         return scores
@@ -1039,7 +1127,7 @@ class IntelligenceEngine:
                 with httpx.Client(timeout=5.0) as client:
                     response = client.get(
                         f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}",
-                        headers={"User-Agent": "Argus-Platform/1.0"}
+                        headers={"User-Agent": "Argus-Platform/1.0"},
                     )
 
                     if response.status_code == 200:
@@ -1053,34 +1141,52 @@ class IntelligenceEngine:
 
                             # Prefer CVSS v3.1, fallback to v3.0, then v2
                             if "cvssMetricV31" in metrics:
-                                cvss_data = metrics["cvssMetricV31"][0].get("cvssData", {})
+                                cvss_data = metrics["cvssMetricV31"][0].get(
+                                    "cvssData", {}
+                                )
                             elif "cvssMetricV30" in metrics:
-                                cvss_data = metrics["cvssMetricV30"][0].get("cvssData", {})
+                                cvss_data = metrics["cvssMetricV30"][0].get(
+                                    "cvssData", {}
+                                )
                             elif "cvssMetricV2" in metrics:
-                                cvss_data = metrics["cvssMetricV2"][0].get("cvssData", {})
+                                cvss_data = metrics["cvssMetricV2"][0].get(
+                                    "cvssData", {}
+                                )
 
                             return cve_id, {
-                                "description": vuln.get("descriptions", [{}])[0].get("value", ""),
-                                "cvss_score": cvss_data.get("baseScore") if cvss_data else None,
-                                "severity": cvss_data.get("baseSeverity") if cvss_data else None,
+                                "description": vuln.get("descriptions", [{}])[0].get(
+                                    "value", ""
+                                ),
+                                "cvss_score": cvss_data.get("baseScore")
+                                if cvss_data
+                                else None,
+                                "severity": cvss_data.get("baseSeverity")
+                                if cvss_data
+                                else None,
                                 "published": vuln.get("published", ""),
                                 "last_modified": vuln.get("lastModified", ""),
-                                "references": [ref.get("url", "") for ref in vuln.get("references", [])[:3]],
+                                "references": [
+                                    ref.get("url", "")
+                                    for ref in vuln.get("references", [])[:3]
+                                ],
                             }
             except Exception as e:
-                logger.warning(f"Failed to fetch NVD data for {cve_id}: {e}")
+                logger.warning("Failed to fetch NVD data for %s: %s", cve_id, e)
             return cve_id, None
 
         try:
             from concurrent.futures import ThreadPoolExecutor, as_completed
+
             with ThreadPoolExecutor(max_workers=min(len(cve_ids), 5)) as pool:
-                futures = {pool.submit(_fetch_single, cve_id): cve_id for cve_id in cve_ids}
+                futures = {
+                    pool.submit(_fetch_single, cve_id): cve_id for cve_id in cve_ids
+                }
                 for future in as_completed(futures):
                     cve_id, result = future.result()
                     if result:
                         results[cve_id] = result
         except Exception as e:
-            logger.warning(f"NVD API parallel fetch failed: {e}")
+            logger.warning("NVD API parallel fetch failed: %s", e)
 
         # Cache result (even if partial — empty dict means "we checked, nothing there")
         self._cache_set(cache_key, results)
@@ -1119,7 +1225,7 @@ class IntelligenceEngine:
                 cve_param = ",".join(cve_ids)
                 response = client.get(
                     f"https://api.first.org/data/v1/epss?cve={cve_param}",
-                    headers={"User-Agent": "Argus-Platform/1.0"}
+                    headers={"User-Agent": "Argus-Platform/1.0"},
                 )
 
                 if response.status_code == 200:
@@ -1133,7 +1239,7 @@ class IntelligenceEngine:
                             except (ValueError, TypeError):
                                 continue
         except Exception as e:
-            logger.warning(f"EPSS API fetch failed: {e}")
+            logger.warning("EPSS API fetch failed: %s", e)
 
         # Cache result (even if partial)
         self._cache_set(cache_key, scores)
@@ -1155,8 +1261,21 @@ class IntelligenceEngine:
 
         # Map subtypes to canonical families so REFLECTED_XSS → XSS etc.
         _type_families = {
-            "XSS": ["XSS", "REFLECTED_XSS", "STORED_XSS", "DOM_XSS", "BLIND_XSS", "CROSS_SITE_SCRIPTING"],
-            "SQLI": ["SQL_INJECTION", "BLIND_SQLI", "TIME_BASED_SQLI", "TIME_BASED_SQL_INJECTION", "ERROR_SQLI"],
+            "XSS": [
+                "XSS",
+                "REFLECTED_XSS",
+                "STORED_XSS",
+                "DOM_XSS",
+                "BLIND_XSS",
+                "CROSS_SITE_SCRIPTING",
+            ],
+            "SQLI": [
+                "SQL_INJECTION",
+                "BLIND_SQLI",
+                "TIME_BASED_SQLI",
+                "TIME_BASED_SQL_INJECTION",
+                "ERROR_SQLI",
+            ],
             "RCE": ["RCE", "COMMAND_INJECTION", "SSTI"],
             "LFI": ["LFI", "PATH_TRAVERSAL", "DIRECTORY_TRAVERSAL"],
             "SSRF": ["SSRF", "OPEN_REDIRECT"],
@@ -1170,12 +1289,36 @@ class IntelligenceEngine:
         normalized_type = _type_to_family.get(finding_type, finding_type)
 
         threat_indicators = {
-            "SQL_INJECTION": {"feed": "exploitdb", "risk": "high", "description": "SQL injection commonly exploited in the wild"},
-            "COMMAND_INJECTION": {"feed": "exploitdb", "risk": "critical", "description": "Command injection frequently exploited"},
-            "XSS": {"feed": "cisa_kev", "risk": "medium", "description": "XSS present in known vulnerability catalogs"},
-            "BROKEN_ACCESS_CONTROL": {"feed": "owasp_top10", "risk": "high", "description": "Access control issues ranked #1 in OWASP Top 10"},
-            "AUTH_FAILURE": {"feed": "cisa_kev", "risk": "high", "description": "Authentication failures frequently targeted"},
-            "WEAK_TLS": {"feed": "cisa_kev", "risk": "medium", "description": "Weak TLS configurations in security advisories"},
+            "SQL_INJECTION": {
+                "feed": "exploitdb",
+                "risk": "high",
+                "description": "SQL injection commonly exploited in the wild",
+            },
+            "COMMAND_INJECTION": {
+                "feed": "exploitdb",
+                "risk": "critical",
+                "description": "Command injection frequently exploited",
+            },
+            "XSS": {
+                "feed": "cisa_kev",
+                "risk": "medium",
+                "description": "XSS present in known vulnerability catalogs",
+            },
+            "BROKEN_ACCESS_CONTROL": {
+                "feed": "owasp_top10",
+                "risk": "high",
+                "description": "Access control issues ranked #1 in OWASP Top 10",
+            },
+            "AUTH_FAILURE": {
+                "feed": "cisa_kev",
+                "risk": "high",
+                "description": "Authentication failures frequently targeted",
+            },
+            "WEAK_TLS": {
+                "feed": "cisa_kev",
+                "risk": "medium",
+                "description": "Weak TLS configurations in security advisories",
+            },
         }
 
         matched_key = None
@@ -1220,7 +1363,9 @@ class IntelligenceEngine:
 
         # 1. Evidence quality heuristic
         evidence = finding.get("evidence", {})
-        evidence_str = json.dumps(evidence) if isinstance(evidence, dict) else str(evidence)
+        evidence_str = (
+            json.dumps(evidence) if isinstance(evidence, dict) else str(evidence)
+        )
         evidence_len = len(evidence_str)
 
         if evidence_len > 500:
@@ -1251,7 +1396,10 @@ class IntelligenceEngine:
         noisy_tools = {"whatweb", "gau", "waybackurls"}
         noisy_types = {"INFO_DISCLOSURE", "TECHNOLOGY_DETECTION"}
 
-        if source_tool.lower() in noisy_tools or finding.get("type", "").upper() in noisy_types:
+        if (
+            source_tool.lower() in noisy_tools
+            or finding.get("type", "").upper() in noisy_types
+        ):
             scores.append(0.40)
             reasons.append("known_noisy_source")
         else:
@@ -1302,7 +1450,10 @@ class IntelligenceEngine:
             "confidence": round(confidence, 3),
             "true_positive_score": round(avg_score, 3),
             "factors": reasons,
-            "factor_scores": {reason: round(score, 3) for reason, score in zip(reasons, scores, strict=False)},
+            "factor_scores": {
+                reason: round(score, 3)
+                for reason, score in zip(reasons, scores, strict=False)
+            },
         }
 
     def get_threat_summary(self, findings: list[dict]) -> dict:
@@ -1334,7 +1485,10 @@ class IntelligenceEngine:
             threat_feed_hits += len(intel.get("threat_feed_hits", []))
 
             fp_assessment = intel.get("fp_assessment", {})
-            if fp_assessment.get("verdict") in ["likely_false_positive", "false_positive"]:
+            if fp_assessment.get("verdict") in [
+                "likely_false_positive",
+                "false_positive",
+            ]:
                 fp_likely_count += 1
 
         return {
@@ -1392,6 +1546,3 @@ class IntelligenceEngine:
             return "medium"
         else:
             return "low"
-
-
-

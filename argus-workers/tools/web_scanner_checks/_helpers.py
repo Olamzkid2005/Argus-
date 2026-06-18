@@ -32,7 +32,7 @@ def safe_request(
         ConnectionError,
         urllib3.exceptions.SSLError,
     ) as e:
-        logger.debug(f"Request failed: {e}")
+        logger.debug("Request failed: %s", e)
         return None
 
 
@@ -143,9 +143,11 @@ def test_jwt_alg_none(
     except Exception:
         return None
 
-    none_header = base64.urlsafe_b64encode(
-        json.dumps({"alg": "none", "typ": "JWT"}).encode()
-    ).decode().rstrip("=")
+    none_header = (
+        base64.urlsafe_b64encode(json.dumps({"alg": "none", "typ": "JWT"}).encode())
+        .decode()
+        .rstrip("=")
+    )
     none_jwt = f"{none_header}.{parts[1]}."
 
     if auth_headers is None:
@@ -187,19 +189,28 @@ def test_jwt_rs256_hs256(
 
     for secret in weak_secrets:
         try:
-            header_b64 = base64.urlsafe_b64encode(
-                json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
-            ).decode().rstrip("=")
+            header_b64 = (
+                base64.urlsafe_b64encode(
+                    json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
+                )
+                .decode()
+                .rstrip("=")
+            )
             message = f"{header_b64}.{parts[1]}"
             import hashlib
             import hmac
-            sig = base64.urlsafe_b64encode(
-                hmac.new(
-                    secret.encode() if secret else b"",
-                    message.encode(),
-                    hashlib.sha256,
-                ).digest()
-            ).decode().rstrip("=")
+
+            sig = (
+                base64.urlsafe_b64encode(
+                    hmac.new(
+                        secret.encode() if secret else b"",
+                        message.encode(),
+                        hashlib.sha256,
+                    ).digest()
+                )
+                .decode()
+                .rstrip("=")
+            )
             forged = f"{message}.{sig}"
 
             for auth_header in auth_headers:

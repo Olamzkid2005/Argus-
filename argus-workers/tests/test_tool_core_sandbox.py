@@ -46,6 +46,7 @@ class TestAsyncToolRunnerRun:
             mock_runner.is_dangerous.return_value = True
             with pytest.raises(Exception) as exc:
                 import asyncio
+
                 asyncio.run(runner.run("nuclei", ["-u", "target.com; rm -rf /"]))
             assert "dangerous" in str(exc.value).lower() or "Blocked" in str(exc.value)
 
@@ -55,9 +56,14 @@ class TestAsyncToolRunnerRun:
             mock_runner = MagicMock()
             mock_runner.is_dangerous.return_value = False
             mock_get_runner.return_value = mock_runner
-            with patch("tool_core.validators.scope.validate_target_scope", return_value=False):
+            with patch(
+                "tool_core.validators.scope.validate_target_scope", return_value=False
+            ):
                 import asyncio
-                result = asyncio.run(runner.run("nuclei", [], target="https://evil.com"))
+
+                result = asyncio.run(
+                    runner.run("nuclei", [], target="https://evil.com")
+                )
                 assert result.status == ToolStatus.SKIPPED
                 assert "out of scope" in result.error_message
 
@@ -68,10 +74,13 @@ class TestAsyncToolRunnerRun:
             mock_runner.is_dangerous.return_value = False
             mock_runner.is_tool_available.return_value = False  # circuit breaker open
             mock_get_runner.return_value = mock_runner
-            with patch("tool_core.validators.scope.validate_target_scope", return_value=True):
+            with patch(
+                "tool_core.validators.scope.validate_target_scope", return_value=True
+            ):
                 import asyncio
 
                 from tools.circuit_breaker import CircuitOpenError
+
                 with pytest.raises(CircuitOpenError):
                     asyncio.run(runner.run("nuclei", [], target="https://example.com"))
 
@@ -84,11 +93,16 @@ class TestAsyncToolRunnerRun:
             mock_runner.is_tool_available.return_value = True
             mock_runner._resolve_tool_path.return_value = "/usr/bin/echo"
             mock_runner._locked_env.return_value = {"PATH": "/usr/bin"}
-            mock_runner._redact_sensitive_args.return_value = (["hello"], {"PATH": "/usr/bin"})
+            mock_runner._redact_sensitive_args.return_value = (
+                ["hello"],
+                {"PATH": "/usr/bin"},
+            )
             mock_runner.sandbox_dir = "/tmp"
             mock_get_runner.return_value = mock_runner
 
-            with patch("tool_core.validators.scope.validate_target_scope", return_value=True):
+            with patch(
+                "tool_core.validators.scope.validate_target_scope", return_value=True
+            ):
                 import asyncio
 
                 # Mock the subprocess execution
@@ -97,9 +111,14 @@ class TestAsyncToolRunnerRun:
                     mock_proc.communicate.return_value = (b"Hello World", b"")
                     mock_proc.returncode = 0
 
-                    with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+                    with patch(
+                        "asyncio.create_subprocess_exec", return_value=mock_proc
+                    ):
                         return await runner.run(
-                            "echo", ["hello"], target="https://example.com", engagement_id="eng-1",
+                            "echo",
+                            ["hello"],
+                            target="https://example.com",
+                            engagement_id="eng-1",
                         )
 
                 result = asyncio.run(mock_run())
@@ -114,18 +133,25 @@ class TestAsyncToolRunnerRun:
             mock_runner.is_tool_available.return_value = True
             mock_runner._resolve_tool_path.return_value = "/usr/bin/sleep"
             mock_runner._locked_env.return_value = {"PATH": "/usr/bin"}
-            mock_runner._redact_sensitive_args.return_value = (["100"], {"PATH": "/usr/bin"})
+            mock_runner._redact_sensitive_args.return_value = (
+                ["100"],
+                {"PATH": "/usr/bin"},
+            )
             mock_runner.sandbox_dir = "/tmp"
             mock_get_runner.return_value = mock_runner
 
-            with patch("tool_core.validators.scope.validate_target_scope", return_value=True):
+            with patch(
+                "tool_core.validators.scope.validate_target_scope", return_value=True
+            ):
                 import asyncio
 
                 async def mock_run():
                     mock_proc = AsyncMock()
                     mock_proc.communicate.side_effect = TimeoutError()
 
-                    with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+                    with patch(
+                        "asyncio.create_subprocess_exec", return_value=mock_proc
+                    ):
                         with patch("asyncio.wait_for", side_effect=TimeoutError()):
                             result = await runner.run("sleep", ["100"], timeout=0.001)
                             assert result.status == ToolStatus.TIMEOUT

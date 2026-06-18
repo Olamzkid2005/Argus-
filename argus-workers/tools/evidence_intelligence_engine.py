@@ -70,31 +70,45 @@ class EvidenceIntelligenceEngine(AbstractTool):
         if evidence:
             content = json.dumps(evidence, indent=2, sort_keys=True)
             artifact_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
-            artifacts.append({
-                "type": "evidence_data",
-                "hash": artifact_hash,
-                "size_bytes": len(content),
-            })
+            artifacts.append(
+                {
+                    "type": "evidence_data",
+                    "hash": artifact_hash,
+                    "size_bytes": len(content),
+                }
+            )
 
         request_data = finding.get("request")
         if request_data:
-            content = request_data if isinstance(request_data, str) else json.dumps(request_data)
+            content = (
+                request_data
+                if isinstance(request_data, str)
+                else json.dumps(request_data)
+            )
             artifact_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
-            artifacts.append({
-                "type": "http_request",
-                "hash": artifact_hash,
-                "size_bytes": len(content),
-            })
+            artifacts.append(
+                {
+                    "type": "http_request",
+                    "hash": artifact_hash,
+                    "size_bytes": len(content),
+                }
+            )
 
         response_data = finding.get("response")
         if response_data:
-            content = response_data if isinstance(response_data, str) else json.dumps(response_data)
+            content = (
+                response_data
+                if isinstance(response_data, str)
+                else json.dumps(response_data)
+            )
             artifact_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
-            artifacts.append({
-                "type": "http_response",
-                "hash": artifact_hash,
-                "size_bytes": len(content),
-            })
+            artifacts.append(
+                {
+                    "type": "http_response",
+                    "hash": artifact_hash,
+                    "size_bytes": len(content),
+                }
+            )
 
         package_hash = hashlib.sha256(
             "".join(a["hash"] for a in artifacts).encode()

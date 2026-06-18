@@ -96,8 +96,7 @@ def login_handler():
         return redirect("/admin")
 
     return (
-        "<h1>Invalid credentials</h1>"
-        '<p><a href="/login">Try again</a></p>',
+        '<h1>Invalid credentials</h1><p><a href="/login">Try again</a></p>',
         401,
     )
 

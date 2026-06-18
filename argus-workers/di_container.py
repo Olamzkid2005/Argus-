@@ -115,6 +115,7 @@ class Container:
         """Get or create ToolRunner instance."""
         if self._tool_runner is None:
             from tools.tool_runner import ToolRunner
+
             self._tool_runner = ToolRunner(
                 connection_string=self.db_url,
                 engagement_id=self.engagement_id,
@@ -127,10 +128,11 @@ class Container:
         if self._llm_client is None:
             try:
                 from llm_client import LLMClient
+
                 redis_url = self.redis_url or "redis://localhost:6379"
                 self._llm_client = LLMClient(redis_url=redis_url)
             except Exception as e:
-                logger.warning(f"LLM client not available: {e}")
+                logger.warning("LLM client not available: %s", e)
                 self._llm_client = None
         return self._llm_client
 
@@ -139,6 +141,7 @@ class Container:
         """Get or create CheckpointManager instance."""
         if self._checkpoint_manager is None and self.db_url:
             from checkpoint_manager import CheckpointManager
+
             self._checkpoint_manager = CheckpointManager(self.db_url)
         return self._checkpoint_manager
 
@@ -147,6 +150,7 @@ class Container:
 
 # Default factory: creates a plain Container
 ContainerFactory = Callable[[ContainerDependencies], Container]
+
 
 def _factory(deps):
     return Container(deps)

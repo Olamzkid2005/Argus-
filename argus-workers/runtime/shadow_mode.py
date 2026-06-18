@@ -91,7 +91,9 @@ def shadow_compare(
     except Exception as e:
         logger.warning(
             "SHADOW_MISMATCH: phase=%s engagement=%s — old path raised: %s",
-            phase, engagement_id, e,
+            phase,
+            engagement_id,
+            e,
         )
         with _counter_lock:
             _consecutive_successes[phase] = 0
@@ -99,7 +101,11 @@ def shadow_compare(
         return
 
     # Compare using hashes
-    if key_fields is not None and isinstance(new_result, dict) and isinstance(old_result, dict):
+    if (
+        key_fields is not None
+        and isinstance(new_result, dict)
+        and isinstance(old_result, dict)
+    ):
         # Compare only the specified key fields
         new_subset = {k: new_result.get(k) for k in key_fields if k in new_result}
         old_subset = {k: old_result.get(k) for k in key_fields if k in old_result}
@@ -113,13 +119,17 @@ def shadow_compare(
             _consecutive_successes[phase] = _consecutive_successes.get(phase, 0) + 1
             logger.debug(
                 "SHADOW_OK: phase=%s engagement=%s (consecutive: %d)",
-                phase, engagement_id, _consecutive_successes[phase],
+                phase,
+                engagement_id,
+                _consecutive_successes[phase],
             )
         else:
             logger.warning(
                 "SHADOW_MISMATCH: phase=%s engagement=%s — outputs differ. "
                 "Consecutive successes reset to 0. Total mismatches: %d",
-                phase, engagement_id, _total_mismatches.get(phase, 0) + 1,
+                phase,
+                engagement_id,
+                _total_mismatches.get(phase, 0) + 1,
             )
             _consecutive_successes[phase] = 0
             _total_mismatches[phase] = _total_mismatches.get(phase, 0) + 1

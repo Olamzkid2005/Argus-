@@ -14,6 +14,7 @@ class TestToolRegistration:
 
     def test_all_tools_registered(self):
         from tool_definitions import TOOLS
+
         expected = [
             "finding_correlation_engine",
             "attack_path_generator",
@@ -35,12 +36,24 @@ class TestToolRegistration:
 
     def test_tools_have_phases(self):
         from tool_definitions import TOOLS
+
         no_phase = []
-        for name in ["finding_correlation_engine", "attack_path_generator", "verification_agent",
-                      "browser_security_operator", "attack_surface_mapper", "evidence_intelligence_engine",
-                      "executive_report_generator", "threat_intelligence_aggregator", "vulnerability_knowledge_engine",
-                      "secure_code_intelligence_engine", "infrastructure_security_analyzer",
-                      "assessment_orchestrator", "workflow_intelligence_engine", "engagement_analytics_engine"]:
+        for name in [
+            "finding_correlation_engine",
+            "attack_path_generator",
+            "verification_agent",
+            "browser_security_operator",
+            "attack_surface_mapper",
+            "evidence_intelligence_engine",
+            "executive_report_generator",
+            "threat_intelligence_aggregator",
+            "vulnerability_knowledge_engine",
+            "secure_code_intelligence_engine",
+            "infrastructure_security_analyzer",
+            "assessment_orchestrator",
+            "workflow_intelligence_engine",
+            "engagement_analytics_engine",
+        ]:
             tool = TOOLS.get(name)
             if tool and not tool.phases:
                 no_phase.append(name)
@@ -48,12 +61,22 @@ class TestToolRegistration:
 
     def test_agent_internal_tools_include_new(self):
         from tool_definitions import _AGENT_INTERNAL_TOOLS
+
         expected = [
-            "finding_correlation_engine", "attack_path_generator", "verification_agent",
-            "browser_security_operator", "attack_surface_mapper", "evidence_intelligence_engine",
-            "executive_report_generator", "threat_intelligence_aggregator", "vulnerability_knowledge_engine",
-            "secure_code_intelligence_engine", "infrastructure_security_analyzer",
-            "assessment_orchestrator", "workflow_intelligence_engine", "engagement_analytics_engine",
+            "finding_correlation_engine",
+            "attack_path_generator",
+            "verification_agent",
+            "browser_security_operator",
+            "attack_surface_mapper",
+            "evidence_intelligence_engine",
+            "executive_report_generator",
+            "threat_intelligence_aggregator",
+            "vulnerability_knowledge_engine",
+            "secure_code_intelligence_engine",
+            "infrastructure_security_analyzer",
+            "assessment_orchestrator",
+            "workflow_intelligence_engine",
+            "engagement_analytics_engine",
         ]
         for name in expected:
             assert name in _AGENT_INTERNAL_TOOLS, f"{name} not in _AGENT_INTERNAL_TOOLS"
@@ -68,9 +91,27 @@ class TestToolPipeline:
         from tools.finding_correlation_engine import FindingCorrelationEngine
 
         findings = [
-            {"id": "1", "type": "MISCONFIGURATION", "severity": "MEDIUM", "endpoint": "https://example.com", "confidence": 0.7},
-            {"id": "2", "type": "SQL_INJECTION", "severity": "CRITICAL", "endpoint": "https://example.com", "confidence": 0.9},
-            {"id": "3", "type": "XSS", "severity": "HIGH", "endpoint": "https://example.com/page", "confidence": 0.8},
+            {
+                "id": "1",
+                "type": "MISCONFIGURATION",
+                "severity": "MEDIUM",
+                "endpoint": "https://example.com",
+                "confidence": 0.7,
+            },
+            {
+                "id": "2",
+                "type": "SQL_INJECTION",
+                "severity": "CRITICAL",
+                "endpoint": "https://example.com",
+                "confidence": 0.9,
+            },
+            {
+                "id": "3",
+                "type": "XSS",
+                "severity": "HIGH",
+                "endpoint": "https://example.com/page",
+                "confidence": 0.8,
+            },
         ]
 
         ctx1 = ToolContext(target="https://example.com", engagement_id="test-pipeline")
@@ -91,7 +132,13 @@ class TestToolPipeline:
         from tools.verification_agent import VerificationAgent
 
         findings = [
-            {"id": "1", "type": "XSS", "severity": "HIGH", "endpoint": "https://example.com/a", "confidence": 0.8},
+            {
+                "id": "1",
+                "type": "XSS",
+                "severity": "HIGH",
+                "endpoint": "https://example.com/a",
+                "confidence": 0.8,
+            },
         ]
 
         ctx1 = ToolContext(target="https://example.com", engagement_id="test-pipeline")
@@ -112,7 +159,14 @@ class TestToolPipeline:
         from tools.vulnerability_knowledge_engine import VulnerabilityKnowledgeEngine
 
         findings = [
-            {"id": "1", "type": "SQL_INJECTION", "severity": "CRITICAL", "endpoint": "https://example.com/a", "cwe": "89", "confidence": 0.9},
+            {
+                "id": "1",
+                "type": "SQL_INJECTION",
+                "severity": "CRITICAL",
+                "endpoint": "https://example.com/a",
+                "cwe": "89",
+                "confidence": 0.9,
+            },
         ]
 
         ctx1 = ToolContext(target="https://example.com", engagement_id="test-pipeline")
@@ -134,6 +188,7 @@ class TestYAMLDefinitions:
 
     def test_yaml_files_exist(self):
         import os
+
         yaml_dir = os.path.join(os.path.dirname(__file__), "..", "tools", "definitions")
         expected = [
             "finding_correlation_engine.yaml",
@@ -159,6 +214,7 @@ class TestYAMLDefinitions:
         import os
 
         import yaml
+
         yaml_dir = os.path.join(os.path.dirname(__file__), "..", "tools", "definitions")
         expected = [
             "finding_correlation_engine.yaml",

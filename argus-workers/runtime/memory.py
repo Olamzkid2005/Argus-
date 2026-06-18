@@ -84,7 +84,9 @@ class MemoryRetriever:
                 reasoning = s.get("reasoning_hash", "")[:80]
                 snapshot_summaries.append(f"  - {tool}: {reasoning}")
             if snapshot_summaries:
-                parts.append("=== PRIOR DECISIONS ===\n" + "\n".join(snapshot_summaries))
+                parts.append(
+                    "=== PRIOR DECISIONS ===\n" + "\n".join(snapshot_summaries)
+                )
 
         # Long-term: target profile highlights
         long_term = self._get_long_term(state)
@@ -141,11 +143,14 @@ class MemoryRetriever:
     def _get_medium_term(self, state: Any) -> list[dict]:
         """Medium-term: compressed reasoning from decision_snapshots."""
         # Support both EngagementState and bare objects
-        engagement_id = getattr(state, "engagement_id", None) or getattr(state, "_engagement_id", "")
+        engagement_id = getattr(state, "engagement_id", None) or getattr(
+            state, "_engagement_id", ""
+        )
         if not engagement_id or not self.connection_string:
             return []
         try:
             from database.connection import db_cursor
+
             with db_cursor() as cursor:
                 cursor.execute(
                     """
@@ -181,6 +186,7 @@ class MemoryRetriever:
             from database.repositories.target_profile_repository import (
                 TargetProfileRepository,
             )
+
             repo = TargetProfileRepository()
             profile = repo.get_by_engagement_id(engagement_id)
             if profile and hasattr(profile, "to_dict"):

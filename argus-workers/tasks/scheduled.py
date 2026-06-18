@@ -37,6 +37,7 @@ def _build_budget_from_aggressiveness(aggressiveness: str) -> dict:
     }
     return budget_map.get(aggressiveness, budget_map["default"])
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,7 +119,11 @@ def run_due_scans(self):
                 try:
                     cursor.execute("ROLLBACK TO SAVEPOINT spawn_schedule")
                 except Exception:
-                    logger.warning("Failed to rollback to SAVEPOINT spawn_schedule for scheduled engagement %s", sched_id, exc_info=True)
+                    logger.warning(
+                        "Failed to rollback to SAVEPOINT spawn_schedule for scheduled engagement %s",
+                        sched_id,
+                        exc_info=True,
+                    )
                 logger.error("Failed to spawn scheduled engagement %s: %s", sched_id, e)
                 # Continue with next schedule — don't fail the batch
 
@@ -131,6 +136,7 @@ def run_due_scans(self):
             budget = _build_budget_from_aggressiveness(aggr)
             if info["scan_type"] == "repo":
                 from tasks.repo_scan import run_repo_scan
+
                 run_repo_scan.delay(
                     engagement_id=info["engagement_id"],
                     repo_url=info["target"],
@@ -220,7 +226,12 @@ def _spawn_engagement(
                                        current_cycles, current_depth, created_at)
             VALUES (%s, %s, %s, %s, 0, 0, NOW())
             """,
-            (str(uuid.uuid4()), engagement_id, budget["max_cycles"], budget["max_depth"]),
+            (
+                str(uuid.uuid4()),
+                engagement_id,
+                budget["max_cycles"],
+                budget["max_depth"],
+            ),
         )
 
         # Record initial state
@@ -246,7 +257,11 @@ def _spawn_engagement(
             if row and row[0]:
                 prev_engagement_id = str(row[0])
         except (ValueError, OSError) as e:
-            logger.debug("Failed to look up previous engagement for scheduled %s: %s", sched_id, e)
+            logger.debug(
+                "Failed to look up previous engagement for scheduled %s: %s",
+                sched_id,
+                e,
+            )
             prev_engagement_id = None
 
         # Compute next run from cron expression

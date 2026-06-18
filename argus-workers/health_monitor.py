@@ -25,6 +25,7 @@ HEARTBEAT_TTL = 60  # seconds
 @dataclass
 class WorkerHealth:
     """Worker health snapshot"""
+
     worker_id: str
     hostname: str
     pid: int
@@ -58,6 +59,7 @@ class WorkerHealthMonitor:
         by stripping non-alphanumeric characters, newlines, colons, etc.
         """
         from utils.validation import sanitize_redis_key
+
         return sanitize_redis_key(engagement_id)
 
     def __init__(self, worker_id: str | None = None, redis_url: str = None):
@@ -92,7 +94,7 @@ class WorkerHealthMonitor:
                 "connections": len(process.connections()),
             }
         except Exception as e:
-            logger.warning(f"Failed to get system metrics: {e}")
+            logger.warning("Failed to get system metrics: %s", e)
             return {
                 "cpu_percent": 0.0,
                 "memory_percent": 0.0,
@@ -124,7 +126,7 @@ class WorkerHealthMonitor:
             tasks_processed=self.tasks_processed,
             last_heartbeat=datetime.now(UTC).isoformat(),
             status=status,
-            uptime_seconds=int(time.time() - self.start_time)
+            uptime_seconds=int(time.time() - self.start_time),
         )
 
         key = f"{self.REDIS_KEY_PREFIX}:{self.worker_id}"
@@ -133,10 +135,12 @@ class WorkerHealthMonitor:
             self.redis.expire(key, HEARTBEAT_TTL * 2)
 
             if status == "critical":
-                logger.warning(f"Worker {self.worker_id} in CRITICAL state: {metrics}")
+                logger.warning(
+                    "Worker %s in CRITICAL state: %s", self.worker_id, metrics
+                )
 
         except Exception as e:
-            logger.error(f"Failed to send heartbeat: {e}")
+            logger.error("Failed to send heartbeat: %s", e)
 
     def increment_tasks(self, count: int = 1):
         """Increment processed task counter"""
@@ -154,16 +158,16 @@ class WorkerHealthMonitor:
         # Memory pressure - suggest restart
         if metrics["memory_percent"] > 85:
             logger.warning(
-                f"High memory usage ({metrics['memory_percent']:.1f}%), "
-                "considering restart after current task"
+                "High memory usage (%s), considering restart after current task",
+                metrics["memory_percent"],
             )
             return True
 
         # Too many open files
         if metrics["open_files"] > 1000:
             logger.warning(
-                f"Too many open files ({metrics['open_files']}), "
-                "suggesting restart"
+                "Too many open files (%s), suggesting restart",
+                metrics["open_files"],
             )
             return True
 
@@ -178,22 +182,26 @@ class WorkerHealthMonitor:
                 data = self.redis.hgetall(key)
                 if data:
                     try:
-                        workers.append(WorkerHealth(
-                            worker_id=data.get(b"worker_id", b"").decode(),
-                            hostname=data.get(b"hostname", b"").decode(),
-                            pid=int(data.get(b"pid", 0)),
-                            cpu_percent=float(data.get(b"cpu_percent", 0)),
-                            memory_percent=float(data.get(b"memory_percent", 0)),
-                            memory_mb=float(data.get(b"memory_mb", 0)),
-                            tasks_processed=int(data.get(b"tasks_processed", 0)),
-                            last_heartbeat=data.get(b"last_heartbeat", b"").decode(),
-                            status=data.get(b"status", b"unknown").decode(),
-                            uptime_seconds=int(data.get(b"uptime_seconds", 0))
-                        ))
+                        workers.append(
+                            WorkerHealth(
+                                worker_id=data.get(b"worker_id", b"").decode(),
+                                hostname=data.get(b"hostname", b"").decode(),
+                                pid=int(data.get(b"pid", 0)),
+                                cpu_percent=float(data.get(b"cpu_percent", 0)),
+                                memory_percent=float(data.get(b"memory_percent", 0)),
+                                memory_mb=float(data.get(b"memory_mb", 0)),
+                                tasks_processed=int(data.get(b"tasks_processed", 0)),
+                                last_heartbeat=data.get(
+                                    b"last_heartbeat", b""
+                                ).decode(),
+                                status=data.get(b"status", b"unknown").decode(),
+                                uptime_seconds=int(data.get(b"uptime_seconds", 0)),
+                            )
+                        )
                     except Exception:
                         logger.debug("Skipping malformed worker health entry: %s", key)
         except Exception as e:
-            logger.error(f"Failed to fetch worker health: {e}")
+            logger.error("Failed to fetch worker health: %s", e)
 
         return workers
 
@@ -213,7 +221,9 @@ class WorkerHealthMonitor:
                     unhealthy.append(worker)
                     continue
             except (ValueError, OSError):
-                logger.debug("Skipping worker with unparseable heartbeat: %s", worker.worker_id)
+                logger.debug(
+                    "Skipping worker with unparseable heartbeat: %s", worker.worker_id
+                )
 
             # Check status
             if worker.status in ("warning", "critical", "dead"):
@@ -238,10 +248,12 @@ class WorkerHealthMonitor:
                             self.redis.delete(key)
                             removed += 1
                     except ValueError:
-                        logger.debug("Skipping worker with unparseable heartbeat: %s", key)
+                        logger.debug(
+                            "Skipping worker with unparseable heartbeat: %s", key
+                        )
 
         except Exception as e:
-            logger.error(f"Failed to cleanup dead workers: {e}")
+            logger.error("Failed to cleanup dead workers: %s", e)
 
         return removed
 
@@ -264,6 +276,7 @@ def get_health_monitor(worker_id: str | None = None) -> WorkerHealthMonitor:
 @dataclass
 class ToolHealth:
     """Health snapshot for a single security tool."""
+
     tool_name: str
     success_rate_24h: float
     avg_duration_seconds: float
@@ -287,12 +300,14 @@ class ToolHealthTracker:
         cursor = None
         try:
             from database.connection import get_db
+
             db = get_db()
             conn = db.get_connection()
             cursor = conn.cursor()
             cutoff = datetime.now(UTC) - timedelta(hours=24)
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     tool_name,
                     COUNT(*) AS total_runs,
@@ -303,16 +318,21 @@ class ToolHealthTracker:
                 WHERE created_at >= %s
                 GROUP BY tool_name
                 ORDER BY tool_name
-            """, (cutoff,))
+            """,
+                (cutoff,),
+            )
             rows = cursor.fetchall()
 
             # Count consecutive failures per tool from recent runs
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT tool_name, success
                 FROM tool_metrics
                 WHERE created_at >= %s
                 ORDER BY tool_name, created_at DESC
-            """, (cutoff,))
+            """,
+                (cutoff,),
+            )
             all_metrics = cursor.fetchall()
 
             # Compute consecutive failures per tool (newest-first order)
@@ -331,7 +351,13 @@ class ToolHealthTracker:
 
             results = []
             for row in rows:
-                tool_name, total_runs, success_rate, avg_duration_sec, last_success_at = row
+                (
+                    tool_name,
+                    total_runs,
+                    success_rate,
+                    avg_duration_sec,
+                    last_success_at,
+                ) = row
                 if success_rate is None:
                     success_rate = 0.0
                 consecutive = cons_failures.get(tool_name, 0)
@@ -343,10 +369,20 @@ class ToolHealthTracker:
                 else:
                     status = "healthy"
 
-                results.append(ToolHealth(tool_name=tool_name, status=status, success_rate_24h=success_rate, avg_duration_seconds=avg_duration_sec, total_runs_24h=total_runs, last_success_at=last_success_at, consecutive_failures=consecutive))
+                results.append(
+                    ToolHealth(
+                        tool_name=tool_name,
+                        status=status,
+                        success_rate_24h=success_rate,
+                        avg_duration_seconds=avg_duration_sec,
+                        total_runs_24h=total_runs,
+                        last_success_at=last_success_at,
+                        consecutive_failures=consecutive,
+                    )
+                )
             return results
         except Exception as e:
-            logger.warning(f"Tool health query failed: {e}")
+            logger.warning("Tool health query failed: %s", e)
             return []
         finally:
             if cursor:

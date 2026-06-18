@@ -53,7 +53,9 @@ class PortDiscovery:
         try:
             result = subprocess.run(
                 ["naabu", "-host", host, "-json", "-silent"],
-                capture_output=True, text=True, timeout=timeout,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
             )
             if result.returncode != 0:
                 return []
@@ -63,12 +65,14 @@ class PortDiscovery:
                     continue
                 try:
                     data = json.loads(line)
-                    ports.append({
-                        "port": int(data.get("port", 0)),
-                        "protocol": "tcp",
-                        "service": data.get("service", ""),
-                        "source": "naabu",
-                    })
+                    ports.append(
+                        {
+                            "port": int(data.get("port", 0)),
+                            "protocol": "tcp",
+                            "service": data.get("service", ""),
+                            "source": "naabu",
+                        }
+                    )
                 except (json.JSONDecodeError, ValueError):
                     pass
             return ports
@@ -84,7 +88,8 @@ class PortDiscovery:
             return []
         try:
             result = self._tool_runner.run(
-                "naabu", ["-host", host, "-json", "-silent"],
+                "naabu",
+                ["-host", host, "-json", "-silent"],
                 timeout=timeout,
             )
             if not result.status.is_ok:
@@ -95,12 +100,14 @@ class PortDiscovery:
                     continue
                 try:
                     data = json.loads(line)
-                    ports.append({
-                        "port": int(data.get("port", 0)),
-                        "protocol": "tcp",
-                        "service": data.get("service", ""),
-                        "source": "naabu",
-                    })
+                    ports.append(
+                        {
+                            "port": int(data.get("port", 0)),
+                            "protocol": "tcp",
+                            "service": data.get("service", ""),
+                            "source": "naabu",
+                        }
+                    )
                 except (json.JSONDecodeError, ValueError):
                     pass
             return ports
@@ -114,7 +121,8 @@ class PortDiscovery:
         port_str = ",".join(str(p) for p in known_ports[:100])
         try:
             result = self._tool_runner.run(
-                "nmap", ["-sV", "-p", port_str, "-oX", "-", host],
+                "nmap",
+                ["-sV", "-p", port_str, "-oX", "-", host],
                 timeout=min(timeout, 120),
             )
             if not result.status.is_ok:
@@ -126,15 +134,19 @@ class PortDiscovery:
                     port_id = int(port_elem.get("portid", 0))
                     protocol = port_elem.get("protocol", "tcp")
                     service = port_elem.find("service")
-                    service_name = service.get("name", "") if service is not None else ""
+                    service_name = (
+                        service.get("name", "") if service is not None else ""
+                    )
                     version = service.get("version", "") if service is not None else ""
-                    ports.append({
-                        "port": port_id,
-                        "protocol": protocol,
-                        "service": service_name,
-                        "version": version,
-                        "source": "nmap",
-                    })
+                    ports.append(
+                        {
+                            "port": port_id,
+                            "protocol": protocol,
+                            "service": service_name,
+                            "version": version,
+                            "source": "nmap",
+                        }
+                    )
                 return ports
             except ET.ParseError:
                 return []

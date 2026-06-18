@@ -125,7 +125,9 @@ class TestPublishRateLimitEvent:
         pub = WebSocketEventPublisher(redis_url="redis://localhost:6379")
         mock_redis = MagicMock()
         pub._redis = mock_redis
-        pub.publish_rate_limit_event("eng-1", "example.com", "backoff", 3.0, status_code=429)
+        pub.publish_rate_limit_event(
+            "eng-1", "example.com", "backoff", 3.0, status_code=429
+        )
         assert mock_redis.lpush.called
 
 
@@ -152,7 +154,9 @@ class TestPublishJobCompleted:
         pub = WebSocketEventPublisher(redis_url="redis://localhost:6379")
         mock_redis = MagicMock()
         pub._redis = mock_redis
-        pub.publish_job_completed("eng-1", "recon", "success", findings_count=10, duration_ms=5000)
+        pub.publish_job_completed(
+            "eng-1", "recon", "success", findings_count=10, duration_ms=5000
+        )
         assert mock_redis.lpush.called
 
 
@@ -162,7 +166,9 @@ class TestPublishScannerActivity:
         mock_redis = MagicMock()
         pub._redis = mock_redis
         with patch.object(pub, "_persist_scanner_activity"):
-            pub.publish_scanner_activity("eng-1", "nuclei", "Scanning endpoints", "in_progress")
+            pub.publish_scanner_activity(
+                "eng-1", "nuclei", "Scanning endpoints", "in_progress"
+            )
             assert mock_redis.lpush.called
 
     def test_persists_to_db(self):

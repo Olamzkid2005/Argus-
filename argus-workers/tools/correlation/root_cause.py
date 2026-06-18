@@ -20,6 +20,7 @@ def _root_cause_key(finding: dict) -> str:
     ftype = finding.get("type", "UNKNOWN")
 
     from urllib.parse import urlparse
+
     try:
         host = urlparse(endpoint).hostname or endpoint
     except Exception:
@@ -56,17 +57,23 @@ def find_root_causes(findings: list[dict], min_group_size: int = 2) -> list[dict
             (_SEVERITY_RANK.get(f.get("severity", "INFO"), 0) for f in group),
             default=0,
         )
-        severity_name = {v: k for k, v in _SEVERITY_RANK.items()}.get(max_severity, "INFO")
+        severity_name = {v: k for k, v in _SEVERITY_RANK.items()}.get(
+            max_severity, "INFO"
+        )
 
-        root_causes.append({
-            "root_cause": key,
-            "finding_count": len(group),
-            "max_severity": severity_name,
-            "affected_endpoints": list({
-                f.get("endpoint", "") for f in group if f.get("endpoint")
-            }),
-            "finding_ids": [f.get("id", f.get("type", "")) for f in group],
-        })
+        root_causes.append(
+            {
+                "root_cause": key,
+                "finding_count": len(group),
+                "max_severity": severity_name,
+                "affected_endpoints": list(
+                    {f.get("endpoint", "") for f in group if f.get("endpoint")}
+                ),
+                "finding_ids": [f.get("id", f.get("type", "")) for f in group],
+            }
+        )
 
-    root_causes.sort(key=lambda rc: _SEVERITY_RANK.get(rc["max_severity"], 0), reverse=True)
+    root_causes.sort(
+        key=lambda rc: _SEVERITY_RANK.get(rc["max_severity"], 0), reverse=True
+    )
     return root_causes

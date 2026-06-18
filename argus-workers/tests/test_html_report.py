@@ -39,9 +39,19 @@ class TestRenderHtmlReport:
     def test_severity_cards_rendered(self):
         """Severity cards appear for all severity levels."""
         findings = [
-            {"severity": "CRITICAL", "type": "SQLI", "endpoint": "/api", "title": "SQL Injection"},
+            {
+                "severity": "CRITICAL",
+                "type": "SQLI",
+                "endpoint": "/api",
+                "title": "SQL Injection",
+            },
             {"severity": "HIGH", "type": "XSS", "endpoint": "/search", "title": "XSS"},
-            {"severity": "MEDIUM", "type": "CSRF", "endpoint": "/form", "title": "CSRF"},
+            {
+                "severity": "MEDIUM",
+                "type": "CSRF",
+                "endpoint": "/form",
+                "title": "CSRF",
+            },
         ]
         html = render_html_report(findings=findings)
         assert "CRITICAL" in html
@@ -52,7 +62,13 @@ class TestRenderHtmlReport:
     def test_severity_breakdown_passed_directly(self):
         """Pre-computed severity breakdown renders correctly."""
         html = render_html_report(
-            severity_breakdown={"CRITICAL": 3, "HIGH": 5, "MEDIUM": 2, "LOW": 1, "INFO": 0}
+            severity_breakdown={
+                "CRITICAL": 3,
+                "HIGH": 5,
+                "MEDIUM": 2,
+                "LOW": 1,
+                "INFO": 0,
+            }
         )
         assert "3" in html
         assert "5" in html
@@ -62,8 +78,18 @@ class TestRenderHtmlReport:
     def test_findings_table_has_rows(self):
         """Findings appear as table rows."""
         findings = [
-            {"severity": "HIGH", "type": "SQL_INJECTION", "endpoint": "/login", "title": "SQLi in login"},
-            {"severity": "LOW", "type": "INFO_LEAK", "endpoint": "/robots.txt", "title": "Info leak"},
+            {
+                "severity": "HIGH",
+                "type": "SQL_INJECTION",
+                "endpoint": "/login",
+                "title": "SQLi in login",
+            },
+            {
+                "severity": "LOW",
+                "type": "INFO_LEAK",
+                "endpoint": "/robots.txt",
+                "title": "Info leak",
+            },
         ]
         html = render_html_report(findings=findings)
         assert "SQL_INJECTION" in html
@@ -122,7 +148,9 @@ class TestRenderHtmlReport:
 
     def test_executive_summary_included(self):
         """Executive summary renders when provided."""
-        html = render_html_report(executive_summary="Critical vulnerabilities found requiring immediate action.")
+        html = render_html_report(
+            executive_summary="Critical vulnerabilities found requiring immediate action."
+        )
         assert "Executive Summary" in html
         assert "Critical vulnerabilities" in html
 
@@ -139,6 +167,7 @@ class TestRenderHtmlReport:
     def test_auto_generates_scan_date(self):
         """Auto-generated scan date when not provided."""
         import datetime
+
         html = render_html_report()
         today = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d")
         assert today in html
@@ -147,11 +176,17 @@ class TestRenderHtmlReport:
         """Report has no external HTTP references."""
         html = render_html_report()
         assert "http://" not in html
-        assert "https://" not in html or "https://example.com" in html  # only our target
+        assert (
+            "https://" not in html or "https://example.com" in html
+        )  # only our target
 
     def test_no_javascript_error(self):
         """JavaScript functions defined correctly."""
-        html = render_html_report(findings=[{"severity": "LOW", "type": "TEST", "endpoint": "/", "title": "Test"}])
+        html = render_html_report(
+            findings=[
+                {"severity": "LOW", "type": "TEST", "endpoint": "/", "title": "Test"}
+            ]
+        )
         assert "filterFindings" in html
         assert "toggleDetail" in html
         assert "copyFix" in html

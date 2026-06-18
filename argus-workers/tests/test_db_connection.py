@@ -61,23 +61,33 @@ class TestConnectionString:
 
     def test_uses_env_var(self):
         cm = ConnectionManager()
-        with patch.dict(os.environ, {"DATABASE_URL": "postgresql://user:pass@localhost/db"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {"DATABASE_URL": "postgresql://user:pass@localhost/db"},
+            clear=False,
+        ):
             result = cm._get_connection_string()
             assert "postgresql://user:pass@localhost/db" in result
 
     def test_adds_sslmode_when_missing(self):
         cm = ConnectionManager()
-        with patch.dict(os.environ, {"DATABASE_URL": "postgresql://user@localhost/db"}, clear=False):
+        with patch.dict(
+            os.environ, {"DATABASE_URL": "postgresql://user@localhost/db"}, clear=False
+        ):
             result = cm._get_connection_string()
             assert "sslmode=" in result
 
     def test_pgbouncer_transaction_mode(self):
         cm = ConnectionManager()
         cm._pgbouncer_mode = "transaction"
-        with patch.dict(os.environ, {
-            "DATABASE_URL": "postgresql://user@localhost/pgbouncer",
-            "USE_PGBOUNCER": "true",
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "DATABASE_URL": "postgresql://user@localhost/pgbouncer",
+                "USE_PGBOUNCER": "true",
+            },
+            clear=False,
+        ):
             result = cm._get_connection_string()
             assert "statement_timeout" in result
 
@@ -93,7 +103,9 @@ class TestGetConnection:
 
     def test_get_connection_pool_error(self, cm):
         with (
-            patch.object(cm, "_ensure_pool", side_effect=DatabaseConnectionError("No pool")),
+            patch.object(
+                cm, "_ensure_pool", side_effect=DatabaseConnectionError("No pool")
+            ),
         ):
             with pytest.raises(DatabaseConnectionError):
                 cm.get_connection(timeout=1)
@@ -152,7 +164,9 @@ class TestConnectHelper:
                 connect()
 
     def test_connect_uses_env_var(self):
-        with patch.dict(os.environ, {"DATABASE_URL": "postgresql://user@localhost/db"}, clear=False):
+        with patch.dict(
+            os.environ, {"DATABASE_URL": "postgresql://user@localhost/db"}, clear=False
+        ):
             with patch("database.connection.psycopg2.connect") as mock_connect:
                 conn = connect()
                 assert conn is mock_connect.return_value

@@ -5,6 +5,7 @@ Provides:
 - LlmCostTracker for per-engagement LLM budget tracking
 - get_engagement_state for querying engagement status from the database
 """
+
 import contextlib
 import json
 import logging
@@ -39,7 +40,11 @@ class LlmCostTracker:
         try:
             self._redis = _get_redis_client()
         except (ConnectionError, OSError, ValueError) as e:
-            logger.warning("Redis unavailable for LlmCostTracker — cost cap disabled for %s: %s", engagement_id, e)
+            logger.warning(
+                "Redis unavailable for LlmCostTracker — cost cap disabled for %s: %s",
+                engagement_id,
+                e,
+            )
 
     def has_remaining_budget(self) -> bool:
         """Check if we're still within budget.
@@ -77,7 +82,11 @@ class LlmCostTracker:
                 self._redis.incrbyfloat(self._redis_key, cost)
                 self._redis.expire(self._redis_key, 86400)  # 24h TTL
             except (ConnectionError, OSError, ValueError) as e:
-                logger.warning("Failed to record LLM cost in Redis for %s: %s", self.engagement_id, e)
+                logger.warning(
+                    "Failed to record LLM cost in Redis for %s: %s",
+                    self.engagement_id,
+                    e,
+                )
         return self._get_current_cost() < self.max_cost
 
     def _get_current_cost(self) -> float:
@@ -91,7 +100,11 @@ class LlmCostTracker:
                 redis_cost = float(self._redis.get(self._redis_key) or 0)
                 return max(self._local_spend, redis_cost)
             except (ConnectionError, OSError, ValueError) as e:
-                logger.debug("Redis unavailable for LlmCostTracker cost lookup for %s: %s, using local spend", self.engagement_id, e)
+                logger.debug(
+                    "Redis unavailable for LlmCostTracker cost lookup for %s: %s, using local spend",
+                    self.engagement_id,
+                    e,
+                )
         return self._local_spend
 
 
@@ -107,6 +120,7 @@ def _get_redis_client(redis_url: str = None):
     """
     global _redis_pool, _redis_pool_url
     import redis as redis_module
+
     url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
 
     if _redis_pool is None:
@@ -148,7 +162,11 @@ def save_recon_context(engagement_id: str, ctx, redis_url: str = None):
     """
     r = _get_redis_client(redis_url)
     key = RECON_CONTEXT_KEY.format(engagement_id=engagement_id)
-    r.setex(key, RECON_CONTEXT_TTL, json.dumps(ctx.to_dict() if hasattr(ctx, "to_dict") else ctx.__dict__))
+    r.setex(
+        key,
+        RECON_CONTEXT_TTL,
+        json.dumps(ctx.to_dict() if hasattr(ctx, "to_dict") else ctx.__dict__),
+    )
 
 
 def load_recon_context(engagement_id: str, redis_url: str = None) -> object | None:
@@ -177,7 +195,9 @@ def load_recon_context(engagement_id: str, redis_url: str = None) -> object | No
     return recon_context
 
 
-def get_engagement_state(engagement_id: str, db_conn_string: str | None = None) -> str | None:
+def get_engagement_state(
+    engagement_id: str, db_conn_string: str | None = None
+) -> str | None:
     """
     Query the current engagement state from the database.
 
@@ -201,12 +221,15 @@ def get_engagement_state(engagement_id: str, db_conn_string: str | None = None) 
     try:
         from database.connection import connect
         from utils.validation import validate_uuid
+
         valid_id = validate_uuid(engagement_id, "engagement_id")
         conn = connect(db_conn_string)
         try:
             cursor = conn.cursor()
             try:
-                cursor.execute("SELECT status FROM engagements WHERE id = %s", (valid_id,))
+                cursor.execute(
+                    "SELECT status FROM engagements WHERE id = %s", (valid_id,)
+                )
                 row = cursor.fetchone()
                 return row[0] if row else None
             finally:
@@ -214,7 +237,7 @@ def get_engagement_state(engagement_id: str, db_conn_string: str | None = None) 
         finally:
             conn.close()
     except (ValueError, OSError):
-        logger.warning("Failed to get engagement status for %s", engagement_id, exc_info=True)
+        logger.warning("Failed to get engagement status for %s", engagement_id)
         return None
 
 
@@ -250,15 +273,29 @@ def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:
                 auth_config = row[4] if len(row) > 4 else None
                 dual_auth_config = row[5] if len(row) > 5 else None
                 return {
-                    "scan_mode": (sm or defaults["scan_mode"]) if isinstance(sm, str) else defaults["scan_mode"],
-                    "aggressiveness": (sa or defaults["aggressiveness"]) if isinstance(sa, str) else defaults["aggressiveness"],
-                    "agent_mode": bool(am) if am is not None else defaults["agent_mode"],
-                    "bug_bounty_mode": bool(bbm) if bbm is not None else defaults["bug_bounty_mode"],
+                    "scan_mode": (sm or defaults["scan_mode"])
+                    if isinstance(sm, str)
+                    else defaults["scan_mode"],
+                    "aggressiveness": (sa or defaults["aggressiveness"])
+                    if isinstance(sa, str)
+                    else defaults["aggressiveness"],
+                    "agent_mode": bool(am)
+                    if am is not None
+                    else defaults["agent_mode"],
+                    "bug_bounty_mode": bool(bbm)
+                    if bbm is not None
+                    else defaults["bug_bounty_mode"],
                     "auth_config": auth_config,
                     "dual_auth_config": dual_auth_config,
                 }
-            logger.error("Engagement %s not found for scan options — returning defaults", engagement_id)
+            logger.error(
+                "Engagement %s not found for scan options — returning defaults",
+                engagement_id,
+            )
             return defaults
     except Exception:
-        logger.error("fetch_engagement_scan_options failed for %s — returning defaults", engagement_id, exc_info=True)
+        logger.exception(
+            "fetch_engagement_scan_options failed for %s — returning defaults",
+            engagement_id,
+        )
         return defaults

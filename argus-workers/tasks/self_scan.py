@@ -12,7 +12,9 @@ from celery_app import app
 logger = logging.getLogger(__name__)
 
 
-@app.task(bind=True, name="tasks.security.run_self_scan", soft_time_limit=300, time_limit=360)
+@app.task(
+    bind=True, name="tasks.security.run_self_scan", soft_time_limit=300, time_limit=360
+)
 def run_self_scan(self):
     """
     Run a basic security self-assessment of the Argus platform.
@@ -36,25 +38,25 @@ def run_self_scan(self):
         # Log summary
         summary = report["summary"]
         logger.info(
-            f"Self-scan complete: {summary['total_findings']} findings "
-            f"({summary['critical']} critical, {summary['high']} high)"
+            "Self-scan complete: %s findings (%s critical, %s high)",
+            summary["total_findings"],
+            summary["critical"],
+            summary["high"],
         )
 
         # Alert if critical findings
         if summary["critical"] > 0:
             logger.critical(
-                f"CRITICAL: Self-scan found {summary['critical']} critical security issues!"
+                "CRITICAL: Self-scan found %s critical security issues!",
+                summary["critical"],
             )
 
         return {
             "status": "completed",
             "summary": summary,
-            "findings_count": summary["total_findings"]
+            "findings_count": summary["total_findings"],
         }
 
     except Exception as e:
-        logger.error(f"Self-scan failed: {e}")
-        return {
-            "status": "error",
-            "error": str(e)
-        }
+        logger.error("Self-scan failed: %s", e)
+        return {"status": "error", "error": str(e)}

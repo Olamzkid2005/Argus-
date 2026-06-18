@@ -30,6 +30,5 @@ for module_info in pkgutil.iter_modules([str(_this_dir)]):
                 _check_registry[module_name] = attr
                 globals()[attr_name] = attr
     except Exception as e:
-        logger.warning(f"Failed to load check module '{module_name}': {e}")
-
+        logger.warning("Failed to load check module '%s': %s", module_name, e)
 __all__ = list(_check_registry.keys())

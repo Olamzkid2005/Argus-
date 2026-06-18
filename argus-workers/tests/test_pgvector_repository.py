@@ -61,8 +61,10 @@ class TestStoreEmbedding:
         """Returns False when UPDATE affects zero rows."""
         mock_cursor = MagicMock()
         mock_cursor.rowcount = 0
-        with patch.object(repo, "check_pgvector_available", return_value=True), \
-             patch("database.repositories.pgvector_repository.db_cursor") as mock:
+        with (
+            patch.object(repo, "check_pgvector_available", return_value=True),
+            patch("database.repositories.pgvector_repository.db_cursor") as mock,
+        ):
             mock.return_value.__enter__.return_value = mock_cursor
             assert repo.store_embedding("fid", "eid", [0.0] * 1536, "text") is False
 
@@ -70,8 +72,10 @@ class TestStoreEmbedding:
         """Returns True when UPDATE affects one row."""
         mock_cursor = MagicMock()
         mock_cursor.rowcount = 1
-        with patch.object(repo, "check_pgvector_available", return_value=True), \
-             patch("database.repositories.pgvector_repository.db_cursor") as mock:
+        with (
+            patch.object(repo, "check_pgvector_available", return_value=True),
+            patch("database.repositories.pgvector_repository.db_cursor") as mock,
+        ):
             mock.return_value.__enter__.return_value = mock_cursor
             assert repo.store_embedding("fid", "eid", [0.0] * 1536, "text") is True
             sql = mock_cursor.execute.call_args[0][0]
@@ -91,8 +95,10 @@ class TestFindSimilarFindings:
         """Returns empty list when source finding has no embedding."""
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = None
-        with patch.object(repo, "check_pgvector_available", return_value=True), \
-             patch("database.repositories.pgvector_repository.db_cursor") as mock:
+        with (
+            patch.object(repo, "check_pgvector_available", return_value=True),
+            patch("database.repositories.pgvector_repository.db_cursor") as mock,
+        ):
             mock.return_value.__enter__.return_value = mock_cursor
             assert repo.find_similar_findings("fid", "eid") == []
 
@@ -104,8 +110,10 @@ class TestFindSimilarFindings:
             ("r1", "xss", "high", "/api/login", "eid2", 0.92),
             ("r2", "sqli", "critical", "/api/query", "eid2", 0.87),
         ]
-        with patch.object(repo, "check_pgvector_available", return_value=True), \
-             patch("database.repositories.pgvector_repository.db_cursor") as mock:
+        with (
+            patch.object(repo, "check_pgvector_available", return_value=True),
+            patch("database.repositories.pgvector_repository.db_cursor") as mock,
+        ):
             mock.return_value.__enter__.return_value = mock_cursor
             results = repo.find_similar_findings("fid", "eid")
 
@@ -133,12 +141,14 @@ class TestFindSimilarByText:
 
     def test_falls_back_to_find_similar_fallback(self, repo):
         """Falls back to keyword matching when embedding generation returns None."""
-        with patch.object(repo, "generate_embedding_fallback", return_value=None), \
-             patch.object(
-                 repo,
-                 "_find_similar_fallback",
-                 return_value=[{"id": "r1", "match_type": "keyword_fallback"}],
-             ) as mock_fallback:
+        with (
+            patch.object(repo, "generate_embedding_fallback", return_value=None),
+            patch.object(
+                repo,
+                "_find_similar_fallback",
+                return_value=[{"id": "r1", "match_type": "keyword_fallback"}],
+            ) as mock_fallback,
+        ):
             results = repo.find_similar_by_text("sql injection", "eid")
 
         mock_fallback.assert_called_once()

@@ -1,6 +1,7 @@
 """
 Tests for Normalizer
 """
+
 from models.finding import EvidenceStrength, Severity
 from parsers.normalizer import FindingNormalizer
 
@@ -15,13 +16,21 @@ class TestFindingNormalizer:
     def test_normalize_type_standardizes_sqli(self):
         """Test that SQL injection variants are standardized"""
         assert self.normalizer._normalize_type("sqli", "nuclei") == "SQL_INJECTION"
-        assert self.normalizer._normalize_type("sql injection", "nuclei") == "SQL_INJECTION"
-        assert self.normalizer._normalize_type("sql-injection", "nuclei") == "SQL_INJECTION"
+        assert (
+            self.normalizer._normalize_type("sql injection", "nuclei")
+            == "SQL_INJECTION"
+        )
+        assert (
+            self.normalizer._normalize_type("sql-injection", "nuclei")
+            == "SQL_INJECTION"
+        )
 
     def test_normalize_type_standardizes_xss(self):
         """Test that XSS variants are standardized"""
         assert self.normalizer._normalize_type("xss", "nuclei") == "XSS"
-        assert self.normalizer._normalize_type("cross-site scripting", "nuclei") == "XSS"
+        assert (
+            self.normalizer._normalize_type("cross-site scripting", "nuclei") == "XSS"
+        )
 
     def test_normalize_severity_maps_correctly(self):
         """Test that severity levels are mapped correctly"""
@@ -106,7 +115,7 @@ class TestFindingNormalizer:
         """Test confidence calculation formula"""
         finding = {
             "evidence": {"request": "GET /", "response": "200 OK"},
-            "verified": False
+            "verified": False,
         }
 
         confidence = self.normalizer._calculate_confidence(finding, "sqlmap")
@@ -122,7 +131,7 @@ class TestFindingNormalizer:
             "severity": "high",
             "endpoint": "https://example.com/api",
             "evidence": {"payload": "' OR 1=1--"},
-            "confidence": 0.8
+            "confidence": 0.8,
         }
 
         finding = self.normalizer.normalize(raw_finding, "nuclei")
@@ -136,11 +145,23 @@ class TestFindingNormalizer:
     def test_normalize_batch_skips_invalid_findings(self):
         """Test that normalize_batch skips invalid findings"""
         raw_findings = [
-            {"type": "xss", "severity": "high", "endpoint": "https://example.com", "evidence": {}},
+            {
+                "type": "xss",
+                "severity": "high",
+                "endpoint": "https://example.com",
+                "evidence": {},
+            },
             {"type": "", "severity": "high", "endpoint": "", "evidence": {}},  # Invalid
-            {"type": "sqli", "severity": "critical", "endpoint": "https://example.com/api", "evidence": {}}
+            {
+                "type": "sqli",
+                "severity": "critical",
+                "endpoint": "https://example.com/api",
+                "evidence": {},
+            },
         ]
 
         findings = self.normalizer.normalize_batch(raw_findings, "nuclei")
 
-        assert len(findings) == 3  # All findings now valid — lenient validators coerce empty type/endpoint to defaults
+        assert (
+            len(findings) == 3
+        )  # All findings now valid — lenient validators coerce empty type/endpoint to defaults

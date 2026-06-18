@@ -1,6 +1,7 @@
 """
 Register tool — wraps agent/tools/register_tool.py as an AbstractTool.
 """
+
 from __future__ import annotations
 
 import logging

@@ -49,11 +49,13 @@ class TestCreate:
             "created_by": "user-1",
         }
 
-        result = repo.create({
-            "org_id": "org-1",
-            "target_url": "https://example.com",
-            "created_by": "user-1",
-        })
+        result = repo.create(
+            {
+                "org_id": "org-1",
+                "target_url": "https://example.com",
+                "created_by": "user-1",
+            }
+        )
 
         assert result["org_id"] == "org-1"
         assert result["status"] == "created"
@@ -72,12 +74,14 @@ class TestCreate:
             "authorization_proof": "proof123",
         }
 
-        result = repo.create({
-            "org_id": "org-1",
-            "target_url": "https://example.com",
-            "authorization": "proof123",
-            "created_by": "user-1",
-        })
+        result = repo.create(
+            {
+                "org_id": "org-1",
+                "target_url": "https://example.com",
+                "authorization": "proof123",
+                "created_by": "user-1",
+            }
+        )
 
         assert result["authorization_proof"] == "proof123"
 
@@ -184,7 +188,9 @@ class TestFindByStatus:
         """find_by_status passes limit and offset params."""
         mock_db.fetchall.return_value = []
 
-        results = repo.find_by_status(status="running", org_id="org-1", limit=5, offset=10)
+        results = repo.find_by_status(
+            status="running", org_id="org-1", limit=5, offset=10
+        )
 
         assert results == []
         params = mock_db.execute.call_args[0][1]

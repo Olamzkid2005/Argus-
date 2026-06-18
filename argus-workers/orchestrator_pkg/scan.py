@@ -40,6 +40,7 @@ def _get_rate_limit_repo():
     if _RATE_LIMIT_REPO is None:
         try:
             from database.repositories.rate_limit_repository import RateLimitRepository
+
             # IMPORTANT: Pass None so RateLimitRepository uses db_cursor()
             # (connection pool). Passing a connection string as db_connection
             # would crash on self.db.cursor() since strings have no cursor().
@@ -48,18 +49,27 @@ def _get_rate_limit_repo():
             pass
     return _RATE_LIMIT_REPO
 
+
 from .utils import get_nuclei_templates_path
 
 # Module-level flag to avoid repeated import inside the per-target loop
 try:
     from feature_flags import is_enabled as _feature_enabled
 except ImportError:
+
     def _feature_enabled(name, default=False):
         return False
 
+
 logger = logging.getLogger(__name__)
 
-def _should_run_tool(tool_name: str, recon_context=None, tech_stack: list[str] | None = None, target: str = "") -> bool:
+
+def _should_run_tool(
+    tool_name: str,
+    recon_context=None,
+    tech_stack: list[str] | None = None,
+    target: str = "",
+) -> bool:
     """Check if a tool should run based on requires gate.
 
     Accepts either a ReconContext or raw tech_stack/target params.
@@ -87,7 +97,9 @@ def _should_run_tool(tool_name: str, recon_context=None, tech_stack: list[str] |
                 gate_ctx[attr] = getattr(recon_context, attr)
         else:
             for attr in dir(recon_context):
-                if not attr.startswith("_") and not callable(getattr(recon_context, attr)):
+                if not attr.startswith("_") and not callable(
+                    getattr(recon_context, attr)
+                ):
                     gate_ctx[attr] = getattr(recon_context, attr)
     # Ensure boolean signals default to False
     for signal in tool_def.requires.recon_signals or []:
@@ -97,37 +109,48 @@ def _should_run_tool(tool_name: str, recon_context=None, tech_stack: list[str] |
     ctx = SimpleNamespace(**gate_ctx)
     return evaluate_gate(tool_name, ctx)
 
+
 NUCLEI_SEVERITY_BY_AGGRESSIVENESS = {
-    'default': 'medium,high,critical',
-    'high': 'low,medium,high,critical',
-    'extreme': 'info,low,medium,high,critical',
+    "default": "medium,high,critical",
+    "high": "low,medium,high,critical",
+    "extreme": "info,low,medium,high,critical",
 }
 
 TECH_TAG_MAP = {
-    'wordpress': ['wordpress', 'wp'],
-    'php': ['php'],
-    'apache': ['apache'],
-    'nginx': ['nginx'],
-    'java': ['java', 'spring', 'tomcat'],
-    'node': ['nodejs', 'express'],
-    'react': ['javascript', 'react', 'reactjs'],
-    'angular': ['javascript', 'angular'],
-    'vue': ['javascript', 'vue'],
-    'django': ['python', 'django'],
-    'flask': ['python', 'flask'],
-    'mysql': ['mysql'],
-    'postgresql': ['postgresql'],
-    'redis': ['redis'],
+    "wordpress": ["wordpress", "wp"],
+    "php": ["php"],
+    "apache": ["apache"],
+    "nginx": ["nginx"],
+    "java": ["java", "spring", "tomcat"],
+    "node": ["nodejs", "express"],
+    "react": ["javascript", "react", "reactjs"],
+    "angular": ["javascript", "angular"],
+    "vue": ["javascript", "vue"],
+    "django": ["python", "django"],
+    "flask": ["python", "flask"],
+    "mysql": ["mysql"],
+    "postgresql": ["postgresql"],
+    "redis": ["redis"],
 }
 
-ALWAYS_INCLUDE_TAGS = ['cve', 'rce', 'sqli', 'xss', 'ssrf', 'lfi',
-                       'exposed-panel', 'default-login', 'misconfig', 'takeover']
+ALWAYS_INCLUDE_TAGS = [
+    "cve",
+    "rce",
+    "sqli",
+    "xss",
+    "ssrf",
+    "lfi",
+    "exposed-panel",
+    "default-login",
+    "misconfig",
+    "takeover",
+]
 
 
-def _build_nuclei_tags(tech_stack, agg='default') -> list[str]:
+def _build_nuclei_tags(tech_stack, agg="default") -> list[str]:
     tags = set(ALWAYS_INCLUDE_TAGS)
-    if agg == 'extreme':
-        tags.add('fuzz')
+    if agg == "extreme":
+        tags.add("fuzz")
     if tech_stack:
         for tech in tech_stack:
             tech_lower = tech.lower()
@@ -138,17 +161,23 @@ def _build_nuclei_tags(tech_stack, agg='default') -> list[str]:
                 # matching "java" key against "javascript" tech.
                 if tech_lower == key or any(tag in tech_lower for tag in mapped_tags):
                     tags.update(mapped_tags)
-    return ['-tags', ','.join(sorted(tags))]
+    return ["-tags", ",".join(sorted(tags))]
 
 
 def _is_reachable(target: str) -> bool:
     # Use urlparse for reliable hostname extraction (handles IPv6, userinfo, etc.)
     from urllib.parse import urlparse
+
     try:
         parsed = urlparse(target)
         hostname = parsed.hostname or target
     except Exception:
-        hostname = target.replace('https://', '').replace('http://', '').split('/')[0].split(':')[0]
+        hostname = (
+            target.replace("https://", "")
+            .replace("http://", "")
+            .split("/")[0]
+            .split(":")[0]
+        )
 
     try:
         ip = ipaddress.ip_address(hostname)
@@ -158,24 +187,30 @@ def _is_reachable(target: str) -> bool:
         # M-01: ipaddress.is_private also covers IPv6 unique-local on Python 3.9+,
         # and is_link_local covers fe80::/10. Check ipv4_mapped addresses too.
         if ip.is_private or ip.is_loopback or ip.is_link_local:
-            logger.warning(f'Target {target} resolves to private IP {ip} — skipping')
+            logger.warning("Target %s resolves to private IP %s — skipping", target, ip)
             return False
         if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
             mapped = ipaddress.ip_address(ip.ipv4_mapped)
             if mapped.is_private or mapped.is_loopback or mapped.is_link_local:
-                logger.warning(f'Target {target} resolves to IPv4-mapped private IP {ip} — skipping')
+                logger.warning(
+                    "Target %s resolves to IPv4-mapped private IP %s — skipping",
+                    target,
+                    ip,
+                )
                 return False
         return True
     except ValueError:
         pass
-    if hostname in ('localhost', '127.0.0.1', '::1'):
-        logger.warning(f'Target {target} resolves to loopback — skipping')
+    if hostname in ("localhost", "127.0.0.1", "::1"):
+        logger.warning("Target %s resolves to loopback — skipping", target)
         return False
-    if hostname.startswith('169.254.'):
-        logger.warning(f'Target {target} is link-local — skipping')
+    if hostname.startswith("169.254."):
+        logger.warning("Target %s is link-local — skipping", target)
         return False
     try:
-        addrinfo = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        addrinfo = socket.getaddrinfo(
+            hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+        )
         # Validate resolved IPs to prevent DNS rebinding
         for _family, _typ, _proto, _cn, sockaddr in addrinfo:
             resolved_ip = sockaddr[0]
@@ -183,8 +218,10 @@ def _is_reachable(target: str) -> bool:
                 addr = ipaddress.ip_address(resolved_ip)
                 if addr.is_private or addr.is_loopback or addr.is_link_local:
                     logger.warning(
-                        f'Target {target} resolved to {resolved_ip} (private/internal) — '
-                        f'blocking to prevent DNS rebinding SSRF'
+                        "Target %s resolved to %s (private/internal) — "
+                        "blocking to prevent DNS rebinding SSRF",
+                        target,
+                        resolved_ip,
                     )
                     return False
             except ValueError:
@@ -192,11 +229,15 @@ def _is_reachable(target: str) -> bool:
         return True
     except socket.gaierror as e:
         if e.errno in (-2, -3):
-            logger.warning(f'DNS: {hostname} not found — skipping')
+            logger.warning("DNS: %s not found — skipping", hostname)
             return False
         return True
     except Exception as e:
-        logger.warning(f"DNS resolution for {hostname} failed with unexpected error — assuming NOT reachable: {e}")
+        logger.warning(
+            "DNS resolution for %s failed with unexpected error — assuming NOT reachable: %s",
+            hostname,
+            e,
+        )
         return False
 
 
@@ -217,7 +258,9 @@ def _get_async_loop() -> asyncio.AbstractEventLoop:
         with _ASYNC_LOOP_LOCK:
             if _ASYNC_LOOP is None or _ASYNC_LOOP.is_closed():
                 loop = asyncio.new_event_loop()
-                t = threading.Thread(target=loop.run_forever, daemon=True, name="async-worker")
+                t = threading.Thread(
+                    target=loop.run_forever, daemon=True, name="async-worker"
+                )
                 t.start()
                 _ASYNC_LOOP = loop
     return _ASYNC_LOOP
@@ -246,6 +289,7 @@ def _cleanup_emitted_fingerprints():
     with _emitted_fingerprints_lock:
         _emitted_fingerprints.clear()
 
+
 _atexit.register(_cleanup_emitted_fingerprints)
 
 
@@ -269,6 +313,7 @@ def _dedup_fingerprint(engagement_id: str, fp: str) -> bool:
         fps.add(fp)
         return True
 
+
 _streaming_tools: dict[str, dict] = {
     "dalfox": {"flag": "--json", "json_lines": True},
     "sqlmap": {"flag": "--output-format=json", "json_lines": False, "batch_json": True},
@@ -283,13 +328,13 @@ def _parse_line_buffer(ctx, tool_name, line_buffer, all_findings):
     start = accumulated.find("{")
     end = accumulated.rfind("}")
     if start != -1 and end != -1 and end > start:
-        json_str = accumulated[start:end + 1]
+        json_str = accumulated[start : end + 1]
     else:
         json_str = accumulated
     try:
         data = json.loads(json_str)
     except json.JSONDecodeError:
-        logger.log(5, f"{tool_name} accumulated output is not valid JSON")
+        logger.log(5, "%s accumulated output is not valid JSON", tool_name)
         return
     items = data if isinstance(data, list) else [data]
     for item in items:
@@ -303,9 +348,15 @@ def _parse_line_buffer(ctx, tool_name, line_buffer, all_findings):
                 all_findings.append(normalized)
 
 
-def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: list,
-                   on_line: Callable | None = None,
-                   line_buffer: list | None = None) -> tuple[str, bool, str | None]:
+def _run_scan_tool(
+    ctx,
+    tool_name: str,
+    args: list,
+    timeout: int,
+    all_findings: list,
+    on_line: Callable | None = None,
+    line_buffer: list | None = None,
+) -> tuple[str, bool, str | None]:
     """Thread-safe wrapper for running a scan tool.
 
     Findings are emitted in real-time via emit_finding_rt as each tool
@@ -339,15 +390,19 @@ def _run_scan_tool(ctx, tool_name: str, args: list, timeout: int, all_findings: 
                 success = True
             return tool_name, success, result.stdout if success else None
     except Exception as e:
-        logger.warning(f"{tool_name} failed: {e}")
+        logger.warning("%s failed: %s", tool_name, e)
         return tool_name, False, None
     finally:
         emit_tool_complete(ctx.engagement_id, tool_name, success=success)
 
 
 def execute_scan_tools(
-    ctx, targets: list[str], budget: dict, aggressiveness: str = DEFAULT_AGGRESSIVENESS,
-    auth_config: dict | None = None, dual_auth_config: dict | None = None,
+    ctx,
+    targets: list[str],
+    budget: dict,
+    aggressiveness: str = DEFAULT_AGGRESSIVENESS,
+    auth_config: dict | None = None,
+    dual_auth_config: dict | None = None,
     tech_stack: list[str] | None = None,
     skip_tools: set | None = None,
     recon_context=None,
@@ -372,11 +427,15 @@ def execute_scan_tools(
 
         ctx = ToolContext.from_orchestrator(ctx)
 
-    slog = ScanLogger("scan_pipeline", engagement_id=getattr(ctx, 'engagement_id', ''))
-    slog.phase_header("EXECUTE SCAN TOOLS", targets=f"{len(targets)} target(s)", aggressiveness=aggressiveness)
+    slog = ScanLogger("scan_pipeline", engagement_id=getattr(ctx, "engagement_id", ""))
+    slog.phase_header(
+        "EXECUTE SCAN TOOLS",
+        targets=f"{len(targets)} target(s)",
+        aggressiveness=aggressiveness,
+    )
     # Clear per-engagement dedup fingerprints to prevent unbounded memory growth
     # across multiple execute_scan_tools invocations and cross-engagement pollution (H-v4-05).
-    engagement_id = getattr(ctx, 'engagement_id', '')
+    engagement_id = getattr(ctx, "engagement_id", "")
     with _emitted_fingerprints_lock:
         _emitted_fingerprints.pop(engagement_id, None)
     all_findings = []
@@ -394,10 +453,11 @@ def execute_scan_tools(
     # Phase 0: Scope validation — filter targets before any tool execution.
     # This ensures the deterministic path enforces scope even when the agent
     # path is not active (previously scope was only checked in LLM agent path).
-    engagement_id = getattr(ctx, 'engagement_id', '')
+    engagement_id = getattr(ctx, "engagement_id", "")
     if engagement_id and True:
         try:
             from tools.scope_validator import validate_target_scope
+
             scoped_targets = []
             blocked_targets = []
             for t in targets:
@@ -405,11 +465,13 @@ def execute_scan_tools(
                     scoped_targets.append(t)
                 else:
                     blocked_targets.append(t)
-                    slog.warn(f"Target {t} is out of scope — skipping")
+                    slog.warn("Target %s is out of scope — skipping", t)
             if blocked_targets:
                 logger.warning(
                     "Scope filter blocked %d of %d targets for engagement %s",
-                    len(blocked_targets), len(targets), engagement_id,
+                    len(blocked_targets),
+                    len(targets),
+                    engagement_id,
                 )
             targets = scoped_targets
         except Exception as e:
@@ -422,7 +484,7 @@ def execute_scan_tools(
                 "to prevent out-of-scope requests (L-06 fail-closed)",
                 e,
             )
-            slog.warn(f"Scope validation error — scan aborted: {e}")
+            slog.warn("Scope validation error — scan aborted: %s", e)
             targets = []
     if not targets:
         slog.warn("All targets filtered by scope — nothing to scan")
@@ -434,9 +496,10 @@ def execute_scan_tools(
             from tools.update_nuclei_templates import (
                 update_nuclei_templates as _update_templates,
             )
+
             _update_templates(timeout=120)
         except Exception as e:
-            logger.warning(f"Nuclei template update failed (scan continues): {e}")
+            logger.warning("Nuclei template update failed (scan continues): %s", e)
 
     # Cache nuclei templates path once before the loop
     nuclei_templates = get_nuclei_templates_path()
@@ -462,10 +525,11 @@ def execute_scan_tools(
         try:
             finding = json.loads(line)
         except json.JSONDecodeError:
-            logger.log(5, f"Nuclei skipped malformed JSON: {line[:200]}")
+            logger.log(5, "Nuclei skipped malformed JSON: %s", line[:200])
             return
         try:
             from parsers.schemas.nuclei_schema import validate_nuclei_finding
+
             validated = validate_nuclei_finding(finding)
             if validated:
                 normalized = ctx._normalize_finding(validated, "nuclei")
@@ -478,11 +542,16 @@ def execute_scan_tools(
                     emit_finding_rt(ctx.engagement_id, normalized, "nuclei")
                     all_findings.append(normalized)
         except Exception as e:
-            logger.warning(f"Nuclei streaming: failed to process line ({type(e).__name__}): {str(e)[:200]}")
+            logger.warning(
+                "Nuclei streaming: failed to process line (%s): %s",
+                type(e).__name__,
+                str(e)[:200],
+            )
 
     # Factory for per-tool streaming callbacks (captures ctx, all_findings via closure)
     def _make_on_tool_line(tool_name, json_lines=True, line_buffer=None):
         _json_acc = ""
+
         def on_tool_line(line: str) -> bool:
             nonlocal _json_acc
             line = line.strip()
@@ -511,6 +580,7 @@ def execute_scan_tools(
                 if line_buffer is not None:
                     line_buffer.append(line)
             return True
+
         return on_tool_line
 
     for target_idx, target in enumerate(targets):
@@ -520,41 +590,66 @@ def execute_scan_tools(
 
         # Skip if target is unreachable (DNS NXDOMAIN/SERVFAIL only)
         if not _is_reachable(target):
-            slog.info(f"Target {target} unreachable, skipping")
+            slog.info("Target %s unreachable, skipping", target)
             continue
 
-        slog.target_start(target, index=target_idx+1, total=len(targets))
+        slog.target_start(target, index=target_idx + 1, total=len(targets))
 
         # Phase 1: arjun (parameter discovery) — must run first for injection tools
         if "arjun" not in _skip:
             try:
                 import hashlib
-                _target_slug = hashlib.md5(target.encode(), usedforsecurity=False).hexdigest()[:8]
-                sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
+
+                _target_slug = hashlib.md5(
+                    target.encode(), usedforsecurity=False
+                ).hexdigest()[:8]
+                sandbox = (
+                    ctx.tool_runner.sandbox_dir
+                    if hasattr(ctx.tool_runner, "sandbox_dir")
+                    and ctx.tool_runner.sandbox_dir
+                    else None
+                )
                 if sandbox:
                     sandbox.mkdir(parents=True, exist_ok=True)
                     arjun_out = str(sandbox / "tmp" / f"arjun_{_target_slug}.json")
                 else:
                     import os
                     import tempfile
-                    arjun_out = os.path.join(tempfile.gettempdir(), f"arjun_{_target_slug}.json")
+
+                    arjun_out = os.path.join(
+                        tempfile.gettempdir(), f"arjun_{_target_slug}.json"
+                    )
                     _temp_outputs.append(arjun_out)
-                arjun_threads = "20" if agg == "default" else "50" if agg == "high" else "100"
-                arjun_timeout = TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
-                _run_scan_tool(ctx, "arjun",
+                arjun_threads = (
+                    "20" if agg == "default" else "50" if agg == "high" else "100"
+                )
+                arjun_timeout = (
+                    TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG
+                )
+                _run_scan_tool(
+                    ctx,
+                    "arjun",
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads],
-                    arjun_timeout, all_findings)
+                    arjun_timeout,
+                    all_findings,
+                )
             except Exception as e:
-                logger.warning(f"arjun failed for {target}: {e}")
+                logger.warning("arjun failed for %s: %s", target, e)
 
         # Phase 1.5: WAF detection — run before vulnerability scanners
         if "wafw00f" not in _skip:
             try:
                 waf_timeout = 120
                 slog.tool_start("wafw00f", [target])
-                waf_result = ctx.tool_runner.run("wafw00f", [target, "-a"], timeout=waf_timeout)
+                waf_result = ctx.tool_runner.run(
+                    "wafw00f", [target, "-a"], timeout=waf_timeout
+                )
                 if waf_result.success and waf_result.stdout:
-                    logger.info("WAF detection results for %s: %s", target, waf_result.stdout[:500])
+                    logger.info(
+                        "WAF detection results for %s: %s",
+                        target,
+                        waf_result.stdout[:500],
+                    )
                     waf_finding = {
                         "type": "WAF_DETECTED",
                         "severity": "info",
@@ -569,14 +664,17 @@ def execute_scan_tools(
                 slog.tool_complete("wafw00f", success=waf_result.success)
             except Exception as e:
                 slog.tool_complete("wafw00f", success=False)
-                logger.debug(f"wafw00f failed for {target}: {e}")
+                logger.debug("wafw00f failed for %s: %s", target, e)
 
         # Phase 2: all vulnerability scanners run simultaneously
         scan_jobs = []
 
         # Budget enforcement: limit scan tools per target if budget specifies a cap
-        max_tools = int(budget.get("max_scan_tools", 0)) if isinstance(budget, dict) else 0
+        max_tools = (
+            int(budget.get("max_scan_tools", 0)) if isinstance(budget, dict) else 0
+        )
         _tool_count = 0
+
         def _budget_exceeded():
             return max_tools > 0 and _tool_count >= max_tools
 
@@ -588,7 +686,9 @@ def execute_scan_tools(
             if templates_exist:
                 nuclei_cmd.extend(["-t", str(nuclei_templates)])
             nuclei_timeout = TOOL_TIMEOUT_LONG
-            severity = NUCLEI_SEVERITY_BY_AGGRESSIVENESS.get(agg, NUCLEI_SEVERITY_BY_AGGRESSIVENESS['default'])
+            severity = NUCLEI_SEVERITY_BY_AGGRESSIVENESS.get(
+                agg, NUCLEI_SEVERITY_BY_AGGRESSIVENESS["default"]
+            )
             nuclei_cmd.extend(["-severity", severity])
             nuclei_cmd.extend(_build_nuclei_tags(tech_stack, agg))
             if agg == "high":
@@ -598,12 +698,21 @@ def execute_scan_tools(
 
             try:
                 emit_tool_start(ctx.engagement_id, "nuclei", nuclei_cmd)
-                ctx.tool_runner.run_streaming("nuclei", nuclei_cmd, nuclei_timeout, _on_nuclei_line)
-                emit_tool_complete(ctx.engagement_id, "nuclei", True, 0,
-                                    finding_count=len([f for f in all_findings if f.get("source_tool") == "nuclei"]))
+                ctx.tool_runner.run_streaming(
+                    "nuclei", nuclei_cmd, nuclei_timeout, _on_nuclei_line
+                )
+                emit_tool_complete(
+                    ctx.engagement_id,
+                    "nuclei",
+                    True,
+                    0,
+                    finding_count=len(
+                        [f for f in all_findings if f.get("source_tool") == "nuclei"]
+                    ),
+                )
             except Exception as e:
                 emit_tool_complete(ctx.engagement_id, "nuclei", False, 0)
-                logger.warning(f"nuclei streaming failed for {target}: {e}")
+                logger.warning("nuclei streaming failed for %s: %s", target, e)
 
         # Build dalfox command
         if "dalfox" not in _skip and not _budget_exceeded():
@@ -622,17 +731,34 @@ def execute_scan_tools(
         if "sqlmap" not in _skip and not _budget_exceeded():
             _tool_count += 1
             import hashlib
-            _target_slug = hashlib.md5(target.encode(), usedforsecurity=False).hexdigest()[:8]
-            sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
+
+            _target_slug = hashlib.md5(
+                target.encode(), usedforsecurity=False
+            ).hexdigest()[:8]
+            sandbox = (
+                ctx.tool_runner.sandbox_dir
+                if hasattr(ctx.tool_runner, "sandbox_dir")
+                and ctx.tool_runner.sandbox_dir
+                else None
+            )
             if sandbox:
                 sandbox.mkdir(parents=True, exist_ok=True)
                 sqlmap_out = str(sandbox / "tmp" / f"sqlmap_{_target_slug}.json")
             else:
                 import os
                 import tempfile
-                sqlmap_out = os.path.join(tempfile.gettempdir(), f"sqlmap_{_target_slug}.json")
+
+                sqlmap_out = os.path.join(
+                    tempfile.gettempdir(), f"sqlmap_{_target_slug}.json"
+                )
                 _temp_outputs.append(sqlmap_out)
-            sqlmap_cmd = ["-u", target, "--output-format=json", "--json-output", sqlmap_out]
+            sqlmap_cmd = [
+                "-u",
+                target,
+                "--output-format=json",
+                "--json-output",
+                sqlmap_out,
+            ]
             sqlmap_timeout = TOOL_TIMEOUT_LONG
             if agg == "high":
                 sqlmap_cmd.extend(["--level", "3", "--risk", "2"])
@@ -643,49 +769,97 @@ def execute_scan_tools(
             scan_jobs.append(("sqlmap", sqlmap_cmd, sqlmap_timeout))
 
         # Build jwt_tool command
-        if "jwt_tool" not in _skip and not _budget_exceeded() and _should_run_tool("jwt_tool", recon_context=recon_context, tech_stack=tech_stack):
+        if (
+            "jwt_tool" not in _skip
+            and not _budget_exceeded()
+            and _should_run_tool(
+                "jwt_tool", recon_context=recon_context, tech_stack=tech_stack
+            )
+        ):
             _tool_count += 1
             scan_jobs.append(("jwt_tool", ["-u", target, "-C", "-d"], 120))
 
         # Build commix command
-        if "commix" not in _skip and not _budget_exceeded() and _should_run_tool("commix", recon_context=recon_context, tech_stack=tech_stack):
+        if (
+            "commix" not in _skip
+            and not _budget_exceeded()
+            and _should_run_tool(
+                "commix", recon_context=recon_context, tech_stack=tech_stack
+            )
+        ):
             import hashlib
-            _target_slug = hashlib.md5(target.encode(), usedforsecurity=False).hexdigest()[:8]
-            sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
+
+            _target_slug = hashlib.md5(
+                target.encode(), usedforsecurity=False
+            ).hexdigest()[:8]
+            sandbox = (
+                ctx.tool_runner.sandbox_dir
+                if hasattr(ctx.tool_runner, "sandbox_dir")
+                and ctx.tool_runner.sandbox_dir
+                else None
+            )
             if sandbox:
                 sandbox.mkdir(parents=True, exist_ok=True)
                 commix_out = str(sandbox / "tmp" / f"commix_{_target_slug}.json")
             else:
                 import os
                 import tempfile
-                commix_out = os.path.join(tempfile.gettempdir(), f"commix_{_target_slug}.json")
+
+                commix_out = os.path.join(
+                    tempfile.gettempdir(), f"commix_{_target_slug}.json"
+                )
                 _temp_outputs.append(commix_out)
-            scan_jobs.append(("commix",
-                ["--url", target, "--batch", "--json-output", commix_out],
-                TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
+            scan_jobs.append(
+                (
+                    "commix",
+                    ["--url", target, "--batch", "--json-output", commix_out],
+                    TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG,
+                )
+            )
 
         # Build testssl command
-        if "testssl" not in _skip and not _budget_exceeded() and _should_run_tool("testssl", target=target):
+        if (
+            "testssl" not in _skip
+            and not _budget_exceeded()
+            and _should_run_tool("testssl", target=target)
+        ):
             import hashlib
-            _target_slug = hashlib.md5(target.encode(), usedforsecurity=False).hexdigest()[:8]
-            sandbox = ctx.tool_runner.sandbox_dir if hasattr(ctx.tool_runner, 'sandbox_dir') and ctx.tool_runner.sandbox_dir else None
+
+            _target_slug = hashlib.md5(
+                target.encode(), usedforsecurity=False
+            ).hexdigest()[:8]
+            sandbox = (
+                ctx.tool_runner.sandbox_dir
+                if hasattr(ctx.tool_runner, "sandbox_dir")
+                and ctx.tool_runner.sandbox_dir
+                else None
+            )
             if sandbox:
                 sandbox.mkdir(parents=True, exist_ok=True)
                 testssl_out = str(sandbox / "tmp" / f"testssl_{_target_slug}.json")
             else:
                 import os
                 import tempfile
-                testssl_out = os.path.join(tempfile.gettempdir(), f"testssl_{_target_slug}.json")
+
+                testssl_out = os.path.join(
+                    tempfile.gettempdir(), f"testssl_{_target_slug}.json"
+                )
                 _temp_outputs.append(testssl_out)
-            scan_jobs.append(("testssl",
-                ["--jsonfile", testssl_out, target],
-                TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG))
+            scan_jobs.append(
+                (
+                    "testssl",
+                    ["--jsonfile", testssl_out, target],
+                    TOOL_TIMEOUT_DEFAULT if agg == "default" else TOOL_TIMEOUT_LONG,
+                )
+            )
 
         # Log any rate limit events detected during scanning
         rate_limit_repo = _get_rate_limit_repo()
 
         # Run all Phase 2 tools in parallel
-        slog.info(f"Phase 2: Running {len(scan_jobs)} vulnerability scanners in parallel")
+        slog.info(
+            f"Phase 2: Running {len(scan_jobs)} vulnerability scanners in parallel"
+        )
         if scan_jobs:
             with ThreadPoolExecutor(max_workers=5) as pool:
                 futures = {}
@@ -699,22 +873,38 @@ def execute_scan_tools(
                             line_buffer=line_buffer,
                         )
                         future = pool.submit(
-                            _run_scan_tool, ctx, name, args, timeout, all_findings,
-                            on_line=on_line, line_buffer=line_buffer,
+                            _run_scan_tool,
+                            ctx,
+                            name,
+                            args,
+                            timeout,
+                            all_findings,
+                            on_line=on_line,
+                            line_buffer=line_buffer,
                         )
                     else:
                         future = pool.submit(
-                            _run_scan_tool, ctx, name, args, timeout, all_findings,
+                            _run_scan_tool,
+                            ctx,
+                            name,
+                            args,
+                            timeout,
+                            all_findings,
                         )
                     futures[future] = name
                 try:
-                    for future in as_completed(futures, timeout=max(TOOL_TIMEOUT_LONG + 60, 900)):
+                    for future in as_completed(
+                        futures, timeout=max(TOOL_TIMEOUT_LONG + 60, 900)
+                    ):
                         tool_name = futures[future]
                         try:
                             future.result(timeout=30)
                         except Exception as e:
                             err_str = str(e).lower()
-                            if rate_limit_repo and any(kw in err_str for kw in ["429", "rate limit", "too many requests"]):
+                            if rate_limit_repo and any(
+                                kw in err_str
+                                for kw in ["429", "rate limit", "too many requests"]
+                            ):
                                 try:
                                     rate_limit_repo.create_event(
                                         domain=target,
@@ -723,21 +913,26 @@ def execute_scan_tools(
                                         current_rps=0.0,
                                     )
                                 except Exception as rl_err:
-                                    logger.debug(f"Failed to log rate limit event: {rl_err}")
-                            logger.warning(f"Scan tool {tool_name} error: {e}")
+                                    logger.debug(
+                                        "Failed to log rate limit event: %s", rl_err
+                                    )
+                            logger.warning("Scan tool %s error: %s", tool_name, e)
                 except TimeoutError:
-                    logger.warning("Scan tool batch timed out — some tools may not have completed")
+                    logger.warning(
+                        "Scan tool batch timed out — some tools may not have completed"
+                    )
 
         # Authenticate session if auth_config is provided
         authenticated_session = None
         if auth_config:
             try:
                 from tools.auth_manager import AuthManager
+
                 auth_manager = AuthManager(auth_config)
                 authenticated_session = auth_manager.authenticate(target)
-                logger.info(f"Authentication successful for {target}")
+                logger.info("Authentication successful for %s", target)
             except Exception as e:
-                logger.warning(f"Authentication failed for {target}: {e}")
+                logger.warning("Authentication failed for %s: %s", target, e)
 
         # ── Real-time finding streamer ──
         # Normalizes and emits findings inline as each scanner discovers them,
@@ -765,14 +960,16 @@ def execute_scan_tools(
                 emit_finding_callback=_stream_finding,
             )
             emit_tool_start(ctx.engagement_id, "web_scanner", [target])
-            _ws_result = web_scanner.execute(ScannerContext(
-                target=target,
-                timeout=SSL_TIMEOUT,
-                rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
-                engagement_id=ctx.engagement_id,
-                tech_stack=tech_stack,
-                emit_finding=_stream_finding,
-            ))
+            _ws_result = web_scanner.execute(
+                ScannerContext(
+                    target=target,
+                    timeout=SSL_TIMEOUT,
+                    rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
+                    engagement_id=ctx.engagement_id,
+                    tech_stack=tech_stack,
+                    emit_finding=_stream_finding,
+                )
+            )
             web_findings = _ws_result.findings
 
             # Log any rate limit findings detected by the web scanner
@@ -788,7 +985,7 @@ def execute_scan_tools(
                                 current_rps=0.0,
                             )
                         except Exception as rl_err:
-                            logger.debug(f"Failed to log rate limit event: {rl_err}")
+                            logger.debug("Failed to log rate limit event: %s", rl_err)
 
             slog.tool_complete("web_scanner", success=True, findings=len(web_findings))
             # Findings already emitted inline via _stream_finding callback.
@@ -798,14 +995,15 @@ def execute_scan_tools(
                 if normalized:
                     dedup_key = (normalized.get("type"), normalized.get("endpoint"))
                     if not any(
-                        f.get("type") == dedup_key[0] and f.get("endpoint") == dedup_key[1]
+                        f.get("type") == dedup_key[0]
+                        and f.get("endpoint") == dedup_key[1]
                         for f in all_findings
                     ):
                         emit_finding_rt(ctx.engagement_id, normalized, "web_scanner")
                         all_findings.append(normalized)
         except Exception as e:
             slog.tool_complete("web_scanner", success=False)
-            logger.warning(f"WebScanner failed for {target}: {e}")
+            logger.warning("WebScanner failed for %s: %s", target, e)
 
     # DualAuthScanner / BolaWorkflow — cross-account BOLA/BOPLA testing when dual_auth_config is provided
     if dual_auth_config is not None and auth_config is not None:
@@ -828,15 +1026,20 @@ def execute_scan_tools(
                 emit_tool_start(ctx.engagement_id, "bola_workflow", [target])
                 result = workflow.execute()
                 bola_slog.tool_complete(
-                    "bola_workflow", success=result.success, findings=result.findings_created,
+                    "bola_workflow",
+                    success=result.success,
+                    findings=result.findings_created,
                 )
                 emit_tool_complete(
-                    ctx.engagement_id, "bola_workflow", result.success, 0,
+                    ctx.engagement_id,
+                    "bola_workflow",
+                    result.success,
+                    0,
                     finding_count=result.findings_created,
                 )
             except Exception as e:
                 bola_slog.tool_complete("bola_workflow", success=False)
-                logger.warning(f"BolaWorkflow failed for {target}: {e}")
+                logger.warning("BolaWorkflow failed for %s: %s", target, e)
         else:
             # Legacy DualAuthScanner path (unchanged)
             from tools.dual_auth_scanner import DualAuthScanner
@@ -845,40 +1048,57 @@ def execute_scan_tools(
             try:
                 dual_scanner = DualAuthScanner()
                 emit_tool_start(ctx.engagement_id, "dual_auth_scanner", [target])
-                _dual_result = dual_scanner.execute(ScannerContext(
-                    target=target,
-                    timeout=SSL_TIMEOUT,
-                    rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
-                    engagement_id=ctx.engagement_id,
-                    emit_finding=_stream_finding,
-                    dual_auth=DualAuthConfig(
-                        auth_a=auth_config,
-                        auth_b=dual_auth_config,
-                    ),
-                ))
+                _dual_result = dual_scanner.execute(
+                    ScannerContext(
+                        target=target,
+                        timeout=SSL_TIMEOUT,
+                        rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
+                        engagement_id=ctx.engagement_id,
+                        emit_finding=_stream_finding,
+                        dual_auth=DualAuthConfig(
+                            auth_a=auth_config,
+                            auth_b=dual_auth_config,
+                        ),
+                    )
+                )
                 dual_findings = _dual_result.findings
-                slog.tool_complete("dual_auth_scanner", success=True, findings=len(dual_findings))
+                slog.tool_complete(
+                    "dual_auth_scanner", success=True, findings=len(dual_findings)
+                )
                 for df in dual_findings:
                     normalized = ctx._normalize_finding(df, "dual_auth_scanner")
                     if normalized:
                         dedup_key = (normalized.get("type"), normalized.get("endpoint"))
                         if not any(
-                            f.get("type") == dedup_key[0] and f.get("endpoint") == dedup_key[1]
+                            f.get("type") == dedup_key[0]
+                            and f.get("endpoint") == dedup_key[1]
                             for f in all_findings
                         ):
-                            emit_finding_rt(ctx.engagement_id, normalized, "dual_auth_scanner")
+                            emit_finding_rt(
+                                ctx.engagement_id, normalized, "dual_auth_scanner"
+                            )
                             all_findings.append(normalized)
-                emit_tool_complete(ctx.engagement_id, "dual_auth_scanner", True, 0,
-                                   finding_count=len(dual_findings))
-                logger.info(f"DualAuthScanner complete: {len(dual_findings)} findings for {target}")
+                emit_tool_complete(
+                    ctx.engagement_id,
+                    "dual_auth_scanner",
+                    True,
+                    0,
+                    finding_count=len(dual_findings),
+                )
+                logger.info(
+                    "DualAuthScanner complete: %s findings for %s",
+                    len(dual_findings),
+                    target,
+                )
             except Exception as e:
                 slog.tool_complete("dual_auth_scanner", success=False)
-                logger.warning(f"DualAuthScanner failed for {target}: {e}")
+                logger.warning("DualAuthScanner failed for %s: %s", target, e)
 
         # AIVulnScanner — prompt injection and AI information disclosure
         slog.tool_start("ai_vuln_scanner", [target])
         try:
             from tools.ai_vuln_scanner import AIVulnScanner
+
             ai_scanner = AIVulnScanner(
                 timeout=SSL_TIMEOUT * 2,  # AI endpoints may be slower
                 rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
@@ -887,15 +1107,19 @@ def execute_scan_tools(
                 emit_finding_callback=_stream_finding,
             )
             emit_tool_start(ctx.engagement_id, "ai_vuln_scanner", [target])
-            _ai_result = ai_scanner.execute(ScannerContext(
-                target=target,
-                timeout=SSL_TIMEOUT * 2,
-                rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
-                engagement_id=ctx.engagement_id,
-                emit_finding=_stream_finding,
-            ))
+            _ai_result = ai_scanner.execute(
+                ScannerContext(
+                    target=target,
+                    timeout=SSL_TIMEOUT * 2,
+                    rate_limit=RATE_LIMIT_DELAY_MS / 1000.0,
+                    engagement_id=ctx.engagement_id,
+                    emit_finding=_stream_finding,
+                )
+            )
             ai_findings = _ai_result.findings
-            slog.tool_complete("ai_vuln_scanner", success=True, findings=len(ai_findings))
+            slog.tool_complete(
+                "ai_vuln_scanner", success=True, findings=len(ai_findings)
+            )
             # Findings already emitted inline via _stream_finding callback
             # Collect any remaining that weren't streamed (backward compat)
             # L-05: Use fingerprint set for consistent dedup with other tools
@@ -907,50 +1131,78 @@ def execute_scan_tools(
                         continue
                     emit_finding_rt(ctx.engagement_id, normalized, "ai_vuln_scanner")
                     all_findings.append(normalized)
-            emit_tool_complete(ctx.engagement_id, "ai_vuln_scanner", True, 0,
-                                finding_count=len(ai_findings))
+            emit_tool_complete(
+                ctx.engagement_id,
+                "ai_vuln_scanner",
+                True,
+                0,
+                finding_count=len(ai_findings),
+            )
             if ai_findings:
-                logger.info(f"AIVulnScanner complete: {len(ai_findings)} findings for {target}")
+                logger.info(
+                    "AIVulnScanner complete: %s findings for %s",
+                    len(ai_findings),
+                    target,
+                )
         except Exception as e:
             slog.tool_complete("ai_vuln_scanner", success=False)
-            logger.warning(f"AIVulnScanner failed for {target}: {e}")
+            logger.warning("AIVulnScanner failed for %s: %s", target, e)
 
         # WebSocketScanner — WebSocket security testing (origin validation, auth, injection, rate limiting)
         if _feature_enabled("WS_SCANNER", default=False):
             slog.tool_start("websocket_scanner", [target])
             try:
                 from tools.websocket_scanner import WebSocketScanner
+
                 ws_findings = []
 
                 # Discover WebSocket URLs from the target page
                 ws_urls = []
                 try:
-                    ws_urls = _run_async(WebSocketScanner.discover_websocket_urls(target))
+                    ws_urls = _run_async(
+                        WebSocketScanner.discover_websocket_urls(target)
+                    )
                 except Exception as disc_err:
-                    logger.debug(f"WebSocket URL discovery failed for {target}: {disc_err}")
+                    logger.debug(
+                        "WebSocket URL discovery failed for %s: %s", target, disc_err
+                    )
 
                 if ws_urls:
-                    slog.info(f"Discovered {len(ws_urls)} WebSocket URL(s) for {target}: {ws_urls}")
+                    slog.info(
+                        f"Discovered {len(ws_urls)} WebSocket URL(s) for {target}: {ws_urls}"
+                    )
                     for ws_url in ws_urls:
                         try:
                             scanner = WebSocketScanner(timeout=SSL_TIMEOUT)
-                            _ws_result = _run_async(scanner.async_execute(ScannerContext(
-                                target=ws_url,
-                                timeout=SSL_TIMEOUT,
-                            )))
+                            _ws_result = _run_async(
+                                scanner.async_execute(
+                                    ScannerContext(
+                                        target=ws_url,
+                                        timeout=SSL_TIMEOUT,
+                                    )
+                                )
+                            )
                             ws_findings.extend(_ws_result.findings)
                         except RuntimeError as ws_err:
                             # Missing dependency (websockets or httpx) — skip gracefully
                             if "is required" in str(ws_err):
-                                slog.info(f"WebSocket scanning skipped (missing dependency): {ws_err}")
+                                slog.info(
+                                    f"WebSocket scanning skipped (missing dependency): {ws_err}"
+                                )
                                 break
-                            logger.debug(f"WebSocket scan failed for {ws_url}: {ws_err}")
+                            logger.debug(
+                                "WebSocket scan failed for %s: %s", ws_url, ws_err
+                            )
                         except Exception as ws_err:
-                            logger.debug(f"WebSocket scan failed for {ws_url}: {ws_err}")
+                            logger.debug(
+                                "WebSocket scan failed for %s: %s", ws_url, ws_err
+                            )
                 else:
-                    slog.info(f"No WebSocket URLs discovered for {target}")
+                    slog.info("No WebSocket URLs discovered for %s", target)
 
-                slog.tool_complete("websocket_scanner", success=True, findings=len(ws_findings))
+                slog.tool_complete(
+                    "websocket_scanner", success=True, findings=len(ws_findings)
+                )
                 # L-04: Use fingerprint set for consistent dedup with other tools
                 for wf in ws_findings:
                     normalized = ctx._normalize_finding(wf, "websocket_scanner")
@@ -958,20 +1210,31 @@ def execute_scan_tools(
                         fp = f"{normalized.get('type')}|{normalized.get('endpoint')}|websocket_scanner"
                         if not _dedup_fingerprint(ctx.engagement_id, fp):
                             continue
-                        emit_finding_rt(ctx.engagement_id, normalized, "websocket_scanner")
+                        emit_finding_rt(
+                            ctx.engagement_id, normalized, "websocket_scanner"
+                        )
                         all_findings.append(normalized)
-                emit_tool_complete(ctx.engagement_id, "websocket_scanner", True, 0,
-                                   finding_count=len(ws_findings))
+                emit_tool_complete(
+                    ctx.engagement_id,
+                    "websocket_scanner",
+                    True,
+                    0,
+                    finding_count=len(ws_findings),
+                )
                 if ws_findings:
-                    logger.info(f"WebSocketScanner complete: {len(ws_findings)} findings for {target}")
+                    logger.info(
+                        "WebSocketScanner complete: %s findings for %s",
+                        len(ws_findings),
+                        target,
+                    )
             except Exception as e:
                 slog.tool_complete("websocket_scanner", success=False)
-                logger.warning(f"WebSocketScanner failed for {target}: {e}")
+                logger.warning("WebSocketScanner failed for %s: %s", target, e)
 
         slog.target_complete(target, findings=len(all_findings))
 
     # Clean up per-engagement RT fingerprints to prevent unbounded memory growth
-    eng_id = getattr(ctx, 'engagement_id', '')
+    eng_id = getattr(ctx, "engagement_id", "")
     if eng_id:
         clear_engagement_rt_fingerprints(eng_id)
         # Also clean up the in-memory dedup set to prevent leaks on crash
@@ -983,6 +1246,7 @@ def execute_scan_tools(
     # no sandbox directory is available. Files in the sandbox are cleaned up by
     # the Orchestrator's atexit handler (M-v4-06).
     import os as _os
+
     for _tmp_path in _temp_outputs:
         try:
             if _os.path.exists(_tmp_path):
@@ -998,13 +1262,20 @@ def execute_scan_tools(
         db_conn = _os.environ.get("DATABASE_URL")
         if db_conn and all_findings:
             from intelligence_engine import IntelligenceEngine
+
             engine = IntelligenceEngine(db_conn)
-            slog.info(f"Enriching {len(all_findings)} findings with threat intel (async)")
-            enriched = _run_async(engine.enrich_findings_with_threat_intel_async(all_findings))
+            slog.info(
+                f"Enriching {len(all_findings)} findings with threat intel (async)"
+            )
+            enriched = _run_async(
+                engine.enrich_findings_with_threat_intel_async(all_findings)
+            )
             if enriched:
                 all_findings[:] = enriched
     except Exception:
         logger.debug("Async enrichment skipped (non-fatal)", exc_info=True)
 
-    slog.info(f"Scan pipeline complete: {len(all_findings)} total findings across {len(targets)} targets")
+    slog.info(
+        f"Scan pipeline complete: {len(all_findings)} total findings across {len(targets)} targets"
+    )
     return all_findings

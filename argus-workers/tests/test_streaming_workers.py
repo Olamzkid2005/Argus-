@@ -93,7 +93,9 @@ class TestStreamEvent:
         assert se.engagement_id == ""
 
     def test_to_dict(self):
-        se = StreamEvent(event_type=StreamEventType.FINDING, data={"key": "val"}, engagement_id="e1")
+        se = StreamEvent(
+            event_type=StreamEventType.FINDING, data={"key": "val"}, engagement_id="e1"
+        )
         d = se.to_dict()
         assert d["type"] == "finding"
         assert d["data"]["key"] == "val"
@@ -182,7 +184,11 @@ class TestStreamManager:
         """StreamManager.publish should accept legacy StreamEvent objects."""
         sm = StreamManager()
         q = sm.subscribe("eng-1")
-        se = StreamEvent(event_type=StreamEventType.THINKING, data={"msg": "hello"}, engagement_id="eng-1")
+        se = StreamEvent(
+            event_type=StreamEventType.THINKING,
+            data={"msg": "hello"},
+            engagement_id="eng-1",
+        )
         sm.publish(se)
         received = q.get(timeout=1)
         # Should be converted to Event internally
@@ -209,7 +215,11 @@ class TestStreamManager:
     def test_evict_stale_engagements(self):
         sm = StreamManager()
         sm.subscribe("eng-stale")
-        sm.publish(Event(type="old", engagement_id="eng-stale", timestamp="2020-01-01T00:00:00"))
+        sm.publish(
+            Event(
+                type="old", engagement_id="eng-stale", timestamp="2020-01-01T00:00:00"
+            )
+        )
         sm.evict_stale_engagements(max_engagement_age_seconds=1)
         assert "eng-stale" not in sm._history
 
@@ -234,7 +244,9 @@ class TestStreamManager:
             except Exception as e:
                 errors.append(e)
 
-        threads = [threading.Thread(target=worker, args=(f"eng-{i}", 10)) for i in range(5)]
+        threads = [
+            threading.Thread(target=worker, args=(f"eng-{i}", 10)) for i in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -386,7 +398,12 @@ class TestEmitConvenienceFunctions:
         with patch("streaming.get_stream_manager") as mock_get:
             mock_sm = MagicMock()
             mock_get.return_value = mock_sm
-            finding = {"type": "XSS", "severity": "HIGH", "endpoint": "/api", "confidence": 0.9}
+            finding = {
+                "type": "XSS",
+                "severity": "HIGH",
+                "endpoint": "/api",
+                "confidence": 0.9,
+            }
             emit_finding_rt("eng-1", finding, "nuclei")
             mock_sm.publish.assert_called_once()
 

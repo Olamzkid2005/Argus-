@@ -40,7 +40,7 @@ print("-" * 70)
 print("1. RateLimitRepository ScanLogger Output")
 print("-" * 70)
 
-from utils.logging_utils import ScanLogger
+from utils.logging_utils import ScanLogger  # noqa: E402
 
 slog = ScanLogger("scan_pipeline", engagement_id=ENGAGEMENT_ID)
 slog.info("Rate limit detected for target: example.test (429 Too Many Requests)")
@@ -60,12 +60,17 @@ from unittest.mock import MagicMock
 
 mock_repo = MagicMock()
 mock_repo.create_event.return_value = {
-    "id": 1, "domain": "example.test", "event_type": "tool_rate_limited",
-    "status_code": 429, "current_rps": 0.0,
+    "id": 1,
+    "domain": "example.test",
+    "event_type": "tool_rate_limited",
+    "status_code": 429,
+    "current_rps": 0.0,
 }
 result = mock_repo.create_event(
-    domain="example.test", event_type="tool_rate_limited",
-    status_code=429, current_rps=0.0,
+    domain="example.test",
+    event_type="tool_rate_limited",
+    status_code=429,
+    current_rps=0.0,
 )
 print(f"   Mock create_event returned: {result}")
 print(f"   create_event called: {mock_repo.create_event.called}")
@@ -85,7 +90,9 @@ slog2.tool_complete("nuclei", success=False, findings=0, duration_ms=12000)
 # Simulate the actual code path in execute_scan_tools:
 # The code does: rate_limit_repo.create_event(domain=target, event_type="tool_rate_limited", status_code=429, current_rps=0.0)
 print("   Simulated execute_scan_tools rate-limit code path:")
-print("   rate_limit_repo.create_event(domain='example.test', event_type='tool_rate_limited',")
+print(
+    "   rate_limit_repo.create_event(domain='example.test', event_type='tool_rate_limited',"
+)
 print("                              status_code=429, current_rps=0.0)")
 print()
 
@@ -94,8 +101,13 @@ print("-" * 70)
 print("4. FindingVerifier Module ScanLogger Output")
 print("-" * 70)
 
+
 async def run_verifiers():
-    from tools.finding_verifier import verify_open_redirect, verify_sqli, verify_xss
+    from tools.finding_verifier import (  # noqa: E402
+        verify_open_redirect,
+        verify_sqli,
+        verify_xss,
+    )
 
     print("   Calling verify_sqli (will fail on HTTP, but ScanLogger runs first)...")
     sqli_result = await verify_sqli(
@@ -103,7 +115,9 @@ async def run_verifiers():
         "' OR 1=1--",
         engagement_id=ENGAGEMENT_ID,
     )
-    print(f"   Result: verified={sqli_result['verified']}, confidence={sqli_result['confidence']}")
+    print(
+        f"   Result: verified={sqli_result['verified']}, confidence={sqli_result['confidence']}"
+    )
     print(f"   Reason: {sqli_result['reason']}")
     print()
 
@@ -113,15 +127,22 @@ async def run_verifiers():
         "<script>alert(1)</script>",
         engagement_id=ENGAGEMENT_ID,
     )
-    print(f"   Result: verified={xss_result['verified']}, confidence={xss_result['confidence']}")
+    print(
+        f"   Result: verified={xss_result['verified']}, confidence={xss_result['confidence']}"
+    )
     print()
 
-    print("   Calling verify_open_redirect (will fail on HTTP, but ScanLogger runs first)...")
+    print(
+        "   Calling verify_open_redirect (will fail on HTTP, but ScanLogger runs first)..."
+    )
     redirect_result = await verify_open_redirect(
         "https://nonexistent.example/",
         engagement_id=ENGAGEMENT_ID,
     )
-    print(f"   Result: verified={redirect_result['verified']}, confidence={redirect_result['confidence']}")
+    print(
+        f"   Result: verified={redirect_result['verified']}, confidence={redirect_result['confidence']}"
+    )
+
 
 asyncio.run(run_verifiers())
 

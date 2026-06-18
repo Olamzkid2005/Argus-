@@ -7,6 +7,7 @@ Provides:
 - ToolRegistry: Registry of available tools
 - AgentAction / AgentResult: Core data types
 """
+
 from .agent_action import AgentAction
 from .agent_prompts import (
     BUGBOUNTY_STOPPING_RULES,

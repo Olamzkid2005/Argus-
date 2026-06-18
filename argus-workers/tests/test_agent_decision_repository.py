@@ -11,24 +11,42 @@ def mock_db_cursor():
     mock_cursor.fetchone.return_value = None
     mock_cursor.fetchall.return_value = []
     mock_cursor.description = [
-        ("id",), ("engagement_id",), ("phase",), ("iteration",),
-        ("tool_selected",), ("arguments",), ("reasoning",),
-        ("was_fallback",), ("input_tokens",), ("output_tokens",),
-        ("cost_usd",), ("created_at",),
+        ("id",),
+        ("engagement_id",),
+        ("phase",),
+        ("iteration",),
+        ("tool_selected",),
+        ("arguments",),
+        ("reasoning",),
+        ("was_fallback",),
+        ("input_tokens",),
+        ("output_tokens",),
+        ("cost_usd",),
+        ("created_at",),
     ]
 
     def _set_description(sql, params=None):
         if "SUM" in sql or "total_decisions" in sql:
             mock_cursor.description = [
-                ("total_decisions",), ("total_cost_usd",),
-                ("fallback_count",), ("llm_count",),
+                ("total_decisions",),
+                ("total_cost_usd",),
+                ("fallback_count",),
+                ("llm_count",),
             ]
         else:
             mock_cursor.description = [
-                ("id",), ("engagement_id",), ("phase",), ("iteration",),
-                ("tool_selected",), ("arguments",), ("reasoning",),
-                ("was_fallback",), ("input_tokens",), ("output_tokens",),
-                ("cost_usd",), ("created_at",),
+                ("id",),
+                ("engagement_id",),
+                ("phase",),
+                ("iteration",),
+                ("tool_selected",),
+                ("arguments",),
+                ("reasoning",),
+                ("was_fallback",),
+                ("input_tokens",),
+                ("output_tokens",),
+                ("cost_usd",),
+                ("created_at",),
             ]
 
     mock_cursor.execute.side_effect = _set_description
@@ -37,18 +55,25 @@ def mock_db_cursor():
     mock_cm.__enter__.return_value = mock_cursor
     mock_cm.__exit__.return_value = None
 
-    with patch("database.repositories.agent_decision_repository.db_cursor", return_value=mock_cm):
+    with patch(
+        "database.repositories.agent_decision_repository.db_cursor",
+        return_value=mock_cm,
+    ):
         yield mock_cursor
 
 
 class TestAgentDecisionRepositoryInit:
     def test_uses_env_var_when_no_db_conn_passed(self):
-        with patch.dict("os.environ", {"DATABASE_URL": "postgres://env:5432/db"}, clear=True):
+        with patch.dict(
+            "os.environ", {"DATABASE_URL": "postgres://env:5432/db"}, clear=True
+        ):
             repo = AgentDecisionRepository()
             assert repo.db_conn == "postgres://env:5432/db"
 
     def test_uses_passed_db_conn_over_env_var(self):
-        with patch.dict("os.environ", {"DATABASE_URL": "postgres://env:5432/db"}, clear=True):
+        with patch.dict(
+            "os.environ", {"DATABASE_URL": "postgres://env:5432/db"}, clear=True
+        ):
             repo = AgentDecisionRepository(db_conn="postgres://passed:5432/db")
             assert repo.db_conn == "postgres://passed:5432/db"
 
@@ -108,7 +133,20 @@ class TestLogDecision:
 class TestGetDecisions:
     def test_returns_list_of_dicts(self, mock_db_cursor):
         mock_db_cursor.fetchall.return_value = [
-            ("1", "eng-1", "scan", 1, "nuclei", "{}", "", False, 100, 50, 0.015, "2025-01-01"),
+            (
+                "1",
+                "eng-1",
+                "scan",
+                1,
+                "nuclei",
+                "{}",
+                "",
+                False,
+                100,
+                50,
+                0.015,
+                "2025-01-01",
+            ),
         ]
         repo = AgentDecisionRepository()
 
@@ -181,7 +219,12 @@ class TestGetStatsSince:
 
         result = repo.get_stats_since(since_hours=24)
 
-        assert result == {"total_decisions": 0, "total_cost_usd": 0.0, "fallback_count": 0, "llm_count": 0}
+        assert result == {
+            "total_decisions": 0,
+            "total_cost_usd": 0.0,
+            "fallback_count": 0,
+            "llm_count": 0,
+        }
 
     def test_returns_zeros_when_fetchone_returns_none(self, mock_db_cursor):
         mock_db_cursor.fetchone.return_value = None
@@ -189,13 +232,31 @@ class TestGetStatsSince:
 
         result = repo.get_stats_since(since_hours=24)
 
-        assert result == {"total_decisions": 0, "total_cost_usd": 0.0, "fallback_count": 0, "llm_count": 0}
+        assert result == {
+            "total_decisions": 0,
+            "total_cost_usd": 0.0,
+            "fallback_count": 0,
+            "llm_count": 0,
+        }
 
 
 class TestGetRecentDecisions:
     def test_returns_list(self, mock_db_cursor):
         mock_db_cursor.fetchall.return_value = [
-            ("1", "eng-1", "scan", 1, "nuclei", "{}", "", False, 100, 50, 0.015, "2025-01-01"),
+            (
+                "1",
+                "eng-1",
+                "scan",
+                1,
+                "nuclei",
+                "{}",
+                "",
+                False,
+                100,
+                50,
+                0.015,
+                "2025-01-01",
+            ),
         ]
         repo = AgentDecisionRepository()
 

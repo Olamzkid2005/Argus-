@@ -133,6 +133,7 @@ class TestWorkerCacheMetrics:
         mock_get_redis.return_value = mock_client
         # Override CACHE_DB to match mock
         import cache as cache_module
+
         cache_module.CACHE_DB = 1
         wc = WorkerCache(ttl=300)
 
@@ -168,7 +169,12 @@ class TestWorkerCacheMetrics:
         def mock_get(key):
             return json.dumps({"data": "val"})
 
-        mock_client.get.side_effect = [mock_get("k"), mock_get("k"), mock_get("k"), None]
+        mock_client.get.side_effect = [
+            mock_get("k"),
+            mock_get("k"),
+            mock_get("k"),
+            None,
+        ]
         wc = WorkerCache(ttl=300)
 
         wc.get("a")

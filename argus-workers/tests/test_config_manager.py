@@ -89,9 +89,7 @@ class TestConfigManager:
         assert result["b"] == 2
 
     def test_reload_picks_up_changes(self):
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("server:\n  port: 9000\n")
             config_path = f.name
 
@@ -124,9 +122,7 @@ class TestConfigManager:
             assert cm.get("server.host") == "127.0.0.1"
 
     def test_with_valid_yaml(self):
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("server:\n  host: 0.0.0.0\n  port: 8080\n")
             config_path = f.name
 
@@ -141,6 +137,7 @@ class TestConfigManager:
 
     def test_thread_safety(self):
         import threading
+
         cm = ConfigManager(config_path="/nonexistent/config.yaml")
         errors = []
 

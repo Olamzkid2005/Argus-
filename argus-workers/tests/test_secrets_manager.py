@@ -3,6 +3,7 @@ Tests for secrets_manager.py
 
 Validates: Vault retrieval, AWS retrieval, caching, environment fallback
 """
+
 import os
 from unittest.mock import MagicMock, Mock, patch
 
@@ -36,8 +37,19 @@ class TestSecretsManager:
         mock_hvac.Client.return_value = mock_client
 
         with (
-            patch.dict(os.environ, {"VAULT_ADDR": "http://vault:8200", "VAULT_TOKEN": "token123"}, clear=False),
-            patch("builtins.__import__", side_effect=lambda name, *args, **kwargs: mock_hvac if name == "hvac" else __builtins__.__import__(name, *args, **kwargs)),
+            patch.dict(
+                os.environ,
+                {"VAULT_ADDR": "http://vault:8200", "VAULT_TOKEN": "token123"},
+                clear=False,
+            ),
+            patch(
+                "builtins.__import__",
+                side_effect=lambda name, *args, **kwargs: (
+                    mock_hvac
+                    if name == "hvac"
+                    else __builtins__.__import__(name, *args, **kwargs)
+                ),
+            ),
         ):
             client = manager._get_vault_client()
 
@@ -50,7 +62,9 @@ class TestSecretsManager:
 
     def test_get_vault_client_import_error(self, manager):
         """Test Vault client handles missing hvac gracefully"""
-        with patch("builtins.__import__", side_effect=ImportError("No module named hvac")):
+        with patch(
+            "builtins.__import__", side_effect=ImportError("No module named hvac")
+        ):
             client = manager._get_vault_client()
         assert client is None
 
@@ -62,16 +76,27 @@ class TestSecretsManager:
 
         with (
             patch.dict(os.environ, {"AWS_REGION": "us-west-2"}, clear=False),
-            patch("builtins.__import__", side_effect=lambda name, *args, **kwargs: mock_boto3 if name == "boto3" else __builtins__.__import__(name, *args, **kwargs)),
+            patch(
+                "builtins.__import__",
+                side_effect=lambda name, *args, **kwargs: (
+                    mock_boto3
+                    if name == "boto3"
+                    else __builtins__.__import__(name, *args, **kwargs)
+                ),
+            ),
         ):
             client = manager._get_aws_client()
 
         assert client is mock_client
-        mock_boto3.client.assert_called_once_with("secretsmanager", region_name="us-west-2")
+        mock_boto3.client.assert_called_once_with(
+            "secretsmanager", region_name="us-west-2"
+        )
 
     def test_get_aws_client_import_error(self, manager):
         """Test AWS client handles missing boto3 gracefully"""
-        with patch("builtins.__import__", side_effect=ImportError("No module named boto3")):
+        with patch(
+            "builtins.__import__", side_effect=ImportError("No module named boto3")
+        ):
             client = manager._get_aws_client()
         assert client is None
 
@@ -89,7 +114,9 @@ class TestSecretsManager:
 
         assert result == "vault-secret-value"
         assert manager._cache["my-key"] == "vault-secret-value"
-        mock_vault.secrets.kv.v2.read_secret_version.assert_called_once_with(path="secret/argus/my-key")
+        mock_vault.secrets.kv.v2.read_secret_version.assert_called_once_with(
+            path="secret/argus/my-key"
+        )
 
     def test_get_secret_from_aws(self, manager):
         """Test retrieving secret from AWS Secrets Manager"""
@@ -132,23 +159,33 @@ class TestSecretsManager:
 
     def test_get_database_url(self, manager):
         """Test get_database_url retrieves DATABASE_URL"""
-        with patch.object(manager, "get_secret", return_value="postgres://db") as mock_get:
+        with patch.object(
+            manager, "get_secret", return_value="postgres://db"
+        ) as mock_get:
             result = manager.get_database_url()
 
         assert result == "postgres://db"
-        mock_get.assert_called_once_with("DATABASE_URL", os.getenv("DATABASE_URL", "postgresql://localhost/argus"))
+        mock_get.assert_called_once_with(
+            "DATABASE_URL", os.getenv("DATABASE_URL", "postgresql://localhost/argus")
+        )
 
     def test_get_redis_url(self, manager):
         """Test get_redis_url retrieves REDIS_URL"""
-        with patch.object(manager, "get_secret", return_value="redis://cache") as mock_get:
+        with patch.object(
+            manager, "get_secret", return_value="redis://cache"
+        ) as mock_get:
             result = manager.get_redis_url()
 
         assert result == "redis://cache"
-        mock_get.assert_called_once_with("REDIS_URL", os.getenv("REDIS_URL", "redis://localhost:6379"))
+        mock_get.assert_called_once_with(
+            "REDIS_URL", os.getenv("REDIS_URL", "redis://localhost:6379")
+        )
 
     def test_get_api_key(self, manager):
         """Test get_api_key constructs correct key name"""
-        with patch.object(manager, "get_secret", return_value="api-key-123") as mock_get:
+        with patch.object(
+            manager, "get_secret", return_value="api-key-123"
+        ) as mock_get:
             result = manager.get_api_key("stripe")
 
         assert result == "api-key-123"
@@ -185,7 +222,9 @@ class TestSecretsManager:
         """Test Vault exception falls through to next backend"""
         mock_vault = MagicMock()
         mock_vault.is_authenticated.return_value = True
-        mock_vault.secrets.kv.v2.read_secret_version.side_effect = Exception("Vault error")
+        mock_vault.secrets.kv.v2.read_secret_version.side_effect = Exception(
+            "Vault error"
+        )
         manager._vault_client = mock_vault
         manager._aws_client = None
 

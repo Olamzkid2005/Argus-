@@ -96,7 +96,9 @@ class Governance:
         # 1. Runtime timeout check
         elapsed = time.time() - self._start_time
         if elapsed > self.max_runtime_seconds:
-            self._shutdown("runtime_timeout", f"Runtime exceeded {self.max_runtime_seconds}s")
+            self._shutdown(
+                "runtime_timeout", f"Runtime exceeded {self.max_runtime_seconds}s"
+            )
             return False, self._shutdown_reason
 
         # 2. Cost check (estimate before execution)
@@ -104,14 +106,20 @@ class Governance:
         # the agent from choosing expensive tools when budget is tight.
         projected_cost = self._total_cost_usd + float(cost)
         if projected_cost > self.max_cost_usd:
-            self._shutdown("cost_guard", f"Projected cost ${projected_cost:.4f} exceeds ${self.max_cost_usd:.4f}")
+            self._shutdown(
+                "cost_guard",
+                f"Projected cost ${projected_cost:.4f} exceeds ${self.max_cost_usd:.4f}",
+            )
             return False, self._shutdown_reason
 
         # 3. Token budget check (approximate based on tool complexity)
         estimated_tokens = self._estimate_token_usage(tool_name)
         projected_tokens = self._total_tokens_used + estimated_tokens
         if projected_tokens > self.max_tokens:
-            self._shutdown("token_budget", f"Projected tokens {projected_tokens} exceeds {self.max_tokens}")
+            self._shutdown(
+                "token_budget",
+                f"Projected tokens {projected_tokens} exceeds {self.max_tokens}",
+            )
             return False, self._shutdown_reason
 
         return True, ""
@@ -218,7 +226,8 @@ class Governance:
         self._shutdown_reason = f"{reason}: {detail}"
         logger.warning(
             "Governance shutdown for engagement %s: %s",
-            self.engagement_id, self._shutdown_reason,
+            self.engagement_id,
+            self._shutdown_reason,
         )
 
     def _estimate_token_usage(self, tool_name: str) -> int:
@@ -247,6 +256,7 @@ class Governance:
             return len(result.findings)
         if hasattr(result, "output") and result.output:
             import json
+
             try:
                 data = json.loads(result.output)
                 if isinstance(data, list):
@@ -268,6 +278,7 @@ class Governance:
             findings = result.findings
         elif hasattr(result, "output") and result.output:
             import json
+
             try:
                 data = json.loads(result.output)
                 if isinstance(data, list):

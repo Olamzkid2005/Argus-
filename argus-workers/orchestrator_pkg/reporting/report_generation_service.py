@@ -92,7 +92,8 @@ class ReportGenerationService:
             emit_thinking(self.engagement_id, "LLM report generated successfully")
         except Exception as e:
             logger.warning(
-                "LLM report generation failed (non-fatal): %s", e,
+                "LLM report generation failed (non-fatal): %s",
+                e,
             )
 
         return report_data

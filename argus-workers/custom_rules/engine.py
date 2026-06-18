@@ -48,13 +48,19 @@ class CustomRuleEngine:
                     rule_data = yaml.safe_load(rule_file.read_text())
                     if isinstance(rule_data, dict) and "rules" in rule_data:
                         for rule in rule_data["rules"]:
-                            rule["_source_file"] = str(rule_file.relative_to(self.rules_dir))
+                            rule["_source_file"] = str(
+                                rule_file.relative_to(self.rules_dir)
+                            )
                             self.rules.append(rule)
                     elif isinstance(rule_data, dict) and "id" in rule_data:
-                        rule_data["_source_file"] = str(rule_file.relative_to(self.rules_dir))
+                        rule_data["_source_file"] = str(
+                            rule_file.relative_to(self.rules_dir)
+                        )
                         self.rules.append(rule_data)
                 except Exception as e:
-                    raise CustomRuleError(f"Failed to load rule {rule_file}: {e}") from e
+                    raise CustomRuleError(
+                        f"Failed to load rule {rule_file}: {e}"
+                    ) from e
 
     def add_rule(self, rule: dict):
         """Add a single rule to the engine."""
@@ -90,9 +96,7 @@ class CustomRuleEngine:
                                 "category", "custom"
                             ),
                         },
-                        "confidence": rule.get("metadata", {}).get(
-                            "confidence", 0.80
-                        ),
+                        "confidence": rule.get("metadata", {}).get("confidence", 0.80),
                         "tool": "custom_rule_engine",
                     }
                     # Bug-Reaper integration fields

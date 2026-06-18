@@ -105,7 +105,10 @@ class TestFindingPersistenceServiceSave:
     @patch("streaming.StreamingFindingEmitter")
     @patch("database.services.embedding_service.EmbeddingService")
     def test_save_full_pipeline(
-        self, mock_embed, mock_emitter_cls, svc,
+        self,
+        mock_embed,
+        mock_emitter_cls,
+        svc,
     ):
         emitter_instance = MagicMock()
         mock_emitter_cls.return_value = emitter_instance
@@ -115,13 +118,23 @@ class TestFindingPersistenceServiceSave:
                 f["_saved_id"] = "saved-" + f.get("type", "x")
             return (1, 0)
 
-        svc.finding_repo.batch_create_or_update_findings.side_effect = _batch_side_effect
+        svc.finding_repo.batch_create_or_update_findings.side_effect = (
+            _batch_side_effect
+        )
 
         findings = [
-            {"tool": "nuclei", "type": "XSS", "severity": "CRITICAL",
-             "cvss_score": 7.5, "owasp_category": "A7", "cwe_id": "CWE-79",
-             "endpoint": "/search", "evidence": {}, "confidence": 0.9,
-             "source_tool": "nuclei"},
+            {
+                "tool": "nuclei",
+                "type": "XSS",
+                "severity": "CRITICAL",
+                "cvss_score": 7.5,
+                "owasp_category": "A7",
+                "cwe_id": "CWE-79",
+                "endpoint": "/search",
+                "evidence": {},
+                "confidence": 0.9,
+                "source_tool": "nuclei",
+            },
         ]
 
         result = svc.save(findings)
@@ -138,9 +151,15 @@ class TestFindingPersistenceServiceSave:
         svc.finding_repo.upsert_secret_finding.return_value = "saved-id-1"
 
         findings = [
-            {"type": "COMMITTED_SECRET_API_KEY", "severity": "CRITICAL",
-             "cvss_score": 9.0, "endpoint": "/repo", "evidence": {},
-             "confidence": 0.99, "source_tool": "gitleaks"},
+            {
+                "type": "COMMITTED_SECRET_API_KEY",
+                "severity": "CRITICAL",
+                "cvss_score": 9.0,
+                "endpoint": "/repo",
+                "evidence": {},
+                "confidence": 0.99,
+                "source_tool": "gitleaks",
+            },
         ]
 
         result = svc.save(findings)
@@ -215,7 +234,9 @@ class TestPreprocess:
         )
 
         svc = FindingPersistenceService(
-            engagement_id="e1", finding_repo=None, bug_bounty_mode=True,
+            engagement_id="e1",
+            finding_repo=None,
+            bug_bounty_mode=True,
         )
         findings = [{"type": "XSS"}]
         result = svc._preprocess(findings)
@@ -233,7 +254,9 @@ class TestPreprocess:
         result = svc._preprocess(findings)
         assert result[0]["cvss_score"] == 8.5
         mock_estimate.assert_called_once_with(
-            finding_type="XSS", severity="HIGH", evidence_strength="strong",
+            finding_type="XSS",
+            severity="HIGH",
+            evidence_strength="strong",
         )
 
     def test_owasp_cwe_classification(self):
@@ -243,7 +266,8 @@ class TestPreprocess:
 
         classify = MagicMock(return_value={"owasp": "A7", "cwe": "CWE-79"})
         svc = FindingPersistenceService(
-            engagement_id="e1", finding_repo=None,
+            engagement_id="e1",
+            finding_repo=None,
             classify_finding_type_fn=classify,
         )
         findings = [{"type": "XSS", "cvss_score": 5.0}]
@@ -257,8 +281,14 @@ class TestPreprocess:
         )
 
         svc = FindingPersistenceService(engagement_id="e1", finding_repo=None)
-        findings = [{"type": "XSS", "cvss_score": 5.0, "owasp_category": "A7",
-                      "cwe_id": "CWE-79"}]
+        findings = [
+            {
+                "type": "XSS",
+                "cvss_score": 5.0,
+                "owasp_category": "A7",
+                "cwe_id": "CWE-79",
+            }
+        ]
         result = svc._preprocess(findings)
         assert result[0]["source_tool"] == "unknown"
 
@@ -268,8 +298,15 @@ class TestPreprocess:
         )
 
         svc = FindingPersistenceService(engagement_id="e1", finding_repo=None)
-        findings = [{"type": "XSS", "cvss_score": 5.0, "tool": "nuclei",
-                      "owasp_category": "A7", "cwe_id": "CWE-79"}]
+        findings = [
+            {
+                "type": "XSS",
+                "cvss_score": 5.0,
+                "tool": "nuclei",
+                "owasp_category": "A7",
+                "cwe_id": "CWE-79",
+            }
+        ]
         result = svc._preprocess(findings)
         assert result[0]["source_tool"] == "nuclei"
 
@@ -279,8 +316,14 @@ class TestPreprocess:
         )
 
         svc = FindingPersistenceService(engagement_id="e1", finding_repo=None)
-        findings = [{"type": "XSS", "cvss_score": 9.0, "owasp_category": "A7",
-                      "cwe_id": "CWE-79"}]
+        findings = [
+            {
+                "type": "XSS",
+                "cvss_score": 9.0,
+                "owasp_category": "A7",
+                "cwe_id": "CWE-79",
+            }
+        ]
         result = svc._preprocess(findings)
         assert result[0]["cvss_score"] == 9.0
 
@@ -290,8 +333,14 @@ class TestPreprocess:
         )
 
         svc = FindingPersistenceService(engagement_id="e1", finding_repo=None)
-        findings = [{"type": "XSS", "cvss_score": 5.0,
-                      "owasp_category": "A1", "cwe_id": "CWE-1"}]
+        findings = [
+            {
+                "type": "XSS",
+                "cvss_score": 5.0,
+                "owasp_category": "A1",
+                "cwe_id": "CWE-1",
+            }
+        ]
         result = svc._preprocess(findings)
         assert result[0]["owasp_category"] == "A1"
         assert result[0]["cwe_id"] == "CWE-1"
@@ -354,12 +403,15 @@ class TestUpdateCompliancePosture:
         )
 
         repo = MagicMock()
+
         class FakeFinding:
             def to_dict(self):
                 return {"type": "XSS", "severity": "HIGH", "endpoint": "/api"}
+
         repo.get_findings_by_engagement.return_value = ([FakeFinding()], 1)
         svc = FindingPersistenceService(
-            engagement_id="eng-001", finding_repo=repo,
+            engagement_id="eng-001",
+            finding_repo=repo,
         )
 
         svc._update_compliance_posture()
@@ -376,7 +428,8 @@ class TestUpdateCompliancePosture:
         repo = MagicMock()
         repo.get_findings_by_engagement.side_effect = Exception("DB error")
         svc = FindingPersistenceService(
-            engagement_id="eng-001", finding_repo=repo,
+            engagement_id="eng-001",
+            finding_repo=repo,
         )
 
         svc._update_compliance_posture()  # should not raise
@@ -396,7 +449,8 @@ class TestBatchSaveNonSecret:
             repo = MagicMock()
             repo.batch_create_or_update_findings.return_value = (1, 0)
             svc = FindingPersistenceService(
-                engagement_id="eng-001", finding_repo=repo,
+                engagement_id="eng-001",
+                finding_repo=repo,
             )
             emitter = MagicMock()
             findings = [{"_saved_id": "fid-1", "type": "XSS", "severity": "HIGH"}]
@@ -416,10 +470,12 @@ class TestBatchSaveNonSecret:
             repo = MagicMock()
             repo.batch_create_or_update_findings.side_effect = FakeCapError()
             svc = FindingPersistenceService(
-                engagement_id="eng-001", finding_repo=repo,
+                engagement_id="eng-001",
+                finding_repo=repo,
             )
             result = svc._batch_save_non_secret(
-                [{"type": "XSS"}], MagicMock(),
+                [{"type": "XSS"}],
+                MagicMock(),
             )
             assert result == 1
 
@@ -430,7 +486,8 @@ class TestBatchSaveNonSecret:
         )
 
         svc = FindingPersistenceService(
-            engagement_id="eng-001", finding_repo=MagicMock(),
+            engagement_id="eng-001",
+            finding_repo=MagicMock(),
         )
         result = svc._batch_save_non_secret([], MagicMock())
         assert result == 0
@@ -448,12 +505,21 @@ class TestUpsertSecrets:
         repo = MagicMock()
         repo.upsert_secret_finding.return_value = "saved-id-1"
         svc = FindingPersistenceService(
-            engagement_id="eng-001", finding_repo=repo,
+            engagement_id="eng-001",
+            finding_repo=repo,
         )
         emitter = MagicMock()
-        findings = [{"type": "COMMITTED_SECRET", "severity": "CRITICAL",
-                      "endpoint": "/", "evidence": {}, "confidence": 0.9,
-                      "source_tool": "gitleaks", "cvss_score": 9.0}]
+        findings = [
+            {
+                "type": "COMMITTED_SECRET",
+                "severity": "CRITICAL",
+                "endpoint": "/",
+                "evidence": {},
+                "confidence": 0.9,
+                "source_tool": "gitleaks",
+                "cvss_score": 9.0,
+            }
+        ]
         result = svc._upsert_secrets(findings, emitter)
         assert result == 0
         repo.upsert_secret_finding.assert_called_once()
@@ -468,7 +534,8 @@ class TestUpsertSecrets:
         repo = MagicMock()
         repo.upsert_secret_finding.side_effect = ValueError("bad data")
         svc = FindingPersistenceService(
-            engagement_id="eng-001", finding_repo=repo,
+            engagement_id="eng-001",
+            finding_repo=repo,
         )
         findings = [{"type": "SECRET", "endpoint": "/"}]
         result = svc._upsert_secrets(findings, MagicMock())
@@ -535,10 +602,22 @@ class TestFireWebhooks:
 
         svc = FindingPersistenceService(engagement_id="eng-001", finding_repo=None)
         findings = [
-            {"_saved_id": "f-1", "severity": "CRITICAL", "type": "SQLI",
-             "endpoint": "/api", "source_tool": "nuclei", "confidence": 0.9},
-            {"_saved_id": "f-2", "severity": "HIGH", "type": "XSS",
-             "endpoint": "/search", "source_tool": "zap", "confidence": 0.8},
+            {
+                "_saved_id": "f-1",
+                "severity": "CRITICAL",
+                "type": "SQLI",
+                "endpoint": "/api",
+                "source_tool": "nuclei",
+                "confidence": 0.9,
+            },
+            {
+                "_saved_id": "f-2",
+                "severity": "HIGH",
+                "type": "XSS",
+                "endpoint": "/search",
+                "source_tool": "zap",
+                "confidence": 0.8,
+            },
         ]
         svc._fire_webhooks(findings)
         assert mock_fire.call_count == 2

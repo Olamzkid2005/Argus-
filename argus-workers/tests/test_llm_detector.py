@@ -1,6 +1,7 @@
 """
 Tests for LLM Detector - Post-response intelligence.
 """
+
 import json
 from unittest.mock import MagicMock
 
@@ -11,6 +12,7 @@ from tools.llm_detector import LLMDetector
 
 class MockResponse:
     """Mock HTTP response for testing."""
+
     def __init__(self, status_code=200, text="", headers=None):
         self.status_code = status_code
         self.text = text
@@ -37,13 +39,17 @@ class TestLLMDetector:
 
     def test_analyze_structured_output(self, detector):
         """Test that structured output parsing works for vulnerable response."""
-        result = detector._parse_response(json.dumps({
-            "vulnerable": True,
-            "confidence": 0.85,
-            "evidence_quote": "<script>alert(1)</script>",
-            "vuln_type": "XSS",
-            "reasoning": "Payload reflected unencoded in response body",
-        }))
+        result = detector._parse_response(
+            json.dumps(
+                {
+                    "vulnerable": True,
+                    "confidence": 0.85,
+                    "evidence_quote": "<script>alert(1)</script>",
+                    "vuln_type": "XSS",
+                    "reasoning": "Payload reflected unencoded in response body",
+                }
+            )
+        )
         assert result is not None
         assert result.vulnerable is True
         assert result.confidence == 0.85
@@ -51,13 +57,17 @@ class TestLLMDetector:
 
     def test_analyze_not_vulnerable(self, detector):
         """Test that non-vulnerable response is correctly parsed."""
-        result = detector._parse_response(json.dumps({
-            "vulnerable": False,
-            "confidence": 0.0,
-            "evidence_quote": "",
-            "vuln_type": "XSS",
-            "reasoning": "No evidence of successful exploitation detected",
-        }))
+        result = detector._parse_response(
+            json.dumps(
+                {
+                    "vulnerable": False,
+                    "confidence": 0.0,
+                    "evidence_quote": "",
+                    "vuln_type": "XSS",
+                    "reasoning": "No evidence of successful exploitation detected",
+                }
+            )
+        )
         assert result is not None
         assert result.vulnerable is False
         assert result.confidence == 0.0
@@ -68,7 +78,15 @@ class TestLLMDetector:
         mock_client.is_available.return_value = False
         detector = LLMDetector(llm_client=mock_client)
 
-        assert detector.analyze_sync("http://example.com/", "XSS", "test", MockResponse(status_code=200, text="test")) is None
+        assert (
+            detector.analyze_sync(
+                "http://example.com/",
+                "XSS",
+                "test",
+                MockResponse(status_code=200, text="test"),
+            )
+            is None
+        )
 
     def test_analyze_error_returns_none(self, detector):
         """Test parsing of invalid response returns None."""
@@ -87,8 +105,13 @@ class TestLLMDetector:
 
     def test_should_not_skip_candidate(self, detector):
         """Test that candidate findings are not skipped."""
-        finding = {"confidence": 0.5, "evidence": {"payload": "<script>alert(1)</script>"}}
-        response = MockResponse(text="<html><body>This is a sufficiently long response body with enough content to pass the 50 character minimum length check for LLM analysis.</body></html>")
+        finding = {
+            "confidence": 0.5,
+            "evidence": {"payload": "<script>alert(1)</script>"},
+        }
+        response = MockResponse(
+            text="<html><body>This is a sufficiently long response body with enough content to pass the 50 character minimum length check for LLM analysis.</body></html>"
+        )
         assert detector.should_skip(finding, response) is False
 
     def test_should_skip_no_evidence(self, detector):
@@ -120,13 +143,17 @@ class TestLLMDetector:
 
     def test_analyze_with_context(self, detector):
         """Test that context dict is accepted (via _parse_response)."""
-        result = detector._parse_response(json.dumps({
-            "vulnerable": True,
-            "confidence": 0.8,
-            "evidence_quote": "49",
-            "vuln_type": "SSTI",
-            "reasoning": "Template expression evaluated to 49",
-        }))
+        result = detector._parse_response(
+            json.dumps(
+                {
+                    "vulnerable": True,
+                    "confidence": 0.8,
+                    "evidence_quote": "49",
+                    "vuln_type": "SSTI",
+                    "reasoning": "Template expression evaluated to 49",
+                }
+            )
+        )
         assert result is not None
         assert result.vulnerable is True
         assert result.vuln_type == "SSTI"

@@ -33,7 +33,9 @@ class TestDistributedLock:
     @pytest.fixture
     def lock(self, mock_redis):
         with patch("distributed_lock.redis.Redis.from_url", return_value=mock_redis):
-            dl = DistributedLock(redis_url="redis://localhost:6379", worker_id="worker-1")
+            dl = DistributedLock(
+                redis_url="redis://localhost:6379", worker_id="worker-1"
+            )
             yield dl
 
     def test_init_generates_worker_id(self):

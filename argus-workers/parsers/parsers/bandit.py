@@ -1,4 +1,5 @@
 """Parser for bandit JSON output (bandit -f json)."""
+
 import json
 import logging
 
@@ -19,7 +20,11 @@ class BanditParser(BaseParser):
         results = data.get("results", [])
         for issue in results:
             severity = issue.get("issue_severity", "LOW").upper()
-            severity = severity if severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO") else "LOW"
+            severity = (
+                severity
+                if severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
+                else "LOW"
+            )
             finding = {
                 "type": f"BANDIT_{issue.get('test_id', 'UNKNOWN')}",
                 "severity": severity,

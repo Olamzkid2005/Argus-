@@ -58,18 +58,32 @@ class WorkflowIntelligenceEngine(AbstractTool):
         recommendations = []
         for tool, avg_time in slowest[:3]:
             if avg_time > 300:
-                recommendations.append({"tool": tool, "type": "slow_execution", "message": f"{tool} averages {avg_time}s"})
+                recommendations.append(
+                    {
+                        "tool": tool,
+                        "type": "slow_execution",
+                        "message": f"{tool} averages {avg_time}s",
+                    }
+                )
         for tool, failures in tool_failures.items():
             calls = tool_calls.get(tool, 1)
             if failures / calls > 0.3:
-                recommendations.append({"tool": tool, "type": "high_failure_rate", "message": f"{tool} has {failures}/{calls} failures"})
+                recommendations.append(
+                    {
+                        "tool": tool,
+                        "type": "high_failure_rate",
+                        "message": f"{tool} has {failures}/{calls} failures",
+                    }
+                )
 
         total_calls = sum(tool_calls.values())
         total_failures = sum(tool_failures.values())
         return {
             "total_tool_calls": total_calls,
             "total_failures": total_failures,
-            "failure_rate": round(total_failures / total_calls, 3) if total_calls > 0 else 0,
+            "failure_rate": round(total_failures / total_calls, 3)
+            if total_calls > 0
+            else 0,
             "slowest_tools": [{"tool": t, "avg_seconds": s} for t, s in slowest[:5]],
             "recommendations": recommendations,
         }

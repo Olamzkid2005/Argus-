@@ -3,13 +3,14 @@ Tests for Tool Metrics Repository
 
 Requirements: 22.1, 22.2
 """
+
 import os
 import sys
 
 import pytest
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
 
@@ -18,7 +19,9 @@ from database.repositories.tool_metrics_repository import ToolMetricsRepository
 def metrics_repository():
     """Create a metrics repository with test database"""
     # Use test database connection string
-    connection_string = os.getenv("TEST_DATABASE_URL", "postgresql://test:test@localhost:5432/test_db")
+    connection_string = os.getenv(
+        "TEST_DATABASE_URL", "postgresql://test:test@localhost:5432/test_db"
+    )
     return ToolMetricsRepository(connection_string)
 
 
@@ -33,9 +36,7 @@ class TestToolMetricsRepository:
             pytest.skip("TEST_DATABASE_URL not set")
 
         metric_id = metrics_repository.record_metric(
-            tool_name="nuclei",
-            duration_ms=1500,
-            success=True
+            tool_name="nuclei", duration_ms=1500, success=True
         )
 
         assert metric_id is not None
@@ -47,9 +48,7 @@ class TestToolMetricsRepository:
             pytest.skip("TEST_DATABASE_URL not set")
 
         metric_id = metrics_repository.record_metric(
-            tool_name="httpx",
-            duration_ms=500,
-            success=False
+            tool_name="httpx", duration_ms=500, success=False
         )
 
         assert metric_id is not None
@@ -99,7 +98,9 @@ class TestToolMetricsRepository:
             metrics_repository.record_metric("limit_test_tool", 100 + i * 10, True)
 
         # Get recent executions with limit
-        executions = metrics_repository.get_recent_executions("limit_test_tool", limit=3)
+        executions = metrics_repository.get_recent_executions(
+            "limit_test_tool", limit=3
+        )
 
         assert len(executions) <= 3
 
@@ -109,6 +110,7 @@ class TestToolMetricsRepository:
             pytest.skip("TEST_DATABASE_URL not set")
 
         import random
+
         tool_name = f"calc_test_tool_{random.randint(1000, 9999)}"
 
         # Record metrics with known values

@@ -27,6 +27,7 @@ class ThreatIntelligenceAggregator(AbstractTool):
     def execute(self, ctx: ToolContext) -> UnifiedToolResult:
         result = UnifiedToolResult(tool_name=self.tool_name, target=ctx.target)
         from urllib.parse import urlparse
+
         parsed = urlparse(ctx.target)
         domain = parsed.hostname or ctx.target
         builder = FindingBuilder(self.tool_name, engagement_id=ctx.engagement_id)
@@ -49,18 +50,30 @@ class ThreatIntelligenceAggregator(AbstractTool):
             except Exception as e:
                 logger.debug("WHOIS failed: %s", e)
         else:
-            intel["dns_records"] = [{"key": "status", "value": "Domain does not resolve — WHOIS skipped"}]
+            intel["dns_records"] = [
+                {"key": "status", "value": "Domain does not resolve — WHOIS skipped"}
+            ]
             builder.vulnerability(
                 "DOMAIN_NOT_RESOLVED",
                 "INFO",
                 ctx.target,
-                {"domain": domain, "detail": "Domain does not resolve in DNS — it may not be registered or may be offline"},
+                {
+                    "domain": domain,
+                    "detail": "Domain does not resolve in DNS — it may not be registered or may be offline",
+                },
                 confidence=0.9,
             )
 
         builder.info("THREAT_INTELLIGENCE", ctx.target, intel)
         for cert in intel.get("certificates", [])[:10]:
-            builder.info("CERTIFICATE", ctx.target, {"name": cert.get("name_value", ""), "issuer": cert.get("issuer_name", "")})
+            builder.info(
+                "CERTIFICATE",
+                ctx.target,
+                {
+                    "name": cert.get("name_value", ""),
+                    "issuer": cert.get("issuer_name", ""),
+                },
+            )
 
         result.findings = builder.findings
         result.findings_count = len(builder.findings)
@@ -75,6 +88,7 @@ class ThreatIntelligenceAggregator(AbstractTool):
         servers for non-existent domains (e.g., vulnbank.org → .org registry).
         """
         import socket
+
         try:
             socket.getaddrinfo(domain, 80, socket.AF_INET, socket.SOCK_STREAM)
             return True
@@ -97,15 +111,23 @@ class ThreatIntelligenceAggregator(AbstractTool):
                 name = entry.get("name_value", "")
                 if name and name not in seen:
                     seen.add(name)
-                    certs.append({"name_value": name, "issuer_name": entry.get("issuer_name", "")})
+                    certs.append(
+                        {
+                            "name_value": name,
+                            "issuer_name": entry.get("issuer_name", ""),
+                        }
+                    )
             return certs
         except Exception:
             return []
 
     def _query_whois(self, domain: str) -> list[dict]:
         import subprocess
+
         try:
-            result = subprocess.run(["whois", domain], capture_output=True, text=True, timeout=10)
+            result = subprocess.run(
+                ["whois", domain], capture_output=True, text=True, timeout=10
+            )
             records = []
             for line in result.stdout.splitlines():
                 line = line.strip()

@@ -132,9 +132,7 @@ class AsyncToolRunner:
 
         # 1. Dangerous-arg detection
         if runner.is_dangerous(tool, args):
-            raise SecurityError(
-                f"Blocked dangerous payload: {tool} {' '.join(args)}"
-            )
+            raise SecurityError(f"Blocked dangerous payload: {tool} {' '.join(args)}")
 
         # 2. Scope validation (fail-closed — out-of-scope targets are denied)
         if target and eng_id:
@@ -158,8 +156,7 @@ class AsyncToolRunner:
             from tools.circuit_breaker import CircuitOpenError
 
             raise CircuitOpenError(
-                f"Circuit breaker is OPEN for tool {tool!r}. "
-                f"Wait before retrying."
+                f"Circuit breaker is OPEN for tool {tool!r}. Wait before retrying."
             )
 
         # 4. Resolve tool path
@@ -199,14 +196,10 @@ class AsyncToolRunner:
                 return result
 
             stdout = (
-                stdout_bytes.decode("utf-8", errors="replace")
-                if stdout_bytes
-                else ""
+                stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
             )
             stderr = (
-                stderr_bytes.decode("utf-8", errors="replace")
-                if stderr_bytes
-                else ""
+                stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
             )
 
             # 7. Output size capping
@@ -236,7 +229,10 @@ class AsyncToolRunner:
 
             result.status = (
                 ToolStatus.SUCCESS
-                if (exit_code == 0 or exit_code in self.FINDINGS_EXIT_CODES.get(tool, set()))
+                if (
+                    exit_code == 0
+                    or exit_code in self.FINDINGS_EXIT_CODES.get(tool, set())
+                )
                 else ToolStatus.NONZERO_EXIT
             )
 
@@ -245,7 +241,10 @@ class AsyncToolRunner:
 
         except Exception as e:
             result = UnifiedToolResult.from_exception(
-                tool, [tool_path, *safe_args], e, target=target,
+                tool,
+                [tool_path, *safe_args],
+                e,
+                target=target,
             )
 
         finally:
@@ -298,9 +297,7 @@ class AsyncToolRunner:
 
         # 1. Dangerous-arg detection
         if runner.is_dangerous(tool, args):
-            raise SecurityError(
-                f"Blocked dangerous payload: {tool} {' '.join(args)}"
-            )
+            raise SecurityError(f"Blocked dangerous payload: {tool} {' '.join(args)}")
 
         # 2. Scope validation
         if target and eng_id:
@@ -323,9 +320,7 @@ class AsyncToolRunner:
         if not runner.is_tool_available(tool):
             from tools.circuit_breaker import CircuitOpenError
 
-            raise CircuitOpenError(
-                f"Circuit breaker is OPEN for tool {tool!r}."
-            )
+            raise CircuitOpenError(f"Circuit breaker is OPEN for tool {tool!r}.")
 
         # 4. Resolve tool path
         tool_path = self.registry.resolve(tool) or runner._resolve_tool_path(tool)
@@ -388,7 +383,11 @@ class AsyncToolRunner:
                 """Read full stderr output."""
                 assert proc.stderr is not None
                 stderr_bytes = await proc.stderr.read()
-                return stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+                return (
+                    stderr_bytes.decode("utf-8", errors="replace")
+                    if stderr_bytes
+                    else ""
+                )
 
             # Run stdout reader and stderr reader concurrently
             stderr_future = asyncio.ensure_future(_read_stderr())
@@ -413,11 +412,16 @@ class AsyncToolRunner:
 
             if timed_out:
                 result.status = ToolStatus.TIMEOUT
-                result.error_message = f"Streaming tool execution timed out after {timeout}s"
+                result.error_message = (
+                    f"Streaming tool execution timed out after {timeout}s"
+                )
             else:
                 result.status = (
                     ToolStatus.SUCCESS
-                    if (result.exit_code == 0 or result.exit_code in self.FINDINGS_EXIT_CODES.get(tool, set()))
+                    if (
+                        result.exit_code == 0
+                        or result.exit_code in self.FINDINGS_EXIT_CODES.get(tool, set())
+                    )
                     else ToolStatus.NONZERO_EXIT
                 )
 
@@ -425,7 +429,10 @@ class AsyncToolRunner:
             raise
         except Exception as e:
             result = UnifiedToolResult.from_exception(
-                tool, [tool_path, *safe_args], e, target=target,
+                tool,
+                [tool_path, *safe_args],
+                e,
+                target=target,
             )
         finally:
             result.mark_finished()
@@ -461,5 +468,7 @@ class AsyncToolRunner:
         import asyncio
 
         return asyncio.run(
-            self.run(tool, args, timeout=timeout, target=target, engagement_id=engagement_id)
+            self.run(
+                tool, args, timeout=timeout, target=target, engagement_id=engagement_id
+            )
         )

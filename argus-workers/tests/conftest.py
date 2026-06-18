@@ -1,6 +1,7 @@
 """
 Pytest configuration and fixtures
 """
+
 import json
 import logging
 import os
@@ -18,10 +19,12 @@ import pytest
 logger = logging.getLogger(__name__)
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Add tasks directory for loader imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tasks')))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tasks"))
+)
 
 # Path to test fixture data directory
 FIXTURE_DIR = Path(__file__).resolve().parent.parent / "test_fixtures"
@@ -89,7 +92,12 @@ def _wait_for_health(url: str, timeout: float = 10.0, interval: float = 0.3) -> 
             resp = urllib.request.urlopen(url, timeout=2)
             if resp.status == 200:
                 return True
-        except (urllib.error.URLError, urllib.error.HTTPError, ConnectionError, OSError):
+        except (
+            urllib.error.URLError,
+            urllib.error.HTTPError,
+            ConnectionError,
+            OSError,
+        ):
             pass
         time.sleep(interval)
     return False
@@ -110,7 +118,9 @@ def fixture_app(request) -> str:
     fixture_dir = FIXTURE_DIR / fixture_name
 
     if not fixture_dir.exists() or not (fixture_dir / "app.py").exists():
-        raise RuntimeError(f"Fixture '{fixture_name}' not found at {fixture_dir}/app.py")
+        raise RuntimeError(
+            f"Fixture '{fixture_name}' not found at {fixture_dir}/app.py"
+        )
 
     proc = subprocess.Popen(
         [sys.executable, "app.py", "0"],
@@ -144,7 +154,9 @@ def fixture_app(request) -> str:
     if not _wait_for_health(health_url, timeout=10.0):
         proc.kill()
         proc.wait(timeout=5)
-        raise RuntimeError(f"Fixture '{fixture_name}' at {health_url} did not become healthy")
+        raise RuntimeError(
+            f"Fixture '{fixture_name}' at {health_url} did not become healthy"
+        )
 
     base_url_full = f"http://{base_url}"
     logger.info("Fixture '%s' running at %s", fixture_name, base_url_full)
@@ -156,7 +168,9 @@ def fixture_app(request) -> str:
         proc.terminate()
         proc.wait(timeout=5)
     except Exception:
-        logger.warning("Fixture '%s' did not terminate gracefully, killing", fixture_name)
+        logger.warning(
+            "Fixture '%s' did not terminate gracefully, killing", fixture_name
+        )
         proc.kill()
         proc.wait(timeout=5)
 
@@ -209,11 +223,8 @@ def sample_finding():
         "severity": "HIGH",
         "confidence": 0.8,
         "endpoint": "https://example.com/api",
-        "evidence": {
-            "payload": "' OR 1=1--",
-            "response": "SQL error"
-        },
-        "source_tool": "nuclei"
+        "evidence": {"payload": "' OR 1=1--", "response": "SQL error"},
+        "source_tool": "nuclei",
     }
 
 
@@ -222,7 +233,7 @@ def sample_authorized_scope():
     """Sample authorized scope for testing"""
     return {
         "domains": ["staging.app.com", "*.dev.app.com"],
-        "ipRanges": ["10.0.0.0/24", "192.168.1.0/24"]
+        "ipRanges": ["10.0.0.0/24", "192.168.1.0/24"],
     }
 
 

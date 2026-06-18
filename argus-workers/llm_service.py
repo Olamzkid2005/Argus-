@@ -77,11 +77,17 @@ class LLMService:
         )
     """
 
-    def __init__(self, llm_client: LLMClient, config: LLMServiceConfig | None = None,
-                 cost_tracker: "CostTracker" = None):
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        config: LLMServiceConfig | None = None,
+        cost_tracker: "CostTracker" = None,
+    ):
         self._client = llm_client
         self._config = config or LLMServiceConfig()
-        self._cost_tracker = cost_tracker or CostTracker(max_cost_usd=self._config.max_cost_usd)
+        self._cost_tracker = cost_tracker or CostTracker(
+            max_cost_usd=self._config.max_cost_usd
+        )
 
     def is_available(self) -> bool:
         """Check if the underlying LLM client is available for use."""
@@ -101,8 +107,12 @@ class LLMService:
         Returns a dict (never None, never raises). On error, returns a fallback dict.
         """
         from utils.logging_utils import ScanLogger
+
         slog = ScanLogger("llm_service")
-        slog.llm_start(self._client.model if hasattr(self._client, 'model') else 'unknown', system_prompt[:60])
+        slog.llm_start(
+            self._client.model if hasattr(self._client, "model") else "unknown",
+            system_prompt[:60],
+        )
         start = _time.time()
 
         if not self._client.is_available():
@@ -126,7 +136,9 @@ class LLMService:
 
             if self._cost_tracker.exceeded(cost):
                 logger.warning(
-                    f"Cost cap would be exceeded (${self._cost_tracker.total:.4f} + {cost:.4f}), using fallback"
+                    "Cost cap would be exceeded ($%.4f + %.4f), using fallback",
+                    self._cost_tracker.total,
+                    cost,
                 )
                 return self._fallback("Cost cap exceeded")
 
@@ -136,28 +148,46 @@ class LLMService:
                 parsed = json.loads(response_text)
                 duration_ms = int((_time.time() - start) * 1000)
                 tokens = raw.output_tokens if isinstance(raw, LLMResponse) else 0
-                slog.llm_complete(self._client.model if hasattr(self._client, 'model') else 'unknown', duration_ms=duration_ms, tokens=tokens, cost=cost)
+                slog.llm_complete(
+                    self._client.model if hasattr(self._client, "model") else "unknown",
+                    duration_ms=duration_ms,
+                    tokens=tokens,
+                    cost=cost,
+                )
                 # Validate that the response is a dict or list (callers expect structured data)
                 if not isinstance(parsed, (dict, list)):
-                    logger.warning("LLM returned unexpected type %s, using fallback", type(parsed).__name__)
-                    return self._fallback("Unexpected response type (expected dict or list)")
+                    logger.warning(
+                        "LLM returned unexpected type %s, using fallback",
+                        type(parsed).__name__,
+                    )
+                    return self._fallback(
+                        "Unexpected response type (expected dict or list)"
+                    )
                 return parsed
             except json.JSONDecodeError as e:
-                logger.warning("LLM returned non-JSON response (%.200r...), using fallback: %s", response_text, e)
+                logger.warning(
+                    "LLM returned non-JSON response (%.200r...), using fallback: %s",
+                    response_text,
+                    e,
+                )
                 return self._fallback(f"JSON parse error: {e}")
 
         except Exception as e:
-            slog.llm_result(f"Failed: {e}")
-            logger.warning(f"LLM call failed: {e}")
+            slog.llm_result("Failed: %s", e)
+            logger.warning("LLM call failed: %s", e)
             return self._fallback(str(e))
 
     def _fallback(self, reason: str) -> dict:
         """Single fallback response for all callers."""
         from utils.logging_utils import ScanLogger
+
         slog = ScanLogger("llm_service")
-        slog.warn(f"Fallback: {reason}")
-        logger.warning("LLM service using FALLBACK response — reason: %s. "
-                       "All downstream analysis will be placeholder data.", reason)
+        slog.warn("Fallback: %s", reason)
+        logger.warning(
+            "LLM service using FALLBACK response — reason: %s. "
+            "All downstream analysis will be placeholder data.",
+            reason,
+        )
         return {
             "_fallback": True,
             "_reason": reason,

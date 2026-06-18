@@ -37,7 +37,14 @@ class SecureCodeIntelligenceEngine(AbstractTool):
                 category = futures[future]
                 try:
                     for finding in future.result():
-                        builder.add(finding.get("type", f"CODE_{category.upper()}"), finding.get("severity", "MEDIUM"), finding.get("endpoint", ctx.target), finding.get("evidence", {}), confidence=finding.get("confidence", 0.7), category=category)
+                        builder.add(
+                            finding.get("type", f"CODE_{category.upper()}"),
+                            finding.get("severity", "MEDIUM"),
+                            finding.get("endpoint", ctx.target),
+                            finding.get("evidence", {}),
+                            confidence=finding.get("confidence", 0.7),
+                            category=category,
+                        )
                 except Exception as e:
                     logger.warning("Scanner %s failed: %s", category, e)
 
@@ -51,7 +58,18 @@ class SecureCodeIntelligenceEngine(AbstractTool):
         if not tool_runner:
             return []
         try:
-            result = tool_runner.run("gitleaks", ["detect", "--source", target, "--report-format", "json", "--no-banner"], timeout=300)
+            result = tool_runner.run(
+                "gitleaks",
+                [
+                    "detect",
+                    "--source",
+                    target,
+                    "--report-format",
+                    "json",
+                    "--no-banner",
+                ],
+                timeout=300,
+            )
             if not result.status.is_ok:
                 return []
             findings = []
@@ -60,7 +78,15 @@ class SecureCodeIntelligenceEngine(AbstractTool):
                     continue
                 try:
                     data = json.loads(line)
-                    findings.append({"type": "SECRET_EXPOSURE", "severity": "HIGH", "endpoint": data.get("File", target), "evidence": {"rule": data.get("RuleID", "")}, "confidence": 0.9})
+                    findings.append(
+                        {
+                            "type": "SECRET_EXPOSURE",
+                            "severity": "HIGH",
+                            "endpoint": data.get("File", target),
+                            "evidence": {"rule": data.get("RuleID", "")},
+                            "confidence": 0.9,
+                        }
+                    )
                 except json.JSONDecodeError:
                     pass
             return findings
@@ -71,7 +97,9 @@ class SecureCodeIntelligenceEngine(AbstractTool):
         if not tool_runner:
             return []
         try:
-            result = tool_runner.run("semgrep", ["--json", "--config=auto", target], timeout=600)
+            result = tool_runner.run(
+                "semgrep", ["--json", "--config=auto", target], timeout=600
+            )
             if not result.status.is_ok and result.exit_code != 1:
                 return []
             findings = []
@@ -80,7 +108,15 @@ class SecureCodeIntelligenceEngine(AbstractTool):
                 for r in data.get("results", []):
                     severity = r.get("extra", {}).get("severity", "WARNING").upper()
                     sev_map = {"ERROR": "HIGH", "WARNING": "MEDIUM", "INFO": "LOW"}
-                    findings.append({"type": "SASTFinding", "severity": sev_map.get(severity, "MEDIUM"), "endpoint": r.get("path", target), "evidence": {"rule": r.get("check_id", "")}, "confidence": 0.8})
+                    findings.append(
+                        {
+                            "type": "SASTFinding",
+                            "severity": sev_map.get(severity, "MEDIUM"),
+                            "endpoint": r.get("path", target),
+                            "evidence": {"rule": r.get("check_id", "")},
+                            "confidence": 0.8,
+                        }
+                    )
             except json.JSONDecodeError:
                 pass
             return findings
@@ -91,7 +127,11 @@ class SecureCodeIntelligenceEngine(AbstractTool):
         if not tool_runner:
             return []
         try:
-            result = tool_runner.run("trivy", ["fs", "--format", "json", "--scanners", "vuln", target], timeout=600)
+            result = tool_runner.run(
+                "trivy",
+                ["fs", "--format", "json", "--scanners", "vuln", target],
+                timeout=600,
+            )
             if not result.status.is_ok:
                 return []
             findings = []
@@ -101,7 +141,17 @@ class SecureCodeIntelligenceEngine(AbstractTool):
                     for vuln in r.get("Vulnerabilities", []):
                         severity = vuln.get("Severity", "UNKNOWN").upper()
                         if severity in ("CRITICAL", "HIGH", "MEDIUM"):
-                            findings.append({"type": "DEPENDENCY_VULNERABILITY", "severity": severity, "endpoint": vuln.get("PkgName", target), "evidence": {"cve": vuln.get("VulnerabilityID", "")}, "confidence": 0.85})
+                            findings.append(
+                                {
+                                    "type": "DEPENDENCY_VULNERABILITY",
+                                    "severity": severity,
+                                    "endpoint": vuln.get("PkgName", target),
+                                    "evidence": {
+                                        "cve": vuln.get("VulnerabilityID", "")
+                                    },
+                                    "confidence": 0.85,
+                                }
+                            )
             except json.JSONDecodeError:
                 pass
             return findings

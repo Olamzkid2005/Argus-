@@ -140,7 +140,9 @@ class TestSettingsRepositorySetUserSetting:
         mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
         repo = SettingsRepository()
-        result = repo.set_user_setting("admin@example.com", "openrouter_api_key", "sk-or-v1-new")
+        result = repo.set_user_setting(
+            "admin@example.com", "openrouter_api_key", "sk-or-v1-new"
+        )
 
         assert result is True
         sql = mock_cursor.execute.call_args[0][0]
@@ -240,6 +242,7 @@ class TestLLMClientSettingsRepositoryWiring:
         mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
         from llm_client import LLMClient
+
         client = LLMClient.__new__(LLMClient)
         result = client._load_key_from_db()
 
@@ -260,6 +263,7 @@ class TestLLMClientSettingsRepositoryWiring:
         mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
         from llm_client import LLMClient
+
         client = LLMClient.__new__(LLMClient)
         result = client._load_key_from_db()
 
@@ -277,6 +281,7 @@ class TestLLMClientSettingsRepositoryWiring:
         mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
         from llm_client import LLMClient
+
         client = LLMClient.__new__(LLMClient)
         result = client._load_key_from_db()
 
@@ -291,6 +296,7 @@ class TestLLMClientSettingsRepositoryWiring:
         mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
         from llm_client import LLMClient
+
         client = LLMClient.__new__(LLMClient)
         result = client._load_key_from_db()
 
@@ -302,20 +308,27 @@ class TestLLMClientSettingsRepositoryWiring:
         mock_db_cursor.side_effect = Exception("Table does not exist")
 
         from llm_client import LLMClient
+
         client = LLMClient.__new__(LLMClient)
         result = client._load_key_from_db()
 
         assert result is None
 
-    @patch("llm_client.LLMClient._load_key_from_db", return_value="sk-or-v1-db-fallback-key-12345")
+    @patch(
+        "llm_client.LLMClient._load_key_from_db",
+        return_value="sk-or-v1-db-fallback-key-12345",
+    )
     @patch("llm_client.LLMClient._load_key_from_redis", return_value=None)
     @patch("llm_client.LLMClient.is_available", return_value=True)
-    @patch("llm_client.os.getenv", side_effect=lambda k, d=None: {
-        "OPENAI_API_KEY": None,
-        "LLM_API_KEY": None,
-        "LLM_PROVIDER": "openai",
-        "LLM_MODEL": "gpt-4o-mini",
-    }.get(k, d))
+    @patch(
+        "llm_client.os.getenv",
+        side_effect=lambda k, d=None: {
+            "OPENAI_API_KEY": None,
+            "LLM_API_KEY": None,
+            "LLM_PROVIDER": "openai",
+            "LLM_MODEL": "gpt-4o-mini",
+        }.get(k, d),
+    )
     def test_llm_client_calls_load_key_from_db_as_fallback(
         self, mock_getenv, mock_available, mock_redis, mock_load_db
     ):
@@ -331,5 +344,6 @@ class TestLLMClientSettingsRepositoryWiring:
     def test_load_key_from_db_import_path_valid(self):
         """The _load_key_from_db method exists and is callable on LLMClient."""
         from llm_client import LLMClient
+
         assert hasattr(LLMClient, "_load_key_from_db")
         assert callable(LLMClient._load_key_from_db)

@@ -52,13 +52,17 @@ class VerificationAgent(AbstractTool):
             reproduction = engine.reproduce(finding, ctx.target)
             evidence = collector.collect(finding, reproduction)
             confidence = score_confidence(finding, reproduction, evidence)
-            promoted = promote_finding(finding, confidence, reproduction.get("reproduced", False))
+            promoted = promote_finding(
+                finding, confidence, reproduction.get("reproduced", False)
+            )
 
             # Normalize promoted findings to standard FindingBuilder format (M3)
             normalized = {
                 "type": promoted.get("type", finding.get("type", "UNKNOWN")),
                 "severity": promoted.get("severity", finding.get("severity", "INFO")),
-                "endpoint": promoted.get("endpoint", finding.get("endpoint", ctx.target)),
+                "endpoint": promoted.get(
+                    "endpoint", finding.get("endpoint", ctx.target)
+                ),
                 "evidence": promoted.get("evidence", evidence),
                 "confidence": promoted.get("confidence", confidence),
                 "source_tool": self.tool_name,

@@ -49,13 +49,13 @@ def render_mermaid(ranked_paths: list[dict]) -> str:
                 counter += 1
                 node_map[src] = f"N{counter}"
                 label = src.replace("host:", "")
-                lines.append(f"    {node_map[src]}[\"{label}\"]")
+                lines.append(f'    {node_map[src]}["{label}"]')
 
             if dst not in node_map:
                 counter += 1
                 node_map[dst] = f"N{counter}"
                 label = dst.replace("host:", "")
-                lines.append(f"    {node_map[dst]}[\"{label}\"]")
+                lines.append(f'    {node_map[dst]}["{label}"]')
 
             lines.append(f"    {node_map[src]} --> {node_map[dst]}")
 

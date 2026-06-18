@@ -7,6 +7,7 @@ and generates submission-ready reports for HackerOne, Bugcrowd, Intigriti, YesWe
 
 Pattern: Follows LLMReportGenerator and ComplianceReportGenerator patterns.
 """
+
 import json
 import logging
 import re
@@ -380,18 +381,21 @@ SEVERITY_TO_WORST_CASE: dict[str, str] = {
 # Formatting Helpers
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def format_steps(steps_input: Any) -> str:
     """Format steps as numbered markdown list."""
     if isinstance(steps_input, list):
-        return "\n".join(f"{i+1}. {step}" for i, step in enumerate(steps_input))
+        return "\n".join(f"{i + 1}. {step}" for i, step in enumerate(steps_input))
     elif isinstance(steps_input, str):
-        lines = [line.strip() for line in steps_input.strip().split("\n") if line.strip()]
+        lines = [
+            line.strip() for line in steps_input.strip().split("\n") if line.strip()
+        ]
         formatted = []
         for i, line in enumerate(lines):
             if re.match(r"^\d+\.", line):
                 formatted.append(line)
             else:
-                formatted.append(f"{i+1}. {line}")
+                formatted.append(f"{i + 1}. {line}")
         return "\n".join(formatted)
     return "1. [Steps to reproduce not provided]"
 
@@ -405,9 +409,12 @@ def get_field(data: dict, field: str, default: str = "[Not provided]") -> str:
 # Bug-Reaper Generator Functions (ported from generate_report.py)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def generate_hackerone(data: dict, vuln_type: str) -> str:
     """Generate HackerOne-format bug bounty report."""
-    meta = VULN_META.get(vuln_type, {"display": vuln_type.upper(), "cwe": "", "default_cia": ""})
+    meta = VULN_META.get(
+        vuln_type, {"display": vuln_type.upper(), "cwe": "", "default_cia": ""}
+    )
     return HACKERONE_TEMPLATE.format(
         vuln_type_display=meta["display"],
         title=get_field(data, "title"),
@@ -426,17 +433,23 @@ def generate_hackerone(data: dict, vuln_type: str) -> str:
 
 def generate_bugcrowd(data: dict, vuln_type: str) -> str:
     """Generate Bugcrowd-format bug bounty report."""
-    meta = VULN_META.get(vuln_type, {"display": vuln_type.upper(), "cwe": "CWE-XXX", "default_cia": ""})
+    meta = VULN_META.get(
+        vuln_type, {"display": vuln_type.upper(), "cwe": "CWE-XXX", "default_cia": ""}
+    )
     return BUGCROWD_TEMPLATE.format(
         summary=get_field(data, "summary"),
         endpoint=get_field(data, "endpoint"),
         input_vector=get_field(data, "input_vector", "[User-controlled parameter]"),
-        missing_control=get_field(data, "missing_control", "[Missing security control]"),
+        missing_control=get_field(
+            data, "missing_control", "[Missing security control]"
+        ),
         why_exploitable=get_field(data, "root_cause"),
         steps=format_steps(get_field(data, "steps")),
         poc=get_field(data, "poc"),
         attacker_achieves=get_field(data, "attacker_achieves"),
-        data_exposure=get_field(data, "data_exposure", get_field(data, "attacker_achieves")),
+        data_exposure=get_field(
+            data, "data_exposure", get_field(data, "attacker_achieves")
+        ),
         priv_escalation=get_field(data, "priv_escalation", "N/A"),
         business_risk=get_field(data, "business_risk", get_field(data, "worst_case")),
         cwe=meta["cwe"],
@@ -456,16 +469,18 @@ def generate_intigriti(data: dict, vuln_type: str) -> str:
         endpoint=get_field(data, "endpoint"),
         how_it_works=get_field(data, "root_cause"),
         why_control_fails=get_field(
-            data, "missing_control",
-            "[Security control that should prevent this is absent or bypassed]"
+            data,
+            "missing_control",
+            "[Security control that should prevent this is absent or bypassed]",
         ),
         trust_boundary=get_field(data, "trust_boundary", "[Trust boundary violated]"),
         steps=format_steps(get_field(data, "steps")),
         poc=get_field(data, "poc"),
         attacker_achieves=get_field(data, "attacker_achieves"),
         prerequisites=get_field(data, "prerequisites", "Standard user account"),
-        realistic_scenario=get_field(data, "realistic_scenario",
-                                     get_field(data, "attacker_achieves")),
+        realistic_scenario=get_field(
+            data, "realistic_scenario", get_field(data, "attacker_achieves")
+        ),
         remediation=get_field(data, "remediation"),
         date=datetime.now().strftime("%Y-%m-%d"),
     )
@@ -474,9 +489,21 @@ def generate_intigriti(data: dict, vuln_type: str) -> str:
 def generate_yeswehack(data: dict, vuln_type: str) -> str:
     """Generate YesWeHack-format bug bounty report."""
     cia = get_field(data, "cia_impact", "")
-    conf = "Impacted" if ("confidentiality" in cia.lower() or "data" in cia.lower()) else "Not impacted"
-    integ = "Impacted" if ("integrity" in cia.lower() or "modif" in cia.lower()) else "Not impacted"
-    avail = "Impacted" if ("availability" in cia.lower() or "dos" in cia.lower()) else "Not impacted"
+    conf = (
+        "Impacted"
+        if ("confidentiality" in cia.lower() or "data" in cia.lower())
+        else "Not impacted"
+    )
+    integ = (
+        "Impacted"
+        if ("integrity" in cia.lower() or "modif" in cia.lower())
+        else "Not impacted"
+    )
+    avail = (
+        "Impacted"
+        if ("availability" in cia.lower() or "dos" in cia.lower())
+        else "Not impacted"
+    )
 
     return YESWEHACK_TEMPLATE.format(
         summary=get_field(data, "summary"),
@@ -490,8 +517,9 @@ def generate_yeswehack(data: dict, vuln_type: str) -> str:
         confidentiality=get_field(data, "confidentiality", conf),
         integrity=get_field(data, "integrity", integ),
         availability=get_field(data, "availability", avail),
-        realistic_scenario=get_field(data, "realistic_scenario",
-                                     get_field(data, "attacker_achieves")),
+        realistic_scenario=get_field(
+            data, "realistic_scenario", get_field(data, "attacker_achieves")
+        ),
         worst_case=get_field(data, "worst_case"),
         remediation=get_field(data, "remediation"),
         date=datetime.now().strftime("%Y-%m-%d"),
@@ -510,6 +538,7 @@ GENERATORS: dict[str, Any] = {
 # Argus Finding Adapter
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class ArgusFindingAdapter:
     """
     Converts Argus VulnerabilityFinding dicts to Bug-Reaper's expected JSON schema.
@@ -520,7 +549,9 @@ class ArgusFindingAdapter:
     """
 
     @staticmethod
-    def adapt(argus_finding: dict, vuln_type: str, engagement: dict | None = None) -> dict:
+    def adapt(
+        argus_finding: dict, vuln_type: str, engagement: dict | None = None
+    ) -> dict:
         """Convert an Argus finding dict to Bug-Reaper's JSON input schema."""
         evidence = argus_finding.get("evidence") or {}
         type_key = argus_finding.get("type", "").upper()
@@ -550,13 +581,13 @@ class ArgusFindingAdapter:
 
         return {
             "title": f"{argus_finding.get('type', 'Vulnerability').replace('_', ' ').title()} "
-                     f"on {argus_finding.get('endpoint', 'unknown endpoint')}",
+            f"on {argus_finding.get('endpoint', 'unknown endpoint')}",
             "endpoint": argus_finding.get("endpoint", "[Endpoint not specified]"),
             "summary": (
                 argus_finding.get("description")
                 or f"A {severity.lower()} severity {argus_finding.get('type', 'vulnerability').lower()} "
-                   f"was detected at {argus_finding.get('endpoint', 'the target endpoint')} "
-                   f"by {argus_finding.get('source_tool', 'automated scanner')}."
+                f"was detected at {argus_finding.get('endpoint', 'the target endpoint')} "
+                f"by {argus_finding.get('source_tool', 'automated scanner')}."
             ),
             "steps": steps,
             "poc": poc,
@@ -564,23 +595,27 @@ class ArgusFindingAdapter:
                 evidence.get("root_cause")
                 or argus_finding.get("remediation")
                 or f"Missing security control on {argus_finding.get('endpoint', 'the endpoint')} "
-                   f"allowing {argus_finding.get('type', 'vulnerability').lower()}"
+                f"allowing {argus_finding.get('type', 'vulnerability').lower()}"
             ),
             "remediation": (
                 argus_finding.get("remediation")
                 or f"Implement proper validation and authorization checks "
-                   f"for {argus_finding.get('type', 'this vulnerability class').lower()}"
+                f"for {argus_finding.get('type', 'this vulnerability class').lower()}"
             ),
             "attacker_achieves": IMPACT_STATEMENT_MAP.get(
                 type_key,
-                f"Unauthorized access to protected resources via {argus_finding.get('type', 'vulnerability')}"
+                f"Unauthorized access to protected resources via {argus_finding.get('type', 'vulnerability')}",
             ),
             "trust_boundary": TRUST_BOUNDARY_MAP.get(
                 vuln_type,
-                "[Trust boundary violated — authorization or validation bypass detected]"
+                "[Trust boundary violated — authorization or validation bypass detected]",
             ),
-            "cia_impact": VULN_META.get(vuln_type, {}).get("default_cia", "Confidentiality, Integrity"),
-            "worst_case": SEVERITY_TO_WORST_CASE.get(severity, "Security control bypass"),
+            "cia_impact": VULN_META.get(vuln_type, {}).get(
+                "default_cia", "Confidentiality, Integrity"
+            ),
+            "worst_case": SEVERITY_TO_WORST_CASE.get(
+                severity, "Security control bypass"
+            ),
             "affected_scope": (
                 f"Users of {engagement.get('target_url', 'the application')}"
                 if engagement
@@ -596,6 +631,7 @@ class ArgusFindingAdapter:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Bug Bounty Report Generator
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class BugBountyReportGenerator:
     """
@@ -648,11 +684,15 @@ class BugBountyReportGenerator:
             )
 
         slog.phase_header("Bug Bounty Report", platform)
-        slog.info(f"Processing {len(findings)} findings (min_confidence={min_confidence})")
+        slog.info(
+            f"Processing {len(findings)} findings (min_confidence={min_confidence})"
+        )
 
         # Apply Bug-Reaper audit rules: filter findings by quality
         reportable = self._filter_findings(findings, min_confidence)
-        slog.info(f"{len(reportable)}/{len(findings)} findings reportable after filtering")
+        slog.info(
+            f"{len(reportable)}/{len(findings)} findings reportable after filtering"
+        )
 
         if not reportable:
             slog.info("No reportable vulnerabilities — generating empty report")
@@ -682,8 +722,14 @@ class BugBountyReportGenerator:
                 report_md = generator_fn(finding_data, vuln_type)
                 reports.append(report_md)
             except Exception as e:
-                slog.warn(f"Failed to generate report for finding {finding.get('id', '?')}: {e}")
-                logger.warning(f"Failed to generate report for finding {finding.get('id', '?')}: {e}")
+                slog.warn(
+                    f"Failed to generate report for finding {finding.get('id', '?')}: {e}"
+                )
+                logger.warning(
+                    "Failed to generate report for finding %s: %s",
+                    finding.get("id", "?"),
+                    e,
+                )
                 continue
 
         # Wrap with header
@@ -698,7 +744,9 @@ class BugBountyReportGenerator:
         slog.tool_complete("report_generation", platform=platform, reports=len(reports))
         return header + "\n\n---\n\n".join(reports)
 
-    def _filter_findings(self, findings: list[dict], min_confidence: float) -> list[dict]:
+    def _filter_findings(
+        self, findings: list[dict], min_confidence: float
+    ) -> list[dict]:
         """
         Apply Bug-Reaper's audit rules:
         1. Minimum confidence threshold (0.65 = Probable)
@@ -715,7 +763,8 @@ class BugBountyReportGenerator:
             if not isinstance(fp_assessment, dict):
                 fp_assessment = {}
             if f.get("false_positive") or fp_assessment.get("verdict") in (
-                "false_positive", "likely_false_positive"
+                "false_positive",
+                "likely_false_positive",
             ):
                 rejected.append(f)
                 continue
@@ -765,6 +814,7 @@ class BugBountyReportGenerator:
 # CLI Entry Point
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def main():
     """
     CLI entry point for generating bug bounty reports.
@@ -781,17 +831,27 @@ def main():
     parser = argparse.ArgumentParser(
         description="Generate Bug Bounty report from Argus findings"
     )
-    parser.add_argument("--findings", required=True,
-                        help="Path to JSON file with findings array")
-    parser.add_argument("--platform", required=True,
-                        choices=list(GENERATORS.keys()),
-                        help="Target bug bounty platform")
-    parser.add_argument("--target-url", default="",
-                        help="Target URL for the engagement")
-    parser.add_argument("--output", default="",
-                        help="Output file path (default: stdout)")
-    parser.add_argument("--min-confidence", type=float, default=0.65,
-                        help="Minimum confidence threshold (default: 0.65)")
+    parser.add_argument(
+        "--findings", required=True, help="Path to JSON file with findings array"
+    )
+    parser.add_argument(
+        "--platform",
+        required=True,
+        choices=list(GENERATORS.keys()),
+        help="Target bug bounty platform",
+    )
+    parser.add_argument(
+        "--target-url", default="", help="Target URL for the engagement"
+    )
+    parser.add_argument(
+        "--output", default="", help="Output file path (default: stdout)"
+    )
+    parser.add_argument(
+        "--min-confidence",
+        type=float,
+        default=0.65,
+        help="Minimum confidence threshold (default: 0.65)",
+    )
 
     args = parser.parse_args()
 
@@ -842,7 +902,9 @@ def main():
 
 def findings_count(report_md: str) -> int:
     """Count number of individual finding reports in the markdown."""
-    return max(1, report_md.count("## Summary") + report_md.count("## Technical Details"))
+    return max(
+        1, report_md.count("## Summary") + report_md.count("## Technical Details")
+    )
 
 
 if __name__ == "__main__":

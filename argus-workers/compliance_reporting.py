@@ -6,6 +6,7 @@ using Jinja2 templates.
 
 Requirements: 17.1, 17.2, 17.3, 17.4
 """
+
 import logging
 import os
 from dataclasses import dataclass, field
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 class ComplianceStandard(StrEnum):
     """Supported compliance standards"""
+
     OWASP_TOP10 = "owasp_top10"
     PCI_DSS = "pci_dss"
     SOC2 = "soc2"
@@ -30,6 +32,7 @@ class ComplianceStandard(StrEnum):
 @dataclass
 class ComplianceFinding:
     """Finding mapped to compliance requirement"""
+
     finding_id: str
     type: str
     severity: str
@@ -43,6 +46,7 @@ class ComplianceFinding:
 @dataclass
 class ComplianceReport:
     """Generated compliance report"""
+
     id: str
     engagement_id: str
     standard: ComplianceStandard
@@ -172,32 +176,44 @@ class ComplianceMapper:
     @classmethod
     def map_to_owasp(cls, finding_type: str) -> str:
         """Map finding type to OWASP Top 10 category"""
-        return cls.OWASP_MAPPING.get(finding_type.upper(), "A05:2021 - Security Misconfiguration")
+        return cls.OWASP_MAPPING.get(
+            finding_type.upper(), "A05:2021 - Security Misconfiguration"
+        )
 
     @classmethod
     def map_to_pci(cls, finding_type: str) -> str:
         """Map finding type to PCI DSS requirement"""
-        return cls.PCI_MAPPING.get(finding_type.upper(), "6.5.10 - Unvalidated redirects and forwards")
+        return cls.PCI_MAPPING.get(
+            finding_type.upper(), "6.5.10 - Unvalidated redirects and forwards"
+        )
 
     @classmethod
     def map_to_soc2(cls, finding_type: str) -> str:
         """Map finding type to SOC 2 criteria"""
-        return cls.SOC2_MAPPING.get(finding_type.upper(), "CC7.1 - Vulnerability detection")
+        return cls.SOC2_MAPPING.get(
+            finding_type.upper(), "CC7.1 - Vulnerability detection"
+        )
 
     @classmethod
     def map_to_nist_csf(cls, finding_type: str) -> str:
         """Map finding type to NIST CSF v1.1 category"""
-        return cls.NIST_CSF_MAPPING.get(finding_type.upper(), "DE.CM-8 - Vulnerability scans")
+        return cls.NIST_CSF_MAPPING.get(
+            finding_type.upper(), "DE.CM-8 - Vulnerability scans"
+        )
 
     @classmethod
     def map_to_hipaa(cls, finding_type: str) -> str:
         """Map finding type to HIPAA Security Rule reference"""
-        return cls.HIPAA_MAPPING.get(finding_type.upper(), "164.308(a)(1) - Security Management Process")
+        return cls.HIPAA_MAPPING.get(
+            finding_type.upper(), "164.308(a)(1) - Security Management Process"
+        )
 
     @classmethod
     def map_to_iso_27001(cls, finding_type: str) -> str:
         """Map finding type to ISO 27001:2022 Annex A control"""
-        return cls.ISO_27001_MAPPING.get(finding_type.upper(), "A.8.8 - Configuration management")
+        return cls.ISO_27001_MAPPING.get(
+            finding_type.upper(), "A.8.8 - Configuration management"
+        )
 
 
 class ComplianceReportGenerator:
@@ -242,7 +258,9 @@ class ComplianceReportGenerator:
             ComplianceReport instance
         """
         findings = findings or []
-        report_id = report_id or f"owasp-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        report_id = (
+            report_id or f"owasp-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        )
 
         compliance_findings = []
         category_counts = {}
@@ -251,21 +269,25 @@ class ComplianceReportGenerator:
             owasp_ref = self.mapper.map_to_owasp(finding.get("type", "UNKNOWN"))
             category_counts[owasp_ref] = category_counts.get(owasp_ref, 0) + 1
 
-            compliance_findings.append(ComplianceFinding(
-                finding_id=finding.get("id", ""),
-                type=finding.get("type", "UNKNOWN"),
-                severity=finding.get("severity", "INFO"),
-                endpoint=finding.get("endpoint", ""),
-                description=finding.get("description", ""),
-                remediation=finding.get("remediation", ""),
-                compliance_ref=owasp_ref,
-                status=finding.get("status", "open"),
-            ))
+            compliance_findings.append(
+                ComplianceFinding(
+                    finding_id=finding.get("id", ""),
+                    type=finding.get("type", "UNKNOWN"),
+                    severity=finding.get("severity", "INFO"),
+                    endpoint=finding.get("endpoint", ""),
+                    description=finding.get("description", ""),
+                    remediation=finding.get("remediation", ""),
+                    compliance_ref=owasp_ref,
+                    status=finding.get("status", "open"),
+                )
+            )
 
         summary = {
             "total_findings": len(findings),
             "categories": category_counts,
-            "critical_count": sum(1 for f in findings if f.get("severity") == "CRITICAL"),
+            "critical_count": sum(
+                1 for f in findings if f.get("severity") == "CRITICAL"
+            ),
             "high_count": sum(1 for f in findings if f.get("severity") == "HIGH"),
             "medium_count": sum(1 for f in findings if f.get("severity") == "MEDIUM"),
             "low_count": sum(1 for f in findings if f.get("severity") == "LOW"),
@@ -300,7 +322,9 @@ class ComplianceReportGenerator:
             ComplianceReport instance
         """
         findings = findings or []
-        report_id = report_id or f"pci-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        report_id = (
+            report_id or f"pci-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        )
 
         # PCI DSS 4.0 requirements checklist
         pci_requirements = {
@@ -330,16 +354,18 @@ class ComplianceReportGenerator:
             pci_ref = self.mapper.map_to_pci(finding.get("type", "UNKNOWN"))
             req_key = pci_ref.split(" - ")[0]
 
-            compliance_findings.append(ComplianceFinding(
-                finding_id=finding.get("id", ""),
-                type=finding.get("type", "UNKNOWN"),
-                severity=finding.get("severity", "INFO"),
-                endpoint=finding.get("endpoint", ""),
-                description=finding.get("description", ""),
-                remediation=finding.get("remediation", ""),
-                compliance_ref=pci_ref,
-                status=finding.get("status", "open"),
-            ))
+            compliance_findings.append(
+                ComplianceFinding(
+                    finding_id=finding.get("id", ""),
+                    type=finding.get("type", "UNKNOWN"),
+                    severity=finding.get("severity", "INFO"),
+                    endpoint=finding.get("endpoint", ""),
+                    description=finding.get("description", ""),
+                    remediation=finding.get("remediation", ""),
+                    compliance_ref=pci_ref,
+                    status=finding.get("status", "open"),
+                )
+            )
 
             if req_key in requirement_status:
                 requirement_status[req_key]["status"] = "non_compliant"
@@ -347,8 +373,12 @@ class ComplianceReportGenerator:
 
         summary = {
             "total_findings": len(findings),
-            "compliant_requirements": sum(1 for r in requirement_status.values() if r["status"] == "compliant"),
-            "non_compliant_requirements": sum(1 for r in requirement_status.values() if r["status"] == "non_compliant"),
+            "compliant_requirements": sum(
+                1 for r in requirement_status.values() if r["status"] == "compliant"
+            ),
+            "non_compliant_requirements": sum(
+                1 for r in requirement_status.values() if r["status"] == "non_compliant"
+            ),
             "total_requirements": len(pci_requirements),
             "requirement_status": requirement_status,
         }
@@ -382,7 +412,9 @@ class ComplianceReportGenerator:
             ComplianceReport instance
         """
         findings = findings or []
-        report_id = report_id or f"soc2-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        report_id = (
+            report_id or f"soc2-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        )
 
         # SOC 2 Trust Services Criteria
         soc2_criteria = {
@@ -406,16 +438,18 @@ class ComplianceReportGenerator:
             soc2_ref = self.mapper.map_to_soc2(finding.get("type", "UNKNOWN"))
             criteria_key = soc2_ref.split(" - ")[0]
 
-            compliance_findings.append(ComplianceFinding(
-                finding_id=finding.get("id", ""),
-                type=finding.get("type", "UNKNOWN"),
-                severity=finding.get("severity", "INFO"),
-                endpoint=finding.get("endpoint", ""),
-                description=finding.get("description", ""),
-                remediation=finding.get("remediation", ""),
-                compliance_ref=soc2_ref,
-                status=finding.get("status", "open"),
-            ))
+            compliance_findings.append(
+                ComplianceFinding(
+                    finding_id=finding.get("id", ""),
+                    type=finding.get("type", "UNKNOWN"),
+                    severity=finding.get("severity", "INFO"),
+                    endpoint=finding.get("endpoint", ""),
+                    description=finding.get("description", ""),
+                    remediation=finding.get("remediation", ""),
+                    compliance_ref=soc2_ref,
+                    status=finding.get("status", "open"),
+                )
+            )
 
             if criteria_key in criteria_status:
                 criteria_status[criteria_key]["status"] = "fail"
@@ -423,8 +457,12 @@ class ComplianceReportGenerator:
 
         summary = {
             "total_findings": len(findings),
-            "passing_criteria": sum(1 for c in criteria_status.values() if c["status"] == "pass"),
-            "failing_criteria": sum(1 for c in criteria_status.values() if c["status"] == "fail"),
+            "passing_criteria": sum(
+                1 for c in criteria_status.values() if c["status"] == "pass"
+            ),
+            "failing_criteria": sum(
+                1 for c in criteria_status.values() if c["status"] == "fail"
+            ),
             "total_criteria": len(soc2_criteria),
             "criteria_status": criteria_status,
         }
@@ -458,7 +496,9 @@ class ComplianceReportGenerator:
             ComplianceReport instance
         """
         findings = findings or []
-        report_id = report_id or f"nist-csf-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        report_id = (
+            report_id or f"nist-csf-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        )
 
         # NIST CSF Core Functions: Identify, Protect, Detect, Respond, Recover
         nist_functions = {
@@ -479,16 +519,18 @@ class ComplianceReportGenerator:
             # sub_prefix is the first word before space, e.g. "PR.PT-3"
             sub_prefix = nist_ref.split(" ")[0]  # e.g. "PR.PT-3"
 
-            compliance_findings.append(ComplianceFinding(
-                finding_id=finding.get("id", ""),
-                type=finding.get("type", "UNKNOWN"),
-                severity=finding.get("severity", "INFO"),
-                endpoint=finding.get("endpoint", ""),
-                description=finding.get("description", ""),
-                remediation=finding.get("remediation", ""),
-                compliance_ref=nist_ref,
-                status=finding.get("status", "open"),
-            ))
+            compliance_findings.append(
+                ComplianceFinding(
+                    finding_id=finding.get("id", ""),
+                    type=finding.get("type", "UNKNOWN"),
+                    severity=finding.get("severity", "INFO"),
+                    endpoint=finding.get("endpoint", ""),
+                    description=finding.get("description", ""),
+                    remediation=finding.get("remediation", ""),
+                    compliance_ref=nist_ref,
+                    status=finding.get("status", "open"),
+                )
+            )
 
             # Track findings by function
             for func_key in nist_functions:
@@ -509,8 +551,12 @@ class ComplianceReportGenerator:
         summary = {
             "total_findings": len(findings),
             "functions": functions_summary,
-            "passing_functions": sum(1 for f in function_findings.values() if len(f) == 0),
-            "failing_functions": sum(1 for f in function_findings.values() if len(f) > 0),
+            "passing_functions": sum(
+                1 for f in function_findings.values() if len(f) == 0
+            ),
+            "failing_functions": sum(
+                1 for f in function_findings.values() if len(f) > 0
+            ),
             "total_functions": len(nist_functions),
         }
 
@@ -543,7 +589,9 @@ class ComplianceReportGenerator:
             ComplianceReport instance
         """
         findings = findings or []
-        report_id = report_id or f"hipaa-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        report_id = (
+            report_id or f"hipaa-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        )
 
         # HIPAA Security Rule sections and criteria
         hipaa_sections = {
@@ -604,16 +652,18 @@ class ComplianceReportGenerator:
             hipaa_ref = self.mapper.map_to_hipaa(finding.get("type", "UNKNOWN"))
             ref_key = hipaa_ref.split(" - ")[0]
 
-            compliance_findings.append(ComplianceFinding(
-                finding_id=finding.get("id", ""),
-                type=finding.get("type", "UNKNOWN"),
-                severity=finding.get("severity", "INFO"),
-                endpoint=finding.get("endpoint", ""),
-                description=finding.get("description", ""),
-                remediation=finding.get("remediation", ""),
-                compliance_ref=hipaa_ref,
-                status=finding.get("status", "open"),
-            ))
+            compliance_findings.append(
+                ComplianceFinding(
+                    finding_id=finding.get("id", ""),
+                    type=finding.get("type", "UNKNOWN"),
+                    severity=finding.get("severity", "INFO"),
+                    endpoint=finding.get("endpoint", ""),
+                    description=finding.get("description", ""),
+                    remediation=finding.get("remediation", ""),
+                    compliance_ref=hipaa_ref,
+                    status=finding.get("status", "open"),
+                )
+            )
 
             # Map ref to section and mark as failing
             for section_name, section_data in section_status.items():
@@ -630,16 +680,16 @@ class ComplianceReportGenerator:
 
         summary = {
             "total_findings": len(findings),
-            "critical_count": sum(1 for f in findings if f.get("severity") == "CRITICAL"),
+            "critical_count": sum(
+                1 for f in findings if f.get("severity") == "CRITICAL"
+            ),
             "high_count": sum(1 for f in findings if f.get("severity") == "HIGH"),
             "medium_count": sum(1 for f in findings if f.get("severity") == "MEDIUM"),
             "passing_controls": passing,
             "failing_controls": failing,
             "total_controls": len(section_status),
             "sections": section_status,
-            "composite_score": round(
-                (passing / max(len(section_status), 1)) * 100
-            ),
+            "composite_score": round((passing / max(len(section_status), 1)) * 100),
         }
 
         return ComplianceReport(
@@ -671,7 +721,9 @@ class ComplianceReportGenerator:
             ComplianceReport instance
         """
         findings = findings or []
-        report_id = report_id or f"iso27001-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        report_id = (
+            report_id or f"iso27001-{engagement_id}-{datetime.now().strftime('%Y%m%d')}"
+        )
 
         # ISO 27001:2022 Annex A control themes
         iso_themes = {
@@ -740,16 +792,18 @@ class ComplianceReportGenerator:
             iso_ref = self.mapper.map_to_iso_27001(finding.get("type", "UNKNOWN"))
             ref_key = iso_ref.split(" - ")[0]
 
-            compliance_findings.append(ComplianceFinding(
-                finding_id=finding.get("id", ""),
-                type=finding.get("type", "UNKNOWN"),
-                severity=finding.get("severity", "INFO"),
-                endpoint=finding.get("endpoint", ""),
-                description=finding.get("description", ""),
-                remediation=finding.get("remediation", ""),
-                compliance_ref=iso_ref,
-                status=finding.get("status", "open"),
-            ))
+            compliance_findings.append(
+                ComplianceFinding(
+                    finding_id=finding.get("id", ""),
+                    type=finding.get("type", "UNKNOWN"),
+                    severity=finding.get("severity", "INFO"),
+                    endpoint=finding.get("endpoint", ""),
+                    description=finding.get("description", ""),
+                    remediation=finding.get("remediation", ""),
+                    compliance_ref=iso_ref,
+                    status=finding.get("status", "open"),
+                )
+            )
 
             # Map ref to theme and mark as failing
             for theme_name, theme_data in theme_status.items():
@@ -766,16 +820,16 @@ class ComplianceReportGenerator:
 
         summary = {
             "total_findings": len(findings),
-            "critical_count": sum(1 for f in findings if f.get("severity") == "CRITICAL"),
+            "critical_count": sum(
+                1 for f in findings if f.get("severity") == "CRITICAL"
+            ),
             "high_count": sum(1 for f in findings if f.get("severity") == "HIGH"),
             "medium_count": sum(1 for f in findings if f.get("severity") == "MEDIUM"),
             "passing_controls": passing,
             "failing_controls": failing,
             "total_controls": len(theme_status),
             "themes": theme_status,
-            "composite_score": round(
-                (passing / max(len(theme_status), 1)) * 100
-            ),
+            "composite_score": round((passing / max(len(theme_status), 1)) * 100),
         }
 
         return ComplianceReport(
@@ -802,12 +856,16 @@ class ComplianceReportGenerator:
         try:
             template = self.env.get_template(report.template_used)
         except Exception:
-            logger.warning(f"Template {report.template_used} not found, using default")
+            logger.warning("Template %s not found, using default", report.template_used)
             try:
                 template = self.env.get_template("default_report.html")
             except Exception:
-                logger.error("Default template not found — using minimal inline template")
-                template = self.env.from_string("<html><body><h1>Compliance Report</h1><pre>{{ report | pprint }}</pre></body></html>")
+                logger.error(
+                    "Default template not found — using minimal inline template"
+                )
+                template = self.env.from_string(
+                    "<html><body><h1>Compliance Report</h1><pre>{{ report | pprint }}</pre></body></html>"
+                )
 
         return template.render(
             report=report,
@@ -870,7 +928,9 @@ def generate_compliance_report(
     if standard == "owasp_top10":
         report = generator.generate_owasp_report(engagement_id, findings, report_id)
     elif standard == "pci_dss":
-        report = generator.generate_pci_dss_checklist(engagement_id, findings, report_id)
+        report = generator.generate_pci_dss_checklist(
+            engagement_id, findings, report_id
+        )
     elif standard == "soc2":
         report = generator.generate_soc2_template(engagement_id, findings, report_id)
     elif standard == "nist_csf":

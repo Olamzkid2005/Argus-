@@ -5,7 +5,13 @@ import os
 
 _spec = importlib.util.spec_from_file_location(
     "form_discovery",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "agent", "form_discovery.py"),
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "..",
+        "agent",
+        "form_discovery.py",
+    ),
 )
 _fd = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_fd)
@@ -108,9 +114,13 @@ class TestErrorCodes:
 
     def test_required_codes_present(self):
         required = [
-            "FORM_NOT_FOUND", "CAPTCHA_DETECTED",
-            "EMAIL_VERIFICATION_REQUIRED", "INVALID_CREDENTIALS",
-            "2FA_REQUIRED", "RATE_LIMITED", "ACCOUNT_LOCKED",
+            "FORM_NOT_FOUND",
+            "CAPTCHA_DETECTED",
+            "EMAIL_VERIFICATION_REQUIRED",
+            "INVALID_CREDENTIALS",
+            "2FA_REQUIRED",
+            "RATE_LIMITED",
+            "ACCOUNT_LOCKED",
         ]
         for code in required:
             assert code in _fd.ERROR_CODES, f"Missing error code: {code}"

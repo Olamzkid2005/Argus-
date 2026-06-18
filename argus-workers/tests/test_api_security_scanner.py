@@ -45,6 +45,7 @@ class TestAPISecurityScannerConstruction:
 
     def test_inherits_async_tool(self):
         from tool_core.base import AsyncTool
+
         assert issubclass(APISecurityScanner, AsyncTool)
 
     def test_defaults(self):
@@ -101,7 +102,9 @@ class TestValidateExternalUrl:
 
     def test_blocks_cloud_metadata(self):
         """169.254.169.254 is link-local so caught by IP check."""
-        with pytest.raises(ValueError, match="Blocked internal IP|Blocked cloud metadata"):
+        with pytest.raises(
+            ValueError, match="Blocked internal IP|Blocked cloud metadata"
+        ):
             APISecurityScanner._validate_external_url("http://169.254.169.254/")
 
     def test_blocks_gcp_metadata(self):
@@ -126,6 +129,7 @@ class TestValidateExternalUrl:
     def test_dns_failure_does_not_block(self):
         """DNS resolution failure should not raise."""
         import socket
+
         with patch("socket.getaddrinfo", side_effect=socket.gaierror("no address")):
             # Should not raise — let the caller handle connection errors
             APISecurityScanner._validate_external_url(
@@ -148,7 +152,9 @@ class TestTryReplaceId:
         assert result == "/api/users/999"
 
     def test_replaces_hex_id(self):
-        result = APISecurityScanner._try_replace_id("/api/items/a1b2c3d4e5f6a7b8c9d0e1f2a3b4c")
+        result = APISecurityScanner._try_replace_id(
+            "/api/items/a1b2c3d4e5f6a7b8c9d0e1f2a3b4c"
+        )
         # 32-char hex matches the first (8+ hex) pattern → UUID format
         assert "00000000-0000-0000-0000-000000000000" in result
 
@@ -181,8 +187,8 @@ class TestBola:
 
     def test_detects_confirmed_bola(self, scanner):
         """Similar-sized responses with different IDs = BOLA."""
-        orig_body = "data" * 50   # 200 chars
-        alt_body = "datx" * 50   # 200 chars (same length, different content)
+        orig_body = "data" * 50  # 200 chars
+        alt_body = "datx" * 50  # 200 chars (same length, different content)
         orig_resp = _mock_async_response(status_code=200, text=orig_body)
         alt_resp = _mock_async_response(status_code=200, text=alt_body)
 
@@ -253,6 +259,7 @@ class TestBola:
 
     def test_skips_non_id_endpoint(self, scanner):
         """Endpoints without ID-like segments are skipped."""
+
         async def run():
             with patch("httpx.AsyncClient"):
                 findings = await scanner._test_bola(
@@ -267,6 +274,7 @@ class TestBola:
 
     def test_handles_request_error(self, scanner):
         """RequestError on either request → skip."""
+
         async def run():
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_client = mock_cls.return_value.__aenter__.return_value
@@ -285,6 +293,7 @@ class TestBola:
     def test_with_builder_routes_through(self, scanner):
         """When _builder is set, findings route through builder.add()."""
         from tool_core.finding_builder import FindingBuilder
+
         scanner._builder = FindingBuilder(source_tool="api_security_scanner")
         orig_body = "data" * 50
         alt_body = "datx" * 50
@@ -388,6 +397,7 @@ class TestMassAssignment:
 
     def test_handles_request_error(self, scanner):
         """RequestError → skip that request."""
+
         async def run():
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_client = mock_cls.return_value.__aenter__.return_value
@@ -405,6 +415,7 @@ class TestMassAssignment:
 
     def test_with_builder_routes_through(self, scanner):
         from tool_core.finding_builder import FindingBuilder
+
         scanner._builder = FindingBuilder(source_tool="api_security_scanner")
         resp = _mock_async_response(
             status_code=200,
@@ -501,6 +512,7 @@ class TestAuthBypass:
 
     def test_handles_request_error(self, scanner):
         """RequestError → skip that request."""
+
         async def run():
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_client = mock_cls.return_value.__aenter__.return_value
@@ -517,6 +529,7 @@ class TestAuthBypass:
 
     def test_with_builder_routes_through(self, scanner):
         from tool_core.finding_builder import FindingBuilder
+
         scanner._builder = FindingBuilder(source_tool="api_security_scanner")
         resp = _mock_async_response(status_code=200, text="ok")
 
@@ -594,6 +607,7 @@ class TestRateLimiting:
 
     def test_inconclusive_all_failed(self, scanner):
         """All requests failed → API_RATE_LIMIT_INCONCLUSIVE."""
+
         async def run():
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_client = mock_cls.return_value.__aenter__.return_value
@@ -612,6 +626,7 @@ class TestRateLimiting:
 
     def test_skips_non_auth_endpoints(self, scanner):
         """Only auth-related endpoints are tested."""
+
         async def run():
             findings = await scanner._test_api_rate_limiting(
                 self.SCANNER_BASE_URL,
@@ -625,6 +640,7 @@ class TestRateLimiting:
 
     def test_with_builder_routes_through(self, scanner):
         from tool_core.finding_builder import FindingBuilder
+
         scanner._builder = FindingBuilder(source_tool="api_security_scanner")
         resp_ok = _mock_async_response(status_code=200, text="ok")
 
@@ -657,6 +673,7 @@ class TestScan:
 
     def test_returns_empty_when_feature_disabled(self, scanner):
         """Feature flag off → empty list."""
+
         async def run():
             with patch("tools.api_security_scanner.is_enabled", return_value=False):
                 findings = await scanner.scan(
@@ -670,18 +687,26 @@ class TestScan:
 
     def test_runs_discovery_when_no_endpoints(self, scanner):
         """Empty endpoints → runs discovery."""
+
         async def run():
             with patch("tools.api_security_scanner.is_enabled", return_value=True):
                 with patch.object(scanner, "_validate_external_url"):
                     with patch.object(
-                        scanner, "discover_endpoints",
+                        scanner,
+                        "discover_endpoints",
                         return_value=["/api/users/123"],
                     ):
                         with patch.object(scanner, "_test_bola", return_value=[]):
-                            with patch.object(scanner, "_test_mass_assignment", return_value=[]):
-                                with patch.object(scanner, "_test_auth_bypass", return_value=[]):
+                            with patch.object(
+                                scanner, "_test_mass_assignment", return_value=[]
+                            ):
+                                with patch.object(
+                                    scanner, "_test_auth_bypass", return_value=[]
+                                ):
                                     with patch.object(
-                                        scanner, "_test_api_rate_limiting", return_value=[],
+                                        scanner,
+                                        "_test_api_rate_limiting",
+                                        return_value=[],
                                     ):
                                         findings = await scanner.scan(
                                             "https://api.example.com",
@@ -694,6 +719,7 @@ class TestScan:
 
     def test_discovery_returns_empty_returns_empty(self, scanner):
         """No endpoints discovered → empty result."""
+
         async def run():
             with patch("tools.api_security_scanner.is_enabled", return_value=True):
                 with patch.object(scanner, "_validate_external_url"):
@@ -709,12 +735,16 @@ class TestScan:
 
     def test_runs_all_checks_with_endpoints(self, scanner):
         """Provided endpoints run through all 4 checks."""
+
         async def _make_bola(*a, **kw):
             return [scanner._add_finding("API_BOLA", "HIGH", "url", {}, 0.7)]
+
         async def _make_ma(*a, **kw):
             return [scanner._add_finding("API_MASS_ASSIGNMENT", "HIGH", "url", {}, 0.6)]
+
         async def _make_ab(*a, **kw):
             return [scanner._add_finding("API_AUTH_BYPASS", "CRITICAL", "url", {}, 0.5)]
+
         async def _make_rl(*a, **kw):
             return [scanner._add_finding("API_NO_RATE_LIMIT", "MEDIUM", "url", {}, 0.6)]
 
@@ -722,9 +752,17 @@ class TestScan:
             with patch("tools.api_security_scanner.is_enabled", return_value=True):
                 with patch.object(scanner, "_validate_external_url"):
                     with patch.object(scanner, "_test_bola", side_effect=_make_bola):
-                        with patch.object(scanner, "_test_mass_assignment", side_effect=_make_ma):
-                            with patch.object(scanner, "_test_auth_bypass", side_effect=_make_ab):
-                                with patch.object(scanner, "_test_api_rate_limiting", side_effect=_make_rl):
+                        with patch.object(
+                            scanner, "_test_mass_assignment", side_effect=_make_ma
+                        ):
+                            with patch.object(
+                                scanner, "_test_auth_bypass", side_effect=_make_ab
+                            ):
+                                with patch.object(
+                                    scanner,
+                                    "_test_api_rate_limiting",
+                                    side_effect=_make_rl,
+                                ):
                                     findings = await scanner.scan(
                                         "https://api.example.com",
                                         ["/api/users/123"],
@@ -737,6 +775,7 @@ class TestScan:
 
     def test_scan_delegates_to_async_execute(self, scanner):
         """scan() shim delegates to async_execute()."""
+
         async def run():
             with patch("tools.api_security_scanner.is_enabled", return_value=True):
                 with patch.object(scanner, "_validate_external_url"):
@@ -746,8 +785,8 @@ class TestScan:
                                 with patch.object(scanner, "_test_api_rate_limiting"):
                                     findings = await scanner.scan(
                                         "https://api.example.com",
-                        ["/api/users/123"],
-                    )
+                                        ["/api/users/123"],
+                                    )
             return findings
 
         findings = _run_async(run())
@@ -795,6 +834,7 @@ class TestAsyncExecute:
     def test_sets_builder_on_instance(self, scanner):
         """async_execute creates FindingBuilder on self._builder."""
         from tool_core.finding_builder import FindingBuilder
+
         ctx = ToolContext(target="https://api.example.com")
 
         async def run():
@@ -830,6 +870,7 @@ class TestAsyncExecute:
 
     def test_returns_findings_from_scan(self, scanner):
         """Findings produced by check methods appear in the result."""
+
         async def _make_bola(*a, **kw):
             return [scanner._add_finding("API_BOLA", "HIGH", "url", {}, 0.7)]
 
@@ -838,11 +879,23 @@ class TestAsyncExecute:
         async def run():
             with patch("tools.api_security_scanner.is_enabled", return_value=True):
                 with patch.object(scanner, "_validate_external_url"):
-                    with patch.object(scanner, "discover_endpoints", return_value=["/api/test"]):
-                        with patch.object(scanner, "_test_bola", side_effect=_make_bola):
-                            with patch.object(scanner, "_test_mass_assignment", return_value=[]):
-                                with patch.object(scanner, "_test_auth_bypass", return_value=[]):
-                                    with patch.object(scanner, "_test_api_rate_limiting", return_value=[]):
+                    with patch.object(
+                        scanner, "discover_endpoints", return_value=["/api/test"]
+                    ):
+                        with patch.object(
+                            scanner, "_test_bola", side_effect=_make_bola
+                        ):
+                            with patch.object(
+                                scanner, "_test_mass_assignment", return_value=[]
+                            ):
+                                with patch.object(
+                                    scanner, "_test_auth_bypass", return_value=[]
+                                ):
+                                    with patch.object(
+                                        scanner,
+                                        "_test_api_rate_limiting",
+                                        return_value=[],
+                                    ):
                                         result = await scanner.async_execute(ctx)
             return result
 
@@ -857,11 +910,21 @@ class TestAsyncExecute:
         async def run():
             with patch("tools.api_security_scanner.is_enabled", return_value=True):
                 with patch.object(scanner, "_validate_external_url"):
-                    with patch.object(scanner, "discover_endpoints", return_value=["/api/test"]) as mock_discovery:
+                    with patch.object(
+                        scanner, "discover_endpoints", return_value=["/api/test"]
+                    ) as mock_discovery:
                         with patch.object(scanner, "_test_bola", return_value=[]):
-                            with patch.object(scanner, "_test_mass_assignment", return_value=[]):
-                                with patch.object(scanner, "_test_auth_bypass", return_value=[]):
-                                    with patch.object(scanner, "_test_api_rate_limiting", return_value=[]):
+                            with patch.object(
+                                scanner, "_test_mass_assignment", return_value=[]
+                            ):
+                                with patch.object(
+                                    scanner, "_test_auth_bypass", return_value=[]
+                                ):
+                                    with patch.object(
+                                        scanner,
+                                        "_test_api_rate_limiting",
+                                        return_value=[],
+                                    ):
                                         await scanner.async_execute(ctx)
                                         mock_discovery.assert_called_once()
 
@@ -879,8 +942,14 @@ class TestAsyncExecute:
                         with patch.object(scanner, "_test_bola") as mock_bola:
                             with patch.object(scanner, "_test_mass_assignment"):
                                 with patch.object(scanner, "_test_auth_bypass"):
-                                    with patch.object(scanner, "_test_api_rate_limiting", return_value=[]):
-                                        await scanner.async_execute(ctx, endpoints=explicit_endpoints)
+                                    with patch.object(
+                                        scanner,
+                                        "_test_api_rate_limiting",
+                                        return_value=[],
+                                    ):
+                                        await scanner.async_execute(
+                                            ctx, endpoints=explicit_endpoints
+                                        )
                                         # Discovery should NOT be called
                                         mock_discovery.assert_not_called()
                                         # Endpoints passed to check methods
@@ -896,11 +965,21 @@ class TestAsyncExecute:
         async def run():
             with patch("tools.api_security_scanner.is_enabled", return_value=True):
                 with patch.object(scanner, "_validate_external_url"):
-                    with patch.object(scanner, "discover_endpoints", return_value=["/api/test"]) as mock_discovery:
+                    with patch.object(
+                        scanner, "discover_endpoints", return_value=["/api/test"]
+                    ) as mock_discovery:
                         with patch.object(scanner, "_test_bola", return_value=[]):
-                            with patch.object(scanner, "_test_mass_assignment", return_value=[]):
-                                with patch.object(scanner, "_test_auth_bypass", return_value=[]):
-                                    with patch.object(scanner, "_test_api_rate_limiting", return_value=[]):
+                            with patch.object(
+                                scanner, "_test_mass_assignment", return_value=[]
+                            ):
+                                with patch.object(
+                                    scanner, "_test_auth_bypass", return_value=[]
+                                ):
+                                    with patch.object(
+                                        scanner,
+                                        "_test_api_rate_limiting",
+                                        return_value=[],
+                                    ):
                                         await scanner.async_execute(ctx, endpoints=[])
                                         # [] triggers discovery same as default
                                         mock_discovery.assert_called_once()
@@ -979,7 +1058,14 @@ class TestExtractApiFromHtml:
 class TestFindingSchema:
     """All findings conform to expected schema."""
 
-    REQUIRED_KEYS = {"type", "severity", "endpoint", "evidence", "confidence", "source_tool"}
+    REQUIRED_KEYS = {
+        "type",
+        "severity",
+        "endpoint",
+        "evidence",
+        "confidence",
+        "source_tool",
+    }
     VALID_SEVERITIES = {"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
 
     def test_bola_findings_have_required_schema(self):
@@ -1064,6 +1150,7 @@ def httpx_connection_error():
     """Return an exception that matches httpx.RequestError."""
     try:
         import httpx
+
         return httpx.RequestError("Connection refused")
     except ImportError:
         return Exception("Connection refused")

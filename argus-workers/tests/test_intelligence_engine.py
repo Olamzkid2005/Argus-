@@ -1,6 +1,7 @@
 """
 Tests for Intelligence Engine
 """
+
 from intelligence_engine import IntelligenceEngine
 
 
@@ -21,10 +22,7 @@ class TestIntelligenceEngine:
 
     def test_calculate_tool_agreement_two_tools(self):
         """Test tool agreement for two tools"""
-        findings = [
-            {"source_tool": "nuclei"},
-            {"source_tool": "sqlmap"}
-        ]
+        findings = [{"source_tool": "nuclei"}, {"source_tool": "sqlmap"}]
 
         agreement = self.engine._calculate_tool_agreement(findings)
 
@@ -35,7 +33,7 @@ class TestIntelligenceEngine:
         findings = [
             {"source_tool": "nuclei"},
             {"source_tool": "sqlmap"},
-            {"source_tool": "burp"}
+            {"source_tool": "burp"},
         ]
 
         agreement = self.engine._calculate_tool_agreement(findings)
@@ -78,41 +76,32 @@ class TestIntelligenceEngine:
         """Test low coverage detection with few endpoints"""
         findings = [
             {"endpoint": "https://example.com/1"},
-            {"endpoint": "https://example.com/2"}
+            {"endpoint": "https://example.com/2"},
         ]
 
         assert self.engine.detect_low_coverage(findings) is True
 
     def test_detect_low_coverage_with_many_endpoints(self):
         """Test low coverage detection with many endpoints"""
-        findings = [
-            {"endpoint": f"https://example.com/{i}"}
-            for i in range(10)
-        ]
+        findings = [{"endpoint": f"https://example.com/{i}"} for i in range(10)]
 
         assert self.engine.detect_low_coverage(findings) is False
 
     def test_detect_high_value_targets_with_critical(self):
         """Test high value target detection with CRITICAL severity"""
-        findings = [
-            {"severity": "CRITICAL", "endpoint": "https://example.com/api"}
-        ]
+        findings = [{"severity": "CRITICAL", "endpoint": "https://example.com/api"}]
 
         assert self.engine.detect_high_value_targets(findings) is True
 
     def test_detect_high_value_targets_with_high(self):
         """Test high value target detection with HIGH severity"""
-        findings = [
-            {"severity": "HIGH", "endpoint": "https://example.com/api"}
-        ]
+        findings = [{"severity": "HIGH", "endpoint": "https://example.com/api"}]
 
         assert self.engine.detect_high_value_targets(findings) is True
 
     def test_detect_high_value_targets_without_critical_or_high(self):
         """Test high value target detection without CRITICAL/HIGH"""
-        findings = [
-            {"severity": "MEDIUM", "endpoint": "https://example.com/api"}
-        ]
+        findings = [{"severity": "MEDIUM", "endpoint": "https://example.com/api"}]
 
         assert self.engine.detect_high_value_targets(findings) is False
 
@@ -126,17 +115,13 @@ class TestIntelligenceEngine:
 
     def test_detect_weak_auth_signals_without_auth_keyword(self):
         """Test weak auth signal detection without auth keywords"""
-        findings = [
-            {"type": "XSS", "endpoint": "https://example.com/page"}
-        ]
+        findings = [{"type": "XSS", "endpoint": "https://example.com/page"}]
 
         assert self.engine.detect_weak_auth_signals(findings) is False
 
     def test_detect_low_coverage_triggers_recon_expand(self):
         """Test that low coverage detection can be used by analyze_state()"""
-        findings = [
-            {"endpoint": "https://example.com/1", "severity": "INFO"}
-        ]
+        findings = [{"endpoint": "https://example.com/1", "severity": "INFO"}]
 
         assert self.engine.detect_low_coverage(findings) is True
         gaps = self.engine.suggest_new_targets(findings)
@@ -144,9 +129,7 @@ class TestIntelligenceEngine:
 
     def test_detect_high_value_triggers_deep_scan(self):
         """Test that high value detection can be used by analyze_state()"""
-        findings = [
-            {"endpoint": "https://example.com/api", "severity": "CRITICAL"}
-        ]
+        findings = [{"endpoint": "https://example.com/api", "severity": "CRITICAL"}]
 
         assert self.engine.detect_high_value_targets(findings) is True
         endpoints = self.engine.get_priority_endpoints(findings)
@@ -162,12 +145,12 @@ class TestIntelligenceEngine:
                     "severity": "HIGH",
                     "evidence_strength": "PAYLOAD",
                     "fp_likelihood": 0.15,
-                    "source_tool": "nuclei"
+                    "source_tool": "nuclei",
                 }
             ],
             "loop_budget": {},
             "attack_graph": {},
-            "engagement_state": {}
+            "engagement_state": {},
         }
 
         result = self.engine.evaluate(snapshot)
@@ -179,6 +162,7 @@ class TestIntelligenceEngine:
 
     def test_analyze_state_independent(self):
         """Test analyze_state works independently (without pre-enriched findings)"""
+
         class FakeState:
             findings = [
                 {"type": "XSS", "endpoint": "https://example.com", "severity": "HIGH"}

@@ -4,6 +4,7 @@ ReconContext - Structured summary of reconnaissance findings for LLM consumption
 Distills raw recon findings into a compact dataclass the LLM can reason about
 without being overwhelmed by thousands of raw output lines.
 """
+
 from dataclasses import asdict, dataclass, field
 
 
@@ -36,7 +37,9 @@ class ReconContext:
     has_hardcoded_secrets: bool = False
     dependency_vulns_count: int = 0
     repo_clone_success: bool = False
-    target_profile: dict | None = None  # From target_profiles table, for cross-scan learning
+    target_profile: dict | None = (
+        None  # From target_profiles table, for cross-scan learning
+    )
 
     def to_llm_structured(self) -> str:
         """Return structured recon data as JSON for LLM tool selection."""
@@ -63,7 +66,9 @@ class ReconContext:
                 "prior_scans": p.get("total_scans", 0),
                 "best_tools": p.get("best_tools", [])[:5],
                 "noisy_tools": p.get("noisy_tools", [])[:5],
-                "confirmed_vulnerability_types": p.get("confirmed_finding_types", [])[:10],
+                "confirmed_vulnerability_types": p.get("confirmed_finding_types", [])[
+                    :10
+                ],
                 "high_value_endpoints": p.get("high_value_endpoints", [])[:10],
             }
 
@@ -87,7 +92,9 @@ class ReconContext:
             if self.repo_clone_success:
                 lines.append("Clone: successful")
             if self.severity_breakdown:
-                parts = [f"{k}: {v}" for k, v in sorted(self.severity_breakdown.items())]
+                parts = [
+                    f"{k}: {v}" for k, v in sorted(self.severity_breakdown.items())
+                ]
                 lines.append(f"Severity: {' | '.join(parts)}")
             if self.vulnerability_types:
                 lines.append(f"Vuln types: {', '.join(self.vulnerability_types[:15])}")
@@ -100,15 +107,20 @@ class ReconContext:
             if self.dependency_vulns_count > 0:
                 lines.append(f"Dependency vulns: {self.dependency_vulns_count}")
         else:
-            lines.extend([
-                f"Live endpoints: {len(self.live_endpoints)}",
-                f"Subdomains: {len(self.subdomains)}",
-                f"Open ports: {len(self.open_ports)}",
-            ])
+            lines.extend(
+                [
+                    f"Live endpoints: {len(self.live_endpoints)}",
+                    f"Subdomains: {len(self.subdomains)}",
+                    f"Open ports: {len(self.open_ports)}",
+                ]
+            )
             if self.tech_stack:
                 lines.append(f"Tech stack: {', '.join(self.tech_stack[:10])}")
             if self.open_ports:
-                port_strs = [f"{p.get('port', '?')}/{p.get('service', 'unknown')}" for p in self.open_ports[:10]]
+                port_strs = [
+                    f"{p.get('port', '?')}/{p.get('service', 'unknown')}"
+                    for p in self.open_ports[:10]
+                ]
                 lines.append(f"Ports: {', '.join(port_strs)}")
             if self.subdomains:
                 lines.append(f"Subdomains (top 10): {', '.join(self.subdomains[:10])}")

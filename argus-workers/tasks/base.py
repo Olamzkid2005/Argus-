@@ -42,6 +42,7 @@ except ImportError:
         class _SoftTimeLimitExceeded(Exception):  # type: ignore
             pass
 
+
 # Public alias for use in except clauses throughout this module.
 # We also check by class name as a final fallback (see _is_soft_timeout).
 SoftTimeLimitExceeded = _SoftTimeLimitExceeded
@@ -49,6 +50,7 @@ SoftTimeLimitExceeded = _SoftTimeLimitExceeded
 
 class OperatorCanceled(Exception):
     """Raised when an engagement is cancelled by the operator via Redis flag."""
+
     pass
 
 
@@ -63,23 +65,39 @@ def _is_soft_timeout(exc: BaseException) -> bool:
         return True
     return "SoftTimeLimitExceeded" in type(exc).__name__
 
+
 logger = logging.getLogger(__name__)
 
 
 def _transition_to_failed_on_timeout(
-    task, ctx, sm, engagement_id: str, job_type: str,
-    _lock_acquired: bool, _state_assigned: bool, slog,
+    task,
+    ctx,
+    sm,
+    engagement_id: str,
+    job_type: str,
+    _lock_acquired: bool,
+    _state_assigned: bool,
+    slog,
 ) -> None:
     """Shared helper: transition engagement to 'failed' on soft time limit."""
     if _lock_acquired:
         try:
             from tasks.utils import get_engagement_state as _ges
-            current = sm.current_state if _state_assigned else _ges(engagement_id, os.getenv("DATABASE_URL"))
+
+            current = (
+                sm.current_state
+                if _state_assigned
+                else _ges(engagement_id, os.getenv("DATABASE_URL"))
+            )
             if current not in ("complete", "failed"):
                 if _state_assigned:
-                    ctx.state.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+                    ctx.state.transition(
+                        "failed", f"{job_type} timed out (soft time limit exceeded)"
+                    )
                 else:
-                    sm.transition("failed", f"{job_type} timed out (soft time limit exceeded)")
+                    sm.transition(
+                        "failed", f"{job_type} timed out (soft time limit exceeded)"
+                    )
                 slog.phase_complete(job_type, status="failed", reason="soft_time_limit")
                 # Prevent double-transition by Celery's on_failure hook
                 # and any outer task_error_boundary.
@@ -173,7 +191,8 @@ def task_context(
                 sm = EngagementStateMachine(
                     engagement_id,
                     db_connection_string=db_conn_string,
-                    current_state=current_state or get_engagement_state(engagement_id, db_conn_string),
+                    current_state=current_state
+                    or get_engagement_state(engagement_id, db_conn_string),
                 )
                 # WebSocket publisher removed (M-07 consolidation).
                 # All events go through SSE via StreamManager.
@@ -188,32 +207,50 @@ def task_context(
                 slog.info("Lock acquired, state machine initialized")
 
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
-                orchestrator.state = state  # Always wire state into orchestrator (regardless of type)
+                orchestrator.state = (
+                    state  # Always wire state into orchestrator (regardless of type)
+                )
                 ctx.orchestrator = orchestrator
 
                 # Check for operator-initiated cancellation before starting work
                 try:
                     from tasks.utils import _get_redis_client
+
                     _r = _get_redis_client(redis_url)
                     if _r.get(f"cancel:engagement:{engagement_id}"):
                         _r.delete(f"cancel:engagement:{engagement_id}")
-                        slog.warning("Engagement %s was cancelled by operator — aborting", engagement_id)
+                        slog.warning(
+                            "Engagement %s was cancelled by operator — aborting",
+                            engagement_id,
+                        )
                         state.transition("failed", "Cancelled by operator")
                         raise OperatorCanceled("Engagement cancelled by operator")
                 except OperatorCanceled:
                     raise
                 except Exception:
-                    logger.warning("Redis unavailable during cancel check — proceeding normally", exc_info=True)
+                    logger.warning(
+                        "Redis unavailable during cancel check — proceeding normally",
+                        exc_info=True,
+                    )
 
                 yield ctx
         except SoftTimeLimitExceeded:
             slog.error("Soft time limit exceeded — transitioning to failed")
             logger.warning(
                 "Soft time limit exceeded for %s engagement %s — transitioning to failed",
-                job_type, engagement_id,
+                job_type,
+                engagement_id,
             )
-            _transition_to_failed_on_timeout(task, ctx, sm, engagement_id, job_type,
-                                             _lock_acquired, _state_assigned, slog)
+            _transition_to_failed_on_timeout(
+                task,
+                ctx,
+                sm,
+                engagement_id,
+                job_type,
+                _lock_acquired,
+                _state_assigned,
+                slog,
+            )
             raise
         except LockAcquisitionError:
             # Lock contention is transient — don't mark engagement as failed.
@@ -224,32 +261,50 @@ def task_context(
             # Catch SoftTimeLimitExceeded by name in case the imported class
             # is a dummy that doesn't match the real exception type at runtime.
             if _is_soft_timeout(e):
-                slog.error("Soft time limit exceeded (name-matched) — transitioning to failed")
-                _transition_to_failed_on_timeout(task, ctx, sm, engagement_id, job_type,
-                                                 _lock_acquired, _state_assigned, slog)
+                slog.error(
+                    "Soft time limit exceeded (name-matched) — transitioning to failed"
+                )
+                _transition_to_failed_on_timeout(
+                    task,
+                    ctx,
+                    sm,
+                    engagement_id,
+                    job_type,
+                    _lock_acquired,
+                    _state_assigned,
+                    slog,
+                )
                 raise
 
             # If a nested task_error_boundary already transitioned us to failed,
             # skip the duplicate transition (bug #8 fix).
-            if getattr(task, '_failed_transition_done', False):
+            if getattr(task, "_failed_transition_done", False):
                 logger.warning(
                     "Task %s already has _failed_transition_done set — "
                     "skipping duplicate failed transition for %s",
-                    task.request.id if hasattr(task, 'request') else '?',
+                    task.request.id if hasattr(task, "request") else "?",
                     engagement_id,
                 )
                 raise
 
-            logger.error("Task failed for %s engagement %s: %s", job_type, engagement_id, e)
+            logger.error(
+                "Task failed for %s engagement %s: %s", job_type, engagement_id, e
+            )
             if _lock_acquired:
                 try:
-                    current = sm.current_state if _state_assigned else get_engagement_state(engagement_id, db_conn_string)
+                    current = (
+                        sm.current_state
+                        if _state_assigned
+                        else get_engagement_state(engagement_id, db_conn_string)
+                    )
                     if current not in ("complete", "failed"):
                         if _state_assigned:
                             ctx.state.transition("failed", f"{job_type} failed: {e}")
                         else:
                             sm.transition("failed", f"{job_type} failed: {e}")
-                        slog.phase_complete(job_type, status="failed", reason=str(e)[:100])
+                        slog.phase_complete(
+                            job_type, status="failed", reason=str(e)[:100]
+                        )
                         # Mark transition as done to prevent double-transition
                         # in the Celery task's BaseTask.on_failure hook AND
                         # in any outer task_error_boundary.
@@ -291,6 +346,7 @@ def task_error_boundary(
         The original exception after classification and logging.
     """
     from utils.logging_utils import ScanLogger
+
     slog = ScanLogger(phase_name, engagement_id=engagement_id)
 
     try:
@@ -300,7 +356,8 @@ def task_error_boundary(
         logger.warning(
             "Soft time limit exceeded in %s for engagement %s — "
             "state transition handled by task_context if present",
-            phase_name, engagement_id,
+            phase_name,
+            engagement_id,
         )
         raise
     except Exception as e:
@@ -310,11 +367,14 @@ def task_error_boundary(
             raise
 
         from error_classifier import classify_error_with_code
+
         classification = classify_error_with_code(e)
 
         slog.error(
             "%s failed: %s [%s]",
-            phase_name, e, classification.error_code.name if classification else "UNKNOWN",
+            phase_name,
+            e,
+            classification.error_code.name if classification else "UNKNOWN",
         )
 
         # Send to DLQ when non-retryable
@@ -333,6 +393,3 @@ def task_error_boundary(
                 )
             except Exception as dlq_error:
                 logger.error("Failed to enqueue DLQ message: %s", dlq_error)
-
-
-

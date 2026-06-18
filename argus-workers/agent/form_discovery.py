@@ -156,16 +156,26 @@ def _check_recon_paths(
     login_keywords = ["login", "signin", "sign-in"]
 
     for path in recon_crawled_paths:
-        full_url = path if path.startswith("http") else f"{target.rstrip('/')}/{path.lstrip('/')}"
+        full_url = (
+            path
+            if path.startswith("http")
+            else f"{target.rstrip('/')}/{path.lstrip('/')}"
+        )
         path_lower = path.lower()
 
-        if not result["register_url"] and any(kw in path_lower for kw in register_keywords):
+        if not result["register_url"] and any(
+            kw in path_lower for kw in register_keywords
+        ):
             result["register_url"] = full_url
-            logger.debug("Form discovery: found register URL from recon data: %s", full_url)
+            logger.debug(
+                "Form discovery: found register URL from recon data: %s", full_url
+            )
 
         if not result["login_url"] and any(kw in path_lower for kw in login_keywords):
             result["login_url"] = full_url
-            logger.debug("Form discovery: found login URL from recon data: %s", full_url)
+            logger.debug(
+                "Form discovery: found login URL from recon data: %s", full_url
+            )
 
 
 def _scan_common_paths(
@@ -193,7 +203,9 @@ def _scan_common_paths(
                 if "<input" in resp.text or "<form" in resp.text:
                     result[key] = url
                     result[f"{form_type}_content_type"] = content_type
-                    logger.debug("Form discovery: found %s URL (HTML form) at %s", form_type, url)
+                    logger.debug(
+                        "Form discovery: found %s URL (HTML form) at %s", form_type, url
+                    )
                     return
 
                 # JSON API endpoint (no HTML form)
@@ -201,28 +213,46 @@ def _scan_common_paths(
                     result[key] = url
                     result[f"{form_type}_content_type"] = content_type
                     result[f"{form_type}_mode"] = "api"
-                    logger.debug("Form discovery: found %s API endpoint at %s", form_type, url)
+                    logger.debug(
+                        "Form discovery: found %s API endpoint at %s", form_type, url
+                    )
                     return
 
                 # Page has auth-related keywords (require at least 2 to reduce false positives)
                 body_lower = resp.text.lower()
-                auth_keywords = {"login", "signin", "password", "username", "email", "token", "auth"}
+                auth_keywords = {
+                    "login",
+                    "signin",
+                    "password",
+                    "username",
+                    "email",
+                    "token",
+                    "auth",
+                }
                 matches = sum(1 for kw in auth_keywords if kw in body_lower)
                 if matches >= 2:
                     result[key] = url
                     result[f"{form_type}_content_type"] = content_type
                     logger.debug(
                         "Form discovery: found %s page (%d auth keywords) at %s",
-                        form_type, matches, url,
+                        form_type,
+                        matches,
+                        url,
                     )
                     return
 
             # 405 Method Not Allowed — strong signal the endpoint exists but needs POST
             if resp.status_code == 405:
                 result[key] = url
-                result[f"{form_type}_content_type"] = resp.headers.get("Content-Type", "").lower()
+                result[f"{form_type}_content_type"] = resp.headers.get(
+                    "Content-Type", ""
+                ).lower()
                 result[f"{form_type}_mode"] = "api"
-                logger.debug("Form discovery: found %s endpoint (405 -> POST required) at %s", form_type, url)
+                logger.debug(
+                    "Form discovery: found %s endpoint (405 -> POST required) at %s",
+                    form_type,
+                    url,
+                )
                 return
 
         except requests.RequestException:

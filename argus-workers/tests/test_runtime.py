@@ -54,14 +54,25 @@ class TestToolExecutionRecord:
     def test_to_dict_contains_all_keys(self):
         """Test that to_dict returns all expected keys."""
         record = ToolExecutionRecord(
-            tool="nuclei", args={}, timestamp=1.0,
-            result_summary="ok", token_usage=100, execution_cost=0.01,
-            success=True, failure_state="",
+            tool="nuclei",
+            args={},
+            timestamp=1.0,
+            result_summary="ok",
+            token_usage=100,
+            execution_cost=0.01,
+            success=True,
+            failure_state="",
         )
         d = record.to_dict()
         assert set(d.keys()) == {
-            "tool", "args", "timestamp", "result_summary",
-            "token_usage", "execution_cost", "success", "failure_state",
+            "tool",
+            "args",
+            "timestamp",
+            "result_summary",
+            "token_usage",
+            "execution_cost",
+            "success",
+            "failure_state",
             "duration_ms",
         }
 
@@ -114,7 +125,9 @@ class TestEngagementState:
     def test_record_tool_execution(self):
         """Test that tool execution records are appended."""
         state = EngagementState("eng-1")
-        record = ToolExecutionRecord(tool="nuclei", args={}, timestamp=1.0, success=True)
+        record = ToolExecutionRecord(
+            tool="nuclei", args={}, timestamp=1.0, success=True
+        )
         state.record_tool_execution(record)
         assert len(state.tool_history) == 1
         assert state.tool_history[0].tool == "nuclei"
@@ -368,7 +381,9 @@ class TestExecutionEngine:
 
         engine.add_middleware(modifying_middleware)
         engine.execute("nuclei", args=["original"])
-        tool_runner.run.assert_called_with("modified_nuclei", ["modified_arg"], timeout=300)
+        tool_runner.run.assert_called_with(
+            "modified_nuclei", ["modified_arg"], timeout=300
+        )
 
     def test_execute_records_to_engagement_state(self):
         """Test that execution records to engagement_state when provided."""
@@ -674,8 +689,11 @@ class TestRuntimeIntegration:
 
         # State tracks tool execution
         tool_record = ToolExecutionRecord(
-            tool="nuclei", args={}, timestamp=time.time(),
-            result_summary="ok", success=True,
+            tool="nuclei",
+            args={},
+            timestamp=time.time(),
+            result_summary="ok",
+            success=True,
         )
         state.record_tool_execution(tool_record)
         assert len(state.tool_history) == 1
@@ -740,7 +758,9 @@ class TestRuntimeIntegration:
         # 4. Execute via engine
         tool_runner = MagicMock()
         tool_runner.run.return_value = MagicMock(
-            success=True, stdout="nuclei found XSS", tool="nuclei",
+            success=True,
+            stdout="nuclei found XSS",
+            tool="nuclei",
         )
         engine = ExecutionEngine(tool_runner=tool_runner, engagement_state=state)
         result = engine.execute("nuclei", args=["https://example.com"])
@@ -775,12 +795,16 @@ class TestShadowMode:
     def setup_method(self):
         """Reset shadow stats before each test."""
         from runtime.shadow_mode import reset_shadow_stats
+
         reset_shadow_stats()
 
     def test_matching_results(self):
         """Test that matching results increment consecutive successes."""
         from runtime.shadow_mode import get_shadow_stats, shadow_compare
-        shadow_compare("test_phase", "eng-1", {"key": "value"}, lambda: {"key": "value"})
+
+        shadow_compare(
+            "test_phase", "eng-1", {"key": "value"}, lambda: {"key": "value"}
+        )
         stats = get_shadow_stats("test_phase")
         assert stats["consecutive_successes"] == 1
         assert stats["total_mismatches"] == 0
@@ -788,7 +812,10 @@ class TestShadowMode:
     def test_mismatching_results(self):
         """Test that mismatching results reset consecutive successes."""
         from runtime.shadow_mode import get_shadow_stats, shadow_compare
-        shadow_compare("test_phase", "eng-1", {"key": "new_value"}, lambda: {"key": "old_value"})
+
+        shadow_compare(
+            "test_phase", "eng-1", {"key": "new_value"}, lambda: {"key": "old_value"}
+        )
         stats = get_shadow_stats("test_phase")
         assert stats["consecutive_successes"] == 0
         assert stats["total_mismatches"] == 1
@@ -808,16 +835,20 @@ class TestShadowMode:
     def test_key_fields_comparison(self):
         """Test comparing only specific key fields."""
         from runtime.shadow_mode import get_shadow_stats, shadow_compare
+
         new_result = {"risk": "high", "findings": ["xss"]}
         old_result = {"risk": "high", "findings": ["sqli"]}
         # Compare only 'risk' key — should match
-        shadow_compare("test_phase", "eng-1", new_result, lambda: old_result, key_fields=["risk"])
+        shadow_compare(
+            "test_phase", "eng-1", new_result, lambda: old_result, key_fields=["risk"]
+        )
         stats = get_shadow_stats("test_phase")
         assert stats["consecutive_successes"] == 1
 
     def test_consecutive_successes_accumulate(self):
         """Test that consecutive successes accumulate across calls."""
         from runtime.shadow_mode import get_shadow_stats, shadow_compare
+
         for _ in range(5):
             shadow_compare("test_phase", "eng-1", {"key": "v"}, lambda: {"key": "v"})
         stats = get_shadow_stats("test_phase")
@@ -826,6 +857,7 @@ class TestShadowMode:
     def test_mismatch_resets_consecutive(self):
         """Test that a mismatch resets the consecutive counter."""
         from runtime.shadow_mode import get_shadow_stats, shadow_compare
+
         for _ in range(3):
             shadow_compare("test_phase", "eng-1", {"key": "v"}, lambda: {"key": "v"})
         # Now a mismatch
@@ -837,6 +869,7 @@ class TestShadowMode:
     def test_get_shadow_stats_all_phases(self):
         """Test that get_shadow_stats without phase returns all."""
         from runtime.shadow_mode import get_shadow_stats, shadow_compare
+
         shadow_compare("phase_a", "eng-1", {"k": "v"}, lambda: {"k": "v"})
         shadow_compare("phase_b", "eng-1", {"k": "v"}, lambda: {"k": "old"})
         all_stats = get_shadow_stats()
@@ -852,6 +885,7 @@ class TestShadowMode:
             reset_shadow_stats,
             shadow_compare,
         )
+
         shadow_compare("test_phase", "eng-1", {"k": "v"}, lambda: {"k": "v"})
         reset_shadow_stats("test_phase")
         stats = get_shadow_stats("test_phase")
@@ -888,9 +922,11 @@ class TestSafeEventEmitter:
         emitter.emit_tool_start("nuclei", ["-u", "t"])
 
         # SafeEventEmitter.flush() imports streaming functions inside its scope
-        with patch("streaming.emit_thinking") as mock_thinking, \
-             patch("streaming.emit_tool_start") as mock_start, \
-             patch("websocket_events.get_websocket_publisher", return_value=None):
+        with (
+            patch("streaming.emit_thinking") as mock_thinking,
+            patch("streaming.emit_tool_start") as mock_start,
+            patch("websocket_events.get_websocket_publisher", return_value=None),
+        ):
             emitter.flush()
 
         mock_thinking.assert_called_once_with("eng-1", "hello", {})
@@ -903,8 +939,10 @@ class TestSafeEventEmitter:
 
         emitter = SafeEventEmitter("eng-1")
 
-        with patch("streaming.emit_thinking") as mock, \
-             patch("websocket_events.get_websocket_publisher", return_value=None):
+        with (
+            patch("streaming.emit_thinking") as mock,
+            patch("websocket_events.get_websocket_publisher", return_value=None),
+        ):
             emitter.flush()
 
         mock.assert_not_called()
@@ -917,8 +955,10 @@ class TestSafeEventEmitter:
         emitter.emit_thinking("will be discarded")
         assert emitter.queue_size == 1
 
-        with patch("streaming.emit_thinking") as mock, \
-             patch("websocket_events.get_websocket_publisher", return_value=None):
+        with (
+            patch("streaming.emit_thinking") as mock,
+            patch("websocket_events.get_websocket_publisher", return_value=None),
+        ):
             emitter.discard()
 
         mock.assert_not_called()
@@ -985,12 +1025,20 @@ class TestSafeEventEmitter:
         emitter.emit_finding("f-1", "xss", "HIGH", 0.95, "https://x.com", "nuclei")
 
         mock_ws = MagicMock()
-        with patch("websocket_events.get_websocket_publisher", return_value=mock_ws), \
-             patch("streaming.emit_thinking"):
+        with (
+            patch("websocket_events.get_websocket_publisher", return_value=mock_ws),
+            patch("streaming.emit_thinking"),
+        ):
             emitter.flush()
 
         mock_ws.publish_finding.assert_called_once_with(
-            "eng-1", "f-1", "xss", "HIGH", 0.95, "https://x.com", "nuclei",
+            "eng-1",
+            "f-1",
+            "xss",
+            "HIGH",
+            0.95,
+            "https://x.com",
+            "nuclei",
         )
 
     def test_flush_state_change_via_websocket(self):
@@ -1001,12 +1049,17 @@ class TestSafeEventEmitter:
         emitter.emit_state_change("init", "scanning")
 
         mock_ws = MagicMock()
-        with patch("websocket_events.get_websocket_publisher", return_value=mock_ws), \
-             patch("streaming.emit_thinking"):
+        with (
+            patch("websocket_events.get_websocket_publisher", return_value=mock_ws),
+            patch("streaming.emit_thinking"),
+        ):
             emitter.flush()
 
         mock_ws.publish_state_transition.assert_called_once_with(
-            "eng-1", "init", "scanning", "",
+            "eng-1",
+            "init",
+            "scanning",
+            "",
         )
 
     def test_multiple_event_types_mixed(self):
@@ -1020,10 +1073,12 @@ class TestSafeEventEmitter:
         emitter.emit_state_change("scan", "analyze")
 
         mock_ws = MagicMock()
-        with patch("streaming.emit_thinking") as mock_thinking, \
-             patch("streaming.emit_tool_start") as mock_start, \
-             patch("streaming.emit_tool_complete") as mock_complete, \
-             patch("websocket_events.get_websocket_publisher", return_value=mock_ws):
+        with (
+            patch("streaming.emit_thinking") as mock_thinking,
+            patch("streaming.emit_tool_start") as mock_start,
+            patch("streaming.emit_tool_complete") as mock_complete,
+            patch("websocket_events.get_websocket_publisher", return_value=mock_ws),
+        ):
             emitter.flush()
 
         mock_thinking.assert_called_once()
@@ -1048,9 +1103,11 @@ class TestSafeEventEmitter:
             if call_count == 2:  # second call fails
                 raise RuntimeError("stream closed")
 
-        with patch("streaming.emit_thinking", side_effect=_failing_emit), \
-             patch("streaming.emit_tool_start") as mock_start, \
-             patch("websocket_events.get_websocket_publisher", return_value=None):
+        with (
+            patch("streaming.emit_thinking", side_effect=_failing_emit),
+            patch("streaming.emit_tool_start") as mock_start,
+            patch("websocket_events.get_websocket_publisher", return_value=None),
+        ):
             emitter.flush()
 
         # tool_start should still be emitted even though second thinking failed
@@ -1076,6 +1133,7 @@ class TestOperationalGate:
     def setup_method(self):
         """Reset shadow stats before each test."""
         from runtime.shadow_mode import reset_shadow_stats
+
         reset_shadow_stats()
 
     @pytest.mark.parametrize("n_engagements", [1, 10, 50, 100, 200])
@@ -1136,8 +1194,10 @@ class TestOperationalGate:
         # 20 good runs
         for i in range(20):
             shadow_compare(
-                "exception_test", f"eng-{i:04d}",
-                {"ok": True}, lambda: {"ok": True},
+                "exception_test",
+                f"eng-{i:04d}",
+                {"ok": True},
+                lambda: {"ok": True},
             )
 
         # Old path raises
@@ -1158,7 +1218,8 @@ class TestOperationalGate:
         # Phase A: 100 consecutive successes
         for i in range(100):
             shadow_compare(
-                "phase_a", f"eng-{i:04d}",
+                "phase_a",
+                f"eng-{i:04d}",
                 {"phase": "a", "ok": True},
                 lambda: {"phase": "a", "ok": True},
             )
@@ -1166,12 +1227,14 @@ class TestOperationalGate:
         # Phase B: 50 consecutive successes, then a mismatch
         for i in range(50):
             shadow_compare(
-                "phase_b", f"eng-{i:04d}",
+                "phase_b",
+                f"eng-{i:04d}",
                 {"phase": "b", "ok": True},
                 lambda: {"phase": "b", "ok": True},
             )
         shadow_compare(
-            "phase_b", "eng-fail",
+            "phase_b",
+            "eng-fail",
             {"phase": "b", "ok": True},
             lambda: {"phase": "b", "ok": False},
         )
@@ -1179,7 +1242,8 @@ class TestOperationalGate:
         # Phase C: 200 consecutive successes
         for i in range(200):
             shadow_compare(
-                "phase_c", f"eng-{i:04d}",
+                "phase_c",
+                f"eng-{i:04d}",
                 {"phase": "c", "result": i},
                 lambda: {"phase": "c", "result": i},
             )

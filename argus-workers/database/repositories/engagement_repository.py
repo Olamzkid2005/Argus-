@@ -29,7 +29,10 @@ class EngagementRepository(BaseRepository):
         """
         import uuid
 
-        with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (conn, cursor):
+        with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (
+            conn,
+            cursor,
+        ):
             engagement_id = str(uuid.uuid4())
 
             cursor.execute(
@@ -46,11 +49,12 @@ class EngagementRepository(BaseRepository):
                     engagement_id,
                     engagement_data.get("org_id"),
                     engagement_data.get("target_url"),
-                    engagement_data.get("authorization_proof") or engagement_data.get("authorization"),
+                    engagement_data.get("authorization_proof")
+                    or engagement_data.get("authorization"),
                     Json(engagement_data.get("authorized_scope", {})),
                     engagement_data.get("status", "created"),
                     engagement_data.get("created_by"),
-                )
+                ),
             )
             row = cursor.fetchone()
             return dict(row)
@@ -86,12 +90,14 @@ class EngagementRepository(BaseRepository):
                 ORDER BY e.created_at DESC
                 LIMIT %s OFFSET %s
                 """,
-                (org_id, limit, offset)
+                (org_id, limit, offset),
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
-    def find_active_by_org(self, org_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
+    def find_active_by_org(
+        self, org_id: str, limit: int = 100, offset: int = 0
+    ) -> list[dict]:
         """
         Find active engagements for an organization
 
@@ -122,7 +128,7 @@ class EngagementRepository(BaseRepository):
                 ORDER BY e.created_at DESC
                 LIMIT %s OFFSET %s
                 """,
-                (org_id, limit, offset)
+                (org_id, limit, offset),
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
@@ -140,7 +146,9 @@ class EngagementRepository(BaseRepository):
         """
         return self.update_by_id(engagement_id, {"status": status})
 
-    def find_by_status(self, status: str, org_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
+    def find_by_status(
+        self, status: str, org_id: str, limit: int = 100, offset: int = 0
+    ) -> list[dict]:
         """
         Find engagements by status, scoped to an organization.
 
@@ -161,7 +169,7 @@ class EngagementRepository(BaseRepository):
                 ORDER BY created_at DESC
                 LIMIT %s OFFSET %s
                 """,
-                (status, org_id, limit, offset)
+                (status, org_id, limit, offset),
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]

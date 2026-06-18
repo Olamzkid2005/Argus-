@@ -36,7 +36,9 @@ class TestToolRequires:
         assert req.target_scheme is None
 
     def test_full(self):
-        req = ToolRequires(tech_contains=["python"], recon_signals=["has_api"], target_scheme="https")
+        req = ToolRequires(
+            tech_contains=["python"], recon_signals=["has_api"], target_scheme="https"
+        )
         assert req.tech_contains == ["python"]
         assert req.recon_signals == ["has_api"]
         assert req.target_scheme == "https"

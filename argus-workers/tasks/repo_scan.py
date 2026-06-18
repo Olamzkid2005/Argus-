@@ -112,9 +112,9 @@ def run_repo_scan(
     if dual_auth_config is not None:
         job_extra["dual_auth_config"] = dual_auth_config
 
-    with task_context(self, engagement_id, "repo_scan",
-                      job_extra=job_extra,
-                      trace_id=trace_id) as ctx:
+    with task_context(
+        self, engagement_id, "repo_scan", job_extra=job_extra, trace_id=trace_id
+    ) as ctx:
         ctx.state.transition("recon", "Starting repository scan")
 
         result = ctx.orchestrator.run_repo_scan(ctx.job)
@@ -126,7 +126,10 @@ def run_repo_scan(
             repo_path = result.get(
                 "repo_path",
                 os.path.join(
-                    os.getenv("ARTIFACTS_DIR", os.path.join(tempfile.gettempdir(), "argus_artifacts")),
+                    os.getenv(
+                        "ARTIFACTS_DIR",
+                        os.path.join(tempfile.gettempdir(), "argus_artifacts"),
+                    ),
                     engagement_id,
                 ),
             )
@@ -135,7 +138,9 @@ def run_repo_scan(
             if dependencies:
                 try:
                     cyclonedx_sbom = generate_cyclonedx_sbom(repo_path, dependencies)
-                    cyclonedx_path = save_sbom(cyclonedx_sbom, repo_path, format="cyclonedx")
+                    cyclonedx_path = save_sbom(
+                        cyclonedx_sbom, repo_path, format="cyclonedx"
+                    )
 
                     spdx_sbom = generate_spdx_sbom(repo_path, dependencies)
                     spdx_path = save_sbom(spdx_sbom, repo_path, format="spdx")
@@ -155,6 +160,7 @@ def run_repo_scan(
 
         # Auto-push web scan job
         from tasks.utils import fetch_engagement_scan_options
+
         opts = fetch_engagement_scan_options(engagement_id)
 
         # Transition state BEFORE dispatch to prevent orphaned tasks
@@ -180,14 +186,25 @@ def run_repo_scan(
                 kwargs=scan_kwargs if scan_kwargs else None,
             )
         except Exception as e:
-            logger.error("Failed to enqueue scan for engagement %s: %s", engagement_id, e)
+            logger.error(
+                "Failed to enqueue scan for engagement %s: %s", engagement_id, e
+            )
             ctx.state.safe_transition("failed", f"Failed to dispatch scan: {e}")
-            return {"phase": "repo_scan", "status": "failed", "reason": "scan_dispatch_failed"}
+            return {
+                "phase": "repo_scan",
+                "status": "failed",
+                "reason": "scan_dispatch_failed",
+            }
 
         return result
 
 
-@app.task(bind=True, name="tasks.repo_scan.expand_repo_scan", soft_time_limit=2400, time_limit=3600)
+@app.task(
+    bind=True,
+    name="tasks.repo_scan.expand_repo_scan",
+    soft_time_limit=2400,
+    time_limit=3600,
+)
 def expand_repo_scan(
     self,
     engagement_id: str,
@@ -215,9 +232,9 @@ def expand_repo_scan(
         "budget": budget,
     }
 
-    with task_context(self, engagement_id, "repo_scan_expand",
-                      job_extra=job_extra,
-                      trace_id=trace_id) as ctx:
+    with task_context(
+        self, engagement_id, "repo_scan_expand", job_extra=job_extra, trace_id=trace_id
+    ) as ctx:
         return ctx.orchestrator.run_repo_scan(ctx.job)
 
 
@@ -266,7 +283,7 @@ def get_blame_for_finding(repo_path, finding):
             return blame_info
 
     except Exception as e:
-        logger.error(f"Git blame failed: {e}")
+        logger.error("Git blame failed: %s", e)
 
     return None
 
@@ -285,7 +302,6 @@ def enrich_findings_with_blame(repo_path, findings):
                 finding["introduced_in_commit"] = blame.get("commit_hash", "")
 
     return findings
-
 
 
 def generate_cyclonedx_sbom(repo_path, dependencies):
@@ -381,14 +397,11 @@ def save_sbom(sbom, repo_path, format="cyclonedx"):
     else:
         raise ValueError(f"Unsupported SBOM format: {format}")
 
-    logger.info(f"SBOM saved to {filename}")
+    logger.info("SBOM saved to %s", filename)
     return filename
 
 
 # ========== Section 3.1: Dependency Scanning (SCA) ==========
-
-
-
 
 
 # ========== Section 3.2: Git History Secret Scan ==========
@@ -427,7 +440,9 @@ def scan_git_history_for_secrets(repo_path):
             total_bytes += line_bytes
             if total_bytes > max_git_output_bytes:
                 logger.warning(
-                    f"Git history scan: exceeded {max_git_output_bytes} bytes ({total_bytes}), truncating"
+                    "Git history scan: exceeded %s bytes (%s), truncating",
+                    max_git_output_bytes,
+                    total_bytes,
                 )
                 process.kill()
                 break
@@ -456,7 +471,9 @@ def scan_git_history_for_secrets(repo_path):
                 # Limit patch_lines to prevent OOM (issue 3.14)
                 if len(patch_lines) >= MAX_PATCH_LINES:
                     logger.warning(
-                        f"Patch too large (> {MAX_PATCH_LINES} lines), checking first batch for commit {current_commit}"
+                        "Patch too large (> %s lines), checking first batch for commit %s",
+                        MAX_PATCH_LINES,
+                        current_commit,
                     )
                     if current_commit:
                         _check_patch_for_secrets(
@@ -483,7 +500,9 @@ def scan_git_history_for_secrets(repo_path):
 
         if process.returncode not in [0, 1]:
             logger.warning(
-                f"Git log failed (exit {process.returncode}): {stderr_output}"
+                "Git log failed (exit %s): %s",
+                process.returncode,
+                stderr_output,
             )
 
         if current_commit and patch_lines:
@@ -502,7 +521,7 @@ def scan_git_history_for_secrets(repo_path):
             process.kill()
             process.wait()
     except OSError as e:
-        logger.error(f"Git history scan failed: {e}")
+        logger.error("Git history scan failed: %s", e)
         if process:
             process.kill()
             process.wait()
@@ -569,9 +588,7 @@ def detect_license(file_path):
                 if "license" in data:
                     return data["license"]
         except Exception:
-            logger.warning(
-                "Failed to parse license from package.json", exc_info=True
-            )
+            logger.warning("Failed to parse license from package.json", exc_info=True)
 
     return "UNKNOWN"
 
@@ -690,7 +707,7 @@ def run_bandit(repo_path):
 
             return findings
     except Exception as e:
-        logger.error(f"Bandit failed: {e}")
+        logger.error("Bandit failed: %s", e)
     return []
 
 
@@ -745,7 +762,7 @@ def run_eslint_security(repo_path):
 
             return findings
     except Exception as e:
-        logger.error(f"ESLint failed: {e}")
+        logger.error("ESLint failed: %s", e)
     return []
 
 
@@ -789,5 +806,5 @@ def run_gosec(repo_path):
 
             return findings
     except Exception as e:
-        logger.error(f"gosec failed: {e}")
+        logger.error("gosec failed: %s", e)
     return []

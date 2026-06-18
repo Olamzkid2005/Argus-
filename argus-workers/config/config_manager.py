@@ -5,6 +5,7 @@ Mirrors CyberStrikeAI's single config.yaml with hot-reload via API pattern.
 Provides a singleton ConfigManager that reads from argus_config.yaml
 and supports runtime reload without restart.
 """
+
 import logging
 import os
 import threading
@@ -26,7 +27,12 @@ DEFAULT_CONFIG = {
         "short_timeout": 60,
         "timeouts": {},
         "circuit_breaker": {"failure_threshold": 3, "cooldown_seconds": 300},
-        "retry": {"max_attempts": 3, "base_delay": 1.0, "max_delay": 60.0, "backoff_multiplier": 2.0},
+        "retry": {
+            "max_attempts": 3,
+            "base_delay": 1.0,
+            "max_delay": 60.0,
+            "backoff_multiplier": 2.0,
+        },
     },
     "scanning": {
         "max_pages_to_crawl": 20,
@@ -36,9 +42,22 @@ DEFAULT_CONFIG = {
         "default_aggressiveness": "default",
         "aggressiveness": {},
     },
-    "agent": {"max_iterations": 20, "enable_llm_decisions": False, "memory_max_tokens": 8000},
-    "streaming": {"enabled": True, "history_size": 500, "backpressure_queue_size": 1000},
-    "security": {"ssl_verify": True, "block_dangerous_patterns": True, "allowed_schemes": ["https://", "http://"], "blocked_domains": []},
+    "agent": {
+        "max_iterations": 20,
+        "enable_llm_decisions": False,
+        "memory_max_tokens": 8000,
+    },
+    "streaming": {
+        "enabled": True,
+        "history_size": 500,
+        "backpressure_queue_size": 1000,
+    },
+    "security": {
+        "ssl_verify": True,
+        "block_dangerous_patterns": True,
+        "allowed_schemes": ["https://", "http://"],
+        "blocked_domains": [],
+    },
 }
 
 
@@ -65,12 +84,15 @@ class ConfigManager:
         """Load or reload configuration from YAML file."""
         path = Path(self._config_path)
         if not path.exists():
-            logger.warning("Config file not found at %s, using defaults", self._config_path)
+            logger.warning(
+                "Config file not found at %s, using defaults", self._config_path
+            )
             self._config = DEFAULT_CONFIG.copy()
             return
 
         try:
             import yaml
+
             with open(path) as f:
                 loaded = yaml.safe_load(f)
             if loaded and isinstance(loaded, dict):
@@ -91,7 +113,11 @@ class ConfigManager:
         """Deep merge two dictionaries (override wins)."""
         result = base.copy()
         for key, value in override.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
                 result[key] = self._deep_merge(result[key], value)
             else:
                 result[key] = value

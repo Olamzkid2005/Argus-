@@ -220,7 +220,9 @@ class TestDeadLetterQueue:
         # Should remove from main key too
         assert mock_redis.zrem.call_count == 3
         # Should selectively clean the index (hdel) instead of deleting entire key
-        mock_redis.hdel.assert_called_once_with("dlq:task:index", "task-001", "task-002", "task-003")
+        mock_redis.hdel.assert_called_once_with(
+            "dlq:task:index", "task-001", "task-002", "task-003"
+        )
 
     def test_purge_older_than(self, dlq, mock_redis):
         """Test purging tasks older than specified hours"""
@@ -232,7 +234,9 @@ class TestDeadLetterQueue:
         mock_redis.zrangebyscore.assert_called_once()
         mock_redis.zremrangebyscore.assert_called_once()
         # Should selectively clean the index (hdel)
-        mock_redis.hdel.assert_called_once_with("dlq:task:index", "task-001", "task-002")
+        mock_redis.hdel.assert_called_once_with(
+            "dlq:task:index", "task-001", "task-002"
+        )
 
     def test_purge_error(self, dlq, mock_redis):
         """Test purge handles errors"""

@@ -90,7 +90,9 @@ class TestContainer:
         assert isinstance(container.template_provider, TemplateProvider)
 
     def test_lazy_tool_runner(self):
-        deps = ContainerDependencies(engagement_id="eng-001", db_url="postgresql://localhost/db")
+        deps = ContainerDependencies(
+            engagement_id="eng-001", db_url="postgresql://localhost/db"
+        )
         container = Container(deps)
         with patch("tools.tool_runner.ToolRunner") as mock_tr:
             tr = container.tool_runner
@@ -124,10 +126,13 @@ class TestContainerRegistry:
     def setup_method(self):
         # Clean registry before each test
         from di_container import _containers
+
         _containers.clear()
 
     def test_get_or_create_container(self):
-        container = get_or_create_container("eng-001", db_url="postgresql://localhost/db")
+        container = get_or_create_container(
+            "eng-001", db_url="postgresql://localhost/db"
+        )
         assert container.engagement_id == "eng-001"
         assert container.db_url == "postgresql://localhost/db"
 

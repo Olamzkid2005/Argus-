@@ -1,6 +1,7 @@
 """
 HTTP security headers check — missing/insecure HTTP security headers.
 """
+
 import logging
 
 from config.constants import RATE_LIMIT_DELAY_MS, SSL_TIMEOUT
@@ -25,8 +26,12 @@ SECURITY_HEADERS = [
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
     return HeadersCheck().check(target_url, session, findings)
+
+
 def _check_security_headers(target_url, session, findings):
-    resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
+    resp = safe_request(
+        "GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT
+    )
     if not resp:
         return
     headers = {k.lower(): v for k, v in resp.headers.items()}
@@ -52,7 +57,9 @@ def _check_security_headers(target_url, session, findings):
 
 
 def _check_csp(target_url, session, findings):
-    resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
+    resp = safe_request(
+        "GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT
+    )
     if not resp:
         return
     csp = resp.headers.get("Content-Security-Policy", "")
@@ -90,7 +97,9 @@ def _check_csp(target_url, session, findings):
 
 
 def _check_cookies(target_url, session, findings):
-    resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
+    resp = safe_request(
+        "GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT
+    )
     if not resp:
         return
     cookie_header = resp.headers.get("Set-Cookie")
@@ -125,7 +134,9 @@ def _check_cors(target_url, session, findings):
     resp = safe_request(
         "GET",
         target_url,
-        session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT,
+        session,
+        _DEFAULT_TIMEOUT,
+        _DEFAULT_RATE_LIMIT,
         headers={"Origin": "http://evil.com"},
     )
     if not resp:

@@ -1,4 +1,5 @@
 """Parser for gospider web crawler output."""
+
 import json
 import logging
 from urllib.parse import urlparse

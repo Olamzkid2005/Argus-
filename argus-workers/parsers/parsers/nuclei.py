@@ -21,11 +21,14 @@ class NucleiParser(BaseParser):
                 if validated:
                     findings.append(validated)
                 else:
-                    logger.debug(f"Skipping invalid nuclei finding: {data.get('template-id', 'unknown')}")
+                    logger.debug(
+                        "Skipping invalid nuclei finding: %s",
+                        data.get("template-id", "unknown"),
+                    )
             except json.JSONDecodeError:
                 logger.debug("Skipping non-JSON nuclei output line")
                 continue
             except Exception as e:
-                logger.warning(f"Error parsing nuclei line: {e}")
+                logger.warning("Error parsing nuclei line: %s", e)
                 continue
         return findings

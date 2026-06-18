@@ -29,7 +29,12 @@ FAKE_PARSED = [{"type": "PARAMETER_DISCOVERY", "param": "id"}]
 
 
 def _make_context(**overrides):
-    kwargs = {'target': "https://example.com/api", 'timeout': 60, 'engagement_id': "eng-123", 'aggressiveness': "normal"}
+    kwargs = {
+        "target": "https://example.com/api",
+        "timeout": 60,
+        "engagement_id": "eng-123",
+        "aggressiveness": "normal",
+    }
     kwargs.update(overrides)
     return MagicMock(spec=ToolContext, **kwargs)
 
@@ -40,7 +45,9 @@ class TestArjunScanner:
     @pytest.fixture(autouse=True)
     def _patch_tempfile_os(self):
         with (
-            patch("tools.arjun_scanner.tempfile.mkstemp", return_value=(3, OUTPUT_PATH)) as mock_mkstemp,
+            patch(
+                "tools.arjun_scanner.tempfile.mkstemp", return_value=(3, OUTPUT_PATH)
+            ) as mock_mkstemp,
             patch("tools.arjun_scanner.os.close") as mock_close,
             patch("tools.arjun_scanner.os.remove") as mock_remove,
         ):
@@ -108,7 +115,11 @@ class TestArjunScanner:
     def test_thread_count_varies_by_aggressiveness(self, mock_tool_runner):
         scanner = ArjunScanner(tool_runner=mock_tool_runner)
 
-        for aggr, expected in [("passive", "10"), ("normal", "20"), ("aggressive", "50")]:
+        for aggr, expected in [
+            ("passive", "10"),
+            ("normal", "20"),
+            ("aggressive", "50"),
+        ]:
             mock_tool_runner.run.reset_mock()
             with patch("tools.arjun_scanner.os.path.exists", return_value=False):
                 scanner.execute(_make_context(aggressiveness=aggr))
@@ -116,4 +127,6 @@ class TestArjunScanner:
             assert call_args is not None
             args_list = call_args[0][1]
             idx = args_list.index("-t")
-            assert args_list[idx + 1] == expected, f"expected -t {expected} for {aggr}, got {args_list}"
+            assert args_list[idx + 1] == expected, (
+                f"expected -t {expected} for {aggr}, got {args_list}"
+            )

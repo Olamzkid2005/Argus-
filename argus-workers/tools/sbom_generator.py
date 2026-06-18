@@ -11,6 +11,7 @@ Usage:
     sbom = generate_sbom_from_findings(engagement_id, findings)
     # sbom is a CycloneDX 1.5 JSON dict ready for storage
 """
+
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -46,7 +47,8 @@ def generate_sbom_from_findings(
     slog.tool_start("sbom_generation", target=target_url or repo_url or engagement_id)
 
     dep_findings = [
-        f for f in findings
+        f
+        for f in findings
         if f.get("type") == "DEPENDENCY_VULNERABILITY"
         and f.get("evidence", {}).get("package")
     ]
@@ -56,7 +58,7 @@ def generate_sbom_from_findings(
         logger.info("No dependency findings to generate SBOM from")
         return {}
 
-    slog.info(f"Generating SBOM from {len(dep_findings)} dependency findings")
+    slog.info("Generating SBOM from %d dependency findings", len(dep_findings))
 
     # Deduplicate by package name
     seen_packages: dict[str, dict] = {}
@@ -90,7 +92,11 @@ def generate_sbom_from_findings(
     purl_index = 1
 
     for _pkg_key, pkg in seen_packages.items():
-        purl = f"pkg:generic/{pkg['name']}@{pkg['version']}" if pkg["version"] else f"pkg:generic/{pkg['name']}"
+        purl = (
+            f"pkg:generic/{pkg['name']}@{pkg['version']}"
+            if pkg["version"]
+            else f"pkg:generic/{pkg['name']}"
+        )
         component = {
             "type": "library",
             "bom-ref": f"pkg-{purl_index}",
@@ -115,29 +121,37 @@ def generate_sbom_from_findings(
             cve_refs = []
             for cve_id in vuln.get("cve", []):
                 cve_str = str(cve_id) if not isinstance(cve_id, str) else cve_id
-                cve_refs.append({
-                    "type": "advisory",
-                    "url": f"https://nvd.nist.gov/vuln/detail/{cve_str}",
-                })
+                cve_refs.append(
+                    {
+                        "type": "advisory",
+                        "url": f"https://nvd.nist.gov/vuln/detail/{cve_str}",
+                    }
+                )
 
             vulnerability_entry = {
                 "bom-ref": f"vuln-{purl_index}",
                 "id": vuln_id or f"{pkg['name']}-vuln-{purl_index}",
                 "source": {"name": "Argus Security Scanner"},
-                "ratings": [{
-                    "source": {"name": "Argus"},
-                    "method": "other",
-                    "severity": rating["severity"],
-                    "score": rating["score"],
-                }],
+                "ratings": [
+                    {
+                        "source": {"name": "Argus"},
+                        "method": "other",
+                        "severity": rating["severity"],
+                        "score": rating["score"],
+                    }
+                ],
                 "affects": [{"ref": component["bom-ref"]}],
             }
             if cve_refs:
                 vulnerability_entry["advisories"] = cve_refs
             if vuln.get("fix_version"):
-                vulnerability_entry["recommendation"] = f"Upgrade to {vuln['fix_version']}"
+                vulnerability_entry["recommendation"] = (
+                    f"Upgrade to {vuln['fix_version']}"
+                )
             if vuln.get("vulnerable_versions"):
-                vulnerability_entry["description"] = f"Vulnerable versions: {vuln['vulnerable_versions']}"
+                vulnerability_entry["description"] = (
+                    f"Vulnerable versions: {vuln['vulnerable_versions']}"
+                )
 
             vulnerabilities.append(vulnerability_entry)
 
@@ -165,6 +179,14 @@ def generate_sbom_from_findings(
     if vulnerabilities:
         sbom["vulnerabilities"] = vulnerabilities
 
-    slog.tool_complete("sbom_generation", components=len(components), vulnerabilities=len(vulnerabilities))
-    logger.info(f"Generated CycloneDX SBOM with {len(components)} components and {len(vulnerabilities)} vulnerabilities")
+    slog.tool_complete(
+        "sbom_generation",
+        components=len(components),
+        vulnerabilities=len(vulnerabilities),
+    )
+    logger.info(
+        "Generated CycloneDX SBOM with %d components and %d vulnerabilities",
+        len(components),
+        len(vulnerabilities),
+    )
     return sbom

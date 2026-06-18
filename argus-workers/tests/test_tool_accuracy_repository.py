@@ -11,14 +11,18 @@ def mock_db_cursor():
     mock_cursor.fetchone.return_value = None
     mock_cursor.fetchall.return_value = []
     mock_cursor.description = [
-        ("org_id",), ("source_tool",), ("fp_rate",),
+        ("org_id",),
+        ("source_tool",),
+        ("fp_rate",),
     ]
 
     mock_cm = MagicMock()
     mock_cm.__enter__.return_value = mock_cursor
     mock_cm.__exit__.return_value = None
 
-    with patch("database.repositories.tool_accuracy_repository.db_cursor", return_value=mock_cm):
+    with patch(
+        "database.repositories.tool_accuracy_repository.db_cursor", return_value=mock_cm
+    ):
         yield mock_cursor
 
 
@@ -26,7 +30,9 @@ class TestRecordVerdict:
     def test_returns_false_with_empty_org_id(self, mock_db_cursor):
         repo = ToolAccuracyRepository()
 
-        result = repo.record_verdict(org_id="", source_tool="nuclei", is_true_positive=True)
+        result = repo.record_verdict(
+            org_id="", source_tool="nuclei", is_true_positive=True
+        )
 
         assert result is False
         mock_db_cursor.execute.assert_not_called()
@@ -34,7 +40,9 @@ class TestRecordVerdict:
     def test_returns_false_with_empty_source_tool(self, mock_db_cursor):
         repo = ToolAccuracyRepository()
 
-        result = repo.record_verdict(org_id="org-1", source_tool="", is_true_positive=True)
+        result = repo.record_verdict(
+            org_id="org-1", source_tool="", is_true_positive=True
+        )
 
         assert result is False
         mock_db_cursor.execute.assert_not_called()
@@ -43,7 +51,9 @@ class TestRecordVerdict:
         mock_db_cursor.rowcount = 1
         repo = ToolAccuracyRepository()
 
-        result = repo.record_verdict(org_id="org-1", source_tool="nuclei", is_true_positive=True)
+        result = repo.record_verdict(
+            org_id="org-1", source_tool="nuclei", is_true_positive=True
+        )
 
         assert result is True
         mock_db_cursor.execute.assert_called_once()
@@ -54,7 +64,9 @@ class TestRecordVerdict:
     def test_handles_false_positive_verdict(self, mock_db_cursor):
         repo = ToolAccuracyRepository()
 
-        result = repo.record_verdict(org_id="org-1", source_tool="nuclei", is_true_positive=False)
+        result = repo.record_verdict(
+            org_id="org-1", source_tool="nuclei", is_true_positive=False
+        )
 
         assert result is True
         sql, params = mock_db_cursor.execute.call_args[0]
@@ -68,7 +80,9 @@ class TestRecordVerdict:
         mock_db_cursor.execute.side_effect = Exception("DB error")
         repo = ToolAccuracyRepository()
 
-        result = repo.record_verdict(org_id="org-1", source_tool="nuclei", is_true_positive=True)
+        result = repo.record_verdict(
+            org_id="org-1", source_tool="nuclei", is_true_positive=True
+        )
 
         assert result is False
 

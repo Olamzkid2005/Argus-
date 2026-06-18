@@ -86,8 +86,13 @@ class TestReportGenerationServiceGenerate:
     @patch("llm_report_generator.LLMReportGenerator")
     @patch("database.repositories.report_repository.ReportRepository")
     def test_generate_with_llm_client(
-        self, mock_repo_cls, mock_generator_cls,
-        mock_llm_svc_cls, mock_load_recon, mock_emit, job,
+        self,
+        mock_repo_cls,
+        mock_generator_cls,
+        mock_llm_svc_cls,
+        mock_load_recon,
+        mock_emit,
+        job,
     ):
         from orchestrator_pkg.reporting.report_generation_service import (
             ReportGenerationService,
@@ -128,8 +133,13 @@ class TestReportGenerationServiceGenerate:
     @patch("llm_report_generator.LLMReportGenerator")
     @patch("database.repositories.report_repository.ReportRepository")
     def test_generate_handles_exception(
-        self, mock_repo_cls, mock_generator_cls,
-        mock_llm_svc_cls, mock_load_recon, mock_emit, job,
+        self,
+        mock_repo_cls,
+        mock_generator_cls,
+        mock_llm_svc_cls,
+        mock_load_recon,
+        mock_emit,
+        job,
     ):
         from orchestrator_pkg.reporting.report_generation_service import (
             ReportGenerationService,
@@ -182,7 +192,10 @@ class TestReportGenerationServiceGenerateSbom:
     @patch("database.repositories.finding_repository.FindingRepository")
     @patch("tools.sbom_generator.generate_sbom_from_findings")
     def test_loads_findings_and_generates_sbom(
-        self, mock_sbom_gen, mock_finding_repo_cls, job,
+        self,
+        mock_sbom_gen,
+        mock_finding_repo_cls,
+        job,
     ):
         from orchestrator_pkg.reporting.report_generation_service import (
             ReportGenerationService,
@@ -205,7 +218,8 @@ class TestReportGenerationServiceGenerateSbom:
         assert result == {"sbom": "data"}
         mock_finding_repo_cls.assert_called_once_with("postgres://localhost/db")
         repo_instance.get_findings_by_engagement.assert_called_once_with(
-            "eng-001", limit=10000,
+            "eng-001",
+            limit=10000,
         )
         mock_sbom_gen.assert_called_once_with(
             engagement_id="eng-001",

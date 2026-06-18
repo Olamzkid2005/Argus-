@@ -203,7 +203,11 @@ class TestTestBolaStep:
         ctx.owned_resources = {"accounts": ["1"]}
         step = TestBolaStep()
         raw_findings = [
-            {"type": "CONFIRMED_BOLA", "severity": "CRITICAL", "endpoint": "/api/accounts/1"},
+            {
+                "type": "CONFIRMED_BOLA",
+                "severity": "CRITICAL",
+                "endpoint": "/api/accounts/1",
+            },
         ]
 
         with patch(
@@ -319,7 +323,9 @@ class TestBolaWorkflow:
     def test_findings_tracked_locally(self, workflow):
         """findings_created is local sum, not from state.findings."""
         # Step emits 2 findings
-        workflow.steps[0].run = Mock(return_value=StepResult(success=True, findings_emitted=2))
+        workflow.steps[0].run = Mock(
+            return_value=StepResult(success=True, findings_emitted=2)
+        )
 
         with patch.object(workflow, "steps", workflow.steps[:1]):  # run only 1 step
             result = workflow.execute()
@@ -377,6 +383,7 @@ class TestStepEdgeCases:
     def test_authenticate_both_users_fail(self, ctx):
         """Both auth failures emit both obstacles and both sessions are None."""
         from tools.auth_manager import AuthError
+
         step = AuthenticateStep()
 
         with patch(
@@ -474,15 +481,20 @@ class TestStepEdgeCases:
         result = step.run(ctx)
         assert result.skipped is True
 
+
 class TestWorkflowResultEdgeCases:
     """Edge case tests for WorkflowResult."""
 
     def test_merge_metadata_updates_dict(self):
         """merge_metadata adds and updates metadata key-value pairs."""
         result = WorkflowResult(
-            success=True, outcome="complete",
-            findings_created=0, obstacles_encountered=0,
-            identities_created=0, resources_created=0, requests_captured=0,
+            success=True,
+            outcome="complete",
+            findings_created=0,
+            obstacles_encountered=0,
+            identities_created=0,
+            resources_created=0,
+            requests_captured=0,
         )
         assert result.metadata == {}
         result.merge_metadata(target="http://example.com", version=1)
@@ -492,9 +504,13 @@ class TestWorkflowResultEdgeCases:
     def test_merge_metadata_does_not_clear_existing(self):
         """merge_metadata preserves existing metadata entries."""
         result = WorkflowResult(
-            success=True, outcome="complete",
-            findings_created=0, obstacles_encountered=0,
-            identities_created=0, resources_created=0, requests_captured=0,
+            success=True,
+            outcome="complete",
+            findings_created=0,
+            obstacles_encountered=0,
+            identities_created=0,
+            resources_created=0,
+            requests_captured=0,
             metadata={"engagement_id": "eng-1"},
         )
         result.merge_metadata(target="http://example.com")

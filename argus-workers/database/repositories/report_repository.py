@@ -4,6 +4,7 @@ Report Repository - Persistence for LLM-generated penetration test reports.
 Stores structured reports from the LLMReportGenerator in the reports table.
 Provides upsert semantics: one report per engagement.
 """
+
 import json
 import logging
 
@@ -21,6 +22,7 @@ class ReportRepository:
 
     def __init__(self, db_conn: str | None = None):
         import os
+
         self.db_conn = db_conn or os.getenv("DATABASE_URL")
 
     def upsert_report(
@@ -49,9 +51,15 @@ class ReportRepository:
             findings = report_data.get("findings", [])
 
         total = len(findings)
-        critical = sum(1 for f in findings if (f.get("severity", "") or "").upper() == "CRITICAL")
-        high = sum(1 for f in findings if (f.get("severity", "") or "").upper() == "HIGH")
-        medium = sum(1 for f in findings if (f.get("severity", "") or "").upper() == "MEDIUM")
+        critical = sum(
+            1 for f in findings if (f.get("severity", "") or "").upper() == "CRITICAL"
+        )
+        high = sum(
+            1 for f in findings if (f.get("severity", "") or "").upper() == "HIGH"
+        )
+        medium = sum(
+            1 for f in findings if (f.get("severity", "") or "").upper() == "MEDIUM"
+        )
         low = sum(1 for f in findings if (f.get("severity", "") or "").upper() == "LOW")
 
         try:
@@ -96,7 +104,7 @@ class ReportRepository:
                 row = cursor.fetchone()
                 return str(row[0]) if row else None
         except Exception as e:
-            logger.warning(f"Failed to upsert report: {e}")
+            logger.warning("Failed to upsert report: %s", e)
             return None
 
     def get_report(self, engagement_id: str) -> dict | None:
@@ -132,7 +140,7 @@ class ReportRepository:
                     d["full_report_json"] = json.loads(d["full_report_json"])
                 return d
         except Exception as e:
-            logger.warning(f"Failed to get report: {e}")
+            logger.warning("Failed to get report: %s", e)
             return None
 
     def delete_report(self, engagement_id: str) -> bool:
@@ -145,5 +153,5 @@ class ReportRepository:
                 )
                 return cursor.rowcount > 0
         except Exception as e:
-            logger.warning(f"Failed to delete report: {e}")
+            logger.warning("Failed to delete report: %s", e)
             return False

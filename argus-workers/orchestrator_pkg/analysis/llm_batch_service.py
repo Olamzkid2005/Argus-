@@ -77,7 +77,8 @@ class LlmBatchService:
                         except Exception as e:
                             logger.debug(
                                 "PoC for finding %s failed: %s",
-                                finding.get("id", "?"), e,
+                                finding.get("id", "?"),
+                                e,
                             )
         except Exception as e:
             logger.warning("PoC generation batch failed (non-fatal): %s", e)
@@ -159,15 +160,18 @@ class LlmBatchService:
                 )
                 if scripts:
                     saved = ChainExploitGenerator.save_scripts_to_db(
-                        self.engagement_id, scripts,
+                        self.engagement_id,
+                        scripts,
                     )
                     logger.info(
                         "Generated %d chain exploit scripts for engagement %s",
-                        saved, self.engagement_id,
+                        saved,
+                        self.engagement_id,
                     )
         except Exception as e:
             logger.warning(
-                "Chain exploit generation failed (non-fatal): %s", e,
+                "Chain exploit generation failed (non-fatal): %s",
+                e,
             )
 
     def generate_fixes(
@@ -197,9 +201,7 @@ class LlmBatchService:
             tech_stack: list[str] = []
             if recon_ctx is not None:
                 tech_stack = (
-                    recon_ctx.tech_stack
-                    if hasattr(recon_ctx, "tech_stack")
-                    else []
+                    recon_ctx.tech_stack if hasattr(recon_ctx, "tech_stack") else []
                 ) or []
 
             fix_futures = []
@@ -222,7 +224,8 @@ class LlmBatchService:
                     except Exception as e:
                         logger.debug(
                             "Fix for finding %s failed: %s",
-                            finding.get("id", "?"), e,
+                            finding.get("id", "?"),
+                            e,
                         )
         except Exception as e:
             logger.warning("Fix generation batch failed (non-fatal): %s", e)

@@ -86,7 +86,9 @@ class WorkflowResult:
     """
 
     success: bool
-    outcome: Literal["complete", "partial"]  # complete = clean run, partial = obstacles encountered
+    outcome: Literal[
+        "complete", "partial"
+    ]  # complete = clean run, partial = obstacles encountered
     findings_created: int  # local sum of step.findings_emitted
     obstacles_encountered: int  # from len(ctx.state.obstacles) at execute() end
     identities_created: int  # always 0 in V1

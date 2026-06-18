@@ -12,28 +12,44 @@ def mock_db_cursor():
     mock_cursor.fetchone.return_value = None
     mock_cursor.fetchall.return_value = []
     mock_cursor.description = [
-        ("id",), ("engagement_id",), ("generated_by",), ("executive_summary",),
-        ("full_report_json",), ("sbom_json",), ("risk_level",),
-        ("total_findings",), ("critical_count",), ("high_count",),
-        ("medium_count",), ("low_count",), ("model_used",), ("created_at",),
+        ("id",),
+        ("engagement_id",),
+        ("generated_by",),
+        ("executive_summary",),
+        ("full_report_json",),
+        ("sbom_json",),
+        ("risk_level",),
+        ("total_findings",),
+        ("critical_count",),
+        ("high_count",),
+        ("medium_count",),
+        ("low_count",),
+        ("model_used",),
+        ("created_at",),
     ]
 
     mock_cm = MagicMock()
     mock_cm.__enter__.return_value = mock_cursor
     mock_cm.__exit__.return_value = None
 
-    with patch("database.repositories.report_repository.db_cursor", return_value=mock_cm):
+    with patch(
+        "database.repositories.report_repository.db_cursor", return_value=mock_cm
+    ):
         yield mock_cursor
 
 
 class TestReportRepositoryInit:
     def test_uses_env_var_fallback(self):
-        with patch.dict("os.environ", {"DATABASE_URL": "postgres://env:5432/db"}, clear=True):
+        with patch.dict(
+            "os.environ", {"DATABASE_URL": "postgres://env:5432/db"}, clear=True
+        ):
             repo = ReportRepository()
             assert repo.db_conn == "postgres://env:5432/db"
 
     def test_uses_passed_db_conn(self):
-        with patch.dict("os.environ", {"DATABASE_URL": "postgres://env:5432/db"}, clear=True):
+        with patch.dict(
+            "os.environ", {"DATABASE_URL": "postgres://env:5432/db"}, clear=True
+        ):
             repo = ReportRepository(db_conn="postgres://passed:5432/db")
             assert repo.db_conn == "postgres://passed:5432/db"
 
@@ -144,8 +160,20 @@ class TestGetReport:
     def test_returns_report_dict_with_json_loaded_fields(self, mock_db_cursor):
         full_report = {"executive_summary": "Summary", "risk_level": "high"}
         mock_db_cursor.fetchone.return_value = (
-            "1", "eng-1", "llm", "Summary", json.dumps(full_report), None,
-            "high", 5, 1, 2, 1, 1, "gpt-4", "2025-01-01",
+            "1",
+            "eng-1",
+            "llm",
+            "Summary",
+            json.dumps(full_report),
+            None,
+            "high",
+            5,
+            1,
+            2,
+            1,
+            1,
+            "gpt-4",
+            "2025-01-01",
         )
         repo = ReportRepository()
 

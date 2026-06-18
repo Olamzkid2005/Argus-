@@ -1,6 +1,5 @@
 """Tests for tool_core/base.py — AbstractTool, AsyncTool, ToolContext."""
 
-
 import pytest
 
 from tool_core.base import AbstractTool, AsyncTool, ToolContext
@@ -125,6 +124,7 @@ class TestAsyncTool:
         scanner = MyAsyncScanner()
         ctx = ToolContext(target="https://example.com")
         import asyncio
+
         result = asyncio.run(scanner.run(ctx))
         assert result.tool_name == "async_scanner"
         assert result.status.is_ok
@@ -139,6 +139,7 @@ class TestAsyncTool:
         scanner = BrokenAsyncScanner()
         ctx = ToolContext(target="https://example.com")
         import asyncio
+
         result = asyncio.run(scanner.run(ctx))
         assert result.status == ToolStatus.EXCEPTION
         assert "async error" in result.error_message

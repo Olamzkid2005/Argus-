@@ -10,7 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 def execute_recon_pipeline(
-    ctx, target: str, budget: dict, aggressiveness: str | None = None,
+    ctx,
+    target: str,
+    budget: dict,
+    aggressiveness: str | None = None,
     cache_mode: str | None = None,
 ) -> tuple[list, object]:
     """
@@ -30,15 +33,25 @@ def execute_recon_pipeline(
         logger.warning("execute_recon_pipeline called with invalid target: %s", target)
         return [], None
     from utils.logging_utils import ScanLogger
+
     slog = ScanLogger("pipeline_router")
-    slog.info(f"execute_recon_pipeline: target={target}, aggressiveness={aggressiveness}")
+    slog.info(
+        f"execute_recon_pipeline: target={target}, aggressiveness={aggressiveness}"
+    )
     from orchestrator_pkg.recon import execute_recon_tools
-    return execute_recon_tools(ctx, target, budget, aggressiveness, cache_mode=cache_mode)
+
+    return execute_recon_tools(
+        ctx, target, budget, aggressiveness, cache_mode=cache_mode
+    )
 
 
 def execute_scan_pipeline(
-    ctx, targets: list[str], budget: dict, aggressiveness: str | None = None,
-    auth_config: dict | None = None, dual_auth_config: dict | None = None,
+    ctx,
+    targets: list[str],
+    budget: dict,
+    aggressiveness: str | None = None,
+    auth_config: dict | None = None,
+    dual_auth_config: dict | None = None,
     tech_stack: list[str] | None = None,
     skip_tools: set | None = None,
     recon_context=None,
@@ -62,7 +75,22 @@ def execute_scan_pipeline(
         List of findings
     """
     from utils.logging_utils import ScanLogger
+
     slog = ScanLogger("pipeline_router")
-    slog.info(f"execute_scan_pipeline: {len(targets)} target(s), aggressiveness={aggressiveness}, skip_tools={skip_tools}")
+    slog.info(
+        f"execute_scan_pipeline: {len(targets)} target(s), aggressiveness={aggressiveness}, skip_tools={skip_tools}"
+    )
     from orchestrator_pkg.scan import execute_scan_tools
-    return execute_scan_tools(ctx, targets, budget, aggressiveness, auth_config, dual_auth_config, tech_stack, skip_tools, recon_context=recon_context, cache_mode=cache_mode)
+
+    return execute_scan_tools(
+        ctx,
+        targets,
+        budget,
+        aggressiveness,
+        auth_config,
+        dual_auth_config,
+        tech_stack,
+        skip_tools,
+        recon_context=recon_context,
+        cache_mode=cache_mode,
+    )

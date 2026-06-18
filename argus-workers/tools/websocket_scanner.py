@@ -71,8 +71,7 @@ class WebSocketScanner(AsyncTool):
     def _check_deps() -> None:
         if not HAS_WEBSOCKETS:
             raise RuntimeError(
-                "websockets library is required. "
-                "Install with: pip install websockets"
+                "websockets library is required. Install with: pip install websockets"
             )
         if not HAS_HTTPX:
             raise RuntimeError(
@@ -101,7 +100,9 @@ class WebSocketScanner(AsyncTool):
             )
         return self._builder.add(finding_type, severity, endpoint, evidence, confidence)
 
-    async def scan(self, ws_url: str, builder: FindingBuilder | None = None) -> list[dict[str, Any]]:
+    async def scan(
+        self, ws_url: str, builder: FindingBuilder | None = None
+    ) -> list[dict[str, Any]]:
         """
         Run all WebSocket security tests.
 
@@ -137,8 +138,8 @@ class WebSocketScanner(AsyncTool):
             try:
                 async with websockets.connect(
                     ws_url,
-                additional_headers={"Origin": origin},
-                open_timeout=self.timeout,
+                    additional_headers={"Origin": origin},
+                    open_timeout=self.timeout,
                 ) as ws:
                     try:
                         msg = await asyncio.wait_for(ws.recv(), timeout=self.timeout)
@@ -151,17 +152,34 @@ class WebSocketScanner(AsyncTool):
                         "server_response": response_text,
                         "detail": "Server accepted connection with spoofed origin header",
                     }
-                    findings.append(self._add_finding(
-                        "WEBSOCKET_ORIGIN_BYPASS", "MEDIUM", ws_url,
-                        evidence, confidence=0.7,
-                    ))
+                    findings.append(
+                        self._add_finding(
+                            "WEBSOCKET_ORIGIN_BYPASS",
+                            "MEDIUM",
+                            ws_url,
+                            evidence,
+                            confidence=0.7,
+                        )
+                    )
                     await ws.close()
             except InvalidStatus:
-                logger.debug("Server rejected origin validation for %s with origin %s", ws_url, origin)
+                logger.debug(
+                    "Server rejected origin validation for %s with origin %s",
+                    ws_url,
+                    origin,
+                )
             except (OSError, TimeoutError):
-                logger.debug("Network error during origin validation for %s with origin %s", ws_url, origin)
+                logger.debug(
+                    "Network error during origin validation for %s with origin %s",
+                    ws_url,
+                    origin,
+                )
             except WebSocketException:
-                logger.debug("WebSocket protocol error during origin validation for %s with origin %s", ws_url, origin)
+                logger.debug(
+                    "WebSocket protocol error during origin validation for %s with origin %s",
+                    ws_url,
+                    origin,
+                )
 
         return findings
 
@@ -185,10 +203,15 @@ class WebSocketScanner(AsyncTool):
                     "detail": "Server accepted connection without authentication",
                     "server_response": response_text,
                 }
-                findings.append(self._add_finding(
-                    "WEBSOCKET_NO_AUTH", "HIGH", ws_url,
-                    evidence, confidence=0.6,
-                ))
+                findings.append(
+                    self._add_finding(
+                        "WEBSOCKET_NO_AUTH",
+                        "HIGH",
+                        ws_url,
+                        evidence,
+                        confidence=0.6,
+                    )
+                )
                 await ws.close()
         except InvalidStatus:
             logger.debug("Server rejected auth test for %s (expected)", ws_url)
@@ -212,7 +235,9 @@ class WebSocketScanner(AsyncTool):
                 async with websockets.connect(ws_url, open_timeout=self.timeout) as ws:
                     await ws.send(payload)
                     try:
-                        response = await asyncio.wait_for(ws.recv(), timeout=self.timeout)
+                        response = await asyncio.wait_for(
+                            ws.recv(), timeout=self.timeout
+                        )
                         response_text = self._decode_message(response)
 
                         if any(
@@ -235,10 +260,15 @@ class WebSocketScanner(AsyncTool):
                                     "to injected payload"
                                 ),
                             }
-                            findings.append(self._add_finding(
-                                "WEBSOCKET_INJECTION", "HIGH", ws_url,
-                                evidence, confidence=0.7,
-                            ))
+                            findings.append(
+                                self._add_finding(
+                                    "WEBSOCKET_INJECTION",
+                                    "HIGH",
+                                    ws_url,
+                                    evidence,
+                                    confidence=0.7,
+                                )
+                            )
                     except TimeoutError:
                         pass
                     await ws.close()
@@ -247,7 +277,9 @@ class WebSocketScanner(AsyncTool):
             except (OSError, TimeoutError):
                 logger.debug("Network error during injection test for %s", ws_url)
             except WebSocketException:
-                logger.debug("WebSocket protocol error during injection test for %s", ws_url)
+                logger.debug(
+                    "WebSocket protocol error during injection test for %s", ws_url
+                )
 
         return findings
 
@@ -280,10 +312,15 @@ class WebSocketScanner(AsyncTool):
                             "- rate limiting is active"
                         ),
                     }
-                    findings.append(self._add_finding(
-                        "WEBSOCKET_RATE_LIMITED", "INFO", ws_url,
-                        evidence, confidence=0.9,
-                    ))
+                    findings.append(
+                        self._add_finding(
+                            "WEBSOCKET_RATE_LIMITED",
+                            "INFO",
+                            ws_url,
+                            evidence,
+                            confidence=0.9,
+                        )
+                    )
                 else:
                     evidence = {
                         "messages_sent": self.RATE_LIMIT_MESSAGE_COUNT,
@@ -291,10 +328,15 @@ class WebSocketScanner(AsyncTool):
                             "Server accepted all messages without rate limiting"
                         ),
                     }
-                    findings.append(self._add_finding(
-                        "WEBSOCKET_NO_RATE_LIMIT", "MEDIUM", ws_url,
-                        evidence, confidence=0.7,
-                    ))
+                    findings.append(
+                        self._add_finding(
+                            "WEBSOCKET_NO_RATE_LIMIT",
+                            "MEDIUM",
+                            ws_url,
+                            evidence,
+                            confidence=0.7,
+                        )
+                    )
 
                 await ws.close()
         except InvalidStatus:
@@ -302,7 +344,9 @@ class WebSocketScanner(AsyncTool):
         except (OSError, TimeoutError):
             logger.debug("Network error during rate limit test for %s", ws_url)
         except WebSocketException:
-            logger.debug("WebSocket protocol error during rate limit test for %s", ws_url)
+            logger.debug(
+                "WebSocket protocol error during rate limit test for %s", ws_url
+            )
 
         return findings
 
@@ -386,14 +430,16 @@ class WebSocketScanner(AsyncTool):
             Deduplicated list of discovered WebSocket URLs
         """
         slog = ScanLogger("websocket_scanner")
-        slog.info(f"Discovering WebSocket URLs: {page_url}")
+        slog.info("Discovering WebSocket URLs: %s", page_url)
         urls: list[str] = []
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(page_url)
                 if resp.status_code != 200:
-                    slog.info(f"Page returned {resp.status_code}, no WebSocket discovery")
+                    slog.info(
+                        f"Page returned {resp.status_code}, no WebSocket discovery"
+                    )
                     return urls
 
                 html = resp.text
@@ -411,8 +457,6 @@ class WebSocketScanner(AsyncTool):
         except httpx.RequestError:
             logger.debug("Failed to fetch %s for WebSocket discovery", page_url)
         except Exception:
-            logger.debug(
-                "WebSocket discovery error for %s", page_url, exc_info=True
-            )
+            logger.debug("WebSocket discovery error for %s", page_url, exc_info=True)
 
         return list(set(urls))

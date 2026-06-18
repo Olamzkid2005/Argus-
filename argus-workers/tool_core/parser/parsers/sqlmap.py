@@ -48,21 +48,25 @@ def _parse_json(output: str) -> list[NormalizedFinding]:
                 payload = param_info.get("payload", "")
                 vuln_type = _classify_technique(title)
 
-                findings.append(NormalizedFinding(
-                    title=title,
-                    severity=4,
-                    confidence=5,
-                    description=f"SQL injection in parameter '{param_name}' at {url}",
-                    tool="sqlmap",
-                    evidence=[{
-                        "type": "http",
-                        "url": url,
-                        "parameter": param_name,
-                        "payload": payload,
-                        "technique": vuln_type,
-                    }],
-                    subtype=vuln_type,
-                ))
+                findings.append(
+                    NormalizedFinding(
+                        title=title,
+                        severity=4,
+                        confidence=5,
+                        description=f"SQL injection in parameter '{param_name}' at {url}",
+                        tool="sqlmap",
+                        evidence=[
+                            {
+                                "type": "http",
+                                "url": url,
+                                "parameter": param_name,
+                                "payload": payload,
+                                "technique": vuln_type,
+                            }
+                        ],
+                        subtype=vuln_type,
+                    )
+                )
 
     return findings
 
@@ -73,15 +77,17 @@ def _parse_text(output: str) -> list[NormalizedFinding]:
         url_match = re.search(r"(https?://[^\s]+)", output)
         endpoint = url_match.group(1) if url_match else "unknown_target"
 
-        findings.append(NormalizedFinding(
-            title="SQL injection detected",
-            severity=4,
-            confidence=4,
-            description=f"sqlmap identified an injection point at {endpoint}",
-            tool="sqlmap",
-            evidence=[{"type": "text", "content": output[:1000]}],
-            subtype="SQL_INJECTION",
-        ))
+        findings.append(
+            NormalizedFinding(
+                title="SQL injection detected",
+                severity=4,
+                confidence=4,
+                description=f"sqlmap identified an injection point at {endpoint}",
+                tool="sqlmap",
+                evidence=[{"type": "text", "content": output[:1000]}],
+                subtype="SQL_INJECTION",
+            )
+        )
 
     return findings
 

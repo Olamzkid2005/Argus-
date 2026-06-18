@@ -69,7 +69,11 @@ class _TestWsEchoServer:
         while True:
             try:
                 message = await asyncio.wait_for(websocket.recv(), timeout=0.1)
-                text = message if isinstance(message, str) else message.decode("utf-8", errors="replace")
+                text = (
+                    message
+                    if isinstance(message, str)
+                    else message.decode("utf-8", errors="replace")
+                )
                 if text.startswith("rate-test"):
                     continue
                 await websocket.send(message)
@@ -86,7 +90,9 @@ class _TestWsEchoServer:
         import websockets.asyncio.server
 
         self.server = await websockets.asyncio.server.serve(
-            self._handler, host, port,
+            self._handler,
+            host,
+            port,
         )
         port = self.server.sockets[0].getsockname()[1]
         url = f"ws://{host}:{port}"
@@ -165,7 +171,9 @@ class TestWebSocketScannerIntegration:
         )
 
         # Verify specific finding details
-        origin_findings = [f for f in findings if f["type"] == "WEBSOCKET_ORIGIN_BYPASS"]
+        origin_findings = [
+            f for f in findings if f["type"] == "WEBSOCKET_ORIGIN_BYPASS"
+        ]
         assert len(origin_findings) == 4, (
             f"Expected 4 origin bypass findings (4 spoofed origins), got {len(origin_findings)}"
         )
@@ -189,7 +197,9 @@ class TestWebSocketScannerIntegration:
         # Severity sanity checks
         severities = {f["severity"] for f in findings}
         assert "HIGH" in severities  # WEBSOCKET_NO_AUTH + WEBSOCKET_INJECTION
-        assert "MEDIUM" in severities  # WEBSOCKET_ORIGIN_BYPASS + WEBSOCKET_NO_RATE_LIMIT
+        assert (
+            "MEDIUM" in severities
+        )  # WEBSOCKET_ORIGIN_BYPASS + WEBSOCKET_NO_RATE_LIMIT
 
     def test_origin_validation_detects_bypass(self, ws_server_url):
         """Origin validation test detects when server accepts spoofed origins."""
@@ -202,7 +212,9 @@ class TestWebSocketScannerIntegration:
 
         findings = asyncio.run(_test())
 
-        assert len(findings) == 4, f"Expected 4 origin bypass findings, got {len(findings)}"
+        assert len(findings) == 4, (
+            f"Expected 4 origin bypass findings, got {len(findings)}"
+        )
         for f in findings:
             assert f["type"] == "WEBSOCKET_ORIGIN_BYPASS"
             assert f["severity"] == "MEDIUM"
@@ -350,7 +362,14 @@ class TestWebSocketScannerDeps:
 class TestWebSocketScannerSchema:
     """Each finding from every test method conforms to the expected schema."""
 
-    REQUIRED_KEYS = {"type", "severity", "confidence", "endpoint", "evidence", "source_tool"}
+    REQUIRED_KEYS = {
+        "type",
+        "severity",
+        "confidence",
+        "endpoint",
+        "evidence",
+        "source_tool",
+    }
 
     def test_all_finding_types_have_required_schema(self, ws_server_url):
         """All finding types include required schema keys."""

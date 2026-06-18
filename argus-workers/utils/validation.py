@@ -30,7 +30,7 @@ def sanitize_redis_key(component: str) -> str:
     Returns:
         Sanitized key component safe for Redis key construction
     """
-    return urllib.parse.quote(component, safe='')
+    return urllib.parse.quote(component, safe="")
 
 
 def validate_uuid(value: str, field_name: str = "engagement_id") -> str:

@@ -50,15 +50,27 @@ class ToolRunner:
     # Must be kept in sync with _is_dangerous().
     DANGEROUS_PATTERNS = [
         # File/disk destruction
-        "rm -rf", "rm -fr", "rm -r /", "mkfs", "dd if=",
+        "rm -rf",
+        "rm -fr",
+        "rm -r /",
+        "mkfs",
+        "dd if=",
         # Fork bomb
         ":(){ :|:& };:",
         # Shell command chaining (via injection)
-        "; rm", "| rm", "&& rm", "$(rm", "`rm",
+        "; rm",
+        "| rm",
+        "&& rm",
+        "$(rm",
+        "`rm",
         # Redirection to devices
-        ">/dev/", ">/dev/null",
+        ">/dev/",
+        ">/dev/null",
         # Database destruction
-        "DROP TABLE", "DROP DATABASE", "DELETE FROM", "TRUNCATE",
+        "DROP TABLE",
+        "DROP DATABASE",
+        "DELETE FROM",
+        "TRUNCATE",
     ]
 
     # Short tool names that are dangerous when used standalone.
@@ -166,7 +178,9 @@ class ToolRunner:
 
             # 1. System / venv site-packages
             with contextlib.suppress(AttributeError):
-                python_paths.extend(p for p in site.getsitepackages() if os.path.isdir(p))
+                python_paths.extend(
+                    p for p in site.getsitepackages() if os.path.isdir(p)
+                )
 
             # 2. User site-packages (~/.local/lib/... or ~/Library/Python/...)
             user_site = site.getusersitepackages()
@@ -242,9 +256,7 @@ class ToolRunner:
     def _validate_tool_name(self, tool: str) -> str:
         """Validate tool name does not contain path traversal or shell metacharacters."""
         if not tool or "/" in tool or "\\" in tool or ".." in tool:
-            raise SecurityError(
-                f"Invalid tool name blocked (path traversal): {tool!r}"
-            )
+            raise SecurityError(f"Invalid tool name blocked (path traversal): {tool!r}")
         return tool
 
     def _resolve_tool_path(self, tool: str) -> str:
@@ -266,17 +278,19 @@ class ToolRunner:
         # 1. Check ToolCache first (cached/pre-installed tools)
         try:
             from tools.tool_cache import get_cached_tool
+
             cached_path = get_cached_tool(tool)
             if cached_path and cached_path.exists():
-                logger.debug(f"Resolved {tool} via ToolCache: {cached_path}")
+                logger.debug("Resolved %s via ToolCache: %s", tool, cached_path)
                 return str(cached_path)
         except ImportError:
             pass  # ToolCache not available — skip
         except Exception as e:
-            logger.debug(f"ToolCache lookup failed for {tool}: {e}")
+            logger.debug("ToolCache lookup failed for %s: %s", tool, e)
 
         # 2. Use shared utility for augmented PATH resolution
         from tools.tool_utils import resolve_tool_binary
+
         resolved = resolve_tool_binary(tool)
         if resolved:
             return resolved
@@ -307,7 +321,11 @@ class ToolRunner:
         # Only --token, --password, --secret, --auth are used with exact prefix
         # matching below; --key and --api-token use more specific checks.
         sensitive_prefixes = (
-            "--api-token", "--token", "--password", "--secret", "--auth",
+            "--api-token",
+            "--token",
+            "--password",
+            "--secret",
+            "--auth",
         )
         sanitized_args: list[str] = []
         i = 0
@@ -318,9 +336,9 @@ class ToolRunner:
                 arg.split("=")[0].startswith(p) for p in sensitive_prefixes
             ):
                 flag_key, flag_value = arg.split("=", 1)
-                env[
-                    f"TOOL_{flag_key.removeprefix('--').upper().replace('-', '_')}"
-                ] = flag_value
+                env[f"TOOL_{flag_key.removeprefix('--').upper().replace('-', '_')}"] = (
+                    flag_value
+                )
                 sanitized_args.append(flag_key + "=__REDACTED__")
                 i += 1
                 continue
@@ -332,9 +350,9 @@ class ToolRunner:
                     else ""
                 )
                 if value:
-                    env[
-                        f"TOOL_{flag.removeprefix('--').upper().replace('-', '_')}"
-                    ] = value
+                    env[f"TOOL_{flag.removeprefix('--').upper().replace('-', '_')}"] = (
+                        value
+                    )
                     sanitized_args.append(flag)
                     sanitized_args.append("__REDACTED__")
                     i += 2
@@ -343,7 +361,13 @@ class ToolRunner:
             i += 1
         return sanitized_args, env
 
-    def run(self, tool: str, args: list[str], timeout: int = 180, cache_mode: CacheMode = CacheMode.NORMAL) -> UnifiedToolResult:
+    def run(
+        self,
+        tool: str,
+        args: list[str],
+        timeout: int = 180,
+        cache_mode: CacheMode = CacheMode.NORMAL,
+    ) -> UnifiedToolResult:
         """
         Execute tool with safety validation
 
@@ -364,24 +388,30 @@ class ToolRunner:
         """
         # Cache check — skip on NO_CACHE and REFRESH modes
         import hashlib
+
         args_key = str(tuple(args))
         cache_key = f"tool_result:{tool}:{hashlib.md5(args_key.encode(), usedforsecurity=False).hexdigest()}"
         if cache_mode == CacheMode.NORMAL:
             cached_result = cache.get(cache_key)
             if cached_result is not None:
-                return UnifiedToolResult.from_legacy_dict(cached_result, tool_name_hint=tool)
+                return UnifiedToolResult.from_legacy_dict(
+                    cached_result, tool_name_hint=tool
+                )
         else:
             if cache_mode == CacheMode.NO_CACHE:
                 cache.record_bypass()
             elif cache_mode == CacheMode.REFRESH:
                 cache.record_refresh()
-            logger.debug("Cache %s for %s (mode=%s)", "skipped" if cache_mode == CacheMode.NO_CACHE else "refreshing", tool, cache_mode.value)
+            logger.debug(
+                "Cache %s for %s (mode=%s)",
+                "skipped" if cache_mode == CacheMode.NO_CACHE else "refreshing",
+                tool,
+                cache_mode.value,
+            )
 
         # Safety check
         if self.is_dangerous(tool, args):
-            raise SecurityError(
-                f"Blocked dangerous payload: {tool} {' '.join(args)}"
-            )
+            raise SecurityError(f"Blocked dangerous payload: {tool} {' '.join(args)}")
 
         # Create temp directory if it doesn't exist
         tmp_dir = self.sandbox_dir / "tmp"
@@ -423,11 +453,21 @@ class ToolRunner:
                 # at the truncated boundary, discarding any partial multi-byte
                 # character at the cut point.
                 if len(result.stdout.encode("utf-8")) > max_output_bytes:
-                    logger.warning("Truncating stdout for %s (%d bytes > %d limit)", tool, len(result.stdout), max_output_bytes)
+                    logger.warning(
+                        "Truncating stdout for %s (%d bytes > %d limit)",
+                        tool,
+                        len(result.stdout),
+                        max_output_bytes,
+                    )
                     stdout_bytes = result.stdout.encode("utf-8")[:max_output_bytes]
                     result.stdout = stdout_bytes.decode("utf-8", errors="ignore")
                 if len(result.stderr.encode("utf-8")) > max_output_bytes:
-                    logger.warning("Truncating stderr for %s (%d bytes > %d limit)", tool, len(result.stderr), max_output_bytes)
+                    logger.warning(
+                        "Truncating stderr for %s (%d bytes > %d limit)",
+                        tool,
+                        len(result.stderr),
+                        max_output_bytes,
+                    )
                     stderr_bytes = result.stderr.encode("utf-8")[:max_output_bytes]
                     result.stderr = stderr_bytes.decode("utf-8", errors="ignore")
 
@@ -481,7 +521,12 @@ class ToolRunner:
                     tool_name=tool,
                     command=[tool_path] + args,
                     target="",
-                    status=ToolStatus.SUCCESS if (result.returncode == 0 or result.returncode in findings_exit_codes.get(tool, set())) else ToolStatus.NONZERO_EXIT,
+                    status=ToolStatus.SUCCESS
+                    if (
+                        result.returncode == 0
+                        or result.returncode in findings_exit_codes.get(tool, set())
+                    )
+                    else ToolStatus.NONZERO_EXIT,
                     stdout=result.stdout,
                     stderr=result.stderr,
                     exit_code=result.returncode,
@@ -493,9 +538,9 @@ class ToolRunner:
 
                 if cache_mode != CacheMode.NO_CACHE:
                     cache.set(cache_key, tool_result.to_legacy_dict(), ttl=300)
-                    slog.info(f"Tool cache set for {tool}")
+                    slog.info("Tool cache set for %s", tool)
                 else:
-                    slog.info(f"Tool cache skipped for {tool} (no_cache mode)")
+                    slog.info("Tool cache skipped for %s (no_cache mode)", tool)
                 return tool_result
 
             except subprocess.TimeoutExpired:
@@ -533,7 +578,9 @@ class ToolRunner:
                     if hint and self.engagement_id:
                         emit_error_hint(self.engagement_id, hint)
                 except Exception:
-                    logger.warning("Failed to generate error hint for timeout", exc_info=True)
+                    logger.warning(
+                        "Failed to generate error hint for timeout", exc_info=True
+                    )
 
                 return UnifiedToolResult(
                     tool_name=tool,
@@ -579,7 +626,9 @@ class ToolRunner:
                     if hint and self.engagement_id:
                         emit_error_hint(self.engagement_id, hint)
                 except Exception:
-                    logger.warning("Failed to generate error hint for exception", exc_info=True)
+                    logger.warning(
+                        "Failed to generate error hint for exception", exc_info=True
+                    )
 
                 return UnifiedToolResult(
                     tool_name=tool,
@@ -598,9 +647,7 @@ class ToolRunner:
 
         # Safety check — mirror run()'s is_dangerous guard
         if self.is_dangerous(tool, args):
-            raise SecurityError(
-                f"Blocked dangerous payload: {tool} {' '.join(args)}"
-            )
+            raise SecurityError(f"Blocked dangerous payload: {tool} {' '.join(args)}")
 
         env = self._locked_env(tool)
 
@@ -642,7 +689,8 @@ class ToolRunner:
                         if total_bytes > max_streaming_bytes:
                             logger.warning(
                                 "Streaming output for %s exceeded %d byte limit — killing process",
-                                tool, max_streaming_bytes,
+                                tool,
+                                max_streaming_bytes,
                             )
                             proc.kill()
                             process_killed = True
@@ -654,7 +702,11 @@ class ToolRunner:
                                 process_killed = True
                                 break
                         except Exception as line_err:
-                            logger.debug("on_line callback failed for %s: %s — continuing", tool, line_err)
+                            logger.debug(
+                                "on_line callback failed for %s: %s — continuing",
+                                tool,
+                                line_err,
+                            )
 
             # Read any remaining output after the process exits
             remaining_stdout, _ = proc.communicate(timeout=5)
@@ -665,7 +717,11 @@ class ToolRunner:
                         if on_line(line.rstrip("\n\r")) is False:
                             break
                     except Exception as line_err:
-                        logger.debug("on_line callback failed for %s: %s — continuing", tool, line_err)
+                        logger.debug(
+                            "on_line callback failed for %s: %s — continuing",
+                            tool,
+                            line_err,
+                        )
 
         except subprocess.TimeoutExpired:
             logger.warning("Streaming communicate() timed out for %s, killing", tool)
@@ -683,9 +739,14 @@ class ToolRunner:
             try:
                 proc.wait(timeout=5)
             except Exception:
-                logger.warning("Could not wait on %s process (pid=%d) — force-reaping", tool, proc.pid)
+                logger.warning(
+                    "Could not wait on %s process (pid=%d) — force-reaping",
+                    tool,
+                    proc.pid,
+                )
                 try:
                     import signal
+
                     if not process_killed:
                         os.kill(proc.pid, signal.SIGKILL)
                         process_killed = True
@@ -707,9 +768,18 @@ class ToolRunner:
                             break
                         time.sleep(delay)
                     else:
-                        logger.error("Failed to reap PID %d for %s after multiple attempts", proc.pid, tool)
+                        logger.error(
+                            "Failed to reap PID %d for %s after multiple attempts",
+                            proc.pid,
+                            tool,
+                        )
                 except Exception as reap_err:
-                    logger.error("Failed to force-reap PID %d for %s: %s", proc.pid, tool, reap_err)
+                    logger.error(
+                        "Failed to force-reap PID %d for %s: %s",
+                        proc.pid,
+                        tool,
+                        reap_err,
+                    )
 
         stdout = "".join(stdout_lines)
         returncode = proc.returncode if proc.returncode is not None else -1
@@ -719,7 +789,11 @@ class ToolRunner:
         return UnifiedToolResult(
             tool_name=tool,
             command=[tool_path] + args,
-            status=ToolStatus.TIMEOUT if timed_out else ToolStatus.SUCCESS if returncode == 0 else ToolStatus.NONZERO_EXIT,
+            status=ToolStatus.TIMEOUT
+            if timed_out
+            else ToolStatus.SUCCESS
+            if returncode == 0
+            else ToolStatus.NONZERO_EXIT,
             stdout=stdout,
             exit_code=returncode,
             duration_seconds=(time.time() - start),
@@ -883,7 +957,7 @@ class ToolRunner:
         )
         breaker.record_success()
         slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
-        slog.info(f"Circuit breaker reset for {tool} (success)")
+        slog.info("Circuit breaker reset for %s (success)", tool)
 
     def record_tool_failure(self, tool: str):
         """Record failed tool execution."""
@@ -892,10 +966,14 @@ class ToolRunner:
         )
         breaker.record_failure()
         slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
-        slog.warn(f"Circuit breaker failure recorded for {tool}")
+        slog.warn("Circuit breaker failure recorded for %s", tool)
 
     def run_with_circuit_breaker(
-        self, tool: str, args: list[str], timeout: int = 180, cache_mode: CacheMode = CacheMode.NORMAL
+        self,
+        tool: str,
+        args: list[str],
+        timeout: int = 180,
+        cache_mode: CacheMode = CacheMode.NORMAL,
     ) -> UnifiedToolResult:
         """
         Execute tool with circuit breaker protection.

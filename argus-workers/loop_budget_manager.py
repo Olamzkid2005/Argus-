@@ -46,11 +46,17 @@ class LoopBudgetManager:
             return False, "cycles_exceeded"
 
         # Check depth for deep_scan and auth_focused_scan actions
-        if action_type in ("deep_scan", "auth_focused_scan") and self.current_depth >= self.max_depth:
+        if (
+            action_type in ("deep_scan", "auth_focused_scan")
+            and self.current_depth >= self.max_depth
+        ):
             return False, "depth_exceeded"
 
         # Separate budget for LLM review — independent of intelligence engine cycles
-        if action_type == "llm_review" and self.current_llm_reviews >= self.max_llm_reviews:
+        if (
+            action_type == "llm_review"
+            and self.current_llm_reviews >= self.max_llm_reviews
+        ):
             return False, "llm_reviews_exceeded"
 
         return True, "within_budget"
@@ -109,6 +115,7 @@ class LoopBudgetManager:
         """
         try:
             from database.connection import db_cursor
+
             with db_cursor() as cursor:
                 cursor.execute(
                     """
@@ -138,9 +145,11 @@ class LoopBudgetManager:
                 )
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning(
                 "Failed to persist budget for engagement %s: %s",
-                self.engagement_id, e,
+                self.engagement_id,
+                e,
             )
 
     def reset(self):

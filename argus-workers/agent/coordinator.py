@@ -4,6 +4,7 @@ Coordinator Agent - Delegates to ReActAgent.create_for_phase().
 This module exists for backward compatibility. New code should use
 ReActAgent.create_for_phase() directly.
 """
+
 import logging
 
 from utils.logging_utils import ScanLogger
@@ -46,16 +47,23 @@ class CoordinatorAgent:
     def transition_to(self, next_phase: str) -> bool:
         """Transition to next phase if valid."""
         if not self.can_transition_to(next_phase):
-            logger.warning("Invalid transition: %s -> %s",
-                          self.current_phase, next_phase)
+            logger.warning(
+                "Invalid transition: %s -> %s", self.current_phase, next_phase
+            )
             return False
         self._slog.transition(self.current_phase, next_phase, "coordinator transition")
         self.current_phase = next_phase
         return True
 
-    def get_phase_agent(self, phase: str, tool_runner=None,
-                        llm_client=None, decision_repo=None,
-                        engagement_id: str = None, mode: str | None = None) -> ReActAgent:
+    def get_phase_agent(
+        self,
+        phase: str,
+        tool_runner=None,
+        llm_client=None,
+        decision_repo=None,
+        engagement_id: str = None,
+        mode: str | None = None,
+    ) -> ReActAgent:
         """Create a ReAct agent for a specific phase (delegates to ReActAgent.create_for_phase)."""
         return ReActAgent.create_for_phase(
             phase,
@@ -66,8 +74,15 @@ class CoordinatorAgent:
             mode=mode,
         )
 
-    def run_phase(self, phase: str, context: dict, tool_runner=None,
-                  llm_client=None, decision_repo=None, mode: str | None = None) -> list:
+    def run_phase(
+        self,
+        phase: str,
+        context: dict,
+        tool_runner=None,
+        llm_client=None,
+        decision_repo=None,
+        mode: str | None = None,
+    ) -> list:
         """Run a single phase with tools."""
         self._slog.phase_header(f"COORDINATOR RUN PHASE: {phase}")
         agent = ReActAgent.create_for_phase(
@@ -80,7 +95,7 @@ class CoordinatorAgent:
         )
         task_desc = ReActAgent.PHASE_AGENTS.get(phase, {}).get("description", phase)
         results = agent.run(task_desc, initial_context=context)
-        self._slog.info(f"Phase {phase} complete: {len(results)} results")
+        self._slog.info("Phase %s complete: %d results", phase, len(results))
         self.phase_results[phase] = results
         return results
 

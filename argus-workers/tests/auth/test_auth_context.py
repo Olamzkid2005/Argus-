@@ -6,12 +6,18 @@ import os
 # Load auth_context without triggering agent __init__.py
 _spec = importlib.util.spec_from_file_location(
     "auth_context",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "agent", "auth_context.py"),
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "..",
+        "agent",
+        "auth_context.py",
+    ),
 )
 _auth_mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_auth_mod)
 
-import requests
+import requests  # noqa: E402
 
 
 class TestAuthContext:

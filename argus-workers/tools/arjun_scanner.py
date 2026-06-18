@@ -12,6 +12,7 @@ Usage::
     for f in result.findings:
         print(f["type"], f["endpoint"])
 """
+
 from __future__ import annotations
 
 import logging
@@ -58,7 +59,9 @@ class ArjunScanner(AbstractTool):
         threads = thread_map.get(aggressiveness, "20")
 
         # Write arjun output to a temp file
-        fd, output_path = tempfile.mkstemp(suffix=".json", prefix=f"arjun_{engagement_id}_")
+        fd, output_path = tempfile.mkstemp(
+            suffix=".json", prefix=f"arjun_{engagement_id}_"
+        )
         os.close(fd)
 
         try:
@@ -80,6 +83,7 @@ class ArjunScanner(AbstractTool):
                     raw_output = f.read()
 
                 from parsers.parsers.arjun import ArjunParser
+
                 parsed = ArjunParser().parse(raw_output)
 
                 # Normalize findings

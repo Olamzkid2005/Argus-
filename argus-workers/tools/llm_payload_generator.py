@@ -8,6 +8,7 @@ payload lists with context-aware variants.
 Graceful degradation: Returns empty list on any failure.
 The system works exactly as today when LLM is unavailable.
 """
+
 import hashlib
 import json
 import logging
@@ -118,7 +119,7 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             r'src\s*=\s*["\'][^"\']*({param_pattern})[^"\']*["\']',
         ],
         "script": [
-            r'<script[^>]*>[^<]*({param_pattern})[^<]*</script>',
+            r"<script[^>]*>[^<]*({param_pattern})[^<]*</script>",
             r'<script[^>]*>\s*var\s+\w+\s*=\s*["\'][^"\']*({param_pattern})',
         ],
         "json_value": [
@@ -128,8 +129,8 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             r'<[^>]*\s+\w+\s*=\s*["\'][^"\']*({param_pattern})[^"\']*["\']',
         ],
         "html_body": [
-            r'<[^>]*>(?:[^<]*)({param_pattern})(?:[^<]*)<',
-            r'>({param_pattern})<',
+            r"<[^>]*>(?:[^<]*)({param_pattern})(?:[^<]*)<",
+            r">({param_pattern})<",
         ],
     }
 
@@ -150,16 +151,17 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             max_payloads: Max payloads to generate per context (default 2)
         """
         self.llm = llm_client
-        self.model = model or LLM_PAYLOAD_GENERATION_MODEL or getattr(llm_client, 'model', 'gpt-4o-mini')
+        self.model = (
+            model
+            or LLM_PAYLOAD_GENERATION_MODEL
+            or getattr(llm_client, "model", "gpt-4o-mini")
+        )
         self.cache = cache or PayloadCache()
         self.max_payloads = max_payloads
 
     def is_available(self) -> bool:
         """Check if LLM is configured for payload generation."""
-        return (
-            LLM_PAYLOAD_GENERATION_ENABLED
-            and self.llm.is_available()
-        )
+        return LLM_PAYLOAD_GENERATION_ENABLED and self.llm.is_available()
 
     def generate_sync(
         self,
@@ -196,18 +198,24 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             context_type = self._detect_reflection_context(param_name, response_snippet)
 
             # Build context fingerprint for caching
-            fingerprint = self._build_context_fingerprint(vuln_class, param_name, response_snippet)
+            fingerprint = self._build_context_fingerprint(
+                vuln_class, param_name, response_snippet
+            )
             cache_key = f"{vuln_class}:{fingerprint}"
 
             # Check cache
             cached = self.cache.get(cache_key)
             if cached is not None:
-                slog.info(f"Cache hit: {cache_key}")
-                logger.debug(f"LLM payload cache hit: {cache_key}")
-                slog.llm_complete("payload_generation", cached=True, payloads=len(cached[:self.max_payloads]))
-                return cached[:self.max_payloads]
+                slog.info("Cache hit: %s", cache_key)
+                logger.debug("LLM payload cache hit: %s", cache_key)
+                slog.llm_complete(
+                    "payload_generation",
+                    cached=True,
+                    payloads=len(cached[: self.max_payloads]),
+                )
+                return cached[: self.max_payloads]
 
-            slog.info(f"Cache miss: {cache_key}, generating payloads...")
+            slog.info("Cache miss: %s, generating payloads...", cache_key)
 
             # Generate callback marker for detection
             callback = f"LLM_{hashlib.md5(fingerprint.encode(), usedforsecurity=False).hexdigest()[:8]}"
@@ -223,7 +231,10 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             )
 
             messages = [
-                {"role": "system", "content": "You are a penetration testing payload generator. Return only valid JSON arrays."},
+                {
+                    "role": "system",
+                    "content": "You are a penetration testing payload generator. Return only valid JSON arrays.",
+                },
                 {"role": "user", "content": prompt_text},
             ]
 
@@ -235,7 +246,9 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
                 response_format={"type": "json_object"},
             )
 
-            response_text = raw_response.text if hasattr(raw_response, "text") else raw_response
+            response_text = (
+                raw_response.text if hasattr(raw_response, "text") else raw_response
+            )
 
             # Parse payloads
             payloads = self._parse_payloads(response_text)
@@ -246,15 +259,19 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             # Cache
             if payloads:
                 self.cache.set(cache_key, payloads)
-                slog.info(f"Generated {len(payloads)} payloads for {cache_key}")
-                logger.debug(f"Generated {len(payloads)} LLM payloads for {cache_key}")
+                slog.info("Generated %d payloads for %s", len(payloads), cache_key)
+                logger.debug(
+                    "Generated %d LLM payloads for %s", len(payloads), cache_key
+                )
 
-            slog.llm_complete("payload_generation", payloads=len(payloads[:self.max_payloads]))
-            return payloads[:self.max_payloads]
+            slog.llm_complete(
+                "payload_generation", payloads=len(payloads[: self.max_payloads])
+            )
+            return payloads[: self.max_payloads]
 
         except Exception as e:
-            slog.warn(f"LLM payload generation failed: {e}")
-            logger.warning(f"LLM payload generation failed: {e}")
+            slog.warn("LLM payload generation failed: %s", e)
+            logger.warning("LLM payload generation failed: %s", e)
             return []
 
     def _detect_reflection_context(
@@ -276,16 +293,18 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             for pattern in patterns:
                 try:
                     escaped_param = re.escape(param_name)
-                    compiled = re.compile(pattern.format(param_pattern=escaped_param), re.IGNORECASE)
+                    compiled = re.compile(
+                        pattern.format(param_pattern=escaped_param), re.IGNORECASE
+                    )
                     if compiled.search(response_snippet):
                         return context_type
                 except re.error:
                     continue
 
         # Check content type hints
-        if '"' in response_snippet[:100] and '{' in response_snippet[:100]:
+        if '"' in response_snippet[:100] and "{" in response_snippet[:100]:
             return "json_value"
-        if '<script' in response_snippet.lower():
+        if "<script" in response_snippet.lower():
             return "script"
 
         return "html_body"  # Default fallback
@@ -303,11 +322,11 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
         framework indicators, context type.
         """
         # Classify param name
-        if re.match(r'^[0-9]+$', param_name):
+        if re.match(r"^[0-9]+$", param_name):
             param_type = "numeric"
-        elif re.match(r'^[a-f0-9-]{36}$', param_name.lower()):
+        elif re.match(r"^[a-f0-9-]{36}$", param_name.lower()):
             param_type = "uuid"
-        elif re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', param_name):
+        elif re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", param_name):
             param_type = "word"
         else:
             param_type = "other"
@@ -326,7 +345,11 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
             framework = "spring"
         elif "express" in snippet_lower or "node" in snippet_lower:
             framework = "express"
-        elif "asp.net" in snippet_lower or "aspnet" in snippet_lower or "viewstate" in snippet_lower:
+        elif (
+            "asp.net" in snippet_lower
+            or "aspnet" in snippet_lower
+            or "viewstate" in snippet_lower
+        ):
             framework = "aspnet"
         elif "rails" in snippet_lower or "ruby" in snippet_lower:
             framework = "rails"
@@ -344,27 +367,36 @@ Return ONLY a JSON array of strings with exactly 3 payloads:
         # Try JSON parsing
         try:
             # Extract JSON array from markdown code blocks
-            json_match = re.search(r'```(?:json)?\s*\n?(\[[\s\S]*?\])\n?```', raw_text, re.DOTALL)
+            json_match = re.search(
+                r"```(?:json)?\s*\n?(\[[\s\S]*?\])\n?```", raw_text, re.DOTALL
+            )
             if json_match:
                 raw_text = json_match.group(1)
 
             # Also try extracting bare JSON array
-            array_match = re.search(r'\[[\s\S]*\]', raw_text)
+            array_match = re.search(r"\[[\s\S]*\]", raw_text)
             if array_match:
                 raw_text = array_match.group()
 
             payloads = json.loads(raw_text.strip())
             if isinstance(payloads, list):
                 # Filter to strings only, strip whitespace
-                return [str(p).strip() for p in payloads if isinstance(p, str) and p.strip()]
+                return [
+                    str(p).strip() for p in payloads if isinstance(p, str) and p.strip()
+                ]
         except (json.JSONDecodeError, ValueError, TypeError) as e:
-            logger.debug(f"Failed to parse payloads as JSON: {e}")
+            logger.debug("Failed to parse payloads as JSON: %s", e)
 
         # Fallback: line-by-line extraction
         lines = []
-        for line in raw_text.split('\n'):
-            line = line.strip().strip('"').strip("'").strip(',')
-            if line and not line.startswith('[') and not line.startswith(']') and not line.startswith('```'):
+        for line in raw_text.split("\n"):
+            line = line.strip().strip('"').strip("'").strip(",")
+            if (
+                line
+                and not line.startswith("[")
+                and not line.startswith("]")
+                and not line.startswith("```")
+            ):
                 lines.append(line)
 
         return lines[:5]  # Max 5 fallback payloads

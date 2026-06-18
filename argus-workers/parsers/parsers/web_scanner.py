@@ -95,7 +95,9 @@ class WebScannerParser(BaseParser):
             "type": finding_type.upper().replace(" ", "_"),
             "severity": severity,
             "endpoint": endpoint,
-            "evidence": evidence if isinstance(evidence, dict) else {"raw": str(evidence)},
+            "evidence": evidence
+            if isinstance(evidence, dict)
+            else {"raw": str(evidence)},
             "confidence": confidence,
             "tool": "web_scanner",
         }

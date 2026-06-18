@@ -1,6 +1,7 @@
 """
 Tests for AttackGraphRepository persistence layer
 """
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -43,19 +44,23 @@ class TestAttackGraphRepository:
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.fetchall.return_value = []
 
-        with patch.object(self.repo, '_get_connection', return_value=mock_conn):
+        with patch.object(self.repo, "_get_connection", return_value=mock_conn):
             saved = self.repo.save_paths("eng-123", self.graph)
 
         # Verify DELETE — occurs after the SELECT for chain_exploit_script preservation
         delete_calls = [
-            call for call in mock_cursor.execute.call_args_list
+            call
+            for call in mock_cursor.execute.call_args_list
             if "DELETE FROM attack_paths" in call[0][0]
         ]
-        assert len(delete_calls) >= 1, "Expected at least one DELETE FROM attack_paths call"
+        assert len(delete_calls) >= 1, (
+            "Expected at least one DELETE FROM attack_paths call"
+        )
 
         # Verify INSERT calls
         insert_calls = [
-            call for call in mock_cursor.execute.call_args_list
+            call
+            for call in mock_cursor.execute.call_args_list
             if "INSERT INTO attack_paths" in call[0][0]
         ]
         assert len(insert_calls) >= 1
@@ -72,7 +77,7 @@ class TestAttackGraphRepository:
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.fetchall.return_value = []
 
-        with patch.object(self.repo, '_get_connection', return_value=mock_conn):
+        with patch.object(self.repo, "_get_connection", return_value=mock_conn):
             saved = self.repo.save_paths("eng-456", empty_graph)
 
         assert saved == 0
@@ -84,7 +89,7 @@ class TestAttackGraphRepository:
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.execute.side_effect = Exception("DB error")
 
-        with patch.object(self.repo, '_get_connection', return_value=mock_conn):
+        with patch.object(self.repo, "_get_connection", return_value=mock_conn):
             with pytest.raises(Exception):
                 self.repo.save_paths("eng-123", self.graph)
 
@@ -98,45 +103,48 @@ class TestAttackGraphRepository:
 
         # Simulate DB rows
         mock_cursor.fetchall.return_value = [
-            ({
-                "nodes": [
-                    {
-                        "id": "vuln_SQL_INJECTION_https://example.com/api",
-                        "type": "vulnerability",
-                        "data": {
-                            "type": "SQL_INJECTION",
-                            "severity": "HIGH",
-                            "endpoint": "https://example.com/api",
-                            "source_tool": "nuclei",
+            (
+                {
+                    "nodes": [
+                        {
+                            "id": "vuln_SQL_INJECTION_https://example.com/api",
+                            "type": "vulnerability",
+                            "data": {
+                                "type": "SQL_INJECTION",
+                                "severity": "HIGH",
+                                "endpoint": "https://example.com/api",
+                                "source_tool": "nuclei",
+                            },
+                            "cvss": 7.5,
+                            "confidence": 0.8,
+                            "prerequisites": ["parametrized_query_bypassed"],
+                            "downstream_impacts": ["data_exfiltration", "auth_bypass"],
                         },
-                        "cvss": 7.5,
-                        "confidence": 0.8,
-                        "prerequisites": ["parametrized_query_bypassed"],
-                        "downstream_impacts": ["data_exfiltration", "auth_bypass"],
-                    },
-                    {
-                        "id": "endpoint_https://example.com/api",
-                        "type": "endpoint",
-                        "data": {"url": "https://example.com/api"},
-                        "cvss": None,
-                        "confidence": None,
-                        "prerequisites": [],
-                        "downstream_impacts": [],
-                    },
-                ],
-                "edges": [
-                    {
-                        "from_node": "vuln_SQL_INJECTION_https://example.com/api",
-                        "to_node": "endpoint_https://example.com/api",
-                        "type": "independent",
-                        "correlation_factor": 1.0,
-                        "relationship_type": "enables",
-                    },
-                ],
-            }, 7.5),
+                        {
+                            "id": "endpoint_https://example.com/api",
+                            "type": "endpoint",
+                            "data": {"url": "https://example.com/api"},
+                            "cvss": None,
+                            "confidence": None,
+                            "prerequisites": [],
+                            "downstream_impacts": [],
+                        },
+                    ],
+                    "edges": [
+                        {
+                            "from_node": "vuln_SQL_INJECTION_https://example.com/api",
+                            "to_node": "endpoint_https://example.com/api",
+                            "type": "independent",
+                            "correlation_factor": 1.0,
+                            "relationship_type": "enables",
+                        },
+                    ],
+                },
+                7.5,
+            ),
         ]
 
-        with patch.object(self.repo, '_get_connection', return_value=mock_conn):
+        with patch.object(self.repo, "_get_connection", return_value=mock_conn):
             loaded = self.repo.load_graph("eng-123")
 
         assert loaded is not None
@@ -162,7 +170,7 @@ class TestAttackGraphRepository:
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.fetchall.return_value = []
 
-        with patch.object(self.repo, '_get_connection', return_value=mock_conn):
+        with patch.object(self.repo, "_get_connection", return_value=mock_conn):
             loaded = self.repo.load_graph("eng-missing")
 
         assert loaded is None
@@ -174,7 +182,7 @@ class TestAttackGraphRepository:
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.fetchall.side_effect = Exception("DB error")
 
-        with patch.object(self.repo, '_get_connection', return_value=mock_conn):
+        with patch.object(self.repo, "_get_connection", return_value=mock_conn):
             loaded = self.repo.load_graph("eng-123")
 
         assert loaded is None
@@ -186,7 +194,7 @@ class TestAttackGraphRepository:
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.rowcount = 3
 
-        with patch.object(self.repo, '_get_connection', return_value=mock_conn):
+        with patch.object(self.repo, "_get_connection", return_value=mock_conn):
             result = self.repo.delete_for_engagement("eng-123")
 
         assert result is True
@@ -201,7 +209,7 @@ class TestAttackGraphRepository:
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.rowcount = 0
 
-        with patch.object(self.repo, '_get_connection', return_value=mock_conn):
+        with patch.object(self.repo, "_get_connection", return_value=mock_conn):
             result = self.repo.delete_for_engagement("eng-123")
 
         assert result is False
@@ -213,7 +221,7 @@ class TestAttackGraphRepository:
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.execute.side_effect = Exception("DB error")
 
-        with patch.object(self.repo, '_get_connection', return_value=mock_conn):
+        with patch.object(self.repo, "_get_connection", return_value=mock_conn):
             result = self.repo.delete_for_engagement("eng-123")
 
         assert result is False
@@ -225,7 +233,7 @@ class TestAttackGraphRepository:
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.fetchone.return_value = [5]
 
-        with patch.object(self.repo, '_get_connection', return_value=mock_conn):
+        with patch.object(self.repo, "_get_connection", return_value=mock_conn):
             count = self.repo.count_paths("eng-123")
 
         assert count == 5
@@ -237,7 +245,7 @@ class TestAttackGraphRepository:
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.execute.side_effect = Exception("DB error")
 
-        with patch.object(self.repo, '_get_connection', return_value=mock_conn):
+        with patch.object(self.repo, "_get_connection", return_value=mock_conn):
             count = self.repo.count_paths("eng-123")
 
         assert count == 0

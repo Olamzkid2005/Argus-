@@ -44,7 +44,11 @@ class SecretsManager:
 
                 # Warn if using HTTP without skip_verify
                 if vault_addr.startswith("http://"):
-                    skip_verify = os.getenv("VAULT_SKIP_VERIFY", "").lower() in ("true", "1", "yes")
+                    skip_verify = os.getenv("VAULT_SKIP_VERIFY", "").lower() in (
+                        "true",
+                        "1",
+                        "yes",
+                    )
                     if not skip_verify:
                         logger.warning(
                             "Vault URL uses HTTP (not HTTPS): %s. "
@@ -53,7 +57,11 @@ class SecretsManager:
                             vault_addr,
                         )
 
-                verify = os.getenv("VAULT_SKIP_VERIFY", "").lower() not in ("true", "1", "yes")
+                verify = os.getenv("VAULT_SKIP_VERIFY", "").lower() not in (
+                    "true",
+                    "1",
+                    "yes",
+                )
 
                 self._vault_client = hvac.Client(
                     url=vault_addr,
@@ -69,9 +77,9 @@ class SecretsManager:
         if self._aws_client is None:
             try:
                 import boto3
+
                 self._aws_client = boto3.client(
-                    "secretsmanager",
-                    region_name=os.getenv("AWS_REGION", "us-east-1")
+                    "secretsmanager", region_name=os.getenv("AWS_REGION", "us-east-1")
                 )
             except ImportError:
                 logger.warning("boto3 not installed, AWS Secrets Manager unavailable")
@@ -98,7 +106,8 @@ class SecretsManager:
             try:
                 path = os.getenv("VAULT_SECRET_PATH", "secret/argus")
                 import re
-                safe_key = re.sub(r'[^a-zA-Z0-9_\-]', '', key)
+
+                safe_key = re.sub(r"[^a-zA-Z0-9_\-]", "", key)
                 response = vault.secrets.kv.v2.read_secret_version(
                     path=f"{path}/{safe_key}"
                 )
@@ -118,6 +127,7 @@ class SecretsManager:
                     value = response["SecretString"]
                 elif "SecretBinary" in response:
                     import base64
+
                     value = base64.b64decode(response["SecretBinary"]).decode()
                 else:
                     value = default
@@ -136,15 +146,13 @@ class SecretsManager:
     def get_database_url(self) -> str:
         """Get database URL from secrets or env"""
         return self.get_secret(
-            "DATABASE_URL",
-            os.getenv("DATABASE_URL", "postgresql://localhost/argus")
+            "DATABASE_URL", os.getenv("DATABASE_URL", "postgresql://localhost/argus")
         )
 
     def get_redis_url(self) -> str:
         """Get Redis URL from secrets or env"""
         return self.get_secret(
-            "REDIS_URL",
-            os.getenv("REDIS_URL", "redis://localhost:6379")
+            "REDIS_URL", os.getenv("REDIS_URL", "redis://localhost:6379")
         )
 
     def get_api_key(self, service: str) -> str | None:

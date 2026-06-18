@@ -9,6 +9,7 @@ And text lines with indicators:
     [WARNING] Some security issue
     [-] Nothing here (ignored)
 """
+
 import hashlib
 import json
 import logging

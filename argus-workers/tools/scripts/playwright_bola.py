@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """BOLA detection via Playwright. Called as a subprocess by MCP server."""
+
 import argparse
 import json
 
@@ -12,11 +13,15 @@ def _check_auth_success(page, target: str) -> bool:
     return "/login" not in current.lower()
 
 
-def check_bola(target: str, attacker: dict, victim: dict,
-               resource_pattern: str = "/api/users/{username}/details",
-               username_selector: str = "input[name=username]",
-               password_selector: str = "input[name=password]",
-               submit_selector: str = "button[type=submit]") -> list[dict]:
+def check_bola(
+    target: str,
+    attacker: dict,
+    victim: dict,
+    resource_pattern: str = "/api/users/{username}/details",
+    username_selector: str = "input[name=username]",
+    password_selector: str = "input[name=password]",
+    submit_selector: str = "button[type=submit]",
+) -> list[dict]:
     findings = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -41,14 +46,23 @@ def check_bola(target: str, attacker: dict, victim: dict,
                 body = response.json()
             except Exception:
                 body = response.text()
-            findings.append({
-                "title": "BOLA: Unauthorized Access to Victim Resource",
-                "severity": 4,
-                "confidence": 5,
-                "description": f"Attacker accessed {victim['username']}'s details without authorization",
-                "tool": "playwright-bola",
-                "evidence": [{"type": "http", "content": json.dumps(body, indent=2) if isinstance(body, dict) else body}],
-            })
+            findings.append(
+                {
+                    "title": "BOLA: Unauthorized Access to Victim Resource",
+                    "severity": 4,
+                    "confidence": 5,
+                    "description": f"Attacker accessed {victim['username']}'s details without authorization",
+                    "tool": "playwright-bola",
+                    "evidence": [
+                        {
+                            "type": "http",
+                            "content": json.dumps(body, indent=2)
+                            if isinstance(body, dict)
+                            else body,
+                        }
+                    ],
+                }
+            )
 
         browser.close()
     return findings
@@ -57,16 +71,31 @@ def check_bola(target: str, attacker: dict, victim: dict,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True)
-    parser.add_argument("--creds-file", required=True,
-                        help="Path to JSON file with attacker/victim credentials")
-    parser.add_argument("--resource-pattern", default="/api/users/{username}/details",
-                        help="URL pattern for victim resource (use {username} placeholder)")
-    parser.add_argument("--username-selector", default="input[name=username]",
-                        help="CSS selector for username field")
-    parser.add_argument("--password-selector", default="input[name=password]",
-                        help="CSS selector for password field")
-    parser.add_argument("--submit-selector", default="button[type=submit]",
-                        help="CSS selector for submit button")
+    parser.add_argument(
+        "--creds-file",
+        required=True,
+        help="Path to JSON file with attacker/victim credentials",
+    )
+    parser.add_argument(
+        "--resource-pattern",
+        default="/api/users/{username}/details",
+        help="URL pattern for victim resource (use {username} placeholder)",
+    )
+    parser.add_argument(
+        "--username-selector",
+        default="input[name=username]",
+        help="CSS selector for username field",
+    )
+    parser.add_argument(
+        "--password-selector",
+        default="input[name=password]",
+        help="CSS selector for password field",
+    )
+    parser.add_argument(
+        "--submit-selector",
+        default="button[type=submit]",
+        help="CSS selector for submit button",
+    )
     args = parser.parse_args()
 
     with open(args.creds_file) as f:
@@ -85,9 +114,13 @@ if __name__ == "__main__":
         print(json.dumps(f))
 
     if not findings:
-        print(json.dumps({
-            "title": "No BOLA vulnerability detected",
-            "severity": 0,
-            "confidence": 5,
-            "tool": "playwright-bola",
-        }))
+        print(
+            json.dumps(
+                {
+                    "title": "No BOLA vulnerability detected",
+                    "severity": 0,
+                    "confidence": 5,
+                    "tool": "playwright-bola",
+                }
+            )
+        )

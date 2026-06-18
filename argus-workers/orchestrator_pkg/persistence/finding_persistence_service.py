@@ -45,7 +45,9 @@ class FindingPersistenceService:
         self.engagement_id = engagement_id
         self.finding_repo = finding_repo
         self.bug_bounty_mode = bug_bounty_mode
-        self._classify_finding_type = classify_finding_type_fn or (lambda _: {"owasp": "N/A", "cwe": "N/A"})
+        self._classify_finding_type = classify_finding_type_fn or (
+            lambda _: {"owasp": "N/A", "cwe": "N/A"}
+        )
         self._get_org_id = get_org_id_fn or (lambda: None)
 
     # ------------------------------------------------------------------
@@ -87,6 +89,7 @@ class FindingPersistenceService:
 
         failed_count = 0
         from streaming import StreamingFindingEmitter
+
         _finding_emitter = StreamingFindingEmitter(self.engagement_id)
 
         # Phase 2 — update compliance posture (reads ALL engagement findings)
@@ -94,7 +97,8 @@ class FindingPersistenceService:
 
         # Phase 3 — batch-save non-secret findings
         failed_count += self._batch_save_non_secret(
-            non_secret, _finding_emitter,
+            non_secret,
+            _finding_emitter,
         )
 
         # Phase 4 — upsert secret findings individually
@@ -105,9 +109,10 @@ class FindingPersistenceService:
 
         if failed_count > 0:
             logger.error(
-                "_save_findings: %d of %d findings failed to save for "
-                "engagement %s",
-                failed_count, len(findings), self.engagement_id,
+                "_save_findings: %d of %d findings failed to save for engagement %s",
+                failed_count,
+                len(findings),
+                self.engagement_id,
             )
         return failed_count
 
@@ -148,6 +153,7 @@ class FindingPersistenceService:
         """Initialise the embedding service for this engagement."""
         try:
             from database.services.embedding_service import EmbeddingService
+
             EmbeddingService(self.engagement_id)
         except Exception:
             logger.debug("EmbeddingService init skipped (non-fatal)")
@@ -172,6 +178,7 @@ class FindingPersistenceService:
             if finding.get("cvss_score") is None:
                 try:
                     from cvss_calculator import estimate_cvss
+
                     finding["cvss_score"] = estimate_cvss(
                         finding_type=finding.get("type", ""),
                         severity=finding.get("severity", "MEDIUM"),
@@ -202,12 +209,14 @@ class FindingPersistenceService:
     ) -> tuple[list[dict], list[dict]]:
         """Separate findings into secret (individual upsert) and non-secret (batch)."""
         non_secret = [
-            f for f in findings
+            f
+            for f in findings
             if f.get("source_tool") not in self.SECRET_TOOLS
             and not f.get("type", "").startswith("COMMITTED_SECRET")
         ]
         secret = [
-            f for f in findings
+            f
+            for f in findings
             if f.get("source_tool") in self.SECRET_TOOLS
             or f.get("type", "").startswith("COMMITTED_SECRET")
         ]
@@ -220,7 +229,8 @@ class FindingPersistenceService:
 
             posture_scorer = CompliancePostureScorer(self.engagement_id)
             all_db_findings, _ = self.finding_repo.get_findings_by_engagement(
-                self.engagement_id, limit=100000,
+                self.engagement_id,
+                limit=100000,
             )
             finding_dicts = []
             for f in all_db_findings:
@@ -229,17 +239,26 @@ class FindingPersistenceService:
                 elif isinstance(f, dict):
                     finding_dicts.append(f)
                 elif isinstance(f, (list, tuple)):
-                    finding_dicts.append(dict(
-                        zip(["id", "type", "severity", "endpoint"], f[:4], strict=False),
-                    ))
+                    finding_dicts.append(
+                        dict(
+                            zip(
+                                ["id", "type", "severity", "endpoint"],
+                                f[:4],
+                                strict=False,
+                            ),
+                        )
+                    )
             if finding_dicts:
                 org_id = self._get_org_id()
                 snapshot = posture_scorer.compute_and_save(
-                    finding_dicts, org_id=org_id,
+                    finding_dicts,
+                    org_id=org_id,
                 )
                 logger.info(
                     "Compliance posture updated for %s: composite=%s, trend=%s",
-                    self.engagement_id, snapshot.composite_score, snapshot.trend,
+                    self.engagement_id,
+                    snapshot.composite_score,
+                    snapshot.trend,
                 )
         except Exception as posture_err:
             logger.warning(
@@ -263,12 +282,16 @@ class FindingPersistenceService:
 
         try:
             inserted, updated = self.finding_repo.batch_create_or_update_findings(
-                self.engagement_id, non_secret,
+                self.engagement_id,
+                non_secret,
             )
             logger.info(
                 "_save_findings: batch saved %d (inserted=%d, updated=%d) "
                 "findings for %s",
-                inserted + updated, inserted, updated, self.engagement_id,
+                inserted + updated,
+                inserted,
+                updated,
+                self.engagement_id,
             )
             for f in non_secret:
                 if f.get("_saved_id"):
@@ -287,9 +310,10 @@ class FindingPersistenceService:
             )
             return len(non_secret)
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "_save_findings: batch save failed for %s: %s",
-                self.engagement_id, e, exc_info=True,
+                self.engagement_id,
+                e,
             )
             return len(non_secret)
 
@@ -336,13 +360,19 @@ class FindingPersistenceService:
     def save_poc(self, finding_id: str, poc_data: dict) -> bool:
         """Save PoC data to findings.poc_generated column."""
         return self._update_finding_jsonb(
-            finding_id, "poc_generated", poc_data, log_label="PoC",
+            finding_id,
+            "poc_generated",
+            poc_data,
+            log_label="PoC",
         )
 
     def save_remediation(self, finding_id: str, fix_data: dict) -> bool:
         """Save remediation fix to findings.remediation_fix column."""
         return self._update_finding_jsonb(
-            finding_id, "remediation_fix", fix_data, log_label="remediation fix",
+            finding_id,
+            "remediation_fix",
+            fix_data,
+            log_label="remediation fix",
         )
 
     def _update_finding_jsonb(
@@ -370,7 +400,9 @@ class FindingPersistenceService:
         try:
             with db_cursor() as cursor:
                 cursor.execute(
-                    SQL("UPDATE findings SET {col} = %s::jsonb, {col_at} = NOW() WHERE id = %s").format(
+                    SQL(
+                        "UPDATE findings SET {col} = %s::jsonb, {col_at} = NOW() WHERE id = %s"
+                    ).format(
                         col=Identifier(column),
                         col_at=Identifier(f"{column}_at"),
                     ),
@@ -380,26 +412,35 @@ class FindingPersistenceService:
         except Exception as e:
             logger.warning(
                 "Failed to save %s for finding %s: %s",
-                log_label, finding_id, e,
+                log_label,
+                finding_id,
+                e,
             )
             return False
 
     def _fire_webhooks(self, findings_to_save: list[dict]) -> None:
         """Fire webhooks for HIGH / CRITICAL findings."""
         for f in findings_to_save:
-            if f.get("_saved_id") and f.get("severity", "").upper() in ("CRITICAL", "HIGH"):
+            if f.get("_saved_id") and f.get("severity", "").upper() in (
+                "CRITICAL",
+                "HIGH",
+            ):
                 try:
                     from post_finding_hooks import fire_finding_webhooks
-                    fire_finding_webhooks({
-                        "id": f["_saved_id"],
-                        "engagement_id": self.engagement_id,
-                        "type": f.get("type"),
-                        "severity": f.get("severity"),
-                        "endpoint": f.get("endpoint"),
-                        "source_tool": f.get("source_tool", ""),
-                        "confidence": f.get("confidence", 0),
-                    })
+
+                    fire_finding_webhooks(
+                        {
+                            "id": f["_saved_id"],
+                            "engagement_id": self.engagement_id,
+                            "type": f.get("type"),
+                            "severity": f.get("severity"),
+                            "endpoint": f.get("endpoint"),
+                            "source_tool": f.get("source_tool", ""),
+                            "confidence": f.get("confidence", 0),
+                        }
+                    )
                 except Exception as hook_err:
                     logger.warning(
-                        "Webhook dispatch failed (non-fatal): %s", hook_err,
+                        "Webhook dispatch failed (non-fatal): %s",
+                        hook_err,
                     )

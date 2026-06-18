@@ -50,13 +50,16 @@ class SnapshotService:
         findings: list[dict] = []
         if self.finding_repo:
             try:
-
                 raw_findings, _ = self.finding_repo.get_findings_by_engagement(
-                    self.engagement_id, limit=100000,
+                    self.engagement_id,
+                    limit=100000,
                 )
                 findings = [
-                    f.to_dict() if hasattr(f, "to_dict") else dict(f)
-                    if isinstance(f, dict) else f
+                    f.to_dict()
+                    if hasattr(f, "to_dict")
+                    else dict(f)
+                    if isinstance(f, dict)
+                    else f
                     for f in raw_findings
                 ]
             except Exception as e:
@@ -89,14 +92,17 @@ class SnapshotService:
                 )
                 row = cursor.fetchone()
                 if row:
-                    budget_mgr.load_from_db({
-                        "current_cycles": row[0],
-                        "current_depth": row[1],
-                        "current_llm_reviews": row[2] or 0,
-                    })
+                    budget_mgr.load_from_db(
+                        {
+                            "current_cycles": row[0],
+                            "current_depth": row[1],
+                            "current_llm_reviews": row[2] or 0,
+                        }
+                    )
         except Exception:
             logger.debug(
-                "Could not load loop budget from DB for %s", self.engagement_id,
+                "Could not load loop budget from DB for %s",
+                self.engagement_id,
             )
 
         # ── Populate snapshot ──
@@ -111,7 +117,9 @@ class SnapshotService:
             snapshot["priority_vuln_classes"] = priority_classes
             logger.info(
                 "Loaded %d priority vuln classes for engagement %s: %s",
-                len(priority_classes), self.engagement_id, priority_classes,
+                len(priority_classes),
+                self.engagement_id,
+                priority_classes,
             )
 
         # Pass EngagementState reference for AttackGraph integration

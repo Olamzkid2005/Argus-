@@ -18,6 +18,7 @@ def score_path(path: list[str], findings: list[dict]) -> float:
         for f in findings:
             endpoint = f.get("endpoint", "")
             from urllib.parse import urlparse
+
             try:
                 host = urlparse(endpoint).hostname or endpoint
             except Exception:
@@ -40,11 +41,13 @@ def rank_paths(
     scored = []
     for path in paths:
         s = score_path(path, findings)
-        scored.append({
-            "path": path,
-            "score": s,
-            "steps": len(path),
-        })
+        scored.append(
+            {
+                "path": path,
+                "score": s,
+                "steps": len(path),
+            }
+        )
 
     scored.sort(key=lambda x: x["score"], reverse=True)
     return scored

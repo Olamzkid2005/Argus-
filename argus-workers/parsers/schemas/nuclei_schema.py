@@ -1,4 +1,5 @@
 """Pydantic schema for nuclei parser output validation."""
+
 import logging
 from typing import Any
 
@@ -8,7 +9,15 @@ logger = logging.getLogger(__name__)
 # If pydantic is available, it can be swapped in later.
 
 NUCLEI_REQUIRED_FIELDS = {"template-id", "matched-at", "info"}
-NUCLEI_OPTIONAL_FIELDS = {"matcher-name", "extracted-results", "curl-command", "timestamp", "type", "host", "ip"}
+NUCLEI_OPTIONAL_FIELDS = {
+    "matcher-name",
+    "extracted-results",
+    "curl-command",
+    "timestamp",
+    "type",
+    "host",
+    "ip",
+}
 
 
 def validate_nuclei_finding(data: dict[str, Any]) -> dict[str, Any] | None:
@@ -24,7 +33,9 @@ def validate_nuclei_finding(data: dict[str, Any]) -> dict[str, Any] | None:
 
     # Check required top-level fields
     if not data.get("template-id") or not data.get("matched-at"):
-        logger.warning("Nuclei finding missing required fields: template-id or matched-at")
+        logger.warning(
+            "Nuclei finding missing required fields: template-id or matched-at"
+        )
         return None
 
     info = data.get("info")
@@ -40,7 +51,7 @@ def validate_nuclei_finding(data: dict[str, Any]) -> dict[str, Any] | None:
     severity = (info.get("severity") or "info").upper()
     valid_severities = {"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL", "UNKNOWN"}
     if severity not in valid_severities:
-        logger.warning(f"Invalid severity '{severity}', defaulting to INFO")
+        logger.warning("Invalid severity '%s', defaulting to INFO", severity)
         severity = "INFO"
 
     # Build validated output

@@ -1,6 +1,7 @@
 """
 Login tool — wraps agent/tools/login_tool.py as an AbstractTool.
 """
+
 from __future__ import annotations
 
 import logging

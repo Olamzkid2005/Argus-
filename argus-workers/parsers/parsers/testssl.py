@@ -6,6 +6,7 @@ testssl.sh --jsonfile outputs one JSON object per line (NDJSON):
 testssl.sh --json outputs a JSON array:
     [{"host":"example.com","port":443,"severity":"HIGH","id":"SSL_TEST","finding":"..."}]
 """
+
 import json
 import logging
 

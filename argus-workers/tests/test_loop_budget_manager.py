@@ -1,6 +1,7 @@
 """
 Tests for Loop Budget Manager
 """
+
 from loop_budget_manager import LoopBudgetManager
 
 

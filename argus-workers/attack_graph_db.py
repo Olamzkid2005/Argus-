@@ -52,7 +52,7 @@ class AttackGraphRepository:
                 try:
                     conn.close()
                 except Exception:
-                    logger.debug("Failed to close connection", exc_info=True)
+                    logger.debug("Failed to close connection")
 
     def save_paths(self, engagement_id: str, graph: AttackGraph) -> int:
         """
@@ -70,6 +70,7 @@ class AttackGraphRepository:
             Number of paths saved
         """
         from attack_graph import AttackGraph as AG
+
         graph: AG = graph  # type hint for IDE
 
         conn = None
@@ -93,12 +94,17 @@ class AttackGraphRepository:
                 if script:
                     # Build a fingerprint from the path node types to match across re-saves
                     try:
-                        old_nodes = json.loads(old_path_nodes_json) if isinstance(old_path_nodes_json, str) else old_path_nodes_json
+                        old_nodes = (
+                            json.loads(old_path_nodes_json)
+                            if isinstance(old_path_nodes_json, str)
+                            else old_path_nodes_json
+                        )
                         # Use finding type from node.data (e.g. "XSS", "SQL_INJECTION")
                         # not the generic node.type field ("vulnerability"/"endpoint")
                         # to prevent chain scripts from being restored to wrong paths.
                         node_types = tuple(
-                            n.get("data", {}).get("type", "") for n in (old_nodes.get("nodes") or [])
+                            n.get("data", {}).get("type", "")
+                            for n in (old_nodes.get("nodes") or [])
                         )
                         existing_scripts[str(node_types)] = script
                     except (json.JSONDecodeError, AttributeError):
@@ -126,7 +132,9 @@ class AttackGraphRepository:
                             "cvss": node.cvss,
                             "confidence": node.confidence,
                             "prerequisites": list(getattr(node, "prerequisites", [])),
-                            "downstream_impacts": list(getattr(node, "downstream_impacts", [])),
+                            "downstream_impacts": list(
+                                getattr(node, "downstream_impacts", [])
+                            ),
                         }
                         for node in path.nodes
                     ],
@@ -136,7 +144,9 @@ class AttackGraphRepository:
                             "to_node": edge.to_node,
                             "type": edge.type,
                             "correlation_factor": edge.correlation_factor,
-                            "relationship_type": str(getattr(edge, "relationship_type", "independent")),
+                            "relationship_type": str(
+                                getattr(edge, "relationship_type", "independent")
+                            ),
                         }
                         for edge in path.edges
                     ],
@@ -146,7 +156,9 @@ class AttackGraphRepository:
 
                 # Re-associate any previously-saved chain_exploit_script
                 # Use finding type for matching (same fingerprint as above)
-                node_types = tuple(n.get("data", {}).get("type", "") for n in path_nodes["nodes"])
+                node_types = tuple(
+                    n.get("data", {}).get("type", "") for n in path_nodes["nodes"]
+                )
                 chain_script = existing_scripts.get(str(node_types))
 
                 if chain_script:
@@ -185,7 +197,9 @@ class AttackGraphRepository:
             conn.commit()
             logger.info(
                 "Saved %d attack paths (with %d preserved chain scripts) for engagement %s",
-                saved_count, len(existing_scripts), engagement_id,
+                saved_count,
+                len(existing_scripts),
+                engagement_id,
             )
             return saved_count
 
@@ -194,10 +208,15 @@ class AttackGraphRepository:
                 try:
                     conn.rollback()
                 except Exception as rb_e:
-                    logger.debug("Rollback failed after save error for %s: %s", engagement_id, rb_e)
-            logger.error(
+                    logger.debug(
+                        "Rollback failed after save error for %s: %s",
+                        engagement_id,
+                        rb_e,
+                    )
+            logger.exception(
                 "Failed to save attack paths for engagement %s: %s",
-                engagement_id, e, exc_info=True,
+                engagement_id,
+                e,
             )
             raise
         finally:
@@ -273,6 +292,7 @@ class AttackGraphRepository:
                     )
                     if edge_key not in existing_edges:
                         from attack_graph import RelationshipType
+
                         rel_type_str = edge_data.get("relationship_type", "independent")
                         try:
                             rel_type = RelationshipType(rel_type_str)
@@ -291,14 +311,17 @@ class AttackGraphRepository:
 
             logger.info(
                 "Loaded attack graph for engagement %s: %d nodes, %d edges",
-                engagement_id, len(graph.nodes), len(graph.edges),
+                engagement_id,
+                len(graph.nodes),
+                len(graph.edges),
             )
             return graph
 
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "Failed to load attack graph for engagement %s: %s",
-                engagement_id, e, exc_info=True,
+                engagement_id,
+                e,
             )
             return None
         finally:
@@ -339,10 +362,15 @@ class AttackGraphRepository:
                 try:
                     conn.rollback()
                 except Exception as rb_e:
-                    logger.debug("Rollback failed after delete error for %s: %s", engagement_id, rb_e)
+                    logger.debug(
+                        "Rollback failed after delete error for %s: %s",
+                        engagement_id,
+                        rb_e,
+                    )
             logger.error(
                 "Failed to delete attack paths for engagement %s: %s",
-                engagement_id, e,
+                engagement_id,
+                e,
             )
             return False
         finally:
@@ -374,7 +402,8 @@ class AttackGraphRepository:
         except Exception as e:
             logger.error(
                 "Failed to count attack paths for engagement %s: %s",
-                engagement_id, e,
+                engagement_id,
+                e,
             )
             return 0
         finally:

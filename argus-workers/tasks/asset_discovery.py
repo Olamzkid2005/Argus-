@@ -70,6 +70,7 @@ def run_asset_discovery(
             # Use urlparse to safely extract netloc, handling URLs with
             # embedded credentials (user:pass@host), ports, etc.
             from urllib.parse import urlparse
+
             parsed = urlparse(target)
             domain = parsed.netloc or parsed.path.split("/")[0]
             cursor.execute(

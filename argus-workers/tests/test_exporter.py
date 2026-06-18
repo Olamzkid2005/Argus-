@@ -59,6 +59,7 @@ class TestGenerateFilename:
     def test_date_included(self):
         """Filename includes the current date."""
         import datetime
+
         today = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d")
         name = _generate_filename("html", target_slug="test")
         assert today in name
@@ -118,7 +119,9 @@ class TestSaveReport:
     def test_auto_generated_filename(self, tmp_path):
         """Without explicit path, generates filename from target_slug."""
         content = "<html>Report</html>"
-        result = save_report(content, fmt="html", target_slug="example.com", report_dir=tmp_path)
+        result = save_report(
+            content, fmt="html", target_slug="example.com", report_dir=tmp_path
+        )
         # Should have auto-generated name with target slug
         assert "example" in result.path
         assert result.path.endswith(".html")
@@ -151,7 +154,9 @@ class TestSaveReport:
         """open_browser=True opens HTML in browser."""
         content = "<html></html>"
         with patch("reporting.exporter._open_in_browser") as mock_open:
-            result = save_report(content, "browser.html", report_dir=tmp_path, open_browser=True)
+            result = save_report(
+                content, "browser.html", report_dir=tmp_path, open_browser=True
+            )
             mock_open.assert_called_once()
             assert result.opened is True
 
@@ -159,7 +164,13 @@ class TestSaveReport:
         """open_browser=True for non-HTML raises ValueError."""
         content = "# Markdown"
         with pytest.raises(ValueError, match="open_browser is only supported for HTML"):
-            save_report(content, "test.md", fmt="markdown", report_dir=tmp_path, open_browser=True)
+            save_report(
+                content,
+                "test.md",
+                fmt="markdown",
+                report_dir=tmp_path,
+                open_browser=True,
+            )
 
     def test_io_error_writes_exception(self, tmp_path):
         """Permission error or disk full raises IOError."""
@@ -187,7 +198,9 @@ class TestOpenInBrowser:
 
     def test_export_result_string(self):
         """ExportResult repr includes all fields."""
-        result = ExportResult(path="/tmp/report.html", fmt="html", size_bytes=1024, opened=True)
+        result = ExportResult(
+            path="/tmp/report.html", fmt="html", size_bytes=1024, opened=True
+        )
         r = repr(result)
         assert "report.html" in r
         assert "html" in r

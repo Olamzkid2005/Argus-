@@ -4,6 +4,7 @@ Parser for Nikto output. Handles both JSON and CSV formats.
 Nikto is invoked with -Format csv during recon, but the parser
 tries JSON first (for future compatibility) then falls back to CSV.
 """
+
 import csv
 import io
 import json
@@ -39,18 +40,20 @@ class NiktoParser(BaseParser):
                 severity = "HIGH"
             elif any(kw in msg.lower() for kw in ["info", "note"]):
                 severity = "INFO"
-            findings.append({
-                "type": "WEB_SERVER_VULNERABILITY",
-                "severity": severity,
-                "endpoint": url,
-                "evidence": {
-                    "message": msg,
-                    "osvdb": osvdb,
-                    "nikto_item": item,
-                },
-                "confidence": 0.70,
-                "tool": "nikto",
-            })
+            findings.append(
+                {
+                    "type": "WEB_SERVER_VULNERABILITY",
+                    "severity": severity,
+                    "endpoint": url,
+                    "evidence": {
+                        "message": msg,
+                        "osvdb": osvdb,
+                        "nikto_item": item,
+                    },
+                    "confidence": 0.70,
+                    "tool": "nikto",
+                }
+            )
         return findings
 
     def _parse_csv(self, raw_output: str) -> list[dict]:
@@ -70,19 +73,21 @@ class NiktoParser(BaseParser):
             url = row[4].strip() if len(row) > 4 else ""
             description = row[5].strip() if len(row) > 5 else ""
             endpoint = f"{hostname}:{port}" if port else hostname
-            findings.append({
-                "type": "WEB_SERVER_VULNERABILITY",
-                "severity": "MEDIUM",
-                "endpoint": endpoint,
-                "evidence": {
-                    "hostname": hostname,
-                    "port": port,
-                    "osvdb": osvdb,
-                    "method": method,
-                    "url": url,
-                    "description": description,
-                },
-                "confidence": 0.65,
-                "tool": "nikto",
-            })
+            findings.append(
+                {
+                    "type": "WEB_SERVER_VULNERABILITY",
+                    "severity": "MEDIUM",
+                    "endpoint": endpoint,
+                    "evidence": {
+                        "hostname": hostname,
+                        "port": port,
+                        "osvdb": osvdb,
+                        "method": method,
+                        "url": url,
+                        "description": description,
+                    },
+                    "confidence": 0.65,
+                    "tool": "nikto",
+                }
+            )
         return findings

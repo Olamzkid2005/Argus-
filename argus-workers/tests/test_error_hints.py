@@ -241,7 +241,8 @@ class TestToolSpecificHints:
     def test_nuclei_templates_not_found(self):
         """Nuclei 'templates not found' stderr returns template hint."""
         hint = _tool_specific_hint(
-            "nuclei", 1,
+            "nuclei",
+            1,
             "Error: templates not found. Please run nuclei -update-templates",
         )
         assert hint is not None
@@ -251,7 +252,8 @@ class TestToolSpecificHints:
     def test_nmap_permission_error(self):
         """Nmap 'requires root privileges' stderr returns sudo hint."""
         hint = _tool_specific_hint(
-            "nmap", 1,
+            "nmap",
+            1,
             "You don't have root privileges. Nmap requires root for SYN scan.",
         )
         assert hint is not None
@@ -261,7 +263,8 @@ class TestToolSpecificHints:
     def test_sqlmap_no_injectable_parameters(self):
         """SQLmap 'no injectable' stderr returns hint."""
         hint = _tool_specific_hint(
-            "sqlmap", 0,
+            "sqlmap",
+            0,
             "No parameter found. Try to specify parameters manually.",
         )
         assert hint is not None
@@ -270,7 +273,8 @@ class TestToolSpecificHints:
     def test_semgrep_rules_not_found(self):
         """Semgrep 'no rules found' stderr returns config hint."""
         hint = _tool_specific_hint(
-            "semgrep", 1,
+            "semgrep",
+            1,
             "No rules found. Specify rules with --config",
         )
         assert hint is not None
@@ -280,7 +284,8 @@ class TestToolSpecificHints:
     def test_gitleaks_no_git_repo(self):
         """Gitleaks no git repo stderr returns --no-git hint."""
         hint = _tool_specific_hint(
-            "gitleaks", 1,
+            "gitleaks",
+            1,
             "No git repository found in current directory",
         )
         assert hint is not None
@@ -290,7 +295,8 @@ class TestToolSpecificHints:
     def test_unknown_tool_returns_none(self):
         """Unknown tool name returns None (no crash)."""
         hint = _tool_specific_hint(
-            "unknown_tool", 1,
+            "unknown_tool",
+            1,
             "Some error message",
         )
         assert hint is None
@@ -303,7 +309,8 @@ class TestToolSpecificHints:
     def test_no_match_returns_none(self):
         """Non-matching stderr returns None."""
         hint = _tool_specific_hint(
-            "nuclei", 1,
+            "nuclei",
+            1,
             "Some unrelated error message",
         )
         assert hint is None

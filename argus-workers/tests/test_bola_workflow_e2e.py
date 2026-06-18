@@ -22,21 +22,18 @@ class TestFeatureFlagE2E:
     """End-to-end verification of the feature flag gate in scan.py."""
 
     @patch("orchestrator_pkg.scan._feature_enabled", return_value=False)
-    def test_flag_off_uses_dual_auth_scanner(
-        self, mock_feature_enabled: Mock
-    ) -> None:
+    def test_flag_off_uses_dual_auth_scanner(self, mock_feature_enabled: Mock) -> None:
         """When bola_workflow flag is OFF, DualAuthScanner path is taken.
 
         This test verifies the scan.py dispatch logic by patching the flag
         and confirming the DualAuthScanner code path is reachable.
         """
         from feature_flags import is_enabled
+
         assert is_enabled("bola_workflow", default=False) is False
 
     @patch("orchestrator_pkg.scan._feature_enabled", return_value=True)
-    def test_flag_on_uses_bola_workflow(
-        self, mock_feature_enabled: Mock
-    ) -> None:
+    def test_flag_on_uses_bola_workflow(self, mock_feature_enabled: Mock) -> None:
         """When bola_workflow flag is ON, _feature_enabled returns True.
 
         NOTE: This patches the scan.py import of is_enabled, not the
@@ -45,6 +42,7 @@ class TestFeatureFlagE2E:
         the feature_flags module itself.
         """
         from orchestrator_pkg.scan import _feature_enabled
+
         assert _feature_enabled("bola_workflow", default=False) is True
 
     def test_bola_workflow_result_contract(self) -> None:
@@ -161,17 +159,28 @@ class TestFeatureFlagE2E:
         )
 
         # Simulate a finding being emitted by patching TestBolaStep
-        mock_finding = {"type": "CONFIRMED_BOLA", "severity": "CRITICAL", "endpoint": "/api/test/1"}
+        mock_finding = {
+            "type": "CONFIRMED_BOLA",
+            "severity": "CRITICAL",
+            "endpoint": "/api/test/1",
+        }
         for step in workflow.steps:
             if isinstance(step, TestBolaStep):
-                step.run = Mock(return_value=WorkflowResult(
-                    success=True, outcome="complete",
-                    findings_created=1, obstacles_encountered=0,
-                    identities_created=0, resources_created=0, requests_captured=0,
-                ))
+                step.run = Mock(
+                    return_value=WorkflowResult(
+                        success=True,
+                        outcome="complete",
+                        findings_created=1,
+                        obstacles_encountered=0,
+                        identities_created=0,
+                        resources_created=0,
+                        requests_captured=0,
+                    )
+                )
 
         # Actually emit via a DualAuthScanner for_phase_execution instance
         from tools.dual_auth_scanner import DualAuthScanner
+
         scanner = DualAuthScanner.for_phase_execution(
             target="http://localhost:1",
             engagement_id=state.engagement_id,

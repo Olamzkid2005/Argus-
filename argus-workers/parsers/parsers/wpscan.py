@@ -5,6 +5,7 @@ WPScan outputs JSON via --format json flag.
 Covers: plugin/theme CVEs, weak passwords, user enumeration,
         xmlrpc abuse, backup file exposure.
 """
+
 import json
 import logging
 
@@ -14,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 class WpscanParser(BaseParser):
-
     SEVERITY_MAP = {
         "critical": "CRITICAL",
         "high": "HIGH",
@@ -39,9 +39,11 @@ class WpscanParser(BaseParser):
         target = data.get("target_url", "")
 
         # Interesting findings (exposed files, version info, user enumeration)
-        for item in (data.get("interesting_findings") or []):
+        for item in data.get("interesting_findings") or []:
             raw_type = item.get("type")
-            finding_type_str = f"WP_{(raw_type or 'WORDPRESS_MISCONFIGURATION').upper()}"
+            finding_type_str = (
+                f"WP_{(raw_type or 'WORDPRESS_MISCONFIGURATION').upper()}"
+            )
             f = self._make_finding(
                 finding_type=finding_type_str,
                 severity="HIGH" if item.get("type") in ("db_backup",) else "MEDIUM",
@@ -58,42 +60,56 @@ class WpscanParser(BaseParser):
         plugins = data.get("plugins") or {}
         if isinstance(plugins, dict):
             for plugin_name, plugin_data in plugins.items():
-                for vuln in (plugin_data.get("vulnerabilities") or []):
-                    findings.append(self._vuln_finding(vuln, target, plugin_name.upper()))
+                for vuln in plugin_data.get("vulnerabilities") or []:
+                    findings.append(
+                        self._vuln_finding(vuln, target, plugin_name.upper())
+                    )
 
         # Theme vulnerabilities
         themes = data.get("themes") or {}
         if isinstance(themes, dict):
             for theme_name, theme_data in themes.items():
-                for vuln in (theme_data.get("vulnerabilities") or []):
-                    findings.append(self._vuln_finding(vuln, target, theme_name.upper()))
+                for vuln in theme_data.get("vulnerabilities") or []:
+                    findings.append(
+                        self._vuln_finding(vuln, target, theme_name.upper())
+                    )
 
         # Top-level vulnerabilities dict (source_name -> vuln list)
         vuln_dict = data.get("vulnerabilities") or {}
         if isinstance(vuln_dict, dict):
             for source_name, vulns in vuln_dict.items():
-                for vuln in (vulns or []):
-                    findings.append(self._vuln_finding(vuln, target, source_name.upper()))
+                for vuln in vulns or []:
+                    findings.append(
+                        self._vuln_finding(vuln, target, source_name.upper())
+                    )
 
         # WordPress core vulnerabilities
         wp_version = data.get("version") or {}
         if isinstance(wp_version, dict):
-            for vuln in (wp_version.get("vulnerabilities") or []):
-                findings.append(self._vuln_finding(vuln, target, "CORE", finding_type="WP_CORE_VULNERABILITY"))
+            for vuln in wp_version.get("vulnerabilities") or []:
+                findings.append(
+                    self._vuln_finding(
+                        vuln, target, "CORE", finding_type="WP_CORE_VULNERABILITY"
+                    )
+                )
 
         # Users (enumeration finding)
         users = data.get("users", {})
         if users:
-            findings.append(self._make_finding(
-                finding_type="USER_ENUMERATION",
-                severity="MEDIUM",
-                endpoint=target,
-                evidence={"users_found": list(users.keys())[:20]},
-            ))
+            findings.append(
+                self._make_finding(
+                    finding_type="USER_ENUMERATION",
+                    severity="MEDIUM",
+                    endpoint=target,
+                    evidence={"users_found": list(users.keys())[:20]},
+                )
+            )
 
         return findings
 
-    def _vuln_finding(self, vuln: dict, target: str, source: str, finding_type: str | None = None) -> dict:
+    def _vuln_finding(
+        self, vuln: dict, target: str, source: str, finding_type: str | None = None
+    ) -> dict:
         title = vuln.get("title", "WordPress Vulnerability")
         refs = vuln.get("references", {})
         cve_ids = refs.get("cve", [])

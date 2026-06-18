@@ -92,12 +92,26 @@ class TestGenerateHackerOne:
         assert "Argus Bug Bounty Report" in result
 
     def test_uses_meta_default_cia_when_not_provided(self):
-        data = {"title": "XSS", "summary": "XSS found", "steps": "Test", "poc": "<script>", "root_cause": "No encoding", "remediation": "Encode output"}
+        data = {
+            "title": "XSS",
+            "summary": "XSS found",
+            "steps": "Test",
+            "poc": "<script>",
+            "root_cause": "No encoding",
+            "remediation": "Encode output",
+        }
         result = generate_hackerone(data, "xss")
         assert "Confidentiality (session tokens)" in result
 
     def test_handles_unknown_vuln_type(self):
-        data = {"title": "Unknown bug", "summary": "Something", "steps": "x", "poc": "x", "root_cause": "x", "remediation": "x"}
+        data = {
+            "title": "Unknown bug",
+            "summary": "Something",
+            "steps": "x",
+            "poc": "x",
+            "root_cause": "x",
+            "remediation": "x",
+        }
         result = generate_hackerone(data, "unknown_type")
         assert "UNKNOWN_TYPE" in result
 
@@ -304,8 +318,18 @@ class TestBugBountyReportGenerator:
     def test_generate_returns_empty_report_when_all_filtered_out(self):
         generator = BugBountyReportGenerator()
         findings = [
-            {"type": "XSS", "severity": "LOW", "confidence": 0.9, "endpoint": "https://example.com"},
-            {"type": "XSS", "severity": "MEDIUM", "confidence": 0.3, "endpoint": "https://example.com"},
+            {
+                "type": "XSS",
+                "severity": "LOW",
+                "confidence": 0.9,
+                "endpoint": "https://example.com",
+            },
+            {
+                "type": "XSS",
+                "severity": "MEDIUM",
+                "confidence": 0.3,
+                "endpoint": "https://example.com",
+            },
         ]
         result = generator.generate(findings, platform="hackerone")
         assert "No reportable vulnerabilities" in result
@@ -340,12 +364,18 @@ class TestBugBountyReportGenerator:
                 "evidence": {"payload": "x"},
             }
         ]
-        result = generator.generate(findings, platform="bugcrowd", engagement={"target_url": "https://example.com"})
+        result = generator.generate(
+            findings,
+            platform="bugcrowd",
+            engagement={"target_url": "https://example.com"},
+        )
         assert "https://example.com" in result
 
     def test_generate_with_empty_findings_list_and_engagement(self):
         generator = BugBountyReportGenerator()
-        result = generator.generate([], platform="intigriti", engagement={"target_url": "https://test.com"})
+        result = generator.generate(
+            [], platform="intigriti", engagement={"target_url": "https://test.com"}
+        )
         assert "No findings found" in result
 
 
@@ -355,7 +385,12 @@ class TestFilterFindings:
     def test_filters_by_false_positive(self):
         generator = BugBountyReportGenerator()
         findings = [
-            {"type": "XSS", "severity": "HIGH", "confidence": 0.9, "false_positive": True},
+            {
+                "type": "XSS",
+                "severity": "HIGH",
+                "confidence": 0.9,
+                "false_positive": True,
+            },
             {"type": "XSS", "severity": "HIGH", "confidence": 0.9},
         ]
         result = generator._filter_findings(findings, min_confidence=0.5)
@@ -364,7 +399,12 @@ class TestFilterFindings:
     def test_filters_by_false_positive_assessment_verdict(self):
         generator = BugBountyReportGenerator()
         findings = [
-            {"type": "XSS", "severity": "HIGH", "confidence": 0.9, "fp_assessment": {"verdict": "false_positive"}},
+            {
+                "type": "XSS",
+                "severity": "HIGH",
+                "confidence": 0.9,
+                "fp_assessment": {"verdict": "false_positive"},
+            },
             {"type": "XSS", "severity": "HIGH", "confidence": 0.9},
         ]
         result = generator._filter_findings(findings, min_confidence=0.5)
@@ -401,7 +441,12 @@ class TestFilterFindings:
     def test_handles_non_dict_fp_assessment(self):
         generator = BugBountyReportGenerator()
         findings = [
-            {"type": "XSS", "severity": "HIGH", "confidence": 0.9, "fp_assessment": "string_value"},
+            {
+                "type": "XSS",
+                "severity": "HIGH",
+                "confidence": 0.9,
+                "fp_assessment": "string_value",
+            },
         ]
         result = generator._filter_findings(findings, min_confidence=0.5)
         assert len(result) == 1

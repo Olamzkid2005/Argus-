@@ -75,7 +75,10 @@ class TestLLMReportGenerator:
 
     def test_generate_with_recon_context(self):
         mock_llm = MagicMock()
-        mock_llm.chat_json.return_value = {"executive_summary": "Test", "_fallback": False}
+        mock_llm.chat_json.return_value = {
+            "executive_summary": "Test",
+            "_fallback": False,
+        }
         mock_recon = MagicMock()
         mock_recon.to_llm_summary.return_value = "Recon data"
         gen = LLMReportGenerator(mock_llm)

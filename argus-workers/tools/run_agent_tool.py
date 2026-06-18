@@ -8,6 +8,7 @@ Dynamically imports the tool class and calls execute() with the given arguments.
 Usage:
     python3 tools/run_agent_tool.py <tool_name> --target <url> [--param value ...]
 """
+
 import argparse
 import importlib
 import json
@@ -24,9 +25,14 @@ def resolve_tool_class(tool_name: str):
     module = importlib.import_module(f"tools.{tool_name}")
 
     from tool_core.base import AbstractTool
+
     for attr_name in dir(module):
         attr = getattr(module, attr_name)
-        if isinstance(attr, type) and issubclass(attr, AbstractTool) and attr is not AbstractTool:
+        if (
+            isinstance(attr, type)
+            and issubclass(attr, AbstractTool)
+            and attr is not AbstractTool
+        ):
             return attr
 
     raise ValueError(f"No AbstractTool subclass found in tools.{tool_name}")
@@ -37,13 +43,18 @@ def main():
     parser.add_argument("tool_name", help="Name of the tool to run")
     parser.add_argument("--target", required=True, help="Target URL or scope")
     parser.add_argument("--engagement-id", default="", help="Engagement ID")
-    parser.add_argument("--extra", default="{}", help='JSON-encoded extra parameters (e.g. \'{"tech_stack":["apache"]}\')')
+    parser.add_argument(
+        "--extra",
+        default="{}",
+        help='JSON-encoded extra parameters (e.g. \'{"tech_stack":["apache"]}\')',
+    )
     args = parser.parse_args()
 
     extra = json.loads(args.extra)
     start = time.time()
 
     from tool_core.base import ToolContext
+
     ctx = ToolContext(
         target=args.target,
         engagement_id=args.engagement_id,

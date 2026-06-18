@@ -78,8 +78,11 @@ class TestTargetProfileServiceUpdate:
     @patch("database.repositories.tool_accuracy_repository.ToolAccuracyRepository")
     @patch("tasks.utils.load_recon_context")
     def test_update_loads_data_and_upserts(
-        self, mock_load_recon, mock_acc_repo_cls,
-        mock_profile_repo_cls, svc,
+        self,
+        mock_load_recon,
+        mock_acc_repo_cls,
+        mock_profile_repo_cls,
+        svc,
     ):
         mock_recon = MagicMock()
         mock_recon.to_dict.return_value = {"domains": ["example.com"]}
@@ -98,9 +101,11 @@ class TestTargetProfileServiceUpdate:
         ]
         svc.finding_repo.get_findings_by_engagement.return_value = (findings, 2)
 
-        svc.update({
-            "target": "https://example.com",
-        })
+        svc.update(
+            {
+                "target": "https://example.com",
+            }
+        )
 
         mock_profile_repo_cls.return_value.upsert_from_engagement.assert_called_once_with(
             org_id="org-42",
@@ -115,7 +120,9 @@ class TestTargetProfileServiceUpdate:
     @patch("database.repositories.tool_accuracy_repository.ToolAccuracyRepository")
     @patch("tasks.utils.load_recon_context")
     def test_no_finding_repo_uses_empty(
-        self, mock_load_recon, mock_acc_repo_cls,
+        self,
+        mock_load_recon,
+        mock_acc_repo_cls,
         mock_profile_repo_cls,
     ):
         from orchestrator_pkg.reporting.target_profile_service import (
@@ -141,8 +148,11 @@ class TestTargetProfileServiceUpdate:
     @patch("database.repositories.tool_accuracy_repository.ToolAccuracyRepository")
     @patch("tasks.utils.load_recon_context")
     def test_handles_exception_gracefully(
-        self, mock_load_recon, mock_acc_repo_cls,
-        mock_profile_repo_cls, svc,
+        self,
+        mock_load_recon,
+        mock_acc_repo_cls,
+        mock_profile_repo_cls,
+        svc,
     ):
         svc.finding_repo.get_findings_by_engagement.side_effect = Exception("DB error")
 

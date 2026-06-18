@@ -96,7 +96,8 @@ class TestSnapshotService:
         snapshot, budget_mgr, findings, org_id = svc.load_and_build({})
 
         mock_repo.get_findings_by_engagement.assert_called_once_with(
-            "eng-123", limit=100000,
+            "eng-123",
+            limit=100000,
         )
         assert findings == [{"id": "f1", "type": "xss"}]
         assert snapshot["findings"] == [{"id": "f1", "type": "xss"}]

@@ -6,6 +6,7 @@ enabling semantic similarity search across engagements.
 
 Requires: pgvector extension installed on PostgreSQL
 """
+
 import logging
 import os
 
@@ -45,13 +46,11 @@ class PGVectorRepository:
         """
         try:
             with db_cursor() as cursor:
-                cursor.execute(
-                    "SELECT 1 FROM pg_extension WHERE extname = 'vector'"
-                )
+                cursor.execute("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
                 result = cursor.fetchone()
                 return result is not None
         except Exception as e:
-            logger.warning(f"pgvector not available: {e}")
+            logger.warning("pgvector not available: %s", e)
             return False
 
     def store_embedding(
@@ -77,14 +76,17 @@ class PGVectorRepository:
             logger.warning("pgvector not available, skipping embedding storage")
             return False
 
-        if not isinstance(embedding, list) or not all(isinstance(v, (int, float)) for v in embedding):
+        if not isinstance(embedding, list) or not all(
+            isinstance(v, (int, float)) for v in embedding
+        ):
             logger.error("Invalid embedding: must be a list of numeric values")
             return False
 
         if len(embedding) != self.EMBEDDING_DIMENSIONS:
             logger.error(
-                f"Invalid embedding dimensions: {len(embedding)} "
-                f"(expected {self.EMBEDDING_DIMENSIONS})"
+                "Invalid embedding dimensions: %s (expected %s)",
+                len(embedding),
+                self.EMBEDDING_DIMENSIONS,
             )
             return False
 
@@ -99,18 +101,18 @@ class PGVectorRepository:
                     SET embedding = %s::vector
                     WHERE id = %s AND engagement_id = %s
                     """,
-                    (embedding_array, finding_id, engagement_id)
+                    (embedding_array, finding_id, engagement_id),
                 )
 
                 if cursor.rowcount == 0:
-                    logger.warning(f"Finding {finding_id} not found")
+                    logger.warning("Finding %s not found", finding_id)
                     return False
 
-                logger.info(f"Stored embedding for finding {finding_id}")
+                logger.info("Stored embedding for finding %s", finding_id)
                 return True
 
         except Exception as e:
-            logger.error(f"Failed to store embedding: {e}")
+            logger.error("Failed to store embedding: %s", e)
             return False
 
     def find_similar_findings(
@@ -145,12 +147,12 @@ class PGVectorRepository:
                     FROM findings
                     WHERE id = %s AND engagement_id = %s
                     """,
-                    (finding_id, engagement_id)
+                    (finding_id, engagement_id),
                 )
 
                 row = cursor.fetchone()
                 if not row or row[0] is None:
-                    logger.warning(f"No embedding found for finding {finding_id}")
+                    logger.warning("No embedding found for finding %s", finding_id)
                     return []
 
                 # Find similar findings using cosine distance
@@ -179,25 +181,29 @@ class PGVectorRepository:
                         threshold,
                         str(row[0]),  # source embedding
                         limit,
-                    )
+                    ),
                 )
 
                 results = []
                 for row in cursor.fetchall():
-                    results.append({
-                        "id": str(row[0]),
-                        "type": row[1],
-                        "severity": row[2],
-                        "endpoint": row[3],
-                        "engagement_id": str(row[4]),
-                        "similarity": float(row[5]),
-                    })
+                    results.append(
+                        {
+                            "id": str(row[0]),
+                            "type": row[1],
+                            "severity": row[2],
+                            "endpoint": row[3],
+                            "engagement_id": str(row[4]),
+                            "similarity": float(row[5]),
+                        }
+                    )
 
-                logger.info(f"Found {len(results)} similar findings for {finding_id}")
+                logger.info(
+                    "Found %s similar findings for %s", len(results), finding_id
+                )
                 return results
 
         except Exception as e:
-            logger.error(f"Failed to find similar findings: {e}")
+            logger.error("Failed to find similar findings: %s", e)
             return []
 
     def find_similar_by_text(
@@ -227,7 +233,9 @@ class PGVectorRepository:
 
         if embedding is None:
             logger.warning("Could not generate embedding, using fallback")
-            return self._find_similar_fallback(text_content, engagement_id, threshold, limit)
+            return self._find_similar_fallback(
+                text_content, engagement_id, threshold, limit
+            )
 
         try:
             with db_cursor() as cursor:
@@ -256,24 +264,26 @@ class PGVectorRepository:
                         threshold,
                         embedding_array,
                         limit,
-                    )
+                    ),
                 )
 
                 results = []
                 for row in cursor.fetchall():
-                    results.append({
-                        "id": str(row[0]),
-                        "type": row[1],
-                        "severity": row[2],
-                        "endpoint": row[3],
-                        "engagement_id": str(row[4]),
-                        "similarity": float(row[5]),
-                    })
+                    results.append(
+                        {
+                            "id": str(row[0]),
+                            "type": row[1],
+                            "severity": row[2],
+                            "endpoint": row[3],
+                            "engagement_id": str(row[4]),
+                            "similarity": float(row[5]),
+                        }
+                    )
 
                 return results
 
         except Exception as e:
-            logger.error(f"Failed to find similar findings: {e}")
+            logger.error("Failed to find similar findings: %s", e)
             return []
 
     def generate_embedding_fallback(self, text: str) -> list[float] | None:
@@ -303,7 +313,7 @@ class PGVectorRepository:
                 digest + str(dim).encode(), usedforsecurity=False
             ).digest()
             # Use first 4 bytes as a float in [0, 1)
-            value = int.from_bytes(h[:4], "big") / (2 ** 32)
+            value = int.from_bytes(h[:4], "big") / (2**32)
             embedding[dim] = value
 
         return embedding
@@ -338,27 +348,26 @@ class PGVectorRepository:
                     "LIMIT %s"
                 )
 
-                cursor.execute(
-                    query,
-                    [engagement_id] + kw_patterns + [limit]
-                )
+                cursor.execute(query, [engagement_id] + kw_patterns + [limit])
 
                 results = []
                 for row in cursor.fetchall():
-                    results.append({
-                        "id": str(row[0]),
-                        "type": row[1],
-                        "severity": row[2],
-                        "endpoint": row[3],
-                        "engagement_id": str(row[4]),
-                        "similarity": float(row[5]),
-                        "match_type": "keyword_fallback",
-                    })
+                    results.append(
+                        {
+                            "id": str(row[0]),
+                            "type": row[1],
+                            "severity": row[2],
+                            "endpoint": row[3],
+                            "engagement_id": str(row[4]),
+                            "similarity": float(row[5]),
+                            "match_type": "keyword_fallback",
+                        }
+                    )
 
                 return results
 
         except Exception as e:
-            logger.error(f"Fallback search failed: {e}")
+            logger.error("Fallback search failed: %s", e)
             return []
 
     def get_findings_with_embeddings(self, engagement_id: str) -> list[dict]:
@@ -379,23 +388,25 @@ class PGVectorRepository:
                     FROM findings
                     WHERE engagement_id = %s AND embedding IS NOT NULL
                     """,
-                    (engagement_id,)
+                    (engagement_id,),
                 )
 
                 results = []
                 for row in cursor.fetchall():
-                    results.append({
-                        "id": str(row[0]),
-                        "type": row[1],
-                        "severity": row[2],
-                        "endpoint": row[3],
-                        "has_embedding": row[4] is not None,
-                    })
+                    results.append(
+                        {
+                            "id": str(row[0]),
+                            "type": row[1],
+                            "severity": row[2],
+                            "endpoint": row[3],
+                            "has_embedding": row[4] is not None,
+                        }
+                    )
 
                 return results
 
         except Exception as e:
-            logger.error(f"Failed to get findings: {e}")
+            logger.error("Failed to get findings: %s", e)
             return []
 
     def delete_embeddings(self, engagement_id: str) -> int:
@@ -416,13 +427,13 @@ class PGVectorRepository:
                     SET embedding = NULL
                     WHERE engagement_id = %s AND embedding IS NOT NULL
                     """,
-                    (engagement_id,)
+                    (engagement_id,),
                 )
 
                 deleted = cursor.rowcount
-                logger.info(f"Deleted {deleted} embeddings for {engagement_id}")
+                logger.info("Deleted %s embeddings for %s", deleted, engagement_id)
                 return deleted
 
         except Exception as e:
-            logger.error(f"Failed to delete embeddings: {e}")
+            logger.error("Failed to delete embeddings: %s", e)
             return 0

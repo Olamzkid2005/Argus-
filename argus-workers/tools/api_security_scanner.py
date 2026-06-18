@@ -43,16 +43,30 @@ class APISecurityScanner(AsyncTool):
     tool_name = "api_security_scanner"
 
     PUBLIC_ENDPOINT_PATTERNS: list[str] = [
-        "/health", "/api/health", "/api/version", "/api/status",
-        "/favicon.ico", "/robots.txt", "/api-docs", "/swagger.json",
-        "/openapi.json", "/.well-known/",
+        "/health",
+        "/api/health",
+        "/api/version",
+        "/api/status",
+        "/favicon.ico",
+        "/robots.txt",
+        "/api-docs",
+        "/swagger.json",
+        "/openapi.json",
+        "/.well-known/",
     ]
     RATE_LIMIT_REQUEST_COUNT: int = 50
     RATE_LIMIT_CONCURRENCY: int = 10
     BOLA_ALT_IDS: list[str] = ["456", "999", "admin", "1"]
     KNOWN_API_PATHS: list[str] = [
-        "/api/", "/v1/", "/v2/", "/v3/", "/rest/",
-        "/graphql", "/api-docs", "/swagger.json", "/openapi.json",
+        "/api/",
+        "/v1/",
+        "/v2/",
+        "/v3/",
+        "/rest/",
+        "/graphql",
+        "/api-docs",
+        "/swagger.json",
+        "/openapi.json",
     ]
     AUTH_HEADER_VARIANTS: list[dict[str, str] | None] = [
         None,
@@ -123,7 +137,9 @@ class APISecurityScanner(AsyncTool):
             ip = ipaddress.ip_address(hostname)
         except ValueError:
             ip = None  # not an IP literal — check hostname patterns and resolve DNS
-        if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast):
+        if ip is not None and (
+            ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast
+        ):
             raise ValueError(f"Blocked internal IP: {hostname}")
         blocked_hostnames = {"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "::1"}
         hostname_lower = hostname.lower()
@@ -138,6 +154,7 @@ class APISecurityScanner(AsyncTool):
         # resolved IPs against private ranges. This catches DNS rebinding attacks
         # and hostnames that internally resolve to private addresses.
         import socket as _socket
+
         try:
             addrinfo = _socket.getaddrinfo(hostname, None)
             for _family, _typ, _proto, _cn, sockaddr in addrinfo:
@@ -237,7 +254,7 @@ class APISecurityScanner(AsyncTool):
                 result.mark_finished()
                 return result
 
-        auth_headers: dict[str, str] = getattr(self, '_scan_auth_headers', {})
+        auth_headers: dict[str, str] = getattr(self, "_scan_auth_headers", {})
 
         slog.phase_header("API SECURITY SCAN", f"{len(scan_endpoints)} endpoints")
 
@@ -299,19 +316,24 @@ class APISecurityScanner(AsyncTool):
                 full_alt = urljoin(base_url, alt_url)
 
                 try:
-                    orig_resp = await client.get(
-                        full_original, headers=auth_headers
-                    )
+                    orig_resp = await client.get(full_original, headers=auth_headers)
                     alt_resp = await client.get(full_alt, headers=auth_headers)
                 except httpx.RequestError:
                     continue
 
-                if orig_resp.status_code in (401, 403) or alt_resp.status_code in (401, 403):
+                if orig_resp.status_code in (401, 403) or alt_resp.status_code in (
+                    401,
+                    403,
+                ):
                     continue
 
                 alt_resp_404 = alt_resp.status_code == 404
 
-                if not alt_resp_404 and alt_resp.status_code == 200 and orig_resp.status_code == 200:
+                if (
+                    not alt_resp_404
+                    and alt_resp.status_code == 200
+                    and orig_resp.status_code == 200
+                ):
                     orig_body = orig_resp.text
                     alt_body = alt_resp.text
                     size_ratio = len(alt_body) / max(len(orig_body), 1)
@@ -330,10 +352,15 @@ class APISecurityScanner(AsyncTool):
                                 "to the original, suggesting BOLA/IDOR"
                             ),
                         }
-                        findings.append(self._add_finding(
-                            "API_BOLA", "HIGH", full_original,
-                            evidence, confidence=0.7,
-                        ))
+                        findings.append(
+                            self._add_finding(
+                                "API_BOLA",
+                                "HIGH",
+                                full_original,
+                                evidence,
+                                confidence=0.7,
+                            )
+                        )
 
                 # Different status codes (not 401/403/404) → potential BOLA
                 if not alt_resp_404 and orig_resp.status_code != alt_resp.status_code:
@@ -345,14 +372,18 @@ class APISecurityScanner(AsyncTool):
                         "original_size": len(orig_resp.text),
                         "altered_size": len(alt_resp.text),
                         "detail": (
-                            "Altered ID produced a different status code "
-                            "but not a 404"
+                            "Altered ID produced a different status code but not a 404"
                         ),
                     }
-                    findings.append(self._add_finding(
-                        "API_BOLA", "MEDIUM", full_original,
-                        evidence, confidence=0.5,
-                    ))
+                    findings.append(
+                        self._add_finding(
+                            "API_BOLA",
+                            "MEDIUM",
+                            full_original,
+                            evidence,
+                            confidence=0.5,
+                        )
+                    )
 
         return findings
 
@@ -410,15 +441,16 @@ class APISecurityScanner(AsyncTool):
                         except httpx.RequestError:
                             continue
 
-                        if resp.status_code in (401, 403, 404, 405, 501) or resp.status_code >= 500:
+                        if (
+                            resp.status_code in (401, 403, 404, 405, 501)
+                            or resp.status_code >= 500
+                        ):
                             continue
 
                         body = resp.text
                         for key, value in payload.items():
                             key_in_body = key.lower() in body.lower()
-                            value_in_body = (
-                                str(value).lower() in body.lower()
-                            )
+                            value_in_body = str(value).lower() in body.lower()
                             if key_in_body or value_in_body:
                                 evidence = {
                                     "method": method,
@@ -432,10 +464,15 @@ class APISecurityScanner(AsyncTool):
                                         f"in the response"
                                     ),
                                 }
-                                findings.append(self._add_finding(
-                                    "API_MASS_ASSIGNMENT", "HIGH", full_url,
-                                    evidence, confidence=0.6,
-                                ))
+                                findings.append(
+                                    self._add_finding(
+                                        "API_MASS_ASSIGNMENT",
+                                        "HIGH",
+                                        full_url,
+                                        evidence,
+                                        confidence=0.6,
+                                    )
+                                )
 
         return findings
 
@@ -484,14 +521,17 @@ class APISecurityScanner(AsyncTool):
                                 "method": method,
                                 "response_status": resp.status_code,
                                 "response_size": len(resp.text),
-                                "detail": (
-                                    f"{method} returned 200 with {label}"
-                                ),
+                                "detail": (f"{method} returned 200 with {label}"),
                             }
-                            findings.append(self._add_finding(
-                                "API_AUTH_BYPASS", "CRITICAL", full_url,
-                                evidence, confidence=0.5,
-                            ))
+                            findings.append(
+                                self._add_finding(
+                                    "API_AUTH_BYPASS",
+                                    "CRITICAL",
+                                    full_url,
+                                    evidence,
+                                    confidence=0.5,
+                                )
+                            )
 
         return findings
 
@@ -513,8 +553,12 @@ class APISecurityScanner(AsyncTool):
         findings: list[dict[str, Any]] = []
 
         auth_endpoints = [
-            ep for ep in endpoints
-            if any(kw in ep.lower() for kw in ("login", "auth", "token", "signin", "signup", "register"))
+            ep
+            for ep in endpoints
+            if any(
+                kw in ep.lower()
+                for kw in ("login", "auth", "token", "signin", "signup", "register")
+            )
         ]
 
         if not auth_endpoints:
@@ -526,15 +570,16 @@ class APISecurityScanner(AsyncTool):
                 rate_limited = False
                 status_counts: dict[int, int] = {}
                 chunks = [
-                    list(range(self.RATE_LIMIT_REQUEST_COUNT))[i:i + self.RATE_LIMIT_CONCURRENCY]
-                    for i in range(0, self.RATE_LIMIT_REQUEST_COUNT, self.RATE_LIMIT_CONCURRENCY)
+                    list(range(self.RATE_LIMIT_REQUEST_COUNT))[
+                        i : i + self.RATE_LIMIT_CONCURRENCY
+                    ]
+                    for i in range(
+                        0, self.RATE_LIMIT_REQUEST_COUNT, self.RATE_LIMIT_CONCURRENCY
+                    )
                 ]
 
                 for chunk in chunks:
-                    tasks = [
-                        client.get(full_url, headers=auth_headers)
-                        for _ in chunk
-                    ]
+                    tasks = [client.get(full_url, headers=auth_headers) for _ in chunk]
                     try:
                         results = await asyncio.gather(*tasks, return_exceptions=True)
                     except Exception:
@@ -555,10 +600,15 @@ class APISecurityScanner(AsyncTool):
                         "status_distribution": status_counts,
                         "detail": "Server implements rate limiting (429 detected)",
                     }
-                    findings.append(self._add_finding(
-                        "API_RATE_LIMITED", "INFO", full_url,
-                        evidence, confidence=0.9,
-                    ))
+                    findings.append(
+                        self._add_finding(
+                            "API_RATE_LIMITED",
+                            "INFO",
+                            full_url,
+                            evidence,
+                            confidence=0.9,
+                        )
+                    )
                 else:
                     if not status_counts:
                         evidence = {
@@ -566,10 +616,15 @@ class APISecurityScanner(AsyncTool):
                             "status_distribution": {},
                             "detail": "All requests failed — rate limit test inconclusive",
                         }
-                        findings.append(self._add_finding(
-                            "API_RATE_LIMIT_INCONCLUSIVE", "INFO", full_url,
-                            evidence, confidence=0.3,
-                        ))
+                        findings.append(
+                            self._add_finding(
+                                "API_RATE_LIMIT_INCONCLUSIVE",
+                                "INFO",
+                                full_url,
+                                evidence,
+                                confidence=0.3,
+                            )
+                        )
                         continue
                     non_error_codes = [c for c in status_counts if c < 500]
                     total_ok = sum(status_counts.get(c, 0) for c in non_error_codes)
@@ -578,14 +633,18 @@ class APISecurityScanner(AsyncTool):
                             "requests_sent": self.RATE_LIMIT_REQUEST_COUNT,
                             "status_distribution": status_counts,
                             "detail": (
-                                "Server accepted most requests without "
-                                "rate limiting"
+                                "Server accepted most requests without rate limiting"
                             ),
                         }
-                        findings.append(self._add_finding(
-                            "API_NO_RATE_LIMIT", "MEDIUM", full_url,
-                            evidence, confidence=0.6,
-                        ))
+                        findings.append(
+                            self._add_finding(
+                                "API_NO_RATE_LIMIT",
+                                "MEDIUM",
+                                full_url,
+                                evidence,
+                                confidence=0.6,
+                            )
+                        )
 
         return findings
 
@@ -609,9 +668,13 @@ class APISecurityScanner(AsyncTool):
 
         # 1. Try common OpenAPI / API doc paths
         doc_paths = [
-            "/api-docs", "/swagger.json", "/openapi.json",
-            "/api/swagger.json", "/api/openapi.json",
-            "/v1/api-docs", "/v2/api-docs",
+            "/api-docs",
+            "/swagger.json",
+            "/openapi.json",
+            "/api/swagger.json",
+            "/api/openapi.json",
+            "/v1/api-docs",
+            "/v2/api-docs",
             "/.well-known/openid-configuration",
         ]
         for doc_path in doc_paths:
@@ -653,14 +716,13 @@ class APISecurityScanner(AsyncTool):
         return sorted(discovered)
 
     @staticmethod
-    def _extract_openapi_paths(
-        body: str, content_type: str
-    ) -> list[str]:
+    def _extract_openapi_paths(body: str, content_type: str) -> list[str]:
         """Parse OpenAPI spec JSON (only) for endpoint paths. YAML is not supported."""
         paths: list[str] = []
         if "json" in content_type or body.strip().startswith("{"):
             try:
                 import json
+
                 spec = json.loads(body)
                 if "paths" in spec:
                     for path in spec["paths"]:
@@ -668,7 +730,9 @@ class APISecurityScanner(AsyncTool):
             except json.JSONDecodeError:
                 logger.warning("Failed to parse OpenAPI JSON body — YAML not supported")
             except Exception:
-                logger.debug("Failed to parse OpenAPI spec (non-json body)", exc_info=True)
+                logger.debug(
+                    "Failed to parse OpenAPI spec (non-json body)", exc_info=True
+                )
         return paths
 
     @staticmethod

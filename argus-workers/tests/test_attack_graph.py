@@ -1,6 +1,7 @@
 """
 Tests for Attack Graph Engine
 """
+
 import pytest
 
 from attack_graph import AttackGraph, Edge, Node, Path, RelationshipType
@@ -135,7 +136,9 @@ class TestExploitability:
     def test_all_prerequisites_satisfied(self):
         """Test exploitability when all prereqs satisfied"""
         graph = AttackGraph("eng-123")
-        node1 = Node("n1", "vulnerability", {}, prerequisites=["user_interaction", "no_csp"])
+        node1 = Node(
+            "n1", "vulnerability", {}, prerequisites=["user_interaction", "no_csp"]
+        )
         node2 = Node("n2", "endpoint", {})
         path = Path([node1, node2], [])
 
@@ -145,7 +148,9 @@ class TestExploitability:
     def test_no_prerequisites_satisfied(self):
         """Test exploitability when no prereqs satisfied"""
         graph = AttackGraph("eng-123")
-        node1 = Node("n1", "vulnerability", {}, prerequisites=["user_interaction", "no_csp"])
+        node1 = Node(
+            "n1", "vulnerability", {}, prerequisites=["user_interaction", "no_csp"]
+        )
         node2 = Node("n2", "endpoint", {})
         path = Path([node1, node2], [])
 
@@ -155,11 +160,18 @@ class TestExploitability:
     def test_some_prerequisites_satisfied(self):
         """Test exploitability when some prereqs satisfied"""
         graph = AttackGraph("eng-123")
-        node1 = Node("n1", "vulnerability", {}, prerequisites=["user_interaction", "no_csp", "authenticated_session"])
+        node1 = Node(
+            "n1",
+            "vulnerability",
+            {},
+            prerequisites=["user_interaction", "no_csp", "authenticated_session"],
+        )
         node2 = Node("n2", "endpoint", {})
         path = Path([node1, node2], [])
 
-        score = graph.compute_exploitability(path, {"user_interaction", "authenticated_session"})
+        score = graph.compute_exploitability(
+            path, {"user_interaction", "authenticated_session"}
+        )
         assert score == pytest.approx(2.0 / 3.0)
 
     def test_no_prerequisites_returns_one(self):
@@ -337,7 +349,7 @@ class TestStaticEstimateCvss:
             confidence=0.8,
             endpoint="https://example.com/api",
             evidence={},
-            source_tool="nuclei"
+            source_tool="nuclei",
         )
 
         self.graph.add_finding(finding)
@@ -353,7 +365,7 @@ class TestStaticEstimateCvss:
             confidence=0.8,
             endpoint="https://example.com/api",
             evidence={},
-            source_tool="nuclei"
+            source_tool="nuclei",
         )
         finding2 = VulnerabilityFinding(
             type="XSS",
@@ -361,7 +373,7 @@ class TestStaticEstimateCvss:
             confidence=0.7,
             endpoint="https://example.com/api",
             evidence={},
-            source_tool="nuclei"
+            source_tool="nuclei",
         )
 
         self.graph.add_finding(finding1)
@@ -464,7 +476,7 @@ class TestStaticEstimateCvss:
             confidence=0.8,
             endpoint="https://example.com/api",
             evidence={},
-            source_tool="nuclei"
+            source_tool="nuclei",
         )
 
         self.graph.add_finding(finding)
@@ -482,7 +494,7 @@ class TestStaticEstimateCvss:
             endpoint="https://example.com/api1",
             evidence={},
             source_tool="nuclei",
-            cvss_score=9.5
+            cvss_score=9.5,
         )
         finding2 = VulnerabilityFinding(
             type="XSS",
@@ -491,7 +503,7 @@ class TestStaticEstimateCvss:
             endpoint="https://example.com/api2",
             evidence={},
             source_tool="nuclei",
-            cvss_score=5.0
+            cvss_score=5.0,
         )
 
         self.graph.add_finding(finding1)

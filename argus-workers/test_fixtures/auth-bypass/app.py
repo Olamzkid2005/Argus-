@@ -27,10 +27,21 @@ _USERS: dict[str, str] = {  # username -> password
 
 # In-memory user data for IDOR testing
 _USER_DATA: dict[str, list[dict]] = {
-    "admin": [{"id": 1, "account": "admin", "role": "admin", "ssn": "000-00-0000"},
-              {"id": 2, "account": "admin", "role": "admin", "salary": 150000}],
-    "user1": [{"id": 10, "account": "user1", "role": "user", "email": "user1@example.com"}],
-    "analyst": [{"id": 20, "account": "analyst", "role": "analyst", "email": "analyst@example.com"}],
+    "admin": [
+        {"id": 1, "account": "admin", "role": "admin", "ssn": "000-00-0000"},
+        {"id": 2, "account": "admin", "role": "admin", "salary": 150000},
+    ],
+    "user1": [
+        {"id": 10, "account": "user1", "role": "user", "email": "user1@example.com"}
+    ],
+    "analyst": [
+        {
+            "id": 20,
+            "account": "analyst",
+            "role": "analyst",
+            "email": "analyst@example.com",
+        }
+    ],
 }
 
 
@@ -64,12 +75,14 @@ def admin_profile():
     There's no role check. This is a Broken Access Control vulnerability.
     """
     user = session.get("user", "anonymous")
-    return jsonify({
-        "endpoint": "/admin/profile",
-        "user": user,
-        "message": "Admin profile data",
-        "secret_key": "sk-admin-1234567890abcdef",
-    })
+    return jsonify(
+        {
+            "endpoint": "/admin/profile",
+            "user": user,
+            "message": "Admin profile data",
+            "secret_key": "sk-admin-1234567890abcdef",
+        }
+    )
 
 
 @app.route("/admin/users")
@@ -79,12 +92,9 @@ def admin_users():
     Returns the full user list without checking if the requester is an admin.
     This is a mass assignment / information disclosure vulnerability.
     """
-    return jsonify({
-        "users": [
-            {"username": u, "password": p}
-            for u, p in _USERS.items()
-        ]
-    })
+    return jsonify(
+        {"users": [{"username": u, "password": p} for u, p in _USERS.items()]}
+    )
 
 
 @app.route("/api/data/<int:data_id>")
@@ -100,11 +110,13 @@ def api_data(data_id):
     for username, records in _USER_DATA.items():
         for record in records:
             if record["id"] == data_id:
-                return jsonify({
-                    "data": record,
-                    "requested_by": user,
-                    "owner": username,
-                })
+                return jsonify(
+                    {
+                        "data": record,
+                        "requested_by": user,
+                        "owner": username,
+                    }
+                )
 
     return jsonify({"error": "Not found"}), 404
 
@@ -118,7 +130,12 @@ def flag():
     """
     debug_token = request.headers.get("X-Debug-Token", "")
     if debug_token == "argus-bypass-2026":
-        return jsonify({"flag": "ARGUS{XSS_AUTH_BYPASS_2026}", "message": "Access granted via debug header"}), 200
+        return jsonify(
+            {
+                "flag": "ARGUS{XSS_AUTH_BYPASS_2026}",
+                "message": "Access granted via debug header",
+            }
+        ), 200
 
     return jsonify({"error": "Forbidden", "hint": "Debug header required"}), 403
 

@@ -24,10 +24,15 @@ REGISTRY_MAP = {
     ],
 }
 
+
 def resolve(config_name):
     """Resolve a config name like 'p/php' to a list of local file paths."""
     resolved = REGISTRY_MAP.get(config_name, [])
     if not resolved:
         # Not a registry config, return as-is (could be a file path)
-        return [config_name] if os.path.isfile(config_name) or os.path.isdir(config_name) else []
+        return (
+            [config_name]
+            if os.path.isfile(config_name) or os.path.isdir(config_name)
+            else []
+        )
     return [f for f in resolved if os.path.isfile(f)]

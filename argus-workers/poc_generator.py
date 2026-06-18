@@ -36,8 +36,11 @@ Return exactly the fields specified in the template.
 POC_TEMPLATES: dict[str, dict[str, Any]] = {
     "XSS": {
         "fields": [
-            "curl_command", "browser_poc", "blind_xss_payload",
-            "impact_demo", "developer_fix_hint",
+            "curl_command",
+            "browser_poc",
+            "blind_xss_payload",
+            "impact_demo",
+            "developer_fix_hint",
         ],
         "instruction": (
             "Generate a reflected XSS PoC using the detected payload and endpoint."
@@ -45,8 +48,11 @@ POC_TEMPLATES: dict[str, dict[str, Any]] = {
     },
     "SQL_INJECTION": {
         "fields": [
-            "curl_command", "sqlmap_command", "manual_payload",
-            "data_extraction_query", "developer_fix_hint",
+            "curl_command",
+            "sqlmap_command",
+            "manual_payload",
+            "data_extraction_query",
+            "developer_fix_hint",
         ],
         "instruction": (
             "Generate SQLi PoC with extraction example using the parameter."
@@ -54,8 +60,11 @@ POC_TEMPLATES: dict[str, dict[str, Any]] = {
     },
     "SSRF": {
         "fields": [
-            "curl_command", "imds_test", "internal_scan_example",
-            "oob_detection_url", "developer_fix_hint",
+            "curl_command",
+            "imds_test",
+            "internal_scan_example",
+            "oob_detection_url",
+            "developer_fix_hint",
         ],
         "instruction": (
             "Generate SSRF PoC targeting cloud IMDS and internal services."
@@ -63,8 +72,10 @@ POC_TEMPLATES: dict[str, dict[str, Any]] = {
     },
     "IDOR": {
         "fields": [
-            "account_a_request", "account_b_request",
-            "expected_403_vs_actual", "automation_script",
+            "account_a_request",
+            "account_b_request",
+            "expected_403_vs_actual",
+            "automation_script",
             "developer_fix_hint",
         ],
         "instruction": (
@@ -177,31 +188,43 @@ class PoCGenerator:
         # backslash-escaped quotes, and Base64-encoded tokens. Also catches
         # shorter tokens (min 8 chars) and X-API-Key / Bearer patterns.
         import re as _redact_re
+
         def _redact(t: str) -> str:
             # Redact key=value or key:value patterns (supports Unicode whitespace and JSON escaping)
             t = _redact_re.sub(
-                r'(?i)(api[_-]?key|secret|token|password|auth|credential|private_key|access_key|session_id)'
+                r"(?i)(api[_-]?key|secret|token|password|auth|credential|private_key|access_key|session_id)"
                 r'(?:\s*[:=]\s*|["\']?\s*:\s*["\']?)'
                 r'["\']?[^\s"\'&]+["\']?',
-                r'\1=__REDACTED__', t[:800],
+                r"\1=__REDACTED__",
+                t[:800],
             )
             # Redact bearer tokens (Base64 and short tokens, min 8 chars)
-            t = _redact_re.sub(r'(?i)(bearer\s+|token\s+)[a-z0-9+/_.=-]{8,}', r'\1__REDACTED__', t)
+            t = _redact_re.sub(
+                r"(?i)(bearer\s+|token\s+)[a-z0-9+/_.=-]{8,}", r"\1__REDACTED__", t
+            )
             # Redact standalone JWT-like patterns (three dot-separated Base64 segments)
-            t = _redact_re.sub(r'(?i)[a-z0-9+/_-]{20,}\.[a-z0-9+/_-]{4,}\.[a-z0-9+/_-]{4,}', '__REDACTED_JWT__', t)
+            t = _redact_re.sub(
+                r"(?i)[a-z0-9+/_-]{20,}\.[a-z0-9+/_-]{4,}\.[a-z0-9+/_-]{4,}",
+                "__REDACTED_JWT__",
+                t,
+            )
             return t
-        user_prompt = json.dumps({
-            "finding_type": vuln_type,
-            "endpoint": finding.get("endpoint", ""),
-            "severity": finding.get("severity", ""),
-            "evidence": {
-                "request": _redact(str(evidence.get("request", ""))[:400]),
-                "response": _redact(str(evidence.get("response", ""))[:300]),
-                "payload": _redact(str(evidence.get("payload", ""))[:200]),
+
+        user_prompt = json.dumps(
+            {
+                "finding_type": vuln_type,
+                "endpoint": finding.get("endpoint", ""),
+                "severity": finding.get("severity", ""),
+                "evidence": {
+                    "request": _redact(str(evidence.get("request", ""))[:400]),
+                    "response": _redact(str(evidence.get("response", ""))[:300]),
+                    "payload": _redact(str(evidence.get("payload", ""))[:200]),
+                },
+                "instruction": template["instruction"],
+                "required_fields": template["fields"],
             },
-            "instruction": template["instruction"],
-            "required_fields": template["fields"],
-        }, indent=2)
+            indent=2,
+        )
 
         try:
             from datetime import datetime
@@ -215,6 +238,7 @@ class PoCGenerator:
                 )
             else:
                 from llm_service import LLMService as LLMSvc
+
                 svc = LLMSvc(llm_client=self.llm_client)
                 result = svc.chat_json(
                     system_prompt=POC_SYSTEM_PROMPT,

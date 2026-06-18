@@ -8,6 +8,7 @@ using Redis as the message broker and result backend.
 import datetime
 import logging
 import os
+import re
 import sys
 
 from celery import Celery
@@ -35,14 +36,14 @@ for _bin_dir in [_venv_bin, _go_bin]:
 if _current_path != os.environ.get("PATH", ""):
     os.environ["PATH"] = _current_path
 
-import re
-
 # ── Patterns for extracting engagement IDs from task arguments ──
 # TypeScript TUI uses: ENG-{base36timestamp}-{base36seq}  (e.g. "ENG-m0v1w2x3-5")
 # Python server uses: UUID v4                             (e.g. "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
 _ENGAGEMENT_ID_PATTERNS = [
-    re.compile(r"^ENG-[a-z0-9]+-[a-z0-9]+$", re.IGNORECASE),        # ENG-* format
-    re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE),  # UUID
+    re.compile(r"^ENG-[a-z0-9]+-[a-z0-9]+$", re.IGNORECASE),  # ENG-* format
+    re.compile(
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+    ),  # UUID
 ]
 
 
@@ -69,7 +70,9 @@ def setup_logging():
 
         setup_redaction()
     except ImportError:
-        logging.getLogger(__name__).debug("Logging redaction not available — continuing without it")
+        logging.getLogger(__name__).debug(
+            "Logging redaction not available — continuing without it"
+        )
     return logging.getLogger(__name__)
 
 
@@ -103,7 +106,9 @@ if not os.getenv("DATABASE_URL"):
         except OSError as e:
             logger.warning("Failed to read DATABASE_URL from %s: %s", platform_env, e)
     else:
-        logger.warning("DATABASE_URL not set and fallback .env.local not found at %s", platform_env)
+        logger.warning(
+            "DATABASE_URL not set and fallback .env.local not found at %s", platform_env
+        )
 
 # Create Celery application
 app = Celery(
@@ -276,13 +281,17 @@ class BaseTask(app.Task):
             # H-03: State transitions are handled by task_context() — the single
             # authoritative handler. We only log and let task_context() manage
             # the _failed_transition_done flag.
-            if getattr(self, '_failed_transition_done', False):
-                logger.debug("Failure transition already handled for engagement %s by task_context", engagement_id)
+            if getattr(self, "_failed_transition_done", False):
+                logger.debug(
+                    "Failure transition already handled for engagement %s by task_context",
+                    engagement_id,
+                )
             else:
                 # If task_context was NOT used (e.g., on_failure from SIGKILL/timeout
                 # where the task body never ran), attempt a safe transition.
                 try:
                     from database.connection import db_cursor
+
                     with db_cursor() as cursor:
                         cursor.execute(
                             "SELECT status FROM engagements WHERE id = %s",
@@ -292,17 +301,22 @@ class BaseTask(app.Task):
                         current_state = row[0] if row else "created"
                     if current_state not in ("complete", "failed"):
                         from state_machine import EngagementStateMachine
+
                         sm = EngagementStateMachine(
                             engagement_id,
                             current_state=current_state,
                         )
-                        if not sm.safe_transition("failed", f"Task {self.name} failed: {exc}"):
+                        if not sm.safe_transition(
+                            "failed", f"Task {self.name} failed: {exc}"
+                        ):
                             logger.debug(
                                 "safe_transition skipped for engagement %s (already in terminal state)",
                                 engagement_id,
                             )
                 except Exception as e:
-                    logger.warning("Failed to update engagement state on failure: %s", e)
+                    logger.warning(
+                        "Failed to update engagement state on failure: %s", e
+                    )
 
         # Send to DLQ if not retryable
         if not classification.should_retry:
@@ -319,7 +333,7 @@ class BaseTask(app.Task):
                     engagement_id=kwargs.get("engagement_id") if kwargs else None,
                 )
             except Exception as e:
-                logger.error(f"Failed to add task {task_id} to DLQ: {e}")
+                logger.error("Failed to add task %s to DLQ: %s", task_id, e)
 
         # Handle shutdown-related failures
         if shutdown_handler.should_shutdown():
@@ -331,36 +345,62 @@ class BaseTask(app.Task):
                 error=exc,
             )
 
-        logger.error(f"Task {task_id} failed: {exc}")
+        logger.error("Task %s failed: %s", task_id, exc)
 
-    def retry(self, args=None, kwargs=None, exc=None, throw=True,
-              eta=None, countdown=None, max_retries=None,
-              default_retry_delay=None, **options):
+    def retry(
+        self,
+        args=None,
+        kwargs=None,
+        exc=None,
+        throw=True,
+        eta=None,
+        countdown=None,
+        max_retries=None,
+        default_retry_delay=None,
+        **options,
+    ):
         """Override retry to inject classification-based retry_delay_seconds."""
-        if countdown is None and hasattr(self, '_last_classification') and self._last_classification is not None:
+        if (
+            countdown is None
+            and hasattr(self, "_last_classification")
+            and self._last_classification is not None
+        ):
             cd = self._last_classification.retry_delay_seconds
             if cd is not None and cd > 0:
                 countdown = cd
         return super().retry(
-            args=args, kwargs=kwargs, exc=exc, throw=throw,
-            eta=eta, countdown=countdown, max_retries=max_retries,
-            default_retry_delay=default_retry_delay, **options,
+            args=args,
+            kwargs=kwargs,
+            exc=exc,
+            throw=throw,
+            eta=eta,
+            countdown=countdown,
+            max_retries=max_retries,
+            default_retry_delay=default_retry_delay,
+            **options,
         )
 
     def on_retry(self, exc, task_id, _args, _kwargs, _einfo):
         """Called when task is retried"""
-        delay = ''
-        if hasattr(self, '_last_classification') and self._last_classification is not None:
+        delay = ""
+        if (
+            hasattr(self, "_last_classification")
+            and self._last_classification is not None
+        ):
             cd = self._last_classification.retry_delay_seconds
             if cd is not None:
-                delay = f' (delay={cd}s)'
-        logger.warning(
-            f"Task {task_id} retrying (attempt {self.request.retries}){delay}: {exc}"
-        )
+                delay = f" (delay={cd}s)"
+            logger.warning(
+                "Task %s retrying (attempt %s)%s: %s",
+                task_id,
+                self.request.retries,
+                delay,
+                exc,
+            )
 
     def on_success(self, _retval, task_id, _args, _kwargs):
         """Called when task succeeds"""
-        logger.info(f"Task {task_id} succeeded")
+        logger.info("Task %s succeeded", task_id)
 
     def __call__(self, *args, **kwargs):
         """Wrap task execution with shutdown checking"""
@@ -386,7 +426,7 @@ class BaseTask(app.Task):
         try:
             # Check if shutdown is requested before starting
             if shutdown_handler.should_shutdown():
-                logger.warning(f"Task {task_id} cancelled due to shutdown")
+                logger.warning("Task %s cancelled due to shutdown", task_id)
                 raise Exception("Worker is shutting down")
 
             return self.run(*args, **kwargs)

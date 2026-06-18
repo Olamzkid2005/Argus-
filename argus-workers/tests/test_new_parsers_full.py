@@ -6,6 +6,7 @@ Each parser gets three tests:
   2. Malformed output → empty list, no raise
   3. Empty string → empty list
 """
+
 import json
 import os
 import sys
@@ -27,6 +28,7 @@ from parsers.parsers.testssl import TestsslParser
 from parsers.parsers.whatweb import WhatwebParser
 
 # ── 11 New Parsers ──
+
 
 class TestDalfoxParser(unittest.TestCase):
     def test_parse_xss_finding(self):
@@ -85,7 +87,9 @@ class TestNaabuParser(unittest.TestCase):
 
 class TestNiktoParser(unittest.TestCase):
     def test_parse_vuln(self):
-        raw = json.dumps([{"OSVDB": "123", "url": "http://t.com/", "msg": "Critical issue found"}])
+        raw = json.dumps(
+            [{"OSVDB": "123", "url": "http://t.com/", "msg": "Critical issue found"}]
+        )
         findings = NiktoParser().parse(raw)
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]["type"], "WEB_SERVER_VULNERABILITY")
@@ -235,27 +239,32 @@ class TestAlterxParser(unittest.TestCase):
 
 # ── AuthManager ──
 
+
 class TestAuthManager(unittest.TestCase):
     def test_cookie_auth(self):
         from tools.auth_manager import AuthConfig, AuthManager
+
         am = AuthManager(AuthConfig(cookie="sessionid=abc123"))
         session = am.authenticate("https://example.com")
         self.assertEqual(session.cookies.get("sessionid"), "abc123")
 
     def test_token_auth(self):
         from tools.auth_manager import AuthConfig, AuthManager
+
         am = AuthManager(AuthConfig(token="tok_xyz"))
         session = am.authenticate("https://example.com")
         self.assertEqual(session.headers.get("Authorization"), "Bearer tok_xyz")
 
     def test_empty_config(self):
         from tools.auth_manager import AuthManager
+
         am = AuthManager(None)
         session = am.authenticate("https://example.com")
         self.assertIsNotNone(session)
 
     def test_api_key_auth(self):
         from tools.auth_manager import AuthConfig, AuthManager
+
         am = AuthManager(AuthConfig(token="key_abc", token_header="X-API-Key"))
         session = am.authenticate("https://example.com")
         self.assertIn("key_abc", session.headers.get("X-API-Key", ""))
@@ -264,6 +273,7 @@ class TestAuthManager(unittest.TestCase):
         import requests
 
         from tools.auth_manager import AuthConfig, AuthManager
+
         am = AuthManager(AuthConfig(cookie="sess=val"))
         sess = requests.Session()
         am.attach_to_session(sess)
@@ -272,11 +282,20 @@ class TestAuthManager(unittest.TestCase):
 
 # ── BrowserScanner (mocked subprocess) ──
 
+
 class TestBrowserScanner(unittest.TestCase):
     @patch("subprocess.run")
     def test_scan_returns_findings(self, mock_run):
         from tools.browser_scanner import scan
-        expected = [{"type": "SPA_FRAMEWORK_DETECTED", "severity": "INFO", "endpoint": "https://t.com", "tool": "browser_scanner"}]
+
+        expected = [
+            {
+                "type": "SPA_FRAMEWORK_DETECTED",
+                "severity": "INFO",
+                "endpoint": "https://t.com",
+                "tool": "browser_scanner",
+            }
+        ]
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = json.dumps(expected)
@@ -291,6 +310,7 @@ class TestBrowserScanner(unittest.TestCase):
     @patch("subprocess.run")
     def test_scan_nonzero_exit(self, mock_run):
         from tools.browser_scanner import scan
+
         mock_result = MagicMock()
         mock_result.returncode = 1
         mock_result.stderr = "error"
@@ -302,6 +322,7 @@ class TestBrowserScanner(unittest.TestCase):
     @patch("subprocess.run")
     def test_scan_bad_json(self, mock_run):
         from tools.browser_scanner import scan
+
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "not json"
@@ -315,12 +336,14 @@ class TestBrowserScanner(unittest.TestCase):
         import subprocess
 
         from tools.browser_scanner import scan
+
         mock_run.side_effect = subprocess.TimeoutExpired("cmd", 5)
         findings = scan("https://t.com", timeout=5)
         self.assertEqual(len(findings), 0)
 
     def test_is_spa_target(self):
         from tools.browser_scanner import is_spa_target
+
         self.assertTrue(is_spa_target(["React"]))
         self.assertTrue(is_spa_target(["Vue.js", "Django"]))
         self.assertTrue(is_spa_target(["Next.js"]))
@@ -330,13 +353,23 @@ class TestBrowserScanner(unittest.TestCase):
 
 # ── SBOM Generator ──
 
+
 class TestSBOMGenerator(unittest.TestCase):
     def test_generates_cyclonedx(self):
         from tools.sbom_generator import generate_sbom_from_findings
+
         findings = [
-            {"type": "DEPENDENCY_VULNERABILITY", "severity": "HIGH",
-             "evidence": {"package": "lodash", "version": "4.17.20", "fix_version": "4.17.21",
-                          "vulnerable_versions": "< 4.17.21", "cve": "CVE-2024-1234"}},
+            {
+                "type": "DEPENDENCY_VULNERABILITY",
+                "severity": "HIGH",
+                "evidence": {
+                    "package": "lodash",
+                    "version": "4.17.20",
+                    "fix_version": "4.17.21",
+                    "vulnerable_versions": "< 4.17.21",
+                    "cve": "CVE-2024-1234",
+                },
+            },
         ]
         sbom = generate_sbom_from_findings("e-1", findings)
         self.assertEqual(sbom["bomFormat"], "CycloneDX")
@@ -346,6 +379,7 @@ class TestSBOMGenerator(unittest.TestCase):
 
     def test_skips_non_dependency(self):
         from tools.sbom_generator import generate_sbom_from_findings
+
         findings = [
             {"type": "XSS", "severity": "HIGH", "evidence": {}},
         ]
@@ -354,21 +388,43 @@ class TestSBOMGenerator(unittest.TestCase):
 
     def test_handles_multiple_cves(self):
         from tools.sbom_generator import generate_sbom_from_findings
+
         findings = [
-            {"type": "DEPENDENCY_VULNERABILITY", "severity": "CRITICAL",
-             "evidence": {"package": "requests", "version": "2.28.0",
-                          "cves": ["CVE-2024-5678", "CVE-2024-9012"]}},
+            {
+                "type": "DEPENDENCY_VULNERABILITY",
+                "severity": "CRITICAL",
+                "evidence": {
+                    "package": "requests",
+                    "version": "2.28.0",
+                    "cves": ["CVE-2024-5678", "CVE-2024-9012"],
+                },
+            },
         ]
         sbom = generate_sbom_from_findings("e-1", findings)
         self.assertEqual(len(sbom["vulnerabilities"][0]["advisories"]), 2)
 
     def test_deduplicates_same_package(self):
         from tools.sbom_generator import generate_sbom_from_findings
+
         findings = [
-            {"type": "DEPENDENCY_VULNERABILITY", "severity": "HIGH",
-             "evidence": {"package": "lodash", "version": "4.17.20", "cve": "CVE-2024-1"}},
-            {"type": "DEPENDENCY_VULNERABILITY", "severity": "HIGH",
-             "evidence": {"package": "lodash", "version": "4.17.20", "cve": "CVE-2024-2"}},
+            {
+                "type": "DEPENDENCY_VULNERABILITY",
+                "severity": "HIGH",
+                "evidence": {
+                    "package": "lodash",
+                    "version": "4.17.20",
+                    "cve": "CVE-2024-1",
+                },
+            },
+            {
+                "type": "DEPENDENCY_VULNERABILITY",
+                "severity": "HIGH",
+                "evidence": {
+                    "package": "lodash",
+                    "version": "4.17.20",
+                    "cve": "CVE-2024-2",
+                },
+            },
         ]
         sbom = generate_sbom_from_findings("e-1", findings)
         self.assertEqual(len(sbom["components"]), 1)
@@ -376,6 +432,7 @@ class TestSBOMGenerator(unittest.TestCase):
 
     def test_empty_findings(self):
         from tools.sbom_generator import generate_sbom_from_findings
+
         self.assertEqual(generate_sbom_from_findings("e-1", []), {})
 
 

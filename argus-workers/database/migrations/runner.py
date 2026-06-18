@@ -95,7 +95,9 @@ def run_migrations(connection_string: str | None = None) -> list[str]:
                 logger.error("Migration %s failed: %s", path.name, e)
                 raise
 
-        logger.info("Applied %d migration(s): %s", len(applied_names), ", ".join(applied_names))
+        logger.info(
+            "Applied %d migration(s): %s", len(applied_names), ", ".join(applied_names)
+        )
         return applied_names
     finally:
         conn.close()

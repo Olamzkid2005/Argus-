@@ -15,6 +15,7 @@ Usage:
     # Legacy API (still works):
     findings = scan("https://example.com")
 """
+
 from __future__ import annotations
 
 import json
@@ -32,7 +33,16 @@ logger = logging.getLogger(__name__)
 
 _ALLOWED_BROWSER_SCHEMES = frozenset({"http", "https"})
 
-SPA_FRAMEWORKS = {"react", "vue", "angular", "next.js", "nuxt", "svelte", "ember", "backbone"}
+SPA_FRAMEWORKS = {
+    "react",
+    "vue",
+    "angular",
+    "next.js",
+    "nuxt",
+    "svelte",
+    "ember",
+    "backbone",
+}
 
 
 class BrowserScanner(AbstractTool):
@@ -67,7 +77,9 @@ class BrowserScanner(AbstractTool):
         engagement_id = ctx.engagement_id or ""
 
         slog = ScanLogger(self.tool_name, engagement_id=engagement_id)
-        slog.tool_start("browser_scan", target=target_url, tech=len(tech_stack) if tech_stack else 0)
+        slog.tool_start(
+            "browser_scan", target=target_url, tech=len(tech_stack) if tech_stack else 0
+        )
 
         result = UnifiedToolResult(
             tool_name=self.tool_name,
@@ -79,7 +91,9 @@ class BrowserScanner(AbstractTool):
         if parsed.scheme not in _ALLOWED_BROWSER_SCHEMES:
             msg = f"Rejected browser scan with scheme '{parsed.scheme}': {target_url}"
             slog.warn(msg)
-            logger.warning(msg)
+            logger.warning(
+                "Rejected browser scan with scheme '%s': %s", parsed.scheme, target_url
+            )
             result.status = ToolStatus.SKIPPED
             result.error_message = msg
             result.mark_finished()
@@ -89,7 +103,7 @@ class BrowserScanner(AbstractTool):
         if not worker.exists():
             msg = f"Browser scan worker not found at {worker}"
             slog.warn(msg)
-            logger.warning(msg)
+            logger.warning("Browser scan worker not found at %s", worker)
             result.status = ToolStatus.NOT_INSTALLED
             result.error_message = msg
             result.mark_finished()
@@ -108,7 +122,7 @@ class BrowserScanner(AbstractTool):
         except FileNotFoundError:
             msg = f"Python interpreter not found at {sys.executable}"
             slog.warn(msg)
-            logger.warning(msg)
+            logger.warning("Python interpreter not found at %s", sys.executable)
             result.status = ToolStatus.NOT_INSTALLED
             result.error_message = msg
             result.mark_finished()
@@ -116,17 +130,25 @@ class BrowserScanner(AbstractTool):
         except subprocess.TimeoutExpired:
             msg = f"Browser scan timed out after {timeout}s"
             slog.warn(msg)
-            logger.warning(msg)
+            logger.warning("Browser scan timed out after %ss", timeout)
             result.status = ToolStatus.TIMEOUT
             result.error_message = msg
             result.mark_finished()
             return result
 
         if proc_result.returncode != 0:
-            stderr = proc_result.stderr.strip()[:500] if proc_result.stderr else "unknown error"
+            stderr = (
+                proc_result.stderr.strip()[:500]
+                if proc_result.stderr
+                else "unknown error"
+            )
             msg = f"Browser scan worker failed (exit {proc_result.returncode})"
             slog.warn(msg)
-            logger.warning(f"{msg}: {stderr}")
+            logger.warning(
+                "Browser scan worker failed (exit %s): %s",
+                proc_result.returncode,
+                stderr,
+            )
             result.status = ToolStatus.NONZERO_EXIT
             result.error_message = msg
             result.stderr = stderr
@@ -136,7 +158,7 @@ class BrowserScanner(AbstractTool):
         stdout = proc_result.stdout.strip()
         if not stdout:
             slog.debug("Browser scan returned empty output")
-            logger.debug(f"Browser scan returned empty output for {target_url}")
+            logger.debug("Browser scan returned empty output for %s", target_url)
             result.status = ToolStatus.SUCCESS_EMPTY
             result.mark_finished()
             return result
@@ -152,7 +174,9 @@ class BrowserScanner(AbstractTool):
             result.findings = findings
             result.status = ToolStatus.SUCCESS
             slog.tool_complete("browser_scan", findings=len(findings))
-            logger.info(f"Browser scan complete: {len(findings)} findings for {target_url}")
+            logger.info(
+                "Browser scan complete: %s findings for %s", len(findings), target_url
+            )
         except json.JSONDecodeError as e:
             msg = f"Browser scan worker returned invalid JSON: {e}"
             slog.warn(msg)
@@ -168,7 +192,9 @@ class BrowserScanner(AbstractTool):
 # ── Legacy API (backward-compatible wrappers) ──────────────────────────────
 
 
-def scan(target_url: str, tech_stack: list[str] | None = None, timeout: int = 120) -> list[dict]:
+def scan(
+    target_url: str, tech_stack: list[str] | None = None, timeout: int = 120
+) -> list[dict]:
     """
     Run browser-based SPA scan against target in a subprocess.
 

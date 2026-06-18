@@ -1,6 +1,7 @@
 """
 Snapshot Manager - Creates immutable state snapshots for decision-making
 """
+
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -46,14 +47,20 @@ class SnapshotManager:
             # Reset isolation level to default before returning to pool
             conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED)
         except Exception:
-            logger.warning("Failed to reset isolation level on connection before returning to pool", exc_info=True)
+            logger.warning(
+                "Failed to reset isolation level on connection before returning to pool",
+                exc_info=True,
+            )
         try:
             get_db().release_connection(conn)
         except Exception:
             try:
                 conn.close()
             except Exception:
-                logger.warning("Failed to close connection after failed release_connection", exc_info=True)
+                logger.warning(
+                    "Failed to close connection after failed release_connection",
+                    exc_info=True,
+                )
 
     def create_snapshot(self, engagement_id: str) -> dict:
         """
@@ -78,7 +85,9 @@ class SnapshotManager:
             try:
                 conn = self._get_connection()
                 # Set SERIALIZABLE isolation level
-                conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
+                conn.set_isolation_level(
+                    psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE
+                )
 
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -93,7 +102,7 @@ class SnapshotManager:
                     WHERE engagement_id = %s
                     ORDER BY created_at DESC
                     """,
-                    (engagement_id,)
+                    (engagement_id,),
                 )
                 findings = [dict(row) for row in cursor.fetchall()]
 
@@ -107,7 +116,7 @@ class SnapshotManager:
                     WHERE engagement_id = %s
                     ORDER BY risk_score DESC
                     """,
-                    (engagement_id,)
+                    (engagement_id,),
                 )
                 attack_paths = [dict(row) for row in cursor.fetchall()]
 
@@ -120,7 +129,7 @@ class SnapshotManager:
                     FROM loop_budgets
                     WHERE engagement_id = %s
                     """,
-                    (engagement_id,)
+                    (engagement_id,),
                 )
                 loop_budget_row = cursor.fetchone()
                 loop_budget = dict(loop_budget_row) if loop_budget_row else {}
@@ -132,7 +141,7 @@ class SnapshotManager:
                     FROM engagements
                     WHERE id = %s
                     """,
-                    (engagement_id,)
+                    (engagement_id,),
                 )
                 engagement_row = cursor.fetchone()
                 engagement_state = dict(engagement_row) if engagement_row else {}
@@ -169,17 +178,29 @@ class SnapshotManager:
                 if conn:
                     try:
                         from psycopg2.errorcodes import SERIALIZATION_FAILURE
-                        pgcode = getattr(e, 'pgcode', None)
-                        if pgcode == SERIALIZATION_FAILURE and attempt < max_retries - 1:
-                            logger.info("Snapshot serialization failure (attempt %d/%d), retrying in %ds",
-                                        attempt + 1, max_retries, retry_delay * (2 ** attempt))
-                            time.sleep(retry_delay * (2 ** attempt))
+
+                        pgcode = getattr(e, "pgcode", None)
+                        if (
+                            pgcode == SERIALIZATION_FAILURE
+                            and attempt < max_retries - 1
+                        ):
+                            logger.info(
+                                "Snapshot serialization failure (attempt %d/%d), retrying in %ds",
+                                attempt + 1,
+                                max_retries,
+                                retry_delay * (2**attempt),
+                            )
+                            time.sleep(retry_delay * (2**attempt))
                             continue
                     except Exception:
-                        logger.debug("Failed to inspect pgcode for snapshot retry", exc_info=True)
+                        logger.debug(
+                            "Failed to inspect pgcode for snapshot retry", exc_info=True
+                        )
                 # Re-raise all non-serialization exceptions immediately
                 if attempt == max_retries - 1:
-                    raise Exception(f"Failed to create snapshot after {max_retries} attempts: {e}") from e
+                    raise Exception(
+                        f"Failed to create snapshot after {max_retries} attempts: {e}"
+                    ) from e
                 else:
                     raise  # Non-serialization failures: don't retry silently
             finally:
@@ -202,12 +223,7 @@ class SnapshotManager:
             return [self._to_jsonable(v) for v in value]
         return value
 
-    def _store_snapshot(
-        self,
-        engagement_id: str,
-        snapshot_data: dict,
-        cursor
-    ) -> str:
+    def _store_snapshot(self, engagement_id: str, snapshot_data: dict, cursor) -> str:
         """
         Store snapshot in decision_snapshots table
 
@@ -228,7 +244,7 @@ class SnapshotManager:
             FROM decision_snapshots
             WHERE engagement_id = %s
             """,
-            (engagement_id,)
+            (engagement_id,),
         )
         version = cursor.fetchone()["next_version"]
 
@@ -241,12 +257,14 @@ class SnapshotManager:
                 %s, %s, %s, %s, NOW()
             )
             """,
-            (snapshot_id, engagement_id, version, Json(snapshot_data))
+            (snapshot_id, engagement_id, version, Json(snapshot_data)),
         )
 
         return snapshot_id
 
-    def _execute_query(self, query: str, params: tuple, fetch: str = "all") -> list[dict] | dict | None:
+    def _execute_query(
+        self, query: str, params: tuple, fetch: str = "all"
+    ) -> list[dict] | dict | None:
         """Execute a read-only query using pool connections (C5 fix)."""
         conn = None
         cursor = None

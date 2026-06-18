@@ -1,6 +1,7 @@
 """
 Tests for Parser Layer
 """
+
 import json
 
 import pytest
@@ -19,15 +20,14 @@ class TestNucleiParser:
 
     def test_parse_valid_json_line(self):
         """Test parsing valid nuclei JSON output"""
-        output = json.dumps({
-            "info": {
-                "name": "SQL Injection",
-                "severity": "high"
-            },
-            "matched-at": "https://example.com/api",
-            "template-id": "sqli-test",
-            "matcher-name": "sql-error"
-        })
+        output = json.dumps(
+            {
+                "info": {"name": "SQL Injection", "severity": "high"},
+                "matched-at": "https://example.com/api",
+                "template-id": "sqli-test",
+                "matcher-name": "sql-error",
+            }
+        )
 
         findings = self.parser.parse(output)
 
@@ -39,8 +39,20 @@ class TestNucleiParser:
 
     def test_parse_multiple_json_lines(self):
         """Test parsing multiple JSON lines"""
-        line1 = json.dumps({"info": {"name": "XSS", "severity": "medium"}, "matched-at": "https://example.com/1", "template-id": "xss-test"})
-        line2 = json.dumps({"info": {"name": "IDOR", "severity": "high"}, "matched-at": "https://example.com/2", "template-id": "idor-test"})
+        line1 = json.dumps(
+            {
+                "info": {"name": "XSS", "severity": "medium"},
+                "matched-at": "https://example.com/1",
+                "template-id": "xss-test",
+            }
+        )
+        line2 = json.dumps(
+            {
+                "info": {"name": "IDOR", "severity": "high"},
+                "matched-at": "https://example.com/2",
+                "template-id": "idor-test",
+            }
+        )
         output = f"{line1}\n{line2}"
 
         findings = self.parser.parse(output)
@@ -51,7 +63,17 @@ class TestNucleiParser:
 
     def test_parse_skips_empty_lines(self):
         """Test that empty lines are skipped"""
-        output = "\n\n" + json.dumps({"info": {"name": "Test", "severity": "low"}, "matched-at": "https://example.com", "template-id": "test-template"}) + "\n\n"
+        output = (
+            "\n\n"
+            + json.dumps(
+                {
+                    "info": {"name": "Test", "severity": "low"},
+                    "matched-at": "https://example.com",
+                    "template-id": "test-template",
+                }
+            )
+            + "\n\n"
+        )
 
         findings = self.parser.parse(output)
 
@@ -59,7 +81,13 @@ class TestNucleiParser:
 
     def test_parse_handles_invalid_json(self):
         """Test that invalid JSON lines are skipped"""
-        output = "invalid json\n" + json.dumps({"info": {"name": "Test", "severity": "low"}, "matched-at": "https://example.com", "template-id": "test-template"})
+        output = "invalid json\n" + json.dumps(
+            {
+                "info": {"name": "Test", "severity": "low"},
+                "matched-at": "https://example.com",
+                "template-id": "test-template",
+            }
+        )
 
         findings = self.parser.parse(output)
 
@@ -75,13 +103,15 @@ class TestHttpxParser:
 
     def test_parse_json_output(self):
         """Test parsing httpx JSON output"""
-        output = json.dumps({
-            "url": "https://example.com",
-            "status_code": 200,
-            "content_length": 1234,
-            "content_type": "text/html",
-            "title": "Example Domain"
-        })
+        output = json.dumps(
+            {
+                "url": "https://example.com",
+                "status_code": 200,
+                "content_length": 1234,
+                "content_type": "text/html",
+                "title": "Example Domain",
+            }
+        )
 
         findings = self.parser.parse(output)
 
@@ -119,7 +149,13 @@ class TestParser:
 
     def test_parse_routes_to_nuclei_parser(self):
         """Test that nuclei output is routed correctly"""
-        output = json.dumps({"info": {"name": "Test", "severity": "low"}, "matched-at": "https://example.com", "template-id": "route-test"})
+        output = json.dumps(
+            {
+                "info": {"name": "Test", "severity": "low"},
+                "matched-at": "https://example.com",
+                "template-id": "route-test",
+            }
+        )
 
         findings = self.parser.parse("nuclei", output)
 

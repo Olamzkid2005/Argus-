@@ -61,23 +61,16 @@ def run_scan_diff(
         profile_repo = TargetProfileRepository()
         target_url = _get_engagement_target(new_engagement_id)
         domain = (
-            TargetProfileRepository.extract_domain(target_url)
-            if target_url
-            else ""
+            TargetProfileRepository.extract_domain(target_url) if target_url else ""
         )
-        profile = (
-            profile_repo.get_profile(org_id, domain) if domain else None
-        )
+        profile = profile_repo.get_profile(org_id, domain) if domain else None
 
         # Compute diff
-        diff_result = engine.diff(
-            prev_engagement_id, new_engagement_id, profile
-        )
+        diff_result = engine.diff(prev_engagement_id, new_engagement_id, profile)
 
         # Auto-close fixed findings via batch UPDATE (1 query vs N queries)
         fixed_ids = [
-            f["id"] for f in diff_result.get(engine.CAT_FIXED, [])
-            if f.get("id")
+            f["id"] for f in diff_result.get(engine.CAT_FIXED, []) if f.get("id")
         ]
         # L-09: Use atomic batch_mark_fixed_with_fps to mark findings fixed
         # and update the profile's fingerprint list in a single transaction.
@@ -86,18 +79,24 @@ def run_scan_diff(
         fixed_findings = diff_result.get(engine.CAT_FIXED, [])
         if fixed_ids and domain:
             updated = engine.batch_mark_fixed_with_fps(
-                fixed_ids, fixed_findings, new_engagement_id, org_id, domain,
+                fixed_ids,
+                fixed_findings,
+                new_engagement_id,
+                org_id,
+                domain,
             )
             logger.info(
                 "Batch-marked %d findings as fixed (with fps) for engagement %s",
-                updated, new_engagement_id,
+                updated,
+                new_engagement_id,
             )
         elif fixed_ids:
             # No domain — can't update profile, just mark fixed
             updated = engine.batch_mark_fixed(fixed_ids, new_engagement_id)
             logger.info(
                 "Batch-marked %d findings as fixed for engagement %s",
-                updated, new_engagement_id,
+                updated,
+                new_engagement_id,
             )
 
         # Store diff in profile
@@ -105,8 +104,7 @@ def run_scan_diff(
             engine.store_diff_in_profile(org_id, domain, diff_result)
 
         logger.info(
-            "Diff complete for %s: %d new, %d fixed, %d regressed, "
-            "%d severity changed",
+            "Diff complete for %s: %d new, %d fixed, %d regressed, %d severity changed",
             domain or new_engagement_id,
             diff_result["summary"]["new_count"],
             diff_result["summary"]["fixed_count"],
@@ -169,10 +167,7 @@ def _update_fixed_fingerprints(
     """
     from scan_diff_engine import ScanDiffEngine
 
-    fps = [
-        ScanDiffEngine._fingerprint(f)
-        for f in fixed_findings
-    ]
+    fps = [ScanDiffEngine._fingerprint(f) for f in fixed_findings]
     if not fps:
         return
 
@@ -208,9 +203,7 @@ def _update_fixed_fingerprints(
         )
         conn.commit()
     except Exception as e:
-        logger.warning(
-            "Failed to update fixed fingerprints: %s", e
-        )
+        logger.warning("Failed to update fixed fingerprints: %s", e)
     finally:
         if conn:
             with contextlib.suppress(Exception):

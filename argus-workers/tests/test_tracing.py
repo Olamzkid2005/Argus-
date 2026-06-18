@@ -3,6 +3,7 @@ Tests for tracing module
 
 Validates: Requirements 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 21.1, 21.2
 """
+
 import time
 import uuid
 from unittest.mock import MagicMock, patch
@@ -29,7 +30,7 @@ class TestExecutionContext:
         context = ExecutionContext(
             trace_id=trace_id,
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="recon"
+            job_type="recon",
         )
 
         assert context.trace_id == trace_id
@@ -43,7 +44,7 @@ class TestExecutionContext:
         context = ExecutionContext(
             trace_id=trace_id,
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="scan"
+            job_type="scan",
         )
 
         result = context.to_dict()
@@ -60,7 +61,7 @@ class TestExecutionContext:
             "trace_id": trace_id,
             "engagement_id": "550e8400-e29b-41d4-a716-446655440001",
             "job_type": "analyze",
-            "start_time": time.time()
+            "start_time": time.time(),
         }
 
         context = ExecutionContext.from_dict(data)
@@ -79,7 +80,7 @@ class TestTraceContext:
         context = ExecutionContext(
             trace_id=trace_id,
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="recon"
+            job_type="recon",
         )
 
         TraceContext.set_context(context)
@@ -97,7 +98,7 @@ class TestTraceContext:
         context = ExecutionContext(
             trace_id=trace_id,
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="recon"
+            job_type="recon",
         )
 
         TraceContext.set_context(context)
@@ -120,7 +121,7 @@ class TestTraceContext:
         context = ExecutionContext(
             trace_id=trace_id,
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="recon"
+            job_type="recon",
         )
 
         with TraceContext.with_context(context):
@@ -154,8 +155,7 @@ class TestTracingManager:
         manager = TracingManager()
 
         context = manager.create_context(
-            engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="recon"
+            engagement_id="550e8400-e29b-41d4-a716-446655440000", job_type="recon"
         )
 
         assert context.engagement_id == "550e8400-e29b-41d4-a716-446655440000"
@@ -173,7 +173,7 @@ class TestTracingManager:
         context = manager.create_context(
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
             job_type="scan",
-            trace_id=existing_trace_id
+            trace_id=existing_trace_id,
         )
 
         assert context.trace_id == existing_trace_id
@@ -182,7 +182,9 @@ class TestTracingManager:
         """Test trace_execution context manager"""
         manager = TracingManager()
 
-        with manager.trace_execution("550e8400-e29b-41d4-a716-446655440000", "recon") as context:
+        with manager.trace_execution(
+            "550e8400-e29b-41d4-a716-446655440000", "recon"
+        ) as context:
             # Context should be set
             assert get_trace_id() == context.trace_id
             assert context.engagement_id == "550e8400-e29b-41d4-a716-446655440000"
@@ -202,7 +204,7 @@ class TestStructuredLogger:
         assert StructuredLogger.EVENT_PARSER_COMPLETED == "parser_completed"
         assert StructuredLogger.EVENT_INTELLIGENCE_DECISION == "intelligence_decision"
 
-    @patch('database.connection.get_db')
+    @patch("database.connection.get_db")
     def test_log_without_trace_context(self, mock_get_db):
         """Test logging without trace context (should not fail)"""
         TraceContext.clear_context()
@@ -214,7 +216,7 @@ class TestStructuredLogger:
         # Should not have attempted database connection
         mock_get_db.assert_not_called()
 
-    @patch('database.connection.get_db')
+    @patch("database.connection.get_db")
     def test_log_with_trace_context(self, mock_get_db):
         """Test logging with trace context"""
         mock_db = MagicMock()
@@ -228,7 +230,7 @@ class TestStructuredLogger:
         context = ExecutionContext(
             trace_id=trace_id,
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="recon"
+            job_type="recon",
         )
 
         with TraceContext.with_context(context):
@@ -238,7 +240,7 @@ class TestStructuredLogger:
         # Should have executed INSERT
         mock_cursor.execute.assert_called_once()
 
-    @patch('database.connection.get_db')
+    @patch("database.connection.get_db")
     def test_log_job_started(self, mock_get_db):
         """Test log_job_started convenience method"""
         mock_db = MagicMock()
@@ -252,16 +254,18 @@ class TestStructuredLogger:
         context = ExecutionContext(
             trace_id=trace_id,
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="recon"
+            job_type="recon",
         )
 
         with TraceContext.with_context(context):
             logger = StructuredLogger("test_connection_string")
-            logger.log_job_started("recon", "550e8400-e29b-41d4-a716-446655440000", "https://example.com")
+            logger.log_job_started(
+                "recon", "550e8400-e29b-41d4-a716-446655440000", "https://example.com"
+            )
 
         mock_cursor.execute.assert_called_once()
 
-    @patch('database.connection.get_db')
+    @patch("database.connection.get_db")
     def test_log_tool_executed(self, mock_get_db):
         """Test log_tool_executed convenience method"""
         mock_db = MagicMock()
@@ -275,7 +279,7 @@ class TestStructuredLogger:
         context = ExecutionContext(
             trace_id=trace_id,
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="scan"
+            job_type="scan",
         )
 
         with TraceContext.with_context(context):
@@ -285,12 +289,12 @@ class TestStructuredLogger:
                 arguments=["-t", "cves"],
                 duration_ms=1500,
                 success=True,
-                return_code=0
+                return_code=0,
             )
 
         mock_cursor.execute.assert_called_once()
 
-    @patch('database.connection.get_db')
+    @patch("database.connection.get_db")
     def test_log_parser_completed(self, mock_get_db):
         """Test log_parser_completed convenience method"""
         mock_db = MagicMock()
@@ -304,20 +308,18 @@ class TestStructuredLogger:
         context = ExecutionContext(
             trace_id=trace_id,
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="recon"
+            job_type="recon",
         )
 
         with TraceContext.with_context(context):
             logger = StructuredLogger("test_connection_string")
             logger.log_parser_completed(
-                tool_name="nuclei",
-                findings_count=5,
-                parse_time_ms=100
+                tool_name="nuclei", findings_count=5, parse_time_ms=100
             )
 
         mock_cursor.execute.assert_called_once()
 
-    @patch('database.connection.get_db')
+    @patch("database.connection.get_db")
     def test_log_intelligence_decision(self, mock_get_db):
         """Test log_intelligence_decision convenience method"""
         mock_db = MagicMock()
@@ -331,7 +333,7 @@ class TestStructuredLogger:
         context = ExecutionContext(
             trace_id=trace_id,
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="analyze"
+            job_type="analyze",
         )
 
         with TraceContext.with_context(context):
@@ -339,7 +341,7 @@ class TestStructuredLogger:
             logger.log_intelligence_decision(
                 actions=[{"type": "deep_scan", "targets": ["https://example.com"]}],
                 findings_analyzed=10,
-                reasoning="High-value targets found"
+                reasoning="High-value targets found",
             )
 
         mock_cursor.execute.assert_called_once()
@@ -364,13 +366,15 @@ class TestExecutionSpan:
         # Use a mock tracer to avoid OpenTelemetry ConsoleSpanExporter crashes
         mock_tracer = MagicMock()
         mock_otel_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_otel_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_otel_span
+        )
 
         trace_id = str(uuid.uuid4())
         context = ExecutionContext(
             trace_id=trace_id,
             engagement_id="550e8400-e29b-41d4-a716-446655440000",
-            job_type="recon"
+            job_type="recon",
         )
 
         with TraceContext.with_context(context):
@@ -390,7 +394,9 @@ class TestExecutionSpan:
         """Test span without trace context still works (no crash)."""
         mock_tracer = MagicMock()
         mock_otel_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_otel_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_otel_span
+        )
 
         TraceContext.clear_context()
 
@@ -423,7 +429,7 @@ class TestConvenienceFunctions:
 class TestIntegration:
     """Integration tests for tracing"""
 
-    @patch('database.connection.get_db')
+    @patch("database.connection.get_db")
     def test_full_tracing_flow(self, mock_get_db):
         """Test complete tracing flow from job start to completion"""
         mock_db = MagicMock()
@@ -437,9 +443,10 @@ class TestIntegration:
 
         # Simulate a full job execution
         with manager.trace_execution("550e8400-e29b-41d4-a716-446655440000", "recon"):
-
             # Log job started
-            manager.logger.log_job_started("recon", "550e8400-e29b-41d4-a716-446655440000", "https://example.com")
+            manager.logger.log_job_started(
+                "recon", "550e8400-e29b-41d4-a716-446655440000", "https://example.com"
+            )
 
             # Record tool execution span
             with manager.span(ExecutionSpan.SPAN_TOOL_EXECUTION):
@@ -450,7 +457,7 @@ class TestIntegration:
                 tool_name="nuclei",
                 arguments=["-t", "cves"],
                 duration_ms=1500,
-                success=True
+                success=True,
             )
 
             # Record parsing span

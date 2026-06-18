@@ -53,6 +53,7 @@ CAPABILITY_TO_PHASES: dict[str, list[str]] = {
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _indent(text: str, level: int = 1) -> str:
     return "    " * level + text
 
@@ -76,6 +77,7 @@ def _build_parameters(params: list[dict]) -> str:
             args += f', flag="{flag}"'
         if default is not None:
             import json
+
             args += f", default={json.dumps(default)}"
         if enum_vals:
             vals = ", ".join(f'"{v}"' for v in enum_vals)
@@ -200,7 +202,6 @@ def check(tools_dir: str, generated_path: str) -> bool:
     """Compare generated output with existing file. Returns True if consistent."""
     import tempfile
 
-
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as tmp:
         generate(tmp.name, tools_dir)
         tmp_path = tmp.name
@@ -218,7 +219,10 @@ def check(tools_dir: str, generated_path: str) -> bool:
             print(f"[PASS] {generated_path} is consistent with YAML definitions.")
             return True
         else:
-            print(f"[FAIL] {generated_path} has drifted from YAML definitions.", file=sys.stderr)
+            print(
+                f"[FAIL] {generated_path} has drifted from YAML definitions.",
+                file=sys.stderr,
+            )
             print("       Run: python scripts/generate_tool_defs.py", file=sys.stderr)
             return False
     finally:
@@ -230,7 +234,9 @@ def main():
         description="Generate _generated_tools.py from YAML single source of truth"
     )
     parser.add_argument("--tools-dir", default=None, help="Path to tools/definitions/")
-    parser.add_argument("--output", default=None, help="Output path for _generated_tools.py")
+    parser.add_argument(
+        "--output", default=None, help="Output path for _generated_tools.py"
+    )
     parser.add_argument("--check", action="store_true", help="CI mode: verify no drift")
     args = parser.parse_args()
 

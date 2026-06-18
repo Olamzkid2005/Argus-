@@ -24,25 +24,23 @@ class GracefulShutdownHandler:
         self.active_tasks: set = set()  # Track active task IDs
         self._lock = threading.Lock()
         self.shutdown_deadline = None
-        self.force_exit_after = int(os.getenv("WORKER_SHUTDOWN_TIMEOUT", "30"))  # seconds
+        self.force_exit_after = int(
+            os.getenv("WORKER_SHUTDOWN_TIMEOUT", "30")
+        )  # seconds
 
     def setup(self):
         """Setup signal handlers for graceful shutdown"""
         self.original_sigterm_handler = signal.signal(
-            signal.SIGTERM,
-            self._handle_shutdown
+            signal.SIGTERM, self._handle_shutdown
         )
         self.original_sigint_handler = signal.signal(
-            signal.SIGINT,
-            self._handle_shutdown
+            signal.SIGINT, self._handle_shutdown
         )
         logger.info("Graceful shutdown handlers registered")
 
     def _handle_shutdown(self, signum, _frame):
         """Handle shutdown signal"""
-        logger.warning(
-            f"Received signal {signum}, initiating graceful shutdown..."
-        )
+        logger.warning("Received signal %s, initiating graceful shutdown...", signum)
         self.shutdown_requested = True
         self.shutdown_deadline = time.time() + self.force_exit_after
 
@@ -55,7 +53,7 @@ class GracefulShutdownHandler:
             finally:
                 self._lock.release()
         if active_count:
-            logger.info(f"Waiting for {active_count} active tasks to complete")
+            logger.info("Waiting for %d active tasks to complete", active_count)
 
     def should_shutdown(self) -> bool:
         """Check if shutdown was requested"""
@@ -64,8 +62,8 @@ class GracefulShutdownHandler:
 
         # Check if shutdown deadline exceeded
         if self.shutdown_deadline and time.time() > self.shutdown_deadline:
-                logger.warning("Shutdown deadline exceeded, forcing exit")
-                return True
+            logger.warning("Shutdown deadline exceeded, forcing exit")
+            return True
 
         # Allow shutdown if no active tasks
         with self._lock:
@@ -73,7 +71,9 @@ class GracefulShutdownHandler:
         if not has_active:
             return True
 
-        return True  # Signal shutdown is requested, task should check and finish quickly
+        return (
+            True  # Signal shutdown is requested, task should check and finish quickly
+        )
 
     def should_force_exit(self) -> bool:
         """Check if we should force exit immediately"""
@@ -92,6 +92,7 @@ class GracefulShutdownHandler:
     def restore(self):
         """Restore original signal handlers"""
         import threading
+
         if threading.current_thread() is not threading.main_thread():
             return
         if self.original_sigterm_handler:
@@ -100,12 +101,7 @@ class GracefulShutdownHandler:
             signal.signal(signal.SIGINT, self.original_sigint_handler)
 
     def handle_task_failure_on_shutdown(
-        self,
-        task_id: str,
-        task_name: str,
-        args: tuple,
-        kwargs: dict,
-        error: Exception
+        self, task_id: str, task_name: str, args: tuple, kwargs: dict, error: Exception
     ):
         """
         Handle task failure during shutdown.
@@ -127,15 +123,16 @@ class GracefulShutdownHandler:
                 error_message=str(error),
                 error_class=type(error).__name__,
                 retry_count=0,
-                engagement_id=kwargs.get("engagement_id") if kwargs else None
+                engagement_id=kwargs.get("engagement_id") if kwargs else None,
             )
 
             logger.warning(
-                f"Task {task_id} failed during shutdown, added to DLQ. "
-                f"Classification: {classification.category.value}"
+                "Task %s failed during shutdown, added to DLQ. Classification: %s",
+                task_id,
+                classification.category.value,
             )
         except Exception as e:
-            logger.error(f"Failed to send task {task_id} to DLQ: {e}")
+            logger.error("Failed to send task %s to DLQ: %s", task_id, e)
 
 
 # Global shutdown handler

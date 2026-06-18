@@ -38,7 +38,8 @@ class EngagementService:
         except Exception as e:
             logger.warning(
                 "Failed to load priority_vuln_classes for %s: %s",
-                engagement_id, e,
+                engagement_id,
+                e,
             )
             return []
 
@@ -58,7 +59,8 @@ class EngagementService:
         except (ValueError, OSError, KeyError) as e:
             logger.warning(
                 "State check failed for engagement %s: %s — defaulting to 'failed'",
-                engagement_id, e,
+                engagement_id,
+                e,
             )
             return "failed"
 
@@ -66,7 +68,8 @@ class EngagementService:
     def log_timeout_event(engagement_id: str, elapsed_seconds: float) -> None:
         """Log a hard timeout event for the engagement."""
         logger.warning(
-            "Engagement %s exceeded hard timeout. "
-            "Elapsed: %.2fs, Limit: %ds",
-            engagement_id, elapsed_seconds, HARD_TIMEOUT_SECONDS,
+            "Engagement %s exceeded hard timeout. Elapsed: %.2fs, Limit: %ds",
+            engagement_id,
+            elapsed_seconds,
+            HARD_TIMEOUT_SECONDS,
         )

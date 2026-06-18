@@ -42,47 +42,52 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 # test_orchestrator_integration.py's mock_heavy_deps)
 # ═══════════════════════════════════════════════════════════════════
 
+
 @pytest.fixture(autouse=True)
 def mock_heavy_deps():
     """Mock heavy external dependencies so tests run without DB/Redis/tools."""
-    with patch.dict(sys.modules, {
-        "psycopg2": MagicMock(),
-        "psycopg2.sql": MagicMock(),
-        "psycopg2.extras": MagicMock(),
-        "psycopg2.extensions": MagicMock(),
-        "redis": MagicMock(),
-        "redis.client": MagicMock(),
-        "database": MagicMock(),
-        "database.connection": MagicMock(),
-        "database.repositories": MagicMock(),
-        "database.repositories.finding_repository": MagicMock(),
-        "database.repositories.engagement_repository": MagicMock(),
-        "database.repositories.report_repository": MagicMock(),
-        "database.repositories.agent_decision_repository": MagicMock(),
-        "database.repositories.rate_limit_repository": MagicMock(),
-        "database.repositories.tool_metrics_repository": MagicMock(),
-        "database.repositories.target_profile_repository": MagicMock(),
-        "database.repositories.tool_accuracy_repository": MagicMock(),
-        "database.services": MagicMock(),
-        "database.services.embedding_service": MagicMock(),
-        "websocket_events": MagicMock(),
-        "websocket": MagicMock(),
-        "compliance_reporting": MagicMock(),
-        "compliance_posture_scorer": MagicMock(),
-        "llm_client": MagicMock(),
-        "mcp_server": MagicMock(),
-        "streaming": MagicMock(),
-        "tracing": MagicMock(),
-        "parsers.parser": MagicMock(),
-        "parsers.normalizer": MagicMock(),
-        "tools.tool_runner": MagicMock(),
-    }):
+    with patch.dict(
+        sys.modules,
+        {
+            "psycopg2": MagicMock(),
+            "psycopg2.sql": MagicMock(),
+            "psycopg2.extras": MagicMock(),
+            "psycopg2.extensions": MagicMock(),
+            "redis": MagicMock(),
+            "redis.client": MagicMock(),
+            "database": MagicMock(),
+            "database.connection": MagicMock(),
+            "database.repositories": MagicMock(),
+            "database.repositories.finding_repository": MagicMock(),
+            "database.repositories.engagement_repository": MagicMock(),
+            "database.repositories.report_repository": MagicMock(),
+            "database.repositories.agent_decision_repository": MagicMock(),
+            "database.repositories.rate_limit_repository": MagicMock(),
+            "database.repositories.tool_metrics_repository": MagicMock(),
+            "database.repositories.target_profile_repository": MagicMock(),
+            "database.repositories.tool_accuracy_repository": MagicMock(),
+            "database.services": MagicMock(),
+            "database.services.embedding_service": MagicMock(),
+            "websocket_events": MagicMock(),
+            "websocket": MagicMock(),
+            "compliance_reporting": MagicMock(),
+            "compliance_posture_scorer": MagicMock(),
+            "llm_client": MagicMock(),
+            "mcp_server": MagicMock(),
+            "streaming": MagicMock(),
+            "tracing": MagicMock(),
+            "parsers.parser": MagicMock(),
+            "parsers.normalizer": MagicMock(),
+            "tools.tool_runner": MagicMock(),
+        },
+    ):
         yield
 
 
 # ═══════════════════════════════════════════════════════════════════
 # Shared fixtures
 # ═══════════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def engagement_id() -> str:
@@ -117,6 +122,7 @@ def mock_db_url() -> str:
 # ═══════════════════════════════════════════════════════════════════
 # Capturing context manager — wraps a MagicMock TaskContext
 # ═══════════════════════════════════════════════════════════════════
+
 
 class _CapturingContext:
     """Minimal context manager wrapping a test TaskContext."""
@@ -170,6 +176,7 @@ def _make_mock_task_context(
 # mock AsyncResult objects. This lets us inspect dispatched tasks.
 # ═══════════════════════════════════════════════════════════════════
 
+
 @pytest.fixture
 def dispatched_tasks() -> list[dict]:
     """Records every app.send_task call as a dict."""
@@ -200,6 +207,7 @@ def mock_celery_app(dispatched_tasks):
 # End-to-end pipeline test class
 # ═══════════════════════════════════════════════════════════════════
 
+
 class TestFullScanPipelineE2E:
     """Complete recon → scan → analyze → report pipeline integration test."""
 
@@ -220,30 +228,39 @@ class TestFullScanPipelineE2E:
         from tasks import recon as recon_module
 
         ctx = _make_mock_task_context(
-            "recon", engagement_id, trace_id,
+            "recon",
+            engagement_id,
+            trace_id,
             db_conn_string=mock_db_url,
         )
-        ctx.job.update({
-            "target": target_url,
-            "targets": targets,
-            "budget": budget,
-            "agent_mode": True,
-            "scan_mode": "agent",
-            "aggressiveness": "default",
-            "bug_bounty_mode": False,
-        })
+        ctx.job.update(
+            {
+                "target": target_url,
+                "targets": targets,
+                "budget": budget,
+                "agent_mode": True,
+                "scan_mode": "agent",
+                "aggressiveness": "default",
+                "bug_bounty_mode": False,
+            }
+        )
 
         recon_result = {
             "phase": "recon",
             "status": "completed",
             "findings_count": 3,
             "next_state": "scanning",
-            "recon_context": {"target_url": target_url, "live_endpoints": ["/api", "/login"]},
+            "recon_context": {
+                "target_url": target_url,
+                "live_endpoints": ["/api", "/login"],
+            },
             "trace_id": trace_id,
         }
         ctx.orchestrator.run_recon.return_value = recon_result
 
-        def fake_task_context(task, eid, job_type, job_extra=None, trace_id=None, current_state=None):
+        def fake_task_context(
+            task, eid, job_type, job_extra=None, trace_id=None, current_state=None
+        ):
             ctx.job.update(job_extra or {})
             ctx.trace_id = trace_id
             return _CapturingContext(ctx)
@@ -261,10 +278,10 @@ class TestFullScanPipelineE2E:
                 target_url,
                 budget,
                 trace_id,
-                True,      # agent_mode
-                "agent",   # scan_mode
-                "default", # aggressiveness
-                False,     # bug_bounty_mode
+                True,  # agent_mode
+                "agent",  # scan_mode
+                "default",  # aggressiveness
+                False,  # bug_bounty_mode
             )
 
         # ── Assert recon result ──
@@ -274,7 +291,9 @@ class TestFullScanPipelineE2E:
 
         # ── State transitions ──
         ctx.state.transition.assert_any_call("recon", "Starting reconnaissance")
-        ctx.state.transition.assert_any_call("scanning", "Recon complete — scan dispatched")
+        ctx.state.transition.assert_any_call(
+            "scanning", "Recon complete — scan dispatched"
+        )
 
         # ── Orchestrator called with correct job ──
         ctx.orchestrator.run_recon.assert_called_once()
@@ -286,16 +305,18 @@ class TestFullScanPipelineE2E:
 
         # ── Scan task dispatched ──
         assert len(dispatched_tasks) >= 1
-        scan_dispatch = next(t for t in dispatched_tasks if t["name"] == "tasks.scan.run_scan")
+        scan_dispatch = next(
+            t for t in dispatched_tasks if t["name"] == "tasks.scan.run_scan"
+        )
         assert scan_dispatch is not None
         dispatch_args = scan_dispatch["args"]
         assert dispatch_args[0] == engagement_id  # engagement_id
-        assert dispatch_args[1] == [target_url]    # targets
+        assert dispatch_args[1] == [target_url]  # targets
         # recon task mutates budget by adding prev_engagement_id
         expected_budget = dict(budget)
         expected_budget["prev_engagement_id"] = None
         assert dispatch_args[2] == expected_budget  # budget with prev_engagement_id
-        assert dispatch_args[3] == trace_id        # trace_id
+        assert dispatch_args[3] == trace_id  # trace_id
 
     def test_phase_recon_fails_when_dispatch_fails(
         self,
@@ -309,12 +330,16 @@ class TestFullScanPipelineE2E:
         """When scan dispatch fails, engagement transitions to failed."""
         from tasks import recon as recon_module
 
-        ctx = _make_mock_task_context("recon", engagement_id, trace_id, db_conn_string=mock_db_url)
-        ctx.job.update({
-            "target": target_url,
-            "budget": budget,
-            "agent_mode": True,
-        })
+        ctx = _make_mock_task_context(
+            "recon", engagement_id, trace_id, db_conn_string=mock_db_url
+        )
+        ctx.job.update(
+            {
+                "target": target_url,
+                "budget": budget,
+                "agent_mode": True,
+            }
+        )
         ctx.orchestrator.run_recon.return_value = {
             "phase": "recon",
             "status": "completed",
@@ -327,7 +352,9 @@ class TestFullScanPipelineE2E:
         # Make send_task raise
         mock_celery_app.send_task.side_effect = RuntimeError("Broker unreachable")
 
-        def fake_task_context(task, eid, job_type, job_extra=None, trace_id=None, current_state=None):
+        def fake_task_context(
+            task, eid, job_type, job_extra=None, trace_id=None, current_state=None
+        ):
             ctx.job.update(job_extra or {})
             ctx.trace_id = trace_id
             return _CapturingContext(ctx)
@@ -352,10 +379,16 @@ class TestFullScanPipelineE2E:
         # Should still return result (the DispatchLock catches the error)
         # but should attempt failed transition
         fail_call = next(
-            (c for c in ctx.state.safe_transition.call_args_list if c[0][0] == "failed"),
+            (
+                c
+                for c in ctx.state.safe_transition.call_args_list
+                if c[0][0] == "failed"
+            ),
             None,
         )
-        assert fail_call is not None, "Expected safe_transition('failed') on dispatch error"
+        assert fail_call is not None, (
+            "Expected safe_transition('failed') on dispatch error"
+        )
         assert "Broker unreachable" in fail_call[0][1]
 
     # ── Phase 2: Scan ───────────────────────────────────────────
@@ -373,14 +406,18 @@ class TestFullScanPipelineE2E:
         """Scan task transitions to analyzing and dispatches analyze task."""
         from tasks import scan as scan_module
 
-        ctx = _make_mock_task_context("scan", engagement_id, trace_id, db_conn_string=mock_db_url)
-        ctx.job.update({
-            "targets": targets,
-            "budget": budget,
-            "agent_mode": True,
-            "recon_context": {"target_url": targets[0], "live_endpoints": ["/api"]},
-            "auth_config": {},
-        })
+        ctx = _make_mock_task_context(
+            "scan", engagement_id, trace_id, db_conn_string=mock_db_url
+        )
+        ctx.job.update(
+            {
+                "targets": targets,
+                "budget": budget,
+                "agent_mode": True,
+                "recon_context": {"target_url": targets[0], "live_endpoints": ["/api"]},
+                "auth_config": {},
+            }
+        )
         ctx.orchestrator.run_scan.return_value = {
             "phase": "scan",
             "status": "completed",
@@ -389,7 +426,9 @@ class TestFullScanPipelineE2E:
             "trace_id": trace_id,
         }
 
-        def fake_task_context(task, eid, job_type, job_extra=None, trace_id=None, current_state=None):
+        def fake_task_context(
+            task, eid, job_type, job_extra=None, trace_id=None, current_state=None
+        ):
             ctx.job.update(job_extra or {})
             ctx.trace_id = trace_id
             return _CapturingContext(ctx)
@@ -427,7 +466,9 @@ class TestFullScanPipelineE2E:
         assert called_job["targets"] == targets
 
         # ── Analyze task dispatched with trace_id ──
-        analyze_dispatch = next(t for t in dispatched_tasks if t["name"] == "tasks.analyze.run_analysis")
+        analyze_dispatch = next(
+            t for t in dispatched_tasks if t["name"] == "tasks.analyze.run_analysis"
+        )
         assert analyze_dispatch is not None
         assert analyze_dispatch["args"][0] == engagement_id
         assert analyze_dispatch["args"][1] == budget
@@ -445,13 +486,15 @@ class TestFullScanPipelineE2E:
         from tasks import scan as scan_module
 
         ctx = _make_mock_task_context("scan", engagement_id, trace_id)
-        ctx.job.update({
-            "targets": targets,
-            "budget": budget,
-            "agent_mode": True,
-            "recon_context": None,
-            "auth_config": {},
-        })
+        ctx.job.update(
+            {
+                "targets": targets,
+                "budget": budget,
+                "agent_mode": True,
+                "recon_context": None,
+                "auth_config": {},
+            }
+        )
         ctx.orchestrator.run_scan.return_value = {
             "phase": "scan",
             "status": "completed",
@@ -461,7 +504,11 @@ class TestFullScanPipelineE2E:
         }
 
         with (
-            patch.object(scan_module, "task_context", side_effect=lambda *_, **__: _CapturingContext(ctx)),
+            patch.object(
+                scan_module,
+                "task_context",
+                side_effect=lambda *_, **__: _CapturingContext(ctx),
+            ),
             patch.object(scan_module, "app", mock_celery_app),
             patch("tasks.utils.load_recon_context", return_value=None),
         ):
@@ -494,10 +541,14 @@ class TestFullScanPipelineE2E:
         """Analyze task transitions to reporting and dispatches report task."""
         from tasks import analyze as analyze_module
 
-        ctx = _make_mock_task_context("analyze", engagement_id, trace_id, db_conn_string=mock_db_url)
-        ctx.job.update({
-            "budget": budget,
-        })
+        ctx = _make_mock_task_context(
+            "analyze", engagement_id, trace_id, db_conn_string=mock_db_url
+        )
+        ctx.job.update(
+            {
+                "budget": budget,
+            }
+        )
         ctx.orchestrator.run_analysis.return_value = {
             "phase": "analyze",
             "status": "completed",
@@ -508,8 +559,18 @@ class TestFullScanPipelineE2E:
                 "high_value_targets": ["/admin"],
             },
             "scored_findings": [
-                {"id": str(uuid.uuid4()), "type": "SQL_INJECTION", "severity": "HIGH", "confidence": 0.85},
-                {"id": str(uuid.uuid4()), "type": "XSS", "severity": "MEDIUM", "confidence": 0.65},
+                {
+                    "id": str(uuid.uuid4()),
+                    "type": "SQL_INJECTION",
+                    "severity": "HIGH",
+                    "confidence": 0.85,
+                },
+                {
+                    "id": str(uuid.uuid4()),
+                    "type": "XSS",
+                    "severity": "MEDIUM",
+                    "confidence": 0.65,
+                },
             ],
             "reasoning": "Found SQL injection and XSS vulnerabilities",
             "synthesis": {
@@ -520,7 +581,9 @@ class TestFullScanPipelineE2E:
             "trace_id": trace_id,
         }
 
-        def fake_task_context(task, eid, job_type, job_extra=None, trace_id=None, current_state=None):
+        def fake_task_context(
+            task, eid, job_type, job_extra=None, trace_id=None, current_state=None
+        ):
             ctx.job.update(job_extra or {})
             ctx.trace_id = trace_id
             return _CapturingContext(ctx)
@@ -547,7 +610,9 @@ class TestFullScanPipelineE2E:
         assert result["trace_id"] == trace_id
 
         # ── State transitions ──
-        ctx.state.transition.assert_any_call("reporting", "Analysis complete — advancing to report")
+        ctx.state.transition.assert_any_call(
+            "reporting", "Analysis complete — advancing to report"
+        )
 
         # ── Orchestrator called correctly ──
         ctx.orchestrator.run_analysis.assert_called_once()
@@ -557,7 +622,9 @@ class TestFullScanPipelineE2E:
         assert called_job["trace_id"] == trace_id
 
         # ── Report task dispatched ──
-        report_dispatch = next(t for t in dispatched_tasks if t["name"] == "tasks.report.generate_report")
+        report_dispatch = next(
+            t for t in dispatched_tasks if t["name"] == "tasks.report.generate_report"
+        )
         assert report_dispatch is not None
         assert report_dispatch["args"][0] == engagement_id
         assert report_dispatch["args"][1] == trace_id
@@ -577,19 +644,27 @@ class TestFullScanPipelineE2E:
         """Report task transitions engagement to complete."""
         from tasks import report as report_module
 
-        ctx = _make_mock_task_context("report", engagement_id, trace_id, db_conn_string=mock_db_url)
-        ctx.job.update({
-            "budget": budget,
-        })
+        ctx = _make_mock_task_context(
+            "report", engagement_id, trace_id, db_conn_string=mock_db_url
+        )
+        ctx.job.update(
+            {
+                "budget": budget,
+            }
+        )
         ctx.orchestrator.run_reporting.return_value = {
             "phase": "report",
             "status": "completed",
             "next_state": "complete",
-            "report": {"sections": ["executive_summary", "findings", "recommendations"]},
+            "report": {
+                "sections": ["executive_summary", "findings", "recommendations"]
+            },
             "trace_id": trace_id,
         }
 
-        def fake_task_context(task, eid, job_type, job_extra=None, trace_id=None, current_state=None):
+        def fake_task_context(
+            task, eid, job_type, job_extra=None, trace_id=None, current_state=None
+        ):
             ctx.job.update(job_extra or {})
             ctx.trace_id = trace_id
             return _CapturingContext(ctx)
@@ -632,7 +707,11 @@ class TestFullScanPipelineE2E:
         ctx = _make_mock_task_context("report", engagement_id, trace_id)
 
         with (
-            patch.object(report_module, "task_context", side_effect=lambda *_, **__: _CapturingContext(ctx)),
+            patch.object(
+                report_module,
+                "task_context",
+                side_effect=lambda *_, **__: _CapturingContext(ctx),
+            ),
             patch("tasks.utils.get_engagement_state", return_value="complete"),
         ):
             result = report_module.generate_report.run(
@@ -680,6 +759,7 @@ class TestFullScanPipelineE2E:
         # ── Data flow test values ──
         # Build a real ReconContext for the scan phase to receive
         from models.recon_context import ReconContext
+
         recon_context_obj = ReconContext(
             target_url=target_url,
             live_endpoints=["/api", "/login"],
@@ -694,99 +774,167 @@ class TestFullScanPipelineE2E:
         _finding_store: dict[str, list[dict]] = {}
 
         fake_findings_from_scan = [
-            {"type": "SQL_INJECTION", "severity": "HIGH", "endpoint": "/api/login",
-             "source_tool": "sqlmap", "confidence": 0.95},
-            {"type": "XSS", "severity": "MEDIUM", "endpoint": "/api/users",
-             "source_tool": "dalfox", "confidence": 0.70},
-            {"type": "CSRF", "severity": "LOW", "endpoint": "/admin",
-             "source_tool": "nuclei", "confidence": 0.50},
-            {"type": "COMMITTED_SECRET", "severity": "CRITICAL", "endpoint": "src/.env",
-             "source_tool": "gitleaks", "confidence": 0.99},
-            {"type": "INFO", "severity": "INFO", "endpoint": "/robots.txt",
-             "source_tool": "nuclei", "confidence": 0.30},
+            {
+                "type": "SQL_INJECTION",
+                "severity": "HIGH",
+                "endpoint": "/api/login",
+                "source_tool": "sqlmap",
+                "confidence": 0.95,
+            },
+            {
+                "type": "XSS",
+                "severity": "MEDIUM",
+                "endpoint": "/api/users",
+                "source_tool": "dalfox",
+                "confidence": 0.70,
+            },
+            {
+                "type": "CSRF",
+                "severity": "LOW",
+                "endpoint": "/admin",
+                "source_tool": "nuclei",
+                "confidence": 0.50,
+            },
+            {
+                "type": "COMMITTED_SECRET",
+                "severity": "CRITICAL",
+                "endpoint": "src/.env",
+                "source_tool": "gitleaks",
+                "confidence": 0.99,
+            },
+            {
+                "type": "INFO",
+                "severity": "INFO",
+                "endpoint": "/robots.txt",
+                "source_tool": "nuclei",
+                "confidence": 0.30,
+            },
         ]
 
         # ── Chain of mock contexts ──
         contexts: dict[str, MagicMock] = {}
         current_trace = trace_id
 
-        def make_recon_ctx(te, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_recon_ctx(
+            te, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             nonlocal current_trace
             if trace_id:
                 current_trace = trace_id
-            ctx = _make_mock_task_context("recon", eid, current_trace, db_conn_string=mock_db_url)
+            ctx = _make_mock_task_context(
+                "recon", eid, current_trace, db_conn_string=mock_db_url
+            )
             ctx.job.update(job_extra or {})
             ctx.orchestrator.run_recon.return_value = {
-                "phase": "recon", "status": "completed", "findings_count": 3,
-                "next_state": "scanning", "trace_id": current_trace,
-                "recon_context": {"target_url": target_url, "live_endpoints": ["/api", "/login"]},
+                "phase": "recon",
+                "status": "completed",
+                "findings_count": 3,
+                "next_state": "scanning",
+                "trace_id": current_trace,
+                "recon_context": {
+                    "target_url": target_url,
+                    "live_endpoints": ["/api", "/login"],
+                },
             }
             contexts["recon"] = ctx
             return _CapturingContext(ctx)
 
-        def make_scan_ctx(te, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_scan_ctx(
+            te, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             nonlocal current_trace
             if trace_id:
                 current_trace = trace_id
-            ctx = _make_mock_task_context("scan", eid, current_trace, db_conn_string=mock_db_url)
+            ctx = _make_mock_task_context(
+                "scan", eid, current_trace, db_conn_string=mock_db_url
+            )
             ctx.job.update(job_extra or {})
 
             def _mock_run_scan(job):
                 # Simulate orchestrator saving findings to finding_repo
                 findings_count = len(fake_findings_from_scan)
                 _finding_store[eid] = fake_findings_from_scan
-                finding_repo_mock.batch_create_or_update_findings(eid, fake_findings_from_scan)
+                finding_repo_mock.batch_create_or_update_findings(
+                    eid, fake_findings_from_scan
+                )
                 return {
-                    "phase": "scan", "status": "completed", "findings_count": findings_count,
-                    "next_state": "analyzing", "trace_id": current_trace,
+                    "phase": "scan",
+                    "status": "completed",
+                    "findings_count": findings_count,
+                    "next_state": "analyzing",
+                    "trace_id": current_trace,
                 }
 
             ctx.orchestrator.run_scan.side_effect = _mock_run_scan
             contexts["scan"] = ctx
             return _CapturingContext(ctx)
 
-        def make_analyze_ctx(te, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_analyze_ctx(
+            te, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             nonlocal current_trace
             if trace_id:
                 current_trace = trace_id
-            ctx = _make_mock_task_context("analyze", eid, current_trace, db_conn_string=mock_db_url)
+            ctx = _make_mock_task_context(
+                "analyze", eid, current_trace, db_conn_string=mock_db_url
+            )
             ctx.job.update(job_extra or {})
 
             def _mock_run_analysis(job):
                 # Simulate orchestrator loading findings from DB and scoring them
                 stored = _finding_store.get(eid, [])
-                finding_repo_mock.get_findings_by_engagement.return_value = (stored, len(stored))
+                finding_repo_mock.get_findings_by_engagement.return_value = (
+                    stored,
+                    len(stored),
+                )
                 mock_result = finding_repo_mock.get_findings_by_engagement(eid)
                 loaded = mock_result[0]  # the stored findings list
                 scored = []
                 for f in loaded:
                     if f["type"] in ("SQL_INJECTION", "XSS"):
-                        scored.append({
-                            "id": str(uuid.uuid4()),
-                            "type": f["type"], "severity": f["severity"],
-                            "confidence": f.get("confidence", 0.5),
-                        })
+                        scored.append(
+                            {
+                                "id": str(uuid.uuid4()),
+                                "type": f["type"],
+                                "severity": f["severity"],
+                                "confidence": f.get("confidence", 0.5),
+                            }
+                        )
                 return {
-                    "phase": "analyze", "status": "completed", "actions": [],
-                    "analysis": {"risk_level": "high", "coverage_gaps": [], "high_value_targets": []},
+                    "phase": "analyze",
+                    "status": "completed",
+                    "actions": [],
+                    "analysis": {
+                        "risk_level": "high",
+                        "coverage_gaps": [],
+                        "high_value_targets": [],
+                    },
                     "scored_findings": scored,
-                    "reasoning": "Analysis complete", "synthesis": {},
-                    "next_state": "reporting", "trace_id": current_trace,
+                    "reasoning": "Analysis complete",
+                    "synthesis": {},
+                    "next_state": "reporting",
+                    "trace_id": current_trace,
                 }
 
             ctx.orchestrator.run_analysis.side_effect = _mock_run_analysis
             contexts["analyze"] = ctx
             return _CapturingContext(ctx)
 
-        def make_report_ctx(te, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_report_ctx(
+            te, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             nonlocal current_trace
             if trace_id:
                 current_trace = trace_id
-            ctx = _make_mock_task_context("report", eid, current_trace, db_conn_string=mock_db_url)
+            ctx = _make_mock_task_context(
+                "report", eid, current_trace, db_conn_string=mock_db_url
+            )
             ctx.job.update(job_extra or {})
             ctx.orchestrator.run_reporting.return_value = {
-                "phase": "report", "status": "completed",
-                "next_state": "complete", "trace_id": current_trace,
+                "phase": "report",
+                "status": "completed",
+                "next_state": "complete",
+                "trace_id": current_trace,
                 "report": {"sections": ["summary", "findings"]},
             }
             contexts["report"] = ctx
@@ -814,12 +962,20 @@ class TestFullScanPipelineE2E:
         ):
             # STEP 1: Run recon
             recon_result = recon_module.run_recon.run(
-                engagement_id, target_url, budget, trace_id,
-                True, "agent", "default", False,
+                engagement_id,
+                target_url,
+                budget,
+                trace_id,
+                True,
+                "agent",
+                "default",
+                False,
             )
             assert recon_result["status"] == "completed"
             assert recon_result["trace_id"] == trace_id
-            contexts["recon"].state.transition.assert_any_call("recon", "Starting reconnaissance")
+            contexts["recon"].state.transition.assert_any_call(
+                "recon", "Starting reconnaissance"
+            )
 
             # ── Data flow: recon_context saved to Redis ──
             assert recon_result.get("recon_context") is not None
@@ -831,7 +987,9 @@ class TestFullScanPipelineE2E:
             assert saved_ctx_arg.live_endpoints == ["/api", "/login"]
 
             # STEP 2: Capture scan dispatch, run scan
-            scan_dispatch = next(d for d in dispatched if d["name"] == "tasks.scan.run_scan")
+            scan_dispatch = next(
+                d for d in dispatched if d["name"] == "tasks.scan.run_scan"
+            )
             assert scan_dispatch is not None
             scan_args = scan_dispatch["args"]
             assert scan_args[0] == engagement_id
@@ -839,12 +997,17 @@ class TestFullScanPipelineE2E:
             assert scan_args[3] == trace_id
 
             scan_result = scan_module.run_scan.run(
-                engagement_id, scan_args[1], scan_args[2], scan_args[3],
+                engagement_id,
+                scan_args[1],
+                scan_args[2],
+                scan_args[3],
                 *scan_args[4:],
             )
             assert scan_result["status"] == "completed"
             assert scan_result["trace_id"] == trace_id
-            contexts["scan"].state.transition.assert_any_call("analyzing", "Scan complete")
+            contexts["scan"].state.transition.assert_any_call(
+                "analyzing", "Scan complete"
+            )
 
             # ── Data flow: scan loaded recon_context ──
             scan_ctx = contexts["scan"]
@@ -856,22 +1019,34 @@ class TestFullScanPipelineE2E:
 
             # ── Data flow: findings persisted to DB by scan ──
             finding_repo_mock.batch_create_or_update_findings.assert_called_once()
-            persist_args = finding_repo_mock.batch_create_or_update_findings.call_args[0]
+            persist_args = finding_repo_mock.batch_create_or_update_findings.call_args[
+                0
+            ]
             assert persist_args[0] == engagement_id
             persisted = persist_args[1]
             assert len(persisted) == 5
-            assert any(f["type"] == "SQL_INJECTION" and f["severity"] == "HIGH" for f in persisted)
-            assert any(f["type"] == "COMMITTED_SECRET" and f["severity"] == "CRITICAL" for f in persisted)
+            assert any(
+                f["type"] == "SQL_INJECTION" and f["severity"] == "HIGH"
+                for f in persisted
+            )
+            assert any(
+                f["type"] == "COMMITTED_SECRET" and f["severity"] == "CRITICAL"
+                for f in persisted
+            )
 
             # STEP 3: Capture analyze dispatch, run analyze
-            analyze_dispatch = next(d for d in dispatched if d["name"] == "tasks.analyze.run_analysis")
+            analyze_dispatch = next(
+                d for d in dispatched if d["name"] == "tasks.analyze.run_analysis"
+            )
             assert analyze_dispatch is not None
             analyze_args = analyze_dispatch["args"]
             assert analyze_args[0] == engagement_id
             assert analyze_args[2] == trace_id
 
             analyze_result = analyze_module.run_analysis.run(
-                analyze_args[0], analyze_args[1], analyze_args[2],
+                analyze_args[0],
+                analyze_args[1],
+                analyze_args[2],
             )
             assert analyze_result["status"] == "completed"
             assert analyze_result["trace_id"] == trace_id
@@ -885,26 +1060,36 @@ class TestFullScanPipelineE2E:
             sf_types = {sf["type"] for sf in analyze_result["scored_findings"]}
             assert "SQL_INJECTION" in sf_types
             assert "XSS" in sf_types
-            sf1 = next(sf for sf in analyze_result["scored_findings"] if sf["type"] == "SQL_INJECTION")
+            sf1 = next(
+                sf
+                for sf in analyze_result["scored_findings"]
+                if sf["type"] == "SQL_INJECTION"
+            )
             assert sf1["severity"] == "HIGH"
             contexts["analyze"].state.transition.assert_any_call(
-                "reporting", "Analysis complete — advancing to report",
+                "reporting",
+                "Analysis complete — advancing to report",
             )
 
             # STEP 4: Capture report dispatch, run report
-            report_dispatch = next(d for d in dispatched if d["name"] == "tasks.report.generate_report")
+            report_dispatch = next(
+                d for d in dispatched if d["name"] == "tasks.report.generate_report"
+            )
             assert report_dispatch is not None
             report_args = report_dispatch["args"]
             assert report_args[0] == engagement_id
             assert report_args[1] == trace_id
 
             report_result = report_module.generate_report.run(
-                report_args[0], report_args[1], report_args[2],
+                report_args[0],
+                report_args[1],
+                report_args[2],
             )
             assert report_result["status"] == "completed"
             assert report_result["trace_id"] == trace_id
             contexts["report"].state.safe_transition.assert_any_call(
-                "complete", "Report generated",
+                "complete",
+                "Report generated",
             )
 
     # ── Trace ID propagation ────────────────────────────────────
@@ -922,31 +1107,48 @@ class TestFullScanPipelineE2E:
         from tasks import recon as recon_module
 
         ctx = _make_mock_task_context("recon", engagement_id, trace_id)
-        ctx.job.update({
-            "target": target_url,
-            "budget": budget,
-            "agent_mode": True,
-        })
+        ctx.job.update(
+            {
+                "target": target_url,
+                "budget": budget,
+                "agent_mode": True,
+            }
+        )
         ctx.orchestrator.run_recon.return_value = {
-            "phase": "recon", "status": "completed", "findings_count": 1,
-            "next_state": "scanning", "trace_id": trace_id,
+            "phase": "recon",
+            "status": "completed",
+            "findings_count": 1,
+            "next_state": "scanning",
+            "trace_id": trace_id,
             "recon_context": {"target_url": target_url},
         }
 
         with (
-            patch.object(recon_module, "task_context", side_effect=lambda *_, **__: _CapturingContext(ctx)),
+            patch.object(
+                recon_module,
+                "task_context",
+                side_effect=lambda *_, **__: _CapturingContext(ctx),
+            ),
             patch.object(recon_module, "app", mock_celery_app),
             patch("tasks.utils.load_recon_context", return_value=None),
             patch("tasks.utils.save_recon_context", return_value=None),
             patch("models.recon_context.ReconContext"),
         ):
             recon_module.run_recon.run(
-                engagement_id, target_url, budget, trace_id,
-                True, "agent", "default", False,
+                engagement_id,
+                target_url,
+                budget,
+                trace_id,
+                True,
+                "agent",
+                "default",
+                False,
             )
 
         # The scan dispatch must carry the same trace_id
-        scan_dispatch = next(t for t in dispatched_tasks if t["name"] == "tasks.scan.run_scan")
+        scan_dispatch = next(
+            t for t in dispatched_tasks if t["name"] == "tasks.scan.run_scan"
+        )
         assert scan_dispatch["args"][3] == trace_id, (
             f"Expected trace_id={trace_id} in scan dispatch, got {scan_dispatch['args'][3]}"
         )
@@ -988,24 +1190,34 @@ class TestFullScanPipelineE2E:
         # ── Step 1: Run recon (succeeds, dispatches scan) ──
 
         recon_ctx = _make_mock_task_context(
-            "recon", engagement_id, trace_id, db_conn_string=mock_db_url,
+            "recon",
+            engagement_id,
+            trace_id,
+            db_conn_string=mock_db_url,
         )
-        recon_ctx.job.update({
-            "target": target_url,
-            "targets": [target_url],
-            "budget": budget,
-            "agent_mode": True,
-            "scan_mode": "agent",
-            "aggressiveness": "default",
-            "bug_bounty_mode": False,
-        })
+        recon_ctx.job.update(
+            {
+                "target": target_url,
+                "targets": [target_url],
+                "budget": budget,
+                "agent_mode": True,
+                "scan_mode": "agent",
+                "aggressiveness": "default",
+                "bug_bounty_mode": False,
+            }
+        )
         recon_ctx.orchestrator.run_recon.return_value = {
-            "phase": "recon", "status": "completed", "findings_count": 2,
-            "next_state": "scanning", "trace_id": trace_id,
+            "phase": "recon",
+            "status": "completed",
+            "findings_count": 2,
+            "next_state": "scanning",
+            "trace_id": trace_id,
             "recon_context": {"target_url": target_url},
         }
 
-        def make_recon_ctx_fn(task, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_recon_ctx_fn(
+            task, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             recon_ctx.job.update(job_extra or {})
             if trace_id:
                 recon_ctx.trace_id = trace_id
@@ -1020,8 +1232,14 @@ class TestFullScanPipelineE2E:
             patch("utils.logging_utils.ScanLogger"),
         ):
             recon_result = recon_module.run_recon.run(
-                engagement_id, target_url, budget, trace_id,
-                True, "agent", "default", False,
+                engagement_id,
+                target_url,
+                budget,
+                trace_id,
+                True,
+                "agent",
+                "default",
+                False,
             )
 
         assert recon_result["status"] == "completed"
@@ -1030,26 +1248,35 @@ class TestFullScanPipelineE2E:
         # ── Step 2: Run scan (fails with exception) ──
 
         scan_ctx = _make_mock_task_context(
-            "scan", engagement_id, trace_id, db_conn_string=mock_db_url,
+            "scan",
+            engagement_id,
+            trace_id,
+            db_conn_string=mock_db_url,
         )
-        scan_ctx.job.update({
-            "targets": [target_url],
-            "budget": budget,
-            "agent_mode": True,
-            "recon_context": None,
-            "auth_config": {},
-        })
+        scan_ctx.job.update(
+            {
+                "targets": [target_url],
+                "budget": budget,
+                "agent_mode": True,
+                "recon_context": None,
+                "auth_config": {},
+            }
+        )
         # Make orchestrator raise — this prevents transition to analyzing
         # and dispatch of analyze task
         scan_ctx.orchestrator.run_scan.side_effect = RuntimeError("Scan failed")
 
-        def make_scan_ctx_fn(task, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_scan_ctx_fn(
+            task, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             scan_ctx.job.update(job_extra or {})
             if trace_id:
                 scan_ctx.trace_id = trace_id
             return _CapturingContext(scan_ctx)
 
-        scan_dispatch = next(d for d in dispatched if d["name"] == "tasks.scan.run_scan")
+        scan_dispatch = next(
+            d for d in dispatched if d["name"] == "tasks.scan.run_scan"
+        )
         scan_args = scan_dispatch["args"]
 
         with (
@@ -1060,7 +1287,10 @@ class TestFullScanPipelineE2E:
         ):
             with pytest.raises(RuntimeError, match="Scan failed"):
                 scan_module.run_scan.run(
-                    engagement_id, scan_args[1], scan_args[2], scan_args[3],
+                    engagement_id,
+                    scan_args[1],
+                    scan_args[2],
+                    scan_args[3],
                     *scan_args[4:],
                 )
 
@@ -1074,7 +1304,8 @@ class TestFullScanPipelineE2E:
 
         # 3. Analyzed transition was NEVER reached (exception before it)
         analyzing_calls = [
-            c for c in scan_ctx.state.transition.call_args_list
+            c
+            for c in scan_ctx.state.transition.call_args_list
             if c[0][0] == "analyzing"
         ]
         assert len(analyzing_calls) == 0, (
@@ -1134,24 +1365,34 @@ class TestFullScanPipelineE2E:
         # ── Step 1: Run recon (succeeds, dispatches scan) ──
 
         recon_ctx = _make_mock_task_context(
-            "recon", engagement_id, trace_id, db_conn_string=mock_db_url,
+            "recon",
+            engagement_id,
+            trace_id,
+            db_conn_string=mock_db_url,
         )
-        recon_ctx.job.update({
-            "target": target_url,
-            "targets": [target_url],
-            "budget": budget,
-            "agent_mode": True,
-            "scan_mode": "agent",
-            "aggressiveness": "default",
-            "bug_bounty_mode": False,
-        })
+        recon_ctx.job.update(
+            {
+                "target": target_url,
+                "targets": [target_url],
+                "budget": budget,
+                "agent_mode": True,
+                "scan_mode": "agent",
+                "aggressiveness": "default",
+                "bug_bounty_mode": False,
+            }
+        )
         recon_ctx.orchestrator.run_recon.return_value = {
-            "phase": "recon", "status": "completed", "findings_count": 2,
-            "next_state": "scanning", "trace_id": trace_id,
+            "phase": "recon",
+            "status": "completed",
+            "findings_count": 2,
+            "next_state": "scanning",
+            "trace_id": trace_id,
             "recon_context": {"target_url": target_url},
         }
 
-        def make_recon_ctx_fn(task, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_recon_ctx_fn(
+            task, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             recon_ctx.job.update(job_extra or {})
             if trace_id:
                 recon_ctx.trace_id = trace_id
@@ -1166,8 +1407,14 @@ class TestFullScanPipelineE2E:
             patch("utils.logging_utils.ScanLogger"),
         ):
             recon_result = recon_module.run_recon.run(
-                engagement_id, target_url, budget, trace_id,
-                True, "agent", "default", False,
+                engagement_id,
+                target_url,
+                budget,
+                trace_id,
+                True,
+                "agent",
+                "default",
+                False,
             )
 
         assert recon_result["status"] == "completed"
@@ -1176,20 +1423,28 @@ class TestFullScanPipelineE2E:
         # ── Step 2: Run scan (orchestrator returns failed status) ──
 
         scan_ctx = _make_mock_task_context(
-            "scan", engagement_id, trace_id, db_conn_string=mock_db_url,
+            "scan",
+            engagement_id,
+            trace_id,
+            db_conn_string=mock_db_url,
         )
-        scan_ctx.job.update({
-            "targets": [target_url],
-            "budget": budget,
-            "agent_mode": True,
-            "recon_context": None,
-            "auth_config": {},
-        })
+        scan_ctx.job.update(
+            {
+                "targets": [target_url],
+                "budget": budget,
+                "agent_mode": True,
+                "recon_context": None,
+                "auth_config": {},
+            }
+        )
 
         # Orchestrator returns failed status (doesn't raise an exception)
         scan_ctx.orchestrator.run_scan.return_value = {
-            "phase": "scan", "status": "failed", "reason": "scan_failed",
-            "findings_count": 0, "trace_id": trace_id,
+            "phase": "scan",
+            "status": "failed",
+            "reason": "scan_failed",
+            "findings_count": 0,
+            "trace_id": trace_id,
         }
 
         # Make transition to analyzing FAIL (simulating the guard that prevents
@@ -1200,13 +1455,17 @@ class TestFullScanPipelineE2E:
 
         scan_ctx.state.transition.side_effect = _transition_raises_if_analyzing
 
-        def make_scan_ctx_fn(task, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_scan_ctx_fn(
+            task, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             scan_ctx.job.update(job_extra or {})
             if trace_id:
                 scan_ctx.trace_id = trace_id
             return _CapturingContext(scan_ctx)
 
-        scan_dispatch = next(d for d in dispatched if d["name"] == "tasks.scan.run_scan")
+        scan_dispatch = next(
+            d for d in dispatched if d["name"] == "tasks.scan.run_scan"
+        )
         scan_args = scan_dispatch["args"]
 
         with (
@@ -1217,7 +1476,10 @@ class TestFullScanPipelineE2E:
         ):
             # Should NOT raise — orchestrator returns, doesn't raise
             result = scan_module.run_scan.run(
-                engagement_id, scan_args[1], scan_args[2], scan_args[3],
+                engagement_id,
+                scan_args[1],
+                scan_args[2],
+                scan_args[3],
                 *scan_args[4:],
             )
 
@@ -1237,7 +1499,8 @@ class TestFullScanPipelineE2E:
 
         # 4. transition("analyzing") was attempted (via side_effect)
         analyzing_calls = [
-            c for c in scan_ctx.state.transition.call_args_list
+            c
+            for c in scan_ctx.state.transition.call_args_list
             if c[0][0] == "analyzing"
         ]
         assert len(analyzing_calls) == 1, (
@@ -1247,7 +1510,8 @@ class TestFullScanPipelineE2E:
         # 5. safe_transition("failed") was called as error recovery
         fail_transition = next(
             (
-                c for c in scan_ctx.state.safe_transition.call_args_list
+                c
+                for c in scan_ctx.state.safe_transition.call_args_list
                 if c[0][0] == "failed"
             ),
             None,
@@ -1305,103 +1569,167 @@ class TestFullScanPipelineE2E:
         _finding_store: dict[str, list[dict]] = {}
 
         fake_findings_from_scan = [
-            {"type": "SQL_INJECTION", "severity": "HIGH", "endpoint": "/api/login",
-             "source_tool": "sqlmap", "confidence": 0.95},
-            {"type": "XSS", "severity": "MEDIUM", "endpoint": "/api/users",
-             "source_tool": "dalfox", "confidence": 0.70},
+            {
+                "type": "SQL_INJECTION",
+                "severity": "HIGH",
+                "endpoint": "/api/login",
+                "source_tool": "sqlmap",
+                "confidence": 0.95,
+            },
+            {
+                "type": "XSS",
+                "severity": "MEDIUM",
+                "endpoint": "/api/users",
+                "source_tool": "dalfox",
+                "confidence": 0.70,
+            },
         ]
 
         recon_ctx = _make_mock_task_context(
-            "recon", engagement_id, trace_id, db_conn_string=mock_db_url,
+            "recon",
+            engagement_id,
+            trace_id,
+            db_conn_string=mock_db_url,
         )
-        recon_ctx.job.update({
-            "target": target_url, "targets": [target_url], "budget": budget,
-            "agent_mode": True, "scan_mode": "agent", "aggressiveness": "default",
-            "bug_bounty_mode": False,
-        })
+        recon_ctx.job.update(
+            {
+                "target": target_url,
+                "targets": [target_url],
+                "budget": budget,
+                "agent_mode": True,
+                "scan_mode": "agent",
+                "aggressiveness": "default",
+                "bug_bounty_mode": False,
+            }
+        )
         recon_ctx.orchestrator.run_recon.return_value = {
-            "phase": "recon", "status": "completed", "findings_count": 2,
-            "next_state": "scanning", "trace_id": trace_id,
+            "phase": "recon",
+            "status": "completed",
+            "findings_count": 2,
+            "next_state": "scanning",
+            "trace_id": trace_id,
             "recon_context": {"target_url": target_url},
         }
 
         scan_ctx = _make_mock_task_context(
-            "scan", engagement_id, trace_id, db_conn_string=mock_db_url,
+            "scan",
+            engagement_id,
+            trace_id,
+            db_conn_string=mock_db_url,
         )
-        scan_ctx.job.update({
-            "targets": [target_url], "budget": budget, "agent_mode": True,
-            "recon_context": None, "auth_config": {},
-        })
+        scan_ctx.job.update(
+            {
+                "targets": [target_url],
+                "budget": budget,
+                "agent_mode": True,
+                "recon_context": None,
+                "auth_config": {},
+            }
+        )
 
         def _mock_run_scan(job):
             findings_count = len(fake_findings_from_scan)
             _finding_store[engagement_id] = fake_findings_from_scan
             finding_repo_mock.batch_create_or_update_findings(
-                engagement_id, fake_findings_from_scan,
+                engagement_id,
+                fake_findings_from_scan,
             )
             return {
-                "phase": "scan", "status": "completed", "findings_count": findings_count,
-                "next_state": "analyzing", "trace_id": trace_id,
+                "phase": "scan",
+                "status": "completed",
+                "findings_count": findings_count,
+                "next_state": "analyzing",
+                "trace_id": trace_id,
             }
 
         scan_ctx.orchestrator.run_scan.side_effect = _mock_run_scan
 
         analyze_ctx = _make_mock_task_context(
-            "analyze", engagement_id, trace_id, db_conn_string=mock_db_url,
+            "analyze",
+            engagement_id,
+            trace_id,
+            db_conn_string=mock_db_url,
         )
         analyze_ctx.job.update({"budget": budget})
 
         def _mock_run_analysis(job):
             stored = _finding_store.get(engagement_id, [])
-            finding_repo_mock.get_findings_by_engagement.return_value = (stored, len(stored))
+            finding_repo_mock.get_findings_by_engagement.return_value = (
+                stored,
+                len(stored),
+            )
             mock_result = finding_repo_mock.get_findings_by_engagement(engagement_id)
             loaded = mock_result[0]
             scored = []
             for f in loaded:
                 if f["type"] in ("SQL_INJECTION", "XSS"):
-                    scored.append({
-                        "id": str(uuid.uuid4()),
-                        "type": f["type"], "severity": f["severity"],
-                        "confidence": f.get("confidence", 0.5),
-                    })
+                    scored.append(
+                        {
+                            "id": str(uuid.uuid4()),
+                            "type": f["type"],
+                            "severity": f["severity"],
+                            "confidence": f.get("confidence", 0.5),
+                        }
+                    )
             return {
-                "phase": "analyze", "status": "completed", "actions": [],
-                "analysis": {"risk_level": "high", "coverage_gaps": [], "high_value_targets": []},
+                "phase": "analyze",
+                "status": "completed",
+                "actions": [],
+                "analysis": {
+                    "risk_level": "high",
+                    "coverage_gaps": [],
+                    "high_value_targets": [],
+                },
                 "scored_findings": scored,
-                "reasoning": "Analysis complete", "synthesis": {},
-                "next_state": "reporting", "trace_id": trace_id,
+                "reasoning": "Analysis complete",
+                "synthesis": {},
+                "next_state": "reporting",
+                "trace_id": trace_id,
             }
 
         analyze_ctx.orchestrator.run_analysis.side_effect = _mock_run_analysis
 
         report_ctx = _make_mock_task_context(
-            "report", engagement_id, trace_id, db_conn_string=mock_db_url,
+            "report",
+            engagement_id,
+            trace_id,
+            db_conn_string=mock_db_url,
         )
         report_ctx.job.update({"budget": budget})
         # Orchestrator raises — this propagates because report.py does NOT
         # wrap run_reporting() in try/except
-        report_ctx.orchestrator.run_reporting.side_effect = RuntimeError("Report generation failed")
+        report_ctx.orchestrator.run_reporting.side_effect = RuntimeError(
+            "Report generation failed"
+        )
 
         # ── Helper: create context mappers that return each ctx ──
-        def make_recon_ctx_fn(task, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_recon_ctx_fn(
+            task, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             recon_ctx.job.update(job_extra or {})
             if trace_id:
                 recon_ctx.trace_id = trace_id
             return _CapturingContext(recon_ctx)
 
-        def make_scan_ctx_fn(task, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_scan_ctx_fn(
+            task, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             scan_ctx.job.update(job_extra or {})
             if trace_id:
                 scan_ctx.trace_id = trace_id
             return _CapturingContext(scan_ctx)
 
-        def make_analyze_ctx_fn(task, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_analyze_ctx_fn(
+            task, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             analyze_ctx.job.update(job_extra or {})
             if trace_id:
                 analyze_ctx.trace_id = trace_id
             return _CapturingContext(analyze_ctx)
 
-        def make_report_ctx_fn(task, eid, jt, job_extra=None, trace_id=None, current_state=None):
+        def make_report_ctx_fn(
+            task, eid, jt, job_extra=None, trace_id=None, current_state=None
+        ):
             report_ctx.job.update(job_extra or {})
             if trace_id:
                 report_ctx.trace_id = trace_id
@@ -1418,7 +1746,9 @@ class TestFullScanPipelineE2E:
             patch.object(scan_module, "task_context", side_effect=make_scan_ctx_fn),
             patch.object(scan_module, "app", mock_celery_app),
             # Phase 3: Analyze
-            patch.object(analyze_module, "task_context", side_effect=make_analyze_ctx_fn),
+            patch.object(
+                analyze_module, "task_context", side_effect=make_analyze_ctx_fn
+            ),
             patch.object(analyze_module, "app", mock_celery_app),
             # Phase 4: Report
             patch.object(report_module, "task_context", side_effect=make_report_ctx_fn),
@@ -1430,18 +1760,31 @@ class TestFullScanPipelineE2E:
         ):
             # ── Step 1: Recon succeeds ──
             recon_result = recon_module.run_recon.run(
-                engagement_id, target_url, budget, trace_id,
-                True, "agent", "default", False,
+                engagement_id,
+                target_url,
+                budget,
+                trace_id,
+                True,
+                "agent",
+                "default",
+                False,
             )
             assert recon_result["status"] == "completed"
             assert recon_result["trace_id"] == trace_id
-            recon_ctx.state.transition.assert_any_call("recon", "Starting reconnaissance")
+            recon_ctx.state.transition.assert_any_call(
+                "recon", "Starting reconnaissance"
+            )
 
             # ── Step 2: Capture scan dispatch, run scan (succeeds) ──
-            scan_dispatch = next(d for d in dispatched if d["name"] == "tasks.scan.run_scan")
+            scan_dispatch = next(
+                d for d in dispatched if d["name"] == "tasks.scan.run_scan"
+            )
             scan_args = scan_dispatch["args"]
             scan_result = scan_module.run_scan.run(
-                engagement_id, scan_args[1], scan_args[2], scan_args[3],
+                engagement_id,
+                scan_args[1],
+                scan_args[2],
+                scan_args[3],
                 *scan_args[4:],
             )
             assert scan_result["status"] == "completed"
@@ -1449,25 +1792,34 @@ class TestFullScanPipelineE2E:
             scan_ctx.state.transition.assert_any_call("analyzing", "Scan complete")
 
             # ── Step 3: Capture analyze dispatch, run analyze (succeeds) ──
-            analyze_dispatch = next(d for d in dispatched if d["name"] == "tasks.analyze.run_analysis")
+            analyze_dispatch = next(
+                d for d in dispatched if d["name"] == "tasks.analyze.run_analysis"
+            )
             analyze_args = analyze_dispatch["args"]
             analyze_result = analyze_module.run_analysis.run(
-                analyze_args[0], analyze_args[1], analyze_args[2],
+                analyze_args[0],
+                analyze_args[1],
+                analyze_args[2],
             )
             assert analyze_result["status"] == "completed"
             assert analyze_result["trace_id"] == trace_id
             assert len(analyze_result["scored_findings"]) == 2
             analyze_ctx.state.transition.assert_any_call(
-                "reporting", "Analysis complete — advancing to report",
+                "reporting",
+                "Analysis complete — advancing to report",
             )
 
             # ── Step 4: Capture report dispatch, run report (RAISES) ──
-            report_dispatch = next(d for d in dispatched if d["name"] == "tasks.report.generate_report")
+            report_dispatch = next(
+                d for d in dispatched if d["name"] == "tasks.report.generate_report"
+            )
             report_args = report_dispatch["args"]
 
             with pytest.raises(RuntimeError, match="Report generation failed"):
                 report_module.generate_report.run(
-                    report_args[0], report_args[1], report_args[2],
+                    report_args[0],
+                    report_args[1],
+                    report_args[2],
                 )
 
         # ── Assert error recovery ──
@@ -1479,14 +1831,19 @@ class TestFullScanPipelineE2E:
         report_ctx.orchestrator.run_reporting.assert_called_once()
 
         # 2. All successful phases completed their state transitions
-        recon_ctx.state.transition.assert_any_call("scanning", "Recon complete — scan dispatched")
+        recon_ctx.state.transition.assert_any_call(
+            "scanning", "Recon complete — scan dispatched"
+        )
         scan_ctx.state.transition.assert_any_call("analyzing", "Scan complete")
-        analyze_ctx.state.transition.assert_any_call("reporting", "Analysis complete — advancing to report")
+        analyze_ctx.state.transition.assert_any_call(
+            "reporting", "Analysis complete — advancing to report"
+        )
 
         # 3. safe_transition("complete") was NEVER called on report context
         #    (exception propagates before the safe_transition in report.py)
         complete_calls = [
-            c for c in report_ctx.state.safe_transition.call_args_list
+            c
+            for c in report_ctx.state.safe_transition.call_args_list
             if c[0][0] == "complete"
         ]
         assert len(complete_calls) == 0, (
@@ -1516,7 +1873,9 @@ class TestFullScanPipelineE2E:
         from celery_app import app
 
         routes = app.conf.task_routes
-        assert isinstance(routes, dict), f"task_routes should be a dict, got {type(routes)}"
+        assert isinstance(routes, dict), (
+            f"task_routes should be a dict, got {type(routes)}"
+        )
 
         # ── Helper: resolve task name to queue via fnmatch ──
         def _resolve(task_name: str) -> str | None:
@@ -1560,6 +1919,7 @@ class TestFullScanPipelineE2E:
         """
         from celery_app import app
         from tasks import recon as recon_module
+
         routes = app.conf.task_routes
 
         def _resolve_queue(task_name: str) -> str | None:
@@ -1587,14 +1947,20 @@ class TestFullScanPipelineE2E:
 
         ctx = _make_mock_task_context("recon", "routing-test-id", "routing-trace")
         ctx.orchestrator.run_recon.return_value = {
-            "phase": "recon", "status": "completed", "findings_count": 1,
+            "phase": "recon",
+            "status": "completed",
+            "findings_count": 1,
             "next_state": "scanning",
             "recon_context": {"target_url": "https://example.com"},
             "trace_id": "routing-trace",
         }
 
         with (
-            patch.object(recon_module, "task_context", side_effect=lambda *_, **__: _CapturingContext(ctx)),
+            patch.object(
+                recon_module,
+                "task_context",
+                side_effect=lambda *_, **__: _CapturingContext(ctx),
+            ),
             patch.object(recon_module, "app", mock_app),
             patch("tasks.utils.load_recon_context", return_value=None),
             patch("tasks.utils.save_recon_context", return_value=None),
@@ -1602,8 +1968,14 @@ class TestFullScanPipelineE2E:
             patch("utils.logging_utils.ScanLogger"),
         ):
             recon_module.run_recon.run(
-                "routing-test-id", "https://example.com", {},
-                "routing-trace", True, "agent", "default", False,
+                "routing-test-id",
+                "https://example.com",
+                {},
+                "routing-trace",
+                True,
+                "agent",
+                "default",
+                False,
             )
 
         # ── Assert core pipeline tasks have routes ──
@@ -1693,10 +2065,19 @@ class TestFullScanPipelineE2E:
             ],
             tech_stack=["React", "Node.js", "PostgreSQL", "Redis", "Nginx"],
             crawled_paths=[
-                "/", "/api/users", "/api/login", "/admin/dashboard",
-                "/.env", "/robots.txt", "/sitemap.xml",
+                "/",
+                "/api/users",
+                "/api/login",
+                "/admin/dashboard",
+                "/.env",
+                "/robots.txt",
+                "/sitemap.xml",
             ],
-            parameter_bearing_urls=["/api/users?id=1", "/search?q=test", "/api/data?page=2"],
+            parameter_bearing_urls=[
+                "/api/users?id=1",
+                "/search?q=test",
+                "/api/data?page=2",
+            ],
             auth_endpoints=["/login", "/oauth/token", "/auth/callback"],
             api_endpoints=["/api/users", "/api/login", "/api/data", "/graphql"],
             findings_count=12,
@@ -1797,23 +2178,36 @@ class TestFullScanPipelineE2E:
         from tasks import scan as scan_module
 
         scan_ctx = _make_mock_task_context(
-            "scan", engagement_id, trace_id, db_conn_string=mock_db_url,
+            "scan",
+            engagement_id,
+            trace_id,
+            db_conn_string=mock_db_url,
         )
-        scan_ctx.job.update({
-            "targets": targets,
-            "budget": budget,
-            "agent_mode": True,
-            # Use the deserialized ReconContext OBJECT (realistic flow)
-            "recon_context": loaded,
-            "auth_config": {},
-        })
+        scan_ctx.job.update(
+            {
+                "targets": targets,
+                "budget": budget,
+                "agent_mode": True,
+                # Use the deserialized ReconContext OBJECT (realistic flow)
+                "recon_context": loaded,
+                "auth_config": {},
+            }
+        )
         scan_ctx.orchestrator.run_scan.return_value = {
-            "phase": "scan", "status": "completed", "findings_count": 5,
-            "next_state": "analyzing", "trace_id": trace_id,
+            "phase": "scan",
+            "status": "completed",
+            "findings_count": 5,
+            "next_state": "analyzing",
+            "trace_id": trace_id,
         }
 
         def make_scan_ctx_for_roundtrip(
-            te, eid, jt, job_extra=None, trace_id=None, current_state=None,
+            te,
+            eid,
+            jt,
+            job_extra=None,
+            trace_id=None,
+            current_state=None,
         ):
             scan_ctx.job.update(job_extra or {})
             if trace_id:
@@ -1821,14 +2215,22 @@ class TestFullScanPipelineE2E:
             return _CapturingContext(scan_ctx)
 
         with (
-            patch.object(scan_module, "task_context", side_effect=make_scan_ctx_for_roundtrip),
+            patch.object(
+                scan_module, "task_context", side_effect=make_scan_ctx_for_roundtrip
+            ),
             patch.object(scan_module, "app", mock_celery_app),
             # Return the deserialized ReconContext to match real scan flow
             patch("tasks.utils.load_recon_context", return_value=loaded),
         ):
             result = scan_module.run_scan.run(
-                engagement_id, targets, budget, trace_id,
-                True, None, None, None,
+                engagement_id,
+                targets,
+                budget,
+                trace_id,
+                True,
+                None,
+                None,
+                None,
             )
 
         assert result["status"] == "completed"
@@ -1837,7 +2239,12 @@ class TestFullScanPipelineE2E:
         # Verify the scan's job_extra.recon_context held the deserialized ReconContext
         assert scan_ctx.job.get("recon_context") is not None
         assert scan_ctx.job["recon_context"].target_url == target_url
-        assert scan_ctx.job["recon_context"].live_endpoints == ["/api", "/login", "/admin", "/users"]
+        assert scan_ctx.job["recon_context"].live_endpoints == [
+            "/api",
+            "/login",
+            "/admin",
+            "/users",
+        ]
         assert scan_ctx.job["recon_context"].has_hardcoded_secrets is True
 
     def test_orchestrator_unknown_job_type_raises_error(

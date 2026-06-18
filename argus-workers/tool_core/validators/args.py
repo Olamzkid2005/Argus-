@@ -40,7 +40,10 @@ def is_dangerous(args: list[str], tool: str = "") -> tuple[bool, str]:
     dangerous_chars = set(";&|`$(){}[]!<>#\n\t")
     for i, arg in enumerate(args):
         if any(c in arg for c in dangerous_chars):
-            return True, f"Argument at position {i} contains shell metacharacters: {arg!r}"
+            return (
+                True,
+                f"Argument at position {i} contains shell metacharacters: {arg!r}",
+            )
         if ".." in arg:
             return True, f"Argument at position {i} contains path traversal: {arg!r}"
 

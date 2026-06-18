@@ -43,8 +43,10 @@ class TestGracefulShutdownHandler:
         assert handler.force_exit_after == 1
 
     def test_setup_registers_signal_handlers(self, handler):
-        with patch.object(handler, "original_sigterm_handler", None), \
-             patch.object(handler, "original_sigint_handler", None):
+        with (
+            patch.object(handler, "original_sigterm_handler", None),
+            patch.object(handler, "original_sigint_handler", None),
+        ):
             handler.setup()
             assert handler.original_sigterm_handler is not None
             assert handler.original_sigint_handler is not None
@@ -100,8 +102,10 @@ class TestGracefulShutdownHandler:
 
     def test_handle_task_failure_on_shutdown(self, handler):
         error = ValueError("test error")
-        with patch("dead_letter_queue.get_dlq") as mock_get_dlq, \
-             patch("error_classifier.classify_error") as mock_classify:
+        with (
+            patch("dead_letter_queue.get_dlq") as mock_get_dlq,
+            patch("error_classifier.classify_error") as mock_classify,
+        ):
             mock_dlq = MagicMock()
             mock_get_dlq.return_value = mock_dlq
             mock_classify.return_value.category.value = "retryable"
@@ -120,7 +124,11 @@ class TestGracefulShutdownHandler:
         with patch("dead_letter_queue.get_dlq", side_effect=Exception("DLQ down")):
             # Should not raise — gracefully handles DLQ failure
             handler.handle_task_failure_on_shutdown(
-                task_id="task-1", task_name="test", args=(), kwargs={}, error=error,
+                task_id="task-1",
+                task_name="test",
+                args=(),
+                kwargs={},
+                error=error,
             )
 
 

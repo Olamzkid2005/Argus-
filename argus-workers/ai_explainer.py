@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ExplanationResult:
     """Result of AI explanation generation."""
+
     cluster_id: str
     explanation: str
     model_version: str
@@ -57,7 +58,7 @@ class AIExplainer:
         temperature: float = 0.3,
         max_tokens: int = 500,
         db_connection=None,
-        embedding_client=None
+        embedding_client=None,
     ):
         """
         Initialize AI explainer.
@@ -77,10 +78,7 @@ class AIExplainer:
         self.db = db_connection
         self.embedding_client = embedding_client
 
-    async def explain_clusters(
-        self,
-        clusters: list[dict]
-    ) -> list[ExplanationResult]:
+    async def explain_clusters(self, clusters: list[dict]) -> list[ExplanationResult]:
         """
         Generate explanations for pre-grouped vulnerability clusters.
 
@@ -129,7 +127,7 @@ class AIExplainer:
                     token_count=len(explanation.split()),  # Approximate
                     input_cluster_ids=[cluster["cluster_id"]],
                     used_fields=list(sanitized_cluster.keys()),
-                    timestamp=datetime.now()
+                    timestamp=datetime.now(),
                 )
 
                 # Store explanation and trace
@@ -139,13 +137,16 @@ class AIExplainer:
                 results.append(result)
 
                 logger.info(
-                    f"Generated explanation for cluster {cluster['cluster_id']}: "
-                    f"{len(explanation)} chars"
+                    "Generated explanation for cluster %s: %s chars",
+                    cluster["cluster_id"],
+                    len(explanation),
                 )
 
             except Exception as e:
                 logger.error(
-                    f"Failed to explain cluster {cluster.get('cluster_id', 'unknown')}: {e}"
+                    "Failed to explain cluster %s: %s",
+                    cluster.get("cluster_id", "unknown"),
+                    e,
                 )
                 continue
 
@@ -197,7 +198,7 @@ class AIExplainer:
             "confidence",
             "vulnerability_type",
             "affected_endpoints",
-            "common_patterns"
+            "common_patterns",
         ]
 
         for field in safe_fields:
@@ -207,13 +208,20 @@ class AIExplainer:
                 # Sanitize strings
                 if isinstance(value, str):
                     # Remove non-ASCII and control characters to prevent Unicode-based bypass
-                    value = re.sub(r'[^\x20-\x7E\s]', '', value)
+                    value = re.sub(r"[^\x20-\x7E\s]", "", value)
                     # Remove control characters (including null, backspace, etc.)
-                    value = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', value)
+                    value = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", "", value)
 
                     # Remove potential prompt injection patterns (with stricter boundaries)
-                    value = re.sub(r'\b(ignore|disregard|forget)\b.*?\b(previous|above|prior)\b', '', value, flags=re.IGNORECASE | re.DOTALL)
-                    value = re.sub(r'\b(you are|act as|pretend)\b', '', value, flags=re.IGNORECASE)
+                    value = re.sub(
+                        r"\b(ignore|disregard|forget)\b.*?\b(previous|above|prior)\b",
+                        "",
+                        value,
+                        flags=re.IGNORECASE | re.DOTALL,
+                    )
+                    value = re.sub(
+                        r"\b(you are|act as|pretend)\b", "", value, flags=re.IGNORECASE
+                    )
 
                     # Aggressively truncate to prevent hidden injection in long strings
                     if len(value) > 500:
@@ -245,11 +253,25 @@ class AIExplainer:
 
         # Check: no new vulnerability types mentioned that aren't in input
         declared_type = cluster.get("vulnerability_type", "").upper()
-        if declared_type and declared_type not in explanation_lower and declared_type.replace("_", " ").lower() not in explanation_lower and ("sql" in declared_type.lower() or "xss" in declared_type.lower() or "rce" in declared_type.lower() or "ssrf" in declared_type.lower()):
-                logger.debug("Explanation doesn't mention primary vulnerability type '%s' — may still be valid", declared_type)
+        if (
+            declared_type
+            and declared_type not in explanation_lower
+            and declared_type.replace("_", " ").lower() not in explanation_lower
+            and (
+                "sql" in declared_type.lower()
+                or "xss" in declared_type.lower()
+                or "rce" in declared_type.lower()
+                or "ssrf" in declared_type.lower()
+            )
+        ):
+            logger.debug(
+                "Explanation doesn't mention primary vulnerability type '%s' — may still be valid",
+                declared_type,
+            )
 
         # Check: don't invent CVE IDs not in input
         import re
+
         input_cves = set()
         for finding in cluster.get("findings", []):
             evidence = finding.get("evidence", {})
@@ -261,7 +283,9 @@ class AIExplainer:
         output_cves = set(re.findall(r"CVE-\d{4}-\d{4,}", explanation, re.IGNORECASE))
         invented_cves = output_cves - input_cves
         if invented_cves:
-            logger.warning("Explanation invented CVE IDs not in input: %s", invented_cves)
+            logger.warning(
+                "Explanation invented CVE IDs not in input: %s", invented_cves
+            )
             return False
 
         return True
@@ -276,10 +300,12 @@ class AIExplainer:
         Returns:
             Prompt string
         """
-        findings_summary = "\n".join([
-            f"- {f['type']} at {f['endpoint']} (Severity: {f['severity']}, Confidence: {f['confidence']:.0%})"
-            for f in cluster.get("findings", [])
-        ])
+        findings_summary = "\n".join(
+            [
+                f"- {f['type']} at {f['endpoint']} (Severity: {f['severity']}, Confidence: {f['confidence']:.0%})"
+                for f in cluster.get("findings", [])
+            ]
+        )
 
         prompt = f"""You are a security expert explaining vulnerabilities to developers.
 
@@ -291,10 +317,10 @@ STRICT RULES:
 5. ONLY explain what is provided
 
 VULNERABILITY CLUSTER:
-Cluster ID: {cluster.get('cluster_id')}
-Overall Severity: {cluster.get('severity')}
-Overall Confidence: {cluster.get('confidence', 0.0):.0%}
-Type: {cluster.get('vulnerability_type', 'Unknown')}
+Cluster ID: {cluster.get("cluster_id")}
+Overall Severity: {cluster.get("severity")}
+Overall Confidence: {cluster.get("confidence", 0.0):.0%}
+Type: {cluster.get("vulnerability_type", "Unknown")}
 
 FINDINGS:
 {findings_summary}
@@ -330,7 +356,9 @@ Keep response under 500 tokens. Be factual and specific."""
             return "AI explanation not available (LLM client not configured)"
 
         # Try OpenAI/Anthropic SDK-style client first
-        if hasattr(self.llm_client, "chat") and hasattr(self.llm_client.chat, "completions"):
+        if hasattr(self.llm_client, "chat") and hasattr(
+            self.llm_client.chat, "completions"
+        ):
             return await self._generate_with_sdk_client(prompt)
 
         # Fallback to generic HTTP API with httpx
@@ -355,31 +383,32 @@ Keep response under 500 tokens. Be factual and specific."""
         for attempt in range(3):  # 3 attempts = initial + 2 retries
             try:
                 import asyncio
+
                 response = await asyncio.wait_for(
                     self.llm_client.chat.completions.create(
                         model=self.model_version,
                         messages=[
                             {
                                 "role": "system",
-                                "content": "You are a security expert explaining vulnerabilities to developers. Be factual and specific."
+                                "content": "You are a security expert explaining vulnerabilities to developers. Be factual and specific.",
                             },
-                            {"role": "user", "content": prompt}
+                            {"role": "user", "content": prompt},
                         ],
                         temperature=self.temperature,
-                        max_tokens=self.max_tokens
+                        max_tokens=self.max_tokens,
                     ),
-                    timeout=15
+                    timeout=15,
                 )
 
                 return response.choices[0].message.content
 
             except Exception as e:
                 last_error = e
-                logger.warning(f"LLM call attempt {attempt + 1} failed: {e}")
+                logger.warning("LLM call attempt %s failed: %s", attempt + 1, e)
                 if attempt < 2:
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s
+                    await asyncio.sleep(2**attempt)  # Exponential backoff: 1s, 2s
 
-        logger.error(f"All LLM retry attempts failed: {last_error}")
+        logger.error("All LLM retry attempts failed: %s", last_error)
         return f"Failed to generate explanation after retries: {str(last_error)}"
 
     async def _generate_with_httpx(self, prompt: str) -> str:
@@ -415,12 +444,12 @@ Keep response under 500 tokens. Be factual and specific."""
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a security expert explaining vulnerabilities to developers. Be factual and specific."
+                    "content": "You are a security expert explaining vulnerabilities to developers. Be factual and specific.",
                 },
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             "temperature": self.temperature,
-            "max_tokens": self.max_tokens
+            "max_tokens": self.max_tokens,
         }
 
         headers = {"Content-Type": "application/json"}
@@ -445,18 +474,17 @@ Keep response under 500 tokens. Be factual and specific."""
 
             except Exception as e:
                 last_error = e
-                logger.warning(f"HTTP LLM attempt {attempt + 1} failed: {e}")
+                logger.warning("HTTP LLM attempt %s failed: %s", attempt + 1, e)
                 if attempt < 2:
                     import asyncio
-                    await asyncio.sleep(2 ** attempt)
 
-        logger.error(f"All HTTP LLM retry attempts failed: {last_error}")
+                    await asyncio.sleep(2**attempt)
+
+        logger.error("All HTTP LLM retry attempts failed: %s", last_error)
         return f"Failed to generate explanation after retries: {str(last_error)}"
 
     async def _store_explanation(
-        self,
-        result: ExplanationResult,
-        cluster: dict
+        self, result: ExplanationResult, cluster: dict
     ) -> None:
         """
         Store explanation and explainability trace in database.
@@ -480,7 +508,7 @@ Keep response under 500 tokens. Be factual and specific."""
                 cluster_id=result.cluster_id,
                 explanation=result.explanation,
                 model_version=result.model_version,
-                token_count=result.token_count
+                token_count=result.token_count,
             )
 
             # Store explainability trace
@@ -496,15 +524,14 @@ Keep response under 500 tokens. Be factual and specific."""
                 "reasoning_trace": result.explanation[:500],  # First 500 chars
             }
 
-            repo.create_trace(
-                cluster_id=result.cluster_id,
-                trace_data=trace_data
+            repo.create_trace(cluster_id=result.cluster_id, trace_data=trace_data)
+
+            logger.info(
+                "Stored explanation and trace for cluster %s", result.cluster_id
             )
 
-            logger.info(f"Stored explanation and trace for cluster {result.cluster_id}")
-
         except Exception as e:
-            logger.error(f"Failed to store explanation: {e}")
+            logger.error("Failed to store explanation: %s", e)
 
     async def generate_embedding(self, text: str) -> list[float] | None:
         """
@@ -520,41 +547,43 @@ Keep response under 500 tokens. Be factual and specific."""
         if self.embedding_client:
             try:
                 response = await self.embedding_client.embeddings.create(
-                    model=self.EMBEDDING_MODEL,
-                    input=text
+                    model=self.EMBEDDING_MODEL, input=text
                 )
                 return response.data[0].embedding
             except Exception as e:
-                logger.warning(f"Embedding client failed: {e}")
+                logger.warning("Embedding client failed: %s", e)
 
         # Try using main LLM client as fallback
         if self.llm_client:
             try:
                 # Some LLM clients support embeddings
                 response = await self.llm_client.embeddings.create(
-                    model=self.EMBEDDING_MODEL,
-                    input=text
+                    model=self.EMBEDDING_MODEL, input=text
                 )
                 return response.data[0].embedding
             except AttributeError:
                 # Client doesn't support embeddings
                 pass
             except Exception as e:
-                logger.warning(f"LLM client embedding failed: {e}")
+                logger.warning("LLM client embedding failed: %s", e)
 
         # Try OpenRouter embeddings endpoint (for sk-or- keys)
         import os
+
         api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
         if api_key and api_key.startswith("sk-or-"):
             try:
                 import httpx
+
                 async with httpx.AsyncClient(timeout=15) as client:
                     resp = await client.post(
                         "https://openrouter.ai/api/v1/embeddings",
                         headers={
                             "Authorization": f"Bearer {api_key}",
                             "Content-Type": "application/json",
-                            "HTTP-Referer": os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
+                            "HTTP-Referer": os.getenv(
+                                "NEXT_PUBLIC_APP_URL", "http://localhost:3000"
+                            ),
                             "X-Title": "Argus Pentest Platform",
                         },
                         json={"model": "openai/text-embedding-3-small", "input": text},
@@ -563,7 +592,7 @@ Keep response under 500 tokens. Be factual and specific."""
                         data = resp.json()
                         return data["data"][0]["embedding"]
             except Exception as e:
-                logger.warning(f"OpenRouter embedding failed: {e}")
+                logger.warning("OpenRouter embedding failed: %s", e)
 
         # Return placeholder embedding for testing
         logger.info("Using placeholder embedding (no API key configured)")
@@ -584,7 +613,7 @@ Keep response under 500 tokens. Be factual and specific."""
 
         for i in range(0, len(hash_bytes), 4):
             if i + 3 < len(hash_bytes):
-                value = int.from_bytes(hash_bytes[i:i+4], 'big')
+                value = int.from_bytes(hash_bytes[i : i + 4], "big")
                 normalized = (value % 10000) / 10000.0
                 embedding.append(normalized)
 
@@ -592,12 +621,10 @@ Keep response under 500 tokens. Be factual and specific."""
         while len(embedding) < self.EMBEDDING_DIMENSIONS:
             embedding.append(0.0)
 
-        return embedding[:self.EMBEDDING_DIMENSIONS]
+        return embedding[: self.EMBEDDING_DIMENSIONS]
 
     async def generate_and_store_embeddings(
-        self,
-        findings: list[dict],
-        engagement_id: str
+        self, findings: list[dict], engagement_id: str
     ) -> dict[str, bool]:
         """
         Generate and store embeddings for findings using pgvector.
@@ -646,12 +673,16 @@ Keep response under 500 tokens. Be factual and specific."""
                     result["errors"] += 1
 
             except Exception as e:
-                logger.error(f"Failed to process embedding for {finding.get('id')}: {e}")
+                logger.error(
+                    "Failed to process embedding for %s: %s", finding.get("id"), e
+                )
                 result["errors"] += 1
 
         logger.info(
-            f"Embedding generation complete: {result['success']} success, "
-            f"{result['errors']} errors, {result['skipped']} skipped"
+            "Embedding generation complete: %s success, %s errors, %s skipped",
+            result["success"],
+            result["errors"],
+            result["skipped"],
         )
         return result
 
@@ -713,20 +744,28 @@ Keep response under 500 tokens. Be factual and specific."""
 
             # Collect threat feed hits
             for hit in threat_intel.get("threat_feed_hits", []):
-                feed_hits.append(f"{hit.get('feed', 'unknown')}: {hit.get('description', '')}")
+                feed_hits.append(
+                    f"{hit.get('feed', 'unknown')}: {hit.get('description', '')}"
+                )
 
             # Collect FP warnings
             fp_assessment = threat_intel.get("fp_assessment", {})
-            if fp_assessment.get("verdict") in ["likely_false_positive", "false_positive"]:
+            if fp_assessment.get("verdict") in [
+                "likely_false_positive",
+                "false_positive",
+            ]:
                 fp_warnings.append(
                     f"{finding.get('type', 'unknown')} at {finding.get('endpoint', '')} "
-                    f"- {fp_assessment.get('verdict')} (confidence: {fp_assessment.get('confidence', 0)})")
+                    f"- {fp_assessment.get('verdict')} (confidence: {fp_assessment.get('confidence', 0)})"
+                )
 
         if cve_list:
             intel_parts.append(f"Related CVEs: {', '.join(cve_list[:5])}")
 
         if epss_alerts:
-            intel_parts.append(f"High Exploitability (EPSS >50%): {', '.join(epss_alerts[:3])}")
+            intel_parts.append(
+                f"High Exploitability (EPSS >50%): {', '.join(epss_alerts[:3])}"
+            )
 
         if feed_hits:
             intel_parts.append(f"Threat Feed Matches: {', '.join(feed_hits[:3])}")
@@ -767,8 +806,7 @@ THREAT INTELLIGENCE CONTEXT:
         return base_prompt + threat_section
 
     async def explain_clusters_with_threat_intel(
-        self,
-        clusters: list[dict]
+        self, clusters: list[dict]
     ) -> list[ExplanationResult]:
         """
         Generate explanations enriched with threat intelligence context.
@@ -815,7 +853,7 @@ THREAT INTELLIGENCE CONTEXT:
                     token_count=len(explanation.split()),
                     input_cluster_ids=[cluster["cluster_id"]],
                     used_fields=list(sanitized_cluster.keys()),
-                    timestamp=datetime.now()
+                    timestamp=datetime.now(),
                 )
 
                 # Store explanation and trace
@@ -825,13 +863,16 @@ THREAT INTELLIGENCE CONTEXT:
                 results.append(result)
 
                 logger.info(
-                    f"Generated threat-intel explanation for cluster {cluster['cluster_id']}: "
-                    f"{len(explanation)} chars"
+                    "Generated threat-intel explanation for cluster %s: %s chars",
+                    cluster["cluster_id"],
+                    len(explanation),
                 )
 
             except Exception as e:
                 logger.error(
-                    f"Failed to explain cluster {cluster.get('cluster_id', 'unknown')} with threat intel: {e}"
+                    "Failed to explain cluster %s with threat intel: %s",
+                    cluster.get("cluster_id", "unknown"),
+                    e,
                 )
                 continue
 

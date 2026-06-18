@@ -69,7 +69,9 @@ class TestEngagementService:
         from orchestrator_pkg.engagement.engagement_service import EngagementService
 
         with patch("database.connection.db_cursor") as mock_db:
-            mock_db.return_value.__enter__.side_effect = RuntimeError("Connection refused")
+            mock_db.return_value.__enter__.side_effect = RuntimeError(
+                "Connection refused"
+            )
             result = EngagementService.load_priority_vuln_classes("eng-bad")
 
         assert result == []

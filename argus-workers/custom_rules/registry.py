@@ -3,6 +3,7 @@ Custom Rule Registry - Rule sharing marketplace and versioning
 
 Requirements: 27.4, 27.5
 """
+
 import json
 import os
 from datetime import UTC, datetime
@@ -26,7 +27,11 @@ class RuleRegistry:
         Args:
             storage_dir: Directory for rule storage
         """
-        self.storage_dir = Path(storage_dir) if storage_dir else Path(os.path.dirname(__file__)) / "registry"
+        self.storage_dir = (
+            Path(storage_dir)
+            if storage_dir
+            else Path(os.path.dirname(__file__)) / "registry"
+        )
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
         self.versions_dir = self.storage_dir / "versions"
@@ -35,7 +40,9 @@ class RuleRegistry:
         self.community_dir = self.storage_dir / "community"
         self.community_dir.mkdir(exist_ok=True)
 
-    def register_rule(self, rule_id: str, rule_yaml: str, metadata: dict | None = None) -> dict:
+    def register_rule(
+        self, rule_id: str, rule_yaml: str, metadata: dict | None = None
+    ) -> dict:
         """
         Register or update a rule.
 
@@ -53,7 +60,7 @@ class RuleRegistry:
         version = 1
         if rule_file.exists():
             existing = self.get_rule(rule_id)
-            version = (existing.get("version", 1) + 1)
+            version = existing.get("version", 1) + 1
 
         # Save current version
         rule_data = {
@@ -118,7 +125,10 @@ class RuleRegistry:
         return self.register_rule(
             rule_id,
             rule_yaml,
-            metadata={**version_data.get("metadata", {}), "rolled_back_from": target_version}
+            metadata={
+                **version_data.get("metadata", {}),
+                "rolled_back_from": target_version,
+            },
         )
 
     def list_rules(self) -> list[dict]:
@@ -126,10 +136,12 @@ class RuleRegistry:
         rules = []
         for rule_file in self.storage_dir.glob("*.yml"):
             rule_id = rule_file.stem
-            rules.append({
-                "id": rule_id,
-                "version": self._get_current_version(rule_id),
-            })
+            rules.append(
+                {
+                    "id": rule_id,
+                    "version": self._get_current_version(rule_id),
+                }
+            )
         return rules
 
     def _get_current_version(self, rule_id: str) -> int:
@@ -141,7 +153,9 @@ class RuleRegistry:
 
     # Community marketplace (basic structure)
 
-    def publish_to_community(self, rule_id: str, author: str, description: str = "") -> dict:
+    def publish_to_community(
+        self, rule_id: str, author: str, description: str = ""
+    ) -> dict:
         """
         Publish a rule to the community marketplace.
 
@@ -195,4 +209,8 @@ class RuleRegistry:
         community_file.write_text(json.dumps(data, indent=2))
 
         # Register locally
-        return self.register_rule(rule_id, yaml_content, metadata={"source": "community", "author": data.get("author", "")})
+        return self.register_rule(
+            rule_id,
+            yaml_content,
+            metadata={"source": "community", "author": data.get("author", "")},
+        )

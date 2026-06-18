@@ -85,7 +85,8 @@ class IntelligenceService:
                 from tasks.utils import load_recon_context
 
                 llm_svc = LLMService(
-                    self.llm_client, cost_tracker=engagement_cost_tracker,
+                    self.llm_client,
+                    cost_tracker=engagement_cost_tracker,
                 )
                 recon_ctx = load_recon_context(self.engagement_id)
             except Exception as e:

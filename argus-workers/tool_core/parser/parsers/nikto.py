@@ -37,20 +37,24 @@ def _parse_json(output: str) -> list[NormalizedFinding]:
         osvdb = item.get("OSVDB", "") or item.get("osvdb", "")
         url = item.get("url", "") or item.get("hostname", "")
 
-        findings.append(NormalizedFinding(
-            title=msg[:120] if msg else "Nikto finding",
-            severity=_infer_severity(msg),
-            confidence=2,
-            description=f"OSVDB: {osvdb}" if osvdb else msg,
-            tool="nikto",
-            evidence=[{
-                "type": "http",
-                "url": url,
-                "osvdb": osvdb,
-                "message": msg,
-            }],
-            subtype="web_vulnerability",
-        ))
+        findings.append(
+            NormalizedFinding(
+                title=msg[:120] if msg else "Nikto finding",
+                severity=_infer_severity(msg),
+                confidence=2,
+                description=f"OSVDB: {osvdb}" if osvdb else msg,
+                tool="nikto",
+                evidence=[
+                    {
+                        "type": "http",
+                        "url": url,
+                        "osvdb": osvdb,
+                        "message": msg,
+                    }
+                ],
+                subtype="web_vulnerability",
+            )
+        )
 
     return findings
 
@@ -68,23 +72,27 @@ def _parse_csv(output: str) -> list[NormalizedFinding]:
         url = row[4].strip() if len(row) > 4 else ""
         description = row[5].strip() if len(row) > 5 else ""
 
-        findings.append(NormalizedFinding(
-            title=description[:120] if description else "Nikto finding",
-            severity=normalize_severity("medium", 2),
-            confidence=2,
-            description=f"{method} {url}: {description}",
-            tool="nikto",
-            evidence=[{
-                "type": "http",
-                "hostname": hostname,
-                "port": port,
-                "osvdb": osvdb,
-                "method": method,
-                "url": url,
-                "description": description,
-            }],
-            subtype="web_vulnerability",
-        ))
+        findings.append(
+            NormalizedFinding(
+                title=description[:120] if description else "Nikto finding",
+                severity=normalize_severity("medium", 2),
+                confidence=2,
+                description=f"{method} {url}: {description}",
+                tool="nikto",
+                evidence=[
+                    {
+                        "type": "http",
+                        "hostname": hostname,
+                        "port": port,
+                        "osvdb": osvdb,
+                        "method": method,
+                        "url": url,
+                        "description": description,
+                    }
+                ],
+                subtype="web_vulnerability",
+            )
+        )
 
     return findings
 
@@ -96,15 +104,17 @@ def _parse_text(output: str) -> list[NormalizedFinding]:
         content = match.group(1).strip()
         if not content or len(content) < 10:
             continue
-        findings.append(NormalizedFinding(
-            title=content[:120],
-            severity=_infer_severity(content),
-            confidence=1,
-            description=content,
-            tool="nikto",
-            evidence=[{"type": "text", "content": content}],
-            subtype="web_vulnerability",
-        ))
+        findings.append(
+            NormalizedFinding(
+                title=content[:120],
+                severity=_infer_severity(content),
+                confidence=1,
+                description=content,
+                tool="nikto",
+                evidence=[{"type": "text", "content": content}],
+                subtype="web_vulnerability",
+            )
+        )
     return findings
 
 

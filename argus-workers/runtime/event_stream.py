@@ -53,81 +53,104 @@ class SafeEventEmitter:
 
     def emit_thinking(self, message: str, details: dict | None = None):
         """Queue a thinking event."""
-        self._queue.append({
-            "type": "thinking",
-            "engagement_id": self.engagement_id,
-            "data": {"message": message, "details": details or {}},
-        })
+        self._queue.append(
+            {
+                "type": "thinking",
+                "engagement_id": self.engagement_id,
+                "data": {"message": message, "details": details or {}},
+            }
+        )
 
     def emit_tool_start(self, tool: str, args: list[str] | None = None):
         """Queue a tool_start event."""
-        self._queue.append({
-            "type": "tool_start",
-            "engagement_id": self.engagement_id,
-            "data": {"tool": tool, "args": args or []},
-        })
+        self._queue.append(
+            {
+                "type": "tool_start",
+                "engagement_id": self.engagement_id,
+                "data": {"tool": tool, "args": args or []},
+            }
+        )
 
     def emit_tool_complete(
-        self, tool: str, success: bool,
-        duration_ms: int = 0, finding_count: int = 0,
+        self,
+        tool: str,
+        success: bool,
+        duration_ms: int = 0,
+        finding_count: int = 0,
     ):
         """Queue a tool_complete event."""
-        self._queue.append({
-            "type": "tool_complete",
-            "engagement_id": self.engagement_id,
-            "data": {
-                "tool": tool,
-                "success": success,
-                "duration_ms": duration_ms,
-                "finding_count": finding_count,
-            },
-        })
+        self._queue.append(
+            {
+                "type": "tool_complete",
+                "engagement_id": self.engagement_id,
+                "data": {
+                    "tool": tool,
+                    "success": success,
+                    "duration_ms": duration_ms,
+                    "finding_count": finding_count,
+                },
+            }
+        )
 
     def emit_finding(
-        self, finding_id: str, finding_type: str, severity: str,
-        confidence: float, endpoint: str, source_tool: str,
+        self,
+        finding_id: str,
+        finding_type: str,
+        severity: str,
+        confidence: float,
+        endpoint: str,
+        source_tool: str,
     ):
         """Queue a finding event (matches WebSocketEventPublisher.publish_finding signature)."""
-        self._queue.append({
-            "type": "finding",
-            "engagement_id": self.engagement_id,
-            "data": {
-                "finding_id": finding_id,
-                "finding_type": finding_type,
-                "severity": severity,
-                "confidence": confidence,
-                "endpoint": endpoint,
-                "source_tool": source_tool,
-            },
-        })
+        self._queue.append(
+            {
+                "type": "finding",
+                "engagement_id": self.engagement_id,
+                "data": {
+                    "finding_id": finding_id,
+                    "finding_type": finding_type,
+                    "severity": severity,
+                    "confidence": confidence,
+                    "endpoint": endpoint,
+                    "source_tool": source_tool,
+                },
+            }
+        )
 
     def emit_state_change(self, from_state: str, to_state: str, reason: str = ""):
         """Queue a state_change event (matches WebSocketEventPublisher.publish_state_transition)."""
-        self._queue.append({
-            "type": "state_change",
-            "engagement_id": self.engagement_id,
-            "data": {
-                "from_state": from_state,
-                "to_state": to_state,
-                "reason": reason,
-            },
-        })
+        self._queue.append(
+            {
+                "type": "state_change",
+                "engagement_id": self.engagement_id,
+                "data": {
+                    "from_state": from_state,
+                    "to_state": to_state,
+                    "reason": reason,
+                },
+            }
+        )
 
     def emit_agent_decision(
-        self, iteration: int, tool: str,
-        reasoning: str = "", was_fallback: bool = False,
+        self,
+        iteration: int,
+        tool: str,
+        reasoning: str = "",
+        was_fallback: bool = False,
     ):
         """Queue an agent_decision event."""
-        self._queue.append({
-            "type": "agent_decision",
-            "engagement_id": self.engagement_id,
-            "data": {
-                "iteration": iteration,
-                "tool": tool,
-                "reasoning": reasoning,
-                "was_fallback": was_fallback,
-            },
-        })
+        self._queue.append(
+            {
+                "type": "agent_decision",
+                "engagement_id": self.engagement_id,
+                "data": {
+                    "iteration": iteration,
+                    "tool": tool,
+                    "reasoning": reasoning,
+                    "was_fallback": was_fallback,
+                },
+            }
+        )
 
     def flush(self):
         """
@@ -162,34 +185,47 @@ class SafeEventEmitter:
                 try:
                     if etype == "thinking":
                         _emit_thinking(
-                            self.engagement_id, data["message"], data.get("details"),
+                            self.engagement_id,
+                            data["message"],
+                            data.get("details"),
                         )
                     elif etype == "tool_start":
-                        _emit_tool_start(self.engagement_id, data["tool"], data.get("args"))
+                        _emit_tool_start(
+                            self.engagement_id, data["tool"], data.get("args")
+                        )
                     elif etype == "tool_complete":
                         _emit_tool_complete(
-                            self.engagement_id, data["tool"], data["success"],
-                            data.get("duration_ms", 0), data.get("finding_count", 0),
+                            self.engagement_id,
+                            data["tool"],
+                            data["success"],
+                            data.get("duration_ms", 0),
+                            data.get("finding_count", 0),
                         )
                     elif etype == "finding":
                         if _ws:
                             _ws.publish_finding(
                                 self.engagement_id,
-                                data["finding_id"], data["finding_type"],
-                                data["severity"], data["confidence"],
-                                data["endpoint"], data["source_tool"],
+                                data["finding_id"],
+                                data["finding_type"],
+                                data["severity"],
+                                data["confidence"],
+                                data["endpoint"],
+                                data["source_tool"],
                             )
                     elif etype == "state_change":
                         if _ws:
                             _ws.publish_state_transition(
                                 self.engagement_id,
-                                data["from_state"], data["to_state"],
+                                data["from_state"],
+                                data["to_state"],
                                 data.get("reason", ""),
                             )
                     elif etype == "agent_decision":
                         _emit_agent_decision(
-                            self.engagement_id, data["iteration"],
-                            data["tool"], data.get("reasoning", ""),
+                            self.engagement_id,
+                            data["iteration"],
+                            data["tool"],
+                            data.get("reasoning", ""),
                             data.get("was_fallback", False),
                         )
                 except Exception as e:

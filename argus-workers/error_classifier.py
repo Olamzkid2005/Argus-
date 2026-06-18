@@ -17,29 +17,32 @@ logger = logging.getLogger(__name__)
 
 class ErrorCategory(Enum):
     """Categories of errors for targeted handling"""
-    TRANSIENT = "transient"           # Temporary, likely to succeed on retry
-    PERMANENT = "permanent"           # Will never succeed, needs code fix
-    INFRASTRUCTURE = "infrastructure" # DB, Redis, network issues
-    EXTERNAL = "external"             # Third-party service failures
-    VALIDATION = "validation"         # Input validation errors
-    RATE_LIMIT = "rate_limit"         # Rate limiting errors
-    SECURITY = "security"             # Authentication/authorization failures
-    RESOURCE = "resource"             # Out of memory, disk space, etc.
-    TIMEOUT = "timeout"               # Time limit exceeded
-    UNKNOWN = "unknown"               # Unclassified
+
+    TRANSIENT = "transient"  # Temporary, likely to succeed on retry
+    PERMANENT = "permanent"  # Will never succeed, needs code fix
+    INFRASTRUCTURE = "infrastructure"  # DB, Redis, network issues
+    EXTERNAL = "external"  # Third-party service failures
+    VALIDATION = "validation"  # Input validation errors
+    RATE_LIMIT = "rate_limit"  # Rate limiting errors
+    SECURITY = "security"  # Authentication/authorization failures
+    RESOURCE = "resource"  # Out of memory, disk space, etc.
+    TIMEOUT = "timeout"  # Time limit exceeded
+    UNKNOWN = "unknown"  # Unclassified
 
 
 class ErrorSeverity(Enum):
     """Severity levels for error alerting"""
-    LOW = "low"           # Log only
-    MEDIUM = "medium"     # Log + metric
-    HIGH = "high"         # Log + metric + alert
-    CRITICAL = "critical" # Log + metric + immediate alert + page
+
+    LOW = "low"  # Log only
+    MEDIUM = "medium"  # Log + metric
+    HIGH = "high"  # Log + metric + alert
+    CRITICAL = "critical"  # Log + metric + immediate alert + page
 
 
 @dataclass
 class ErrorClassification:
     """Result of error classification"""
+
     category: ErrorCategory
     severity: ErrorSeverity
     should_retry: bool
@@ -50,58 +53,98 @@ class ErrorClassification:
 # Error patterns for automatic classification
 ERROR_PATTERNS = {
     ErrorCategory.TRANSIENT: [
-        "connection reset", "connection refused", "broken pipe",
-        "temporarily unavailable", "try again later", "service unavailable",
-        "too many connections", "pool exhausted",
+        "connection reset",
+        "connection refused",
+        "broken pipe",
+        "temporarily unavailable",
+        "try again later",
+        "service unavailable",
+        "too many connections",
+        "pool exhausted",
     ],
     ErrorCategory.INFRASTRUCTURE: [
-        "database", "postgresql", "psycopg2", "redis", "connection pool",
-        "network", "dns", "socket",
+        "database",
+        "postgresql",
+        "psycopg2",
+        "redis",
+        "connection pool",
+        "network",
+        "dns",
+        "socket",
     ],
     ErrorCategory.EXTERNAL: [
-        "http error", "api error", "third party", "webhook",
-        "openai", "anthropic", "llm",
+        "http error",
+        "api error",
+        "third party",
+        "webhook",
+        "openai",
+        "anthropic",
+        "llm",
     ],
     ErrorCategory.VALIDATION: [
-        "invalid", "validation", "required field", "bad request",
-        "schema", "malformed",
+        "invalid",
+        "validation",
+        "required field",
+        "bad request",
+        "schema",
+        "malformed",
     ],
     ErrorCategory.RATE_LIMIT: [
-        "rate limit", "too many requests", "429", "throttled",
-        "quota exceeded", "limit exceeded",
+        "rate limit",
+        "too many requests",
+        "429",
+        "throttled",
+        "quota exceeded",
+        "limit exceeded",
     ],
     ErrorCategory.SECURITY: [
-        "unauthorized", "forbidden", "authentication", "permission",
-        "access denied", "invalid token", "csrf",
+        "unauthorized",
+        "forbidden",
+        "authentication",
+        "permission",
+        "access denied",
+        "invalid token",
+        "csrf",
     ],
     ErrorCategory.RESOURCE: [
-        "out of memory", "disk full", "no space", "resource",
-        "quota", "limit reached",
+        "out of memory",
+        "disk full",
+        "no space",
+        "resource",
+        "quota",
+        "limit reached",
     ],
     ErrorCategory.TIMEOUT: [
-        "time limit", "deadline exceeded", "soft time limit",
-        "hard time limit", "timeout",
+        "time limit",
+        "deadline exceeded",
+        "soft time limit",
+        "hard time limit",
+        "timeout",
     ],
 }
 
 # Permanent error indicators (should not retry)
 PERMANENT_INDICATORS = [
-    "not found", "does not exist", "unsupported",
-    "not implemented", "deprecated", "bad request", "unauthorized",
-    "forbidden", "payment required",
+    "not found",
+    "does not exist",
+    "unsupported",
+    "not implemented",
+    "deprecated",
+    "bad request",
+    "unauthorized",
+    "forbidden",
+    "payment required",
 ]
 
 
 def classify_error(
-    error: Exception,
-    task_name: str | None = None,
-    retry_count: int = 0
+    error: Exception, task_name: str | None = None, retry_count: int = 0
 ) -> ErrorClassification:
     error_message = str(error).lower()
     error_type = type(error).__name__
 
     # Check for ErrorCode attribute (set via tag_error()) — preferred path
-    error_code = getattr(error, 'error_code', None)
+    error_code = getattr(error, "error_code", None)
     if error_code is not None:
         code_result = classify_by_error_code(error_code, retry_count)
         return ErrorClassification(
@@ -129,15 +172,17 @@ def classify_error(
 
     is_permanent = any(ind in error_message for ind in PERMANENT_INDICATORS)
 
-    if (is_permanent
+    if (
+        is_permanent
         or category in (ErrorCategory.VALIDATION, ErrorCategory.SECURITY)
         or (category == ErrorCategory.TIMEOUT and retry_count >= 2)
-        or retry_count >= 3):
+        or retry_count >= 3
+    ):
         should_retry = False
         retry_delay = 0
     else:
         should_retry = True
-        retry_delay = min(2 ** retry_count * 30, 600)
+        retry_delay = min(2**retry_count * 30, 600)
 
     if category in (ErrorCategory.INFRASTRUCTURE, ErrorCategory.RESOURCE):
         severity = ErrorSeverity.HIGH
@@ -162,7 +207,7 @@ def classify_error(
         severity=severity,
         should_retry=should_retry,
         retry_delay_seconds=retry_delay,
-        alert_message=alert_message
+        alert_message=alert_message,
     )
 
 
@@ -171,7 +216,7 @@ def log_classified_error(
     task_id: str,
     task_name: str,
     error: Exception,
-    extra_context: dict[str, Any] | None = None
+    extra_context: dict[str, Any] | None = None,
 ):
     """
     Log an error with its classification.
@@ -192,7 +237,7 @@ def log_classified_error(
         "severity": classification.severity.value,
         "should_retry": classification.should_retry,
         "retry_delay": classification.retry_delay_seconds,
-        "context": extra_context or {}
+        "context": extra_context or {},
     }
 
     if classification.severity == ErrorSeverity.CRITICAL:
@@ -222,19 +267,20 @@ def send_alert(message: str, severity: ErrorSeverity):
     alert_channel = os.getenv("ALERT_WEBHOOK_URL")
 
     if not alert_channel:
-        logger.warning(f"ALERT: {message}")
+        logger.warning("ALERT: %s", message)
         return
 
     def _fire():
         try:
             import httpx
+
             with httpx.Client(timeout=5.0) as client:
                 client.post(
                     alert_channel,
                     json={
                         "text": message,
                         "severity": severity.value,
-                        "timestamp": datetime.now(UTC).isoformat()
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                 )
         except Exception as e:
@@ -312,7 +358,9 @@ class CodeBasedClassification:
     error_code: ErrorCode | None = None
 
 
-def classify_by_error_code(code: ErrorCode, retry_count: int = 0) -> CodeBasedClassification:
+def classify_by_error_code(
+    code: ErrorCode, retry_count: int = 0
+) -> CodeBasedClassification:
     """Classify an error by its ErrorCode for reliable, deterministic routing.
 
     This is the PREFERRED classification method. Use it when the error
@@ -331,7 +379,7 @@ def classify_by_error_code(code: ErrorCode, retry_count: int = 0) -> CodeBasedCl
     """
     # ── Resource errors — retryable (wait for reset) ──
     if code in (ErrorCode.RATE_LIMITED, ErrorCode.QUOTA_EXCEEDED):
-        delay = min(2 ** retry_count * 30, 600)
+        delay = min(2**retry_count * 30, 600)
         return CodeBasedClassification(
             category=ErrorCategory.RATE_LIMIT,
             severity=ErrorSeverity.MEDIUM,
@@ -362,7 +410,7 @@ def classify_by_error_code(code: ErrorCode, retry_count: int = 0) -> CodeBasedCl
 
     # ── Database errors — retryable transient ──
     if code == ErrorCode.DATABASE_ERROR:
-        delay = min(2 ** retry_count * 30, 300)
+        delay = min(2**retry_count * 30, 300)
         return CodeBasedClassification(
             category=ErrorCategory.INFRASTRUCTURE,
             severity=ErrorSeverity.HIGH,
@@ -376,11 +424,15 @@ def classify_by_error_code(code: ErrorCode, retry_count: int = 0) -> CodeBasedCl
     if code in (ErrorCode.TOOL_NOT_FOUND, ErrorCode.TOOL_EXECUTION_FAILED):
         is_retryable = retry_count < 3
         return CodeBasedClassification(
-            category=ErrorCategory.TRANSIENT if is_retryable else ErrorCategory.PERMANENT,
+            category=ErrorCategory.TRANSIENT
+            if is_retryable
+            else ErrorCategory.PERMANENT,
             severity=ErrorSeverity.MEDIUM if is_retryable else ErrorSeverity.HIGH,
             should_retry=is_retryable,
-            retry_delay_seconds=min(2 ** retry_count * 15, 300) if is_retryable else 0,
-            alert_message=f"Tool execution error: {code.value}" if not is_retryable else None,
+            retry_delay_seconds=min(2**retry_count * 15, 300) if is_retryable else 0,
+            alert_message=f"Tool execution error: {code.value}"
+            if not is_retryable
+            else None,
             error_code=code,
         )
 
@@ -389,7 +441,7 @@ def classify_by_error_code(code: ErrorCode, retry_count: int = 0) -> CodeBasedCl
             category=ErrorCategory.TIMEOUT,
             severity=ErrorSeverity.MEDIUM,
             should_retry=True,
-            retry_delay_seconds=min(2 ** retry_count * 60, 600),
+            retry_delay_seconds=min(2**retry_count * 60, 600),
             alert_message=None,
             error_code=code,
         )
@@ -409,7 +461,7 @@ def classify_by_error_code(code: ErrorCode, retry_count: int = 0) -> CodeBasedCl
             category=ErrorCategory.TRANSIENT,
             severity=ErrorSeverity.LOW,
             should_retry=True,
-            retry_delay_seconds=min(2 ** retry_count * 10, 120),
+            retry_delay_seconds=min(2**retry_count * 10, 120),
             alert_message=None,
             error_code=code,
         )
@@ -418,10 +470,12 @@ def classify_by_error_code(code: ErrorCode, retry_count: int = 0) -> CodeBasedCl
     if code in (ErrorCode.STEP_EXECUTION_FAILED, ErrorCode.OUTPUT_VALIDATION_FAILED):
         is_retryable = retry_count < 2
         return CodeBasedClassification(
-            category=ErrorCategory.TRANSIENT if is_retryable else ErrorCategory.PERMANENT,
+            category=ErrorCategory.TRANSIENT
+            if is_retryable
+            else ErrorCategory.PERMANENT,
             severity=ErrorSeverity.MEDIUM,
             should_retry=is_retryable,
-            retry_delay_seconds=min(2 ** retry_count * 30, 300) if is_retryable else 0,
+            retry_delay_seconds=min(2**retry_count * 30, 300) if is_retryable else 0,
             alert_message=None,
             error_code=code,
         )
@@ -451,7 +505,7 @@ def classify_by_error_code(code: ErrorCode, retry_count: int = 0) -> CodeBasedCl
             category=ErrorCategory.INFRASTRUCTURE,
             severity=ErrorSeverity.HIGH,
             should_retry=True,
-            retry_delay_seconds=min(2 ** retry_count * 30, 300),
+            retry_delay_seconds=min(2**retry_count * 30, 300),
             alert_message=f"Checkpoint error (retry {retry_count})",
             error_code=code,
         )

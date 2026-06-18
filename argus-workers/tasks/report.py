@@ -22,8 +22,15 @@ from tracing import TracingManager
 logger = logging.getLogger(__name__)
 
 
-@app.task(bind=True, name="tasks.report.generate_report", soft_time_limit=1800, time_limit=2400)
-def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict | None = None):
+@app.task(
+    bind=True,
+    name="tasks.report.generate_report",
+    soft_time_limit=1800,
+    time_limit=2400,
+)
+def generate_report(
+    self, engagement_id: str, trace_id: str = None, budget: dict | None = None
+):
     """
     Generate final report for an engagement
 
@@ -33,6 +40,7 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
         budget: Optional budget dict (forwards prev_engagement_id for diff engine)
     """
     from utils.logging_utils import ScanLogger
+
     slog = ScanLogger("report", engagement_id=engagement_id)
     slog.phase_header("REPORT PHASE")
 
@@ -40,17 +48,25 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
     if budget:
         job_extra["budget"] = budget
     with task_context(
-        self, engagement_id, "report",
+        self,
+        engagement_id,
+        "report",
         job_extra=job_extra,
-        trace_id=trace_id, current_state="reporting"
+        trace_id=trace_id,
+        current_state="reporting",
     ) as ctx:
         # Idempotency check INSIDE the lock — query actual DB state,
         # not the client-side current_state which is forced to "reporting".
         # Uses the same db_conn_string as task_context for connection pooling.
         from tasks.utils import get_engagement_state
+
         db_state = get_engagement_state(engagement_id, ctx.db_conn_string)
         if db_state in ("complete", "failed"):
-            logger.info("Engagement %s already in terminal state '%s' (DB) — skipping report generation", engagement_id, db_state)
+            logger.info(
+                "Engagement %s already in terminal state '%s' (DB) — skipping report generation",
+                engagement_id,
+                db_state,
+            )
             return {"status": "already_complete"}
 
         result = ctx.orchestrator.run_reporting(ctx.job)
@@ -60,6 +76,7 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
         # won't skip itself (it skips when engagement is already terminal).
         try:
             from tasks.llm_review import run_llm_review
+
             run_llm_review.delay(
                 engagement_id=engagement_id,
                 budget=budget,
@@ -74,7 +91,8 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
             logger.warning(
                 "Engagement %s could not transition to 'complete' from state '%s' — "
                 "may be stuck in 'reporting'",
-                engagement_id, ctx.state.current_state,
+                engagement_id,
+                ctx.state.current_state,
             )
         slog.phase_complete("report", status="completed")
 
@@ -83,6 +101,7 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
         # so the diff engine can compare findings between scans.
         try:
             from database.connection import db_cursor as _diff_cursor
+
             with _diff_cursor() as _c:
                 _c.execute(
                     "SELECT target_url, org_id FROM engagements WHERE id = %s",
@@ -100,6 +119,7 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
                     _prev = _c.fetchone()
                     if _prev:
                         from tasks.diff import run_scan_diff
+
                         run_scan_diff.delay(
                             prev_engagement_id=str(_prev[0]),
                             new_engagement_id=engagement_id,
@@ -107,7 +127,8 @@ def generate_report(self, engagement_id: str, trace_id: str = None, budget: dict
                         )
                         logger.info(
                             "Dispatched scan diff for engagement %s (prev=%s)",
-                            engagement_id, str(_prev[0]),
+                            engagement_id,
+                            str(_prev[0]),
                         )
         except Exception as _e:
             logger.debug("Could not dispatch scan diff for %s: %s", engagement_id, _e)
@@ -170,8 +191,12 @@ def get_findings_summary(self, engagement_id: str, trace_id: str = None):
                 conn.close()
 
 
-
-@app.task(bind=True, name="tasks.report.generate_scheduled_reports", soft_time_limit=3600, time_limit=4200)
+@app.task(
+    bind=True,
+    name="tasks.report.generate_scheduled_reports",
+    soft_time_limit=3600,
+    time_limit=4200,
+)
 def generate_scheduled_reports(self):
     """
     Generate all due scheduled reports and send them via email.
@@ -181,6 +206,7 @@ def generate_scheduled_reports(self):
     cursor = None
     try:
         from database.connection import get_db
+
         conn = get_db().get_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -236,10 +262,12 @@ def generate_scheduled_reports(self):
                             report["org_id"],
                             report["created_by"],
                             report["id"],
-                            json.dumps({
-                                "recipients": report["email_recipients"],
-                                "report_name": report["name"],
-                            }),
+                            json.dumps(
+                                {
+                                    "recipients": report["email_recipients"],
+                                    "report_name": report["name"],
+                                }
+                            ),
                         ),
                     )
 
@@ -248,30 +276,43 @@ def generate_scheduled_reports(self):
                 except Exception as e:
                     conn.rollback()
                     if attempt < max_attempts:
-                        wait = 2 ** attempt  # exponential backoff: 2s, 4s
+                        wait = 2**attempt  # exponential backoff: 2s, 4s
                         logger.warning(
                             "Scheduled report %s attempt %d/%d failed, retrying in %ds: %s",
-                            report["id"], attempt, max_attempts, wait, e,
+                            report["id"],
+                            attempt,
+                            max_attempts,
+                            wait,
+                            e,
                         )
                         import time
+
                         time.sleep(wait)
                     else:
-                        logger.error(
+                        logger.exception(
                             "Scheduled report %s failed after %d attempts: %s",
-                            report["id"], max_attempts, e, exc_info=True,
+                            report["id"],
+                            max_attempts,
+                            e,
                         )
                         # Report to DLQ for manual investigation
                         try:
                             from dead_letter_queue import get_dlq
+
                             get_dlq().enqueue(
                                 task_id=f"scheduled_report_{report['id']}",
                                 task_name="tasks.report.generate_scheduled_reports",
-                                args=[], kwargs={"report_id": report["id"]},
+                                args=[],
+                                kwargs={"report_id": report["id"]},
                                 error_message=str(e),
                                 error_class=type(e).__name__,
                             )
                         except Exception as dlq_e:
-                            logger.debug("DLQ enqueue failed for scheduled report %s: %s", report["id"], dlq_e)
+                            logger.debug(
+                                "DLQ enqueue failed for scheduled report %s: %s",
+                                report["id"],
+                                dlq_e,
+                            )
                         continue
 
         return {"processed": len(due_reports)}
@@ -374,7 +415,12 @@ def _calculate_next_run(frequency: str) -> datetime:
     return now + timedelta(weeks=1)
 
 
-@app.task(bind=True, name="tasks.report.generate_compliance_report", soft_time_limit=1800, time_limit=2400)
+@app.task(
+    bind=True,
+    name="tasks.report.generate_compliance_report",
+    soft_time_limit=1800,
+    time_limit=2400,
+)
 def generate_compliance_report(
     self,
     engagement_id: str,
@@ -458,7 +504,9 @@ def generate_compliance_report(
             org_id = org_row["org_id"] if org_row else None
 
             if not org_id:
-                raise ValueError(f"No org_id found for engagement {engagement_id} — cannot generate compliance report")
+                raise ValueError(
+                    f"No org_id found for engagement {engagement_id} — cannot generate compliance report"
+                )
 
             # Store report in database
             cursor.execute(
@@ -498,7 +546,9 @@ def generate_compliance_report(
                 try:
                     conn.rollback()
                 except Exception as rb_e:
-                    logger.debug("Rollback failed after compliance report error: %s", rb_e)
+                    logger.debug(
+                        "Rollback failed after compliance report error: %s", rb_e
+                    )
             raise
         finally:
             if cursor:
@@ -507,7 +557,12 @@ def generate_compliance_report(
                 conn.close()
 
 
-@app.task(bind=True, name="tasks.report.generate_full_report", soft_time_limit=1800, time_limit=2400)
+@app.task(
+    bind=True,
+    name="tasks.report.generate_full_report",
+    soft_time_limit=1800,
+    time_limit=2400,
+)
 def generate_full_report(
     self,
     engagement_id: str,
@@ -588,7 +643,7 @@ def generate_full_report(
                         sbom_json=sbom,
                     )
             except Exception as e:
-                logger.warning(f"SBOM generation failed (non-fatal): {e}")
+                logger.warning("SBOM generation failed (non-fatal): %s", e)
 
             # 3. Count by severity
             critical_count = sum(1 for f in findings if f["severity"] == "CRITICAL")

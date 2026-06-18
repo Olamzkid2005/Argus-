@@ -30,6 +30,7 @@ select = [
     "C4",  # flake8-comprehensions
     "SIM", # flake8-simplify
     "ARG", # flake8-unused-arguments
+    "G",   # flake8-logging (G004: f-strings, G201: exc_info)
 ]
 
 # Ignore specific rules

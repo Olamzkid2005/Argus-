@@ -21,12 +21,16 @@ class TestRedisConfig:
         """When REDIS_URL is not set, should default to localhost."""
         with patch.dict(os.environ, {}, clear=True):
             import config.redis as redis_config
+
             importlib.reload(redis_config)
             assert redis_config.REDIS_URL == "redis://localhost:6379"
 
     def test_url_from_env_var(self):
         """When REDIS_URL is set, should use the env var value."""
-        with patch.dict(os.environ, {"REDIS_URL": "redis://myredis:6380/1"}, clear=True):
+        with patch.dict(
+            os.environ, {"REDIS_URL": "redis://myredis:6380/1"}, clear=True
+        ):
             import config.redis as redis_config
+
             importlib.reload(redis_config)
             assert redis_config.REDIS_URL == "redis://myredis:6380/1"

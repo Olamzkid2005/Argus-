@@ -24,20 +24,24 @@ def parse(output: str) -> list[NormalizedFinding]:
         confidence_raw = metadata.get("confidence", "medium")
         confidence = 4 if str(confidence_raw).lower() in ("high", "5") else 3
 
-        findings.append(NormalizedFinding(
-            title=result.get("check_id", "Semgrep finding"),
-            severity=SEVERITY_MAP.get(extra.get("severity", "medium"), 2),
-            confidence=confidence,
-            description=extra.get("message", ""),
-            tool="semgrep",
-            cwe=cwe_str,
-            owasp=metadata.get("owasp", ""),
-            evidence=[{
-                "type": "code",
-                "file": result.get("path", ""),
-                "line": result.get("start", {}).get("line", 0),
-                "content": extra.get("lines", ""),
-            }],
-            subtype="code_vulnerability",
-        ))
+        findings.append(
+            NormalizedFinding(
+                title=result.get("check_id", "Semgrep finding"),
+                severity=SEVERITY_MAP.get(extra.get("severity", "medium"), 2),
+                confidence=confidence,
+                description=extra.get("message", ""),
+                tool="semgrep",
+                cwe=cwe_str,
+                owasp=metadata.get("owasp", ""),
+                evidence=[
+                    {
+                        "type": "code",
+                        "file": result.get("path", ""),
+                        "line": result.get("start", {}).get("line", 0),
+                        "content": extra.get("lines", ""),
+                    }
+                ],
+                subtype="code_vulnerability",
+            )
+        )
     return findings

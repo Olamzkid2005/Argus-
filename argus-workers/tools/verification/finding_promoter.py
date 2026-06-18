@@ -22,14 +22,26 @@ def promote_finding(finding: dict, confidence: float, reproduced: bool) -> dict:
     elif confidence >= 0.7:
         updated["status"] = "CONFIRMED"
         updated["verification"] = "HIGH_CONFIDENCE"
-        logger.info("Finding %s CONFIRMED (high confidence %.2f)", finding.get("id", "unknown"), confidence)
+        logger.info(
+            "Finding %s CONFIRMED (high confidence %.2f)",
+            finding.get("id", "unknown"),
+            confidence,
+        )
     elif confidence >= 0.4:
         updated["status"] = "PENDING"
         updated["verification"] = "NEEDS_REVIEW"
-        logger.info("Finding %s PENDING (confidence %.2f)", finding.get("id", "unknown"), confidence)
+        logger.info(
+            "Finding %s PENDING (confidence %.2f)",
+            finding.get("id", "unknown"),
+            confidence,
+        )
     else:
         updated["status"] = "REJECTED"
         updated["verification"] = "LOW_CONFIDENCE"
-        logger.info("Finding %s REJECTED (low confidence %.2f)", finding.get("id", "unknown"), confidence)
+        logger.info(
+            "Finding %s REJECTED (low confidence %.2f)",
+            finding.get("id", "unknown"),
+            confidence,
+        )
 
     return updated

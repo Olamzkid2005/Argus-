@@ -43,7 +43,10 @@ class AssetGraph:
     def to_dict(self) -> dict:
         return {
             "subdomains": sorted(self.subdomains),
-            "ports": {k: sorted(v, key=lambda p: p.get("port", 0)) for k, v in self.ports.items()},
+            "ports": {
+                k: sorted(v, key=lambda p: p.get("port", 0))
+                for k, v in self.ports.items()
+            },
             "urls": sorted(self.urls),
             "technologies": sorted(self.technologies),
             "api_endpoints": sorted(self.api_endpoints),

@@ -1,6 +1,7 @@
 """
 Tests for error_classifier.py
 """
+
 from unittest.mock import patch
 
 from error_classifier import (
@@ -19,7 +20,9 @@ class TestClassifyError:
     def test_transient_connection_reset(self):
         """Test transient error classification"""
         error = Exception("Connection reset by peer")
-        classification = classify_error(error, task_name="tasks.scan.run_scan", retry_count=0)
+        classification = classify_error(
+            error, task_name="tasks.scan.run_scan", retry_count=0
+        )
 
         assert classification.category == ErrorCategory.TRANSIENT
         assert classification.should_retry is True
@@ -28,7 +31,9 @@ class TestClassifyError:
     def test_infrastructure_database_error(self):
         """Test infrastructure error classification"""
         error = Exception("postgresql server is down")
-        classification = classify_error(error, task_name="tasks.scan.run_scan", retry_count=1)
+        classification = classify_error(
+            error, task_name="tasks.scan.run_scan", retry_count=1
+        )
 
         assert classification.category == ErrorCategory.INFRASTRUCTURE
         assert classification.severity == ErrorSeverity.HIGH
@@ -110,7 +115,7 @@ class TestClassifyError:
         assert c2.retry_delay_seconds == 120
 
         # Verify cap by checking the formula directly
-        assert min(2 ** 10 * 30, 600) == 600
+        assert min(2**10 * 30, 600) == 600
 
     def test_resource_error_severity(self):
         """Test resource error severity"""
@@ -138,7 +143,9 @@ class TestClassifyError:
     def test_alert_message_for_high_severity(self):
         """Test alert message generated for high severity"""
         error = Exception("Database connection failed")
-        classification = classify_error(error, task_name="tasks.scan.run_scan", retry_count=0)
+        classification = classify_error(
+            error, task_name="tasks.scan.run_scan", retry_count=0
+        )
 
         assert classification.alert_message is not None
         assert "infrastructure" in classification.alert_message
@@ -153,8 +160,10 @@ class TestClassifyError:
 
     def test_error_type_matching(self):
         """Test matching by error type name"""
+
         class PostgresqlError(Exception):
             pass
+
         error = PostgresqlError("some message")
         classification = classify_error(error)
 
@@ -173,14 +182,16 @@ class TestLogClassifiedError:
             severity=ErrorSeverity.CRITICAL,
             should_retry=False,
             retry_delay_seconds=0,
-            alert_message="Security breach detected"
+            alert_message="Security breach detected",
         )
         error = Exception("Unauthorized access")
 
         log_classified_error(classification, "task-001", "tasks.scan.run_scan", error)
 
         mock_logger.critical.assert_called_once()
-        mock_send_alert.assert_called_once_with("Security breach detected", ErrorSeverity.CRITICAL)
+        mock_send_alert.assert_called_once_with(
+            "Security breach detected", ErrorSeverity.CRITICAL
+        )
 
     @patch("error_classifier.logger")
     @patch("error_classifier.send_alert")
@@ -191,7 +202,7 @@ class TestLogClassifiedError:
             severity=ErrorSeverity.HIGH,
             should_retry=True,
             retry_delay_seconds=60,
-            alert_message="Database down"
+            alert_message="Database down",
         )
         error = Exception("Connection refused")
 
@@ -209,7 +220,7 @@ class TestLogClassifiedError:
             severity=ErrorSeverity.MEDIUM,
             should_retry=True,
             retry_delay_seconds=30,
-            alert_message=None
+            alert_message=None,
         )
         error = Exception("Weird thing happened")
 
@@ -227,7 +238,7 @@ class TestLogClassifiedError:
             severity=ErrorSeverity.LOW,
             should_retry=True,
             retry_delay_seconds=30,
-            alert_message=None
+            alert_message=None,
         )
         error = Exception("Minor hiccup")
 
@@ -245,12 +256,14 @@ class TestLogClassifiedError:
             severity=ErrorSeverity.LOW,
             should_retry=True,
             retry_delay_seconds=30,
-            alert_message=None
+            alert_message=None,
         )
         error = Exception("API error")
         extra = {"endpoint": "https://example.com/api", "status_code": 503}
 
-        log_classified_error(classification, "task-005", "tasks.external.call", error, extra)
+        log_classified_error(
+            classification, "task-005", "tasks.external.call", error, extra
+        )
 
         mock_logger.info.assert_called_once()
         # The message is "LOW ERROR"; extra context is passed as the `extra` kwarg
@@ -264,7 +277,9 @@ class TestSendAlert:
     @patch("error_classifier.os.getenv")
     @patch("httpx.Client")
     @patch("error_classifier.logger")
-    def test_send_alert_with_webhook(self, _mock_logger, mock_httpx_client, mock_getenv):
+    def test_send_alert_with_webhook(
+        self, _mock_logger, mock_httpx_client, mock_getenv
+    ):
         """Test sending alert via webhook"""
         mock_getenv.return_value = "https://hooks.example.com/alerts"
         mock_instance = mock_httpx_client.return_value.__enter__.return_value
@@ -280,7 +295,9 @@ class TestSendAlert:
     @patch("error_classifier.os.getenv")
     @patch("httpx.Client")
     @patch("error_classifier.logger")
-    def test_send_alert_webhook_failure(self, mock_logger, mock_httpx_client, mock_getenv):
+    def test_send_alert_webhook_failure(
+        self, mock_logger, mock_httpx_client, mock_getenv
+    ):
         """Test alert handles webhook failure gracefully"""
         mock_getenv.return_value = "https://hooks.example.com/alerts"
         mock_instance = mock_httpx_client.return_value.__enter__.return_value

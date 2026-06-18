@@ -4,6 +4,7 @@ Engagement State Machine - Enforces valid state transitions
 Uses the shared connection pool from database/connection.py.
 Supports passing an external connection for transaction support.
 """
+
 import logging
 import uuid
 
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class InvalidStateTransitionError(Exception):
     """Raised when invalid state transition is attempted"""
+
     pass
 
 
@@ -49,8 +51,13 @@ class EngagementStateMachine:
         "complete": [],
     }
 
-    def __init__(self, engagement_id: str, db_connection_string: str | None = None,
-                 current_state: str = "created", connection: psycopg2.extensions.connection | None = None):
+    def __init__(
+        self,
+        engagement_id: str,
+        db_connection_string: str | None = None,
+        current_state: str = "created",
+        connection: psycopg2.extensions.connection | None = None,
+    ):
         """
         Initialize State Machine
 
@@ -105,20 +112,24 @@ class EngagementStateMachine:
         conn = self._get_connection()
         try:
             c = conn.cursor()
-            c.execute("SELECT status FROM engagements WHERE id = %s", (self.engagement_id,))
+            c.execute(
+                "SELECT status FROM engagements WHERE id = %s", (self.engagement_id,)
+            )
             row = c.fetchone()
             c.close()
             resolved = row[0] if row else "created"
         except (psycopg2.Error, DatabaseConnectionError) as e:
             logger.error(
                 "Database error resolving state for engagement %s: %s",
-                self.engagement_id, e,
+                self.engagement_id,
+                e,
             )
             raise  # Re-raise DB outages — don't silently mask them
         except (IndexError, TypeError) as e:
             logger.warning(
                 "Unexpected row format for engagement %s, defaulting to 'created': %s",
-                self.engagement_id, e,
+                self.engagement_id,
+                e,
             )
             resolved = "created"
         finally:
@@ -153,7 +164,9 @@ class EngagementStateMachine:
         if conn and not self._external_conn:
             get_db().release_connection(conn)
 
-    def transition(self, new_state: str, reason: str | None = None, trace_id: str | None = None):
+    def transition(
+        self, new_state: str, reason: str | None = None, trace_id: str | None = None
+    ):
         """
         Enforce valid state transitions with atomic locking and causality tracking.
 
@@ -200,7 +213,9 @@ class EngagementStateMachine:
         # WebSocket state transition publishing removed (M-07 consolidation).
         # All events go through SSE via StreamManager.
 
-    def _persist_state_and_budget(self, from_state: str, to_state: str, reason: str, trace_id: str | None = None):
+    def _persist_state_and_budget(
+        self, from_state: str, to_state: str, reason: str, trace_id: str | None = None
+    ):
         """
         Atomically record state transition and update loop budget if needed.
         Uses SELECT ... FOR UPDATE to prevent concurrent state races.
@@ -221,7 +236,7 @@ class EngagementStateMachine:
             # Lock the engagement row to prevent concurrent state transitions
             cursor.execute(
                 "SELECT status FROM engagements WHERE id = %s FOR UPDATE",
-                (self.engagement_id,)
+                (self.engagement_id,),
             )
             locked_row = cursor.fetchone()
             if not locked_row:
@@ -236,7 +251,10 @@ class EngagementStateMachine:
                 logger.error(
                     "State race detected: expected %s, actual %s for engagement %s. "
                     "Rejecting transition to %s — another worker changed state.",
-                    from_state, current_db_state, self.engagement_id, to_state
+                    from_state,
+                    current_db_state,
+                    self.engagement_id,
+                    to_state,
                 )
                 raise InvalidStateTransitionError(
                     f"Race: engagement {self.engagement_id} is {current_db_state}, "
@@ -253,8 +271,14 @@ class EngagementStateMachine:
                     %s, %s, %s, %s, %s, %s, NOW()
                 )
                 """,
-                (transition_id, self.engagement_id, current_db_state, to_state,
-                 reason, trace_id)
+                (
+                    transition_id,
+                    self.engagement_id,
+                    current_db_state,
+                    to_state,
+                    reason,
+                    trace_id,
+                ),
             )
 
             # Update engagement status with WHERE clause for safety
@@ -264,7 +288,7 @@ class EngagementStateMachine:
                 SET status = %s, updated_at = NOW()
                 WHERE id = %s AND status = %s
                 """,
-                (to_state, self.engagement_id, current_db_state)
+                (to_state, self.engagement_id, current_db_state),
             )
 
             if cursor.rowcount == 0:
@@ -284,7 +308,7 @@ class EngagementStateMachine:
                 # First, read current cycles to check against max
                 cursor.execute(
                     "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
-                    (self.engagement_id,)
+                    (self.engagement_id,),
                 )
                 lb_row = cursor.fetchone()
                 current_cycles = lb_row[0] if lb_row else 0
@@ -304,7 +328,7 @@ class EngagementStateMachine:
                         current_cycles = loop_budgets.current_cycles + 1,
                         updated_at = NOW()
                     """,
-                    (str(uuid.uuid4()), self.engagement_id, max_cycles)
+                    (str(uuid.uuid4()), self.engagement_id, max_cycles),
                 )
 
             conn.commit()
@@ -312,7 +336,11 @@ class EngagementStateMachine:
         except psycopg2.Error as e:
             if conn:
                 conn.rollback()
-            logger.error(f"Failed to persist state transition for engagement {self.engagement_id}: {e}")
+            logger.error(
+                "Failed to persist state transition for engagement %s: %s",
+                self.engagement_id,
+                e,
+            )
             raise
         finally:
             if cursor:
@@ -338,7 +366,7 @@ class EngagementStateMachine:
                 WHERE engagement_id = %s
                 ORDER BY created_at ASC
                 """,
-                (self.engagement_id,)
+                (self.engagement_id,),
             )
 
             rows = cursor.fetchall()
@@ -346,12 +374,14 @@ class EngagementStateMachine:
 
             history = []
             for row in rows:
-                history.append({
-                    "from_state": row[0],
-                    "to_state": row[1],
-                    "reason": row[2],
-                    "timestamp": row[3].isoformat() if row[3] else None,
-                })
+                history.append(
+                    {
+                        "from_state": row[0],
+                        "to_state": row[1],
+                        "reason": row[2],
+                        "timestamp": row[3].isoformat() if row[3] else None,
+                    }
+                )
 
             return history
 
@@ -379,20 +409,25 @@ class EngagementStateMachine:
         if new_state not in self.STATES:
             logger.warning(
                 "safe_transition: '%s' is not a valid state for engagement %s — skipping",
-                new_state, self.engagement_id,
+                new_state,
+                self.engagement_id,
             )
             return False
         if not self.can_transition_to(new_state):
             logger.warning(
                 "Skipping transition %s -> %s for engagement %s "
                 "(no valid outgoing transitions from current state — engagement may be in terminal state)",
-                self.current_state, new_state, self.engagement_id,
+                self.current_state,
+                new_state,
+                self.engagement_id,
             )
             return False
         self.transition(new_state, reason)
         return True
 
-    def chain_transition(self, states: list[tuple[str, str]], trace_id: str | None = None) -> str:
+    def chain_transition(
+        self, states: list[tuple[str, str]], trace_id: str | None = None
+    ) -> str:
         """
         Perform multiple state transitions in a single database transaction.
         Each element of states is a (new_state, reason) tuple.
@@ -419,7 +454,8 @@ class EngagementStateMachine:
         if self.current_state in ("complete", "failed"):
             logger.warning(
                 "chain_transition called on engagement %s in terminal state %s — skipping",
-                self.engagement_id, self.current_state,
+                self.engagement_id,
+                self.current_state,
             )
             return self.current_state
 
@@ -431,7 +467,7 @@ class EngagementStateMachine:
             # Lock the engagement row to prevent concurrent state transitions
             cursor.execute(
                 "SELECT status FROM engagements WHERE id = %s FOR UPDATE",
-                (self.engagement_id,)
+                (self.engagement_id,),
             )
             locked_row = cursor.fetchone()
             if not locked_row:
@@ -441,7 +477,8 @@ class EngagementStateMachine:
             if db_current in ("complete", "failed"):
                 logger.warning(
                     "chain_transition: engagement %s already in terminal state %s — skipping",
-                    self.engagement_id, db_current,
+                    self.engagement_id,
+                    db_current,
                 )
                 conn.rollback()
                 return db_current
@@ -464,7 +501,14 @@ class EngagementStateMachine:
                     INSERT INTO engagement_states (id, engagement_id, from_state, to_state, reason, trace_id, created_at)
                     VALUES (%s, %s, %s, %s, %s, %s, NOW())
                     """,
-                    (transition_id, self.engagement_id, current, new_state, reason, trace_id)
+                    (
+                        transition_id,
+                        self.engagement_id,
+                        current,
+                        new_state,
+                        reason,
+                        trace_id,
+                    ),
                 )
                 current = new_state
 
@@ -472,7 +516,7 @@ class EngagementStateMachine:
             final_state = states[-1][0]
             cursor.execute(
                 "UPDATE engagements SET status = %s, updated_at = NOW() WHERE id = %s AND status = %s",
-                (final_state, self.engagement_id, db_current)
+                (final_state, self.engagement_id, db_current),
             )
 
             if cursor.rowcount == 0:
@@ -486,12 +530,14 @@ class EngagementStateMachine:
             # auto-created for non-scheduled engagements that were created
             # without an explicit loop_budgets INSERT.
             # Enforce max_cycles to prevent infinite looping.
-            recon_loop_count = sum(1 for f, t in states if f == "analyzing" and t == "recon")
+            recon_loop_count = sum(
+                1 for f, t in states if f == "analyzing" and t == "recon"
+            )
             if recon_loop_count > 0:
                 # Read current cycles to check against max
                 cursor.execute(
                     "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
-                    (self.engagement_id,)
+                    (self.engagement_id,),
                 )
                 lb_row = cursor.fetchone()
                 current_cycles = lb_row[0] if lb_row else 0
@@ -512,7 +558,13 @@ class EngagementStateMachine:
                         current_cycles = loop_budgets.current_cycles + %s,
                         updated_at = NOW()
                     """,
-                    (str(uuid.uuid4()), self.engagement_id, max_cycles, recon_loop_count, recon_loop_count),
+                    (
+                        str(uuid.uuid4()),
+                        self.engagement_id,
+                        max_cycles,
+                        recon_loop_count,
+                        recon_loop_count,
+                    ),
                 )
 
             conn.commit()
@@ -525,7 +577,9 @@ class EngagementStateMachine:
         except psycopg2.Error as e:
             if conn:
                 conn.rollback()
-            logger.error("chain_transition failed for engagement %s: %s", self.engagement_id, e)
+            logger.error(
+                "chain_transition failed for engagement %s: %s", self.engagement_id, e
+            )
             raise
         except ValueError:
             if conn:

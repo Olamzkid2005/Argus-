@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Privilege Escalation detection via Playwright. Called as a subprocess by MCP server."""
+
 import argparse
 import json
 
@@ -20,10 +21,14 @@ def _check_auth_success(page, target: str) -> bool:
     return "/login" not in current.lower()
 
 
-def check_privesc(target: str, low_priv: dict, admin_paths: list[str],
-                   username_selector: str = "input[name=username]",
-                   password_selector: str = "input[name=password]",
-                   submit_selector: str = "button[type=submit]") -> list[dict]:
+def check_privesc(
+    target: str,
+    low_priv: dict,
+    admin_paths: list[str],
+    username_selector: str = "input[name=username]",
+    password_selector: str = "input[name=password]",
+    submit_selector: str = "button[type=submit]",
+) -> list[dict]:
     findings = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -44,17 +49,21 @@ def check_privesc(target: str, low_priv: dict, admin_paths: list[str],
         for path in admin_paths:
             response = page.goto(f"{target}{path}")
             if response.status == 200:
-                findings.append({
-                    "title": "Privilege Escalation: Unauthorized Admin Access",
-                    "severity": 4,
-                    "confidence": 5,
-                    "description": f"Low-privilege user accessed {path} (HTTP {response.status})",
-                    "tool": "playwright-privesc",
-                    "evidence": [{
-                        "type": "http",
-                        "content": f"GET {path} -> {response.status}",
-                    }],
-                })
+                findings.append(
+                    {
+                        "title": "Privilege Escalation: Unauthorized Admin Access",
+                        "severity": 4,
+                        "confidence": 5,
+                        "description": f"Low-privilege user accessed {path} (HTTP {response.status})",
+                        "tool": "playwright-privesc",
+                        "evidence": [
+                            {
+                                "type": "http",
+                                "content": f"GET {path} -> {response.status}",
+                            }
+                        ],
+                    }
+                )
 
         browser.close()
     return findings
@@ -63,15 +72,27 @@ def check_privesc(target: str, low_priv: dict, admin_paths: list[str],
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True)
-    parser.add_argument("--creds-file", required=True,
-                        help="Path to JSON file with low-privilege credentials")
+    parser.add_argument(
+        "--creds-file",
+        required=True,
+        help="Path to JSON file with low-privilege credentials",
+    )
     parser.add_argument("--admin-paths", default=",".join(DEFAULT_ADMIN_PATHS))
-    parser.add_argument("--username-selector", default="input[name=username]",
-                        help="CSS selector for username field")
-    parser.add_argument("--password-selector", default="input[name=password]",
-                        help="CSS selector for password field")
-    parser.add_argument("--submit-selector", default="button[type=submit]",
-                        help="CSS selector for submit button")
+    parser.add_argument(
+        "--username-selector",
+        default="input[name=username]",
+        help="CSS selector for username field",
+    )
+    parser.add_argument(
+        "--password-selector",
+        default="input[name=password]",
+        help="CSS selector for password field",
+    )
+    parser.add_argument(
+        "--submit-selector",
+        default="button[type=submit]",
+        help="CSS selector for submit button",
+    )
     args = parser.parse_args()
 
     with open(args.creds_file) as f:
@@ -91,9 +112,13 @@ if __name__ == "__main__":
         print(json.dumps(f))
 
     if not findings:
-        print(json.dumps({
-            "title": "No Privilege Escalation vulnerability detected",
-            "severity": 0,
-            "confidence": 5,
-            "tool": "playwright-privesc",
-        }))
+        print(
+            json.dumps(
+                {
+                    "title": "No Privilege Escalation vulnerability detected",
+                    "severity": 0,
+                    "confidence": 5,
+                    "tool": "playwright-privesc",
+                }
+            )
+        )

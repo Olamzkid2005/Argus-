@@ -94,7 +94,7 @@ def _get_matching_webhooks(engagement_id: str) -> list[dict]:
         rows = cursor.fetchall()
         return [{"id": r[0], "webhook_url": r[1]} for r in rows]
     except Exception as e:
-        logger.warning(f"Failed to query webhooks: {e}")
+        logger.warning("Failed to query webhooks: %s", e)
         return []
     finally:
         if cursor:

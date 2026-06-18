@@ -48,7 +48,10 @@ def _get_redis():
                 _redis_available = False
         try:
             import redis as redis_lib
-            _redis_client_instance = redis_lib.from_url(CACHE_REDIS_URL, socket_connect_timeout=3, socket_timeout=3)
+
+            _redis_client_instance = redis_lib.from_url(
+                CACHE_REDIS_URL, socket_connect_timeout=3, socket_timeout=3
+            )
             _redis_client_instance.ping()
             _redis_available = True
             return _redis_client_instance
@@ -56,7 +59,7 @@ def _get_redis():
             if not _redis_available:
                 logger.debug("Redis still unavailable for caching: %s", e)
             else:
-                logger.warning(f"Redis became unavailable for caching: {e}")
+                logger.warning("Redis became unavailable for caching: %s", e)
             _redis_available = False
             return None
 
@@ -67,9 +70,10 @@ class CacheMode(Enum):
     Enforced at the execution layer (tool_runner), not inside cache.py itself.
     cache.py remains a dumb storage layer.
     """
-    NORMAL = "normal"       # Read cache, write cache (standard behavior)
-    NO_CACHE = "no_cache"   # Skip reads AND writes (truly fresh scan)
-    REFRESH = "refresh"     # Skip reads, still write (refresh stale data)
+
+    NORMAL = "normal"  # Read cache, write cache (standard behavior)
+    NO_CACHE = "no_cache"  # Skip reads AND writes (truly fresh scan)
+    REFRESH = "refresh"  # Skip reads, still write (refresh stale data)
 
 
 class CachePolicy:
@@ -83,21 +87,22 @@ class CachePolicy:
         -1 — No expiry (use Redis SET instead of SETEX).
              TTL values <= 0 are treated as sentinel and stored without expiry.
     """
-    TOOL_QUERY = 300              # 5 min — tool results (quick-changing)
-    TOOL_DETAIL = 86400 * 7       # 7 days — tool definitions/metadata (stable)
-    ADVISORY_QUERY = 1800         # 30 min — advisory lookups (cve-lite-cli compat)
-    ADVISORY_DETAIL = -1          # No expiry — advisory records are immutable
-    ENGAGEMENT_STATE = 300        # 5 min — engagement state (existing default)
+
+    TOOL_QUERY = 300  # 5 min — tool results (quick-changing)
+    TOOL_DETAIL = 86400 * 7  # 7 days — tool definitions/metadata (stable)
+    ADVISORY_QUERY = 1800  # 30 min — advisory lookups (cve-lite-cli compat)
+    ADVISORY_DETAIL = -1  # No expiry — advisory records are immutable
+    ENGAGEMENT_STATE = 300  # 5 min — engagement state (existing default)
 
 
 class WorkerCache:
     """Enhanced cache using Redis with query result caching and invalidation"""
 
     # TTL presets (seconds)
-    TTL_SHORT = 60       # 1 minute
-    TTL_MEDIUM = 300     # 5 minutes
-    TTL_LONG = 3600      # 1 hour
-    TTL_EXTENDED = 86400 # 24 hours
+    TTL_SHORT = 60  # 1 minute
+    TTL_MEDIUM = 300  # 5 minutes
+    TTL_LONG = 3600  # 1 hour
+    TTL_EXTENDED = 86400  # 24 hours
     # Namespace prefix to avoid key collisions with other Redis users on same DB
     KEY_PREFIX = "cache:"
 
@@ -122,7 +127,7 @@ class WorkerCache:
         Returns:
             Sanitized key component
         """
-        safe = re.sub(r'[\x00-\x1f\x7f]', '', str(component))
+        safe = re.sub(r"[\x00-\x1f\x7f]", "", str(component))
         # Replace emtpy string after sanitization
         return safe or "_"
 
@@ -142,7 +147,7 @@ class WorkerCache:
                     self._hit_count += 1
                 return json.loads(value)
         except Exception as e:
-            logger.error(f"Cache get error: {e}")
+            logger.error("Cache get error: %s", e)
 
         with self._lock:
             self._miss_count += 1
@@ -178,7 +183,7 @@ class WorkerCache:
                 client.setex(self._key(key), ttl, serialized)
             return True
         except Exception as e:
-            logger.error(f"Cache set error: {e}")
+            logger.error("Cache set error: %s", e)
             return False
 
     def delete(self, key: str) -> bool:
@@ -191,7 +196,7 @@ class WorkerCache:
             client.delete(self._key(key))
             return True
         except Exception as e:
-            logger.error(f"Cache delete error: {e}")
+            logger.error("Cache delete error: %s", e)
             return False
 
     def clear_pattern(self, pattern: str) -> int:
@@ -212,14 +217,11 @@ class WorkerCache:
                     break
             return deleted
         except Exception as e:
-            logger.error(f"Cache clear error: {e}")
+            logger.error("Cache clear error: %s", e)
             return 0
 
     def get_query_result(
-        self,
-        query: str,
-        params: tuple | None = None,
-        _ttl: int | None = None
+        self, query: str, params: tuple | None = None, _ttl: int | None = None
     ) -> Any | None:
         """
         Get cached query result.
@@ -236,11 +238,7 @@ class WorkerCache:
         return self.get(key)
 
     def set_query_result(
-        self,
-        query: str,
-        params: tuple | None,
-        result: Any,
-        ttl: int | None = None
+        self, query: str, params: tuple | None, result: Any, ttl: int | None = None
     ) -> bool:
         """
         Cache query result.
@@ -330,7 +328,7 @@ class WorkerCache:
                 **metrics,
             }
         except Exception as e:
-            logger.error(f"Cache stats error: {e}")
+            logger.error("Cache stats error: %s", e)
             return {"status": "error", "error": str(e), **metrics}
 
 
@@ -338,7 +336,9 @@ class WorkerCache:
 cache = WorkerCache(ttl=300)  # 5 minute default TTL
 
 
-def cached(key_prefix: str, ttl: int | None = None, invalidate_on: list[str] | None = None):
+def cached(
+    key_prefix: str, ttl: int | None = None, invalidate_on: list[str] | None = None
+):
     """
     Decorator for caching function results.
 
@@ -369,6 +369,7 @@ def cached(key_prefix: str, ttl: int | None = None, invalidate_on: list[str] | N
         wrapper.cache_invalidate = lambda: cache.clear_pattern(f"{key_prefix}:*")
 
         return wrapper
+
     return decorator
 
 
@@ -379,6 +380,7 @@ def cached_query(ttl: int = 300):
     Args:
         ttl: Cache TTL in seconds
     """
+
     def decorator(func: Callable):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -401,4 +403,5 @@ def cached_query(ttl: int = 300):
 
         wrapper.cache_invalidate = lambda: cache.clear_pattern("query:*")
         return wrapper
+
     return decorator

@@ -11,17 +11,20 @@ from tools.context import ScanContext, ToolContext
 
 class ToolRunnerStub:
     """Stub for ToolRunner used in tests."""
+
     pass
 
 
 class ParserStub:
     """Stub for ParserProtocol."""
+
     def parse(self, tool_name: str, raw_output: str) -> list[dict]:
         return []
 
 
 class NormalizerStub:
     """Stub for NormalizerProtocol."""
+
     def normalize(self, raw_finding: dict, source_tool: str) -> dict:
         return raw_finding
 
@@ -105,7 +108,13 @@ class TestToolContext:
             normalizer=normalizer,
             ws_publisher=mock_ws,
         )
-        ctx.publish_activity(tool="nuclei", activity="scanning", status="running", items=5, details="test")
+        ctx.publish_activity(
+            tool="nuclei",
+            activity="scanning",
+            status="running",
+            items=5,
+            details="test",
+        )
         mock_ws.publish_scanner_activity.assert_called_once_with(
             engagement_id="eng-001",
             tool_name="nuclei",
@@ -115,7 +124,9 @@ class TestToolContext:
             details="test",
         )
 
-    def test_publish_activity_is_noop_without_ws_publisher(self, tool_runner, parser, normalizer):
+    def test_publish_activity_is_noop_without_ws_publisher(
+        self, tool_runner, parser, normalizer
+    ):
         ctx = ToolContext(
             engagement_id="eng-001",
             tool_runner=tool_runner,
@@ -125,7 +136,9 @@ class TestToolContext:
         ctx.publish_activity(tool="nuclei", activity="scanning", status="running")
         assert True  # no exception raised
 
-    def test_publish_activity_called_with_none_items(self, tool_runner, parser, normalizer):
+    def test_publish_activity_called_with_none_items(
+        self, tool_runner, parser, normalizer
+    ):
         mock_ws = MagicMock()
         ctx = ToolContext(
             engagement_id="eng-001",
@@ -145,7 +158,9 @@ class TestToolContext:
         )
 
     @patch("orchestrator_pkg.normalizer_utils.normalize_finding")
-    def test_normalize_finding_calls_normalizer(self, mock_normalize, tool_runner, parser, normalizer):
+    def test_normalize_finding_calls_normalizer(
+        self, mock_normalize, tool_runner, parser, normalizer
+    ):
         mock_normalize.return_value = {"normalized": True}
         ctx = ToolContext(
             engagement_id="eng-001",
@@ -157,7 +172,9 @@ class TestToolContext:
         mock_normalize.assert_called_once_with(normalizer, {"raw": True}, "nuclei")
         assert result == {"normalized": True}
 
-    def test_normalize_finding_returns_raw_when_no_normalizer(self, tool_runner, parser):
+    def test_normalize_finding_returns_raw_when_no_normalizer(
+        self, tool_runner, parser
+    ):
         ctx = ToolContext(
             engagement_id="eng-001",
             tool_runner=tool_runner,
@@ -167,14 +184,18 @@ class TestToolContext:
         result = ctx._normalize_finding({"raw": True}, "nuclei")
         assert result == {"raw": True}
 
-    def test_normalize_delegates_to_normalize_finding(self, tool_runner, parser, normalizer):
+    def test_normalize_delegates_to_normalize_finding(
+        self, tool_runner, parser, normalizer
+    ):
         ctx = ToolContext(
             engagement_id="eng-001",
             tool_runner=tool_runner,
             parser=parser,
             normalizer=normalizer,
         )
-        with patch.object(ctx, "_normalize_finding", return_value={"normalized": True}) as mock_method:
+        with patch.object(
+            ctx, "_normalize_finding", return_value={"normalized": True}
+        ) as mock_method:
             result = ctx.normalize({"raw": True}, "nuclei")
             mock_method.assert_called_once_with({"raw": True}, "nuclei")
             assert result == {"normalized": True}

@@ -27,7 +27,7 @@ def replay_dlq_task(self, task_id: str) -> bool:
     dlq = get_dlq()
     task_data = dlq.get_task_by_id(task_id)
     if not task_data:
-        logger.warning(f"Task {task_id} not found in DLQ")
+        logger.warning("Task %s not found in DLQ", task_id)
         return False
 
     try:
@@ -37,8 +37,8 @@ def replay_dlq_task(self, task_id: str) -> bool:
             kwargs=task_data["kwargs"],
             task_id=task_id,
         )
-        logger.info(f"Replayed task {task_id}")
+        logger.info("Replayed task %s", task_id)
         return True
     except Exception as e:
-        logger.error(f"Failed to replay task {task_id}: {e}")
+        logger.error("Failed to replay task %s: %s", task_id, e)
         return False

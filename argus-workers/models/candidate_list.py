@@ -7,19 +7,21 @@ agent reads a typed candidate list instead of raw prose.
 
 Mirrors DeepSec's FileRecord contract pattern — typed, structured, sortable.
 """
+
 from dataclasses import dataclass, field
 from enum import StrEnum
 
 
 class CandidateSource(StrEnum):
     """Source tool that flagged the candidate vulnerability."""
-    NUCLEI_CVE     = "nuclei_cve"        # confirmed CVE template match
-    NUCLEI_MISC    = "nuclei_misc"        # misconfiguration template
-    DALFOX         = "dalfox"             # XSS hit
-    SQLMAP         = "sqlmap"             # SQLi confirmed
-    WEB_SCANNER    = "web_scanner"        # custom check
-    RECON_ENDPOINT = "recon_endpoint"     # endpoint discovered, not yet tested
-    CUSTOM_RULE    = "custom_rule"        # YAML rule match
+
+    NUCLEI_CVE = "nuclei_cve"  # confirmed CVE template match
+    NUCLEI_MISC = "nuclei_misc"  # misconfiguration template
+    DALFOX = "dalfox"  # XSS hit
+    SQLMAP = "sqlmap"  # SQLi confirmed
+    WEB_SCANNER = "web_scanner"  # custom check
+    RECON_ENDPOINT = "recon_endpoint"  # endpoint discovered, not yet tested
+    CUSTOM_RULE = "custom_rule"  # YAML rule match
 
 
 # Source → quality ordering (lower = higher priority)
@@ -40,13 +42,13 @@ class Candidate:
 
     Tagged by source tool, vulnerability slug, and evidence snippet.
     """
+
     endpoint: str
     source: CandidateSource
-    vuln_slug: str              # e.g. 'sql-injection', 'xss', 'idor'
-    snippet: str                # raw tool output that flagged this
+    vuln_slug: str  # e.g. 'sql-injection', 'xss', 'idor'
+    snippet: str  # raw tool output that flagged this
     line_hint: str | None = None
     confidence: float = 0.5
-
 
     @classmethod
     def from_finding(cls, finding: dict) -> "Candidate":
@@ -59,8 +61,8 @@ class Candidate:
             source=source,
             vuln_slug=finding.get("type", "unknown").lower().replace("_", "-"),
             snippet=finding.get("evidence", {}).get("matched_text", "")
-                or finding.get("evidence", {}).get("message", "")
-                or str(finding.get("evidence", ""))[:200],
+            or finding.get("evidence", {}).get("message", "")
+            or str(finding.get("evidence", ""))[:200],
             confidence=finding.get("confidence", 0.5),
         )
 
@@ -71,6 +73,7 @@ class CandidateList:
 
     Typed, sortable by signal quality, with compact LLM prompt formatting.
     """
+
     target: str
     candidates: list[Candidate] = field(default_factory=list)
 
@@ -113,9 +116,7 @@ class CandidateList:
         for slug in sorted(by_slug):
             cands = by_slug[slug]
             endpoints = list({c.endpoint for c in cands})[:3]
-            lines.append(
-                f"{slug}: {len(cands)} hit(s) on {', '.join(endpoints)}"
-            )
+            lines.append(f"{slug}: {len(cands)} hit(s) on {', '.join(endpoints)}")
         return "\n".join(lines)
 
 

@@ -1,6 +1,7 @@
 """
 Security configuration checks: headers, CSP, cookies, CORS.
 """
+
 import logging
 from http.cookies import SimpleCookie
 
@@ -26,28 +27,52 @@ SECURITY_HEADERS = [
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
     return ConfigCheck().check(target_url, session, findings)
+
+
 def _check_security_headers(target_url, session, findings):
-    resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
+    resp = safe_request(
+        "GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT
+    )
     if not resp:
         return
     headers = {k.lower(): v for k, v in resp.headers.items()}
     missing = [h for h in SECURITY_HEADERS if h.lower() not in headers]
     if missing:
-        findings.append(make_finding("MISSING_SECURITY_HEADERS", "MEDIUM", target_url, {
-            "missing_headers": missing,
-            "present_headers": [h for h in SECURITY_HEADERS if h.lower() in headers],
-        }, 0.95))
+        findings.append(
+            make_finding(
+                "MISSING_SECURITY_HEADERS",
+                "MEDIUM",
+                target_url,
+                {
+                    "missing_headers": missing,
+                    "present_headers": [
+                        h for h in SECURITY_HEADERS if h.lower() in headers
+                    ],
+                },
+                0.95,
+            )
+        )
 
 
 def _check_csp(target_url, session, findings):
-    resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
+    resp = safe_request(
+        "GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT
+    )
     if not resp:
         return
     csp = resp.headers.get("Content-Security-Policy", "")
     if not csp:
-        findings.append(make_finding("MISSING_CSP", "MEDIUM", target_url, {
-            "message": "No Content-Security-Policy header found",
-        }, 0.95))
+        findings.append(
+            make_finding(
+                "MISSING_CSP",
+                "MEDIUM",
+                target_url,
+                {
+                    "message": "No Content-Security-Policy header found",
+                },
+                0.95,
+            )
+        )
         return
     unsafe = []
     if "unsafe-inline" in csp:
@@ -57,14 +82,24 @@ def _check_csp(target_url, session, findings):
     if "*." in csp or "*:" in csp:
         unsafe.append("wildcard domains")
     if unsafe:
-        findings.append(make_finding("WEAK_CSP", "MEDIUM", target_url, {
-            "unsafe_directives": unsafe,
-            "csp_preview": csp[:200],
-        }, 0.9))
+        findings.append(
+            make_finding(
+                "WEAK_CSP",
+                "MEDIUM",
+                target_url,
+                {
+                    "unsafe_directives": unsafe,
+                    "csp_preview": csp[:200],
+                },
+                0.9,
+            )
+        )
 
 
 def _check_cookies(target_url, session, findings):
-    resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
+    resp = safe_request(
+        "GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT
+    )
     if not resp:
         return
     # Responses may contain multiple Set-Cookie headers; requests exposes them
@@ -88,32 +123,62 @@ def _check_cookies(target_url, session, findings):
         if not morsel.get("samesite"):
             issues.append("Missing SameSite")
         if issues:
-            findings.append(make_finding("INSECURE_COOKIE", "MEDIUM", target_url, {
-                "cookie": name,
-                "issues": issues,
-            }, 0.9))
+            findings.append(
+                make_finding(
+                    "INSECURE_COOKIE",
+                    "MEDIUM",
+                    target_url,
+                    {
+                        "cookie": name,
+                        "issues": issues,
+                    },
+                    0.9,
+                )
+            )
 
 
 def _check_cors(target_url, session, findings):
-    resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT,
-                        headers={"Origin": "http://evil.com"})
+    resp = safe_request(
+        "GET",
+        target_url,
+        session,
+        _DEFAULT_TIMEOUT,
+        _DEFAULT_RATE_LIMIT,
+        headers={"Origin": "http://evil.com"},
+    )
     if not resp:
         return
     acao = resp.headers.get("Access-Control-Allow-Origin", "")
     acac = resp.headers.get("Access-Control-Allow-Credentials", "")
     if acao == "*":
-        findings.append(make_finding("WILDCARD_CORS", "HIGH", target_url, {
-            "Access-Control-Allow-Origin": "*",
-            "message": "Wildcard CORS allows any origin",
-        }, 0.9))
+        findings.append(
+            make_finding(
+                "WILDCARD_CORS",
+                "HIGH",
+                target_url,
+                {
+                    "Access-Control-Allow-Origin": "*",
+                    "message": "Wildcard CORS allows any origin",
+                },
+                0.9,
+            )
+        )
     elif acao == "http://evil.com":
         acac_str = str(acac) if acac is not None else ""
         severity = "CRITICAL" if acac_str.lower() == "true" else "HIGH"
-        findings.append(make_finding("REFLECTED_ORIGIN_CORS", severity, target_url, {
-            "Access-Control-Allow-Origin": acao,
-            "Access-Control-Allow-Credentials": acac,
-            "message": "Server reflected evil.com origin",
-        }, 0.9))
+        findings.append(
+            make_finding(
+                "REFLECTED_ORIGIN_CORS",
+                severity,
+                target_url,
+                {
+                    "Access-Control-Allow-Origin": acao,
+                    "Access-Control-Allow-Credentials": acac,
+                    "message": "Server reflected evil.com origin",
+                },
+                0.9,
+            )
+        )
 
 
 class ConfigCheck:

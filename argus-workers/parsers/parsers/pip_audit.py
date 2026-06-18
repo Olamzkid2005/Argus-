@@ -1,4 +1,5 @@
 """Parser for pip-audit JSON output (pip-audit --format json)."""
+
 import json
 import logging
 
@@ -16,10 +17,20 @@ class PipAuditParser(BaseParser):
             data = json.loads(raw_output)
         except json.JSONDecodeError:
             return findings
-        items = data if isinstance(data, list) else data.get("dependencies", []) if isinstance(data, dict) else []
+        items = (
+            data
+            if isinstance(data, list)
+            else data.get("dependencies", [])
+            if isinstance(data, dict)
+            else []
+        )
         for vuln in items:
             severity = vuln.get("severity", "MEDIUM").upper()
-            severity = severity if severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW") else "MEDIUM"
+            severity = (
+                severity
+                if severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+                else "MEDIUM"
+            )
             name = vuln.get("name", "unknown")
             finding = {
                 "type": "DEPENDENCY_VULNERABILITY",

@@ -2,6 +2,7 @@
 Tool Registry - Registry of available tools for the agent to use.
 Bridges to the MCP protocol server for tool discovery.
 """
+
 import logging
 import time
 from collections.abc import Callable
@@ -81,12 +82,20 @@ class ToolRegistry:
                 )
 
             max_val = param.get("max")
-            if max_val is not None and isinstance(value, (int, float)) and value > max_val:
+            if (
+                max_val is not None
+                and isinstance(value, (int, float))
+                and value > max_val
+            ):
                 raise ValueError(
                     f"Tool '{name}' parameter '{pname}' value {value} exceeds max {max_val}"
                 )
             min_val = param.get("min")
-            if min_val is not None and isinstance(value, (int, float)) and value < min_val:
+            if (
+                min_val is not None
+                and isinstance(value, (int, float))
+                and value < min_val
+            ):
                 raise ValueError(
                     f"Tool '{name}' parameter '{pname}' value {value} below min {min_val}"
                 )
@@ -96,10 +105,7 @@ class ToolRegistry:
         start = time.time()
         func = self._tools.get(name)
         if not func:
-            return AgentResult(
-                tool=name, success=False,
-                error=f"Unknown tool: {name}"
-            )
+            return AgentResult(tool=name, success=False, error=f"Unknown tool: {name}")
         try:
             self._validate_arguments(name, kwargs)
             result = func(**kwargs)
@@ -108,12 +114,10 @@ class ToolRegistry:
                 result.duration_ms = duration
                 return result
             return AgentResult(
-                tool=name, success=True,
-                output=str(result), duration_ms=duration
+                tool=name, success=True, output=str(result), duration_ms=duration
             )
         except Exception as e:
             duration = int((time.time() - start) * 1000)
             return AgentResult(
-                tool=name, success=False,
-                error=str(e), duration_ms=duration
+                tool=name, success=False, error=str(e), duration_ms=duration
             )

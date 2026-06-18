@@ -3,6 +3,7 @@ Tests for health_monitor.py
 
 Validates: Health check recording, heartbeat, self-healing, dead worker cleanup
 """
+
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, Mock, patch
 
@@ -69,7 +70,9 @@ class TestWorkerHealthMonitor:
 
     def test_get_system_metrics_failure(self, monitor):
         """Test get_system_metrics gracefully handles psutil failures"""
-        with patch("health_monitor.psutil.Process", side_effect=Exception("psutil error")):
+        with patch(
+            "health_monitor.psutil.Process", side_effect=Exception("psutil error")
+        ):
             metrics = monitor.get_system_metrics()
 
         assert metrics["cpu_percent"] == 0.0
@@ -165,7 +168,10 @@ class TestWorkerHealthMonitor:
 
     def test_get_all_worker_health(self, monitor, mock_redis):
         """Test retrieving health for all workers"""
-        mock_redis.scan_iter.return_value = [b"worker:health:worker-1", b"worker:health:worker-2"]
+        mock_redis.scan_iter.return_value = [
+            b"worker:health:worker-1",
+            b"worker:health:worker-2",
+        ]
         mock_redis.hgetall.side_effect = [
             {
                 b"worker_id": b"worker-1",
@@ -209,7 +215,9 @@ class TestWorkerHealthMonitor:
 
     def test_get_unhealthy_workers_dead(self, monitor, mock_redis):
         """Test detecting dead workers by stale heartbeat"""
-        stale_time = (datetime.now(UTC) - timedelta(seconds=HEARTBEAT_TTL * 3)).isoformat()
+        stale_time = (
+            datetime.now(UTC) - timedelta(seconds=HEARTBEAT_TTL * 3)
+        ).isoformat()
         mock_redis.scan_iter.return_value = [b"worker:health:worker-dead"]
         mock_redis.hgetall.return_value = {
             b"worker_id": b"worker-dead",
@@ -272,7 +280,9 @@ class TestWorkerHealthMonitor:
 
     def test_cleanup_dead_workers(self, monitor, mock_redis):
         """Test cleanup removes stale worker entries"""
-        stale_time = (datetime.now(UTC) - timedelta(seconds=HEARTBEAT_TTL * 6)).isoformat()
+        stale_time = (
+            datetime.now(UTC) - timedelta(seconds=HEARTBEAT_TTL * 6)
+        ).isoformat()
         mock_redis.scan_iter.return_value = [b"worker:health:old-worker"]
         mock_redis.hgetall.return_value = {
             b"last_heartbeat": stale_time.encode(),

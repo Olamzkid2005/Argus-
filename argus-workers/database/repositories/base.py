@@ -68,6 +68,7 @@ def _get_table_columns(table_name: str) -> list[str]:
         List of column names
     """
     import time as _time
+
     with _schema_cache_lock:
         if table_name in _schema_cache:
             # Check TTL to pick up schema changes from migrations
@@ -99,7 +100,11 @@ def _get_table_columns(table_name: str) -> list[str]:
             _schema_cache_timestamps[table_name] = _time.time()
         return columns
     except Exception as e:
-        logging.getLogger(__name__).debug("Schema introspection failed for %s: %s — falling back to allowlist", table_name, e)
+        logging.getLogger(__name__).debug(
+            "Schema introspection failed for %s: %s — falling back to allowlist",
+            table_name,
+            e,
+        )
         # Fall back to allowlist if schema introspection fails
         return ALLOWED_COLUMNS.get(table_name, [])
     finally:
@@ -254,7 +259,9 @@ class BaseRepository:
         # We should commit on both pooled connections (external_conn=None)
         # AND string-initiated connections (external_conn is a URL string).
         # Only skip auto-commit when an actual connection OBJECT is passed in.
-        _should_manage = not isinstance(self._external_conn, psycopg2.extensions.connection)
+        _should_manage = not isinstance(
+            self._external_conn, psycopg2.extensions.connection
+        )
         try:
             yield (conn, cursor)
             if commit and _should_manage:
@@ -293,7 +300,7 @@ class BaseRepository:
         elapsed_ms = (time.time() - start_time) * 1000
         if elapsed_ms > 500:
             logging.getLogger(__name__).warning(
-                f"Slow query ({elapsed_ms:.1f}ms, {rows} rows): {query[:200]}"
+                "Slow query (%.1fms, %d rows): %s", elapsed_ms, rows, query[:200]
             )
 
     def find_by_id(self, id: str) -> dict | None:
@@ -333,7 +340,9 @@ class BaseRepository:
         start = time.time()
         _validate_table_name(self.table_name)
         with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
-            query = psycopg2.sql.SQL("SELECT * FROM {} ORDER BY created_at DESC LIMIT %s OFFSET %s").format(
+            query = psycopg2.sql.SQL(
+                "SELECT * FROM {} ORDER BY created_at DESC LIMIT %s OFFSET %s"
+            ).format(
                 psycopg2.sql.Identifier(self.table_name),
             )
             cursor.execute(query, (limit, offset))
@@ -402,7 +411,10 @@ class BaseRepository:
             set_parts.append(SQL("updated_at = NOW()"))
         values = list(updates.values()) + [id]
 
-        with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (conn, cursor):
+        with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (
+            conn,
+            cursor,
+        ):
             query = SQL("UPDATE {} SET {} WHERE {} = %s RETURNING *").format(
                 Identifier(self.table_name),
                 SQL(", ").join(set_parts),

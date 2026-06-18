@@ -55,7 +55,7 @@ class TestMCPTransport:
         )
         output = mock_stdout.getvalue()
         assert '"error"' in output
-        assert '-32601' in output
+        assert "-32601" in output
         assert '"result"' not in output
 
     @patch("mcp_transport.sys.stdout", new_callable=StringIO)
@@ -72,16 +72,16 @@ class TestMCPTransport:
         transport = MCPTransport()
         transport._handle_request({"id": 1, "method": "unknown"})
         output = mock_stdout.getvalue()
-        assert '-32601' in output
-        assert 'Method not found' in output
+        assert "-32601" in output
+        assert "Method not found" in output
 
     @patch("mcp_transport.sys.stdout", new_callable=StringIO)
     def test_handle_request_returns_32600_for_missing_method(self, mock_stdout):
         transport = MCPTransport()
         transport._handle_request({"id": 1})
         output = mock_stdout.getvalue()
-        assert '-32600' in output
-        assert 'Method not specified' in output
+        assert "-32600" in output
+        assert "Method not specified" in output
 
     @patch("mcp_transport.sys.stdout", new_callable=StringIO)
     def test_handle_request_returns_32603_on_handler_exception(self, mock_stdout):
@@ -92,8 +92,8 @@ class TestMCPTransport:
         transport.register("fail", failing_handler)
         transport._handle_request({"id": 1, "method": "fail"})
         output = mock_stdout.getvalue()
-        assert '-32603' in output
-        assert 'oops' in output
+        assert "-32603" in output
+        assert "oops" in output
 
     @patch("mcp_transport.sys.stdout", new_callable=StringIO)
     @patch("mcp_transport.sys.stdin", new_callable=StringIO)

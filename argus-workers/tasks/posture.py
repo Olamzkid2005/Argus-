@@ -1,6 +1,7 @@
 """
 Compliance posture scoring tasks for on-demand and scheduled re-scoring.
 """
+
 import logging
 
 from celery import shared_task
@@ -45,27 +46,34 @@ def recompute_posture(self, engagement_id: str, org_id: str | None = None):
         # Load all findings for the engagement
         finding_repo = FindingRepository()
         all_findings, total = finding_repo.get_findings_by_engagement(
-            engagement_id, limit=100000,
+            engagement_id,
+            limit=100000,
         )
 
         # Convert to dicts
         finding_dicts = []
         for f in all_findings:
-            if hasattr(f, 'to_dict'):
+            if hasattr(f, "to_dict"):
                 finding_dicts.append(f.to_dict())
             elif isinstance(f, dict):
                 finding_dicts.append(f)
             elif isinstance(f, (list, tuple)):
-                finding_dicts.append(dict(zip(
-                    ['id', 'type', 'severity', 'endpoint'], f[:4], strict=False
-                )))
+                finding_dicts.append(
+                    dict(
+                        zip(["id", "type", "severity", "endpoint"], f[:4], strict=False)
+                    )
+                )
 
         if not finding_dicts:
             logger.info("No findings for %s — posture stays at 100", engagement_id)
             # Still save a clean snapshot
             scorer = CompliancePostureScorer(engagement_id)
             snapshot = scorer.compute_and_save([], org_id=org_id)
-            return {"engagement_id": engagement_id, "composite_score": 100.0, "findings_count": 0}
+            return {
+                "engagement_id": engagement_id,
+                "composite_score": 100.0,
+                "findings_count": 0,
+            }
 
         # Compute and save
         scorer = CompliancePostureScorer(engagement_id)
@@ -73,7 +81,10 @@ def recompute_posture(self, engagement_id: str, org_id: str | None = None):
 
         logger.info(
             "Posture recomputed for %s: composite=%.1f, trend=%s, findings=%d",
-            engagement_id, snapshot.composite_score, snapshot.trend, len(finding_dicts),
+            engagement_id,
+            snapshot.composite_score,
+            snapshot.trend,
+            len(finding_dicts),
         )
 
         # Check for compliance alerts (score drops below thresholds)
@@ -87,8 +98,10 @@ def recompute_posture(self, engagement_id: str, org_id: str | None = None):
         }
 
     except Exception as e:
-        logger.error(
-            "Failed to recompute posture for %s: %s", engagement_id, e, exc_info=True,
+        logger.exception(
+            "Failed to recompute posture for %s: %s",
+            engagement_id,
+            e,
         )
         raise self.retry(exc=e)
 
@@ -115,6 +128,7 @@ def _check_compliance_alerts(
         # Emit compliance alert event via WebSocket
         try:
             from websocket_events import get_websocket_publisher
+
             publisher = get_websocket_publisher()
             publisher.publish_error(
                 engagement_id=engagement_id,
@@ -132,7 +146,9 @@ def _check_compliance_alerts(
             )
             logger.info(
                 "Compliance alert emitted for %s: %s (score=%.1f)",
-                engagement_id, level, score,
+                engagement_id,
+                level,
+                score,
             )
         except Exception as ws_err:
             logger.debug("Failed to emit compliance alert (non-fatal): %s", ws_err)

@@ -1,6 +1,5 @@
 """Tests for utils/sanitization.py — input sanitization utilities."""
 
-
 from utils.sanitization import (
     check_for_dangerous_content,
     sanitize_evidence,
@@ -11,7 +10,10 @@ from utils.sanitization import (
 
 class TestSanitizeString:
     def test_escapes_html(self):
-        assert sanitize_string("<script>alert(1)</script>") == "&lt;script&gt;alert(1)&lt;/script&gt;"
+        assert (
+            sanitize_string("<script>alert(1)</script>")
+            == "&lt;script&gt;alert(1)&lt;/script&gt;"
+        )
 
     def test_escapes_quotes(self):
         result = sanitize_string('say "hello"')

@@ -1,6 +1,7 @@
 """
 Open redirect parameter detection and testing.
 """
+
 import logging
 import re
 
@@ -14,26 +15,44 @@ _DEFAULT_TIMEOUT = SSL_TIMEOUT
 _DEFAULT_RATE_LIMIT = RATE_LIMIT_DELAY_MS / 1000.0
 
 REDIRECT_PARAMS = [
-    "redirect", "url", "next", "dest", "redirect_url",
-    "return", "continue", "to", "ref", "dest_url", "target", "goto",
+    "redirect",
+    "url",
+    "next",
+    "dest",
+    "redirect_url",
+    "return",
+    "continue",
+    "to",
+    "ref",
+    "dest_url",
+    "target",
+    "goto",
 ]
 
 EXTERNAL_TEST_URL = "https://evil.com"
 
 
 def _check_open_redirect(target_url: str, session, findings: list) -> None:
-    resp = safe_request("GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT)
+    resp = safe_request(
+        "GET", target_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT
+    )
     if not resp or not resp.text:
         return
     # Find redirect-like parameters in forms and links
-    param_pattern = re.compile(r'[?&](' + '|'.join(REDIRECT_PARAMS) + r')=([^&\s"\']+)', re.I)
+    param_pattern = re.compile(
+        r"[?&](" + "|".join(REDIRECT_PARAMS) + r')=([^&\s"\']+)', re.I
+    )
     for match in param_pattern.finditer(resp.text):
         param_name = match.group(1)
         _ = match.group(2)  # existing value (unused, future use)
         test_url = target_url + ("&" if "?" in target_url else "?")
         test_url += f"{param_name}={EXTERNAL_TEST_URL}"
         redirect_resp = safe_request(
-            "GET", test_url, session, _DEFAULT_TIMEOUT, _DEFAULT_RATE_LIMIT,
+            "GET",
+            test_url,
+            session,
+            _DEFAULT_TIMEOUT,
+            _DEFAULT_RATE_LIMIT,
             allow_redirects=False,
         )
         if redirect_resp is None:
@@ -42,11 +61,19 @@ def _check_open_redirect(target_url: str, session, findings: list) -> None:
         if not location:
             continue
         if "evil.com" in location:
-            findings.append(make_finding("OPEN_REDIRECT", "MEDIUM", target_url, {
-                "parameter": param_name,
-                "redirects_to": location,
-                "test_value": EXTERNAL_TEST_URL,
-            }, 0.8))
+            findings.append(
+                make_finding(
+                    "OPEN_REDIRECT",
+                    "MEDIUM",
+                    target_url,
+                    {
+                        "parameter": param_name,
+                        "redirects_to": location,
+                        "test_value": EXTERNAL_TEST_URL,
+                    },
+                    0.8,
+                )
+            )
             break
 
 

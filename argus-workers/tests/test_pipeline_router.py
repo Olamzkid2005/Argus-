@@ -20,10 +20,14 @@ class TestExecuteReconPipeline:
         ctx = MagicMock()
         with patch("orchestrator_pkg.recon.execute_recon_tools") as mock_recon:
             mock_recon.return_value = ([{"type": "XSS"}], "recon_context")
-            findings, rctx = execute_recon_pipeline(ctx, "https://example.com", {}, "normal")
+            findings, rctx = execute_recon_pipeline(
+                ctx, "https://example.com", {}, "normal"
+            )
             assert len(findings) == 1
             assert rctx == "recon_context"
-            mock_recon.assert_called_with(ctx, "https://example.com", {}, "normal", cache_mode=None)
+            mock_recon.assert_called_with(
+                ctx, "https://example.com", {}, "normal", cache_mode=None
+            )
 
 
 class TestExecuteScanPipeline:
@@ -32,7 +36,9 @@ class TestExecuteScanPipeline:
         with patch("orchestrator_pkg.scan.execute_scan_tools") as mock_scan:
             mock_scan.return_value = [{"type": "XSS"}]
             findings = execute_scan_pipeline(
-                ctx, ["https://example.com"], {},
+                ctx,
+                ["https://example.com"],
+                {},
                 skip_tools={"nmap"},
                 tech_stack=["python"],
             )
@@ -44,7 +50,10 @@ class TestExecuteScanPipeline:
         with patch("orchestrator_pkg.scan.execute_scan_tools") as mock_scan:
             mock_scan.return_value = []
             execute_scan_pipeline(
-                ctx, ["https://example.com"], {}, "aggressive",
+                ctx,
+                ["https://example.com"],
+                {},
+                "aggressive",
                 auth_config={"user": "admin"},
                 recon_context="mock_ctx",
             )

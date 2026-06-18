@@ -22,7 +22,14 @@ class TestFindingBuilder:
 
     def test_add_with_extra_fields(self):
         builder = FindingBuilder(source_tool="nuclei")
-        finding = builder.add("SQLI", "CRITICAL", "/api/login", {"sql": "1=1"}, confidence=0.95, cve="CVE-2024-0001")
+        finding = builder.add(
+            "SQLI",
+            "CRITICAL",
+            "/api/login",
+            {"sql": "1=1"},
+            confidence=0.95,
+            cve="CVE-2024-0001",
+        )
         assert finding["cve"] == "CVE-2024-0001"
         assert finding["confidence"] == 0.95
 
@@ -45,7 +52,9 @@ class TestFindingBuilder:
 
     def test_vulnerability_convenience(self):
         builder = FindingBuilder(source_tool="nuclei")
-        finding = builder.vulnerability("SQLI", "CRITICAL", "/api", {"evidence": "test"})
+        finding = builder.vulnerability(
+            "SQLI", "CRITICAL", "/api", {"evidence": "test"}
+        )
         assert finding["type"] == "SQLI"
         assert finding["severity"] == "CRITICAL"
 
@@ -83,7 +92,9 @@ class TestFindingBuilder:
         def emit(engagement_id, finding, tool_name):
             results.append((engagement_id, finding, tool_name))
 
-        builder = FindingBuilder(source_tool="nuclei", engagement_id="eng-1", emit_finding=emit)
+        builder = FindingBuilder(
+            source_tool="nuclei", engagement_id="eng-1", emit_finding=emit
+        )
         builder.add("XSS", "HIGH", "/api", {})
         assert len(results) == 1
         assert results[0][0] == "eng-1"
@@ -93,7 +104,9 @@ class TestFindingBuilder:
         def broken_emit(engagement_id, finding, tool_name):
             raise RuntimeError("broken")
 
-        builder = FindingBuilder(source_tool="test", engagement_id="eng-1", emit_finding=broken_emit)
+        builder = FindingBuilder(
+            source_tool="test", engagement_id="eng-1", emit_finding=broken_emit
+        )
         # Should not raise
         finding = builder.add("XSS", "HIGH", "/api", {})
         assert finding["type"] == "XSS"

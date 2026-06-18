@@ -18,7 +18,11 @@ _spec = importlib.util.spec_from_file_location(
     "login_tool",
     os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
-        "..", "..", "agent", "tools", "login_tool.py",
+        "..",
+        "..",
+        "agent",
+        "tools",
+        "login_tool.py",
     ),
 )
 _lt = importlib.util.module_from_spec(_spec)
@@ -34,7 +38,9 @@ class TestBuildLoginPayloadFormMode:
     def test_form_mode_uses_extracted_field_names(self) -> None:
         """Form mode builds payload from discovered form fields."""
         fields = {"email": "user_email", "password": "passwd"}
-        payload = _lt._build_login_payload("admin@test.com", "secret123", fields, "form", 0)
+        payload = _lt._build_login_payload(
+            "admin@test.com", "secret123", fields, "form", 0
+        )
         assert payload is not None
         assert payload.get("user_email") == "admin@test.com"
         assert payload.get("passwd") == "secret123"
@@ -58,7 +64,12 @@ class TestBuildLoginPayloadFormMode:
 
     def test_form_mode_includes_csrf_when_present(self) -> None:
         """Form mode includes the CSRF token value if available."""
-        fields = {"email": "email", "password": "password", "csrf": "csrf_token", "csrf_value": "tok123"}
+        fields = {
+            "email": "email",
+            "password": "password",
+            "csrf": "csrf_token",
+            "csrf_value": "tok123",
+        }
         payload = _lt._build_login_payload("a@b.com", "s3cret", fields, "form", 0)
         assert payload is not None
         assert payload.get("csrf_token") == "tok123"
@@ -165,14 +176,18 @@ class TestBuildLoginPayloadIsJsonType:
     """``_is_json`` must be a Python boolean, never a string."""
 
     def test_is_json_is_boolean_form_mode_even(self) -> None:
-        payload = _lt._build_login_payload("a", "b", {"email": "e", "password": "p"}, "form", 0)
+        payload = _lt._build_login_payload(
+            "a", "b", {"email": "e", "password": "p"}, "form", 0
+        )
         assert payload is not None
         assert isinstance(payload.get("_is_json"), bool)
         assert payload["_is_json"] is False
 
     def test_is_json_is_boolean_form_mode_odd(self) -> None:
         """Form mode always sets ``_is_json`` to ``False``."""
-        payload = _lt._build_login_payload("a", "b", {"email": "e", "password": "p"}, "form", 1)
+        payload = _lt._build_login_payload(
+            "a", "b", {"email": "e", "password": "p"}, "form", 1
+        )
         assert payload is not None
         assert isinstance(payload.get("_is_json"), bool)
         assert payload["_is_json"] is False

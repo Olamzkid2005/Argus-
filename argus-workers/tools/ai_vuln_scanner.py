@@ -122,19 +122,21 @@ INJECTION_SUCCESS_INDICATORS_RAW = [
     "mongodb",
     "mysql",
 ]
-INJECTION_SUCCESS_INDICATORS = INJECTION_SUCCESS_INDICATORS_RAW  # plain strings, not regex
+INJECTION_SUCCESS_INDICATORS = (
+    INJECTION_SUCCESS_INDICATORS_RAW  # plain strings, not regex
+)
 
 SENSITIVE_DATA_PATTERNS_RAW = [
-    r'(?i)(system\s+prompt[:\s].{10,})',
-    r'(?i)(you\s+are\s+an?\s+AI.{5,})',
-    r'(?i)(SELECT\s+\*\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)',
-    r'(?i)(CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE)',
+    r"(?i)(system\s+prompt[:\s].{10,})",
+    r"(?i)(you\s+are\s+an?\s+AI.{5,})",
+    r"(?i)(SELECT\s+\*\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)",
+    r"(?i)(CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE)",
     r'(?i)(api[_\s]key[:\s]["\']?[a-zA-Z0-9_\-]{16,})',
     r'(?i)(secret[:\s]["\']?[a-zA-Z0-9_\-]{16,})',
-    r'(?i)(bearer\s+[a-zA-Z0-9_\-\.]{20,})',
-    r'(?i)(postgresql://|mysql://|mongodb://|redis://)',
-    r'(?i)(admin@|root@|password\s*[:=])',
-    r'(?i)(Authorization:\s*Bearer)',
+    r"(?i)(bearer\s+[a-zA-Z0-9_\-\.]{20,})",
+    r"(?i)(postgresql://|mysql://|mongodb://|redis://)",
+    r"(?i)(admin@|root@|password\s*[:=])",
+    r"(?i)(Authorization:\s*Bearer)",
 ]
 SENSITIVE_DATA_PATTERNS = [re.compile(p) for p in SENSITIVE_DATA_PATTERNS_RAW]
 
@@ -159,7 +161,15 @@ class AIVulnScanner(AbstractTool):
     ]
 
     # Common AI response JSON keys (where the AI's reply lives)
-    AI_RESPONSE_KEYS = ["message", "response", "reply", "text", "content", "answer", "output"]
+    AI_RESPONSE_KEYS = [
+        "message",
+        "response",
+        "reply",
+        "text",
+        "content",
+        "answer",
+        "output",
+    ]
 
     def __init__(
         self,
@@ -221,10 +231,14 @@ class AIVulnScanner(AbstractTool):
         elif self.emit_finding_callback and self.engagement_id:
             try:
                 self.emit_finding_callback(
-                    self.engagement_id, finding, "ai_vuln_scanner",
+                    self.engagement_id,
+                    finding,
+                    "ai_vuln_scanner",
                 )
             except Exception:
-                logger.debug("Inline finding emission failed (non-fatal)", exc_info=True)
+                logger.debug(
+                    "Inline finding emission failed (non-fatal)", exc_info=True
+                )
 
     def execute(self, ctx: ToolContext) -> UnifiedToolResult:
         """
@@ -250,33 +264,43 @@ class AIVulnScanner(AbstractTool):
 
         target_url = ctx.target
         self.target_url = target_url.rstrip("/")
-        ai_endpoints = getattr(self, "_scan_ai_endpoints", None) or self.DEFAULT_AI_ENDPOINTS
+        ai_endpoints = (
+            getattr(self, "_scan_ai_endpoints", None) or self.DEFAULT_AI_ENDPOINTS
+        )
         slog = ScanLogger("ai_vuln_scanner", engagement_id=self.engagement_id)
 
-        slog.phase_header("AI VULN SCAN", target=self.target_url, endpoints=len(ai_endpoints))
+        slog.phase_header(
+            "AI VULN SCAN", target=self.target_url, endpoints=len(ai_endpoints)
+        )
 
         # Discover which AI endpoints actually exist
         active_endpoints = self._discover_ai_endpoints(ai_endpoints)
         if not active_endpoints:
             slog.info("No AI endpoints detected — skipping AI scan")
         else:
-            slog.info(f"Found {len(active_endpoints)} active AI endpoints")
+            slog.info("Found %d active AI endpoints", len(active_endpoints))
 
             for endpoint in active_endpoints:
                 url = urljoin(self.target_url, endpoint.lstrip("/"))
                 slog.tool_start("prompt_injection", [endpoint])
                 injection_findings = self._test_prompt_injection(url)
-                slog.tool_complete("prompt_injection", success=True, findings=len(injection_findings))
+                slog.tool_complete(
+                    "prompt_injection", success=True, findings=len(injection_findings)
+                )
                 for f in injection_findings:
                     self._emit_finding(f)
 
                 slog.tool_start("info_disclosure", [endpoint])
                 disclosure_findings = self._test_information_disclosure(url)
-                slog.tool_complete("info_disclosure", success=True, findings=len(disclosure_findings))
+                slog.tool_complete(
+                    "info_disclosure", success=True, findings=len(disclosure_findings)
+                )
                 for f in disclosure_findings:
                     self._emit_finding(f)
 
-        slog.tool_complete("ai_vuln_scan", success=True, findings=len(self._builder.findings))
+        slog.tool_complete(
+            "ai_vuln_scan", success=True, findings=len(self._builder.findings)
+        )
 
         result = UnifiedToolResult(
             tool_name=self.tool_name,
@@ -334,11 +358,13 @@ class AIVulnScanner(AbstractTool):
                 req_session = getattr(self._thread_session, "session", None)
                 if req_session is None:
                     req_session = requests.Session()
-                    req_session.headers.update({
-                        "User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)",
-                        "Content-Type": "application/json",
-                        "Accept": "application/json",
-                    })
+                    req_session.headers.update(
+                        {
+                            "User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)",
+                            "Content-Type": "application/json",
+                            "Accept": "application/json",
+                        }
+                    )
                     self._thread_session.session = req_session
 
             with self._rate_lock:
@@ -350,8 +376,14 @@ class AIVulnScanner(AbstractTool):
 
             resp = req_session.request(method, url, **kwargs)
             return resp
-        except (TimeoutError, RequestException, Timeout, ConnectionError, urllib3.exceptions.SSLError) as e:
-            logger.debug(f"AI scanner request failed: {e}")
+        except (
+            TimeoutError,
+            RequestException,
+            Timeout,
+            ConnectionError,
+            urllib3.exceptions.SSLError,
+        ) as e:
+            logger.debug("AI scanner request failed: %s", e)
             return None
 
     def _discover_ai_endpoints(self, endpoints: list[str]) -> list[str]:
@@ -426,7 +458,11 @@ class AIVulnScanner(AbstractTool):
             if isinstance(choices, list) and len(choices) > 0:
                 choice = choices[0]
                 if isinstance(choice, dict):
-                    msg = choice.get("message") or choice.get("delta") or choice.get("text")
+                    msg = (
+                        choice.get("message")
+                        or choice.get("delta")
+                        or choice.get("text")
+                    )
                     if isinstance(msg, dict):
                         return msg.get("content", "")
                     if isinstance(msg, str):
@@ -469,19 +505,21 @@ class AIVulnScanner(AbstractTool):
                         continue
                     seen_evasions.add(evasion_key)
 
-                    findings.append({
-                        "type": "PROMPT_INJECTION",
-                        "severity": "CRITICAL",
-                        "endpoint": url,
-                        "evidence": {
-                            "payload": payload,
-                            "indicator": indicator,
-                            "response_preview": response_text[:300],
-                            "message": f"AI response contained '{indicator}' indicating injection succeeded",
-                        },
-                        "confidence": 0.85,
-                        "cwe": "CWE-77",
-                    })
+                    findings.append(
+                        {
+                            "type": "PROMPT_INJECTION",
+                            "severity": "CRITICAL",
+                            "endpoint": url,
+                            "evidence": {
+                                "payload": payload,
+                                "indicator": indicator,
+                                "response_preview": response_text[:300],
+                                "message": f"AI response contained '{indicator}' indicating injection succeeded",
+                            },
+                            "confidence": 0.85,
+                            "cwe": "CWE-77",
+                        }
+                    )
                     break
 
         return findings
@@ -505,18 +543,20 @@ class AIVulnScanner(AbstractTool):
 
             # Check if response contains sensitive data
             if self._contains_sensitive_data(response_text):
-                findings.append({
-                    "type": "AI_INFORMATION_DISCLOSURE",
-                    "severity": "HIGH",
-                    "endpoint": url,
-                    "evidence": {
-                        "probe": probe,
-                        "response_preview": response_text[:300],
-                        "message": "AI response contains sensitive data (SQL strings, API keys, or system prompt details)",
-                    },
-                    "confidence": 0.75,
-                    "cwe": "CWE-200",
-                })
+                findings.append(
+                    {
+                        "type": "AI_INFORMATION_DISCLOSURE",
+                        "severity": "HIGH",
+                        "endpoint": url,
+                        "evidence": {
+                            "probe": probe,
+                            "response_preview": response_text[:300],
+                            "message": "AI response contains sensitive data (SQL strings, API keys, or system prompt details)",
+                        },
+                        "confidence": 0.75,
+                        "cwe": "CWE-200",
+                    }
+                )
 
         return findings
 

@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 _REDIS_URL: str | None = None
 
+
 def get_redis_url() -> str:
     global _REDIS_URL
     if _REDIS_URL is not None:
@@ -26,5 +27,6 @@ def get_redis_url() -> str:
         "Set REDIS_URL environment variable for production use."
     )
     return _REDIS_URL
+
 
 REDIS_URL = get_redis_url()

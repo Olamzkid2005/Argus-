@@ -117,6 +117,7 @@ class WebSocketEventPublisher:
             Sanitized key component safe for Redis keys
         """
         from utils.validation import sanitize_redis_key
+
         return sanitize_redis_key(engagement_id)
 
     def _get_channel(self, engagement_id: str) -> str:
@@ -134,7 +135,9 @@ class WebSocketEventPublisher:
         safe = self._sanitize_engagement_key(engagement_id)
         return f"state:engagement:{safe}"
 
-    def _should_publish(self, event: dict[str, Any], min_severity: str | None = None) -> bool:
+    def _should_publish(
+        self, event: dict[str, Any], min_severity: str | None = None
+    ) -> bool:
         """
         Check if event should be published based on severity filter.
 
@@ -148,17 +151,26 @@ class WebSocketEventPublisher:
         if not min_severity:
             return True
 
-        severity_order = [self.SEVERITY_INFO, self.SEVERITY_LOW, self.SEVERITY_MEDIUM,
-                         self.SEVERITY_HIGH, self.SEVERITY_CRITICAL]
+        severity_order = [
+            self.SEVERITY_INFO,
+            self.SEVERITY_LOW,
+            self.SEVERITY_MEDIUM,
+            self.SEVERITY_HIGH,
+            self.SEVERITY_CRITICAL,
+        ]
 
         event_severity = event.get("data", {}).get("severity", self.SEVERITY_INFO)
 
         try:
-            return severity_order.index(event_severity) >= severity_order.index(min_severity)
+            return severity_order.index(event_severity) >= severity_order.index(
+                min_severity
+            )
         except ValueError:
             return True
 
-    def _publish_event(self, event: dict[str, Any], min_severity: str | None = None) -> None:
+    def _publish_event(
+        self, event: dict[str, Any], min_severity: str | None = None
+    ) -> None:
         """
         Publish an event to Redis.
 
@@ -181,8 +193,10 @@ class WebSocketEventPublisher:
         if len(event_json) > self.MAX_EVENT_SIZE_BYTES:
             logger.warning(
                 "Event %s for engagement %s exceeds size limit (%d > %d bytes) — truncating",
-                event.get("type", "unknown"), engagement_id,
-                len(event_json), self.MAX_EVENT_SIZE_BYTES,
+                event.get("type", "unknown"),
+                engagement_id,
+                len(event_json),
+                self.MAX_EVENT_SIZE_BYTES,
             )
             # Truncate data dict values to fit within limit
             data = event.get("data", {})
@@ -262,7 +276,7 @@ class WebSocketEventPublisher:
         confidence: float,
         endpoint: str,
         source_tool: str,
-        use_batch: bool = True
+        use_batch: bool = True,
     ) -> None:
         """
         Publish a finding discovered event.
@@ -290,7 +304,7 @@ class WebSocketEventPublisher:
                 "confidence": confidence,
                 "endpoint": endpoint,
                 "source_tool": source_tool,
-            }
+            },
         }
 
         if use_batch:
@@ -306,7 +320,7 @@ class WebSocketEventPublisher:
         engagement_id: str,
         from_state: str,
         to_state: str,
-        reason: str | None = None
+        reason: str | None = None,
     ) -> None:
         """
         Publish a state transition event.
@@ -327,7 +341,7 @@ class WebSocketEventPublisher:
                 "from_state": from_state,
                 "to_state": to_state,
                 "reason": reason,
-            }
+            },
         }
         self._publish_event(event)
 
@@ -343,7 +357,7 @@ class WebSocketEventPublisher:
         event_type: str,
         current_rps: float,
         status_code: int | None = None,
-        message: str | None = None
+        message: str | None = None,
     ) -> None:
         """
         Publish a rate limit event.
@@ -368,7 +382,7 @@ class WebSocketEventPublisher:
                 "status_code": status_code,
                 "current_rps": current_rps,
                 "message": message or f"Rate limit event: {event_type}",
-            }
+            },
         }
         self._publish_event(event)
 
@@ -378,7 +392,7 @@ class WebSocketEventPublisher:
         tool_name: str,
         duration_ms: int,
         success: bool,
-        findings_count: int = 0
+        findings_count: int = 0,
     ) -> None:
         """
         Publish a tool execution event.
@@ -399,15 +413,12 @@ class WebSocketEventPublisher:
                 "duration_ms": duration_ms,
                 "success": success,
                 "findings_count": findings_count,
-            }
+            },
         }
         self._publish_event(event)
 
     def publish_job_started(
-        self,
-        engagement_id: str,
-        job_type: str,
-        target: str | None = None
+        self, engagement_id: str, job_type: str, target: str | None = None
     ) -> None:
         """
         Publish a job started event.
@@ -424,7 +435,7 @@ class WebSocketEventPublisher:
             "data": {
                 "job_type": job_type,
                 "target": target,
-            }
+            },
         }
         self._publish_event(event)
 
@@ -434,7 +445,7 @@ class WebSocketEventPublisher:
         job_type: str,
         status: str,
         findings_count: int = 0,
-        duration_ms: int = 0
+        duration_ms: int = 0,
     ) -> None:
         """
         Publish a job completed event.
@@ -455,7 +466,7 @@ class WebSocketEventPublisher:
                 "status": status,
                 "findings_count": findings_count,
                 "duration_ms": duration_ms,
-            }
+            },
         }
         self._publish_event(event)
 
@@ -468,7 +479,7 @@ class WebSocketEventPublisher:
         target: str = None,
         details: str = None,
         items_found: int = None,
-        duration_ms: int = None
+        duration_ms: int = None,
     ) -> None:
         """
         Publish a scanner activity event for live visibility into what tools are doing.
@@ -496,7 +507,7 @@ class WebSocketEventPublisher:
                 "details": details,
                 "items_found": items_found,
                 "duration_ms": duration_ms,
-            }
+            },
         }
         self._publish_event(event)
 
@@ -539,7 +550,7 @@ class WebSocketEventPublisher:
                 "tool": tool,
                 "reasoning": reasoning[:200] if reasoning else "",
                 "was_fallback": was_fallback,
-            }
+            },
         }
         self._publish_event(event)
 
@@ -570,7 +581,7 @@ class WebSocketEventPublisher:
                 "framework_scores": framework_scores,
                 "trend": trend,
                 "total_findings": total_findings,
-            }
+            },
         }
         self._publish_event(event)
 
@@ -598,6 +609,7 @@ class WebSocketEventPublisher:
         cursor = None
         try:
             from database.connection import get_db
+
             db = get_db()
             conn = db.get_connection()
             cursor = conn.cursor()
@@ -607,12 +619,21 @@ class WebSocketEventPublisher:
                     (engagement_id, tool_name, activity, status, target, details, items_found, duration_ms)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (engagement_id, tool_name, activity, status, target, details, items_found or 0, duration_ms or 0),
+                (
+                    engagement_id,
+                    tool_name,
+                    activity,
+                    status,
+                    target,
+                    details,
+                    items_found or 0,
+                    duration_ms or 0,
+                ),
             )
             conn.commit()
         except Exception as e:
             # Non-critical: don't let DB write failure break the scan
-            logger.warning(f"Failed to persist scanner activity: {e}")
+            logger.warning("Failed to persist scanner activity: %s", e)
         finally:
             if cursor:
                 cursor.close()
@@ -624,7 +645,7 @@ class WebSocketEventPublisher:
         engagement_id: str,
         error_message: str,
         error_code: str,
-        context: dict[str, Any] | None = None
+        context: dict[str, Any] | None = None,
     ) -> None:
         """
         Publish an error event.
@@ -643,7 +664,7 @@ class WebSocketEventPublisher:
                 "error_message": error_message,
                 "error_code": error_code,
                 "context": context or {},
-            }
+            },
         }
         self._publish_event(event)
 
@@ -671,7 +692,7 @@ def publish_finding(
     severity: str,
     confidence: float,
     endpoint: str,
-    source_tool: str
+    source_tool: str,
 ) -> None:
     """Publish a finding discovered event"""
     get_websocket_publisher().publish_finding(
@@ -686,10 +707,7 @@ def publish_finding(
 
 
 def publish_state_transition(
-    engagement_id: str,
-    from_state: str,
-    to_state: str,
-    reason: str | None = None
+    engagement_id: str, from_state: str, to_state: str, reason: str | None = None
 ) -> None:
     """Publish a state transition event"""
     get_websocket_publisher().publish_state_transition(
@@ -706,7 +724,7 @@ def publish_rate_limit_event(
     event_type: str,
     current_rps: float,
     status_code: int | None = None,
-    message: str | None = None
+    message: str | None = None,
 ) -> None:
     """Publish a rate limit event"""
     get_websocket_publisher().publish_rate_limit_event(

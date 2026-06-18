@@ -50,13 +50,26 @@ class TestCustomRulesServiceLoad:
 
         mock_cursor.fetchone.return_value = ("org-42",)
         mock_cursor.description = [
-            ("id", None), ("name", None), ("description", None),
-            ("severity", None), ("category", None), ("rule_yaml", None),
+            ("id", None),
+            ("name", None),
+            ("description", None),
+            ("severity", None),
+            ("category", None),
+            ("rule_yaml", None),
             ("tags", None),
         ]
         mock_cursor.fetchall.side_effect = [
-            [("rule-1", "Test Rule", "A test rule", "HIGH", "injection",
-              "yaml_content", ["tag1"])],
+            [
+                (
+                    "rule-1",
+                    "Test Rule",
+                    "A test rule",
+                    "HIGH",
+                    "injection",
+                    "yaml_content",
+                    ["tag1"],
+                )
+            ],
             [],
         ]
 
@@ -74,14 +87,27 @@ class TestCustomRulesServiceLoad:
 
         mock_cursor.fetchone.return_value = ("org-42",)
         mock_cursor.description = [
-            ("id", None), ("name", None), ("description", None),
-            ("severity", None), ("category", None), ("rule_yaml", None),
+            ("id", None),
+            ("name", None),
+            ("description", None),
+            ("severity", None),
+            ("category", None),
+            ("rule_yaml", None),
             ("tags", None),
         ]
         mock_cursor.fetchall.side_effect = [
             [],
-            [("org-rule-1", "Org Rule", "Org level rule", "MEDIUM",
-              "config", "yaml", [])],
+            [
+                (
+                    "org-rule-1",
+                    "Org Rule",
+                    "Org level rule",
+                    "MEDIUM",
+                    "config",
+                    "yaml",
+                    [],
+                )
+            ],
         ]
 
         result = CustomRulesService.load("eng-002")
@@ -108,10 +134,14 @@ class TestCustomRulesServicePublish:
             CustomRulesService,
         )
 
-        with patch.object(CustomRulesService, "load", return_value=[
-            {"name": "Rule 1", "severity": "HIGH", "description": "Desc 1"},
-            {"name": "Rule 2", "severity": "MEDIUM", "description": "Desc 2"},
-        ]):
+        with patch.object(
+            CustomRulesService,
+            "load",
+            return_value=[
+                {"name": "Rule 1", "severity": "HIGH", "description": "Desc 1"},
+                {"name": "Rule 2", "severity": "MEDIUM", "description": "Desc 2"},
+            ],
+        ):
             ws_publisher = MagicMock()
             CustomRulesService.publish(
                 engagement_id="eng-001",

@@ -1,6 +1,7 @@
 """
 Tests for LLM Payload Generator.
 """
+
 import json
 from unittest.mock import MagicMock, patch
 
@@ -54,11 +55,13 @@ class TestLLMPayloadGenerator:
 
     def test_generate_sync_returns_payloads(self, generator, mock_llm_client):
         """Test basic payload generation."""
-        mock_llm_client.chat_sync.return_value = json.dumps([
-            "<script>alert('LLM_TEST')</script>",
-            "\"><img src=x onerror=alert('LLM_TEST')>",
-            "<svg onload=alert('LLM_TEST')>",
-        ])
+        mock_llm_client.chat_sync.return_value = json.dumps(
+            [
+                "<script>alert('LLM_TEST')</script>",
+                "\"><img src=x onerror=alert('LLM_TEST')>",
+                "<svg onload=alert('LLM_TEST')>",
+            ]
+        )
 
         payloads = generator.generate_sync(
             vuln_class="XSS",
@@ -95,9 +98,11 @@ class TestLLMPayloadGenerator:
 
     def test_cache_used_on_second_call(self, generator, mock_llm_client):
         """Test that cached payloads are returned without calling LLM again."""
-        mock_llm_client.chat_sync.return_value = json.dumps([
-            "<script>alert(1)</script>",
-        ])
+        mock_llm_client.chat_sync.return_value = json.dumps(
+            [
+                "<script>alert(1)</script>",
+            ]
+        )
 
         # First call — should call LLM
         first = generator.generate_sync("XSS", "q", "<html>test</html>")
@@ -119,14 +124,15 @@ class TestLLMPayloadGenerator:
 
     def test_detect_reflection_context_html(self, generator):
         """Test context detection for HTML body."""
-        context = generator._detect_reflection_context("q", '<html><body><p>test q value</p></body></html>')
+        context = generator._detect_reflection_context(
+            "q", "<html><body><p>test q value</p></body></html>"
+        )
         assert context == "html_body"
 
     def test_detect_reflection_context_script(self, generator):
         """Test context detection for script context."""
         context = generator._detect_reflection_context(
-            "name",
-            '<html><script>var name = "test";</script></html>'
+            "name", '<html><script>var name = "test";</script></html>'
         )
         # Should detect script tag containing 'name'
         assert context is not None
@@ -151,15 +157,21 @@ class TestLLMPayloadGenerator:
 
     def test_is_available_disabled(self, mock_llm_client):
         """Test is_available returns False when disabled."""
-        with patch('tools.llm_payload_generator.LLM_PAYLOAD_GENERATION_ENABLED', False):
+        with patch("tools.llm_payload_generator.LLM_PAYLOAD_GENERATION_ENABLED", False):
             gen = LLMPayloadGenerator(llm_client=mock_llm_client)
             assert gen.is_available() is False
 
     def test_generate_sync_max_payloads(self, generator, mock_llm_client):
         """Test that returned payloads are capped at max_payloads."""
-        mock_llm_client.chat_sync.return_value = json.dumps([
-            "p1", "p2", "p3", "p4", "p5",
-        ])
+        mock_llm_client.chat_sync.return_value = json.dumps(
+            [
+                "p1",
+                "p2",
+                "p3",
+                "p4",
+                "p5",
+            ]
+        )
 
         payloads = generator.generate_sync(
             vuln_class="XSS",

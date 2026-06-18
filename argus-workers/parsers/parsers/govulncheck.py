@@ -1,4 +1,5 @@
 """Parser for govulncheck JSON output (govulncheck ./... -json)."""
+
 import json
 import logging
 
@@ -22,7 +23,11 @@ class GovulncheckParser(BaseParser):
                     continue
 
                 raw_sev = (vuln.get("severity") or "MEDIUM").upper()
-                severity = raw_sev if raw_sev in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO") else "MEDIUM"
+                severity = (
+                    raw_sev
+                    if raw_sev in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
+                    else "MEDIUM"
+                )
                 vuln_info = vuln.get("vulnerability") or {}
                 finding = {
                     "type": "DEPENDENCY_VULNERABILITY",

@@ -41,7 +41,9 @@ class URLDiscovery:
         try:
             result = subprocess.run(
                 ["katana", "-u", target, "-jsonl", "-silent", "-d", "3"],
-                capture_output=True, text=True, timeout=timeout,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
             )
             if result.returncode != 0:
                 return []
@@ -70,7 +72,8 @@ class URLDiscovery:
             return []
         try:
             result = self._tool_runner.run(
-                "katana", ["-u", target, "-jsonl", "-silent", "-d", "3"],
+                "katana",
+                ["-u", target, "-jsonl", "-silent", "-d", "3"],
                 timeout=timeout,
             )
             if not result.status.is_ok:
@@ -97,7 +100,8 @@ class URLDiscovery:
             return []
         try:
             result = self._tool_runner.run(
-                "gau", ["--json", target],
+                "gau",
+                ["--json", target],
                 timeout=timeout,
             )
             if not result.status.is_ok:
@@ -123,12 +127,17 @@ class URLDiscovery:
             return []
         try:
             result = self._tool_runner.run(
-                "waybackurls", [target],
+                "waybackurls",
+                [target],
                 timeout=timeout,
             )
             if not result.status.is_ok:
                 return []
-            return [line.strip() for line in result.stdout.strip().splitlines() if line.strip().startswith("http")]
+            return [
+                line.strip()
+                for line in result.stdout.strip().splitlines()
+                if line.strip().startswith("http")
+            ]
         except Exception as e:
             logger.debug("waybackurls failed: %s", e)
             return []

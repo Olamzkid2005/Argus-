@@ -20,16 +20,12 @@ class TestSpecialistAgentActivation:
         assert agent.should_activate() is False
 
     def test_auth_agent_activates_when_login_page_exists(self):
-        rc = ReconContext(
-            has_login_page=True, auth_endpoints=["/login"]
-        )
+        rc = ReconContext(has_login_page=True, auth_endpoints=["/login"])
         agent = AuthAgent(None, None, rc, "test-id")
         assert agent.should_activate() is True
 
     def test_auth_agent_skips_when_no_auth_signals(self):
-        rc = ReconContext(
-            has_login_page=False, auth_endpoints=[], has_api=False
-        )
+        rc = ReconContext(has_login_page=False, auth_endpoints=[], has_api=False)
         agent = AuthAgent(None, None, rc, "test-id")
         assert agent.should_activate() is False
 
@@ -42,9 +38,7 @@ class TestSpecialistAgentActivation:
         assert agent.should_activate() is True
 
     def test_api_agent_skips_when_few_endpoints(self):
-        rc = ReconContext(
-            has_api=True, api_endpoints=["/api/v1/health"]
-        )
+        rc = ReconContext(has_api=True, api_endpoints=["/api/v1/health"])
         agent = APIAgent(None, None, rc, "test-id")
         assert agent.should_activate() is False
 
@@ -112,9 +106,7 @@ class TestSwarmDedup:
 class TestDeepCopy:
     def test_agents_get_independent_contexts(self):
         """Verify deep copy prevents shared state mutation."""
-        rc = ReconContext(
-            has_api=True, api_endpoints=["/api/v1/users"]
-        )
+        rc = ReconContext(has_api=True, api_endpoints=["/api/v1/users"])
         agent1 = IDORAgent(None, None, rc, "test-id")
         agent2 = AuthAgent(None, None, rc, "test-id")
 

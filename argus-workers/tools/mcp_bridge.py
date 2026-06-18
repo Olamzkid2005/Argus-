@@ -55,7 +55,9 @@ class MCPToolBridge:
             binary_name = getattr(tool_def, "binary", None) or tool_def.command
             if not is_tool_available(binary_name):
                 skipped_tools.append(tool_def.name)
-                slog.info(f"Skipping tool '{tool_def.name}' — binary not found on PATH")
+                slog.info(
+                    "Skipping tool '%s' — binary not found on PATH", tool_def.name
+                )
                 continue
             self.mcp.register_tool(tool_def)
             registered_count += 1
@@ -63,11 +65,13 @@ class MCPToolBridge:
         if skipped_tools:
             logger.warning(
                 "Skipped %d unavailable tool(s): %s",
-                len(skipped_tools), ", ".join(skipped_tools),
+                len(skipped_tools),
+                ", ".join(skipped_tools),
             )
         slog.info(
             "Registered %d tools with MCP (%d skipped)",
-            registered_count, len(skipped_tools),
+            registered_count,
+            len(skipped_tools),
         )
 
     def call_via_mcp(self, tool: str, arguments: dict = None) -> dict:
@@ -78,7 +82,9 @@ class MCPToolBridge:
         slog.tool_complete(f"mcp_call:{tool}")
         return result
 
-    def call_via_runner(self, tool: str, args: list[str], timeout: int = None) -> UnifiedToolResult:
+    def call_via_runner(
+        self, tool: str, args: list[str], timeout: int = None
+    ) -> UnifiedToolResult:
         """Call a tool via the existing ToolRunner."""
         timeout = timeout or 300
         return self.tool_runner.run(tool, args, timeout=timeout)

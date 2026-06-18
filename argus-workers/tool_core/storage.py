@@ -43,7 +43,9 @@ class ArtifactStorage:
     def __init__(self, base_dir: str = "~/.argus/artifacts"):
         self.base_dir = Path(base_dir).expanduser()
 
-    def store(self, finding_id: str, data: bytes, filename: str, mime: str) -> ArtifactRef:
+    def store(
+        self, finding_id: str, data: bytes, filename: str, mime: str
+    ) -> ArtifactRef:
         self._validate_path(finding_id, filename)
 
         artifact_dir = self.base_dir / finding_id
@@ -113,14 +115,18 @@ class ArtifactStorage:
                     hashlib.sha256(content).hexdigest()
                     len(content)
                 except Exception as e:
-                    issues.append({
-                        "path": str(file_path),
-                        "error": f"Failed to read: {e}",
-                    })
+                    issues.append(
+                        {
+                            "path": str(file_path),
+                            "error": f"Failed to read: {e}",
+                        }
+                    )
                     continue
         return issues
 
     def _validate_path(self, finding_id: str, filename: str):
         resolved = (self.base_dir / finding_id / filename).resolve()
         if not str(resolved).startswith(str(self.base_dir.resolve())):
-            raise ValueError(f"Path traversal detected in finding_id={finding_id!r} filename={filename!r}")
+            raise ValueError(
+                f"Path traversal detected in finding_id={finding_id!r} filename={filename!r}"
+            )

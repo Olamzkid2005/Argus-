@@ -1,4 +1,5 @@
 """Tests for LLM tool selection prompts."""
+
 import os
 import sys
 
@@ -35,7 +36,11 @@ class TestAgentPrompts:
         assert "nuclei" in prompt
         assert "sqlmap" in prompt
         # dalfox should appear with (already tried) marker in the AVAILABLE TOOLS section
-        avail_section = prompt.split("=== AVAILABLE TOOLS ===")[-1] if "=== AVAILABLE TOOLS ===" in prompt else prompt
+        avail_section = (
+            prompt.split("=== AVAILABLE TOOLS ===")[-1]
+            if "=== AVAILABLE TOOLS ===" in prompt
+            else prompt
+        )
         assert "dalfox" in avail_section
         assert "(already tried)" in avail_section.split("dalfox")[1]
 

@@ -58,6 +58,7 @@ class ExecutionEngine:
         Checks all common target-bearing parameter names (target, url, host,
         hostname, domain, endpoint) and blocks execution if any are out of scope.
         """
+
         def _scope_check(tool_name: str, args: list, kwargs: dict) -> tuple | None:
             target_params = ["target", "url", "host", "hostname", "domain", "endpoint"]
             # Check kwargs
@@ -69,23 +70,33 @@ class ExecutionEngine:
                     except Exception as e:
                         logger.warning(
                             "Scope validation blocked %s: param=%s target=%s — %s",
-                            tool_name, param, tgt, e,
+                            tool_name,
+                            param,
+                            tgt,
+                            e,
                         )
                         return None  # Block execution
             # Check positional args for target patterns.
             # Only block when the arg clearly looks like a URL/hostname/IP
             # to avoid false positives on file paths or flags.
-            for arg in (args or []):
-                if isinstance(arg, str) and any(c in arg for c in (":", "/", ".")) and len(arg) > 3 and not arg.startswith("-"):
-                        try:
-                            scope_validator.validate_target(arg)
-                        except Exception:
-                            logger.warning(
-                                "Scope validation blocked %s: positional arg=%s",
-                                tool_name, arg,
-                            )
-                            return None
+            for arg in args or []:
+                if (
+                    isinstance(arg, str)
+                    and any(c in arg for c in (":", "/", "."))
+                    and len(arg) > 3
+                    and not arg.startswith("-")
+                ):
+                    try:
+                        scope_validator.validate_target(arg)
+                    except Exception:
+                        logger.warning(
+                            "Scope validation blocked %s: positional arg=%s",
+                            tool_name,
+                            arg,
+                        )
+                        return None
             return (tool_name, args, kwargs)
+
         return _scope_check
 
     def add_middleware(self, fn: Callable):
@@ -155,7 +166,9 @@ class ExecutionEngine:
                 tool=tool_name,
                 args={"args": args, **kwargs},
                 timestamp=start,
-                result_summary=(result.stdout or "")[:500] if result.success else (result.stderr or "")[:200],
+                result_summary=(result.stdout or "")[:500]
+                if result.success
+                else (result.stderr or "")[:200],
                 success=result.success,
                 failure_state="" if result.success else (result.stderr or "")[:200],
                 duration_ms=duration_ms,

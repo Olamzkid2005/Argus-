@@ -69,8 +69,16 @@ class TestRunDueScans:
         org_id = str(uuid.uuid4())
 
         mock_cursor.fetchall.return_value = [
-            (sched_id, org_id, "https://example.com", {}, "recon",
-             "default", True, "test-user"),
+            (
+                sched_id,
+                org_id,
+                "https://example.com",
+                {},
+                "recon",
+                "default",
+                True,
+                "test-user",
+            ),
         ]
         mock_connect.return_value = mock_conn
 
@@ -98,10 +106,26 @@ class TestRunDueScans:
         org_id = str(uuid.uuid4())
 
         mock_cursor.fetchall.return_value = [
-            (sched_id_1, org_id, "https://bad.com", {}, "recon",
-             "default", True, "user-1"),
-            (sched_id_2, org_id, "https://good.com", {}, "recon",
-             "default", True, "user-2"),
+            (
+                sched_id_1,
+                org_id,
+                "https://bad.com",
+                {},
+                "recon",
+                "default",
+                True,
+                "user-1",
+            ),
+            (
+                sched_id_2,
+                org_id,
+                "https://good.com",
+                {},
+                "recon",
+                "default",
+                True,
+                "user-2",
+            ),
         ]
         mock_connect.return_value = mock_conn
 
@@ -121,11 +145,13 @@ class TestRunDueScans:
         assert result["spawned"] >= 1
 
         savepoint_calls = [
-            c for c in mock_cursor.execute.call_args_list
+            c
+            for c in mock_cursor.execute.call_args_list
             if c[0][0] == "SAVEPOINT spawn_schedule"
         ]
         rollback_calls = [
-            c for c in mock_cursor.execute.call_args_list
+            c
+            for c in mock_cursor.execute.call_args_list
             if c[0][0] == "ROLLBACK TO SAVEPOINT spawn_schedule"
         ]
         assert len(savepoint_calls) >= 2
@@ -148,10 +174,26 @@ class TestRunDueScans:
 
         org_id = str(uuid.uuid4())
         mock_cursor.fetchall.return_value = [
-            (str(uuid.uuid4()), org_id, "https://example.com", {},
-             "recon", "default", True, "user-1"),
-            (str(uuid.uuid4()), org_id, "https://github.com/org/repo", {},
-             "repo", "aggressive", True, "user-2"),
+            (
+                str(uuid.uuid4()),
+                org_id,
+                "https://example.com",
+                {},
+                "recon",
+                "default",
+                True,
+                "user-1",
+            ),
+            (
+                str(uuid.uuid4()),
+                org_id,
+                "https://github.com/org/repo",
+                {},
+                "repo",
+                "aggressive",
+                True,
+                "user-2",
+            ),
         ]
 
         with patch("tasks.repo_scan.run_repo_scan") as mock_run_repo_scan:
@@ -273,12 +315,15 @@ class TestSpawnEngagement:
         engagement_id = str(uuid.uuid4())
         org_id = str(uuid.uuid4())
 
-        with patch("tasks.scheduled.uuid.uuid4", side_effect=[
-            uuid.UUID(engagement_id),
-            uuid.UUID(str(uuid.uuid4())),
-            uuid.UUID(str(uuid.uuid4())),
-            uuid.UUID(str(uuid.uuid4())),
-        ]):
+        with patch(
+            "tasks.scheduled.uuid.uuid4",
+            side_effect=[
+                uuid.UUID(engagement_id),
+                uuid.UUID(str(uuid.uuid4())),
+                uuid.UUID(str(uuid.uuid4())),
+                uuid.UUID(str(uuid.uuid4())),
+            ],
+        ):
             result = _spawn_engagement(
                 conn=mock_conn,
                 sched_id=sched_id,

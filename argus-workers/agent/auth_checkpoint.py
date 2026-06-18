@@ -41,10 +41,12 @@ def save_auth_checkpoint(engagement_id: str, ctx: AuthContext) -> bool:
     data["_checkpoint_type"] = "auth_context"
     # Encrypt sensitive fields before storage
     import os
+
     enc_key = os.environ.get("AUTH_CHECKPOINT_KEY")
     if enc_key and data.get("password"):
         try:
             from cryptography.fernet import Fernet
+
             cipher = Fernet(enc_key.encode())
             data["password"] = cipher.encrypt(data["password"].encode()).decode()
         except Exception:
@@ -72,7 +74,8 @@ def save_auth_checkpoint(engagement_id: str, ctx: AuthContext) -> bool:
             )
         logger.info(
             "Auth checkpoint saved for engagement %s (email=%s)",
-            engagement_id, ctx.email,
+            engagement_id,
+            ctx.email,
         )
         return True
     except Exception as exc:
@@ -94,6 +97,7 @@ def load_auth_checkpoint(engagement_id: str) -> AuthContext | None:
     """
     try:
         from database.connection import db_cursor
+
         with db_cursor() as cursor:
             cursor.execute(
                 """
@@ -120,18 +124,23 @@ def load_auth_checkpoint(engagement_id: str) -> AuthContext | None:
 
             # Decrypt password if encrypted
             import os
+
             enc_key = os.environ.get("AUTH_CHECKPOINT_KEY")
             if enc_key and data.get("password", "").startswith("gAAAAA"):
                 try:
                     from cryptography.fernet import Fernet
+
                     cipher = Fernet(enc_key.encode())
-                    data["password"] = cipher.decrypt(data["password"].encode()).decode()
+                    data["password"] = cipher.decrypt(
+                        data["password"].encode()
+                    ).decode()
                 except Exception:
                     logger.warning("Failed to decrypt auth checkpoint password")
             ctx = AuthContext.from_dict(data)
             logger.info(
                 "Auth checkpoint loaded for engagement %s (email=%s)",
-                engagement_id, ctx.email,
+                engagement_id,
+                ctx.email,
             )
             return ctx
     except Exception as exc:
@@ -152,6 +161,7 @@ def clear_auth_checkpoint(engagement_id: str) -> bool:
     """
     try:
         from database.connection import db_cursor
+
         with db_cursor() as cursor:
             cursor.execute(
                 """

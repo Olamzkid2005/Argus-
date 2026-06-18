@@ -3,6 +3,7 @@ Tests for security_audit.py
 
 Validates: Environment checks, dependency scanning, TLS config, full audit run
 """
+
 import os
 from unittest.mock import Mock, mock_open, patch
 
@@ -25,7 +26,11 @@ class TestSecurityAudit:
 
     def test_check_environment_variables_weak_secret(self, audit):
         """Test detecting weak secrets in environment variables"""
-        with patch.dict(os.environ, {"DATABASE_URL": "postgres://user:password@remote-host/db"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {"DATABASE_URL": "postgres://user:password@remote-host/db"},
+            clear=False,
+        ):
             audit.check_environment_variables()
 
         env_findings = [f for f in audit.findings if f.check_id == "ENV-001"]
@@ -49,15 +54,25 @@ class TestSecurityAudit:
         """Test localhost in value does not falsely trigger weak secret"""
         # Reset findings and use a localhost-only value
         audit.findings = []
-        with patch.dict(os.environ, {"DATABASE_URL": "postgres://user@localhost/db"}, clear=False):
+        with patch.dict(
+            os.environ, {"DATABASE_URL": "postgres://user@localhost/db"}, clear=False
+        ):
             audit.check_environment_variables()
 
-        env_findings = [f for f in audit.findings if f.check_id == "ENV-001" and "DATABASE_URL" in f.title]
+        env_findings = [
+            f
+            for f in audit.findings
+            if f.check_id == "ENV-001" and "DATABASE_URL" in f.title
+        ]
         assert len(env_findings) == 0
 
     def test_check_database_security_ssl_disabled(self, audit):
         """Test detecting disabled SSL in database URL"""
-        with patch.dict(os.environ, {"DATABASE_URL": "postgres://user:pass@host/db?sslmode=disable"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {"DATABASE_URL": "postgres://user:pass@host/db?sslmode=disable"},
+            clear=False,
+        ):
             audit.check_database_security()
 
         finding = [f for f in audit.findings if f.check_id == "DB-001"]
@@ -66,7 +81,11 @@ class TestSecurityAudit:
 
     def test_check_database_security_default_user(self, audit):
         """Test detecting default postgres user"""
-        with patch.dict(os.environ, {"DATABASE_URL": "postgres://postgres:pass@host/db"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {"DATABASE_URL": "postgres://postgres:pass@host/db"},
+            clear=False,
+        ):
             audit.check_database_security()
 
         finding = [f for f in audit.findings if f.check_id == "DB-002"]
@@ -75,7 +94,9 @@ class TestSecurityAudit:
 
     def test_check_celery_security_unencrypted_redis(self, audit):
         """Test detecting unencrypted Redis connection"""
-        with patch.dict(os.environ, {"REDIS_URL": "redis://localhost:6379"}, clear=False):
+        with patch.dict(
+            os.environ, {"REDIS_URL": "redis://localhost:6379"}, clear=False
+        ):
             audit.check_celery_security()
 
         finding = [f for f in audit.findings if f.check_id == "CELERY-001"]
@@ -84,7 +105,9 @@ class TestSecurityAudit:
 
     def test_check_celery_security_encrypted_redis_ok(self, audit):
         """Test encrypted Redis connection is not flagged"""
-        with patch.dict(os.environ, {"REDIS_URL": "rediss://localhost:6379"}, clear=False):
+        with patch.dict(
+            os.environ, {"REDIS_URL": "rediss://localhost:6379"}, clear=False
+        ):
             audit.check_celery_security()
 
         finding = [f for f in audit.findings if f.check_id == "CELERY-001"]
@@ -92,10 +115,14 @@ class TestSecurityAudit:
 
     def test_check_celery_security_shared_db(self, audit):
         """Test detecting shared broker/backend Redis DB"""
-        with patch.dict(os.environ, {
-            "CELERY_RESULT_BACKEND": "redis://localhost:6379/0",
-            "CELERY_BROKER_URL": "redis://localhost:6379/0",
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "CELERY_RESULT_BACKEND": "redis://localhost:6379/0",
+                "CELERY_BROKER_URL": "redis://localhost:6379/0",
+            },
+            clear=False,
+        ):
             audit.check_celery_security()
 
         finding = [f for f in audit.findings if f.check_id == "CELERY-002"]
@@ -156,7 +183,9 @@ class TestSecurityAudit:
         """Test missing TLS config in production is flagged"""
         with (
             patch.dict(os.environ, {"NODE_ENV": "production"}, clear=False),
-            patch.dict(os.environ, {"SSL_CERT_PATH": "", "TLS_ENABLED": ""}, clear=False),
+            patch.dict(
+                os.environ, {"SSL_CERT_PATH": "", "TLS_ENABLED": ""}, clear=False
+            ),
         ):
             audit.check_ssl_tls()
 
@@ -166,7 +195,9 @@ class TestSecurityAudit:
 
     def test_check_ssl_tls_enabled(self, audit):
         """Test TLS explicitly enabled is not flagged"""
-        with patch.dict(os.environ, {"NODE_ENV": "production", "TLS_ENABLED": "1"}, clear=False):
+        with patch.dict(
+            os.environ, {"NODE_ENV": "production", "TLS_ENABLED": "1"}, clear=False
+        ):
             audit.check_ssl_tls()
 
         finding = [f for f in audit.findings if f.check_id == "TLS-001"]
@@ -200,7 +231,9 @@ class TestSecurityAudit:
             patch.object(audit, "check_ssl_tls") as mock_ssl,
             patch.object(audit, "check_rate_limiting") as mock_rate,
         ):
-            audit.findings = [SecurityFinding("info", "test", "title", "desc", "fix", "TEST-001")]
+            audit.findings = [
+                SecurityFinding("info", "test", "title", "desc", "fix", "TEST-001")
+            ]
             result = audit.run_all_checks()
 
         assert result is audit.findings
@@ -258,10 +291,15 @@ class TestSecurityAudit:
     def test_main_exits_error_on_critical(self, _mock_print, mock_exit):
         """Test main exits with error code when critical findings exist"""
         mock_exit.side_effect = SystemExit
-        with patch.object(SecurityAudit, "run_all_checks", return_value=[
-            SecurityFinding("critical", "config", "Crit", "Desc", "Fix", "C-001")
-        ]):
+        with patch.object(
+            SecurityAudit,
+            "run_all_checks",
+            return_value=[
+                SecurityFinding("critical", "config", "Crit", "Desc", "Fix", "C-001")
+            ],
+        ):
             from security_audit import main
+
             with pytest.raises(SystemExit):
                 main()
 
@@ -271,10 +309,15 @@ class TestSecurityAudit:
     @patch("builtins.print")
     def test_main_exits_ok(self, _mock_print, mock_exit):
         """Test main exits with 0 when no critical/high findings"""
-        with patch.object(SecurityAudit, "run_all_checks", return_value=[
-            SecurityFinding("medium", "config", "Med", "Desc", "Fix", "M-001")
-        ]):
+        with patch.object(
+            SecurityAudit,
+            "run_all_checks",
+            return_value=[
+                SecurityFinding("medium", "config", "Med", "Desc", "Fix", "M-001")
+            ],
+        ):
             from security_audit import main
+
             main()
 
         mock_exit.assert_called_once_with(0)

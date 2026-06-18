@@ -3,6 +3,7 @@ Celery tasks for maintenance operations
 
 Uses shared ConnectionManager for database access (H-23).
 """
+
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -27,26 +28,23 @@ def cleanup_old_results(self):
 
         with db_cursor(commit=True) as cursor:
             cursor.execute(
-                "DELETE FROM decision_snapshots WHERE created_at < %s",
-                (cutoff_date,)
+                "DELETE FROM decision_snapshots WHERE created_at < %s", (cutoff_date,)
             )
             snapshots_deleted = cursor.rowcount
 
             cursor.execute(
-                "DELETE FROM checkpoints WHERE created_at < %s",
-                (cutoff_date,)
+                "DELETE FROM checkpoints WHERE created_at < %s", (cutoff_date,)
             )
             checkpoints_deleted = cursor.rowcount
 
             cursor.execute(
-                "DELETE FROM raw_outputs WHERE created_at < %s",
-                (cutoff_date,)
+                "DELETE FROM raw_outputs WHERE created_at < %s", (cutoff_date,)
             )
             raw_outputs_deleted = cursor.rowcount
 
             cursor.execute(
                 "DELETE FROM query_performance_log WHERE created_at < %s",
-                (cutoff_date,)
+                (cutoff_date,),
             )
             perf_logs_deleted = cursor.rowcount
 
@@ -78,7 +76,7 @@ def cleanup_failed_engagements(self):
                      WHERE status = 'failed'
                      AND updated_at < %s
                  )""",
-                (cutoff_date,)
+                (cutoff_date,),
             )
             states_deleted = cursor.rowcount
 
@@ -89,7 +87,7 @@ def cleanup_failed_engagements(self):
                      WHERE status = 'failed'
                      AND updated_at < %s
                  )""",
-                (cutoff_date,)
+                (cutoff_date,),
             )
             budgets_deleted = cursor.rowcount
 
@@ -100,7 +98,7 @@ def cleanup_failed_engagements(self):
                      WHERE status = 'failed'
                      AND updated_at < %s
                  )""",
-                (cutoff_date,)
+                (cutoff_date,),
             )
             activities_deleted = cursor.rowcount
 
@@ -111,13 +109,13 @@ def cleanup_failed_engagements(self):
                      WHERE status = 'failed'
                      AND updated_at < %s
                  )""",
-                (cutoff_date,)
+                (cutoff_date,),
             )
             findings_deleted = cursor.rowcount
 
             cursor.execute(
                 "DELETE FROM engagements WHERE status = 'failed' AND updated_at < %s",
-                (cutoff_date,)
+                (cutoff_date,),
             )
             engagements_deleted = cursor.rowcount
 
@@ -153,7 +151,7 @@ def cleanup_checkpoints(self):
                  AND engagement_id IN (
                      SELECT id FROM engagements WHERE status IN ('running', 'pending')
                  )""",
-                (cutoff_active,)
+                (cutoff_active,),
             )
             active_deleted = cursor.rowcount
 
@@ -164,7 +162,7 @@ def cleanup_checkpoints(self):
                  AND engagement_id IN (
                      SELECT id FROM engagements WHERE status IN ('completed', 'failed', 'cancelled')
                  )""",
-                (cutoff_completed,)
+                (cutoff_completed,),
             )
             completed_deleted = cursor.rowcount
 
@@ -188,6 +186,7 @@ def worker_health_check(self):
     will detect the missed heartbeat and alert.
     """
     import socket
+
     now = datetime.now(UTC)
     return {
         "status": "ok",

@@ -40,7 +40,9 @@ class TestUpdateNucleiTemplates:
         assert result is False
 
     def test_returns_false_on_timeout(self):
-        self._mock_run.side_effect = subprocess.TimeoutExpired(cmd="nuclei", timeout=120)
+        self._mock_run.side_effect = subprocess.TimeoutExpired(
+            cmd="nuclei", timeout=120
+        )
 
         result = update_nuclei_templates()
 

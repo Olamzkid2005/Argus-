@@ -1,4 +1,5 @@
 """Parser for npm audit JSON output (npm audit --json)."""
+
 import json
 import logging
 
@@ -17,10 +18,16 @@ class NpmAuditParser(BaseParser):
         except json.JSONDecodeError:
             return findings
 
-        vulnerabilities = data.get("vulnerabilities", {}) if isinstance(data, dict) else {}
+        vulnerabilities = (
+            data.get("vulnerabilities", {}) if isinstance(data, dict) else {}
+        )
         for pkg_name, vuln_info in vulnerabilities.items():
             severity = vuln_info.get("severity", "medium").upper()
-            severity = severity if severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW") else "MEDIUM"
+            severity = (
+                severity
+                if severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+                else "MEDIUM"
+            )
             via = vuln_info.get("via", [])
             finding = {
                 "type": "DEPENDENCY_VULNERABILITY",

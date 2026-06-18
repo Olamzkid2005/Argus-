@@ -37,14 +37,17 @@ class TestLLMReviewTask:
     def test_replay_request_no_payload(self):
         """Test request replay without payload."""
         from tasks.llm_review import _replay_request
+
         assert callable(_replay_request)
 
     def test_task_skipped_when_disabled(self):
         """Test that the module has the expected structure."""
         import tasks.llm_review
-        assert hasattr(tasks.llm_review, 'run_llm_review')
+
+        assert hasattr(tasks.llm_review, "run_llm_review")
 
     def test_replay_request_imports(self):
         """Test that the module imports cleanly."""
         import tasks.llm_review
-        assert hasattr(tasks.llm_review, 'run_llm_review')
+
+        assert hasattr(tasks.llm_review, "run_llm_review")

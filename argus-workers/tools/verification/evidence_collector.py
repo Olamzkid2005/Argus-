@@ -12,7 +12,9 @@ class VerificationEvidenceCollector:
     """Collects and packages evidence from verification attempts."""
 
     def __init__(self, output_dir: str | None = None):
-        self._output_dir = Path(output_dir) if output_dir else Path("/tmp/argus_evidence")
+        self._output_dir = (
+            Path(output_dir) if output_dir else Path("/tmp/argus_evidence")
+        )
         self._output_dir.mkdir(parents=True, exist_ok=True)
 
     def collect(self, finding: dict, reproduction_result: dict) -> dict:
@@ -29,11 +31,13 @@ class VerificationEvidenceCollector:
                 "evidence.json",
                 json.dumps(evidence_data, indent=2),
             )
-            artifacts.append({
-                "path": str(artifact_path),
-                "type": "evidence_data",
-                "hash": self._hash_file(artifact_path),
-            })
+            artifacts.append(
+                {
+                    "path": str(artifact_path),
+                    "type": "evidence_data",
+                    "hash": self._hash_file(artifact_path),
+                }
+            )
 
         if reproduction_result.get("error"):
             artifact_path = self._write_artifact(
@@ -41,11 +45,13 @@ class VerificationEvidenceCollector:
                 "error.txt",
                 reproduction_result["error"],
             )
-            artifacts.append({
-                "path": str(artifact_path),
-                "type": "error_log",
-                "hash": self._hash_file(artifact_path),
-            })
+            artifacts.append(
+                {
+                    "path": str(artifact_path),
+                    "type": "error_log",
+                    "hash": self._hash_file(artifact_path),
+                }
+            )
 
         evidence_hash = self._compute_evidence_hash(artifacts)
 

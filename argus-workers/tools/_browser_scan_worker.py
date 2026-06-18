@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Standalone browser scan worker — runs Playwright in its own process."""
+
 import contextlib
 import json
 import logging
@@ -29,6 +30,7 @@ def _validate_url(url: str) -> str:
     # Resolve hostname to IP and check it's not internal (prevents DNS rebinding)
     try:
         import socket as _socket
+
         resolved_ip = _socket.gethostbyname(hostname)
         ip = _ipaddress.ip_address(resolved_ip)
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
@@ -63,7 +65,7 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
     try:
         target_url = _validate_url(target_url)  # SSRF guard
     except ValueError as ve:
-        slog.warn(f"URL validation failed: {ve}")
+        slog.warn("URL validation failed: %s", ve)
         return findings
     slog.tool_start("browser_scan", target=target_url)
     with sync_playwright() as p:
@@ -72,31 +74,35 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
             page = browser.new_page()
             # Use a fresh list per payload to avoid TOCTOU race between
             # collecting errors and checking them (M7 fix)
-            page.goto(target_url, timeout=30000, wait_until='networkidle')
+            page.goto(target_url, timeout=30000, wait_until="networkidle")
             # Register listener once — rebind the collector list per payload (H-18)
             current_errors = []
+
             def on_console(msg):
-                if msg.type == 'error':
+                if msg.type == "error":
                     current_errors.append(msg.text)
-            page.on('console', on_console)
-            for payload in ['<img src=x onerror=alert(1)>', 'javascript:alert(1)']:
+
+            page.on("console", on_console)
+            for payload in ["<img src=x onerror=alert(1)>", "javascript:alert(1)"]:
                 current_errors = []
-                payload_url = f'{target_url}?q={payload}'
+                payload_url = f"{target_url}?q={payload}"
                 if not payload_url.startswith(("http://", "https://")):
                     continue
                 page.goto(payload_url, timeout=10000)
-                if any('alert' in e.lower() for e in current_errors):
-                    findings.append({
-                        'type': 'DOM_XSS',
-                        'severity': 'HIGH',
-                        'endpoint': target_url,
-                        'evidence': {'payload': payload},
-                        'source_tool': 'browser_scanner',
-                        'confidence': 0.9,
-                    })
+                if any("alert" in e.lower() for e in current_errors):
+                    findings.append(
+                        {
+                            "type": "DOM_XSS",
+                            "severity": "HIGH",
+                            "endpoint": target_url,
+                            "evidence": {"payload": payload},
+                            "source_tool": "browser_scanner",
+                            "confidence": 0.9,
+                        }
+                    )
         except Exception as e:
-            slog.warn(f"Browser scan failed: {e}")
-            logger.warning(f"Browser scan failed: {e}")
+            slog.warn("Browser scan failed: %s", e)
+            logger.warning("Browser scan failed: %s", e)
         finally:
             if browser:
                 with contextlib.suppress(Exception):
@@ -105,7 +111,7 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
     return findings
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(json.dumps([]), file=sys.stderr)
         sys.exit(1)

@@ -1,6 +1,7 @@
 """
 Orchestrator utility functions.
 """
+
 import os
 from pathlib import Path
 
@@ -36,7 +37,9 @@ def get_nuclei_templates_path() -> Path:
     if custom_path:
         base = Path(custom_path)
     else:
-        base = Path(__file__).resolve().parent.parent / "tool_assets" / "nuclei-templates"
+        base = (
+            Path(__file__).resolve().parent.parent / "tool_assets" / "nuclei-templates"
+        )
 
     if base.exists() and any(base.rglob("*.yaml")):
         return base

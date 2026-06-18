@@ -1,4 +1,5 @@
 """Tests for finding deduplication (ON CONFLICT DO NOTHING)."""
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -34,7 +35,9 @@ class TestFindingDedup:
         )
 
         assert result == "new-uuid"
-        insert_calls = [c for c in mock_cursor.execute.call_args_list if "INSERT" in c[0][0]]
+        insert_calls = [
+            c for c in mock_cursor.execute.call_args_list if "INSERT" in c[0][0]
+        ]
         assert len(insert_calls) == 1
         insert_sql = insert_calls[0][0][0]
         assert "ON CONFLICT" in insert_sql
@@ -64,7 +67,9 @@ class TestFindingDedup:
         )
 
         assert result == "existing-id"
-        insert_calls = [c for c in mock_cursor.execute.call_args_list if "INSERT" in c[0][0]]
+        insert_calls = [
+            c for c in mock_cursor.execute.call_args_list if "INSERT" in c[0][0]
+        ]
         assert len(insert_calls) == 1
 
     def test_create_finding_commit_after_insert(self):

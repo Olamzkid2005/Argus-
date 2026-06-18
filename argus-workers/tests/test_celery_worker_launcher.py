@@ -12,17 +12,22 @@ import pytest
 @pytest.fixture
 def cwl():
     """Import/reload celery_worker_launcher with venv found."""
-    with patch("celery_worker_launcher.os.path.exists", return_value=True), \
-         patch("celery_worker_launcher.os.chdir"):
+    with (
+        patch("celery_worker_launcher.os.path.exists", return_value=True),
+        patch("celery_worker_launcher.os.chdir"),
+    ):
         import celery_worker_launcher
+
         importlib.reload(celery_worker_launcher)
         yield celery_worker_launcher
 
 
 class TestCeleryWorkerLauncher:
     def test_main_constructs_correct_command_with_default_concurrency(self, cwl):
-        with patch("celery_worker_launcher.subprocess.Popen") as mock_popen, \
-             patch("celery_worker_launcher.signal.signal"):
+        with (
+            patch("celery_worker_launcher.subprocess.Popen") as mock_popen,
+            patch("celery_worker_launcher.signal.signal"),
+        ):
             mock_popen.return_value.pid = 12345
             mock_popen.return_value.wait.return_value = 0
             cwl.main()
@@ -33,9 +38,11 @@ class TestCeleryWorkerLauncher:
             assert args[args.index("--concurrency") + 1] == "8"
 
     def test_main_uses_celery_concurrency_env_var(self, cwl):
-        with patch.dict(os.environ, {"CELERY_CONCURRENCY": "16"}), \
-             patch("celery_worker_launcher.subprocess.Popen") as mock_popen, \
-             patch("celery_worker_launcher.signal.signal"):
+        with (
+            patch.dict(os.environ, {"CELERY_CONCURRENCY": "16"}),
+            patch("celery_worker_launcher.subprocess.Popen") as mock_popen,
+            patch("celery_worker_launcher.signal.signal"),
+        ):
             mock_popen.return_value.pid = 12345
             mock_popen.return_value.wait.return_value = 0
             cwl.main()
@@ -43,12 +50,17 @@ class TestCeleryWorkerLauncher:
             assert args[args.index("--concurrency") + 1] == "16"
 
     def test_main_falls_back_to_system_python(self):
-        with patch("celery_worker_launcher.os.path.exists", return_value=False), \
-             patch("celery_worker_launcher.os.chdir"):
+        with (
+            patch("celery_worker_launcher.os.path.exists", return_value=False),
+            patch("celery_worker_launcher.os.chdir"),
+        ):
             import celery_worker_launcher
+
             importlib.reload(celery_worker_launcher)
-        with patch("celery_worker_launcher.subprocess.Popen") as mock_popen, \
-             patch("celery_worker_launcher.signal.signal"):
+        with (
+            patch("celery_worker_launcher.subprocess.Popen") as mock_popen,
+            patch("celery_worker_launcher.signal.signal"),
+        ):
             mock_popen.return_value.pid = 12345
             mock_popen.return_value.wait.return_value = 0
             celery_worker_launcher.main()
@@ -56,8 +68,10 @@ class TestCeleryWorkerLauncher:
             assert args[0] == sys.executable
 
     def test_main_sets_up_signal_handlers(self, cwl):
-        with patch("celery_worker_launcher.subprocess.Popen") as mock_popen, \
-             patch("celery_worker_launcher.signal.signal") as mock_signal:
+        with (
+            patch("celery_worker_launcher.subprocess.Popen") as mock_popen,
+            patch("celery_worker_launcher.signal.signal") as mock_signal,
+        ):
             mock_popen.return_value.pid = 12345
             mock_popen.return_value.wait.return_value = 0
             cwl.main()

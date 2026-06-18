@@ -131,6 +131,7 @@ class TestSimpleWebAppE2E:
         findings = result.get("findings", result.get("results", []))
         assert isinstance(findings, list), f"Expected list, got {type(findings)}"
 
+
 @pytest.mark.parametrize("fixture_app", ["xss-playground"], indirect=True)
 class TestXSSPlaygroundE2E:
     """Smoke tests against the xss-playground fixture."""
@@ -228,6 +229,7 @@ class TestAuthBypassE2E:
         resp = urllib.request.urlopen(f"{fixture_app}/admin/profile", timeout=5)
         assert resp.status == 200
         import json
+
         data = json.loads(resp.read().decode())
         assert data["user"] == "anonymous"  # No session but still returns data
 

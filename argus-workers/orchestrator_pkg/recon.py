@@ -47,22 +47,30 @@ def execute_recon_tools(
 
         ctx = ToolContext.from_orchestrator(ctx)
 
-    slog = ScanLogger("recon_pipeline", engagement_id=getattr(ctx, 'engagement_id', ''))
-    slog.phase_header("EXECUTE RECON TOOLS", target=target, aggressiveness=aggressiveness)
+    slog = ScanLogger("recon_pipeline", engagement_id=getattr(ctx, "engagement_id", ""))
+    slog.phase_header(
+        "EXECUTE RECON TOOLS", target=target, aggressiveness=aggressiveness
+    )
     all_findings = []
 
     # Guard against None/empty target
     if not target:
         logger.warning(
-            f"[execute_recon_tools] No valid target for engagement {ctx.engagement_id}, skipping recon"
+            "[execute_recon_tools] No valid target for engagement %s, skipping recon",
+            ctx.engagement_id,
         )
         from models.recon_context import ReconContext
 
         return [], ReconContext(target_url=target or "")
 
     from urllib.parse import urlparse
+
     parsed_target = urlparse(target)
-    target_domain = parsed_target.hostname or target.replace("https://", "").replace("http://", "").split("/")[0]
+    target_domain = (
+        parsed_target.hostname
+        or urlparse("//" + target).hostname
+        or target.split("/")[0]
+    )
 
     # Aggressiveness config
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
@@ -76,8 +84,7 @@ def execute_recon_tools(
     amass_mode = {
         "default": ["enum", "-d"],
         "high": ["enum", "-d", "-brute", "-active"],
-        "extreme": ["enum", "-d", "-brute", "-w",
-                    str(get_wordlist_path("common.txt"))],
+        "extreme": ["enum", "-d", "-brute", "-w", str(get_wordlist_path("common.txt"))],
     }.get(agg, ["enum", "-d"])
 
     def _emit(
@@ -115,7 +122,7 @@ def execute_recon_tools(
     except Exception as e:
         slog.tool_complete("httpx", success=False)
         _emit("httpx", f"Live endpoint discovery failed: {str(e)}", "failed")
-        logger.warning(f"httpx failed: {e}")
+        logger.warning("httpx failed: %s", e)
 
     # Phase 2: Execute remaining recon tools in parallel
     ffuf_wordlist_map = {
@@ -131,18 +138,14 @@ def execute_recon_tools(
         ffuf_cmd.extend(["-t", "100", "-mc", "all"])
 
     amass_cmd = amass_mode + [target_domain, "-json"]
-    amass_timeout = (
-        120 if agg == "default" else 180 if agg == "high" else 240
-    )
+    amass_timeout = 120 if agg == "default" else 180 if agg == "high" else 240
 
     naabu_cmd = ["-host", target_domain, "-json"]
     if naabu_ports == "-p-":
         naabu_cmd.append("-p-")
     else:
         naabu_cmd.extend(["-top-ports", naabu_port_val])
-    naabu_timeout = (
-        60 if agg == "default" else 90 if agg == "high" else 120
-    )
+    naabu_timeout = 60 if agg == "default" else 90 if agg == "high" else 120
 
     def _run_recon_tool(ctx, tool_name, args, timeout, all_findings, start_msg=None):
         try:
@@ -164,7 +167,7 @@ def execute_recon_tools(
                         parsed_count += 1
             return tool_name, bool(result and result.success), parsed_count, None
         except Exception as e:
-            logger.warning(f"Recon tool {tool_name} failed: {e}")
+            logger.warning("Recon tool %s failed: %s", tool_name, e)
             return tool_name, False, 0, str(e)
 
     amass_start_msg = (
@@ -252,15 +255,33 @@ def execute_recon_tools(
     }
 
     # Budget enforcement: limit number of recon tools if budget specifies a cap
-    max_tools = budget.get("max_recon_tools", len(recon_tools)) if isinstance(budget, dict) else len(recon_tools)
+    max_tools = (
+        budget.get("max_recon_tools", len(recon_tools))
+        if isinstance(budget, dict)
+        else len(recon_tools)
+    )
     if max_tools < len(recon_tools):
-        logger.info("Budget limits recon tools to %d (from %d available)", max_tools, len(recon_tools))
+        logger.info(
+            "Budget limits recon tools to %d (from %d available)",
+            max_tools,
+            len(recon_tools),
+        )
     selected_tools = dict(list(recon_tools.items())[:max_tools])
 
-    slog.info(f"Launching {len(selected_tools)} parallel recon tools (budget allows {max_tools})")
+    slog.info(
+        f"Launching {len(selected_tools)} parallel recon tools (budget allows {max_tools})"
+    )
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures = {
-            pool.submit(_run_recon_tool, ctx, name, cfg["args"], cfg["timeout"], all_findings, cfg.get("start_msg")): name
+            pool.submit(
+                _run_recon_tool,
+                ctx,
+                name,
+                cfg["args"],
+                cfg["timeout"],
+                all_findings,
+                cfg.get("start_msg"),
+            ): name
             for name, cfg in selected_tools.items()
         }
         try:
@@ -269,13 +290,25 @@ def execute_recon_tools(
                 if success:
                     slog.tool_complete(tool_name, success=True, findings=parsed_count)
                     success_msg = recon_tools[tool_name]["success_msg"]
-                    formatted_msg = success_msg.replace("{{}}", str(parsed_count)) if "{{}}" in success_msg else success_msg
+                    formatted_msg = (
+                        success_msg.replace("{{}}", str(parsed_count))
+                        if "{{}}" in success_msg
+                        else success_msg
+                    )
                     _emit(tool_name, formatted_msg, "completed", items=parsed_count)
                 else:
                     slog.tool_complete(tool_name, success=False)
-                    _emit(tool_name, f"{tool_name} failed: {error}" if error else f"{tool_name} failed", "failed")
+                    _emit(
+                        tool_name,
+                        f"{tool_name} failed: {error}"
+                        if error
+                        else f"{tool_name} failed",
+                        "failed",
+                    )
         except TimeoutError:
-            logger.warning("Recon tool batch timed out after 300s — some tools may not have completed")
+            logger.warning(
+                "Recon tool batch timed out after 300s — some tools may not have completed"
+            )
             slog.warn("Recon tool batch timed out after 300s")
             # Cancel remaining futures
             for future in futures:
@@ -314,7 +347,7 @@ def execute_recon_tools(
     except Exception as e:
         logger.warning("Could not load target profile (non-fatal): %s", e)
 
-    slog.info(f"Recon pipeline complete: {len(all_findings)} total findings")
+    slog.info("Recon pipeline complete: %d total findings", len(all_findings))
     return all_findings, recon_context
 
 
@@ -341,7 +374,10 @@ def _probe_login_pages(
 
     import requests
     import urllib3
-    warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
+
+    warnings.filterwarnings(
+        "ignore", category=urllib3.exceptions.InsecureRequestWarning
+    )
 
     verified: list[str] = []
     has_login_form = False
@@ -349,10 +385,16 @@ def _probe_login_pages(
     for path in auth_endpoints:
         url = urljoin(target.rstrip("/") + "/", path.lstrip("/"))
         try:
-            resp = requests.get(url, timeout=timeout, allow_redirects=True, verify=False, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; ArgusRecon/1.0)",
-                "Accept": "text/html,application/xhtml+xml",
-            })
+            resp = requests.get(
+                url,
+                timeout=timeout,
+                allow_redirects=True,
+                verify=False,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; ArgusRecon/1.0)",
+                    "Accept": "text/html,application/xhtml+xml",
+                },
+            )
             if resp.status_code != 200:
                 continue
 
@@ -360,8 +402,9 @@ def _probe_login_pages(
             # Look for HTML form with password field — strongest signal
             has_password = 'type="password"' in body or "type='password'" in body
             has_form = "<form" in body
-            has_auth_keywords = any(kw in body for kw in
-                                    ("login", "signin", "sign in", "log in"))
+            has_auth_keywords = any(
+                kw in body for kw in ("login", "signin", "sign in", "log in")
+            )
 
             if has_password or (has_form and has_auth_keywords):
                 verified.append(url)
@@ -407,10 +450,14 @@ def summarize_recon_findings(target: str, findings: list[dict]) -> ReconContext:
         str(t)
         for f in findings
         if f.get("source_tool") == "whatweb"
-        for t in (f.get("evidence", {}) if isinstance(f.get("evidence"), dict) else {}).get("plugins", {})
+        for t in (
+            f.get("evidence", {}) if isinstance(f.get("evidence"), dict) else {}
+        ).get("plugins", {})
     ]
     crawled_paths = [
-        f.get("endpoint", "") for f in findings if f.get("source_tool") in ("katana", "ffuf")
+        f.get("endpoint", "")
+        for f in findings
+        if f.get("source_tool") in ("katana", "ffuf")
     ][:50]
     param_urls = [
         f.get("endpoint", "")
@@ -438,7 +485,9 @@ def summarize_recon_findings(target: str, findings: list[dict]) -> ReconContext:
     )
 
     # Prefer verified endpoints; fall back to keyword-based if probing fails
-    auth_endpoints = verified_endpoints if verified_endpoints else keyword_auth_endpoints
+    auth_endpoints = (
+        verified_endpoints if verified_endpoints else keyword_auth_endpoints
+    )
     has_login_page = verified_has_login if verified_endpoints else keyword_has_login
 
     return ReconContext(

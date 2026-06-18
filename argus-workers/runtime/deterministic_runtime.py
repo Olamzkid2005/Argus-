@@ -64,7 +64,8 @@ class DeterministicRuntime:
         """
         logger.info(
             "DeterministicRuntime: scanning %d targets (skip_tools=%s)",
-            len(targets), skip_tools,
+            len(targets),
+            skip_tools,
         )
 
         return execute_scan_pipeline(

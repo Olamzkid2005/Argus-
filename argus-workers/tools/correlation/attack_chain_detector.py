@@ -7,6 +7,7 @@ from collections import defaultdict
 
 def _endpoint_host(endpoint: str) -> str:
     from urllib.parse import urlparse
+
     try:
         return urlparse(endpoint).hostname or endpoint
     except Exception:
@@ -31,8 +32,7 @@ def _build_dependency_graph(findings: list[dict]) -> dict[str, list[str]]:
         "WEAK_AUTHENTICATION": ["PRIVILEGE_ESCALATION", "SESSION_HIJACK"],
         "MISCONFIGURATION": ["INFORMATION_DISCLOSURE", "UNAUTHORIZED_ACCESS"],
     }
-
-    for host, indices in by_host.items():
+    for _host, indices in by_host.items():
         types_at_host = {}
         for idx in indices:
             ftype = findings[idx].get("type", "UNKNOWN")
@@ -79,15 +79,22 @@ def _build_chain(path: list[str], findings: list[dict]) -> dict:
     for idx_str in path:
         idx = int(idx_str)
         f = findings[idx]
-        steps.append({
-            "finding_id": f.get("id", f.get("type", "")),
-            "type": f.get("type", "UNKNOWN"),
-            "severity": f.get("severity", "INFO"),
-            "endpoint": f.get("endpoint", ""),
-        })
+        steps.append(
+            {
+                "finding_id": f.get("id", f.get("type", "")),
+                "type": f.get("type", "UNKNOWN"),
+                "severity": f.get("severity", "INFO"),
+                "endpoint": f.get("endpoint", ""),
+            }
+        )
 
     severities = [s["severity"] for s in steps]
-    max_sev = max(severities, key=lambda s: {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}.get(s, 0))
+    max_sev = max(
+        severities,
+        key=lambda s: {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}.get(
+            s, 0
+        ),
+    )
 
     return {
         "chain_length": len(steps),

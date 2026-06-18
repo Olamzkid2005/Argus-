@@ -38,7 +38,7 @@ class AuthenticateStep(WorkflowStep):
         try:
             mgr = AuthManager(auth_config)
             session = mgr.authenticate(ctx.target)
-            ctx.slog.info(f"User {role} authenticated")
+            ctx.slog.info("User %s authenticated", role)
             return session
         except AuthError:
             obstacle_type = f"auth_failed_{role[-1]}"
@@ -46,16 +46,18 @@ class AuthenticateStep(WorkflowStep):
                 f"Obstacle: {obstacle_type}",
                 extra={"step": self.name, "role": role},
             )
-            ctx.state.add_obstacle({
-                "type": obstacle_type,
-                "detected_at": time.time(),
-                "step": self.name,
-                "recoverable": False,
-                "recovery_paths": (
-                    ["skip"] if role == "user_a" else ["skip_bola_only_bopla"]
-                ),
-                "metadata": {"role": role, "error_class": "AuthError"},
-            })
+            ctx.state.add_obstacle(
+                {
+                    "type": obstacle_type,
+                    "detected_at": time.time(),
+                    "step": self.name,
+                    "recoverable": False,
+                    "recovery_paths": (
+                        ["skip"] if role == "user_a" else ["skip_bola_only_bopla"]
+                    ),
+                    "metadata": {"role": role, "error_class": "AuthError"},
+                }
+            )
             return None
 
 
@@ -92,27 +94,31 @@ class DiscoverOwnedResourcesStep(WorkflowStep):
                     "Obstacle: target_unreachable",
                     extra={"step": self.name, "target": ctx.target},
                 )
-                ctx.state.add_obstacle({
-                    "type": "target_unreachable",
-                    "detected_at": time.time(),
-                    "step": self.name,
-                    "recoverable": False,
-                    "recovery_paths": ["skip"],
-                    "metadata": {"target": ctx.target, "probed_endpoints": 5},
-                })
+                ctx.state.add_obstacle(
+                    {
+                        "type": "target_unreachable",
+                        "detected_at": time.time(),
+                        "step": self.name,
+                        "recoverable": False,
+                        "recovery_paths": ["skip"],
+                        "metadata": {"target": ctx.target, "probed_endpoints": 5},
+                    }
+                )
             else:
                 ctx.slog.warning(
                     "Obstacle: no_owned_resources",
                     extra={"step": self.name, "target": ctx.target},
                 )
-                ctx.state.add_obstacle({
-                    "type": "no_owned_resources",
-                    "detected_at": time.time(),
-                    "step": self.name,
-                    "recoverable": False,
-                    "recovery_paths": ["skip_bola_run_bopla"],
-                    "metadata": {"target": ctx.target, "probed_endpoints": 5},
-                })
+                ctx.state.add_obstacle(
+                    {
+                        "type": "no_owned_resources",
+                        "detected_at": time.time(),
+                        "step": self.name,
+                        "recoverable": False,
+                        "recovery_paths": ["skip_bola_run_bopla"],
+                        "metadata": {"target": ctx.target, "probed_endpoints": 5},
+                    }
+                )
             ctx.skip_bola = True
 
         return StepResult(success=True)
@@ -141,9 +147,13 @@ class TestBolaStep(WorkflowStep):
 
         # _test_cross_account_access RETURNS findings but does NOT emit them.
         # The caller is responsible for emitting via scanner._emit_finding().
-        raw_findings = scanner._test_cross_account_access(ctx.session_b, ctx.owned_resources)
+        raw_findings = scanner._test_cross_account_access(
+            ctx.session_b, ctx.owned_resources
+        )
         for f in raw_findings:
-            scanner._emit_finding(f)  # routes through FindingBuilder.add() → emit_finding_callback
+            scanner._emit_finding(
+                f
+            )  # routes through FindingBuilder.add() → emit_finding_callback
         ctx.bola_findings = len(raw_findings)
 
         # If the step ran but no requests succeeded at the transport level,
@@ -153,14 +163,16 @@ class TestBolaStep(WorkflowStep):
                 "Obstacle: target_unreachable",
                 extra={"step": self.name, "phase": "bola_test", "target": ctx.target},
             )
-            ctx.state.add_obstacle({
-                "type": "target_unreachable",
-                "detected_at": time.time(),
-                "step": self.name,
-                "recoverable": False,
-                "recovery_paths": ["skip"],
-                "metadata": {"target": ctx.target, "phase": "bola_test"},
-            })
+            ctx.state.add_obstacle(
+                {
+                    "type": "target_unreachable",
+                    "detected_at": time.time(),
+                    "step": self.name,
+                    "recoverable": False,
+                    "recovery_paths": ["skip"],
+                    "metadata": {"target": ctx.target, "phase": "bola_test"},
+                }
+            )
 
         return StepResult(success=True, findings_emitted=len(raw_findings))
 

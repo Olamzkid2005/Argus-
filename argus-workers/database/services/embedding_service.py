@@ -49,6 +49,7 @@ class EmbeddingService:
         if self._llm_client is None:
             try:
                 from llm_client import LLMClient
+
                 self._llm_client = LLMClient()
             except Exception:
                 return None
@@ -64,7 +65,9 @@ class EmbeddingService:
                 "headers": {
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
+                    "HTTP-Referer": os.getenv(
+                        "NEXT_PUBLIC_APP_URL", "http://localhost:3000"
+                    ),
                     "X-Title": "Argus Pentest Platform",
                 },
             }
@@ -86,7 +89,7 @@ class EmbeddingService:
         """
         # M-v4-17: Use cooldown-based blocking instead of permanent flag.
         # A single transient API failure should not permanently disable embeddings.
-        last_fail = getattr(self, '_embed_last_fail_time', 0)
+        last_fail = getattr(self, "_embed_last_fail_time", 0)
         if last_fail and (time.time() - last_fail) < 60:
             # Cooldown: retry after 60 seconds
             return None
@@ -116,6 +119,7 @@ class EmbeddingService:
         """Lazy-loaded PGVectorRepository instance."""
         if self._pgvector is None:
             from database.repositories.pgvector_repository import PGVectorRepository
+
             self._pgvector = PGVectorRepository()
         return self._pgvector
 
@@ -128,10 +132,13 @@ class EmbeddingService:
         Results are cached in-memory to avoid redundant API calls when saving
         many findings with similar dedup_text values (common after recon).
         """
-        if not hasattr(self, '_get_embedding_cache'):
+        if not hasattr(self, "_get_embedding_cache"):
             self._get_embedding_cache = {}
         import hashlib
-        key = hashlib.md5(text.encode('utf-8', errors='replace'), usedforsecurity=False).hexdigest()
+
+        key = hashlib.md5(
+            text.encode("utf-8", errors="replace"), usedforsecurity=False
+        ).hexdigest()
         if key in self._get_embedding_cache:
             return self._get_embedding_cache[key]
 
@@ -180,15 +187,14 @@ class EmbeddingService:
 
     # ── Similarity Search ──────────────────────────────────────────────────
 
-    def find_existing_similar(
-        self, text: str, threshold: float = 0.92
-    ) -> dict | None:
+    def find_existing_similar(self, text: str, threshold: float = 0.92) -> dict | None:
         """Find an existing finding with similar embedding vector.
 
         Returns dict with 'id' and 'similarity' keys, or None.
         """
         if self._pgvector is None:
             from database.repositories.pgvector_repository import PGVectorRepository
+
             self._pgvector = PGVectorRepository()
 
         if not self._pgvector.check_pgvector_available():
@@ -200,6 +206,7 @@ class EmbeddingService:
 
         try:
             from database.connection import db_cursor
+
             emb_str = "[" + ",".join(map(str, embedding)) + "]"
             with db_cursor() as cursor:
                 cursor.execute(
@@ -234,4 +241,5 @@ class EmbeddingService:
         if not EmbeddingService.is_valid_embedding(embedding):
             return
         from database.repositories.pgvector_repository import PGVectorRepository
+
         PGVectorRepository().store_embedding(finding_id, engagement_id, embedding, text)

@@ -33,8 +33,8 @@ pytestmark = pytest.mark.skipif(
     reason="Integration test requires Unix-compatible HTTP server behavior",
 )
 
-from runtime.engagement_state import EngagementState
-from runtime.workflows.base import StepResult
+from runtime.engagement_state import EngagementState  # noqa: E402
+from runtime.workflows.base import StepResult  # noqa: E402
 
 # ── Local Test Server ─────────────────────────────────────────────────
 
@@ -67,7 +67,9 @@ class BolaTestServerHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         token = self._get_token()
-        user = self.sessions.get(token, {}).get("user", "unknown") if token else "unknown"
+        user = (
+            self.sessions.get(token, {}).get("user", "unknown") if token else "unknown"
+        )
 
         if self.path == "/api/accounts":
             # Return all accounts regardless of user — test scenario is that
@@ -87,21 +89,27 @@ class BolaTestServerHandler(BaseHTTPRequestHandler):
         elif self.path.startswith("/api/accounts/"):
             # BOLA: no ownership check — any authenticated user can read any account.
             # Response must be >50 chars to trigger CONFIRMED_BOLA (vs POTENTIAL_BOLA).
-            self._send_json(200, {
-                "id": 1,
-                "owner": "user_a",
-                "balance": 100,
-                "description": "User A's primary checking account with standard features.",
-            })
+            self._send_json(
+                200,
+                {
+                    "id": 1,
+                    "owner": "user_a",
+                    "balance": 100,
+                    "description": "User A's primary checking account with standard features.",
+                },
+            )
 
         elif self.path == "/api/profile":
             # BOPLA: exposes sensitive fields
-            self._send_json(200, {
-                "username": user,
-                "email": f"{user}@example.com",
-                "ssn": "123-45-6789",
-                "credit_card": "4111-1111-1111-1111",
-            })
+            self._send_json(
+                200,
+                {
+                    "username": user,
+                    "email": f"{user}@example.com",
+                    "ssn": "123-45-6789",
+                    "credit_card": "4111-1111-1111-1111",
+                },
+            )
 
         elif self.path == "/api/me":
             self._send_json(200, {"id": 1, "username": user})
@@ -157,7 +165,9 @@ class TestBolaWorkflowIntegration:
     """
 
     @pytest.mark.integration
-    def test_bola_workflow_detects_cross_account_access(self, server_url: str, state: EngagementState) -> None:
+    def test_bola_workflow_detects_cross_account_access(
+        self, server_url: str, state: EngagementState
+    ) -> None:
         """Full BOLA workflow: User B accesses User A's resource -> finding emitted."""
 
         findings: list[dict] = []
@@ -209,7 +219,9 @@ class TestBolaWorkflowIntegration:
         assert len(state.findings) == 0
 
     @pytest.mark.integration
-    def test_bopla_still_executes_when_user_b_auth_fails(self, server_url: str, state: EngagementState) -> None:
+    def test_bopla_still_executes_when_user_b_auth_fails(
+        self, server_url: str, state: EngagementState
+    ) -> None:
         """BOPLA must run against User A even when User B authentication fails."""
 
         findings: list[dict] = []
@@ -250,7 +262,9 @@ class TestBolaWorkflowIntegration:
         )
 
     @pytest.mark.integration
-    def test_workflow_sessions_closed(self, server_url: str, state: EngagementState) -> None:
+    def test_workflow_sessions_closed(
+        self, server_url: str, state: EngagementState
+    ) -> None:
         """Sessions are closed after workflow execution."""
 
         from runtime.workflows import BolaWorkflow

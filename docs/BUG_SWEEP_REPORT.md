@@ -1832,8 +1832,8 @@ Pass a shared connection/cursor to all internal methods within a single transact
 
 | Count | Status | Notes |
 |-------|--------|-------|
-| 52 | ⚪ Pending | Hardening and best-practice improvements |
-| 23 | ✅ Fixed | L-01 through L-10 applied; 13 additional bugs fixed via ruff/lint sweep (S110/B023/F821) |
+| 47 | ⚪ Pending | Hardening and best-practice improvements |
+| 28 | ✅ Fixed | L-01 through L-10 applied; 13 ruff/lint fixes (S110/B023/F821); 5 additional fixes (B904×2 in repo_scan.py/posture.py, E402×3 in scan.py/utils.py/tool_definitions.py) |
 
 ---
 
@@ -1850,4 +1850,4 @@ Pass a shared connection/cursor to all internal methods within a single transact
 
 ---
 
-*Report generated 2026-06-17 by automated codebase audit. Last updated: 2026-06-17 — all CRITICAL, HIGH, MEDIUM, and 23 LOW/INFO items fixed and verified. Python ruff lint clean (0 errors).*
+*Report generated 2026-06-17 by automated codebase audit. Last updated: 2026-06-17 — all CRITICAL, HIGH, MEDIUM, and 28 LOW/INFO items fixed and verified. Python ruff lint clean (0 errors across selected rulesets E,F,I,N,W,UP,B,C4,SIM,ARG).*

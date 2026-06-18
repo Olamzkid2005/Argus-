@@ -1,6 +1,7 @@
 """
 Distributed Lock - Prevents multiple workers from processing same engagement
 """
+
 import logging
 import time
 import uuid
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 class LockAcquisitionError(Exception):
     """Raised when a distributed lock cannot be acquired (transient, retryable)."""
+
     pass
 
 
@@ -105,7 +107,7 @@ class DistributedLock:
             lock_key,
             self.worker_id,
             nx=True,  # Only set if not exists
-            ex=ttl  # Expiration in seconds
+            ex=ttl,  # Expiration in seconds
         )
 
         if acquired:
@@ -118,7 +120,7 @@ class DistributedLock:
 
         # Check if we already hold this lock
         current_holder = self._with_reconnect(self.redis_client.get, lock_key)
-        if current_holder and current_holder.decode('utf-8') == self.worker_id:
+        if current_holder and current_holder.decode("utf-8") == self.worker_id:
             # We already hold this lock — extend it to prevent expiry during long operations
             self.extend(engagement_id)
             self.held_locks[engagement_id] = {
@@ -165,10 +167,14 @@ class DistributedLock:
 
         # Execute Lua script with auto-reconnect (M6)
         try:
-            result = self._with_reconnect(self.redis_client.eval, lua_script, 1, lock_key, self.worker_id)
+            result = self._with_reconnect(
+                self.redis_client.eval, lua_script, 1, lock_key, self.worker_id
+            )
         except Exception:
             # Redis unavailable — don't touch held_locks, attempt to close cleanly
-            logger.warning("Redis unavailable during release of engagement %s", engagement_id)
+            logger.warning(
+                "Redis unavailable during release of engagement %s", engagement_id
+            )
             return False
 
         if result == 1:
@@ -259,7 +265,7 @@ class DistributedLock:
             return None
 
         if holder:
-            return holder.decode('utf-8')
+            return holder.decode("utf-8")
 
         return None
 
@@ -268,7 +274,9 @@ class DistributedLock:
         for engagement_id in list(self.held_locks.keys()):
             self.release(engagement_id)
 
-    def heartbeat_loop(self, engagement_id: str, is_done_callback, interval_seconds: int | None = None):
+    def heartbeat_loop(
+        self, engagement_id: str, is_done_callback, interval_seconds: int | None = None
+    ):
         """
         Run heartbeat loop to extend lock while processing
 
@@ -290,13 +298,15 @@ class DistributedLock:
                 consecutive_failures += 1
                 logger.warning(
                     "Failed to extend lock for engagement %s (attempt %d)",
-                    engagement_id, consecutive_failures,
+                    engagement_id,
+                    consecutive_failures,
                 )
                 if consecutive_failures >= 3:
                     logger.error(
                         "Lost lock for engagement %s after %d failed extend attempts — "
                         "re-acquiring with ownership check",
-                        engagement_id, consecutive_failures,
+                        engagement_id,
+                        consecutive_failures,
                     )
                     # Re-acquire with NX flag and ownership verification to avoid
                     # force-deleting another worker's lock. If the original TTL is

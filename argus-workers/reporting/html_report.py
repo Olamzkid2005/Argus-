@@ -294,16 +294,19 @@ def _findings_rows(findings: list[dict]) -> str:
                 parts.append(f"<h4>Remediation</h4><p>{remediation}</p>")
             if remediation:
                 import json
+
                 safe_remediation = json.dumps(remediation)
                 btn_click = f"copyFix({safe_remediation}, this)"
                 parts.append(
-                    '<button class="copy-btn" onclick="' + btn_click + '">Copy Fix</button>'
+                    '<button class="copy-btn" onclick="'
+                    + btn_click
+                    + '">Copy Fix</button>'
                 )
             parts.extend(["</div>", "</td>", "</tr>"])
             detail_html = "".join(parts)
 
         rows += (
-            f'<tr>'
+            f"<tr>"
             f'<td><span class="severity-badge" style="{_severity_badge_css(sev)}">{sev}</span></td>'
             f"<td>{finding_type}</td>"
             f"<td>{endpoint}</td>"
@@ -346,7 +349,9 @@ def render_html_report(
         Complete HTML string (self-contained, no external resources).
     """
     findings = findings or []
-    scan_date = scan_date or datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
+    scan_date = scan_date or datetime.datetime.now(datetime.UTC).strftime(
+        "%Y-%m-%d %H:%M UTC"
+    )
 
     if severity_breakdown is None:
         severity_breakdown = {}
@@ -367,7 +372,7 @@ def render_html_report(
     executive_summary_html = ""
     if executive_summary:
         executive_summary_html = (
-            f'<h2>📋 Executive Summary</h2>'
+            f"<h2>📋 Executive Summary</h2>"
             f'<div class="summary">{_escape(executive_summary)}</div>'
         )
 

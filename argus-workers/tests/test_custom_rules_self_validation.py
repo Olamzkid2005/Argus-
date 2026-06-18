@@ -2,6 +2,7 @@
 Self-validation test: every bugbounty YAML rule must match its own test_patterns
 and must NOT match its non_matching_patterns.
 """
+
 import re
 from pathlib import Path
 

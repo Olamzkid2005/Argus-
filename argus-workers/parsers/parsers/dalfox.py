@@ -30,6 +30,9 @@ class DalfoxParser(BaseParser):
                 }
                 findings.append(finding)
             except json.JSONDecodeError:
-                logger.warning("Non-JSON line encountered in Dalfox output, skipping: %s", line[:200])
+                logger.warning(
+                    "Non-JSON line encountered in Dalfox output, skipping: %s",
+                    line[:200],
+                )
                 continue
         return findings

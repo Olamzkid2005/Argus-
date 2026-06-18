@@ -90,7 +90,6 @@ _ERROR_CODE_HINTS: dict[ErrorCode, ErrorHint] = {
         hint_command="argus config validate",
         docs_url="https://docs.argus.io/setup/configuration#validation",
     ),
-
     # ── Tool execution errors ──
     ErrorCode.TOOL_NOT_FOUND: ErrorHint(
         summary="Security tool not found",
@@ -120,7 +119,6 @@ _ERROR_CODE_HINTS: dict[ErrorCode, ErrorHint] = {
         remediation="This may be due to a tool version update. Try updating the tool or checking if a newer version of Argus supports the new format.",
         docs_url="https://docs.argus.io/troubleshooting/tool-schema",
     ),
-
     # ── Pipeline execution errors ──
     ErrorCode.STEP_EXECUTION_FAILED: ErrorHint(
         summary="Scan step failed",
@@ -143,7 +141,6 @@ _ERROR_CODE_HINTS: dict[ErrorCode, ErrorHint] = {
         detail="A scan phase exceeded its time budget and was terminated.",
         remediation="Increase the phase timeout with '--phase-timeout <seconds>' or reduce the scan scope. For large targets, consider splitting the scan.",
     ),
-
     # ── Resource errors ──
     ErrorCode.RATE_LIMITED: ErrorHint(
         summary="Rate limit hit",
@@ -158,7 +155,6 @@ _ERROR_CODE_HINTS: dict[ErrorCode, ErrorHint] = {
         remediation="Wait for the quota to reset, or upgrade your plan for higher limits. Check your usage with 'argus usage stats'.",
         docs_url="https://docs.argus.io/account/plans",
     ),
-
     # ── I/O errors ──
     ErrorCode.FILE_NOT_FOUND: ErrorHint(
         summary="Required file not found",
@@ -176,7 +172,6 @@ _ERROR_CODE_HINTS: dict[ErrorCode, ErrorHint] = {
         detail="Could not save scan progress checkpoint. Progress may not be recoverable if interrupted.",
         remediation="Check disk space and database connectivity. The scan will continue but may not resume if interrupted.",
     ),
-
     # ── Preflight errors ──
     ErrorCode.INVALID_INPUT: ErrorHint(
         summary="Invalid input provided",
@@ -279,7 +274,10 @@ _TOOL_SPECIFIC_PATTERNS: dict[str, list[tuple[re.Pattern, str, str, str | None]]
     ],
     "nmap": [
         (
-            re.compile(r"you (?:don't have|need).*root|permission denied|requires root privileges", re.IGNORECASE),
+            re.compile(
+                r"you (?:don't have|need).*root|permission denied|requires root privileges",
+                re.IGNORECASE,
+            ),
             "Nmap requires elevated permissions",
             "Nmap's SYN scan and OS detection require root privileges. Use 'sudo' or adjust the scan type.",
             "sudo nmap <target>",
@@ -346,7 +344,9 @@ def _tool_specific_hint(
     if not stderr or tool_name not in _TOOL_SPECIFIC_PATTERNS:
         return None
 
-    for pattern, summary, remediation, hint_command in _TOOL_SPECIFIC_PATTERNS[tool_name]:
+    for pattern, summary, remediation, hint_command in _TOOL_SPECIFIC_PATTERNS[
+        tool_name
+    ]:
         if pattern.search(stderr):
             return ErrorHint(
                 summary=summary,

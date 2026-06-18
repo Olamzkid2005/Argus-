@@ -144,7 +144,9 @@ class PortScanner(AbstractTool):
                 logger.info("naabu found %d live ports", len(live_ports))
             else:
                 slog.tool_complete("naabu", success=False)
-                logger.warning("naabu failed: %s", naabu_result.error or naabu_result.stderr[:200])
+                logger.warning(
+                    "naabu failed: %s", naabu_result.error or naabu_result.stderr[:200]
+                )
         except Exception as e:
             slog.tool_complete("naabu", success=False)
             logger.warning("naabu scan failed: %s", e)
@@ -159,7 +161,7 @@ class PortScanner(AbstractTool):
         # ── Phase 2: nmap service detection via ToolRunner ────────────
         port_list = ",".join(str(p.get("port")) for p in live_ports if p.get("port"))
         if not port_list:
-            slog.warn(f"No live ports found for {target}")
+            slog.warn("No live ports found for %s", target)
             result.mark_finished()
             return result
 
@@ -197,13 +199,15 @@ class PortScanner(AbstractTool):
         for p in live_ports:
             port_num = p.get("port", 0)
             if port_num not in seen:
-                final_ports.append({
-                    "port": port_num,
-                    "protocol": p.get("protocol", "tcp"),
-                    "service": "",
-                    "version": "",
-                    "state": "open",
-                })
+                final_ports.append(
+                    {
+                        "port": port_num,
+                        "protocol": p.get("protocol", "tcp"),
+                        "service": "",
+                        "version": "",
+                        "state": "open",
+                    }
+                )
                 seen.add(port_num)
 
         # Log open ports as findings
@@ -245,12 +249,14 @@ class PortScanner(AbstractTool):
                 entry = json.loads(line)
                 port_num = entry.get("port")
                 if port_num is not None:
-                    ports.append({
-                        "port": int(port_num),
-                        "protocol": entry.get("protocol", "tcp"),
-                        "ip": entry.get("ip", ""),
-                        "host": entry.get("host", ""),
-                    })
+                    ports.append(
+                        {
+                            "port": int(port_num),
+                            "protocol": entry.get("protocol", "tcp"),
+                            "ip": entry.get("ip", ""),
+                            "host": entry.get("host", ""),
+                        }
+                    )
             except (json.JSONDecodeError, ValueError) as e:
                 logger.debug("Failed to parse naabu line: %s (%s)", line, e)
                 continue
@@ -291,7 +297,11 @@ class PortScanner(AbstractTool):
                     continue
 
                 state_elem = port_elem.find("state")
-                state = state_elem.get("state", "open") if state_elem is not None else "open"
+                state = (
+                    state_elem.get("state", "open")
+                    if state_elem is not None
+                    else "open"
+                )
 
                 service_elem = port_elem.find("service")
                 service_name = ""

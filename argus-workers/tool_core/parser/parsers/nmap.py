@@ -29,8 +29,12 @@ def parse(output: str) -> list[NormalizedFinding]:
             state = state_el.get("state", "") if state_el is not None else ""
             service_el = port.find("service")
             service_name = service_el.get("name", "") if service_el is not None else ""
-            service_product = service_el.get("product", "") if service_el is not None else ""
-            service_version = service_el.get("version", "") if service_el is not None else ""
+            service_product = (
+                service_el.get("product", "") if service_el is not None else ""
+            )
+            service_version = (
+                service_el.get("version", "") if service_el is not None else ""
+            )
 
             if state != "open":
                 continue
@@ -40,24 +44,28 @@ def parse(output: str) -> list[NormalizedFinding]:
             if service_product:
                 description += f" - {service_product} {service_version}"
 
-            findings.append(NormalizedFinding(
-                title=title,
-                severity=normalize_severity("info", 0),
-                confidence=4,
-                description=description,
-                tool="nmap",
-                evidence=[{
-                    "type": "port",
-                    "port": port_id,
-                    "protocol": protocol,
-                    "state": state,
-                    "service": service_name,
-                    "product": service_product,
-                    "version": service_version,
-                    "host": addr,
-                    "hostname": hostname,
-                }],
-                subtype="port_open",
-            ))
+            findings.append(
+                NormalizedFinding(
+                    title=title,
+                    severity=normalize_severity("info", 0),
+                    confidence=4,
+                    description=description,
+                    tool="nmap",
+                    evidence=[
+                        {
+                            "type": "port",
+                            "port": port_id,
+                            "protocol": protocol,
+                            "state": state,
+                            "service": service_name,
+                            "product": service_product,
+                            "version": service_version,
+                            "host": addr,
+                            "hostname": hostname,
+                        }
+                    ],
+                    subtype="port_open",
+                )
+            )
 
     return findings

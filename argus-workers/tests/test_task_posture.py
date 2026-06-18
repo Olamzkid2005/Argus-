@@ -69,7 +69,10 @@ class TestRecomputePosture:
 
         mock_repo = MagicMock()
         mock_repo_cls.return_value = mock_repo
-        mock_repo.get_findings_by_engagement.return_value = ([{"id": "f1", "type": "SQL_INJECTION"}], 1)
+        mock_repo.get_findings_by_engagement.return_value = (
+            [{"id": "f1", "type": "SQL_INJECTION"}],
+            1,
+        )
 
         mock_scorer = MagicMock()
         mock_scorer_cls.return_value = mock_scorer
@@ -132,6 +135,7 @@ class TestRecomputePosture:
 
         # Patch retry on the bound task self
         from tasks.posture import recompute_posture as _task
+
         bound_self = _task._orig_run.__self__
         orig_retry = bound_self.retry
         bound_self.retry = MagicMock(side_effect=Exception("Retry triggered"))

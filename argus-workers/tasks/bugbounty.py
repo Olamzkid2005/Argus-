@@ -5,6 +5,7 @@ Uses BugBountyReportGenerator (imported from tools.bugbounty_report_generator)
 to convert Argus findings into submission-ready bug bounty reports for
 HackerOne, Bugcrowd, Intigriti, and YesWeHack.
 """
+
 import json
 import logging
 import os
@@ -46,8 +47,9 @@ def generate_bugbounty_report(
         trace_id: Optional trace ID for logging
     """
     logger.info(
-        f"Generating bug bounty report for engagement {engagement_id}, "
-        f"platform={platform}"
+        "Generating bug bounty report for engagement %s, platform=%s",
+        engagement_id,
+        platform,
     )
 
     # Fetch findings from database
@@ -55,13 +57,15 @@ def generate_bugbounty_report(
         findings = _fetch_findings(engagement_id)
         engagement = _fetch_engagement(engagement_id)
     except Exception as e:
-        logger.error(f"Failed to fetch data for engagement {engagement_id}: {e}")
+        logger.error("Failed to fetch data for engagement %s: %s", engagement_id, e)
         # Exponential backoff with jitter to prevent retry storms
-        countdown = min(30 * (2 ** self.request.retries), 300) + secrets.randbelow(1000) / 100.0
+        countdown = (
+            min(30 * (2**self.request.retries), 300) + secrets.randbelow(1000) / 100.0
+        )
         raise self.retry(exc=e, countdown=countdown) from e
 
     if not findings:
-        logger.warning(f"No findings found for engagement {engagement_id}")
+        logger.warning("No findings found for engagement %s", engagement_id)
         return {
             "engagement_id": engagement_id,
             "platform": platform,
@@ -78,7 +82,7 @@ def generate_bugbounty_report(
             engagement=engagement,
         )
     except ValueError as e:
-        logger.error(f"Report generation failed: {e}")
+        logger.error("Report generation failed: %s", e)
         return {
             "engagement_id": engagement_id,
             "platform": platform,
@@ -90,13 +94,11 @@ def generate_bugbounty_report(
     if not output_path:
         reports_dir = Path(os.path.dirname(__file__)).parent / "reports"
         reports_dir.mkdir(exist_ok=True)
-        output_path = str(
-            reports_dir / f"bugbounty_{platform}_{engagement_id[:8]}.md"
-        )
+        output_path = str(reports_dir / f"bugbounty_{platform}_{engagement_id[:8]}.md")
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     Path(output_path).write_text(report_md, encoding="utf-8")
-    logger.info(f"Bug bounty report written to {output_path}")
+    logger.info("Bug bounty report written to %s", output_path)
 
     return {
         "engagement_id": engagement_id,

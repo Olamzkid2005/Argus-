@@ -49,11 +49,11 @@ BACKOFF_DELAYS = [1, 2, 3, 3, 5, 5]
 # When no HTML form fields are available (API mode), the register tool
 # iterates through these combinations to find the right field names.
 _API_FIELD_PERMUTATIONS: list[tuple[str, str]] = [
-    ("email", "password"),       # most common for modern APIs
-    ("username", "password"),    # common for legacy systems
-    ("email", "pass"),           # shorter variant
-    ("username", "pass"),        # shorter variant
-    ("user", "password"),        # user/password
+    ("email", "password"),  # most common for modern APIs
+    ("username", "password"),  # common for legacy systems
+    ("email", "pass"),  # shorter variant
+    ("username", "pass"),  # shorter variant
+    ("user", "password"),  # user/password
 ]
 
 
@@ -104,9 +104,14 @@ def run_register(
     # Replaces SIGALRM + threading.Timer which leak TCP connections.
     _CONNECT_TIMEOUT = 5
     _READ_TIMEOUT = 30
-    http_session.mount('https://', requests.adapters.HTTPAdapter(
-        max_retries=0, pool_connections=1, pool_maxsize=1,
-    ))
+    http_session.mount(
+        "https://",
+        requests.adapters.HTTPAdapter(
+            max_retries=0,
+            pool_connections=1,
+            pool_maxsize=1,
+        ),
+    )
 
     try:
         # ── Start of inner logic ──
@@ -124,7 +129,9 @@ def run_register(
             }
             logger.debug("Register: using provided register_url='%s'", register_url)
         else:
-            endpoints = discover_auth_endpoints(target, http_session, recon_crawled_paths)
+            endpoints = discover_auth_endpoints(
+                target, http_session, recon_crawled_paths
+            )
 
         register_url = endpoints.get("register_url")
         if not register_url:
@@ -132,18 +139,22 @@ def run_register(
                 UnifiedToolResult(
                     tool_name="register",
                     status=ToolStatus.NONZERO_EXIT,
-                    stdout=json.dumps({
-                        "status": "failed",
-                        "error_code": "FORM_NOT_FOUND",
-                        "message": ERROR_CODES["FORM_NOT_FOUND"],
-                    }),
+                    stdout=json.dumps(
+                        {
+                            "status": "failed",
+                            "error_code": "FORM_NOT_FOUND",
+                            "message": ERROR_CODES["FORM_NOT_FOUND"],
+                        }
+                    ),
                     stderr=ERROR_CODES["FORM_NOT_FOUND"],
                 ),
                 ctx,
             )
 
         fields = endpoints.get("register_fields", {})
-        login_mode = "api" if not fields.get("email") and not fields.get("password") else "form"
+        login_mode = (
+            "api" if not fields.get("email") and not fields.get("password") else "form"
+        )
         result_data["register_url"] = register_url
         result_data["register_mode"] = login_mode
 
@@ -154,10 +165,16 @@ def run_register(
 
             # Build payload using the shared helper
             payload = _build_register_payload(
-                email, password, fields, login_mode, attempt,
+                email,
+                password,
+                fields,
+                login_mode,
+                attempt,
             )
             if payload is None:
-                last_error = last_error or ERROR_CODES.get("UNKNOWN_FAILURE", "Failed to build payload")
+                last_error = last_error or ERROR_CODES.get(
+                    "UNKNOWN_FAILURE", "Failed to build payload"
+                )
                 break
 
             is_json_payload = payload.get("_is_json", False)
@@ -182,7 +199,11 @@ def run_register(
                 if resp.ok or resp.status_code in (302, 301):
                     # Step 3: Try logging in immediately
                     login_result = _try_login(
-                        target, http_session, email, password, endpoints,
+                        target,
+                        http_session,
+                        email,
+                        password,
+                        endpoints,
                     )
 
                     if login_result["success"]:
@@ -226,7 +247,9 @@ def run_register(
                             ctx,
                         )
                     else:
-                        last_error = login_result.get("error", "Login failed after registration")
+                        last_error = login_result.get(
+                            "error", "Login failed after registration"
+                        )
                         _rate_limit_backoff(attempt)
                         continue
 
@@ -236,16 +259,28 @@ def run_register(
 
                     # 405/415 => wrong content type
                     if resp.status_code in (405, 415) and not is_json_payload:
-                        logger.debug("Register: got %d with form-data, retrying with JSON", resp.status_code)
+                        logger.debug(
+                            "Register: got %d with form-data, retrying with JSON",
+                            resp.status_code,
+                        )
                         last_error = f"HTTP {resp.status_code} with form-encoded data"
                         continue  # next attempt toggles content type
 
-                    if "captcha" in body or "bot" in body or "recaptcha" in body or "robot" in body:
+                    if (
+                        "captcha" in body
+                        or "bot" in body
+                        or "recaptcha" in body
+                        or "robot" in body
+                    ):
                         last_error = ERROR_CODES["CAPTCHA_DETECTED"]
                         result_data["error_code"] = "CAPTCHA_DETECTED"
                         break  # Don't retry CAPTCHA
 
-                    if "already exist" in body or "already taken" in body or "already registered" in body:
+                    if (
+                        "already exist" in body
+                        or "already taken" in body
+                        or "already registered" in body
+                    ):
                         last_error = ERROR_CODES["EMAIL_EXISTS"]
                         result_data["error_code"] = "EMAIL_EXISTS"
                         _rate_limit_backoff(attempt)
@@ -333,7 +368,7 @@ def _build_register_payload(
     all_combos: list[tuple[tuple[str, str], bool]] = []
     for perm in _API_FIELD_PERMUTATIONS:
         all_combos.append((perm, False))  # form-encoded first
-        all_combos.append((perm, True))   # then JSON
+        all_combos.append((perm, True))  # then JSON
 
     if attempt >= len(all_combos):
         return None  # all combinations exhausted
@@ -405,35 +440,54 @@ def _try_login(
             action_url = target.rstrip("/") + "/" + action_url.lstrip("/")
 
         try:
-            resp = session.post(action_url, data=body_data, timeout=15, allow_redirects=True)
+            resp = session.post(
+                action_url, data=body_data, timeout=15, allow_redirects=True
+            )
         except requests.RequestException as exc:
             return {"success": False, "error": str(exc)}
 
         if resp.ok or resp.status_code in (302, 301):
             if has_verification_requirement(resp):
-                return {"success": False, "requires_verification": True, "login_url": login_url}
+                return {
+                    "success": False,
+                    "requires_verification": True,
+                    "login_url": login_url,
+                }
             body = resp.text.lower() if resp.text else ""
             if "invalid" in body or "incorrect" in body:
                 return {"success": False, "error": "Invalid credentials"}
             return {"success": True, "login_url": login_url}
 
-        return {"success": False, "error": f"HTTP {resp.status_code}: {resp.text[:100]}"}
+        return {
+            "success": False,
+            "error": f"HTTP {resp.status_code}: {resp.text[:100]}",
+        }
 
     # API mode: try all (permutation, content_type) combinations
     from agent.tools.login_tool import _API_FIELD_PERMUTATIONS as _LOGIN_PERMUTATIONS
 
-    for (id_key, pw_key), use_json in ((p, f) for p in _LOGIN_PERMUTATIONS for f in (False, True)):
+    for (id_key, pw_key), use_json in (
+        (p, f) for p in _LOGIN_PERMUTATIONS for f in (False, True)
+    ):
         body_data = {id_key: email, pw_key: password}
 
         try:
             if use_json:
-                resp = session.post(login_url, json=body_data, timeout=15, allow_redirects=True)
+                resp = session.post(
+                    login_url, json=body_data, timeout=15, allow_redirects=True
+                )
             else:
-                resp = session.post(login_url, data=body_data, timeout=15, allow_redirects=True)
+                resp = session.post(
+                    login_url, data=body_data, timeout=15, allow_redirects=True
+                )
 
             if resp.ok or resp.status_code in (302, 301):
                 if has_verification_requirement(resp):
-                    return {"success": False, "requires_verification": True, "login_url": login_url}
+                    return {
+                        "success": False,
+                        "requires_verification": True,
+                        "login_url": login_url,
+                    }
                 body = resp.text.lower() if resp.text else ""
                 if "invalid" in body or "incorrect" in body:
                     continue

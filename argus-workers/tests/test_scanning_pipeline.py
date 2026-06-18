@@ -114,7 +114,9 @@ def test_run_scan_task_context_receives_trace_agent_targets_in_job_extra(
 
     last_tc_kwargs: dict = {}
 
-    def capture_task_context(task, eid, job_type, job_extra=None, trace_id=None, current_state=None):
+    def capture_task_context(
+        task, eid, job_type, job_extra=None, trace_id=None, current_state=None
+    ):
         last_tc_kwargs.update(
             {
                 "job_extra": job_extra,
@@ -179,7 +181,11 @@ def test_run_scan_marks_failed_when_analyze_enqueue_raises(
     mock_app.send_task.side_effect = RuntimeError("broker down")
 
     with (
-        patch.object(scan_module, "task_context", side_effect=lambda *_, **__: _CapturingContext(ctx)),
+        patch.object(
+            scan_module,
+            "task_context",
+            side_effect=lambda *_, **__: _CapturingContext(ctx),
+        ),
         patch.object(scan_module, "app", mock_app),
         patch("tasks.utils.load_recon_context", return_value=None),
     ):

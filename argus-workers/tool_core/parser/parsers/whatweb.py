@@ -38,18 +38,22 @@ def parse(output: str) -> list[NormalizedFinding]:
             continue
 
         plugin_names = ", ".join(sorted(plugins.keys()))
-        findings.append(NormalizedFinding(
-            title=f"Technology detected: {plugin_names}",
-            severity=SEVERITY_MAP.get("info", 0),
-            confidence=3,
-            description=f"Detected {len(plugins)} technologies on {url}",
-            tool="whatweb",
-            evidence=[{
-                "type": "technology",
-                "url": url,
-                "plugins": plugins,
-            }],
-            subtype="technology_detection",
-        ))
+        findings.append(
+            NormalizedFinding(
+                title=f"Technology detected: {plugin_names}",
+                severity=SEVERITY_MAP.get("info", 0),
+                confidence=3,
+                description=f"Detected {len(plugins)} technologies on {url}",
+                tool="whatweb",
+                evidence=[
+                    {
+                        "type": "technology",
+                        "url": url,
+                        "plugins": plugins,
+                    }
+                ],
+                subtype="technology_detection",
+            )
+        )
 
     return findings

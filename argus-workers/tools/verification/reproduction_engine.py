@@ -40,26 +40,66 @@ class ReproductionEngine:
 
     def _reproduce_sqli(self, endpoint: str, finding: dict) -> dict:
         test_payloads = ["'", "1' OR '1'='1", "1 UNION SELECT NULL--"]
-        evidence = {"endpoint": endpoint, "payloads_tested": test_payloads, "type": "sqli"}
-        return {"reproduced": False, "evidence": evidence, "error": "Requires live HTTP client"}
+        evidence = {
+            "endpoint": endpoint,
+            "payloads_tested": test_payloads,
+            "type": "sqli",
+        }
+        return {
+            "reproduced": False,
+            "evidence": evidence,
+            "error": "Requires live HTTP client",
+        }
 
     def _reproduce_xss(self, endpoint: str, finding: dict) -> dict:
-        test_payloads = ["<script>alert(1)</script>", "\"><img src=x onerror=alert(1)>"]
-        evidence = {"endpoint": endpoint, "payloads_tested": test_payloads, "type": "xss"}
-        return {"reproduced": False, "evidence": evidence, "error": "Requires live HTTP client"}
+        test_payloads = ["<script>alert(1)</script>", '"><img src=x onerror=alert(1)>']
+        evidence = {
+            "endpoint": endpoint,
+            "payloads_tested": test_payloads,
+            "type": "xss",
+        }
+        return {
+            "reproduced": False,
+            "evidence": evidence,
+            "error": "Requires live HTTP client",
+        }
 
     def _reproduce_csrf(self, endpoint: str, finding: dict) -> dict:
-        evidence = {"endpoint": endpoint, "type": "csrf", "checks": ["token_absent", "origin_not_validated"]}
-        return {"reproduced": False, "evidence": evidence, "error": "Requires live HTTP client"}
+        evidence = {
+            "endpoint": endpoint,
+            "type": "csrf",
+            "checks": ["token_absent", "origin_not_validated"],
+        }
+        return {
+            "reproduced": False,
+            "evidence": evidence,
+            "error": "Requires live HTTP client",
+        }
 
     def _reproduce_cmdi(self, endpoint: str, finding: dict) -> dict:
         evidence = {"endpoint": endpoint, "type": "cmdi", "severity": "CRITICAL"}
-        return {"reproduced": False, "evidence": evidence, "error": "Requires live HTTP client"}
+        return {
+            "reproduced": False,
+            "evidence": evidence,
+            "error": "Requires live HTTP client",
+        }
 
     def _reproduce_ssrf(self, endpoint: str, finding: dict) -> dict:
-        evidence = {"endpoint": endpoint, "type": "ssrf", "test_url": "http://169.254.169.254/latest/meta-data/"}
-        return {"reproduced": False, "evidence": evidence, "error": "Requires live HTTP client"}
+        evidence = {
+            "endpoint": endpoint,
+            "type": "ssrf",
+            "test_url": "http://169.254.169.254/latest/meta-data/",
+        }
+        return {
+            "reproduced": False,
+            "evidence": evidence,
+            "error": "Requires live HTTP client",
+        }
 
     def _reproduce_generic(self, endpoint: str, finding: dict) -> dict:
         evidence = {"endpoint": endpoint, "type": finding.get("type", "unknown")}
-        return {"reproduced": False, "evidence": evidence, "error": "No specific reproduction for this finding type"}
+        return {
+            "reproduced": False,
+            "evidence": evidence,
+            "error": "No specific reproduction for this finding type",
+        }

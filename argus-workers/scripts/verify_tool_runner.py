@@ -11,6 +11,7 @@ Usage:
     python scripts/verify_tool_runner.py
     python scripts/verify_tool_runner.py --verbose     # include full error_detail
 """
+
 from __future__ import annotations
 
 import argparse
@@ -27,7 +28,7 @@ from tools.tool_runner import ToolRunner
 def header(text: str) -> None:
     print(f"\n{'─' * 60}")
     print(f"  {text}")
-    print('─' * 60)
+    print("─" * 60)
 
 
 def check(label: str, condition: bool, detail: str = "") -> bool:
@@ -53,7 +54,11 @@ def main(verbose: bool = False) -> int:
     )
     if not ok:
         failures += 1
-        check("Error captured (not empty)", bool(result.error_message), result.error_message)
+        check(
+            "Error captured (not empty)",
+            bool(result.error_message),
+            result.error_message,
+        )
         check("Fix hint provided", bool(result.fix_hint), result.fix_hint)
         if verbose:
             print(f"\n  Full error_detail:\n{result.error_detail[:1000]}")
@@ -75,7 +80,7 @@ def main(verbose: bool = False) -> int:
     # ── Test 3: timeout ───────────────────────────────────────────────────────
     header("Test 3 — timeout is captured and described")
     runner3 = ToolRunner(tool_name="sleep_test")
-    runner3._timeout = 1   # force a 1-second limit
+    runner3._timeout = 1  # force a 1-second limit
     result3 = runner3.run(["sleep", "5"])
 
     ok3 = check(
@@ -83,7 +88,11 @@ def main(verbose: bool = False) -> int:
         result3.status == ToolStatus.TIMEOUT,
         f"Got: {result3.status.value}",
     )
-    ok3b = check("Fix hint mentions timeout", "timeout" in result3.fix_hint.lower(), result3.fix_hint)
+    ok3b = check(
+        "Fix hint mentions timeout",
+        "timeout" in result3.fix_hint.lower(),
+        result3.fix_hint,
+    )
     if not ok3 or not ok3b:
         failures += 1
 
@@ -102,9 +111,7 @@ def main(verbose: bool = False) -> int:
         )
 
         runner4 = ToolRunner(tool_name="semgrep", target=str(vuln_php))
-        result4 = runner4.run([
-            "semgrep", "--json", "--config", "p/php", str(tmpdir)
-        ])
+        result4 = runner4.run(["semgrep", "--json", "--config", "p/php", str(tmpdir)])
 
         # semgrep exits 1 when findings are present — ToolRunner should
         # recognise this and return SUCCESS, not NONZERO_EXIT
@@ -121,9 +128,14 @@ def main(verbose: bool = False) -> int:
         else:
             try:
                 import json
+
                 data = json.loads(result4.stdout)
                 n = len(data.get("results", []))
-                check(f"Findings parsed ({n} result(s))", n >= 0, f"stdout length: {len(result4.stdout)}")
+                check(
+                    f"Findings parsed ({n} result(s))",
+                    n >= 0,
+                    f"stdout length: {len(result4.stdout)}",
+                )
             except Exception as e:
                 check("JSON parsing OK", False, str(e))
 
@@ -131,7 +143,11 @@ def main(verbose: bool = False) -> int:
     header("Test 5 — ToolResult.to_report_dict() shape is correct")
     report_dict = result2.to_report_dict(include_debug=True)
     for key in ("tool", "status", "error", "debug"):
-        check(f"Key '{key}' present", key in report_dict, str(report_dict.get(key, "(missing)")))
+        check(
+            f"Key '{key}' present",
+            key in report_dict,
+            str(report_dict.get(key, "(missing)")),
+        )
 
     # ── Summary ───────────────────────────────────────────────────────────────
     print(f"\n{'═' * 60}")
@@ -139,7 +155,7 @@ def main(verbose: bool = False) -> int:
         print("  ✅  All tests passed — safe to restart the Celery worker.")
     else:
         print(f"  ❌  {failures} test(s) failed — fix before restarting the worker.")
-    print('═' * 60)
+    print("═" * 60)
 
     return failures
 

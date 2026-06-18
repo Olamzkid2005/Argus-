@@ -1,6 +1,7 @@
 """
 Tests for cache.py (enhanced cache features)
 """
+
 import hashlib
 import json
 from unittest.mock import patch
@@ -123,10 +124,7 @@ class TestWorkerCache:
     def test_set_query_result(self, mock_redis):
         """Test caching query result"""
         result = cache.set_query_result(
-            "SELECT * FROM findings",
-            params=("ENG-001",),
-            result={"rows": []},
-            ttl=600
+            "SELECT * FROM findings", params=("ENG-001",), result={"rows": []}, ttl=600
         )
 
         assert result is True
@@ -134,13 +132,18 @@ class TestWorkerCache:
 
     def test_invalidate_query(self, mock_redis):
         """Test invalidating queries by pattern"""
-        mock_redis.scan.return_value = (0, [b"cache:query:abc123", b"cache:query:def456"])
+        mock_redis.scan.return_value = (
+            0,
+            [b"cache:query:abc123", b"cache:query:def456"],
+        )
         mock_redis.delete.return_value = 2
 
         result = cache.invalidate_query("findings")
 
         assert result == 2
-        mock_redis.scan.assert_called_once_with(0, match="cache:query:*findings*", count=100)
+        mock_redis.scan.assert_called_once_with(
+            0, match="cache:query:*findings*", count=100
+        )
 
     def test_invalidate_table(self, mock_redis):
         """Test invalidating cached queries for a table"""
@@ -150,7 +153,9 @@ class TestWorkerCache:
         result = cache.invalidate_table("findings")
 
         assert result == 1
-        mock_redis.scan.assert_called_once_with(0, match="cache:*table:findings*", count=100)
+        mock_redis.scan.assert_called_once_with(
+            0, match="cache:*table:findings*", count=100
+        )
 
     def test_get_stats_available(self, mock_redis):
         """Test getting cache stats when available"""
@@ -174,7 +179,10 @@ class TestWorkerCache:
 
     def test_redis_unavailable(self):
         """Test operations when Redis is unavailable"""
-        with patch("cache._redis_available", False), patch("cache._get_redis", return_value=None):
+        with (
+            patch("cache._redis_available", False),
+            patch("cache._get_redis", return_value=None),
+        ):
             assert cache.get("key") is None
             assert cache.set("key", "value") is False
             assert cache.delete("key") is False
@@ -241,7 +249,9 @@ class TestCachedDecorator:
         my_func()
         my_func.cache_invalidate()
 
-        mock_redis.scan.assert_called_once_with(0, match="cache:invalidate_test:*", count=100)
+        mock_redis.scan.assert_called_once_with(
+            0, match="cache:invalidate_test:*", count=100
+        )
 
 
 class TestCachedQueryDecorator:

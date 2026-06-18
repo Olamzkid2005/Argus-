@@ -5,8 +5,16 @@ Agent Result - Result from a tool execution within the agent loop.
 
 class AgentResult:
     """Result from a tool execution within the agent loop."""
-    def __init__(self, tool: str, success: bool, output: str = "",
-                 error: str = "", duration_ms: int = 0, findings: list = None):
+
+    def __init__(
+        self,
+        tool: str,
+        success: bool,
+        output: str = "",
+        error: str = "",
+        duration_ms: int = 0,
+        findings: list = None,
+    ):
         self.tool = tool
         self.success = success
         self.output = output

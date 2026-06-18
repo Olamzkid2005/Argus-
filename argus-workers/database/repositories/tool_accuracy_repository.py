@@ -47,7 +47,7 @@ class ToolAccuracyRepository:
         try:
             with db_cursor(commit=True) as cursor:
                 cursor.execute(
-                """
+                    """
                 INSERT INTO tool_accuracy
                     (org_id, source_tool, total_verdicts,
                      true_positives, false_positives, fp_rate)
@@ -71,13 +71,14 @@ class ToolAccuracyRepository:
                     ),
                     last_updated = NOW()
                 """,
-                (
-                    org_id, source_tool,
-                    is_true_positive,   # CASE: true_positives +1
-                    is_true_positive,   # CASE: false_positives +0 or +1
-                    is_true_positive,   # CASE: initial fp_rate
-                ),
-            )
+                    (
+                        org_id,
+                        source_tool,
+                        is_true_positive,  # CASE: true_positives +1
+                        is_true_positive,  # CASE: false_positives +0 or +1
+                        is_true_positive,  # CASE: initial fp_rate
+                    ),
+                )
             return True
         except Exception as e:
             logger.error("tool_accuracy record_verdict failed: %s", e)

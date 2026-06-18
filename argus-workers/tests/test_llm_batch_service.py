@@ -64,16 +64,17 @@ class TestLlmBatchService:
         MockPoCGen.assert_called_once_with(llm_client=svc.llm_client)
         MockPool.assert_called_once_with(max_workers=4)
         mock_pool.submit.assert_called_once_with(
-            mock_poc_gen.generate, scored_findings[0], llm_svc, cost_tracker,
+            mock_poc_gen.generate,
+            scored_findings[0],
+            llm_svc,
+            cost_tracker,
         )
         mock_future.result.assert_called_once_with(timeout=30)
         save_poc.assert_called_once_with("f1", {"poc": "script"})
 
     @patch("orchestrator_pkg.analysis.llm_batch_service.logger")
     @patch("poc_generator.PoCGenerator")
-    def test_generate_pocs_catches_exceptions_gracefully(
-        self, MockPoCGen, mock_logger
-    ):
+    def test_generate_pocs_catches_exceptions_gracefully(self, MockPoCGen, mock_logger):
         MockPoCGen.side_effect = RuntimeError("batch failed")
         svc = LlmBatchService(
             llm_client=MagicMock(),
@@ -82,12 +83,16 @@ class TestLlmBatchService:
             save_remediation_fn=MagicMock(),
         )
         svc.generate_pocs(
-            [{"id": "f1"}], MagicMock(), MagicMock(),
+            [{"id": "f1"}],
+            MagicMock(),
+            MagicMock(),
         )
         mock_logger.warning.assert_called_once()
         assert "PoC generation batch failed" in mock_logger.warning.call_args[0][0]
 
-    def test_generate_chain_exploits_without_cost_tracker_or_llm_svc_returns_early(self):
+    def test_generate_chain_exploits_without_cost_tracker_or_llm_svc_returns_early(
+        self,
+    ):
         svc = LlmBatchService(
             llm_client=MagicMock(),
             engagement_id="eng-123",
@@ -154,7 +159,8 @@ class TestLlmBatchService:
             max_chains=3,
         )
         MockChainGen.save_scripts_to_db.assert_called_once_with(
-            "eng-123", [{"script": "exploit"}],
+            "eng-123",
+            [{"script": "exploit"}],
         )
 
     def test_generate_fixes_without_cost_tracker_or_llm_svc_returns_early(self):

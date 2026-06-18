@@ -82,15 +82,26 @@ def sanitize_input(text: str) -> str:
         Sanitized text safe for LLM prompt injection
     """
     # Strip control characters (including Unicode control chars)
-    sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\u200b-\u200f\u202a-\u202e]", "", text)
+    sanitized = re.sub(
+        r"[\x00-\x08\x0b\x0c\x0e-\x1f\u200b-\u200f\u202a-\u202e]", "", text
+    )
     # Strip LLM prompt-escape delimiters
     sanitized = strip_delimiters(sanitized)
     # Normalize leetspeak characters to detect obfuscated injection attempts
-    leet_map = str.maketrans({
-        '0': 'o', '1': 'l', '3': 'e', '4': 'a', '5': 's',
-        '6': 'g', '7': 't', '8': 'b', '@': 'a',
-        '$': 's',
-    })
+    leet_map = str.maketrans(
+        {
+            "0": "o",
+            "1": "l",
+            "3": "e",
+            "4": "a",
+            "5": "s",
+            "6": "g",
+            "7": "t",
+            "8": "b",
+            "@": "a",
+            "$": "s",
+        }
+    )
     normalized = sanitized.lower().translate(leet_map)
     # Strip common prompt injection patterns (check on normalized text)
     injection_present = re.search(
@@ -105,8 +116,10 @@ def sanitize_input(text: str) -> str:
     if injection_present:
         logger.warning(
             "Prompt injection pattern detected in input (%d chars): %s...",
-            len(sanitized), sanitized[:80],
+            len(sanitized),
+            sanitized[:80],
         )
+
         # Redact injection patterns from both original and normalized text
         # to catch leetspeak-obfuscated prompt injections.
         def _redact_injection(text: str) -> str:
@@ -120,6 +133,7 @@ def sanitize_input(text: str) -> str:
                 "",
                 text,
             )
+
         sanitized = _redact_injection(sanitized)
         sanitized_normalized = _redact_injection(normalized)
         if sanitized_normalized != normalized:
@@ -188,19 +202,13 @@ def validate_output(data: dict) -> dict:
         elif expected_type is list and isinstance(value, list):
             validated[field] = [str(v)[:100] for v in value[:20]]
         elif expected_type is dict and isinstance(value, dict):
-            validated[field] = {
-                str(k)[:50]: str(v)[:200] for k, v in value.items()
-            }
+            validated[field] = {str(k)[:50]: str(v)[:200] for k, v in value.items()}
         else:
             validated[field] = defaults.get(field)
 
     # Validate target_url
-    if not validated.get("target_url") or not validate_url(
-        validated["target_url"]
-    ):
-        validated["error"] = (
-            "No valid target URL found in your description"
-        )
+    if not validated.get("target_url") or not validate_url(validated["target_url"]):
+        validated["error"] = "No valid target URL found in your description"
 
     return validated
 
@@ -222,9 +230,7 @@ class IntentParser:
     def __init__(self, llm_client=None):
         self.llm_client = llm_client
 
-    def parse(
-        self, intent_text: str, llm_service=None
-    ) -> dict:
+    def parse(self, intent_text: str, llm_service=None) -> dict:
         """Parse natural language scan intent.
 
         Args:
@@ -241,16 +247,19 @@ class IntentParser:
 
         if not llm_service and self.llm_client:
             from llm_service import LLMService
+
             llm_service = LLMService(llm_client=self.llm_client)
 
         if not llm_service or not llm_service.is_available():
             # Fallback: basic URL extraction
             urls = re.findall(r"https?://[^\s,;)]+", sanitized)
             if urls:
-                return validate_output({
-                    "target_url": urls[0],
-                    "intent_summary": f"Scan {urls[0]}",
-                })
+                return validate_output(
+                    {
+                        "target_url": urls[0],
+                        "intent_summary": f"Scan {urls[0]}",
+                    }
+                )
             return {
                 "error": "Could not parse scan intent",
                 "raw": intent_text[:500],
@@ -277,10 +286,12 @@ class IntentParser:
             # Fallback: regex URL extraction
             urls = re.findall(r"https?://[^\s,;)]+", sanitized)
             if urls:
-                return validate_output({
-                    "target_url": urls[0],
-                    "intent_summary": f"Scan {urls[0]}",
-                })
+                return validate_output(
+                    {
+                        "target_url": urls[0],
+                        "intent_summary": f"Scan {urls[0]}",
+                    }
+                )
             return {
                 "error": f"Failed to parse intent: {e}",
                 "raw": intent_text[:500],

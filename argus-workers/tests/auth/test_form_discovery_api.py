@@ -18,7 +18,13 @@ from typing import Any
 
 _spec = importlib.util.spec_from_file_location(
     "form_discovery",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "agent", "form_discovery.py"),
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "..",
+        "agent",
+        "form_discovery.py",
+    ),
 )
 _fd = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_fd)
@@ -72,106 +78,154 @@ class TestScanCommonPathsApiDetection:
 
     def test_html_form_detected(self) -> None:
         """HTML form with input fields (existing behavior) still works."""
-        session = _MockSession([
-            _MockResponse(200, '<html><form><input name="email"></form></html>'),
-        ])
+        session = _MockSession(
+            [
+                _MockResponse(200, '<html><form><input name="email"></form></html>'),
+            ]
+        )
         result: dict[str, Any] = {}
-        _fd._scan_common_paths("http://example.com", session, ["/login"], result, "login")
+        _fd._scan_common_paths(
+            "http://example.com", session, ["/login"], result, "login"
+        )
         assert result.get("login_url") == "http://example.com/login"
 
     def test_json_api_detected_via_content_type(self) -> None:
         """JSON API endpoint detected via Content-Type: application/json."""
-        session = _MockSession([
-            _MockResponse(
-                200,
-                '{"status":"ok","message":"Welcome"}',
-                {"Content-Type": "application/json"},
-            ),
-        ])
+        session = _MockSession(
+            [
+                _MockResponse(
+                    200,
+                    '{"status":"ok","message":"Welcome"}',
+                    {"Content-Type": "application/json"},
+                ),
+            ]
+        )
         result: dict[str, Any] = {}
-        _fd._scan_common_paths("http://example.com", session, ["/api/login"], result, "login")
+        _fd._scan_common_paths(
+            "http://example.com", session, ["/api/login"], result, "login"
+        )
         assert result.get("login_url") == "http://example.com/api/login"
         assert result.get("login_mode") == "api"
 
     def test_json_api_detected_via_body_start(self) -> None:
         """JSON API endpoint detected when body starts with ``{`` even without JSON Content-Type."""
-        session = _MockSession([
-            _MockResponse(200, '{"error":"Method not allowed"}'),
-        ])
+        session = _MockSession(
+            [
+                _MockResponse(200, '{"error":"Method not allowed"}'),
+            ]
+        )
         result: dict[str, Any] = {}
-        _fd._scan_common_paths("http://example.com", session, ["/api/login"], result, "login")
+        _fd._scan_common_paths(
+            "http://example.com", session, ["/api/login"], result, "login"
+        )
         assert result.get("login_url") == "http://example.com/api/login"
 
     def test_auth_keywords_detected(self) -> None:
         """Page with multiple auth keywords (>=2 required) is detected."""
-        session = _MockSession([
-            _MockResponse(200, "<html><body>Enter your email and password</body></html>"),
-        ])
+        session = _MockSession(
+            [
+                _MockResponse(
+                    200, "<html><body>Enter your email and password</body></html>"
+                ),
+            ]
+        )
         result: dict[str, Any] = {}
-        _fd._scan_common_paths("http://example.com", session, ["/login"], result, "login")
+        _fd._scan_common_paths(
+            "http://example.com", session, ["/login"], result, "login"
+        )
         assert result.get("login_url") == "http://example.com/login"
 
     def test_single_auth_keyword_not_enough(self) -> None:
         """A single generic keyword like 'password' alone is not enough."""
-        session = _MockSession([
-            _MockResponse(200, "<html><body>Enter your password</body></html>"),
-        ])
+        session = _MockSession(
+            [
+                _MockResponse(200, "<html><body>Enter your password</body></html>"),
+            ]
+        )
         result: dict[str, Any] = {}
-        _fd._scan_common_paths("http://example.com", session, ["/login"], result, "login")
+        _fd._scan_common_paths(
+            "http://example.com", session, ["/login"], result, "login"
+        )
         assert result.get("login_url") is None
 
     def test_405_detected(self) -> None:
         """405 Method Not Allowed is detected as an API-style endpoint."""
-        session = _MockSession([
-            _MockResponse(405, "Method Not Allowed"),
-        ])
+        session = _MockSession(
+            [
+                _MockResponse(405, "Method Not Allowed"),
+            ]
+        )
         result: dict[str, Any] = {}
-        _fd._scan_common_paths("http://example.com", session, ["/api/login"], result, "login")
+        _fd._scan_common_paths(
+            "http://example.com", session, ["/api/login"], result, "login"
+        )
         assert result.get("login_url") == "http://example.com/api/login"
         assert result.get("login_mode") == "api"
 
     def test_plain_404_not_detected(self) -> None:
         """A plain 404 without auth keywords is NOT detected."""
-        session = _MockSession([
-            _MockResponse(404, "Not Found"),
-        ])
+        session = _MockSession(
+            [
+                _MockResponse(404, "Not Found"),
+            ]
+        )
         result: dict[str, Any] = {}
-        _fd._scan_common_paths("http://example.com", session, ["/api/login"], result, "login")
+        _fd._scan_common_paths(
+            "http://example.com", session, ["/api/login"], result, "login"
+        )
         assert result.get("login_url") is None
 
     def test_404_with_auth_keywords_not_detected(self) -> None:
         """Auth keywords only trigger detection on OK responses, not 404."""
-        session = _MockSession([
-            _MockResponse(404, "Enter your password"),
-        ])
+        session = _MockSession(
+            [
+                _MockResponse(404, "Enter your password"),
+            ]
+        )
         result: dict[str, Any] = {}
-        _fd._scan_common_paths("http://example.com", session, ["/login"], result, "login")
+        _fd._scan_common_paths(
+            "http://example.com", session, ["/login"], result, "login"
+        )
         assert result.get("login_url") is None
 
     def test_first_path_wins(self) -> None:
         """The first matching path is returned — later paths are not checked."""
-        session = _MockSession([
-            _MockResponse(200, '{"token":"abc"}', {"Content-Type": "application/json"}),
-            _MockResponse(200, '<form><input name="email"></form>'),
-            _MockResponse(200, "password page"),
-        ])
+        session = _MockSession(
+            [
+                _MockResponse(
+                    200, '{"token":"abc"}', {"Content-Type": "application/json"}
+                ),
+                _MockResponse(200, '<form><input name="email"></form>'),
+                _MockResponse(200, "password page"),
+            ]
+        )
         result: dict[str, Any] = {}
         _fd._scan_common_paths(
-            "http://example.com", session,
-            ["/api/login", "/login", "/signin"], result, "login",
+            "http://example.com",
+            session,
+            ["/api/login", "/login", "/signin"],
+            result,
+            "login",
         )
         # Should find api/login first (JSON response)
         assert result.get("login_url") == "http://example.com/api/login"
 
     def test_register_paths_also_detected(self) -> None:
         """Register paths use the same detection logic."""
-        session = _MockSession([
-            _MockResponse(200, '{"status":"ok"}', {"Content-Type": "application/json"}),
-        ])
+        session = _MockSession(
+            [
+                _MockResponse(
+                    200, '{"status":"ok"}', {"Content-Type": "application/json"}
+                ),
+            ]
+        )
         result: dict[str, Any] = {}
         _fd._scan_common_paths(
-            "http://example.com", session,
-            ["/register", "/signup"], result, "register",
+            "http://example.com",
+            session,
+            ["/register", "/signup"],
+            result,
+            "register",
         )
         assert result.get("register_url") == "http://example.com/register"
         assert result.get("register_mode") == "api"
@@ -182,22 +236,28 @@ class TestDiscoverAuthEndpointsLoginMode:
 
     def test_login_mode_api_when_json_response(self) -> None:
         """login_mode is ``api`` when a JSON API endpoint is discovered."""
-        session = _MockSession([
-            # _scan_common_paths probes REGISTER_PATHS first — none match
-            _MockResponse(404, "Not Found"),  # /register
-            _MockResponse(404, "Not Found"),  # /signup
-            _MockResponse(404, "Not Found"),  # /sign-up
-            _MockResponse(404, "Not Found"),  # /create-account
-            _MockResponse(404, "Not Found"),  # /auth/register
-            _MockResponse(404, "Not Found"),  # /api/register
-            _MockResponse(404, "Not Found"),  # /api/auth/register
-            _MockResponse(404, "Not Found"),  # /account/create
-            _MockResponse(404, "Not Found"),  # /users/new
-            # _scan_common_paths probes LOGIN_PATHS — /login matches (JSON)
-            _MockResponse(200, '{"token":"abc"}', {"Content-Type": "application/json"}),
-            # Field extraction: GET /login again
-            _MockResponse(200, '{"token":"abc"}', {"Content-Type": "application/json"}),
-        ])
+        session = _MockSession(
+            [
+                # _scan_common_paths probes REGISTER_PATHS first — none match
+                _MockResponse(404, "Not Found"),  # /register
+                _MockResponse(404, "Not Found"),  # /signup
+                _MockResponse(404, "Not Found"),  # /sign-up
+                _MockResponse(404, "Not Found"),  # /create-account
+                _MockResponse(404, "Not Found"),  # /auth/register
+                _MockResponse(404, "Not Found"),  # /api/register
+                _MockResponse(404, "Not Found"),  # /api/auth/register
+                _MockResponse(404, "Not Found"),  # /account/create
+                _MockResponse(404, "Not Found"),  # /users/new
+                # _scan_common_paths probes LOGIN_PATHS — /login matches (JSON)
+                _MockResponse(
+                    200, '{"token":"abc"}', {"Content-Type": "application/json"}
+                ),
+                # Field extraction: GET /login again
+                _MockResponse(
+                    200, '{"token":"abc"}', {"Content-Type": "application/json"}
+                ),
+            ]
+        )
         result = _fd.discover_auth_endpoints("http://example.com", session)
         assert result.get("login_url") == "http://example.com/login"
         # login_fields will be empty since it's JSON, not HTML
@@ -205,22 +265,24 @@ class TestDiscoverAuthEndpointsLoginMode:
 
     def test_login_mode_api_when_no_html_fields(self) -> None:
         """login_mode is ``api`` when URL found but HTML form fields cannot be extracted."""
-        session = _MockSession([
-            # REGISTER_PATHS — none match
-            _MockResponse(404, "Not Found"),  # /register
-            _MockResponse(404, "Not Found"),  # /signup
-            _MockResponse(404, "Not Found"),  # /sign-up
-            _MockResponse(404, "Not Found"),  # /create-account
-            _MockResponse(404, "Not Found"),  # /auth/register
-            _MockResponse(404, "Not Found"),  # /api/register
-            _MockResponse(404, "Not Found"),  # /api/auth/register
-            _MockResponse(404, "Not Found"),  # /account/create
-            _MockResponse(404, "Not Found"),  # /users/new
-            # LOGIN_PATHS — /login returns 405
-            _MockResponse(405, "Method Not Allowed"),
-            # Field extraction: GET /login again (also 405)
-            _MockResponse(405, "Method Not Allowed"),
-        ])
+        session = _MockSession(
+            [
+                # REGISTER_PATHS — none match
+                _MockResponse(404, "Not Found"),  # /register
+                _MockResponse(404, "Not Found"),  # /signup
+                _MockResponse(404, "Not Found"),  # /sign-up
+                _MockResponse(404, "Not Found"),  # /create-account
+                _MockResponse(404, "Not Found"),  # /auth/register
+                _MockResponse(404, "Not Found"),  # /api/register
+                _MockResponse(404, "Not Found"),  # /api/auth/register
+                _MockResponse(404, "Not Found"),  # /account/create
+                _MockResponse(404, "Not Found"),  # /users/new
+                # LOGIN_PATHS — /login returns 405
+                _MockResponse(405, "Method Not Allowed"),
+                # Field extraction: GET /login again (also 405)
+                _MockResponse(405, "Method Not Allowed"),
+            ]
+        )
         result = _fd.discover_auth_endpoints("http://example.com", session)
         assert result.get("login_url") == "http://example.com/login"
         assert result.get("login_mode") == "api"
@@ -235,22 +297,24 @@ class TestDiscoverAuthEndpointsLoginMode:
         </form>
         </body></html>
         """
-        session = _MockSession([
-            # REGISTER_PATHS — none match
-            _MockResponse(404, "Not Found"),  # /register
-            _MockResponse(404, "Not Found"),  # /signup
-            _MockResponse(404, "Not Found"),  # /sign-up
-            _MockResponse(404, "Not Found"),  # /create-account
-            _MockResponse(404, "Not Found"),  # /auth/register
-            _MockResponse(404, "Not Found"),  # /api/register
-            _MockResponse(404, "Not Found"),  # /api/auth/register
-            _MockResponse(404, "Not Found"),  # /account/create
-            _MockResponse(404, "Not Found"),  # /users/new
-            # LOGIN_PATHS — /login matches (HTML form)
-            _MockResponse(200, html),
-            # Field extraction: GET /login again
-            _MockResponse(200, html),
-        ])
+        session = _MockSession(
+            [
+                # REGISTER_PATHS — none match
+                _MockResponse(404, "Not Found"),  # /register
+                _MockResponse(404, "Not Found"),  # /signup
+                _MockResponse(404, "Not Found"),  # /sign-up
+                _MockResponse(404, "Not Found"),  # /create-account
+                _MockResponse(404, "Not Found"),  # /auth/register
+                _MockResponse(404, "Not Found"),  # /api/register
+                _MockResponse(404, "Not Found"),  # /api/auth/register
+                _MockResponse(404, "Not Found"),  # /account/create
+                _MockResponse(404, "Not Found"),  # /users/new
+                # LOGIN_PATHS — /login matches (HTML form)
+                _MockResponse(200, html),
+                # Field extraction: GET /login again
+                _MockResponse(200, html),
+            ]
+        )
         result = _fd.discover_auth_endpoints("http://example.com", session)
         assert result.get("login_url") == "http://example.com/login"
         assert result.get("login_mode") == "form"

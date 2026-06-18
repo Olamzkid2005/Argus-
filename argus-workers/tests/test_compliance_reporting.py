@@ -1,6 +1,7 @@
 """
 Tests for compliance_reporting.py
 """
+
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -109,7 +110,9 @@ class TestComplianceReportGenerator:
 
     def test_generate_owasp_report(self, generator, sample_findings):
         """Test OWASP report generation"""
-        report = generator.generate_owasp_report("ENG-001", sample_findings, report_id="RPT-001")
+        report = generator.generate_owasp_report(
+            "ENG-001", sample_findings, report_id="RPT-001"
+        )
 
         assert report.id == "RPT-001"
         assert report.engagement_id == "ENG-001"

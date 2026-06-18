@@ -14,11 +14,12 @@ class TestMigrateEngagement:
     NOW = datetime(2026, 5, 24, 12, 0, 0, tzinfo=UTC)
     ROLLOUT_TS = datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC)
     OLD_ENG = NOW - timedelta(days=60)  # before rollout
-    NEW_ENG = NOW - timedelta(days=5)   # after rollout
+    NEW_ENG = NOW - timedelta(days=5)  # after rollout
 
     def setup_method(self):
         """Clear any cached rollout timestamp between tests."""
         from runtime.migration import _clear_rollout_cache
+
         _clear_rollout_cache()
 
     def _patch_has_snapshot(self, value: bool = False):
@@ -44,8 +45,10 @@ class TestMigrateEngagement:
         """Old engagements (pre-rollout) are skipped — kept on old path."""
         from runtime.migration import migrate_engagement
 
-        with self._patch_has_snapshot(False), \
-             patch("feature_flags.is_enabled", return_value=True):
+        with (
+            self._patch_has_snapshot(False),
+            patch("feature_flags.is_enabled", return_value=True),
+        ):
             result = migrate_engagement("eng-old", created_at=self.OLD_ENG)
         assert result.status == "skipped"
         assert "in-flight" in result.reason
@@ -56,8 +59,10 @@ class TestMigrateEngagement:
         """New engagements (post-rollout) are eligible for migration."""
         from runtime.migration import migrate_engagement
 
-        with self._patch_has_snapshot(False), \
-             patch("feature_flags.is_enabled", return_value=True):
+        with (
+            self._patch_has_snapshot(False),
+            patch("feature_flags.is_enabled", return_value=True),
+        ):
             result = migrate_engagement("eng-new", created_at=self.NEW_ENG)
         assert result.status == "migrated"
         assert "eligible" in result.reason
@@ -67,8 +72,10 @@ class TestMigrateEngagement:
         """When no rollout timestamp is set, all engagements are eligible."""
         from runtime.migration import migrate_engagement
 
-        with self._patch_has_snapshot(False), \
-             patch("feature_flags.is_enabled", return_value=True):
+        with (
+            self._patch_has_snapshot(False),
+            patch("feature_flags.is_enabled", return_value=True),
+        ):
             result = migrate_engagement("eng-any", created_at=self.OLD_ENG)
         assert result.status == "migrated"
 
@@ -77,21 +84,22 @@ class TestMigrateEngagement:
         """force=True bypasses the timestamp gate."""
         from runtime.migration import migrate_engagement
 
-        with self._patch_has_snapshot(False), \
-             patch("feature_flags.is_enabled", return_value=True):
-            result = migrate_engagement(
-                "eng-old", created_at=self.OLD_ENG, force=True
-            )
+        with (
+            self._patch_has_snapshot(False),
+            patch("feature_flags.is_enabled", return_value=True),
+        ):
+            result = migrate_engagement("eng-old", created_at=self.OLD_ENG, force=True)
         assert result.status == "migrated"
 
     def test_engagement_not_found(self):
         """Unknown engagement returns error status."""
         from runtime.migration import migrate_engagement
 
-        with self._patch_has_snapshot(False), \
-             patch(
-                 "runtime.migration._get_engagement_created_at", return_value=None
-             ), patch("feature_flags.is_enabled", return_value=True):
+        with (
+            self._patch_has_snapshot(False),
+            patch("runtime.migration._get_engagement_created_at", return_value=None),
+            patch("feature_flags.is_enabled", return_value=True),
+        ):
             result = migrate_engagement("eng-unknown")
         assert result.status == "error"
         assert "not found" in result.reason
@@ -101,8 +109,10 @@ class TestMigrateEngagement:
         """Engagements already with a state snapshot return 'already_live'."""
         from runtime.migration import migrate_engagement
 
-        with self._patch_has_snapshot(True), \
-             patch("feature_flags.is_enabled", return_value=True):
+        with (
+            self._patch_has_snapshot(True),
+            patch("feature_flags.is_enabled", return_value=True),
+        ):
             result = migrate_engagement("eng-live", created_at=self.NEW_ENG)
         assert result.status == "already_live"
 
@@ -112,8 +122,10 @@ class TestMigrateEngagement:
         from runtime.migration import migrate_engagement
 
         naive_dt = datetime(2026, 5, 20, 12, 0, 0)  # no tzinfo
-        with self._patch_has_snapshot(False), \
-             patch("feature_flags.is_enabled", return_value=True):
+        with (
+            self._patch_has_snapshot(False),
+            patch("feature_flags.is_enabled", return_value=True),
+        ):
             result = migrate_engagement("eng-naive", created_at=naive_dt)
         assert result.status == "migrated"
 
@@ -124,8 +136,10 @@ class TestMigrateEngagement:
 
         # exactly at rollout
         boundary_dt = datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC)
-        with self._patch_has_snapshot(False), \
-             patch("feature_flags.is_enabled", return_value=True):
+        with (
+            self._patch_has_snapshot(False),
+            patch("feature_flags.is_enabled", return_value=True),
+        ):
             result = migrate_engagement("eng-boundary", created_at=boundary_dt)
         assert result.status == "migrated"
 
@@ -134,8 +148,10 @@ class TestMigrateEngagement:
         """Pre-rollout engagement returns 'skipped' with appropriate details."""
         from runtime.migration import migrate_engagement
 
-        with self._patch_has_snapshot(False), \
-             patch("feature_flags.is_enabled", return_value=True):
+        with (
+            self._patch_has_snapshot(False),
+            patch("feature_flags.is_enabled", return_value=True),
+        ):
             result = migrate_engagement("eng-pre", created_at=self.OLD_ENG)
         assert result.status == "skipped"
         assert "created_at" in result.details
@@ -152,8 +168,12 @@ class TestBatchMigration:
         """Batch migration with no engagements returns empty list."""
         from runtime.migration import batch_migrate_pending_engagements
 
-        with patch("runtime.migration._engagement_has_state_snapshot", return_value=False), \
-             patch("database.connection.db_cursor") as mock_cursor:
+        with (
+            patch(
+                "runtime.migration._engagement_has_state_snapshot", return_value=False
+            ),
+            patch("database.connection.db_cursor") as mock_cursor,
+        ):
             mock_cm = MagicMock()
             mock_cursor.return_value.__enter__.return_value = mock_cm
             mock_cm.fetchall.return_value = []
@@ -177,10 +197,13 @@ class TestBatchMigration:
             ("eng-new-1", new_ts),
         ]
 
-        with patch("runtime.migration._engagement_has_state_snapshot", return_value=False), \
-             patch("database.connection.db_cursor") as mock_cursor, \
-             patch("feature_flags.is_enabled", return_value=True):
-
+        with (
+            patch(
+                "runtime.migration._engagement_has_state_snapshot", return_value=False
+            ),
+            patch("database.connection.db_cursor") as mock_cursor,
+            patch("feature_flags.is_enabled", return_value=True),
+        ):
             mock_cm = MagicMock()
             mock_cursor.return_value.__enter__.return_value = mock_cm
             mock_cm.fetchall.return_value = mock_rows
@@ -188,8 +211,8 @@ class TestBatchMigration:
             results = batch_migrate_pending_engagements(limit=10)
 
         assert len(results) == 3
-        assert results[0].status == "skipped"   # old
-        assert results[1].status == "skipped"   # old
+        assert results[0].status == "skipped"  # old
+        assert results[1].status == "skipped"  # old
         assert results[2].status == "migrated"  # new
 
     @patch.dict(os.environ, {}, clear=True)
@@ -197,10 +220,11 @@ class TestBatchMigration:
         """When the feature flag is off, batch returns empty (no migrate calls)."""
         from runtime.migration import batch_migrate_pending_engagements
 
-        with patch("feature_flags.is_enabled", return_value=False), \
-             patch("runtime.migration.ensure_tables", return_value=True), \
-             patch("database.connection.db_cursor") as mock_cursor:
-
+        with (
+            patch("feature_flags.is_enabled", return_value=False),
+            patch("runtime.migration.ensure_tables", return_value=True),
+            patch("database.connection.db_cursor") as mock_cursor,
+        ):
             mock_cm = MagicMock()
             mock_cursor.return_value.__enter__.return_value = mock_cm
             mock_cm.fetchall.return_value = [("eng-1", None)]
@@ -226,6 +250,7 @@ class TestHelperFunctions:
     def setup_method(self):
         """Clear any cached rollout timestamp between tests."""
         from runtime.migration import _clear_rollout_cache
+
         _clear_rollout_cache()
 
     def test_get_rollout_timestamp_no_env(self):
@@ -294,6 +319,7 @@ class TestGetMigrationStatus:
     def setup_method(self):
         """Clear any cached rollout timestamp between tests."""
         from runtime.migration import _clear_rollout_cache
+
         _clear_rollout_cache()
 
     def test_returns_status_dict(self):
@@ -318,10 +344,13 @@ class TestGetMigrationStatus:
         """Status includes rollout timestamp from env."""
         from runtime.migration import get_migration_status
 
-        with patch.dict(
-            os.environ,
-            {"ARGUS_FF_ROLLOUT_TIMESTAMP": "2026-05-15T00:00:00+00:00"},
-        ), patch("database.connection.db_cursor") as mock_cursor:
+        with (
+            patch.dict(
+                os.environ,
+                {"ARGUS_FF_ROLLOUT_TIMESTAMP": "2026-05-15T00:00:00+00:00"},
+            ),
+            patch("database.connection.db_cursor") as mock_cursor,
+        ):
             mock_cm = MagicMock()
             mock_cursor.return_value.__enter__.return_value = mock_cm
             mock_cm.fetchone.side_effect = [(False,)]

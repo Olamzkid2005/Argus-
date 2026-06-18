@@ -1,6 +1,7 @@
 """
 Tests for Engagement State Machine
 """
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -61,8 +62,10 @@ class TestEngagementStateMachine:
         mock_db, mock_conn, mock_cursor = _mock_db()
         mock_cursor.fetchone.return_value = ("created",)
 
-        with patch('state_machine.get_db', return_value=mock_db):
-            machine = EngagementStateMachine(TEST_ENGAGEMENT_ID, current_state="created")
+        with patch("state_machine.get_db", return_value=mock_db):
+            machine = EngagementStateMachine(
+                TEST_ENGAGEMENT_ID, current_state="created"
+            )
             machine.transition("recon", "Starting reconnaissance")
 
         assert machine.current_state == "recon"
@@ -91,8 +94,10 @@ class TestEngagementStateMachine:
         mock_db, mock_conn, mock_cursor = _mock_db()
         mock_cursor.fetchone.return_value = ("created",)
 
-        with patch('state_machine.get_db', return_value=mock_db):
-            machine = EngagementStateMachine(TEST_ENGAGEMENT_ID, current_state="created")
+        with patch("state_machine.get_db", return_value=mock_db):
+            machine = EngagementStateMachine(
+                TEST_ENGAGEMENT_ID, current_state="created"
+            )
             machine.transition("recon")
 
         # Should have called execute three times: SELECT FOR UPDATE, INSERT, UPDATE
@@ -112,8 +117,12 @@ class TestEngagementStateMachine:
 
     def test_terminal_states_have_no_transitions(self):
         """Test that terminal states have no valid transitions"""
-        complete_machine = EngagementStateMachine(TEST_ENGAGEMENT_ID, current_state="complete")
-        failed_machine = EngagementStateMachine(TEST_ENGAGEMENT_ID, current_state="failed")
+        complete_machine = EngagementStateMachine(
+            TEST_ENGAGEMENT_ID, current_state="complete"
+        )
+        failed_machine = EngagementStateMachine(
+            TEST_ENGAGEMENT_ID, current_state="failed"
+        )
 
         assert len(complete_machine.get_valid_transitions()) == 0
         assert len(failed_machine.get_valid_transitions()) == 0
@@ -140,8 +149,10 @@ class TestEngagementStateMachine:
             ("created", "recon", "Starting", None),
         ]
 
-        with patch('state_machine.get_db', return_value=mock_db):
-            machine = EngagementStateMachine(TEST_ENGAGEMENT_ID, current_state="created")
+        with patch("state_machine.get_db", return_value=mock_db):
+            machine = EngagementStateMachine(
+                TEST_ENGAGEMENT_ID, current_state="created"
+            )
             history = machine.get_transition_history()
 
         assert len(history) == 1

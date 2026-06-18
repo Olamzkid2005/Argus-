@@ -26,7 +26,11 @@ def mock_tool_runner():
 
 
 def _make_context(**overrides):
-    kwargs = {'target': "https://example.com/FUZZ", 'timeout': 60, 'aggressiveness': "normal"}
+    kwargs = {
+        "target": "https://example.com/FUZZ",
+        "timeout": 60,
+        "aggressiveness": "normal",
+    }
     kwargs.update(overrides)
     return MagicMock(spec=ToolContext, **kwargs)
 
@@ -96,27 +100,40 @@ class TestFfufScanner:
         ]
         for aggr, expected_wordlist, expected_extra in cases:
             mock_tool_runner.run.reset_mock()
-            with patch("tools.ffuf_scanner.FfufScanner._get_wordlist_path", return_value=f"/words/{expected_wordlist}"):
+            with patch(
+                "tools.ffuf_scanner.FfufScanner._get_wordlist_path",
+                return_value=f"/words/{expected_wordlist}",
+            ):
                 scanner.execute(_make_context(aggressiveness=aggr))
             call_args = mock_tool_runner.run.call_args
             assert call_args is not None
             args_list = call_args[0][1]
             w_idx = args_list.index("-w")
-            assert args_list[w_idx + 1] == f"/words/{expected_wordlist}", f"{aggr}: expected -w /words/{expected_wordlist}"
+            assert args_list[w_idx + 1] == f"/words/{expected_wordlist}", (
+                f"{aggr}: expected -w /words/{expected_wordlist}"
+            )
             if expected_extra:
                 for extra in expected_extra:
-                    assert extra in args_list, f"{aggr}: expected {extra} in args {args_list}"
+                    assert extra in args_list, (
+                        f"{aggr}: expected {extra} in args {args_list}"
+                    )
 
     def test_get_wordlist_path_resolves_path(self):
         expected = "/custom/path/common.txt"
-        with patch("tools.tool_cache.get_wordlist_path", return_value=expected, create=True):
+        with patch(
+            "tools.tool_cache.get_wordlist_path", return_value=expected, create=True
+        ):
             path = FfufScanner._get_wordlist_path("common.txt")
 
         assert path == expected
 
     def test_get_wordlist_path_fallback_to_common_locations(self):
         name = "common.txt"
-        fallback_bases = ["/usr/share/wordlists", "/usr/share/ffuf", "/home/user/wordlists"]
+        fallback_bases = [
+            "/usr/share/wordlists",
+            "/usr/share/ffuf",
+            "/home/user/wordlists",
+        ]
 
         def _isfile_side_effect(path):
             for b in fallback_bases:
@@ -125,7 +142,11 @@ class TestFfufScanner:
             return False
 
         with (
-            patch("tools.tool_cache.get_wordlist_path", side_effect=ImportError, create=True),
+            patch(
+                "tools.tool_cache.get_wordlist_path",
+                side_effect=ImportError,
+                create=True,
+            ),
             patch("os.path.isfile", side_effect=_isfile_side_effect),
             patch("os.path.expanduser", return_value="/home/user"),
         ):
@@ -136,7 +157,11 @@ class TestFfufScanner:
     def test_get_wordlist_path_fallback_returns_name_when_not_found(self):
         name = "nonexistent.txt"
         with (
-            patch("tools.tool_cache.get_wordlist_path", side_effect=ImportError, create=True),
+            patch(
+                "tools.tool_cache.get_wordlist_path",
+                side_effect=ImportError,
+                create=True,
+            ),
             patch("os.path.isfile", return_value=False),
             patch("os.path.expanduser", return_value="/home/user"),
         ):

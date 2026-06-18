@@ -1,7 +1,5 @@
 """Tests for tool_core/result.py — UnifiedToolResult and ToolStatus."""
 
-
-
 from tool_core.result import ToolStatus, UnifiedToolResult
 
 
@@ -87,7 +85,9 @@ class TestUnifiedToolResult:
         assert result.finished_at is not None
 
     def test_skipped_classmethod(self):
-        result = UnifiedToolResult.skipped("nuclei", "Target out of scope", "https://example.com")
+        result = UnifiedToolResult.skipped(
+            "nuclei", "Target out of scope", "https://example.com"
+        )
         assert result.tool_name == "nuclei"
         assert result.status == ToolStatus.SKIPPED
         assert result.target == "https://example.com"
@@ -198,7 +198,14 @@ class TestLegacyDict:
         assert d["stdout"] == "output"
 
     def test_from_legacy_dict_success(self):
-        d = {"tool": "nuclei", "stdout": "ok", "returncode": 0, "success": True, "timeout": False, "duration_ms": 1000}
+        d = {
+            "tool": "nuclei",
+            "stdout": "ok",
+            "returncode": 0,
+            "success": True,
+            "timeout": False,
+            "duration_ms": 1000,
+        }
         r = UnifiedToolResult.from_legacy_dict(d)
         assert r.tool_name == "nuclei"
         assert r.stdout == "ok"
@@ -206,7 +213,14 @@ class TestLegacyDict:
         assert r.duration_seconds == 1.0
 
     def test_from_legacy_dict_timeout(self):
-        d = {"tool": "nuclei", "stdout": "", "returncode": 1, "success": False, "timeout": True, "duration_ms": 5000}
+        d = {
+            "tool": "nuclei",
+            "stdout": "",
+            "returncode": 1,
+            "success": False,
+            "timeout": True,
+            "duration_ms": 5000,
+        }
         r = UnifiedToolResult.from_legacy_dict(d)
         assert r.status == ToolStatus.TIMEOUT
 

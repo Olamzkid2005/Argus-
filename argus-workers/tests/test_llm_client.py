@@ -20,7 +20,9 @@ class TestLLMResponse:
         assert resp.cost_usd == 0.0
 
     def test_full_construction(self):
-        resp = LLMResponse(text="response", input_tokens=10, output_tokens=20, cost_usd=0.001)
+        resp = LLMResponse(
+            text="response", input_tokens=10, output_tokens=20, cost_usd=0.001
+        )
         assert resp.text == "response"
         assert resp.input_tokens == 10
         assert resp.output_tokens == 20
@@ -60,7 +62,9 @@ class TestLLMClientInit:
             assert client.api_key == "sk-llm-key"
 
     def test_explicit_provider_and_model(self):
-        client = LLMClient(provider="generic", model="gemini-2.0-flash", api_key="test-key")
+        client = LLMClient(
+            provider="generic", model="gemini-2.0-flash", api_key="test-key"
+        )
         assert client.provider == "generic"
         assert client.model == "gemini-2.0-flash"
 

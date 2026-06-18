@@ -3,6 +3,7 @@ Celery tasks for scanning phase
 
 Requirements: 4.3, 4.4, 20.1, 20.2, 20.3
 """
+
 import logging
 import os
 
@@ -30,27 +31,37 @@ def run_scan(
     Execute scanning phase for an engagement
     """
     from utils.logging_utils import ScanLogger
+
     slog = ScanLogger("scan", engagement_id=engagement_id)
 
     # Load recon context from Redis for agent mode dispatch
     from tasks.utils import load_recon_context
+
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     try:
         recon_context = load_recon_context(engagement_id, redis_url)
-        ep_count = len(recon_context.live_endpoints or []) if (recon_context and hasattr(recon_context, 'live_endpoints')) else 0
+        ep_count = (
+            len(recon_context.live_endpoints or [])
+            if (recon_context and hasattr(recon_context, "live_endpoints"))
+            else 0
+        )
         recon_info = f"{ep_count} endpoints" if recon_context else "none"
-        slog.info(f"Recon context loaded: {recon_info}")
+        slog.info("Recon context loaded: %s", recon_info)
     except Exception as e:
-        logger.error("Failed to load recon context for engagement=%s: %s", engagement_id, e, exc_info=True)
+        logger.exception(
+            "Failed to load recon context for engagement=%s: %s", engagement_id, e
+        )
         recon_context = None
         # Track this failure so operators can investigate why recon context
         # was lost (expired TTL? Redis down? serialization error?)
         try:
             from dead_letter_queue import get_dlq
+
             get_dlq().enqueue(
                 task_id="recon_context_load",
                 task_name="tasks.scan.run_scan",
-                args=[], kwargs={"engagement_id": engagement_id},
+                args=[],
+                kwargs={"engagement_id": engagement_id},
                 error_message=str(e),
                 error_class=type(e).__name__,
                 engagement_id=engagement_id,
@@ -60,9 +71,14 @@ def run_scan(
         # Notify UI
         try:
             from streaming import emit_thinking
-            emit_thinking(engagement_id, "Recon context unavailable — running deterministic scan")
+
+            emit_thinking(
+                engagement_id, "Recon context unavailable — running deterministic scan"
+            )
         except Exception:
-            logger.warning("Failed to emit thinking update for engagement=%s", engagement_id)
+            logger.warning(
+                "Failed to emit thinking update for engagement=%s", engagement_id
+            )
 
     mode = "agent" if agent_mode else "deterministic"
     slog.phase_header("SCAN PHASE", targets=f"{len(targets)} target(s)", mode=mode)
@@ -82,9 +98,9 @@ def run_scan(
     if bug_bounty_mode is not None:
         job_extra["bug_bounty_mode"] = bug_bounty_mode
 
-    with task_context(self, engagement_id, "scan",
-                      job_extra=job_extra,
-                      trace_id=trace_id) as ctx:
+    with task_context(
+        self, engagement_id, "scan", job_extra=job_extra, trace_id=trace_id
+    ) as ctx:
         if ctx.state.current_state != "scanning":
             ctx.state.transition("scanning", "Starting scan")
         result = ctx.orchestrator.run_scan(ctx.job)
@@ -94,7 +110,11 @@ def run_scan(
         try:
             ctx.state.transition("analyzing", "Scan complete")
         except Exception as e:
-            logger.error("Failed to transition to analyzing for engagement=%s: %s", engagement_id, e, exc_info=True)
+            logger.exception(
+                "Failed to transition to analyzing for engagement=%s: %s",
+                engagement_id,
+                e,
+            )
             ctx.state.safe_transition("failed", f"State transition failed: {e}")
             result["status"] = "failed"
             result["reason"] = "state_transition_failed"
@@ -103,12 +123,16 @@ def run_scan(
             analyze_task = app.send_task(
                 "tasks.analyze.run_analysis",
                 args=[engagement_id, budget, ctx.trace_id],
-                kwargs={"bug_bounty_mode": bug_bounty_mode} if bug_bounty_mode is not None else {},
+                kwargs={"bug_bounty_mode": bug_bounty_mode}
+                if bug_bounty_mode is not None
+                else {},
             )
             result["analysis_task_id"] = analyze_task.id
             slog.dispatch("analyze", task_id=analyze_task.id)
         except Exception as e:
-            logger.error("Failed to enqueue analysis for engagement=%s: %s", engagement_id, e, exc_info=True)
+            logger.exception(
+                "Failed to enqueue analysis for engagement=%s: %s", engagement_id, e
+            )
             ctx.state.safe_transition("failed", f"Failed to dispatch analysis: {e}")
             result["status"] = "failed"
             result["reason"] = "analyze_dispatch_failed"
@@ -117,32 +141,55 @@ def run_scan(
 
 
 @app.task(bind=True, name="tasks.scan.deep_scan", soft_time_limit=2400, time_limit=3600)
-def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: str = None, auth_config: dict | None = None):
+def deep_scan(
+    self,
+    engagement_id: str,
+    targets: list,
+    budget: dict,
+    trace_id: str = None,
+    auth_config: dict | None = None,
+):
     """
     Execute deep scanning on specific targets
     """
     from utils.logging_utils import ScanLogger
+
     slog = ScanLogger("deep_scan", engagement_id=engagement_id)
 
     # Fetch scan options INSIDE task_context so error handling uses the
     # DistributedLock and correct state machine (bug #15 fix).
-    with task_context(self, engagement_id, "deep_scan",
-                      job_extra={"targets": targets, "budget": budget, "auth_config": auth_config or {}},
-                      trace_id=trace_id) as ctx:
+    with task_context(
+        self,
+        engagement_id,
+        "deep_scan",
+        job_extra={
+            "targets": targets,
+            "budget": budget,
+            "auth_config": auth_config or {},
+        },
+        trace_id=trace_id,
+    ) as ctx:
         from tasks.utils import fetch_engagement_scan_options
+
         try:
             opts = fetch_engagement_scan_options(engagement_id)
         except Exception as e:
-            logger.error("Failed to fetch scan options for deep_scan engagement=%s: %s", engagement_id, e)
+            logger.error(
+                "Failed to fetch scan options for deep_scan engagement=%s: %s",
+                engagement_id,
+                e,
+            )
             ctx.state.safe_transition("failed", f"Failed to fetch scan options: {e}")
             return {"phase": "deep_scan", "status": "failed", "reason": str(e)}
 
-        ctx.job.update({
-            "agent_mode": opts["agent_mode"],
-            "scan_mode": opts["scan_mode"],
-            "aggressiveness": opts["aggressiveness"],
-            "bug_bounty_mode": opts.get("bug_bounty_mode", False),
-        })
+        ctx.job.update(
+            {
+                "agent_mode": opts["agent_mode"],
+                "scan_mode": opts["scan_mode"],
+                "aggressiveness": opts["aggressiveness"],
+                "bug_bounty_mode": opts.get("bug_bounty_mode", False),
+            }
+        )
 
         # Ensure we record the scanning state (caller may have left us in 'recon')
         ctx.state.safe_transition("scanning", "Starting deep scan")
@@ -151,7 +198,11 @@ def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: s
         try:
             ctx.state.transition("analyzing", "Deep scan complete")
         except Exception as e:
-            logger.error("Failed to transition to analyzing after deep_scan for engagement=%s: %s", engagement_id, e, exc_info=True)
+            logger.exception(
+                "Failed to transition to analyzing after deep_scan for engagement=%s: %s",
+                engagement_id,
+                e,
+            )
             ctx.state.safe_transition("failed", f"State transition failed: {e}")
             result["status"] = "failed"
             result["reason"] = "state_transition_failed"
@@ -164,49 +215,87 @@ def deep_scan(self, engagement_id: str, targets: list, budget: dict, trace_id: s
             )
             slog.dispatch("analyze", task_id=analyze_task.id)
         except Exception as e:
-            logger.error("Failed to enqueue analysis after deep_scan for engagement=%s: %s", engagement_id, e, exc_info=True)
+            logger.exception(
+                "Failed to enqueue analysis after deep_scan for engagement=%s: %s",
+                engagement_id,
+                e,
+            )
             ctx.state.safe_transition("failed", f"Failed to dispatch analysis: {e}")
             result["status"] = "failed"
             result["reason"] = "analyze_dispatch_failed"
         return result
 
 
-@app.task(bind=True, name="tasks.scan.auth_focused_scan", soft_time_limit=2400, time_limit=3600)
-def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, trace_id: str = None, auth_config: dict | None = None):
+@app.task(
+    bind=True,
+    name="tasks.scan.auth_focused_scan",
+    soft_time_limit=2400,
+    time_limit=3600,
+)
+def auth_focused_scan(
+    self,
+    engagement_id: str,
+    endpoints: list,
+    budget: dict,
+    trace_id: str = None,
+    auth_config: dict | None = None,
+):
     """
     Execute authentication-focused scanning
     """
     from utils.logging_utils import ScanLogger
+
     slog = ScanLogger("auth_focused_scan", engagement_id=engagement_id)
 
     # Fetch scan options INSIDE task_context so error handling uses the
     # DistributedLock and correct state machine (bug #15 fix).
-    with task_context(self, engagement_id, "auth_focused_scan",
-                      job_extra={"targets": endpoints, "budget": budget, "auth_config": auth_config or {}},
-                      trace_id=trace_id) as ctx:
+    with task_context(
+        self,
+        engagement_id,
+        "auth_focused_scan",
+        job_extra={
+            "targets": endpoints,
+            "budget": budget,
+            "auth_config": auth_config or {},
+        },
+        trace_id=trace_id,
+    ) as ctx:
         from tasks.utils import fetch_engagement_scan_options
+
         try:
             opts = fetch_engagement_scan_options(engagement_id)
         except Exception as e:
-            logger.error("Failed to fetch scan options for auth_focused_scan engagement=%s: %s", engagement_id, e)
+            logger.error(
+                "Failed to fetch scan options for auth_focused_scan engagement=%s: %s",
+                engagement_id,
+                e,
+            )
             ctx.state.safe_transition("failed", f"Failed to fetch scan options: {e}")
             return {"phase": "auth_focused_scan", "status": "failed", "reason": str(e)}
 
-        ctx.job.update({
-            "agent_mode": opts["agent_mode"],
-            "scan_mode": opts["scan_mode"],
-            "aggressiveness": opts["aggressiveness"],
-            "bug_bounty_mode": opts.get("bug_bounty_mode", False),
-        })
+        ctx.job.update(
+            {
+                "agent_mode": opts["agent_mode"],
+                "scan_mode": opts["scan_mode"],
+                "aggressiveness": opts["aggressiveness"],
+                "bug_bounty_mode": opts.get("bug_bounty_mode", False),
+            }
+        )
 
         # Ensure we record the scanning state (caller may have left us in 'recon')
         ctx.state.safe_transition("scanning", "Starting auth-focused scan")
-        slog.phase_header("AUTH FOCUSED SCAN", endpoints=f"{len(endpoints)} endpoint(s)")
+        slog.phase_header(
+            "AUTH FOCUSED SCAN", endpoints=f"{len(endpoints)} endpoint(s)"
+        )
         result = ctx.orchestrator.run_scan(ctx.job)
         try:
             ctx.state.transition("analyzing", "Auth-focused scan complete")
         except Exception as e:
-            logger.error("Failed to transition to analyzing after auth_focused_scan for engagement=%s: %s", engagement_id, e, exc_info=True)
+            logger.exception(
+                "Failed to transition to analyzing after auth_focused_scan for engagement=%s: %s",
+                engagement_id,
+                e,
+            )
             ctx.state.safe_transition("failed", f"State transition failed: {e}")
             result["status"] = "failed"
             result["reason"] = "state_transition_failed"
@@ -219,7 +308,11 @@ def auth_focused_scan(self, engagement_id: str, endpoints: list, budget: dict, t
             )
             slog.dispatch("analyze", task_id=analyze_task.id)
         except Exception as e:
-            logger.error("Failed to enqueue analysis after auth_focused_scan for engagement=%s: %s", engagement_id, e, exc_info=True)
+            logger.exception(
+                "Failed to enqueue analysis after auth_focused_scan for engagement=%s: %s",
+                engagement_id,
+                e,
+            )
             ctx.state.safe_transition("failed", f"Failed to dispatch analysis: {e}")
             result["status"] = "failed"
             result["reason"] = "analyze_dispatch_failed"

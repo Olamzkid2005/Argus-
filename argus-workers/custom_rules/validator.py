@@ -3,11 +3,13 @@ Custom Rule Validator - Validates YAML-based custom rules
 
 Requirements: 27.3
 """
+
 import re
 
 
 class RuleValidationError(Exception):
     """Raised when rule validation fails"""
+
     pass
 
 
@@ -18,7 +20,15 @@ class RuleValidator:
     """
 
     REQUIRED_FIELDS = ["id", "message", "severity"]
-    ALLOWED_SEVERITIES = ["INFO", "WARNING", "ERROR", "CRITICAL", "LOW", "MEDIUM", "HIGH"]
+    ALLOWED_SEVERITIES = [
+        "INFO",
+        "WARNING",
+        "ERROR",
+        "CRITICAL",
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+    ]
     MAX_PATTERN_LENGTH = 5000
 
     # Dangerous regex patterns that could cause ReDoS
@@ -51,7 +61,9 @@ class RuleValidator:
         # Validate severity
         severity = rule.get("severity", "").upper()
         if severity and severity not in self.ALLOWED_SEVERITIES:
-            errors.append(f"Invalid severity: {severity}. Allowed: {self.ALLOWED_SEVERITIES}")
+            errors.append(
+                f"Invalid severity: {severity}. Allowed: {self.ALLOWED_SEVERITIES}"
+            )
 
         # Validate pattern/regex
         patterns = rule.get("patterns", [])
@@ -67,12 +79,16 @@ class RuleValidator:
 
             if regex:
                 if len(regex) > self.MAX_PATTERN_LENGTH:
-                    errors.append(f"Regex too long: {len(regex)} chars (max {self.MAX_PATTERN_LENGTH})")
+                    errors.append(
+                        f"Regex too long: {len(regex)} chars (max {self.MAX_PATTERN_LENGTH})"
+                    )
 
                 # Check for dangerous regex
                 for dangerous in self.DANGEROUS_REGEX_PATTERNS:
                     if re.search(dangerous, regex):
-                        errors.append(f"Potentially dangerous regex detected: {regex[:50]}...")
+                        errors.append(
+                            f"Potentially dangerous regex detected: {regex[:50]}..."
+                        )
 
                 # Test regex compilation
                 try:
@@ -81,7 +97,9 @@ class RuleValidator:
                     errors.append(f"Invalid regex: {e}")
 
             if pattern and len(pattern) > self.MAX_PATTERN_LENGTH:
-                errors.append(f"Pattern too long: {len(pattern)} chars (max {self.MAX_PATTERN_LENGTH})")
+                errors.append(
+                    f"Pattern too long: {len(pattern)} chars (max {self.MAX_PATTERN_LENGTH})"
+                )
 
         # Validate ID format
         rule_id = rule.get("id", "")
@@ -140,6 +158,8 @@ class RuleValidator:
         for i, rule in enumerate(rules):
             is_valid, errors = self.validate(rule)
             if not is_valid:
-                all_errors.extend([f"Rule {i} ({rule.get('id', 'unknown')}): {e}" for e in errors])
+                all_errors.extend(
+                    [f"Rule {i} ({rule.get('id', 'unknown')}): {e}" for e in errors]
+                )
 
         return len(all_errors) == 0, all_errors

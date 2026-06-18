@@ -7,6 +7,7 @@ import uuid
 
 class AgentAction:
     """An action the agent decided to take."""
+
     def __init__(
         self,
         tool: str,

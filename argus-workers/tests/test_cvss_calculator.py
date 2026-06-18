@@ -45,9 +45,17 @@ class TestTypeBaseScores:
 
     def test_all_expected_keys_present(self):
         required_keys = [
-            "SQL_INJECTION", "XSS", "SSRF", "SSTI", "XXE",
-            "CSRF", "IDOR", "OPEN_REDIRECT", "PATH_TRAVERSAL",
-            "EXPOSED_SECRET", "DEPENDENCY_VULNERABILITY",
+            "SQL_INJECTION",
+            "XSS",
+            "SSRF",
+            "SSTI",
+            "XXE",
+            "CSRF",
+            "IDOR",
+            "OPEN_REDIRECT",
+            "PATH_TRAVERSAL",
+            "EXPOSED_SECRET",
+            "DEPENDENCY_VULNERABILITY",
         ]
         for key in required_keys:
             assert key in TYPE_BASE_SCORES, f"Missing base score for {key}"
@@ -119,23 +127,29 @@ class TestEstimateCVSS:
         # 9.8 * 0.9 * 0.7 = 6.174 → round to 6.2
         assert score == 6.2
 
-    @pytest.mark.parametrize("severity,multiplier", [
-        ("CRITICAL", 1.0),
-        ("HIGH", 0.9),
-        ("MEDIUM", 0.7),
-        ("LOW", 0.5),
-        ("INFO", 0.3),
-    ])
+    @pytest.mark.parametrize(
+        "severity,multiplier",
+        [
+            ("CRITICAL", 1.0),
+            ("HIGH", 0.9),
+            ("MEDIUM", 0.7),
+            ("LOW", 0.5),
+            ("INFO", 0.3),
+        ],
+    )
     def test_severity_multipliers(self, severity, multiplier):
         assert SEVERITY_MULTIPLIERS[severity] == multiplier
 
-    @pytest.mark.parametrize("evidence,adjustment", [
-        ("verified", 1.0),
-        ("strong", 0.95),
-        ("moderate", 0.85),
-        ("weak", 0.7),
-        ("none", 0.6),
-    ])
+    @pytest.mark.parametrize(
+        "evidence,adjustment",
+        [
+            ("verified", 1.0),
+            ("strong", 0.95),
+            ("moderate", 0.85),
+            ("weak", 0.7),
+            ("none", 0.6),
+        ],
+    )
     def test_evidence_adjustments(self, evidence, adjustment):
         assert EVIDENCE_ADJUSTMENTS[evidence] == adjustment
 
@@ -149,21 +163,24 @@ class TestEstimateCVSS:
         score_medium = estimate_cvss("XSS", "MEDIUM", "moderate")
         assert score == score_medium
 
-    @pytest.mark.parametrize("finding_type,expected_approx", [
-        ("SQL_INJECTION", 9.8),
-        ("COMMAND_INJECTION", 9.8),
-        ("SSTI", 9.8),
-        ("SSRF", 9.3),
-        ("XXE", 8.2),
-        ("STORED_XSS", 8.8),
-        ("XSS", 6.1),
-        ("CSRF", 6.5),
-        ("IDOR", 6.5),
-        ("OPEN_REDIRECT", 6.1),
-        ("PATH_TRAVERSAL", 7.5),
-        ("EXPOSED_SECRET", 8.8),
-        ("TECHNOLOGY_DETECTION", 2.5),
-    ])
+    @pytest.mark.parametrize(
+        "finding_type,expected_approx",
+        [
+            ("SQL_INJECTION", 9.8),
+            ("COMMAND_INJECTION", 9.8),
+            ("SSTI", 9.8),
+            ("SSRF", 9.3),
+            ("XXE", 8.2),
+            ("STORED_XSS", 8.8),
+            ("XSS", 6.1),
+            ("CSRF", 6.5),
+            ("IDOR", 6.5),
+            ("OPEN_REDIRECT", 6.1),
+            ("PATH_TRAVERSAL", 7.5),
+            ("EXPOSED_SECRET", 8.8),
+            ("TECHNOLOGY_DETECTION", 2.5),
+        ],
+    )
     def test_known_types_with_critical_severity(self, finding_type, expected_approx):
         score = estimate_cvss(finding_type, "CRITICAL", "verified")
         assert score == expected_approx

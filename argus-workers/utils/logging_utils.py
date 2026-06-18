@@ -3,6 +3,7 @@ Secrets redaction utilities for logging.
 
 Redacts sensitive information from logs to prevent credential leakage.
 """
+
 import logging
 import re
 import time as _time
@@ -11,30 +12,36 @@ from typing import Any
 # Patterns for sensitive data that should be redacted
 SECRET_PATTERNS = {
     # API keys and tokens
-    'api_key': re.compile(r'(?i)(api[_-]?key["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-]{8,})'),
-    'bearer_token': re.compile(r'(?i)(bearer\s+)([a-zA-Z0-9_\-\.]{10,})'),
-    'auth_token': re.compile(r'(?i)(auth[_-]?token["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-\.]{10,})'),
-
+    "api_key": re.compile(
+        r'(?i)(api[_-]?key["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-]{8,})'
+    ),
+    "bearer_token": re.compile(r"(?i)(bearer\s+)([a-zA-Z0-9_\-\.]{10,})"),
+    "auth_token": re.compile(
+        r'(?i)(auth[_-]?token["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-\.]{10,})'
+    ),
     # Passwords (including in URLs) - must check before JWT
-    'password': re.compile(r'(?i)(password["\']?\s*[:=]\s*["\']?)([^\s"\'<>]{4,})'),
-    'url_password': re.compile(r'((?:mysql|postgres|postgresql|mongodb|redis|amqp)://[^:]+):([^@]+)@'),
-
+    "password": re.compile(r'(?i)(password["\']?\s*[:=]\s*["\']?)([^\s"\'<>]{4,})'),
+    "url_password": re.compile(
+        r"((?:mysql|postgres|postgresql|mongodb|redis|amqp)://[^:]+):([^@]+)@"
+    ),
     # AWS credentials
-    'aws_access': re.compile(r'(AKIA|ABIA|ACCA|ASIA)[A-Z0-9]{16}'),
-    'aws_secret': re.compile(r'(?i)(aws[_-]?secret[_-]?access[_-]?key["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9/+=]{20,})'),
-
+    "aws_access": re.compile(r"(AKIA|ABIA|ACCA|ASIA)[A-Z0-9]{16}"),
+    "aws_secret": re.compile(
+        r'(?i)(aws[_-]?secret[_-]?access[_-]?key["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9/+=]{20,})'
+    ),
     # JWT tokens
-    'jwt': re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'),
-
+    "jwt": re.compile(r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"),
     # Private keys
-    'private_key': re.compile(r'-----BEGIN\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+|ENCRYPTED\s+)?PRIVATE\s+KEY-----'),
-
+    "private_key": re.compile(
+        r"-----BEGIN\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+|ENCRYPTED\s+)?PRIVATE\s+KEY-----"
+    ),
     # Database URLs
-    'db_url': re.compile(r'(?i)(database[_-]?url|db[_-]?url|connection[_-]?string["\']?\s*[:=]\s*["\']?)((?:mysql|postgres|postgresql|mongodb)://[^\s"\'<>]+)'),
-
+    "db_url": re.compile(
+        r'(?i)(database[_-]?url|db[_-]?url|connection[_-]?string["\']?\s*[:=]\s*["\']?)((?:mysql|postgres|postgresql|mongodb)://[^\s"\'<>]+)'
+    ),
     # Generic secret patterns
-    'secret': re.compile(r'(?i)(secret["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-]{8,})'),
-    'token': re.compile(r'(?i)(token["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-\.]{10,})'),
+    "secret": re.compile(r'(?i)(secret["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-]{8,})'),
+    "token": re.compile(r'(?i)(token["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-\.]{10,})'),
 }
 
 
@@ -56,15 +63,15 @@ def redact_string(text: str) -> str:
     # Order matters: check specific patterns first, then generic ones
     # URL password must come after JWT/private_key to avoid false matches
     for name, pattern in SECRET_PATTERNS.items():
-        if name in ['jwt', 'private_key', 'aws_access']:
+        if name in ["jwt", "private_key", "aws_access"]:
             # Full value redaction for these patterns
-            result = pattern.sub('[REDACTED]', result)
-        elif name == 'url_password':
+            result = pattern.sub("[REDACTED]", result)
+        elif name == "url_password":
             # URL password redaction
-            result = pattern.sub('://****:****@', result)
+            result = pattern.sub("://****:****@", result)
         else:
             # Partial redaction (show first few chars)
-            result = pattern.sub(r'\1****', result)
+            result = pattern.sub(r"\1****", result)
 
     return result
 
@@ -84,10 +91,24 @@ def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
 
     # Keys that are always sensitive
     sensitive_keys = {
-        'password', 'secret', 'token', 'api_key', 'apikey', 'private_key',
-        'access_token', 'refresh_token', 'auth_token', 'bearer_token',
-        'connection_string', 'database_url', 'db_url', 'credential',
-        'aws_access_key', 'aws_secret_key', 'session_id', 'session_token',
+        "password",
+        "secret",
+        "token",
+        "api_key",
+        "apikey",
+        "private_key",
+        "access_token",
+        "refresh_token",
+        "auth_token",
+        "bearer_token",
+        "connection_string",
+        "database_url",
+        "db_url",
+        "credential",
+        "aws_access_key",
+        "aws_secret_key",
+        "session_id",
+        "session_token",
     }
 
     result = {}
@@ -99,7 +120,7 @@ def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
         if key_lower in sensitive_keys:
             # Redact the value
             if isinstance(value, str):
-                result[key] = '[REDACTED]'
+                result[key] = "[REDACTED]"
             elif isinstance(value, dict):
                 result[key] = redact_dict(value)
             else:
@@ -112,10 +133,7 @@ def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
             result[key] = redact_dict(value)
         elif isinstance(value, list):
             # Process list items
-            result[key] = [
-                redact_string(v) if isinstance(v, str) else v
-                for v in value
-            ]
+            result[key] = [redact_string(v) if isinstance(v, str) else v for v in value]
         else:
             result[key] = value
 
@@ -193,13 +211,13 @@ def setup_logging():
     root_logger = logging.getLogger()
 
     # Add our filter if not already added
-    filter_name = 'SecretsRedactionFilter'
+    filter_name = "SecretsRedactionFilter"
     if not any(f.name == filter_name for f in root_logger.filters):
         secret_filter = SecretsRedactionFilter(filter_name)
         root_logger.addFilter(secret_filter)
 
     # Also add to common loggers that might be created before root logger setup
-    for logger_name in ['argus', 'celery', 'uvicorn']:
+    for logger_name in ["argus", "celery", "uvicorn"]:
         logger = logging.getLogger(logger_name)
         if not any(f.name == filter_name for f in logger.filters):
             # Add filter directly to ensure it works before propagation
@@ -247,7 +265,7 @@ class ScanLogger:
         seconds = _time.time() - self._start_time
         if seconds < 60:
             return f"{seconds:.1f}s"
-        return f"{seconds/60:.1f}m"
+        return f"{seconds / 60:.1f}m"
 
     def _prefix(self) -> str:
         tag = self.phase.upper()
@@ -276,7 +294,13 @@ class ScanLogger:
             **details: Key-value pairs (findings, duration, etc.)
         """
         detail_str = " ".join(f"{k}={v}" for k, v in details.items())
-        color = self._GREEN if status == "completed" else self._RED if status == "failed" else self._YELLOW
+        color = (
+            self._GREEN
+            if status == "completed"
+            else self._RED
+            if status == "failed"
+            else self._YELLOW
+        )
         msg = f"{self._prefix()} {color}{self._BOLD}=== {phase_label.upper()} {status.upper()} ==={self._RESET}"
         if detail_str:
             msg += f"  ({detail_str})"
@@ -324,7 +348,14 @@ class ScanLogger:
             msg += f"  {self._DIM}{arg_summary}{self._RESET}"
         self._logger.info(msg)
 
-    def tool_complete(self, tool: str, success: bool = True, findings: int = 0, duration_ms: int = 0, **details):
+    def tool_complete(
+        self,
+        tool: str,
+        success: bool = True,
+        findings: int = 0,
+        duration_ms: int = 0,
+        **details,
+    ):
         """Log a tool execution completion with findings count and duration.
 
         Args:
@@ -334,8 +365,14 @@ class ScanLogger:
             duration_ms: Execution duration in milliseconds
             **details: Optional key=value pairs appended as context
         """
-        status_icon = self._GREEN + "✓" + self._RESET if success else self._RED + "✗" + self._RESET
-        dur_str = f"{duration_ms}ms" if duration_ms < 10000 else f"{duration_ms/1000:.1f}s"
+        status_icon = (
+            self._GREEN + "✓" + self._RESET
+            if success
+            else self._RED + "✗" + self._RESET
+        )
+        dur_str = (
+            f"{duration_ms}ms" if duration_ms < 10000 else f"{duration_ms / 1000:.1f}s"
+        )
         msg = f"{self._prefix()}   {self._BOLD}└─{self._RESET} [{tool}] {status_icon}  "
         parts = []
         if findings:
@@ -360,9 +397,18 @@ class ScanLogger:
         msg = f"{self._prefix()}   {self._MAGENTA}┌─ LLM [{model}]{action_part}{detail_part}{self._RESET}"
         self._logger.info(msg)
 
-    def llm_complete(self, model: str, duration_ms: int = 0, tokens: int = 0, cost: float = 0.0, **details):
+    def llm_complete(
+        self,
+        model: str,
+        duration_ms: int = 0,
+        tokens: int = 0,
+        cost: float = 0.0,
+        **details,
+    ):
         """Log an LLM call completion."""
-        dur_str = f"{duration_ms}ms" if duration_ms < 10000 else f"{duration_ms/1000:.1f}s"
+        dur_str = (
+            f"{duration_ms}ms" if duration_ms < 10000 else f"{duration_ms / 1000:.1f}s"
+        )
         msg = f"{self._prefix()}   {self._MAGENTA}└─ LLM [{model}] ✓ {dur_str}"
         if tokens:
             msg += f", {tokens} tokens"
@@ -373,8 +419,15 @@ class ScanLogger:
         msg += self._RESET
         self._logger.info(msg)
 
-    def llm_result(self, detail: str):
-        """Log an LLM result detail."""
+    def llm_result(self, detail: str, *args):
+        """Log an LLM result detail.
+
+        Supports printf-style format substitution via *args:
+            slog.llm_result("Found %d findings", count)
+            slog.llm_result("Static message")
+        """
+        if args:
+            detail = detail % args
         msg = f"{self._prefix()}   {self._DIM}  -> {detail}{self._RESET}"
         self._logger.info(msg)
 
@@ -430,7 +483,9 @@ class ScanLogger:
         msg = f"{self._prefix()}   {self._BOLD}└─ Target: {target}{self._RESET} — {findings} findings, {tools} tools"
         self._logger.info(msg)
 
-    def agent_iteration(self, iteration: int, tool: str, reasoning: str = "", cost: float = 0.0):
+    def agent_iteration(
+        self, iteration: int, tool: str, reasoning: str = "", cost: float = 0.0
+    ):
         """Log an agent loop iteration."""
         rsn = f" — {reasoning[:80]}" if reasoning else ""
         cost_str = f" [${cost:.6f}]" if cost else ""

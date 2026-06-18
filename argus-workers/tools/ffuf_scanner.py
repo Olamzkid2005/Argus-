@@ -12,6 +12,7 @@ Usage::
     for f in result.findings:
         print(f["type"], f["endpoint"])
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,11 +51,17 @@ class FfufScanner(AbstractTool):
         """Resolve path to a wordlist file."""
         try:
             from tools.tool_cache import get_wordlist_path
+
             return get_wordlist_path(name)
         except ImportError:
             # Fallback: look in common locations
             import os
-            for base in ("/usr/share/wordlists", "/usr/share/ffuf", os.path.expanduser("~/wordlists")):
+
+            for base in (
+                "/usr/share/wordlists",
+                "/usr/share/ffuf",
+                os.path.expanduser("~/wordlists"),
+            ):
                 candidate = os.path.join(base, name)
                 if os.path.isfile(candidate):
                     return candidate
@@ -106,6 +113,7 @@ class FfufScanner(AbstractTool):
 
             # Parse stdout JSON
             from parsers.parsers.ffuf import FfufParser
+
             parsed = FfufParser().parse(tool_result.stdout or "")
 
             for finding in parsed:

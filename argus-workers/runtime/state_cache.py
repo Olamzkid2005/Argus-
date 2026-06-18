@@ -58,6 +58,7 @@ class RedisStateCache:
 
         try:
             import redis as redis_module
+
             self._client = redis_module.from_url(
                 self.redis_url,
                 socket_connect_timeout=2,

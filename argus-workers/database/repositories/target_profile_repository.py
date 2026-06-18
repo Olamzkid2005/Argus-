@@ -75,9 +75,9 @@ class TargetProfileRepository:
             return None
 
         # Build profile parts from this scan
-        endpoints = list({
-            f.get("endpoint", "") for f in findings if f.get("endpoint")
-        })[:100]
+        endpoints = list(
+            {f.get("endpoint", "") for f in findings if f.get("endpoint")}
+        )[:100]
 
         tech_stack = []
         if recon_context and isinstance(recon_context, dict):
@@ -103,8 +103,7 @@ class TargetProfileRepository:
 
         best_tools = sorted(tool_counts.items(), key=lambda x: -x[1])[:5]
         best_tools_list = [
-            {"tool": t, "finding_count": c,
-             "last_seen": datetime.now(UTC).isoformat()}
+            {"tool": t, "finding_count": c, "last_seen": datetime.now(UTC).isoformat()}
             for t, c in best_tools
         ]
 
@@ -119,7 +118,7 @@ class TargetProfileRepository:
         try:
             with db_cursor(commit=True) as cursor:
                 cursor.execute(
-                """
+                    """
                 INSERT INTO target_profiles (
                     org_id, target_domain,
                     known_endpoints, known_tech_stack,
@@ -194,18 +193,21 @@ class TargetProfileRepository:
                     ),
                     updated_at = NOW()
                 """,
-                (
-                    org_id, domain,
-                    json.dumps(endpoints), json.dumps(tech_stack),
-                    json.dumps(list(type_counts.keys())),
-                    json.dumps(high_value_endpoints[:20]),
-                    json.dumps(best_tools_list), json.dumps(noisy_tools_list),
-                    len(findings),
-                    json.dumps([engagement_id]),
-                    len(findings),
-                    json.dumps([engagement_id]),
-                ),
-            )
+                    (
+                        org_id,
+                        domain,
+                        json.dumps(endpoints),
+                        json.dumps(tech_stack),
+                        json.dumps(list(type_counts.keys())),
+                        json.dumps(high_value_endpoints[:20]),
+                        json.dumps(best_tools_list),
+                        json.dumps(noisy_tools_list),
+                        len(findings),
+                        json.dumps([engagement_id]),
+                        len(findings),
+                        json.dumps([engagement_id]),
+                    ),
+                )
             # Commit already happens via db_cursor(commit=True)
             # Fetch and return the full profile
             cursor.execute(
@@ -279,7 +281,9 @@ class TargetProfileRepository:
 
         best = [t["tool"] for t in profile.get("best_tools", [])[:3]]
         if best:
-            parts.append(f"Tools with confirmed findings on this target: {', '.join(best)}.")
+            parts.append(
+                f"Tools with confirmed findings on this target: {', '.join(best)}."
+            )
 
         noisy = profile.get("noisy_tools", [])[:3]
         if noisy:
@@ -317,22 +321,18 @@ class TargetProfileRepository:
         best = profile.get("best_tools", [])
         if best:
             tools_str = ", ".join(
-                f"{t['tool']} ({t['finding_count']} findings)"
-                for t in best[:4]
+                f"{t['tool']} ({t['finding_count']} findings)" for t in best[:4]
             )
             lines.append(f"Tools that found real issues: {tools_str}")
 
         noisy = profile.get("noisy_tools", [])
         if noisy:
-            lines.append(
-                f"Tools that were noisy/FP: {', '.join(noisy[:4])}"
-            )
+            lines.append(f"Tools that were noisy/FP: {', '.join(noisy[:4])}")
 
         finding_types = profile.get("confirmed_finding_types", [])
         if finding_types:
             lines.append(
-                f"Confirmed vulnerability types:"
-                f" {', '.join(finding_types[:6])}"
+                f"Confirmed vulnerability types: {', '.join(finding_types[:6])}"
             )
 
         hot = profile.get("high_value_endpoints", [])

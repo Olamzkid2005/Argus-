@@ -5,8 +5,6 @@ Covers: add_obstacle(), to_dict() count, _bump_version, from_dict
 exclusion (V1 in-memory-only design), and obstacle metadata.
 """
 
-
-
 from runtime.engagement_state import EngagementState
 
 
@@ -62,13 +60,15 @@ class TestAddObstacle:
     def test_standard_fields_stored_correctly(self):
         """Standard obstacle fields match the contract from the plan."""
         state = EngagementState("eng-test")
-        state.add_obstacle({
-            "type": "target_unreachable",
-            "step": "discover_resources",
-            "recoverable": False,
-            "recovery_paths": ["skip"],
-            "metadata": {"target": "http://example.com", "probed_endpoints": 5},
-        })
+        state.add_obstacle(
+            {
+                "type": "target_unreachable",
+                "step": "discover_resources",
+                "recoverable": False,
+                "recovery_paths": ["skip"],
+                "metadata": {"target": "http://example.com", "probed_endpoints": 5},
+            }
+        )
         o = state.obstacles[0]
         assert o["type"] == "target_unreachable"
         assert o["recoverable"] is False

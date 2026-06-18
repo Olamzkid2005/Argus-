@@ -12,7 +12,15 @@ def generate_narrative(path_info: dict, findings: list[dict]) -> str:
     if not path:
         return "No attack path to describe."
 
-    severity_label = "critical" if score > 10 else "high" if score > 6 else "medium" if score > 3 else "low"
+    severity_label = (
+        "critical"
+        if score > 10
+        else "high"
+        if score > 6
+        else "medium"
+        if score > 3
+        else "low"
+    )
 
     narrative_parts = [
         f"This {severity_label}-severity attack path ({steps} steps, risk score: {score}) "

@@ -57,8 +57,12 @@ class TestRead:
 
     def test_missing_artifact_raises(self, storage):
         ref = ArtifactRef(
-            artifact_id="x", finding_id="y", path="nonexistent/file.txt",
-            hash="", size=0, mime="text/plain",
+            artifact_id="x",
+            finding_id="y",
+            path="nonexistent/file.txt",
+            hash="",
+            size=0,
+            mime="text/plain",
         )
         with pytest.raises(ArtifactMissingError):
             storage.read(ref)
@@ -102,8 +106,12 @@ class TestDeleteArtifact:
 
     def test_missing_artifact_does_not_raise(self, storage):
         ref = ArtifactRef(
-            artifact_id="x", finding_id="y", path="nonexistent/file.txt",
-            hash="", size=0, mime="text/plain",
+            artifact_id="x",
+            finding_id="y",
+            path="nonexistent/file.txt",
+            hash="",
+            size=0,
+            mime="text/plain",
         )
         storage.delete_artifact(ref)
 

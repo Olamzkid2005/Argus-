@@ -94,17 +94,22 @@ class AgentSessionStore:
             return
         self._last_eviction = now
         with self._lock:
-            expired = [sid for sid, s in self._sessions.items()
-                       if now - s.created_at > self._eviction_ttl]
+            expired = [
+                sid
+                for sid, s in self._sessions.items()
+                if now - s.created_at > self._eviction_ttl
+            ]
             for sid in expired:
                 del self._sessions[sid]
 
     def _start_eviction_loop(self) -> None:
         """Background thread for periodic eviction."""
+
         def _loop():
             while True:
                 time.sleep(300)
                 self._evict_expired()
+
         t = threading.Thread(target=_loop, daemon=True)
         t.start()
 
@@ -193,7 +198,9 @@ class AgentSessionStore:
             session = self._sessions.get(session_id)
             if session is None:
                 raise ValueError(f"Session {session_id} not found")
-            if session.current_plan is not None and session.plan_step < len(session.current_plan):
+            if session.current_plan is not None and session.plan_step < len(
+                session.current_plan
+            ):
                 tool = session.current_plan[session.plan_step]
                 session.plan_step += 1
                 return tool

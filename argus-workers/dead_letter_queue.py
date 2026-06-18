@@ -82,18 +82,19 @@ class DeadLetterQueue:
             Sanitized key component safe for Redis keys
         """
         from utils.validation import sanitize_redis_key
+
         return sanitize_redis_key(engagement_id)
 
     # Patterns matching common API keys, tokens, and secrets in string values (M-v3-08)
     _SECRET_VALUE_PATTERNS: list[re.Pattern] = [
-        re.compile(r'^sk-or-v1-[a-zA-Z0-9]{20,}$'),        # OpenRouter API key
-        re.compile(r'^sk-[a-zA-Z0-9]{20,}$'),               # OpenAI API key
-        re.compile(r'^gh[pso]_[a-zA-Z0-9]{36,}$'),          # GitHub token (pat/oauth/secret)
-        re.compile(r'^ghr_[a-zA-Z0-9]{36,}$'),              # GitHub refresh token
-        re.compile(r'^xox[bpsa]-[a-zA-Z0-9-]{20,}$'),       # Slack token
-        re.compile(r'^AKIA[0-9A-Z]{16}$'),                  # AWS access key
-        re.compile(r'^(eyJ[a-zA-Z0-9_-]{10,}\.)'),          # JWT token
-        re.compile(r'^[a-f0-9]{64,}$', re.IGNORECASE),      # SHA-256 hex (64+ chars)
+        re.compile(r"^sk-or-v1-[a-zA-Z0-9]{20,}$"),  # OpenRouter API key
+        re.compile(r"^sk-[a-zA-Z0-9]{20,}$"),  # OpenAI API key
+        re.compile(r"^gh[pso]_[a-zA-Z0-9]{36,}$"),  # GitHub token (pat/oauth/secret)
+        re.compile(r"^ghr_[a-zA-Z0-9]{36,}$"),  # GitHub refresh token
+        re.compile(r"^xox[bpsa]-[a-zA-Z0-9-]{20,}$"),  # Slack token
+        re.compile(r"^AKIA[0-9A-Z]{16}$"),  # AWS access key
+        re.compile(r"^(eyJ[a-zA-Z0-9_-]{10,}\.)"),  # JWT token
+        re.compile(r"^[a-f0-9]{64,}$", re.IGNORECASE),  # SHA-256 hex (64+ chars)
     ]
 
     @staticmethod
@@ -118,10 +119,22 @@ class DeadLetterQueue:
         H-v3-22: Basic key-based redaction.
         M-v3-08: Added list traversal and pattern-based value redaction.
         """
-        SENSITIVE_KEYS = {"password", "passwd", "token", "secret", "api_key",
-                         "auth", "credentials", "cookie",
-                         "totp_secret", "two_factor_secret", "private_key",
-                         "access_key", "session_id", "refresh_token"}
+        SENSITIVE_KEYS = {
+            "password",
+            "passwd",
+            "token",
+            "secret",
+            "api_key",
+            "auth",
+            "credentials",
+            "cookie",
+            "totp_secret",
+            "two_factor_secret",
+            "private_key",
+            "access_key",
+            "session_id",
+            "refresh_token",
+        }
 
         if isinstance(data, dict):
             redacted = {}
@@ -130,7 +143,9 @@ class DeadLetterQueue:
                     redacted[key] = "__REDACTED__"
                 elif isinstance(value, (dict, list)):
                     redacted[key] = DeadLetterQueue._redact_sensitive_fields(value)
-                elif isinstance(value, str) and DeadLetterQueue._looks_like_secret(value):
+                elif isinstance(value, str) and DeadLetterQueue._looks_like_secret(
+                    value
+                ):
                     redacted[key] = "__REDACTED__"
                 else:
                     redacted[key] = value
@@ -223,12 +238,15 @@ class DeadLetterQueue:
                 self.redis.expire(eng_key, 86400 * 7)  # 7 days
 
             logger.warning(
-                f"Task {task_id} ({task_name}) added to DLQ after {retry_count} retries"
+                "Task %s (%s) added to DLQ after %d retries",
+                task_id,
+                task_name,
+                retry_count,
             )
             return True
 
         except Exception as e:
-            logger.error(f"Failed to add task {task_id} to DLQ: {e}")
+            logger.error("Failed to add task %s to DLQ: %s", task_id, e)
             return False
 
     def get_failed_tasks(
@@ -258,7 +276,10 @@ class DeadLetterQueue:
                 return []
 
             # Look up full task data from the index hash (sorted sets hold only IDs)
-            decoded_ids = [tid.decode("utf-8") if isinstance(tid, bytes) else tid for tid in task_ids]
+            decoded_ids = [
+                tid.decode("utf-8") if isinstance(tid, bytes) else tid
+                for tid in task_ids
+            ]
             raw_data = self.redis.hmget(self.TASK_INDEX_KEY, decoded_ids)
             tasks = []
             for raw in raw_data:
@@ -266,11 +287,13 @@ class DeadLetterQueue:
                     try:
                         tasks.append(json.loads(raw))
                     except (json.JSONDecodeError, TypeError):
-                        logger.debug("Failed to decode DLQ task data for ID", exc_info=True)
+                        logger.debug(
+                            "Failed to decode DLQ task data for ID", exc_info=True
+                        )
             return tasks
 
         except Exception as e:
-            logger.error(f"Failed to retrieve DLQ tasks: {e}")
+            logger.error("Failed to retrieve DLQ tasks: %s", e)
             return []
 
     def get_failed_task_count(self, engagement_id: str | None = None) -> int:
@@ -284,7 +307,7 @@ class DeadLetterQueue:
                 key = f"{self.REDIS_KEY_PREFIX}:tasks"
                 return self.redis.zcard(key)
         except Exception as e:
-            logger.error(f"Failed to get DLQ count: {e}")
+            logger.error("Failed to get DLQ count: %s", e)
             return 0
 
     TASK_INDEX_KEY = f"{REDIS_KEY_PREFIX}:index"  # Hash: task_id → JSON
@@ -305,7 +328,7 @@ class DeadLetterQueue:
                 return json.loads(raw)
             return None
         except Exception as e:
-            logger.error(f"Failed to look up task {task_id}: {e}")
+            logger.error("Failed to look up task %s: %s", task_id, e)
             return None
 
     def _remove_from_index(self, task_ids: list[str]) -> None:
@@ -350,7 +373,10 @@ class DeadLetterQueue:
                 eng_task_ids = self.redis.zrangebyscore(eng_key, 0, cutoff)
                 count = len(eng_task_ids)
                 if count > 0:
-                    decoded = [tid.decode("utf-8") if isinstance(tid, bytes) else tid for tid in eng_task_ids]
+                    decoded = [
+                        tid.decode("utf-8") if isinstance(tid, bytes) else tid
+                        for tid in eng_task_ids
+                    ]
                     # Remove from both the main key and the engagement index
                     for tid in eng_task_ids:
                         self.redis.zrem(main_key, tid)
@@ -363,7 +389,10 @@ class DeadLetterQueue:
                 eng_key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
                 # Get all task IDs from the engagement key before removing
                 all_ids = self.redis.zrange(eng_key, 0, -1)
-                decoded_ids = [tid.decode("utf-8") if isinstance(tid, bytes) else tid for tid in all_ids]
+                decoded_ids = [
+                    tid.decode("utf-8") if isinstance(tid, bytes) else tid
+                    for tid in all_ids
+                ]
                 count = self.redis.zcard(eng_key)
                 self.redis.delete(eng_key)
                 # Remove from main key too
@@ -375,7 +404,10 @@ class DeadLetterQueue:
             elif cutoff is not None:
                 # Get task IDs in the score range before removing them
                 task_ids = self.redis.zrangebyscore(main_key, 0, cutoff)
-                decoded_ids = [tid.decode("utf-8") if isinstance(tid, bytes) else tid for tid in task_ids]
+                decoded_ids = [
+                    tid.decode("utf-8") if isinstance(tid, bytes) else tid
+                    for tid in task_ids
+                ]
                 count = len(decoded_ids)
                 self.redis.zremrangebyscore(main_key, 0, cutoff)
                 # Selective index cleanup (M4 fix: don't delete entire index)
@@ -388,7 +420,7 @@ class DeadLetterQueue:
                 return count
 
         except Exception as e:
-            logger.error(f"Failed to purge DLQ: {e}")
+            logger.error("Failed to purge DLQ: %s", e)
             return 0
 
 

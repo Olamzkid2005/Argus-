@@ -20,6 +20,7 @@ from models.feedback import FeedbackLearningLoop, FindingFeedback
 # CandidateList Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestCandidateSource:
     """Tests for CandidateSource enum."""
 
@@ -119,8 +120,18 @@ class TestCandidateList:
 
     def test_from_findings_builds_candidate_list(self):
         findings = [
-            {"source_tool": "nuclei", "endpoint": "https://example.com", "type": "XSS", "evidence": {}},
-            {"source_tool": "dalfox", "endpoint": "https://example.com", "type": "XSS", "evidence": {}},
+            {
+                "source_tool": "nuclei",
+                "endpoint": "https://example.com",
+                "type": "XSS",
+                "evidence": {},
+            },
+            {
+                "source_tool": "dalfox",
+                "endpoint": "https://example.com",
+                "type": "XSS",
+                "evidence": {},
+            },
         ]
         cl = CandidateList.from_findings("https://example.com", findings)
         assert cl.target == "https://example.com"
@@ -132,8 +143,12 @@ class TestCandidateList:
         assert len(cl.candidates) == 0
 
     def test_by_quality_returns_sorted_candidates(self):
-        c1 = Candidate("https://example.com", CandidateSource.RECON_ENDPOINT, "xss", "hit")
-        c2 = Candidate("https://example.com", CandidateSource.NUCLEI_CVE, "sql-injection", "hit")
+        c1 = Candidate(
+            "https://example.com", CandidateSource.RECON_ENDPOINT, "xss", "hit"
+        )
+        c2 = Candidate(
+            "https://example.com", CandidateSource.NUCLEI_CVE, "sql-injection", "hit"
+        )
         c3 = Candidate("https://example.com", CandidateSource.DALFOX, "xss", "hit")
         cl = CandidateList(target="https://example.com", candidates=[c1, c2, c3])
         sorted_c = cl.by_quality()
@@ -141,7 +156,9 @@ class TestCandidateList:
         assert sorted_c[-1].source == CandidateSource.RECON_ENDPOINT  # lowest priority
 
     def test_by_quality_unknown_source_sorted_last(self):
-        c1 = Candidate("https://example.com", CandidateSource.RECON_ENDPOINT, "xss", "hit")
+        c1 = Candidate(
+            "https://example.com", CandidateSource.RECON_ENDPOINT, "xss", "hit"
+        )
         c2 = Candidate("https://example.com", CandidateSource.NUCLEI_CVE, "xss", "hit")
         cl = CandidateList(target="https://example.com", candidates=[c1, c2])
         sorted_c = cl.by_quality()
@@ -152,7 +169,9 @@ class TestCandidateList:
         assert cl.to_llm_summary() == ""
 
     def test_to_llm_summary_with_candidates(self):
-        c1 = Candidate("https://example.com", CandidateSource.NUCLEI_CVE, "sql-injection", "hit")
+        c1 = Candidate(
+            "https://example.com", CandidateSource.NUCLEI_CVE, "sql-injection", "hit"
+        )
         c2 = Candidate("https://example.com", CandidateSource.DALFOX, "xss", "hit")
         cl = CandidateList(target="https://example.com", candidates=[c1, c2])
         summary = cl.to_llm_summary()
@@ -162,7 +181,9 @@ class TestCandidateList:
         assert "2 total" in summary
 
     def test_to_llm_summary_deduplicates_endpoints(self):
-        c1 = Candidate("https://example.com/a", CandidateSource.NUCLEI_CVE, "xss", "hit")
+        c1 = Candidate(
+            "https://example.com/a", CandidateSource.NUCLEI_CVE, "xss", "hit"
+        )
         c2 = Candidate("https://example.com/b", CandidateSource.DALFOX, "xss", "hit")
         cl = CandidateList(target="https://example.com", candidates=[c1, c2])
         summary = cl.to_llm_summary()
@@ -186,6 +207,7 @@ class TestMapToolToSource:
 # ═══════════════════════════════════════════════════════════════════════════════
 # ConfidenceScorer Tests
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestConfidenceScorer:
     """Tests for ConfidenceScorer."""
@@ -228,7 +250,9 @@ class TestConfidenceScorer:
                 "tool_agreement_level": 1.0,
                 "cvss_score": 7.5,
             }
-            score = scorer.score(finding, context={"is_public_endpoint": True, "requires_auth": False})
+            score = scorer.score(
+                finding, context={"is_public_endpoint": True, "requires_auth": False}
+            )
             assert 0.0 <= score <= 1.0
 
     def test_extract_features_returns_all_keys(self):
@@ -241,10 +265,16 @@ class TestConfidenceScorer:
                 "tool_agreement_level": 1.0,
                 "cvss_score": 7.5,
             }
-            features = scorer._extract_features(finding, {"is_public_endpoint": True, "requires_auth": False})
+            features = scorer._extract_features(
+                finding, {"is_public_endpoint": True, "requires_auth": False}
+            )
             assert set(features.keys()) == {
-                "category_fp_rate", "tool_accuracy", "evidence_quality",
-                "multi_tool_agreement", "context", "cvss_severity",
+                "category_fp_rate",
+                "tool_accuracy",
+                "evidence_quality",
+                "multi_tool_agreement",
+                "context",
+                "cvss_severity",
             }
 
     def test_extract_features_unknown_type_uses_default_fp(self):
@@ -272,19 +302,27 @@ class TestConfidenceScorer:
         with patch("models.confidence_scorer.is_enabled", return_value=True):
             scorer = ConfidenceScorer()
             finding = {"type": "xss", "source_tool": "nuclei", "evidence": {}}
-            features = scorer._extract_features(finding, {"is_public_endpoint": True, "requires_auth": True})
+            features = scorer._extract_features(
+                finding, {"is_public_endpoint": True, "requires_auth": True}
+            )
             assert features["context"] == 0.7
 
     def test_extract_features_non_public_uses_0_8(self):
         with patch("models.confidence_scorer.is_enabled", return_value=True):
             scorer = ConfidenceScorer()
             finding = {"type": "xss", "source_tool": "nuclei", "evidence": {}}
-            features = scorer._extract_features(finding, {"is_public_endpoint": False, "requires_auth": False})
+            features = scorer._extract_features(
+                finding, {"is_public_endpoint": False, "requires_auth": False}
+            )
             assert features["context"] == 0.8
 
     def test_legacy_score_handles_string_agreement_level(self):
         scorer = ConfidenceScorer()
-        finding = {"tool_agreement_level": "high", "evidence_strength": 0.8, "fp_likelihood": 0.1}
+        finding = {
+            "tool_agreement_level": "high",
+            "evidence_strength": 0.8,
+            "fp_likelihood": 0.1,
+        }
         with patch("models.confidence_scorer.is_enabled", return_value=False):
             score = scorer.score(finding)
             assert 0.0 <= score <= 1.0
@@ -300,7 +338,11 @@ class TestConfidenceScorer:
     def test_evidence_quality_minimal_for_non_dict_evidence(self):
         with patch("models.confidence_scorer.is_enabled", return_value=True):
             scorer = ConfidenceScorer()
-            finding = {"type": "xss", "source_tool": "nuclei", "evidence": "string evidence"}
+            finding = {
+                "type": "xss",
+                "source_tool": "nuclei",
+                "evidence": "string evidence",
+            }
             features = scorer._extract_features(finding)
             assert features["evidence_quality"] == 0.6
 
@@ -314,14 +356,24 @@ class TestConfidenceScorer:
     def test_multi_tool_agreement_from_string(self):
         with patch("models.confidence_scorer.is_enabled", return_value=True):
             scorer = ConfidenceScorer()
-            finding = {"type": "xss", "source_tool": "nuclei", "evidence": {}, "tool_agreement_level": "high"}
+            finding = {
+                "type": "xss",
+                "source_tool": "nuclei",
+                "evidence": {},
+                "tool_agreement_level": "high",
+            }
             features = scorer._extract_features(finding)
             assert features["multi_tool_agreement"] == pytest.approx(1.0 * 0.33)
 
     def test_cvss_score_parsing(self):
         with patch("models.confidence_scorer.is_enabled", return_value=True):
             scorer = ConfidenceScorer()
-            finding = {"type": "xss", "source_tool": "nuclei", "evidence": {}, "cvss_score": 8.5}
+            finding = {
+                "type": "xss",
+                "source_tool": "nuclei",
+                "evidence": {},
+                "cvss_score": 8.5,
+            }
             features = scorer._extract_features(finding)
             assert features["cvss_severity"] == pytest.approx(0.85)
 
@@ -335,8 +387,20 @@ class TestConfidenceScorer:
     def test_score_range_always_between_0_and_1(self):
         with patch("models.confidence_scorer.is_enabled", return_value=True):
             scorer = ConfidenceScorer()
-            f1 = {"type": "xss", "source_tool": "nuclei", "evidence": {"type": "verified"}, "tool_agreement_level": 1.0, "cvss_score": 10.0}
-            f2 = {"type": "xss", "source_tool": "unknown", "evidence": {}, "tool_agreement_level": 0.0, "cvss_score": 0.0}
+            f1 = {
+                "type": "xss",
+                "source_tool": "nuclei",
+                "evidence": {"type": "verified"},
+                "tool_agreement_level": 1.0,
+                "cvss_score": 10.0,
+            }
+            f2 = {
+                "type": "xss",
+                "source_tool": "unknown",
+                "evidence": {},
+                "tool_agreement_level": 0.0,
+                "cvss_score": 0.0,
+            }
             s1 = scorer.score(f1, {"is_public_endpoint": True, "requires_auth": False})
             s2 = scorer.score(f2, {"is_public_endpoint": False, "requires_auth": True})
             assert 0.0 <= s1 <= 1.0
@@ -346,6 +410,7 @@ class TestConfidenceScorer:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Feedback Tests
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestFindingFeedback:
     """Tests for FindingFeedback dataclass."""
@@ -391,9 +456,15 @@ class TestFeedbackLearningLoop:
             patch("models.feedback.is_enabled", return_value=True),
             patch.object(FeedbackLearningLoop, "_store_feedback"),
             patch.object(FeedbackLearningLoop, "_update_finding"),
-            patch.object(FeedbackLearningLoop, "_update_tool_accuracy", return_value=True),
-            patch.object(FeedbackLearningLoop, "_update_confidence_model", return_value=True),
-            patch.object(FeedbackLearningLoop, "_get_finding_source_tool", return_value="nuclei"),
+            patch.object(
+                FeedbackLearningLoop, "_update_tool_accuracy", return_value=True
+            ),
+            patch.object(
+                FeedbackLearningLoop, "_update_confidence_model", return_value=True
+            ),
+            patch.object(
+                FeedbackLearningLoop, "_get_finding_source_tool", return_value="nuclei"
+            ),
             patch.object(FeedbackLearningLoop, "_get_tool_fp_rate", return_value=0.1),
         ):
             loop = FeedbackLearningLoop()
@@ -409,9 +480,15 @@ class TestFeedbackLearningLoop:
             patch("models.feedback.is_enabled", return_value=True),
             patch.object(FeedbackLearningLoop, "_store_feedback"),
             patch.object(FeedbackLearningLoop, "_update_finding"),
-            patch.object(FeedbackLearningLoop, "_update_tool_accuracy", return_value=True),
-            patch.object(FeedbackLearningLoop, "_update_confidence_model", return_value=True),
-            patch.object(FeedbackLearningLoop, "_get_finding_source_tool", return_value="nikto"),
+            patch.object(
+                FeedbackLearningLoop, "_update_tool_accuracy", return_value=True
+            ),
+            patch.object(
+                FeedbackLearningLoop, "_update_confidence_model", return_value=True
+            ),
+            patch.object(
+                FeedbackLearningLoop, "_get_finding_source_tool", return_value="nikto"
+            ),
             patch.object(FeedbackLearningLoop, "_get_tool_fp_rate", return_value=0.50),
             patch.object(FeedbackLearningLoop, "_send_alert") as mock_alert,
         ):
@@ -426,9 +503,15 @@ class TestFeedbackLearningLoop:
             patch("models.feedback.is_enabled", return_value=True),
             patch.object(FeedbackLearningLoop, "_store_feedback"),
             patch.object(FeedbackLearningLoop, "_update_finding"),
-            patch.object(FeedbackLearningLoop, "_update_tool_accuracy", return_value=True),
-            patch.object(FeedbackLearningLoop, "_update_confidence_model", return_value=True),
-            patch.object(FeedbackLearningLoop, "_get_finding_source_tool", return_value="nuclei"),
+            patch.object(
+                FeedbackLearningLoop, "_update_tool_accuracy", return_value=True
+            ),
+            patch.object(
+                FeedbackLearningLoop, "_update_confidence_model", return_value=True
+            ),
+            patch.object(
+                FeedbackLearningLoop, "_get_finding_source_tool", return_value="nuclei"
+            ),
             patch.object(FeedbackLearningLoop, "_get_tool_fp_rate", return_value=0.10),
         ):
             loop = FeedbackLearningLoop()
@@ -441,9 +524,15 @@ class TestFeedbackLearningLoop:
             patch("models.feedback.is_enabled", return_value=True),
             patch.object(FeedbackLearningLoop, "_store_feedback"),
             patch.object(FeedbackLearningLoop, "_update_finding"),
-            patch.object(FeedbackLearningLoop, "_update_tool_accuracy", return_value=True),
-            patch.object(FeedbackLearningLoop, "_update_confidence_model", return_value=True),
-            patch.object(FeedbackLearningLoop, "_get_finding_source_tool", return_value=None),
+            patch.object(
+                FeedbackLearningLoop, "_update_tool_accuracy", return_value=True
+            ),
+            patch.object(
+                FeedbackLearningLoop, "_update_confidence_model", return_value=True
+            ),
+            patch.object(
+                FeedbackLearningLoop, "_get_finding_source_tool", return_value=None
+            ),
         ):
             loop = FeedbackLearningLoop()
             fb = FindingFeedback("f-001", "eng-001", True)

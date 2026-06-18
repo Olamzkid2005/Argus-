@@ -78,38 +78,43 @@ class DeveloperFixAssistant:
 
         if not llm_service and self.llm_client:
             from llm_service import LLMService
+
             llm_service = LLMService(llm_client=self.llm_client)
 
         if not llm_service or not llm_service.is_available():
             return None
 
         if cost_tracker and not cost_tracker.has_remaining_budget():
-            logger.info(
-                "LLM budget exhausted — skipping fix generation"
-            )
+            logger.info("LLM budget exhausted — skipping fix generation")
             return None
 
-        stack_str = (
-            ", ".join(tech_stack[:5]) if tech_stack else "unknown"
-        )
+        stack_str = ", ".join(tech_stack[:5]) if tech_stack else "unknown"
         evidence = finding.get("evidence", {})
 
-        user_prompt = json.dumps({
-            "finding_type": finding.get("type", "UNKNOWN"),
-            "severity": finding.get("severity", "MEDIUM"),
-            "endpoint": finding.get("endpoint", ""),
-            "evidence": {
-                "request": str(evidence.get("request", ""))[:400],
-                "response": str(evidence.get("response", ""))[:300],
-                "payload": str(evidence.get("payload", ""))[:200],
-                "code_snippet": str(evidence.get("code", "") or evidence.get("code_snippet", "") or evidence.get("match", "") or "")[:500],
+        user_prompt = json.dumps(
+            {
+                "finding_type": finding.get("type", "UNKNOWN"),
+                "severity": finding.get("severity", "MEDIUM"),
+                "endpoint": finding.get("endpoint", ""),
+                "evidence": {
+                    "request": str(evidence.get("request", ""))[:400],
+                    "response": str(evidence.get("response", ""))[:300],
+                    "payload": str(evidence.get("payload", ""))[:200],
+                    "code_snippet": str(
+                        evidence.get("code", "")
+                        or evidence.get("code_snippet", "")
+                        or evidence.get("match", "")
+                        or ""
+                    )[:500],
+                },
+                "tech_stack": tech_stack[:5],
+                "instruction": (
+                    f"Generate remediation for this {finding.get('type')} "
+                    f"finding in a {stack_str} application."
+                ),
             },
-            "tech_stack": tech_stack[:5],
-            "instruction": (
-                f"Generate remediation for this {finding.get('type')} "
-                f"finding in a {stack_str} application."
-            ),
-        }, indent=2)
+            indent=2,
+        )
 
         try:
             from datetime import datetime
@@ -127,9 +132,7 @@ class DeveloperFixAssistant:
             if cost_tracker and "cost_usd" in result:
                 cost_tracker.record_llm_call(result.get("cost_usd", 0))
 
-            result["generated_at"] = datetime.now(
-                UTC
-            ).isoformat()
+            result["generated_at"] = datetime.now(UTC).isoformat()
             result["tech_stack"] = tech_stack[:5]
 
             return result

@@ -17,11 +17,15 @@ class TestDispatchTask:
             mock_app.send_task.return_value = mock_result
 
             with patch.dict("os.environ", {"DATABASE_URL": "postgres://localhost"}):
-                result = dispatch_task("some_task", ["arg1", "arg2"], task_id="custom-id")
+                result = dispatch_task(
+                    "some_task", ["arg1", "arg2"], task_id="custom-id"
+                )
                 assert result["task_id"] == "task-123"
                 assert result["state"] == "PENDING"
                 mock_app.send_task.assert_called_with(
-                    "some_task", args=["arg1", "arg2"], task_id="custom-id",
+                    "some_task",
+                    args=["arg1", "arg2"],
+                    task_id="custom-id",
                 )
 
     def test_default_task_id(self):
@@ -43,7 +47,9 @@ class TestDispatchTask:
             mock_result.state = "PENDING"
             mock_app.send_task.return_value = mock_result
 
-            with patch.dict("os.environ", {"DATABASE_URL": "postgres://localhost"}, clear=True):
+            with patch.dict(
+                "os.environ", {"DATABASE_URL": "postgres://localhost"}, clear=True
+            ):
                 result = dispatch_task("task", ["arg"])
                 assert result["task_id"] == "t-1"
 
@@ -70,11 +76,13 @@ class TestMain:
                 main()
 
     def test_valid_job_dispatches(self):
-        input_data = json.dumps({
-            "type": "recon",
-            "engagement_id": "eng-1",
-            "target": "https://example.com",
-        })
+        input_data = json.dumps(
+            {
+                "type": "recon",
+                "engagement_id": "eng-1",
+                "target": "https://example.com",
+            }
+        )
         with patch("sys.stdin.read", return_value=input_data):
             with patch("dispatch_task.dispatch_task") as mock_dispatch:
                 mock_dispatch.return_value = {"task_id": "t-1", "state": "PENDING"}

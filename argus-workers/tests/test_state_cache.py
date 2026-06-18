@@ -33,7 +33,9 @@ class TestRedisStateCache:
             expected_key = f"engagement_state:{self.ENGAGEMENT_ID}"
             expected_value = json.dumps(self.STATE_DATA, default=str)
             mock_redis.setex.assert_called_once_with(
-                expected_key, 60, expected_value,
+                expected_key,
+                60,
+                expected_value,
             )
 
             # Load (mock get to return the saved value)
@@ -80,7 +82,8 @@ class TestRedisStateCache:
             result = cache.touch(self.ENGAGEMENT_ID)
             assert result is True
             mock_redis.expire.assert_called_once_with(
-                f"engagement_state:{self.ENGAGEMENT_ID}", 300,
+                f"engagement_state:{self.ENGAGEMENT_ID}",
+                300,
             )
 
     def test_save_redis_unavailable(self):
@@ -221,7 +224,8 @@ class TestRedisStateCacheIntegration:
         result = state.save_to_cache()
         assert result is True
         mock_cache.save.assert_called_once_with(
-            "eng-1", state.to_dict(),
+            "eng-1",
+            state.to_dict(),
         )
 
     def test_engagement_state_save_to_cache_no_cache(self):

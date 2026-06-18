@@ -92,6 +92,8 @@ class TestRetryFunction:
             call_args.append((a, b, multiplier))
             return (a + b) * multiplier
 
-        result = retry_function(adder, args=(3, 4), kwargs={"multiplier": 2}, max_attempts=1)
+        result = retry_function(
+            adder, args=(3, 4), kwargs={"multiplier": 2}, max_attempts=1
+        )
         assert result == 14
         assert call_args[0] == (3, 4, 2)

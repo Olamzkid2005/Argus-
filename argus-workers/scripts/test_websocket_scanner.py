@@ -30,6 +30,7 @@ logger = logging.getLogger("test_ws_scanner")
 
 # ── Intentional insecure WebSocket echo server ──
 
+
 class TestWsServerProtocol:
     """A deliberately insecure WebSocket server for testing.
 
@@ -56,8 +57,11 @@ class TestWsServerProtocol:
     async def start(self, host="127.0.0.1", port=0):
         """Start the server and return (url, port)."""
         import websockets.asyncio.server
+
         self.server = await websockets.asyncio.server.serve(
-            self.handler, host, port,
+            self.handler,
+            host,
+            port,
         )
         port = self.server.sockets[0].getsockname()[1]
         url = f"ws://{host}:{port}"
@@ -72,6 +76,7 @@ class TestWsServerProtocol:
 
 
 # ── Run server in a thread, then scan ──
+
 
 def run_server_in_thread(url_holder: list):
     """Run the server in a background thread."""
@@ -95,7 +100,9 @@ def main():
     # 1. Start the test server in a background thread
     url_holder: list[str] = []
     server_thread = threading.Thread(
-        target=run_server_in_thread, args=(url_holder,), daemon=True,
+        target=run_server_in_thread,
+        args=(url_holder,),
+        daemon=True,
     )
     server_thread.start()
     time.sleep(1)  # Wait for server to start

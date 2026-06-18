@@ -31,16 +31,20 @@ class CustomRulesService:
             List of custom rule dicts, or empty list if none found or on error.
         """
         from database.connection import db_cursor
+
         try:
             with db_cursor() as cursor:
-                cursor.execute("SELECT org_id FROM engagements WHERE id = %s", (engagement_id,))
+                cursor.execute(
+                    "SELECT org_id FROM engagements WHERE id = %s", (engagement_id,)
+                )
                 row = cursor.fetchone()
                 if not row:
                     return []
                 org_id = row[0]
 
                 # First check for engagement-specific rules via junction table
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT cr.id, cr.name, cr.description, cr.severity,
                            cr.category, cr.rule_yaml, cr.tags
                     FROM custom_rules cr
@@ -49,14 +53,19 @@ class CustomRulesService:
                     WHERE ecr.engagement_id = %s
                       AND cr.status = 'active'
                     ORDER BY cr.created_at DESC
-                """, (engagement_id,))
+                """,
+                    (engagement_id,),
+                )
                 columns = [desc[0] for desc in cursor.description]
-                engagement_rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+                engagement_rules = [
+                    dict(zip(columns, row, strict=False)) for row in cursor.fetchall()
+                ]
 
                 if engagement_rules:
                     logger.info(
                         "Loaded %d engagement-specific custom rule(s) for engagement %s",
-                        len(engagement_rules), engagement_id,
+                        len(engagement_rules),
+                        engagement_id,
                     )
                     return engagement_rules
 
@@ -65,18 +74,25 @@ class CustomRulesService:
                     "No engagement-specific custom rules for %s, falling back to org-level rules",
                     engagement_id,
                 )
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT id, name, description, severity, category, rule_yaml, tags
                     FROM custom_rules WHERE org_id = %s AND status = 'active'
                     ORDER BY created_at DESC
-                """, (org_id,))
-                org_rules = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
+                """,
+                    (org_id,),
+                )
+                org_rules = [
+                    dict(zip(columns, row, strict=False)) for row in cursor.fetchall()
+                ]
                 logger.info(
-                    "Loaded %d org-level custom rule(s) for org %s", len(org_rules), org_id,
+                    "Loaded %d org-level custom rule(s) for org %s",
+                    len(org_rules),
+                    org_id,
                 )
                 return org_rules
         except Exception as e:
-            logger.warning(f"Failed to load custom rules: {e}")
+            logger.warning("Failed to load custom rules: %s", e)
             return []
 
     @staticmethod
@@ -114,5 +130,6 @@ class CustomRulesService:
                 )
             logger.info(
                 "Loaded %d custom rule(s) for engagement %s",
-                len(custom_rules), engagement_id,
+                len(custom_rules),
+                engagement_id,
             )

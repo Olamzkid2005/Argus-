@@ -70,6 +70,7 @@ class TestDualAuthScannerConstruction:
 
     def test_inherits_abstract_tool(self):
         from tool_core.base import AbstractTool
+
         assert issubclass(DualAuthScanner, AbstractTool)
 
     def test_defaults(self, auth_config):
@@ -97,35 +98,40 @@ class TestDualAuthScannerConstruction:
 
 
 class TestEmitFinding:
-    """"_emit_finding" works with and without builder."""
+    """ "_emit_finding" works with and without builder."""
 
     def test_without_builder_appends_raw(self, scanner):
         """When _builder is None, finding dict is appended directly."""
         scanner._builder = None
-        scanner._emit_finding({
-            "type": "CONFIRMED_BOLA",
-            "severity": "CRITICAL",
-            "endpoint": "https://example.com/api/resource/1",
-            "evidence": {"test": True},
-            "confidence": 0.9,
-        })
+        scanner._emit_finding(
+            {
+                "type": "CONFIRMED_BOLA",
+                "severity": "CRITICAL",
+                "endpoint": "https://example.com/api/resource/1",
+                "evidence": {"test": True},
+                "confidence": 0.9,
+            }
+        )
         assert len(scanner.findings) == 1
         assert scanner.findings[0]["type"] == "CONFIRMED_BOLA"
 
     def test_with_builder_routes_through(self, scanner):
         """When _builder is set, finding routes through FindingBuilder."""
         from tool_core.finding_builder import FindingBuilder
+
         scanner._builder = FindingBuilder(
             source_tool="dual_auth_scanner",
             engagement_id="test-eng",
         )
-        scanner._emit_finding({
-            "type": "CONFIRMED_BOLA",
-            "severity": "CRITICAL",
-            "endpoint": "https://example.com/api/resource/1",
-            "evidence": {"test": True},
-            "confidence": 0.9,
-        })
+        scanner._emit_finding(
+            {
+                "type": "CONFIRMED_BOLA",
+                "severity": "CRITICAL",
+                "endpoint": "https://example.com/api/resource/1",
+                "evidence": {"test": True},
+                "confidence": 0.9,
+            }
+        )
         # Finding should be in both builder and self.findings
         assert len(scanner._builder.findings) == 1
         assert len(scanner.findings) == 1
@@ -134,17 +140,20 @@ class TestEmitFinding:
     def test_builder_sanitizes_evidence(self, scanner):
         """Builder applies sanitization to evidence."""
         from tool_core.finding_builder import FindingBuilder
+
         scanner._builder = FindingBuilder(
             source_tool="dual_auth_scanner",
             engagement_id="test-eng",
         )
-        scanner._emit_finding({
-            "type": "CONFIRMED_BOLA",
-            "severity": "CRITICAL",
-            "endpoint": "https://example.com/api/resource/1",
-            "evidence": {"sensitive": "data"},
-            "confidence": 0.9,
-        })
+        scanner._emit_finding(
+            {
+                "type": "CONFIRMED_BOLA",
+                "severity": "CRITICAL",
+                "endpoint": "https://example.com/api/resource/1",
+                "evidence": {"sensitive": "data"},
+                "confidence": 0.9,
+            }
+        )
         f = scanner._builder.findings[0]
         assert f["type"] == "CONFIRMED_BOLA"
         assert f["severity"] == "CRITICAL"
@@ -209,6 +218,7 @@ class TestCrossAccountAccess:
     def test_confirmed_bola(self, scanner):
         """200 with substantial content = confirmed BOLA."""
         session_b = Mock()
+
         # Only GET succeeds; PUT returns 403 (no finding)
         def _req(method, url, **kw):
             if method == "GET":
@@ -217,11 +227,15 @@ class TestCrossAccountAccess:
                     text='{"id":123,"name":"confidential_admin_resource_owned_by_administrator_user"}',
                 )
             return Mock(status_code=403, text="Forbidden")
+
         session_b.request.side_effect = _req
 
-        findings = scanner._test_cross_account_access(session_b, {
-            "accounts": ["1"],
-        })
+        findings = scanner._test_cross_account_access(
+            session_b,
+            {
+                "accounts": ["1"],
+            },
+        )
 
         assert len(findings) == 1
         assert findings[0]["type"] == "CONFIRMED_BOLA"
@@ -230,6 +244,7 @@ class TestCrossAccountAccess:
     def test_potential_bola(self, scanner):
         """200 with access-denied indicators = potential BOLA."""
         session_b = Mock()
+
         def _req(method, url, **kw):
             if method == "GET":
                 return Mock(
@@ -237,11 +252,15 @@ class TestCrossAccountAccess:
                     text="access denied — you do not have permission",
                 )
             return Mock(status_code=403, text="Forbidden")
+
         session_b.request.side_effect = _req
 
-        findings = scanner._test_cross_account_access(session_b, {
-            "accounts": ["1"],
-        })
+        findings = scanner._test_cross_account_access(
+            session_b,
+            {
+                "accounts": ["1"],
+            },
+        )
 
         assert len(findings) == 1
         assert findings[0]["type"] == "POTENTIAL_BOLA"
@@ -252,9 +271,12 @@ class TestCrossAccountAccess:
         session_b = Mock()
         session_b.request.return_value = Mock(status_code=403, text="Forbidden")
 
-        findings = scanner._test_cross_account_access(session_b, {
-            "accounts": ["1"],
-        })
+        findings = scanner._test_cross_account_access(
+            session_b,
+            {
+                "accounts": ["1"],
+            },
+        )
 
         assert len(findings) == 0
 
@@ -485,7 +507,9 @@ class TestForPhaseExecution:
         mock_session.request.return_value = mock_response
 
         with patch.object(sc, "timeout", 5):
-            sc._safe_request("GET", "https://example.com/api/test", session=mock_session)
+            sc._safe_request(
+                "GET", "https://example.com/api/test", session=mock_session
+            )
 
         assert sc._last_response_received is True
 
@@ -498,7 +522,9 @@ class TestForPhaseExecution:
         mock_session.request.side_effect = RequestsConnectionError("Connection refused")
 
         with patch.object(sc, "timeout", 5):
-            result = sc._safe_request("GET", "https://example.com/api/test", session=mock_session)
+            result = sc._safe_request(
+                "GET", "https://example.com/api/test", session=mock_session
+            )
 
         assert result is None
         assert sc._last_response_received is False
@@ -509,12 +535,14 @@ class TestForPhaseExecution:
         assert sc._builder is not None  # for_phase_execution always sets _builder
         # _emit_finding should route through _builder.add()
         with patch.object(sc._builder, "add", wraps=sc._builder.add) as mock_add:
-            sc._emit_finding({
-                "type": "CONFIRMED_BOLA",
-                "severity": "CRITICAL",
-                "endpoint": "/api/accounts/1",
-                "evidence": {},
-                "confidence": 0.9,
-            })
+            sc._emit_finding(
+                {
+                    "type": "CONFIRMED_BOLA",
+                    "severity": "CRITICAL",
+                    "endpoint": "/api/accounts/1",
+                    "evidence": {},
+                    "confidence": 0.9,
+                }
+            )
             mock_add.assert_called_once()
         assert len(sc.findings) == 1

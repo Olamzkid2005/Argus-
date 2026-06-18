@@ -3,6 +3,7 @@ Tests for tasks/asset_discovery.py
 
 Validates: Asset classification, risk score calculation, discovery task logic
 """
+
 import os
 import sys
 from unittest.mock import MagicMock, patch
@@ -16,12 +17,19 @@ for mod in list(sys.modules.keys()):
 
 # Patch module loading before importing asset_discovery
 mock_celery_app = MagicMock()
+
+
 def _mock_task(*args, **kwargs):
     def decorator(func):
         return func
+
     return decorator
+
+
 mock_celery_app.task = _mock_task
-mock_celery_app.app = mock_celery_app  # so `from celery_app import app` gets the same object
+mock_celery_app.app = (
+    mock_celery_app  # so `from celery_app import app` gets the same object
+)
 
 with patch.dict(sys.modules, {"celery_app": mock_celery_app}):
     from tasks import asset_discovery
@@ -57,7 +65,7 @@ class TestAssetDiscovery:
         mock_cursor.fetchone.return_value = (1,)
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -66,7 +74,7 @@ class TestAssetDiscovery:
                 engagement_id="eng-123",
                 target="https://example.com/path",
                 org_id="org-456",
-                trace_id="trace-abc"
+                trace_id="trace-abc",
             )
 
         assert result["status"] == "completed"
@@ -84,7 +92,7 @@ class TestAssetDiscovery:
         mock_cursor.fetchone.return_value = (2,)
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -92,7 +100,7 @@ class TestAssetDiscovery:
                 self=MagicMock(),
                 engagement_id="eng-123",
                 target="https://example.com/api",
-                org_id="org-456"
+                org_id="org-456",
             )
 
         calls = mock_cursor.execute.call_args_list
@@ -105,7 +113,7 @@ class TestAssetDiscovery:
         mock_cursor.fetchone.side_effect = [(1,), None]
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -113,7 +121,7 @@ class TestAssetDiscovery:
                 self=MagicMock(),
                 engagement_id="eng-123",
                 target="example.com",
-                org_id="org-456"
+                org_id="org-456",
             )
 
         calls = mock_cursor.execute.call_args_list
@@ -126,7 +134,7 @@ class TestAssetDiscovery:
         mock_cursor.fetchone.return_value = None  # conflict, no row returned
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -134,7 +142,7 @@ class TestAssetDiscovery:
                 self=MagicMock(),
                 engagement_id="eng-123",
                 target="https://example.com",
-                org_id="org-456"
+                org_id="org-456",
             )
 
         assert result["assets_discovered"] == 0
@@ -146,7 +154,7 @@ class TestAssetDiscovery:
         mock_cursor.execute.side_effect = Exception("DB error")
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -154,7 +162,7 @@ class TestAssetDiscovery:
                 self=MagicMock(),
                 engagement_id="eng-123",
                 target="https://example.com",
-                org_id="org-456"
+                org_id="org-456",
             )
 
         assert result["status"] == "failed"
@@ -167,7 +175,7 @@ class TestAssetDiscovery:
         mock_cursor.fetchone.return_value = (1,)
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -175,7 +183,7 @@ class TestAssetDiscovery:
                 self=MagicMock(),
                 engagement_id="eng-123",
                 target="https://example.com",
-                org_id="org-456"
+                org_id="org-456",
             )
 
         assert result["trace_id"] == "trace-123"
@@ -191,19 +199,22 @@ class TestAssetDiscovery:
         ]
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
             result = asset_discovery.update_asset_risk_scores(
-                self=MagicMock(),
-                org_id="org-456"
+                self=MagicMock(), org_id="org-456"
             )
 
         assert result["status"] == "completed"
         assert result["assets_scored"] == 2
 
         # Check that UPDATE was called for each asset
-        update_calls = [call for call in mock_cursor.execute.call_args_list if "UPDATE assets" in str(call)]
+        update_calls = [
+            call
+            for call in mock_cursor.execute.call_args_list
+            if "UPDATE assets" in str(call)
+        ]
         assert len(update_calls) == 2
 
     def test_update_asset_risk_scores_critical(self, mock_db):
@@ -216,17 +227,18 @@ class TestAssetDiscovery:
         ]
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
             result = asset_discovery.update_asset_risk_scores(
-                self=MagicMock(),
-                org_id="org-456"
+                self=MagicMock(), org_id="org-456"
             )
 
         assert result["status"] == "completed"
 
-        update_call = [c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)][0]
+        update_call = [
+            c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)
+        ][0]
         args = update_call[0][1]
         assert args[0] == 10.0
         assert args[1] == "CRITICAL"
@@ -241,15 +253,14 @@ class TestAssetDiscovery:
         ]
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
-            asset_discovery.update_asset_risk_scores(
-                self=MagicMock(),
-                org_id="org-456"
-            )
+            asset_discovery.update_asset_risk_scores(self=MagicMock(), org_id="org-456")
 
-        update_call = [c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)][0]
+        update_call = [
+            c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)
+        ][0]
         args = update_call[0][1]
         assert args[0] == 6.1
         assert args[1] == "HIGH"
@@ -264,15 +275,14 @@ class TestAssetDiscovery:
         ]
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
-            asset_discovery.update_asset_risk_scores(
-                self=MagicMock(),
-                org_id="org-456"
-            )
+            asset_discovery.update_asset_risk_scores(self=MagicMock(), org_id="org-456")
 
-        update_call = [c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)][0]
+        update_call = [
+            c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)
+        ][0]
         args = update_call[0][1]
         assert args[0] == 4.1
         assert args[1] == "MEDIUM"
@@ -287,15 +297,14 @@ class TestAssetDiscovery:
         ]
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
-            asset_discovery.update_asset_risk_scores(
-                self=MagicMock(),
-                org_id="org-456"
-            )
+            asset_discovery.update_asset_risk_scores(self=MagicMock(), org_id="org-456")
 
-        update_call = [c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)][0]
+        update_call = [
+            c for c in mock_cursor.execute.call_args_list if "UPDATE assets" in str(c)
+        ][0]
         args = update_call[0][1]
         assert args[0] == 1.0
         assert args[1] == "LOW"
@@ -306,12 +315,11 @@ class TestAssetDiscovery:
         mock_cursor.execute.side_effect = Exception("DB error")
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
             result = asset_discovery.update_asset_risk_scores(
-                self=MagicMock(),
-                org_id="org-456"
+                self=MagicMock(), org_id="org-456"
             )
 
         assert result["status"] == "failed"
@@ -323,12 +331,11 @@ class TestAssetDiscovery:
         mock_cursor.fetchall.return_value = []
 
         with (
-            patch.object(asset_discovery, 'connect', return_value=mock_conn),
+            patch.object(asset_discovery, "connect", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
             result = asset_discovery.update_asset_risk_scores(
-                self=MagicMock(),
-                org_id="org-456"
+                self=MagicMock(), org_id="org-456"
             )
 
         assert result["status"] == "completed"

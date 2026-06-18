@@ -29,15 +29,36 @@ pytestmark = [
 
 STATIC_FIXTURES = {
     # (name, is_list, required_fields)
-    "sqli_scan": (False, {"finding_type", "severity", "title", "source_tool", "evidence"}),
-    "xss_scan": (False, {"finding_type", "severity", "title", "source_tool", "evidence"}),
-    "port_scan": (False, {"finding_type", "severity", "title", "source_tool", "evidence"}),
-    "tech_detect": (False, {"finding_type", "severity", "title", "source_tool", "evidence"}),
+    "sqli_scan": (
+        False,
+        {"finding_type", "severity", "title", "source_tool", "evidence"},
+    ),
+    "xss_scan": (
+        False,
+        {"finding_type", "severity", "title", "source_tool", "evidence"},
+    ),
+    "port_scan": (
+        False,
+        {"finding_type", "severity", "title", "source_tool", "evidence"},
+    ),
+    "tech_detect": (
+        False,
+        {"finding_type", "severity", "title", "source_tool", "evidence"},
+    ),
     "empty_scan": (False, {"finding_type", "severity", "title", "source_tool"}),
     "mixed_severity": (True, {"finding_type", "severity", "title", "source_tool"}),
-    "ssrf_scan": (False, {"finding_type", "severity", "title", "source_tool", "evidence"}),
-    "rce_scan": (False, {"finding_type", "severity", "title", "source_tool", "evidence"}),
-    "weak_tls_scan": (False, {"finding_type", "severity", "title", "source_tool", "evidence"}),
+    "ssrf_scan": (
+        False,
+        {"finding_type", "severity", "title", "source_tool", "evidence"},
+    ),
+    "rce_scan": (
+        False,
+        {"finding_type", "severity", "title", "source_tool", "evidence"},
+    ),
+    "weak_tls_scan": (
+        False,
+        {"finding_type", "severity", "title", "source_tool", "evidence"},
+    ),
 }
 
 TOOL_ERROR_FIXTURES = {
@@ -153,7 +174,9 @@ class TestPipelineRegression:
         data = load_fixture("sqli_scan")
         remediation = data.get("remediation", "")
         assert len(remediation) > 10, "Remediation should be detailed"
-        assert "parameterized" in remediation.lower() or "prepared" in remediation.lower()
+        assert (
+            "parameterized" in remediation.lower() or "prepared" in remediation.lower()
+        )
 
     def test_empty_scan_has_no_findings_indicator(self):
         """Empty scan fixture is explicitly a no-findings result."""
@@ -320,20 +343,28 @@ class TestHTMLReportRendering:
 
         data = load_fixture("mixed_severity")
         html = render_html_report(
-            severity_breakdown={"CRITICAL": 2, "HIGH": 1, "MEDIUM": 1, "LOW": 1, "INFO": 0},
+            severity_breakdown={
+                "CRITICAL": 2,
+                "HIGH": 1,
+                "MEDIUM": 1,
+                "LOW": 1,
+                "INFO": 0,
+            },
             findings=data,
         )
 
         # Verify severity card counts appear next to their labels
-        assert 'class="card critical"><div class="count">2</div>' in html, \
+        assert 'class="card critical"><div class="count">2</div>' in html, (
             "Expected 2 CRITICAL findings in severity cards"
-        assert 'class="card high"><div class="count">1</div>' in html or \
-            'class="card medium"><div class="count">1</div>' in html, \
-            "Expected a severity card with count 1"
-        assert 'CRITICAL' in html
-        assert 'HIGH' in html
-        assert 'MEDIUM' in html
-        assert 'LOW' in html
+        )
+        assert (
+            'class="card high"><div class="count">1</div>' in html
+            or 'class="card medium"><div class="count">1</div>' in html
+        ), "Expected a severity card with count 1"
+        assert "CRITICAL" in html
+        assert "HIGH" in html
+        assert "MEDIUM" in html
+        assert "LOW" in html
 
     def test_render_with_executive_summary(self):
         """HTML report with fixture data and executive summary."""
@@ -358,7 +389,9 @@ class TestErrorHintCoverage:
         from utils.error_hints import _ERROR_CODE_HINTS
 
         missing = set(ErrorCode) - set(_ERROR_CODE_HINTS.keys())
-        assert not missing, f"ErrorCodes without hints: {[c.value for c in sorted(missing)]}"
+        assert not missing, (
+            f"ErrorCodes without hints: {[c.value for c in sorted(missing)]}"
+        )
 
     def test_all_tool_specific_patterns_have_hints(self):
         """Every tool-specific stderr pattern produces a valid ErrorHint."""

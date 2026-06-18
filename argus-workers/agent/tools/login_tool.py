@@ -37,10 +37,17 @@ MAX_RETRIES = 10
 BACKOFF_DELAYS = [1, 3, 5, 5, 10, 10, 15, 15, 30, 30]
 
 # Cookie names that indicate a JWT/bearer token
-TOKEN_COOKIE_NAMES = frozenset({
-    "token", "jwt", "access_token", "authorization",
-    "id_token", "refresh_token", "bearer",
-})
+TOKEN_COOKIE_NAMES = frozenset(
+    {
+        "token",
+        "jwt",
+        "access_token",
+        "authorization",
+        "id_token",
+        "refresh_token",
+        "bearer",
+    }
+)
 
 
 # ── Public API ──
@@ -50,13 +57,13 @@ TOKEN_COOKIE_NAMES = frozenset({
 # When no HTML form fields are available (API mode), the login tool
 # iterates through these combinations to find the right field names.
 _API_FIELD_PERMUTATIONS: list[tuple[str, str]] = [
-    ("email", "password"),       # most common for modern APIs
-    ("username", "password"),    # common for legacy systems
-    ("login", "password"),       # common for some APIs
-    ("email", "pass"),           # shorter variant
-    ("username", "pass"),        # shorter variant
-    ("email", "passwd"),         # passwd variant
-    ("user", "password"),        # user/password
+    ("email", "password"),  # most common for modern APIs
+    ("username", "password"),  # common for legacy systems
+    ("login", "password"),  # common for some APIs
+    ("email", "pass"),  # shorter variant
+    ("username", "pass"),  # shorter variant
+    ("email", "passwd"),  # passwd variant
+    ("user", "password"),  # user/password
 ]
 
 
@@ -100,14 +107,16 @@ def run_login(
             UnifiedToolResult(
                 tool_name="login",
                 status=ToolStatus.NONZERO_EXIT,
-                stdout=json.dumps({
-                    "status": "failed",
-                    "error_code": "NO_CREDENTIALS",
-                    "message": (
-                        "No credentials available. Call register() first "
-                        "or provide email/password."
-                    ),
-                }),
+                stdout=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_code": "NO_CREDENTIALS",
+                        "message": (
+                            "No credentials available. Call register() first "
+                            "or provide email/password."
+                        ),
+                    }
+                ),
                 stderr=(
                     "No credentials available. Call register() first "
                     "or provide email/password."
@@ -135,11 +144,13 @@ def run_login(
             UnifiedToolResult(
                 tool_name="login",
                 status=ToolStatus.NONZERO_EXIT,
-                stdout=json.dumps({
-                    "status": "failed",
-                    "error_code": "FORM_NOT_FOUND",
-                    "message": ERROR_CODES["FORM_NOT_FOUND"],
-                }),
+                stdout=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_code": "FORM_NOT_FOUND",
+                        "message": ERROR_CODES["FORM_NOT_FOUND"],
+                    }
+                ),
                 stderr=ERROR_CODES["FORM_NOT_FOUND"],
             ),
             ctx,
@@ -165,10 +176,14 @@ def run_login(
         result_data["attempts"] = attempt + 1
 
         # Build credential payload
-        payload = _build_login_payload(login_email, login_password, fields, login_mode, attempt)
+        payload = _build_login_payload(
+            login_email, login_password, fields, login_mode, attempt
+        )
         if payload is None:
             # All permutations exhausted — fall through to retry/error logic
-            last_error = last_error or ERROR_CODES.get("UNKNOWN_FAILURE", "Failed to build payload")
+            last_error = last_error or ERROR_CODES.get(
+                "UNKNOWN_FAILURE", "Failed to build payload"
+            )
             break
 
         is_json_payload = payload.get("_is_json", False)
@@ -184,15 +199,24 @@ def run_login(
 
             if method == "GET":
                 resp = http_session.get(
-                    action_url, params=body_data, timeout=30, allow_redirects=True,
+                    action_url,
+                    params=body_data,
+                    timeout=30,
+                    allow_redirects=True,
                 )
             elif is_json_payload:
                 resp = http_session.post(
-                    action_url, json=body_data, timeout=30, allow_redirects=True,
+                    action_url,
+                    json=body_data,
+                    timeout=30,
+                    allow_redirects=True,
                 )
             else:
                 resp = http_session.post(
-                    action_url, data=body_data, timeout=30, allow_redirects=True,
+                    action_url,
+                    data=body_data,
+                    timeout=30,
+                    allow_redirects=True,
                 )
 
             # ── Handle response ──
@@ -210,11 +234,15 @@ def run_login(
 
                 # Check for 2FA requirement
                 if _detect_2fa(body_text):
-                    return _fail_result("2FA_REQUIRED", ERROR_CODES["2FA_REQUIRED"], ctx)
+                    return _fail_result(
+                        "2FA_REQUIRED", ERROR_CODES["2FA_REQUIRED"], ctx
+                    )
 
                 # Check for account locked
                 if any(kw in body_text for kw in ("locked", "disabled", "suspended")):
-                    return _fail_result("ACCOUNT_LOCKED", ERROR_CODES["ACCOUNT_LOCKED"], ctx)
+                    return _fail_result(
+                        "ACCOUNT_LOCKED", ERROR_CODES["ACCOUNT_LOCKED"], ctx
+                    )
 
                 # ✅ Login succeeded
                 ctx.session = http_session
@@ -241,12 +269,16 @@ def run_login(
 
             # 405/415 => wrong content type — switch to JSON if using form, or vice versa
             if resp.status_code in (405, 415) and not is_json_payload:
-                logger.debug("Login: got %d with form-data, retrying with JSON", resp.status_code)
+                logger.debug(
+                    "Login: got %d with form-data, retrying with JSON", resp.status_code
+                )
                 last_error = f"HTTP {resp.status_code} with form-encoded data"
                 continue  # next attempt toggles content type
 
             # 401/403 with invalid/incorrect in body = wrong credentials
-            if resp.status_code in (401, 403) and ("invalid" in body_text or "incorrect" in body_text):
+            if resp.status_code in (401, 403) and (
+                "invalid" in body_text or "incorrect" in body_text
+            ):
                 if attempt < MAX_RETRIES - 1:
                     last_error = ERROR_CODES["INVALID_CREDENTIALS"]
                     _rate_limit_backoff(attempt)
@@ -260,7 +292,9 @@ def run_login(
                 continue
 
             if any(kw in body_text for kw in ("locked", "disabled")):
-                return _fail_result("ACCOUNT_LOCKED", ERROR_CODES["ACCOUNT_LOCKED"], ctx)
+                return _fail_result(
+                    "ACCOUNT_LOCKED", ERROR_CODES["ACCOUNT_LOCKED"], ctx
+                )
 
             last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
             result_data["error_code"] = "UNKNOWN_FAILURE"
@@ -320,7 +354,7 @@ def _build_login_payload(
     all_combos: list[tuple[tuple[str, str], bool]] = []
     for perm in _API_FIELD_PERMUTATIONS:
         all_combos.append((perm, False))  # form-encoded first
-        all_combos.append((perm, True))   # then JSON
+        all_combos.append((perm, True))  # then JSON
 
     if attempt >= len(all_combos):
         return None  # all combinations exhausted
@@ -334,7 +368,10 @@ def _build_login_payload(
 
     logger.debug(
         "API login attempt %d: fields=(%s, %s), json=%s",
-        attempt, id_key, pw_key, use_json,
+        attempt,
+        id_key,
+        pw_key,
+        use_json,
     )
     return payload
 
@@ -345,8 +382,15 @@ def _build_login_payload(
 def _detect_2fa(body: str) -> bool:
     """Detect if the login response indicates 2FA is required."""
     body_lower = body.lower()
-    keywords = ["two-factor", "2fa", "otp", "authenticator",
-                "verification code", "mfa", "multi-factor"]
+    keywords = [
+        "two-factor",
+        "2fa",
+        "otp",
+        "authenticator",
+        "verification code",
+        "mfa",
+        "multi-factor",
+    ]
     return any(kw in body_lower for kw in keywords)
 
 
@@ -391,11 +435,13 @@ def _fail_result(
         UnifiedToolResult(
             tool_name="login",
             status=ToolStatus.NONZERO_EXIT,
-            stdout=json.dumps({
-                "status": "failed",
-                "error_code": error_code,
-                "message": error_message,
-            }),
+            stdout=json.dumps(
+                {
+                    "status": "failed",
+                    "error_code": error_code,
+                    "message": error_message,
+                }
+            ),
             stderr=error_message,
         ),
         ctx,

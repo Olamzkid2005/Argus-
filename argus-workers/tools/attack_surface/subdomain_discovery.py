@@ -40,7 +40,9 @@ class SubdomainDiscovery:
         try:
             result = subprocess.run(
                 ["subfinder", "-d", domain, "-silent", "-json"],
-                capture_output=True, text=True, timeout=timeout,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
             )
             if result.returncode != 0:
                 return []
@@ -66,7 +68,8 @@ class SubdomainDiscovery:
             return []
         try:
             result = self._tool_runner.run(
-                "subfinder", ["-d", domain, "-silent", "-json"],
+                "subfinder",
+                ["-d", domain, "-silent", "-json"],
                 timeout=timeout,
             )
             if not result.status.is_ok:
@@ -90,7 +93,8 @@ class SubdomainDiscovery:
             return []
         try:
             result = self._tool_runner.run(
-                "amass", ["enum", "-d", domain, "-json", "-timeout", str(timeout // 2)],
+                "amass",
+                ["enum", "-d", domain, "-json", "-timeout", str(timeout // 2)],
                 timeout=timeout,
             )
             if not result.status.is_ok:

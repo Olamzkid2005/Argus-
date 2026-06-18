@@ -19,6 +19,7 @@ Integrates advanced web scanning capabilities:
 - Debug endpoint detection
 - Sensitive file detection
 """
+
 import contextlib
 import json
 import logging
@@ -97,63 +98,111 @@ class WebScanner(AbstractTool):
 
     # Sensitive file patterns
     SENSITIVE_FILES = [
-        ".env", ".git/config", ".git/HEAD", ".git/COMMIT_EDITMSG",
-        "config.php", "wp-config.php", ".DS_Store",
-        "credentials.json", "secrets.yml", ".aws/credentials",
-        "id_rsa", "docker-compose.yml", ".htpasswd",
-        "database.yml", "settings.py", ".npmrc", ".pypirc",
-        "robots.txt", "sitemap.xml", "swagger.json", "openapi.json",
-        "/actuator", "/actuator/env", "/actuator/health",
-        "/debug", "/_debug", "/console", "/__debug__",
-        "/phpinfo.php", "/info.php", "/_profiler",
-        "/.well-known/security.txt", "/server-status",
-        "/wp-admin/", "/admin/", "/phpmyadmin/",
-        "/api/v1", "/api/v2", "/graphql",
+        ".env",
+        ".git/config",
+        ".git/HEAD",
+        ".git/COMMIT_EDITMSG",
+        "config.php",
+        "wp-config.php",
+        ".DS_Store",
+        "credentials.json",
+        "secrets.yml",
+        ".aws/credentials",
+        "id_rsa",
+        "docker-compose.yml",
+        ".htpasswd",
+        "database.yml",
+        "settings.py",
+        ".npmrc",
+        ".pypirc",
+        "robots.txt",
+        "sitemap.xml",
+        "swagger.json",
+        "openapi.json",
+        "/actuator",
+        "/actuator/env",
+        "/actuator/health",
+        "/debug",
+        "/_debug",
+        "/console",
+        "/__debug__",
+        "/phpinfo.php",
+        "/info.php",
+        "/_profiler",
+        "/.well-known/security.txt",
+        "/server-status",
+        "/wp-admin/",
+        "/admin/",
+        "/phpmyadmin/",
+        "/api/v1",
+        "/api/v2",
+        "/graphql",
     ]
 
     # JS secret patterns
     JS_SECRET_PATTERNS = [
-        (r'(?:api[_-]?key|apikey|api[_-]?token)\s*[:=]\s*["\']([a-zA-Z0-9_\-]{16,})["\']', "API_KEY"),
-        (r'(?:token|access[_-]?token|auth[_-]?token|bearer)\s*[:=]\s*["\']([a-zA-Z0-9_\-\.]{20,})["\']', "AUTH_TOKEN"),
-        (r'(?:secret|secret[_-]?key|client[_-]?secret)\s*[:=]\s*["\']([a-zA-Z0-9_\-]{16,})["\']', "SECRET_KEY"),
-        (r'(?:password|passwd|pwd)\s*[:=]\s*["\']([^"\']{4,})["\']', "HARDCODED_PASSWORD"),
-        (r'(AKIA|ABIA|ACCA|ASIA)[A-Z0-9]{16}', "AWS_ACCESS_KEY"),
-        (r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', "JWT_TOKEN"),
-        (r'(?:private[_-]?key|encryption[_-]?key)\s*[:=]\s*["\']([^"\']{16,})["\']', "ENCRYPTION_KEY"),
-        (r'-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----', "PRIVATE_KEY"),
-        (r'(?:database[_-]?url|db[_-]?url|connection[_-]?string)\s*[:=]\s*["\']([^"\']+)["\']', "DATABASE_URL"),
-        (r'(?:webhook[_-]?url|webhook[_-]?secret)\s*[:=]\s*["\']([^"\']+)["\']', "WEBHOOK_SECRET"),
+        (
+            r'(?:api[_-]?key|apikey|api[_-]?token)\s*[:=]\s*["\']([a-zA-Z0-9_\-]{16,})["\']',
+            "API_KEY",
+        ),
+        (
+            r'(?:token|access[_-]?token|auth[_-]?token|bearer)\s*[:=]\s*["\']([a-zA-Z0-9_\-\.]{20,})["\']',
+            "AUTH_TOKEN",
+        ),
+        (
+            r'(?:secret|secret[_-]?key|client[_-]?secret)\s*[:=]\s*["\']([a-zA-Z0-9_\-]{16,})["\']',
+            "SECRET_KEY",
+        ),
+        (
+            r'(?:password|passwd|pwd)\s*[:=]\s*["\']([^"\']{4,})["\']',
+            "HARDCODED_PASSWORD",
+        ),
+        (r"(AKIA|ABIA|ACCA|ASIA)[A-Z0-9]{16}", "AWS_ACCESS_KEY"),
+        (r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "JWT_TOKEN"),
+        (
+            r'(?:private[_-]?key|encryption[_-]?key)\s*[:=]\s*["\']([^"\']{16,})["\']',
+            "ENCRYPTION_KEY",
+        ),
+        (r"-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----", "PRIVATE_KEY"),
+        (
+            r'(?:database[_-]?url|db[_-]?url|connection[_-]?string)\s*[:=]\s*["\']([^"\']+)["\']',
+            "DATABASE_URL",
+        ),
+        (
+            r'(?:webhook[_-]?url|webhook[_-]?secret)\s*[:=]\s*["\']([^"\']+)["\']',
+            "WEBHOOK_SECRET",
+        ),
     ]
 
     # XSS payloads
     XSS_PAYLOADS = [
-        '<script>alert(1)</script>',
+        "<script>alert(1)</script>",
         '"><script>alert(1)</script>',
         "javascript:alert(1)",
-        '<img src=x onerror=alert(1)>',
-        '<svg onload=alert(1)>',
-        '{{7*7}}',
-        '${7*7}',
+        "<img src=x onerror=alert(1)>",
+        "<svg onload=alert(1)>",
+        "{{7*7}}",
+        "${7*7}",
         "'\"><img src=x onerror=alert(1)>",
-        '<body onload=alert(1)>',
+        "<body onload=alert(1)>",
     ]
 
     # SSTI payloads
     SSTI_PAYLOADS = [
-        '{{7*7}}',
-        '${7*7}',
-        '<%= 7*7 %>',
-        '#{7*7}',
-        '*{7*7}',
+        "{{7*7}}",
+        "${7*7}",
+        "<%= 7*7 %>",
+        "#{7*7}",
+        "*{7*7}",
     ]
 
     # LFI payloads
     LFI_PAYLOADS = [
-        '../../../../etc/passwd',
-        '....//....//etc/passwd',
-        '%2e%2e%2fetc%2fpasswd',
-        '..%252fetc%252fpasswd',
-        'php://filter/convert.base64-encode/resource=/etc/passwd',
+        "../../../../etc/passwd",
+        "....//....//etc/passwd",
+        "%2e%2e%2fetc%2fpasswd",
+        "..%252fetc%252fpasswd",
+        "php://filter/convert.base64-encode/resource=/etc/passwd",
     ]
 
     # Host header injection targets
@@ -166,8 +215,18 @@ class WebScanner(AbstractTool):
 
     # Open redirect parameters
     REDIRECT_PARAMS = [
-        "redirect", "url", "next", "dest", "redirect_url",
-        "return", "continue", "to", "ref", "dest_url", "target", "goto",
+        "redirect",
+        "url",
+        "next",
+        "dest",
+        "redirect_url",
+        "return",
+        "continue",
+        "to",
+        "ref",
+        "dest_url",
+        "target",
+        "goto",
     ]
 
     # Mass assignment payloads
@@ -224,39 +283,70 @@ class WebScanner(AbstractTool):
 
     # Financial / transaction paths for business logic checks
     TRANSFER_PATHS = [
-        "/api/transfer", "/api/transactions", "/api/payment",
-        "/api/v1/transfers", "/api/send",
+        "/api/transfer",
+        "/api/transactions",
+        "/api/payment",
+        "/api/v1/transfers",
+        "/api/send",
     ]
 
     # File upload endpoints
     UPLOAD_PATHS = [
-        "/api/upload", "/api/profile/image", "/api/documents",
-        "/api/v1/upload", "/upload",
+        "/api/upload",
+        "/api/profile/image",
+        "/api/documents",
+        "/api/v1/upload",
+        "/upload",
     ]
 
     # Rate limiting sensitive paths
     RATE_LIMIT_PATHS = [
-        "/api/login", "/api/auth/login", "/api/reset-password",
-        "/api/transfer", "/api/payment",
+        "/api/login",
+        "/api/auth/login",
+        "/api/reset-password",
+        "/api/transfer",
+        "/api/payment",
     ]
 
     # Password reset endpoints
     RESET_PATHS = [
-        "/api/forgot-password", "/api/reset-password", "/api/auth/reset",
+        "/api/forgot-password",
+        "/api/reset-password",
+        "/api/auth/reset",
     ]
 
     # Race condition test endpoints
     RACE_PATHS = [
-        "/api/transfer", "/api/payment", "/api/card/fund", "/api/withdraw",
+        "/api/transfer",
+        "/api/payment",
+        "/api/card/fund",
+        "/api/withdraw",
     ]
 
     # Sensitive response fields (BOPLA — should not appear in regular user responses)
     SENSITIVE_RESPONSE_FIELDS = {
-        "password", "password_hash", "hashed_password", "pwd",
-        "card_number", "pan", "cvv", "cvv2", "cvc",
-        "secret", "api_key", "access_token", "refresh_token",
-        "ssn", "social_security", "pin", "credit_score",
-        "is_admin", "admin", "role", "privilege", "is_superuser",
+        "password",
+        "password_hash",
+        "hashed_password",
+        "pwd",
+        "card_number",
+        "pan",
+        "cvv",
+        "cvv2",
+        "cvc",
+        "secret",
+        "api_key",
+        "access_token",
+        "refresh_token",
+        "ssn",
+        "social_security",
+        "pin",
+        "credit_score",
+        "is_admin",
+        "admin",
+        "role",
+        "privilege",
+        "is_superuser",
     }
 
     # requests.Session is not thread-safe. We keep a pool of sessions
@@ -266,12 +356,20 @@ class WebScanner(AbstractTool):
     # spawn 5 additional concurrent requests, so 12 gives headroom.
     SESSION_POOL_SIZE = 12
 
-    def __init__(self, timeout: int = SSL_TIMEOUT, rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0,
-                 llm_payload_generator=None, session: requests.Session | None = None,
-                 tech_stack: list[str] | None = None, verify: bool = True,
-                 engagement_id: str = "", user_agent: str = "",
-                 emit_finding_callback=None, auth_manager=None,
-                 pool_size: int | None = None):
+    def __init__(
+        self,
+        timeout: int = SSL_TIMEOUT,
+        rate_limit: float = RATE_LIMIT_DELAY_MS / 1000.0,
+        llm_payload_generator=None,
+        session: requests.Session | None = None,
+        tech_stack: list[str] | None = None,
+        verify: bool = True,
+        engagement_id: str = "",
+        user_agent: str = "",
+        emit_finding_callback=None,
+        auth_manager=None,
+        pool_size: int | None = None,
+    ):
         """
         Initialize web scanner.
 
@@ -314,7 +412,10 @@ class WebScanner(AbstractTool):
         _default_ua = "Argus-Scanner/1.0 (security-automation)"
         _ua = user_agent or os.environ.get("WEB_SCANNER_USER_AGENT", _default_ua)
         self.session.headers.setdefault("User-Agent", _ua)
-        self.session.headers.setdefault("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+        self.session.headers.setdefault(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        )
         self.session.headers.setdefault("Accept-Language", "en-US,en;q=0.5")
         self.findings = []
         self.discovered_parameters = None  # Initialized before parameter_discovery()
@@ -440,12 +541,16 @@ class WebScanner(AbstractTool):
                     else:
                         logger.warning(
                             "Sharing non-HTTPAdapter %r mounted at %s across pooled sessions; "
-                            "ensure it is thread-safe", adapter, prefix
+                            "ensure it is thread-safe",
+                            adapter,
+                            prefix,
                         )
                         s.mount(prefix, adapter)
                 pool.put(s)
             self._session_pool = pool
-            logger.debug("Created WebScanner session pool with %s sessions", self._pool_size)
+            logger.debug(
+                "Created WebScanner session pool with %s sessions", self._pool_size
+            )
             return pool
 
     def close(self) -> None:
@@ -494,10 +599,13 @@ class WebScanner(AbstractTool):
         # M-25: Scope validation — reject targets outside authorized scope before
         # sending any potentially destructive payloads (mass assignment, credential
         # testing, host header injection). Loads scope from DB if not provided.
-        if self.engagement_id and not validate_target_scope(target_url, self.engagement_id):
+        if self.engagement_id and not validate_target_scope(
+            target_url, self.engagement_id
+        ):
             logger.warning(
                 "Target %s is outside authorized scope for engagement %s — scan aborted (M-25)",
-                target_url, self.engagement_id,
+                target_url,
+                self.engagement_id,
             )
             self.findings = []
             return
@@ -506,7 +614,7 @@ class WebScanner(AbstractTool):
         self.target_url = target_url.rstrip("/")
 
         self.slog.phase_header("WEB SCAN", target=self.target_url)
-        logger.info(f"Starting comprehensive web scan: {self.target_url}")
+        logger.info("Starting comprehensive web scan: %s", self.target_url)
 
         # Pre-flight: test SSL/TLS connectivity. If a cert error occurs,
         # report it as a finding and retry with verification disabled so
@@ -517,7 +625,11 @@ class WebScanner(AbstractTool):
             )
             self._base_response = resp
         except requests.exceptions.SSLError as e:
-            logger.warning("SSL certificate error for %s — reporting as finding and retrying without verification: %s", self.target_url, e)
+            logger.warning(
+                "SSL certificate error for %s — reporting as finding and retrying without verification: %s",
+                self.target_url,
+                e,
+            )
             self._report_ssl_finding(str(e))
             # Retry with a SEPARATE unverified session so the shared session
             # maintains SSL verification for all subsequent requests (C-09)
@@ -529,7 +641,11 @@ class WebScanner(AbstractTool):
                 )
                 self._base_response = resp
             except Exception as retry_err:
-                logger.error("Web scanner: cannot connect to %s even without SSL verification: %s", self.target_url, retry_err)
+                logger.error(
+                    "Web scanner: cannot connect to %s even without SSL verification: %s",
+                    self.target_url,
+                    retry_err,
+                )
                 # Sync builder findings before returning (SSL finding may have been added)
                 if self._builder:
                     self.findings = self._builder.findings
@@ -595,14 +711,18 @@ class WebScanner(AbstractTool):
         ]
 
         import concurrent.futures as _cf
+
         with ThreadPoolExecutor(max_workers=6) as pool:
-            futures = {pool.submit(check): getattr(check, '__name__', str(check)) for check in checks}
+            futures = {
+                pool.submit(check): getattr(check, "__name__", str(check))
+                for check in checks
+            }
             try:
                 for future in as_completed(futures, timeout=WEB_SCANNER_CHECK_TIMEOUT):
                     try:
                         future.result(timeout=10)
                     except Exception as e:
-                        logger.warning(f'{futures[future]} failed: {e}')
+                        logger.warning("%s failed: %s", futures[future], e)
             except (TimeoutError, _cf.TimeoutError):
                 logger.warning("WebScanner check batch timed out")
 
@@ -610,7 +730,7 @@ class WebScanner(AbstractTool):
         if self._builder:
             self.findings = self._builder.findings
 
-        logger.info(f"Scan complete: {len(self.findings)} findings")
+        logger.info("Scan complete: %d findings", len(self.findings))
 
     @staticmethod
     def _redact_for_llm(text: str) -> str:
@@ -620,14 +740,23 @@ class WebScanner(AbstractTool):
         from HTTP response snippets to prevent data exfiltration.
         """
         import re as _re
+
         # Redact common credential patterns
-        text = _re.sub(r'(?i)(api[_-]?key|secret|token|password|passwd|auth|credential)\s*[:=]\s*["\']?[^\s"\'&]+', r'\1=__REDACTED__', text)
+        text = _re.sub(
+            r'(?i)(api[_-]?key|secret|token|password|passwd|auth|credential)\s*[:=]\s*["\']?[^\s"\'&]+',
+            r"\1=__REDACTED__",
+            text,
+        )
         # Redact bearer tokens
-        text = _re.sub(r'(?i)(bearer\s+)[a-z0-9_.-]{20,}', r'\1__REDACTED__', text)
+        text = _re.sub(r"(?i)(bearer\s+)[a-z0-9_.-]{20,}", r"\1__REDACTED__", text)
         # Redact AWS keys
-        text = _re.sub(r'(?i)(AKIA[0-9A-Z]{16})', '__AWS_KEY_REDACTED__', text)
+        text = _re.sub(r"(?i)(AKIA[0-9A-Z]{16})", "__AWS_KEY_REDACTED__", text)
         # Redact internal IPs
-        text = _re.sub(r'\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b', 'INTERNAL_IP_REDACTED', text)
+        text = _re.sub(
+            r"\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b",
+            "INTERNAL_IP_REDACTED",
+            text,
+        )
         return text[:500]
 
     def _report_ssl_finding(self, error_msg: str) -> None:
@@ -640,7 +769,9 @@ class WebScanner(AbstractTool):
             confidence=0.85,
         )
 
-    def _safe_request(self, method: str, url: str, session: requests.Session | None = None, **kwargs) -> requests.Response | None:
+    def _safe_request(
+        self, method: str, url: str, session: requests.Session | None = None, **kwargs
+    ) -> requests.Response | None:
         """Make HTTP request with error handling. Thread-safe.
 
         By default checks out a session from the thread-safe pool (C-06).
@@ -691,7 +822,8 @@ class WebScanner(AbstractTool):
             # was idle, update its headers and re-attach the shared cookie jar.
             if (
                 pooled_session is not None
-                and getattr(req_session, "_argus_generation", None) != self._session_generation
+                and getattr(req_session, "_argus_generation", None)
+                != self._session_generation
             ):
                 req_session.headers.update(self.session.headers)
                 req_session.cookies = self._shared_cookie_jar
@@ -731,12 +863,16 @@ class WebScanner(AbstractTool):
                 if wait_time > 0:
                     time.sleep(wait_time)
                 self._last_request_time = time.time()
-            logger.debug(
-                "WebScanner session=%s %s %s", session_id, method, url
-            )
+            logger.debug("WebScanner session=%s %s %s", session_id, method, url)
             resp = req_session.request(method, url, **kwargs)
             return resp
-        except (TimeoutError, RequestException, Timeout, ConnectionError, urllib3.exceptions.SSLError) as e:
+        except (
+            TimeoutError,
+            RequestException,
+            Timeout,
+            ConnectionError,
+            urllib3.exceptions.SSLError,
+        ) as e:
             logger.debug("Request failed (session=%s): %s", session_id, e)
             return None
         finally:
@@ -745,8 +881,14 @@ class WebScanner(AbstractTool):
                 self._checked_out -= 1
                 logger.debug("WebScanner session=%s returned to pool", session_id)
 
-    def _add_finding(self, finding_type: str, severity: str, endpoint: str,
-                     evidence: dict, confidence: float = 0.8):
+    def _add_finding(
+        self,
+        finding_type: str,
+        severity: str,
+        endpoint: str,
+        evidence: dict,
+        confidence: float = 0.8,
+    ):
         """Add a finding — delegates to FindingBuilder.
 
         Creates the builder lazily if needed (backward compat for direct
@@ -763,7 +905,9 @@ class WebScanner(AbstractTool):
                 engagement_id=self.engagement_id,
                 emit_finding=self.emit_finding_callback,
             )
-        finding = self._builder.add(finding_type, severity, endpoint, evidence, confidence)
+        finding = self._builder.add(
+            finding_type, severity, endpoint, evidence, confidence
+        )
         self.findings.append(finding)
 
     def _detect_framework(self, response) -> str:
@@ -871,7 +1015,9 @@ class WebScanner(AbstractTool):
                 endpoint=self.target_url,
                 evidence={
                     "missing_headers": missing,
-                    "present_headers": [h for h in self.SECURITY_HEADERS if h.lower() in headers],
+                    "present_headers": [
+                        h for h in self.SECURITY_HEADERS if h.lower() in headers
+                    ],
                 },
                 confidence=0.95,
             )
@@ -921,19 +1067,30 @@ class WebScanner(AbstractTool):
             return
 
         # Get Set-Cookie headers - use getlist for multi-value headers
-        cookie_headers = resp.raw.headers.getlist("Set-Cookie") if hasattr(resp.raw.headers, "getlist") else []
+        cookie_headers = (
+            resp.raw.headers.getlist("Set-Cookie")
+            if hasattr(resp.raw.headers, "getlist")
+            else []
+        )
         if not cookie_headers:
             cookie_header = resp.headers.get("Set-Cookie")
             if not cookie_header:
                 return
             # Fallback: use http.cookies to parse multi-cookie headers safely
             from http.cookies import SimpleCookie
+
             try:
                 parsed = SimpleCookie(cookie_header)
-                cookie_headers = [c.output(header="", sep="").strip() for c in parsed.values()]
+                cookie_headers = [
+                    c.output(header="", sep="").strip() for c in parsed.values()
+                ]
             except Exception:
                 # Last resort: split on newlines if present
-                cookie_headers = cookie_header.split("\n") if "\n" in cookie_header else [cookie_header]
+                cookie_headers = (
+                    cookie_header.split("\n")
+                    if "\n" in cookie_header
+                    else [cookie_header]
+                )
 
         for cookie_str in cookie_headers:
             issues = []
@@ -945,7 +1102,9 @@ class WebScanner(AbstractTool):
                 issues.append("Missing SameSite")
 
             if issues:
-                cookie_name = cookie_str.split("=")[0] if "=" in cookie_str else "unknown"
+                cookie_name = (
+                    cookie_str.split("=")[0] if "=" in cookie_str else "unknown"
+                )
                 self._add_finding(
                     finding_type="INSECURE_COOKIE",
                     severity="MEDIUM",
@@ -960,8 +1119,7 @@ class WebScanner(AbstractTool):
     def check_cors(self):
         """Check for CORS misconfigurations."""
         resp = self._safe_request(
-            "GET", self.target_url,
-            headers={"Origin": "http://evil.com"}
+            "GET", self.target_url, headers={"Origin": "http://evil.com"}
         )
         if not resp:
             return
@@ -997,13 +1155,14 @@ class WebScanner(AbstractTool):
 
         # L-12: Test null origin — exploitable via sandboxed iframes
         null_resp = self._safe_request(
-            "GET", self.target_url,
-            headers={"Origin": "null"}
+            "GET", self.target_url, headers={"Origin": "null"}
         )
         if null_resp:
             null_acao = null_resp.headers.get("Access-Control-Allow-Origin", "")
             if null_acao == "null":
-                null_acac = null_resp.headers.get("Access-Control-Allow-Credentials", "")
+                null_acac = null_resp.headers.get(
+                    "Access-Control-Allow-Credentials", ""
+                )
                 sev = "CRITICAL" if str(null_acac).lower() == "true" else "HIGH"
                 self._add_finding(
                     finding_type="NULL_ORIGIN_CORS",
@@ -1042,10 +1201,18 @@ class WebScanner(AbstractTool):
         # Text that indicates NOT_FOUND / custom 404 (even with HTTP 200)
         # These patterns mean the file doesn't actually exist
         not_found_patterns = [
-            "not found", "does not exist", "page not found",
-            "return to", "go back", "homepage",
-            "invalid url", "wrong url", "url not found",
-            "nothing here", "no such page", "page does not",
+            "not found",
+            "does not exist",
+            "page not found",
+            "return to",
+            "go back",
+            "homepage",
+            "invalid url",
+            "wrong url",
+            "url not found",
+            "nothing here",
+            "no such page",
+            "page does not",
         ]
 
         for path in self.SENSITIVE_FILES:
@@ -1062,26 +1229,30 @@ class WebScanner(AbstractTool):
 
             # CRITICAL CHECK: Custom 404 that says "not found" (even with HTTP 200)
             content_lower = content.lower()
-            is_custom_404 = any(pattern in content_lower for pattern in not_found_patterns)
+            is_custom_404 = any(
+                pattern in content_lower for pattern in not_found_patterns
+            )
 
             if is_custom_404:
-                logger.debug(f"Skipping {path} - custom 404 (not actually exposed)")
+                logger.debug("Skipping %s - custom 404 (not actually exposed)", path)
                 continue
 
             # CRITICAL CHECK: Must not be HTML (SPA catch-all false positive)
             content_first100 = content[:100].lower()
             html_signatures = [b"<!doctype html", b"<html", b"scroll-smooth"]
-            is_html_response = any(sig in content_first100.encode() for sig in html_signatures)
+            is_html_response = any(
+                sig in content_first100.encode() for sig in html_signatures
+            )
 
             if is_html_response:
                 # This is a false positive - the server returns HTML for all paths
-                logger.debug(f"Skipping {path} - returns HTML (not actually exposed)")
+                logger.debug("Skipping %s - returns HTML (not actually exposed)", path)
                 continue
 
             # Check for file-specific signatures
             expected_signatures = file_signatures.get(path, [])
             if expected_signatures:
-                content_bytes = content.encode('utf-8', errors='ignore')
+                content_bytes = content.encode("utf-8", errors="ignore")
                 has_signature = any(sig in content_bytes for sig in expected_signatures)
             else:
                 # For unknown files, check it's not HTML and has reasonable content
@@ -1114,12 +1285,16 @@ class WebScanner(AbstractTool):
         js_urls = re.findall(r'src=["\']([^"\']+\.js[^"\']*)["\']', resp.text)
 
         # Also check inline scripts
-        inline_scripts = re.findall(r'<script[^>]*>(.*?)</script>', resp.text, re.DOTALL)
+        inline_scripts = re.findall(
+            r"<script[^>]*>(.*?)</script>", resp.text, re.DOTALL
+        )
 
         # Scan inline scripts
         for script in inline_scripts:
             if len(script) > 50:  # Skip tiny scripts
-                self._scan_content_for_secrets(script, self.target_url + "/inline-script")
+                self._scan_content_for_secrets(
+                    script, self.target_url + "/inline-script"
+                )
 
         # Scan external JS files (limit to first 10)
         for js_url in js_urls[:MAX_PAGES_TO_CRAWL]:
@@ -1162,7 +1337,7 @@ class WebScanner(AbstractTool):
             return
 
         # Find URLs with redirect parameters
-        url_params = re.findall(r'[?&](\w+)=', resp.text)
+        url_params = re.findall(r"[?&](\w+)=", resp.text)
 
         for param in self.REDIRECT_PARAMS:
             if param in url_params or param in resp.text.lower():
@@ -1187,10 +1362,7 @@ class WebScanner(AbstractTool):
     def check_host_header_injection(self):
         """Check for host header injection."""
         for host in self.HOST_INJECTION:
-            resp = self._safe_request(
-                "GET", self.target_url,
-                headers={"Host": host}
-            )
+            resp = self._safe_request("GET", self.target_url, headers={"Host": host})
             if resp:
                 # Check if response reflects the injected host
                 if host.lower() in resp.text.lower():
@@ -1247,10 +1419,18 @@ class WebScanner(AbstractTool):
     def check_debug_endpoints(self):
         """Check for exposed debug/admin endpoints with improved validation."""
         debug_paths = [
-            "/debug", "/_debug", "/console", "/actuator",
-            "/actuator/env", "/actuator/health", "/__debug__",
-            "/phpinfo.php", "/info.php", "/_profiler",
-            "/server-status", "/.env",
+            "/debug",
+            "/_debug",
+            "/console",
+            "/actuator",
+            "/actuator/env",
+            "/actuator/health",
+            "/__debug__",
+            "/phpinfo.php",
+            "/info.php",
+            "/_profiler",
+            "/server-status",
+            "/.env",
         ]
 
         # Content signatures for actual debug pages
@@ -1281,22 +1461,32 @@ class WebScanner(AbstractTool):
 
             # CRITICAL CHECK: Must not be HTML (SPA catch-all false positive)
             content_first100 = content[:100].lower().encode()
-            is_html_response = any(html_sig in content_first100 for html_sig in html_signatures)
+            is_html_response = any(
+                html_sig in content_first100 for html_sig in html_signatures
+            )
 
             if is_html_response:
-                logger.debug(f"Skipping {path} - returns HTML (not actually exposed)")
+                logger.debug("Skipping %s - returns HTML (not actually exposed)", path)
                 continue
 
             # Check for actual debug indicators
-            debug_indicators = ["debug", "stack trace", "exception",
-                              "phpinfo", "profiler", "actuator"]
+            debug_indicators = [
+                "debug",
+                "stack trace",
+                "exception",
+                "phpinfo",
+                "profiler",
+                "actuator",
+            ]
 
-            has_debug_content = any(indicator in content_lower for indicator in debug_indicators)
+            has_debug_content = any(
+                indicator in content_lower for indicator in debug_indicators
+            )
 
             # Or check specific signatures
             signatures = debug_signatures.get(path, [])
             if signatures:
-                content_bytes = content.encode('utf-8', errors='ignore')
+                content_bytes = content.encode("utf-8", errors="ignore")
                 has_signature = any(sig in content_bytes for sig in signatures)
             else:
                 has_signature = has_debug_content
@@ -1322,8 +1512,14 @@ class WebScanner(AbstractTool):
     def check_auth_endpoints(self):
         """Check for authentication endpoints and test default credentials."""
         auth_paths = [
-            "/login", "/signin", "/auth", "/admin", "/dashboard",
-            "/api/auth/login", "/api/login", "/wp-login.php",
+            "/login",
+            "/signin",
+            "/auth",
+            "/admin",
+            "/dashboard",
+            "/api/auth/login",
+            "/api/login",
+            "/wp-login.php",
         ]
 
         for path in auth_paths:
@@ -1331,28 +1527,36 @@ class WebScanner(AbstractTool):
 
             # Check if endpoint exists
             resp = self._safe_request("GET", url)
-            if resp and resp.status_code in (200, 302) and self.ENABLE_CREDENTIAL_TESTING:
-                    for username, password in self.DEFAULT_CREDS[:3]:  # Limit to 3
-                        login_resp = self._safe_request(
-                            "POST", url,
-                            data={"username": username, "password": password},
-                            allow_redirects=False,
-                        )
-                        if login_resp and login_resp.status_code in (200, 302):
-                            # Check if login was successful (redirect to dashboard, etc.) — wrap with str() for int values
-                            location = str(login_resp.headers.get("Location", "")).lower()
-                            if any(x in location for x in ["dashboard", "admin", "home", "welcome"]):
-                                self._add_finding(
-                                    finding_type="DEFAULT_CREDENTIALS",
-                                    severity="CRITICAL",
-                                    endpoint=url,
-                                    evidence={
-                                        "username": username,
-                                        "password": password,
-                                        "redirect_to": location,
-                                    },
-                                    confidence=0.7,
-                                )
+            if (
+                resp
+                and resp.status_code in (200, 302)
+                and self.ENABLE_CREDENTIAL_TESTING
+            ):
+                for username, password in self.DEFAULT_CREDS[:3]:  # Limit to 3
+                    login_resp = self._safe_request(
+                        "POST",
+                        url,
+                        data={"username": username, "password": password},
+                        allow_redirects=False,
+                    )
+                    if login_resp and login_resp.status_code in (200, 302):
+                        # Check if login was successful (redirect to dashboard, etc.) — wrap with str() for int values
+                        location = str(login_resp.headers.get("Location", "")).lower()
+                        if any(
+                            x in location
+                            for x in ["dashboard", "admin", "home", "welcome"]
+                        ):
+                            self._add_finding(
+                                finding_type="DEFAULT_CREDENTIALS",
+                                severity="CRITICAL",
+                                endpoint=url,
+                                evidence={
+                                    "username": username,
+                                    "password": password,
+                                    "redirect_to": location,
+                                },
+                                confidence=0.7,
+                            )
 
     def parameter_discovery(self):
         """
@@ -1369,8 +1573,12 @@ class WebScanner(AbstractTool):
         logger.info("Running parameter discovery")
 
         # Initialize early so parameter_fuzzing() doesn't fail if we raise below
-        self.discovered_parameters = {"url_parameters": [], "form_parameters": [],
-                                       "json_parameters": [], "javascript_parameters": []}
+        self.discovered_parameters = {
+            "url_parameters": [],
+            "form_parameters": [],
+            "json_parameters": [],
+            "javascript_parameters": [],
+        }
 
         discovered = {
             "url_parameters": set(),
@@ -1395,7 +1603,7 @@ class WebScanner(AbstractTool):
                 continue
 
             # Extract URL parameters
-            url_params = re.findall(r'[?&](\w+)=', url)
+            url_params = re.findall(r"[?&](\w+)=", url)
             discovered["url_parameters"].update(url_params)
 
             # Extract form parameters
@@ -1414,8 +1622,10 @@ class WebScanner(AbstractTool):
             discovered["form_parameters"].update(form_selects)
 
             # Extract JSON keys from inline scripts
-            script_blocks = re.findall(r'<script[^>]*>(.*?)</script>', resp.text, re.DOTALL | re.IGNORECASE)
-            script_content = ' '.join(script_blocks)
+            script_blocks = re.findall(
+                r"<script[^>]*>(.*?)</script>", resp.text, re.DOTALL | re.IGNORECASE
+            )
+            script_content = " ".join(script_blocks)
             json_keys = set(re.findall(r'["\'](\w+)["\']\s*:\s*', script_content))
             if not json_keys:
                 json_keys = set(re.findall(r'["\'](\w+)["\']\s*:\s*', resp.text)[:50])
@@ -1423,7 +1633,7 @@ class WebScanner(AbstractTool):
 
             # Extract JavaScript variables that might be parameters
             js_vars = re.findall(
-                r'(?:var|let|const)\s+(\w+)\s*=',
+                r"(?:var|let|const)\s+(\w+)\s*=",
                 resp.text,
             )
             discovered["javascript_parameters"].update(js_vars)
@@ -1444,8 +1654,7 @@ class WebScanner(AbstractTool):
 
         # Store discovered parameters for use by other checks
         self.discovered_parameters = {
-            key: list(values)
-            for key, values in discovered.items()
+            key: list(values) for key, values in discovered.items()
         }
 
         # Add finding if parameters were discovered
@@ -1458,8 +1667,12 @@ class WebScanner(AbstractTool):
                 evidence={
                     "total_discovered": total,
                     "url_parameters": self.discovered_parameters["url_parameters"][:20],
-                    "form_parameters": self.discovered_parameters["form_parameters"][:20],
-                    "json_parameters": self.discovered_parameters["json_parameters"][:20],
+                    "form_parameters": self.discovered_parameters["form_parameters"][
+                        :20
+                    ],
+                    "json_parameters": self.discovered_parameters["json_parameters"][
+                        :20
+                    ],
                     "pages_crawled": len(crawled),
                 },
                 confidence=0.8,
@@ -1537,7 +1750,7 @@ class WebScanner(AbstractTool):
                         confidence=0.6,
                     )
 
-        logger.info(f"Parameter fuzzing complete: {tested} tests performed")
+        logger.info("Parameter fuzzing complete: %d tests performed", tested)
 
         # R-08: POST body fuzzing — test form parameters via POST with JSON body.
         # Many injection points only exist in POST bodies, not URL query params.
@@ -1547,9 +1760,12 @@ class WebScanner(AbstractTool):
             for param in post_params:
                 for fuzz_type, payload in fuzz_payloads[:4]:  # Test core payloads only
                     post_body = {param: payload}
-                    resp = self._safe_request("POST", self.target_url,
+                    resp = self._safe_request(
+                        "POST",
+                        self.target_url,
                         json=post_body,
-                        headers={"Content-Type": "application/json"})
+                        headers={"Content-Type": "application/json"},
+                    )
                     tested += 1
                     if not resp:
                         continue
@@ -1595,13 +1811,19 @@ class WebScanner(AbstractTool):
                     vuln_class="MASS_ASSIGNMENT",
                     param_name="json_body",
                     response_snippet="",
-                    framework_hints=self._tech_hints(resp) if resp else ", ".join(self.tech_stack),
+                    framework_hints=self._tech_hints(resp)
+                    if resp
+                    else ", ".join(self.tech_stack),
                 )
 
-            all_payloads = self.MASS_ASSIGN_PAYLOADS[:2] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+            all_payloads = (
+                self.MASS_ASSIGN_PAYLOADS[:2]
+                + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+            )
             for payload in all_payloads:
                 resp = self._safe_request(
-                    "POST", url,
+                    "POST",
+                    url,
                     json=json.loads(payload),
                     headers={"Content-Type": "application/json"},
                 )
@@ -1610,7 +1832,10 @@ class WebScanner(AbstractTool):
                     try:
                         data = resp.json()
                         data_str = json.dumps(data).lower()
-                        if any(x in data_str for x in ["admin", "role", "privilege", "is_admin"]):
+                        if any(
+                            x in data_str
+                            for x in ["admin", "role", "privilege", "is_admin"]
+                        ):
                             self._add_finding(
                                 finding_type="MASS_ASSIGNMENT",
                                 severity="HIGH",
@@ -1622,7 +1847,10 @@ class WebScanner(AbstractTool):
                                 confidence=0.6,
                             )
                     except (json.JSONDecodeError, ValueError):
-                        logger.debug("Mass assignment: failed to parse JSON response from %s", url)
+                        logger.debug(
+                            "Mass assignment: failed to parse JSON response from %s",
+                            url,
+                        )
 
     def check_xss(self):
         """Check for reflected XSS with improved validation."""
@@ -1631,14 +1859,24 @@ class WebScanner(AbstractTool):
             return
 
         # Find URL parameters that accept user input
-        params = re.findall(r'[?&]([\w-]+)=', resp.text)
+        params = re.findall(r"[?&]([\w-]+)=", resp.text)
         if not params:
             return
 
         # Only test inputs that look like they accept user data
         # Avoid testing navigation params
-        ignore_params = ['redirect', 'next', 'url', 'dest', 'target', 'goto',
-                        'continue', 'return', 'ref', 'dest_url']
+        ignore_params = [
+            "redirect",
+            "next",
+            "url",
+            "dest",
+            "target",
+            "goto",
+            "continue",
+            "return",
+            "ref",
+            "dest_url",
+        ]
 
         for param in set(params[:5]):
             if param.lower() in ignore_params:
@@ -1655,7 +1893,9 @@ class WebScanner(AbstractTool):
                 )
 
             # Use static payloads + LLM-generated payloads
-            all_payloads = self.XSS_PAYLOADS[:3] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+            all_payloads = (
+                self.XSS_PAYLOADS[:3] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+            )
 
             for payload in all_payloads:
                 test_url = f"{self.target_url}?{param}={payload}"
@@ -1668,7 +1908,10 @@ class WebScanner(AbstractTool):
                 if payload in test_resp.text:
                     # Only flag HIGH if it's in script context or event handler
                     # Not just reflected in HTML (which browsers escape)
-                    is_script_context = "<script>" in test_resp.text.lower() or "<script " in test_resp.text.lower()
+                    is_script_context = (
+                        "<script>" in test_resp.text.lower()
+                        or "<script " in test_resp.text.lower()
+                    )
 
                     # Calculate confidence based on context
                     if is_script_context:
@@ -1697,16 +1940,23 @@ class WebScanner(AbstractTool):
                     break
 
         # R-01: POST body XSS — test form parameters via POST with JSON body.
-        form_params = self.discovered_parameters.get("form_parameters", []) if self.discovered_parameters else []
+        form_params = (
+            self.discovered_parameters.get("form_parameters", [])
+            if self.discovered_parameters
+            else []
+        )
         if form_params:
             for param in set(form_params[:5]):
                 if param.lower() in ignore_params:
                     continue
                 for payload in self.XSS_PAYLOADS[:3]:
                     post_body = {param: payload}
-                    test_resp = self._safe_request("POST", self.target_url,
+                    test_resp = self._safe_request(
+                        "POST",
+                        self.target_url,
                         json=post_body,
-                        headers={"Content-Type": "application/json"})
+                        headers={"Content-Type": "application/json"},
+                    )
                     if not test_resp:
                         continue
                     if payload in test_resp.text:
@@ -1732,7 +1982,7 @@ class WebScanner(AbstractTool):
         if not resp:
             return
 
-        params = re.findall(r'[?&](\w+)=', resp.text)
+        params = re.findall(r"[?&](\w+)=", resp.text)
         if not params:
             return
 
@@ -1748,7 +1998,9 @@ class WebScanner(AbstractTool):
                 )
 
             # Static + LLM payloads
-            test_payloads = ['{{7*7}}', '${7*7}', '<%= 7*7 %>'] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+            test_payloads = ["{{7*7}}", "${7*7}", "<%= 7*7 %>"] + llm_payloads[
+                :LLM_MAX_GENERATED_PAYLOADS
+            ]
             for payload in test_payloads:
                 test_url = f"{self.target_url}?{param}={payload}"
                 test_resp = self._safe_request("GET", test_url)
@@ -1760,7 +2012,11 @@ class WebScanner(AbstractTool):
                 has_evaluation = " 49 " in test_resp.text or ">49<" in test_resp.text
 
                 # Also verify it's NOT error or part of another word
-                if has_evaluation and "error" not in test_resp.text.lower() and "undefined" not in test_resp.text.lower():
+                if (
+                    has_evaluation
+                    and "error" not in test_resp.text.lower()
+                    and "undefined" not in test_resp.text.lower()
+                ):
                     self._add_finding(
                         finding_type="SSTI",
                         severity="CRITICAL",
@@ -1781,7 +2037,7 @@ class WebScanner(AbstractTool):
         if not resp:
             return
 
-        params = re.findall(r'[?&](\w+)=', resp.text)
+        params = re.findall(r"[?&](\w+)=", resp.text)
         if not params:
             return
 
@@ -1795,7 +2051,9 @@ class WebScanner(AbstractTool):
                     framework_hints=self._tech_hints(resp),
                 )
 
-            all_payloads = self.LFI_PAYLOADS[:2] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+            all_payloads = (
+                self.LFI_PAYLOADS[:2] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
+            )
             for payload in all_payloads:
                 test_url = f"{self.target_url}?{param}={payload}"
                 test_resp = self._safe_request("GET", test_url)
@@ -1818,7 +2076,8 @@ class WebScanner(AbstractTool):
         xxe_payload = '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>'
 
         resp = self._safe_request(
-            "POST", self.target_url,
+            "POST",
+            self.target_url,
             data=xxe_payload,
             headers={"Content-Type": "application/xml"},
         )
@@ -1864,9 +2123,10 @@ class WebScanner(AbstractTool):
                 }"""
             }
             resp = self._safe_request(
-                "POST", url,
+                "POST",
+                url,
                 json=introspection_query,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
             )
             if resp and resp.status_code == 200:
                 try:
@@ -1893,9 +2153,10 @@ class WebScanner(AbstractTool):
                 "query": "{__schema{types{name,fields{name,type{name,fields{name}}}}}}"
             }
             resp = self._safe_request(
-                "POST", url,
+                "POST",
+                url,
                 json=depth_query,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
             )
             if resp and resp.status_code == 200 and len(resp.text) > 5000:
                 self._add_finding(
@@ -1913,16 +2174,25 @@ class WebScanner(AbstractTool):
         # GraphQL SQLi-in-resolver test
         for path in self.GRAPHQL_ENDPOINTS[:1]:
             url = urljoin(self.target_url, path.lstrip("/"))
-            sqli_query = {"query": "{users(search:\"' OR 1=1--\"){id,name}}"}
+            sqli_query = {"query": '{users(search:"\' OR 1=1--"){id,name}}'}
             resp = self._safe_request(
-                "POST", url,
+                "POST",
+                url,
                 json=sqli_query,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
             )
-            if resp and resp.status_code == 200 and resp.text and len(resp.text.strip("{} \t\n\r\x00")) > 5:
+            if (
+                resp
+                and resp.status_code == 200
+                and resp.text
+                and len(resp.text.strip("{} \t\n\r\x00")) > 5
+            ):
                 try:
                     data = resp.json()
-                    if isinstance(data.get("data"), dict) and len(data.get("data", {})) > 0:
+                    if (
+                        isinstance(data.get("data"), dict)
+                        and len(data.get("data", {})) > 0
+                    ):
                         self._add_finding(
                             finding_type="GRAPHQL_SQLI_RESOLVER",
                             severity="CRITICAL",
@@ -1944,41 +2214,53 @@ class WebScanner(AbstractTool):
             base_payload = {"from": "test_source", "to": "test_dest"}
 
             # Test 1: Negative amount
-            neg_resp = self._safe_request("POST", url,
-                json={**base_payload, "amount": -100})
+            neg_resp = self._safe_request(
+                "POST", url, json={**base_payload, "amount": -100}
+            )
             if neg_resp and neg_resp.status_code in (200, 201):
                 self._add_finding(
                     finding_type="NEGATIVE_AMOUNT_ACCEPTED",
                     severity="HIGH",
                     endpoint=url,
-                    evidence={"amount": -100, "status": neg_resp.status_code,
-                              "message": "API accepted a negative transaction amount"},
+                    evidence={
+                        "amount": -100,
+                        "status": neg_resp.status_code,
+                        "message": "API accepted a negative transaction amount",
+                    },
                     confidence=0.85,
                 )
 
             # Test 2: Zero amount
-            zero_resp = self._safe_request("POST", url,
-                json={**base_payload, "amount": 0})
+            zero_resp = self._safe_request(
+                "POST", url, json={**base_payload, "amount": 0}
+            )
             if zero_resp and zero_resp.status_code in (200, 201):
                 self._add_finding(
                     finding_type="ZERO_AMOUNT_ACCEPTED",
                     severity="MEDIUM",
                     endpoint=url,
-                    evidence={"amount": 0, "status": zero_resp.status_code,
-                              "message": "API accepted a zero-value transaction"},
+                    evidence={
+                        "amount": 0,
+                        "status": zero_resp.status_code,
+                        "message": "API accepted a zero-value transaction",
+                    },
                     confidence=0.75,
                 )
 
             # Test 3: Extremely large amount
-            large_resp = self._safe_request("POST", url,
-                json={**base_payload, "amount": 99999999999})
+            large_resp = self._safe_request(
+                "POST", url, json={**base_payload, "amount": 99999999999}
+            )
             if large_resp and large_resp.status_code in (200, 201):
                 self._add_finding(
                     finding_type="NO_TRANSACTION_LIMIT",
                     severity="HIGH",
                     endpoint=url,
-                    evidence={"amount": 99999999999, "status": large_resp.status_code,
-                              "message": "API accepted an extremely large amount with no limit"},
+                    evidence={
+                        "amount": 99999999999,
+                        "status": large_resp.status_code,
+                        "message": "API accepted an extremely large amount with no limit",
+                    },
                     confidence=0.8,
                 )
 
@@ -1994,9 +2276,11 @@ class WebScanner(AbstractTool):
                     finding_type="REPLAY_VULNERABLE",
                     severity="MEDIUM",
                     endpoint=url,
-                    evidence={"success_count": replay_responses.count(200),
-                              "total_requests": 3,
-                              "message": "API accepted repeated identical requests — no idempotency key"},
+                    evidence={
+                        "success_count": replay_responses.count(200),
+                        "total_requests": 3,
+                        "message": "API accepted repeated identical requests — no idempotency key",
+                    },
                     confidence=0.7,
                 )
             break  # Only test first available endpoint
@@ -2018,17 +2302,25 @@ class WebScanner(AbstractTool):
         for path in self.UPLOAD_PATHS:
             url = urljoin(self.target_url, path)
             for filename, content, mime in malicious_payloads:
-                resp = self._safe_request("POST", url,
-                    files={"file": (filename, content, mime)})
+                resp = self._safe_request(
+                    "POST", url, files={"file": (filename, content, mime)}
+                )
                 if resp and resp.status_code in (200, 201):
-                    if filename.endswith(".php") or filename.endswith(".phtml") or filename.endswith(".phar"):
+                    if (
+                        filename.endswith(".php")
+                        or filename.endswith(".phtml")
+                        or filename.endswith(".phar")
+                    ):
                         self._add_finding(
                             finding_type="UNRESTRICTED_FILE_UPLOAD",
                             severity="CRITICAL",
                             endpoint=url,
-                            evidence={"filename": filename, "mime": mime,
-                                      "status": resp.status_code,
-                                      "message": f"Executable file '{filename}' accepted by server"},
+                            evidence={
+                                "filename": filename,
+                                "mime": mime,
+                                "status": resp.status_code,
+                                "message": f"Executable file '{filename}' accepted by server",
+                            },
                             confidence=0.9,
                         )
                     if ".." in filename:
@@ -2036,8 +2328,11 @@ class WebScanner(AbstractTool):
                             finding_type="PATH_TRAVERSAL_IN_FILENAME",
                             severity="HIGH",
                             endpoint=url,
-                            evidence={"filename": filename, "status": resp.status_code,
-                                      "message": "Path traversal characters accepted in filename"},
+                            evidence={
+                                "filename": filename,
+                                "status": resp.status_code,
+                                "message": "Path traversal characters accepted in filename",
+                            },
                             confidence=0.85,
                         )
             break  # Only test first available endpoint
@@ -2075,13 +2370,16 @@ class WebScanner(AbstractTool):
         """Check whether login tokens have expiry claims (JWT exp field)."""
         # Try to extract JWTs from responses — look in common auth response patterns
         auth_paths = ["/api/auth/login", "/api/login", "/auth/login"]
-        jwt_pattern = r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
+        jwt_pattern = r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"
 
         for path in auth_paths:
             url = urljoin(self.target_url, path.lstrip("/"))
-            resp = self._safe_request("POST", url,
+            resp = self._safe_request(
+                "POST",
+                url,
                 json={"username": "test", "password": "test"},
-                headers={"Content-Type": "application/json"})
+                headers={"Content-Type": "application/json"},
+            )
             if not resp:
                 continue
 
@@ -2089,10 +2387,13 @@ class WebScanner(AbstractTool):
             tokens = re.findall(jwt_pattern, resp.text)
             if not tokens:
                 # Check response headers too
-                auth_header = resp.headers.get("Authorization") or resp.headers.get("Set-Cookie", "")
+                auth_header = resp.headers.get("Authorization") or resp.headers.get(
+                    "Set-Cookie", ""
+                )
                 tokens = re.findall(jwt_pattern, auth_header)
 
             import base64 as _b64
+
             for raw_token in tokens[:2]:
                 try:
                     # Decode JWT without signature verification
@@ -2133,30 +2434,44 @@ class WebScanner(AbstractTool):
                             confidence=0.8,
                         )
                 except (json.JSONDecodeError, KeyError):
-                    logger.debug("JWT session expiration check failed for %s", url, exc_info=False)
+                    logger.debug(
+                        "JWT session expiration check failed for %s",
+                        url,
+                        exc_info=False,
+                    )
             break
 
     def check_password_reset_strength(self):
         """Detect weak reset tokens — numeric-only PINs, short codes."""
         for path in self.RESET_PATHS:
             url = urljoin(self.target_url, path)
-            resp = self._safe_request("POST", url,
+            resp = self._safe_request(
+                "POST",
+                url,
                 json={"email": "test@example.com"},
-                headers={"Content-Type": "application/json"})
+                headers={"Content-Type": "application/json"},
+            )
             # Only fall back to form-encoded if JSON was explicitly rejected (415)
             if resp and resp.status_code == 415:
-                resp = self._safe_request("POST", url,
-                    data={"email": "test@example.com"})
+                resp = self._safe_request(
+                    "POST", url, data={"email": "test@example.com"}
+                )
 
             if resp and resp.status_code in (200, 201):
                 try:
                     data = resp.json()
                 except json.JSONDecodeError:
                     data = {}
-                reset_token = str(data.get("token") or data.get("code") or data.get("pin") or "")
+                reset_token = str(
+                    data.get("token") or data.get("code") or data.get("pin") or ""
+                )
                 if not reset_token:
                     # Check if token is embedded in a message
-                    token_match = re.search(r'(?:token|code|pin)[:\s]+["\']?(\w{3,32})["\']?', resp.text, re.I)
+                    token_match = re.search(
+                        r'(?:token|code|pin)[:\s]+["\']?(\w{3,32})["\']?',
+                        resp.text,
+                        re.I,
+                    )
                     if token_match:
                         reset_token = token_match.group(1)
 
@@ -2166,8 +2481,11 @@ class WebScanner(AbstractTool):
                             finding_type="WEAK_RESET_TOKEN",
                             severity="HIGH",
                             endpoint=url,
-                            evidence={"token_length": len(reset_token), "type": "numeric",
-                                      "message": f"Password reset uses a {len(reset_token)}-digit numeric PIN — brute-forceable"},
+                            evidence={
+                                "token_length": len(reset_token),
+                                "type": "numeric",
+                                "message": f"Password reset uses a {len(reset_token)}-digit numeric PIN — brute-forceable",
+                            },
                             confidence=0.85,
                         )
                     elif len(reset_token) < 16:
@@ -2175,8 +2493,10 @@ class WebScanner(AbstractTool):
                             finding_type="SHORT_RESET_TOKEN",
                             severity="MEDIUM",
                             endpoint=url,
-                            evidence={"token_length": len(reset_token),
-                                      "message": f"Reset token is only {len(reset_token)} chars — minimum recommended is 32"},
+                            evidence={
+                                "token_length": len(reset_token),
+                                "message": f"Reset token is only {len(reset_token)} chars — minimum recommended is 32",
+                            },
                             confidence=0.7,
                         )
             break  # Only test first available endpoint
@@ -2187,9 +2507,12 @@ class WebScanner(AbstractTool):
             url = urljoin(self.target_url, path)
             responses = []
             for _ in range(20):
-                r = self._safe_request("POST", url,
+                r = self._safe_request(
+                    "POST",
+                    url,
                     json={"username": "test", "password": "wrong"},
-                    headers={"Content-Type": "application/json"})
+                    headers={"Content-Type": "application/json"},
+                )
                 if r:
                     responses.append(r.status_code)
 
@@ -2222,7 +2545,9 @@ class WebScanner(AbstractTool):
             barrier = threading.Barrier(5, timeout=5)
             barrier_broken = [False]  # Mutable to capture from thread closures
 
-            def _race_request(barrier=barrier, barrier_broken=barrier_broken, url=url, payload=payload):
+            def _race_request(
+                barrier=barrier, barrier_broken=barrier_broken, url=url, payload=payload
+            ):
                 try:
                     barrier.wait(timeout=5)
                 except threading.BrokenBarrierError:
@@ -2236,7 +2561,9 @@ class WebScanner(AbstractTool):
             if barrier_broken[0]:
                 continue  # Test inconclusive — threads didn't synchronize
 
-            success_count = sum(1 for r in responses if r and r.status_code in (200, 201))
+            success_count = sum(
+                1 for r in responses if r and r.status_code in (200, 201)
+            )
             if success_count > 1:
                 self._add_finding(
                     finding_type="RACE_CONDITION",
@@ -2254,13 +2581,21 @@ class WebScanner(AbstractTool):
 
     def check_bopla(self):
         """Check for sensitive fields in API responses (Broken Object Property Level Auth)."""
-        api_paths = ["/api/v1/users", "/api/users", "/api/v1/accounts", "/api/accounts",
-                     "/api/v1/me", "/api/me", "/api/profile"]
+        api_paths = [
+            "/api/v1/users",
+            "/api/users",
+            "/api/v1/accounts",
+            "/api/accounts",
+            "/api/v1/me",
+            "/api/me",
+            "/api/profile",
+        ]
 
         for path in api_paths:
             url = urljoin(self.target_url, path.lstrip("/"))
-            resp = self._safe_request("GET", url,
-                headers={"Content-Type": "application/json"})
+            resp = self._safe_request(
+                "GET", url, headers={"Content-Type": "application/json"}
+            )
             if not resp or resp.status_code != 200:
                 continue
 
@@ -2284,7 +2619,9 @@ class WebScanner(AbstractTool):
                     endpoint=url,
                     evidence={
                         "exposed_fields": exposed_fields,
-                        "response_keys": list(data.keys()) if isinstance(data, dict) else "array",
+                        "response_keys": list(data.keys())
+                        if isinstance(data, dict)
+                        else "array",
                         "message": f"API response includes {len(exposed_fields)} sensitive fields that should be filtered",
                     },
                     confidence=0.85,
@@ -2300,7 +2637,7 @@ class WebScanner(AbstractTool):
         if not resp:
             return
 
-        id_pattern = r'(?:/(\d{3,})(?:\?|/|$))'
+        id_pattern = r"(?:/(\d{3,})(?:\?|/|$))"
         candidate_ids = re.findall(id_pattern, resp.text)
         if not candidate_ids:
             return
@@ -2351,7 +2688,7 @@ class WebScanner(AbstractTool):
 
     def check_jwt_algorithm_confusion(self):
         """Check for JWT algorithm confusion vulnerabilities."""
-        jwt_pattern = r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
+        jwt_pattern = r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"
         resp = self._safe_request("GET", self.target_url)
         if not resp:
             return
@@ -2371,7 +2708,9 @@ class WebScanner(AbstractTool):
             finding = test_jwt_alg_none(
                 jwt_token=jwt_token,
                 target_url=self.target_url,
-                request_func=lambda url, headers: self._safe_request("GET", url, headers=headers),
+                request_func=lambda url, headers: self._safe_request(
+                    "GET", url, headers=headers
+                ),
             )
             if finding:
                 self._add_finding(
@@ -2390,7 +2729,9 @@ class WebScanner(AbstractTool):
             resp = self._safe_request("GET", test_url)
             if not resp:
                 continue
-            if resp.status_code == 200 and ("isAdmin" in resp.text or "true" in resp.text.lower()):
+            if resp.status_code == 200 and (
+                "isAdmin" in resp.text or "true" in resp.text.lower()
+            ):
                 self._add_finding(
                     finding_type="PROTOTYPE_POLLUTION",
                     severity="MEDIUM",
@@ -2406,7 +2747,9 @@ class WebScanner(AbstractTool):
 
     def check_cache_poisoning(self):
         """Check for cache poisoning vulnerabilities."""
-        resp = self._safe_request("GET", self.target_url, headers=self.CACHE_POISONING_HEADERS)
+        resp = self._safe_request(
+            "GET", self.target_url, headers=self.CACHE_POISONING_HEADERS
+        )
         if not resp:
             return
 
@@ -2441,9 +2784,7 @@ class WebScanner(AbstractTool):
         # CL.TE Test
         cl_te_headers = {"Content-Length": "6", "Transfer-Encoding": "chunked"}
         resp = self._safe_request(
-            "POST", self.target_url,
-            headers=cl_te_headers,
-            data="0\r\n\r\n"
+            "POST", self.target_url, headers=cl_te_headers, data="0\r\n\r\n"
         )
         if resp:
             if resp.status_code == 502:
@@ -2474,9 +2815,7 @@ class WebScanner(AbstractTool):
         # TE.CL Test
         te_cl_headers = {"Transfer-Encoding": "chunked", "Content-Length": "6"}
         resp = self._safe_request(
-            "POST", self.target_url,
-            headers=te_cl_headers,
-            data="0\r\n\r\n"
+            "POST", self.target_url, headers=te_cl_headers, data="0\r\n\r\n"
         )
         if resp:
             if resp.status_code == 502:
@@ -2512,9 +2851,7 @@ class WebScanner(AbstractTool):
             "Transfer-encoding": "cow",
         }
         resp = self._safe_request(
-            "POST", self.target_url,
-            headers=te_te_headers,
-            data="0\r\n\r\n"
+            "POST", self.target_url, headers=te_te_headers, data="0\r\n\r\n"
         )
         if resp:
             if resp.status_code == 502:
@@ -2557,17 +2894,30 @@ class WebScanner(AbstractTool):
 
         # DOM sources — where attacker-controlled data enters the page
         dom_sources = [
-            "document.location", "location.href", "location.search",
-            "location.hash", "window.name", "document.referrer",
-            "document.URL", "document.documentURI",
-            "location.origin", "location.pathname",
+            "document.location",
+            "location.href",
+            "location.search",
+            "location.hash",
+            "window.name",
+            "document.referrer",
+            "document.URL",
+            "document.documentURI",
+            "location.origin",
+            "location.pathname",
         ]
         # DOM sinks — where data is rendered/executed unsafely
         dom_sinks = [
-            "document.write", "innerHTML", "outerHTML",
-            "eval(", "setTimeout(", "setInterval(",
-            "document.createElement", ".src =", ".href =",
-            "$.html(", "$.append(",
+            "document.write",
+            "innerHTML",
+            "outerHTML",
+            "eval(",
+            "setTimeout(",
+            "setInterval(",
+            "document.createElement",
+            ".src =",
+            ".href =",
+            "$.html(",
+            "$.append(",
         ]
 
         found_sources = [s for s in dom_sources if s in body]
@@ -2575,7 +2925,9 @@ class WebScanner(AbstractTool):
 
         # Need both a source AND a sink for a real DOM XSS risk.
         # If neither sources nor sinks found, check for reflection-based DOM XSS.
-        if (not found_sources or not found_sink_actual) and not any(s in body for s in ["location", "hash", "search"]):
+        if (not found_sources or not found_sink_actual) and not any(
+            s in body for s in ["location", "hash", "search"]
+        ):
             return
 
         # Test payloads targeting the specific source→sink path
@@ -2592,7 +2944,7 @@ class WebScanner(AbstractTool):
             "<img src=x onerror=alert(1)>",
             "<script>alert(1)</script>",
             "'-alert(1)-'",
-            "\"><img src=x onerror=alert(1)>",
+            '"><img src=x onerror=alert(1)>',
         ] + llm_payloads[:LLM_MAX_GENERATED_PAYLOADS]
 
         for payload in dom_payloads:
@@ -2754,7 +3106,7 @@ class WebScanner(AbstractTool):
                         confidence=0.6,
                     )
             except Exception as e:
-                logger.debug(f"Differential test failed: {e}")
+                logger.debug("Differential test failed: %s", e)
 
     def detect_waf(self):
         """
@@ -3084,8 +3436,14 @@ class WebScanner(AbstractTool):
             if cipher:
                 cipher_name = cipher[0]
                 weak_ciphers = [
-                    "RC4", "DES", "3DES", "MD5", "NULL",
-                    "EXPORT", "anon", "CBC"
+                    "RC4",
+                    "DES",
+                    "3DES",
+                    "MD5",
+                    "NULL",
+                    "EXPORT",
+                    "anon",
+                    "CBC",
                 ]
                 if any(wc in cipher_name for wc in weak_ciphers):
                     self._add_finding(
@@ -3111,9 +3469,9 @@ class WebScanner(AbstractTool):
                 confidence=0.8,
             )
         except OSError as e:
-            logger.debug(f"SSL verification socket error: {e}")
+            logger.debug("SSL verification socket error: %s", e)
         except Exception as e:
-            logger.debug(f"SSL verification error: {e}")
+            logger.debug("SSL verification error: %s", e)
         finally:
             if ssock:
                 with contextlib.suppress(Exception):
@@ -3199,7 +3557,7 @@ class WebScanner(AbstractTool):
         for pattern in stack_patterns:
             match = re.search(pattern, resp.text, re.IGNORECASE)
             if match:
-                snippet = resp.text[max(0, match.start()-100):match.end()+200]
+                snippet = resp.text[max(0, match.start() - 100) : match.end() + 200]
                 self._add_finding(
                     finding_type="STACK_TRACE_EXPOSURE",
                     severity="MEDIUM",

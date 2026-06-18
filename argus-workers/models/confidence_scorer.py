@@ -2,6 +2,7 @@
 Confidence scoring for findings using a weighted heuristic model.
 Replaces the naive (tool_agreement * evidence_strength) / (1 + fp_likelihood) formula.
 """
+
 import logging
 
 from feature_flags import is_enabled
@@ -75,14 +76,18 @@ class ConfidenceScorer:
         "none": 0.3,
     }
 
-    def _extract_features(self, finding: dict, context: dict | None = None) -> dict[str, float]:
+    def _extract_features(
+        self, finding: dict, context: dict | None = None
+    ) -> dict[str, float]:
         """Extract normalized feature values from a finding."""
         if context is None:
             context = {}
 
         # Category FP rate (invert: lower FP rate = higher score)
         finding_type = (finding.get("type") or "").lower()
-        category_fp = self.CATEGORY_FP_RATES.get(finding_type, self.CATEGORY_FP_RATES["default"])
+        category_fp = self.CATEGORY_FP_RATES.get(
+            finding_type, self.CATEGORY_FP_RATES["default"]
+        )
         category_score = 1.0 - category_fp
 
         # Tool accuracy
@@ -105,7 +110,12 @@ class ConfidenceScorer:
         # Multi-tool agreement
         tool_agreement_raw = finding.get("tool_agreement_level", 1.0)
         if isinstance(tool_agreement_raw, str):
-            agreement_map = {"high": 1.0, "medium": 0.85, "single_tool": 0.7, "low": 0.5}
+            agreement_map = {
+                "high": 1.0,
+                "medium": 0.85,
+                "single_tool": 0.7,
+                "low": 0.5,
+            }
             tool_agreement = agreement_map.get(tool_agreement_raw.lower(), 0.7)
         else:
             tool_agreement = float(tool_agreement_raw)
@@ -148,14 +158,25 @@ class ConfidenceScorer:
     def _legacy_score(self, finding: dict) -> float:
         tool_agreement_raw = finding.get("tool_agreement_level", 0.7)
         if isinstance(tool_agreement_raw, str):
-            agreement_map = {"high": 1.0, "medium": 0.85, "single_tool": 0.7, "low": 0.5}
+            agreement_map = {
+                "high": 1.0,
+                "medium": 0.85,
+                "single_tool": 0.7,
+                "low": 0.5,
+            }
             tool_agreement = agreement_map.get(tool_agreement_raw.lower(), 0.7)
         else:
             tool_agreement = float(tool_agreement_raw)
         evidence_strength = float(finding.get("evidence_strength", 0.7) or 0.7)
         fp_likelihood = float(finding.get("fp_likelihood", 0.2) or 0.2)
-        return ConfidenceScorer.compute(tool_agreement, evidence_strength, fp_likelihood)
+        return ConfidenceScorer.compute(
+            tool_agreement, evidence_strength, fp_likelihood
+        )
 
     @staticmethod
-    def compute(tool_agreement: float, evidence_strength: float, fp_likelihood: float) -> float:
-        return max(0.0, min(1.0, (tool_agreement * evidence_strength) / (1 + fp_likelihood)))
+    def compute(
+        tool_agreement: float, evidence_strength: float, fp_likelihood: float
+    ) -> float:
+        return max(
+            0.0, min(1.0, (tool_agreement * evidence_strength) / (1 + fp_likelihood))
+        )

@@ -176,7 +176,9 @@ def _engagement_has_state_snapshot(engagement_id: str) -> bool:
             )
             return cursor.fetchone() is not None
     except Exception:
-        logger.debug("Failed to check state snapshot for %s", engagement_id, exc_info=True)
+        logger.debug(
+            "Failed to check state snapshot for %s", engagement_id, exc_info=True
+        )
         return False
 
 
@@ -330,7 +332,10 @@ def batch_migrate_pending_engagements(
     errors = sum(1 for r in results if r.status == "error")
     logger.info(
         "Batch migration: %d evaluated, %d migrated, %d skipped, %d errors",
-        len(results), migrated, skipped, errors,
+        len(results),
+        migrated,
+        skipped,
+        errors,
     )
 
     return results
@@ -362,9 +367,7 @@ def get_migration_status() -> dict[str, Any]:
                 cursor.execute("SELECT COUNT(*) FROM engagements")
                 engagement_count = cursor.fetchone()[0]
 
-                cursor.execute(
-                    "SELECT COUNT(*) FROM agent_state_log"
-                )
+                cursor.execute("SELECT COUNT(*) FROM agent_state_log")
                 migrated_count = cursor.fetchone()[0]
     except Exception as e:
         logger.warning("Failed to query migration status: %s", e)
