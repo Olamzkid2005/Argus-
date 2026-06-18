@@ -53,7 +53,6 @@ def main():
 
     for test_path in targets:
         content = test_path.read_text()
-        original = content
         lines = content.split('\n')
         new_lines = list(lines)
         changed = False
