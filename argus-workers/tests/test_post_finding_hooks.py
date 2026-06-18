@@ -24,7 +24,7 @@ class TestFireFindingWebhooks:
     """Tests for fire_finding_webhooks."""
 
     def test_skips_low_severity(self):
-        fire_finding_webhooks(
+        result = fire_finding_webhooks(
             {
                 "id": "finding-1",
                 "engagement_id": "eng-001",
@@ -32,7 +32,7 @@ class TestFireFindingWebhooks:
                 "type": "XSS",
             }
         )
-        # Should return None (no webhooks fired for LOW)
+        assert result is None  # No webhooks fired for LOW severity
 
     def test_fires_for_critical(self):
         with patch(

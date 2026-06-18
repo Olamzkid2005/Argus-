@@ -41,7 +41,7 @@ class TestAbstractTool:
             assert instance is not None
             assert isinstance(instance, AbstractTool)
         except TypeError:
-            instance = ToolContext()
+            instance = AbstractTool()
             assert instance is not None
 
     def test_field_access(self):
@@ -51,7 +51,7 @@ class TestAbstractTool:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            instance = ToolContext()
+            instance = AbstractTool()
             assert instance is not None
 
 
@@ -65,7 +65,7 @@ class TestAsyncTool:
             assert instance is not None
             assert isinstance(instance, AsyncTool)
         except TypeError:
-            instance = ToolContext()
+            instance = AsyncTool()
             assert instance is not None
 
     def test_field_access(self):
@@ -75,5 +75,5 @@ class TestAsyncTool:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            instance = ToolContext()
+            instance = AsyncTool()
             assert instance is not None

@@ -17,4 +17,3 @@ class TestExecutionEngine:
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             ExecutionEngine()
-            str(ExecutionEngine())

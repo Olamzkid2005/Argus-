@@ -28,12 +28,12 @@ class TestDiscoverOwnedResourcesStep:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = AuthenticateStep()
+        instance = DiscoverOwnedResourcesStep()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = AuthenticateStep()
+        instance = DiscoverOwnedResourcesStep()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)
 
@@ -43,11 +43,11 @@ class TestTestBolaStep:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = AuthenticateStep()
+        instance = TestBolaStep()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = AuthenticateStep()
+        instance = TestBolaStep()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)

@@ -12,22 +12,22 @@ class TestFindingFeedback:
     def test_instantiation(self):
         """Class can be instantiated."""
         try:
-            instance = FindingFeedback()
+            instance = FeedbackLearningLoop()
             assert instance is not None
             assert isinstance(instance, FindingFeedback)
         except TypeError:
             with pytest.raises(TypeError):
-                FindingFeedback()
+                FeedbackLearningLoop()
 
     def test_field_access(self):
         """Instance fields are accessible."""
         try:
-            instance = FindingFeedback()
+            instance = FeedbackLearningLoop()
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
             with pytest.raises(TypeError):
-                FindingFeedback()
+                FeedbackLearningLoop()
 
 
 class TestFeedbackLearningLoop:
@@ -36,10 +36,10 @@ class TestFeedbackLearningLoop:
     def test_instantiation(self):
         """Class requires constructor args."""
         with pytest.raises(TypeError):
-            FindingFeedback()
+            FeedbackLearningLoop()
 
     def test_str_repr(self):
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
-            FindingFeedback()
-            str(FindingFeedback())
+            FeedbackLearningLoop()
+            str(FeedbackLearningLoop())

@@ -32,7 +32,7 @@ class TestLLMServiceConfig:
             assert instance is not None
             assert isinstance(instance, LLMServiceConfig)
         except TypeError:
-            instance = CostTracker()
+            instance = LLMServiceConfig()
             assert instance is not None
 
     def test_field_access(self):
@@ -42,7 +42,7 @@ class TestLLMServiceConfig:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            instance = CostTracker()
+            instance = LLMServiceConfig()
             assert instance is not None
 
 
@@ -51,11 +51,11 @@ class TestLLMService:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = CostTracker()
+        instance = LLMService()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = CostTracker()
+        instance = LLMService()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)

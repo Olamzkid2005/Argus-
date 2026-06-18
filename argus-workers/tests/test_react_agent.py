@@ -11,12 +11,12 @@ class Test_DoneSentinel:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = _DoneSentinel()
+        instance = ReActAgent()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = _DoneSentinel()
+        instance = ReActAgent()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)
 
@@ -26,11 +26,11 @@ class TestReActAgent:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = _DoneSentinel()
+        instance = ReActAgent()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = _DoneSentinel()
+        instance = ReActAgent()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)

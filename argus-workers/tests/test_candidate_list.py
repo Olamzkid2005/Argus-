@@ -32,7 +32,7 @@ class TestCandidate:
             assert instance is not None
             assert isinstance(instance, Candidate)
         except TypeError:
-            instance = CandidateSource()
+            instance = Candidate()
             assert instance is not None
 
     def test_field_access(self):
@@ -42,7 +42,7 @@ class TestCandidate:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            instance = CandidateSource()
+            instance = Candidate()
             assert instance is not None
 
 
@@ -56,7 +56,7 @@ class TestCandidateList:
             assert instance is not None
             assert isinstance(instance, CandidateList)
         except TypeError:
-            instance = CandidateSource()
+            instance = CandidateList()
             assert instance is not None
 
     def test_field_access(self):
@@ -66,5 +66,5 @@ class TestCandidateList:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            instance = CandidateSource()
+            instance = CandidateList()
             assert instance is not None

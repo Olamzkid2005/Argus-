@@ -11,12 +11,12 @@ class TestArgusFindingAdapter:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = ArgusFindingAdapter()
+        instance = BugBountyReportGenerator()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = ArgusFindingAdapter()
+        instance = BugBountyReportGenerator()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)
 
@@ -26,11 +26,11 @@ class TestBugBountyReportGenerator:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = ArgusFindingAdapter()
+        instance = BugBountyReportGenerator()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = ArgusFindingAdapter()
+        instance = BugBountyReportGenerator()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)

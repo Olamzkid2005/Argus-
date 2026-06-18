@@ -17,4 +17,3 @@ class TestEmbeddingService:
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             EmbeddingService()
-            str(EmbeddingService())

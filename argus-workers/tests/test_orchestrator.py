@@ -11,12 +11,12 @@ class TestEngagementTimeoutError:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = EngagementTimeoutError()
+        instance = Orchestrator()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = EngagementTimeoutError()
+        instance = Orchestrator()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)
 
@@ -26,11 +26,11 @@ class TestOrchestrator:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = EngagementTimeoutError()
+        instance = Orchestrator()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = EngagementTimeoutError()
+        instance = Orchestrator()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)

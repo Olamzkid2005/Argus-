@@ -31,7 +31,7 @@ class TestUnifiedToolResult:
             assert instance is not None
             assert isinstance(instance, UnifiedToolResult)
         except TypeError:
-            instance = ToolStatus()
+            instance = UnifiedToolResult()
             assert instance is not None
 
     def test_field_access(self):
@@ -41,5 +41,5 @@ class TestUnifiedToolResult:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            instance = ToolStatus()
+            instance = UnifiedToolResult()
             assert instance is not None

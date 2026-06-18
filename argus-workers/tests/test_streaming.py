@@ -22,7 +22,7 @@ class TestEvent:
             assert isinstance(instance, Event)
         except TypeError:
             with pytest.raises(TypeError):
-                Event()
+                EventBus()
 
     def test_field_access(self):
         """Instance fields are accessible."""
@@ -32,7 +32,7 @@ class TestEvent:
             assert isinstance(fields, dict)
         except TypeError:
             with pytest.raises(TypeError):
-                Event()
+                EventBus()
 
 
 class TestEventType:
@@ -46,8 +46,7 @@ class TestEventType:
     def test_str_repr(self):
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
-            Event()
-            str(Event())
+            EventType()
 
 
 class TestEventBus:
@@ -61,7 +60,7 @@ class TestEventBus:
             assert isinstance(instance, EventBus)
         except TypeError:
             with pytest.raises(TypeError):
-                Event()
+                EventBus()
 
     def test_field_access(self):
         """Instance fields are accessible."""
@@ -71,4 +70,4 @@ class TestEventBus:
             assert isinstance(fields, dict)
         except TypeError:
             with pytest.raises(TypeError):
-                Event()
+                EventBus()

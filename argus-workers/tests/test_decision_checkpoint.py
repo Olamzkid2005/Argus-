@@ -12,22 +12,22 @@ class TestDecisionCheckpoint:
     def test_instantiation(self):
         """Class can be instantiated."""
         try:
-            instance = DecisionCheckpoint()
+            instance = DecisionCheckpointRepository()
             assert instance is not None
             assert isinstance(instance, DecisionCheckpoint)
         except TypeError:
             with pytest.raises(TypeError):
-                DecisionCheckpoint()
+                DecisionCheckpointRepository()
 
     def test_field_access(self):
         """Instance fields are accessible."""
         try:
-            instance = DecisionCheckpoint()
+            instance = DecisionCheckpointRepository()
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
             with pytest.raises(TypeError):
-                DecisionCheckpoint()
+                DecisionCheckpointRepository()
 
 
 class TestDecisionCheckpointRepository:
@@ -36,10 +36,10 @@ class TestDecisionCheckpointRepository:
     def test_instantiation(self):
         """Class requires constructor args."""
         with pytest.raises(TypeError):
-            DecisionCheckpoint()
+            DecisionCheckpointRepository()
 
     def test_str_repr(self):
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
-            DecisionCheckpoint()
-            str(DecisionCheckpoint())
+            DecisionCheckpointRepository()
+            str(DecisionCheckpointRepository())

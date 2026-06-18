@@ -26,7 +26,18 @@ class TestCircuitState:
 
 
 class TestCircuitOpenError:
-    """Tests for the CircuitOpenError enum."""
+    """Tests for the CircuitOpenError exception."""
+
+    def test_is_exception(self):
+        """Is a proper exception class."""
+        assert issubclass(CircuitOpenError, Exception)
+
+    def test_can_be_raised(self):
+        """Can be raised and caught."""
+        try:
+            raise CircuitOpenError("Test error")
+        except CircuitOpenError as e:
+            assert str(e) == "Test error"
 
     def test_members_exist(self):
         """Enum has expected members."""

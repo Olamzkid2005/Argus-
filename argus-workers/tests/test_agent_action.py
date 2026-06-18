@@ -17,4 +17,3 @@ class TestAgentAction:
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             AgentAction()
-            str(AgentAction())

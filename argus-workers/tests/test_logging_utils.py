@@ -12,12 +12,12 @@ class TestSecretsRedactionFilter:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = SecretsRedactionFilter()
+        instance = ScanLogger()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = SecretsRedactionFilter()
+        instance = RedactedLogger()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)
 
@@ -27,12 +27,12 @@ class TestRedactedLogger:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = SecretsRedactionFilter()
+        instance = RedactedLogger()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = SecretsRedactionFilter()
+        instance = RedactedLogger()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)
 
@@ -42,11 +42,11 @@ class TestScanLogger:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = SecretsRedactionFilter()
+        instance = ScanLogger()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = SecretsRedactionFilter()
+        instance = RedactedLogger()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)

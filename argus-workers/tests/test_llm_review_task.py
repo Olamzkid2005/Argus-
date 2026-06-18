@@ -30,15 +30,17 @@ class TestLLMReviewTask:
         """Test that request replay constructs a URL with the payload."""
         from tasks.llm_review import _replay_request
 
-        # Just verify the function doesn't crash — it makes a real HTTP call
-        # which we don't want in unit tests. We'll test the structure.
-        assert callable(_replay_request)
+        # Function requires arguments
+        with pytest.raises(TypeError):
+            _replay_request()
 
     def test_replay_request_no_payload(self):
         """Test request replay without payload."""
         from tasks.llm_review import _replay_request
 
-        assert callable(_replay_request)
+        # Function requires arguments
+        with pytest.raises(TypeError):
+            _replay_request()
 
     def test_task_skipped_when_disabled(self):
         """Test that the module has the expected structure."""

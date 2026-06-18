@@ -17,4 +17,3 @@ class TestSafeEventEmitter:
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             SafeEventEmitter()
-            str(SafeEventEmitter())

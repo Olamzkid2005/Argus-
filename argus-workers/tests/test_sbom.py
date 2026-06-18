@@ -11,11 +11,8 @@ def load_sbom_functions():
 
     # Create mocked modules for all external dependencies
     mock_celery = MagicMock()
-    MagicMock()
     mock_psycopg2 = MagicMock()
     mock_subprocess = MagicMock()
-    MagicMock()
-    MagicMock()
 
     # Mock the loader module
     mock_loader = MagicMock()

@@ -17,4 +17,3 @@ class TestDeterministicRuntime:
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             DeterministicRuntime()
-            str(DeterministicRuntime())

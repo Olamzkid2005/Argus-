@@ -32,7 +32,7 @@ class TestAuthConfig:
             assert instance is not None
             assert isinstance(instance, AuthConfig)
         except TypeError:
-            instance = AuthError()
+            instance = AuthConfig()
             assert instance is not None
 
     def test_field_access(self):
@@ -42,7 +42,7 @@ class TestAuthConfig:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            instance = AuthError()
+            instance = AuthConfig()
             assert instance is not None
 
 
@@ -51,11 +51,11 @@ class TestAuthManager:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = AuthError()
+        instance = AuthManager()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = AuthError()
+        instance = AuthManager()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)

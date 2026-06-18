@@ -32,7 +32,7 @@ class TestTaskContext:
             assert instance is not None
             assert isinstance(instance, TaskContext)
         except TypeError:
-            instance = OperatorCanceled()
+            instance = TaskContext()
             assert instance is not None
 
     def test_field_access(self):
@@ -42,7 +42,7 @@ class TestTaskContext:
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
-            instance = OperatorCanceled()
+            instance = TaskContext()
             assert instance is not None
 
 
@@ -51,11 +51,11 @@ class Test_SoftTimeLimitExceeded:
 
     def test_instantiation(self):
         """Class requires constructor args."""
-        instance = OperatorCanceled()
+        instance = _SoftTimeLimitExceeded()
         assert instance is not None
 
     def test_str_repr(self):
         """String and repr work on instantiated object."""
-        instance = OperatorCanceled()
+        instance = _SoftTimeLimitExceeded()
         assert isinstance(str(instance), str)
         assert isinstance(repr(instance), str)

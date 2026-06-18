@@ -17,4 +17,3 @@ class TestCoordinatorAgent:
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             CoordinatorAgent()
-            str(CoordinatorAgent())

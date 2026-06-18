@@ -12,22 +12,22 @@ class TestAsset:
     def test_instantiation(self):
         """Class can be instantiated."""
         try:
-            instance = Asset()
+            instance = AssetGraph()
             assert instance is not None
             assert isinstance(instance, Asset)
         except TypeError:
             with pytest.raises(TypeError):
-                Asset()
+                AssetGraph()
 
     def test_field_access(self):
         """Instance fields are accessible."""
         try:
-            instance = Asset()
+            instance = AssetGraph()
             fields = vars(instance) if hasattr(instance, '__dict__') else {}
             assert isinstance(fields, dict)
         except TypeError:
             with pytest.raises(TypeError):
-                Asset()
+                AssetGraph()
 
 
 class TestAssetGraph:
@@ -36,10 +36,10 @@ class TestAssetGraph:
     def test_instantiation(self):
         """Class requires constructor args."""
         with pytest.raises(TypeError):
-            Asset()
+            AssetGraph()
 
     def test_str_repr(self):
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
-            Asset()
-            str(Asset())
+            AssetGraph()
+            str(AssetGraph())

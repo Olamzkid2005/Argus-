@@ -13,12 +13,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    True,
-    reason="These tests require a running scan environment with tools installed. "
-    "Run manually to verify wiring: cd argus-workers && python scripts/verify_wiring_logs.py",
-)
-
 # ── helpers ──────────────────────────────────────────────────────────────
 
 
