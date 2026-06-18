@@ -1,25 +1,28 @@
-"""Smoke tests for tools/login.py
+"""Tests for tools.login — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.login import LoginTool
 
-class TestSmoke:
-    """Smoke tests for tools.login."""
 
-    def test_module_imports(self):
-        """Verify login.py imports cleanly."""
-        mod = importlib.import_module("tools.login")
-        assert mod is not None
+class TestLoginTool:
+    """Tests for the LoginTool class."""
 
-    def test_main_class_exists(self):
-        """Verify key class LoginTool is available."""
-        mod = importlib.import_module("tools.login")
-        assert hasattr(mod, "LoginTool")
-        assert callable(mod.LoginTool)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = LoginTool()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = LoginTool()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

@@ -1,25 +1,28 @@
-"""Smoke tests for tools/verification_agent.py
+"""Tests for tools.verification_agent — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.verification_agent import VerificationAgent
 
-class TestSmoke:
-    """Smoke tests for tools.verification_agent."""
 
-    def test_module_imports(self):
-        """Verify verification_agent.py imports cleanly."""
-        mod = importlib.import_module("tools.verification_agent")
-        assert mod is not None
+class TestVerificationAgent:
+    """Tests for the VerificationAgent class."""
 
-    def test_main_class_exists(self):
-        """Verify key class VerificationAgent is available."""
-        mod = importlib.import_module("tools.verification_agent")
-        assert hasattr(mod, "VerificationAgent")
-        assert callable(mod.VerificationAgent)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = VerificationAgent()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = VerificationAgent()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

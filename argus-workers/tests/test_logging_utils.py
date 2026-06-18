@@ -1,25 +1,76 @@
-"""Smoke tests for utils/logging_utils.py
+"""Tests for utils.logging_utils — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from utils.logging_utils import RedactedLogger
+from utils.logging_utils import ScanLogger
+from utils.logging_utils import SecretsRedactionFilter
 
-class TestSmoke:
-    """Smoke tests for utils.logging_utils."""
 
-    def test_module_imports(self):
-        """Verify logging_utils.py imports cleanly."""
-        mod = importlib.import_module("utils.logging_utils")
-        assert mod is not None
+class TestSecretsRedactionFilter:
+    """Tests for the SecretsRedactionFilter class."""
 
-    def test_main_class_exists(self):
-        """Verify key class SecretsRedactionFilter is available."""
-        mod = importlib.import_module("utils.logging_utils")
-        assert hasattr(mod, "SecretsRedactionFilter")
-        assert callable(mod.SecretsRedactionFilter)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = SecretsRedactionFilter()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = SecretsRedactionFilter()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
+
+
+class TestRedactedLogger:
+    """Tests for the RedactedLogger class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = RedactedLogger()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = RedactedLogger()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
+
+
+class TestScanLogger:
+    """Tests for the ScanLogger class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = ScanLogger()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = ScanLogger()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

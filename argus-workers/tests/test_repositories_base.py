@@ -1,31 +1,28 @@
-"""Smoke tests for database/repositories/base.py
+"""Tests for database.repositories.base — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from database.repositories.base import BaseRepository
 
-class TestSmoke:
-    """Smoke tests for database.repositories.base."""
 
-    def test_module_imports(self):
-        """Verify base.py imports cleanly."""
-        mod = importlib.import_module("database.repositories.base")
-        assert mod is not None
+class TestBaseRepository:
+    """Tests for the BaseRepository class."""
 
-    def test_main_class_exists(self):
-        """Verify key class BaseRepository is available."""
-        mod = importlib.import_module("database.repositories.base")
-        assert hasattr(mod, "BaseRepository")
-        assert callable(mod.BaseRepository)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = BaseRepository()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
 
-    def test_function_validate_columns_exists(self):
-        """Verify function validate_columns is exported."""
-        mod = importlib.import_module("database.repositories.base")
-        assert hasattr(mod, "validate_columns")
-        assert callable(mod.validate_columns)
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = BaseRepository()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

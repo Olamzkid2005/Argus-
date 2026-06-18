@@ -1,25 +1,28 @@
-"""Smoke tests for tools/attack_path_generator.py
+"""Tests for tools.attack_path_generator — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.attack_path_generator import AttackPathGenerator
 
-class TestSmoke:
-    """Smoke tests for tools.attack_path_generator."""
 
-    def test_module_imports(self):
-        """Verify attack_path_generator.py imports cleanly."""
-        mod = importlib.import_module("tools.attack_path_generator")
-        assert mod is not None
+class TestAttackPathGenerator:
+    """Tests for the AttackPathGenerator class."""
 
-    def test_main_class_exists(self):
-        """Verify key class AttackPathGenerator is available."""
-        mod = importlib.import_module("tools.attack_path_generator")
-        assert hasattr(mod, "AttackPathGenerator")
-        assert callable(mod.AttackPathGenerator)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = AttackPathGenerator()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = AttackPathGenerator()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

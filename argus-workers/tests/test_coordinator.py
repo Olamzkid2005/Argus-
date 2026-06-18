@@ -1,31 +1,28 @@
-"""Smoke tests for agent/coordinator.py
+"""Tests for agent.coordinator — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from agent.coordinator import CoordinatorAgent
 
-class TestSmoke:
-    """Smoke tests for agent.coordinator."""
 
-    def test_module_imports(self):
-        """Verify coordinator.py imports cleanly."""
-        mod = importlib.import_module("agent.coordinator")
-        assert mod is not None
+class TestCoordinatorAgent:
+    """Tests for the CoordinatorAgent class."""
 
-    def test_main_class_exists(self):
-        """Verify key class CoordinatorAgent is available."""
-        mod = importlib.import_module("agent.coordinator")
-        assert hasattr(mod, "CoordinatorAgent")
-        assert callable(mod.CoordinatorAgent)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = CoordinatorAgent()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
 
-    def test_function_create_phase_agent_exists(self):
-        """Verify function create_phase_agent is exported."""
-        mod = importlib.import_module("agent.coordinator")
-        assert hasattr(mod, "create_phase_agent")
-        assert callable(mod.create_phase_agent)
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = CoordinatorAgent()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

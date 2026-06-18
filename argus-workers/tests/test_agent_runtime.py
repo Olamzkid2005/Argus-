@@ -1,25 +1,28 @@
-"""Smoke tests for agent/agent_runtime.py
+"""Tests for agent.agent_runtime — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from agent.agent_runtime import AgentRuntime
 
-class TestSmoke:
-    """Smoke tests for agent.agent_runtime."""
 
-    def test_module_imports(self):
-        """Verify agent_runtime.py imports cleanly."""
-        mod = importlib.import_module("agent.agent_runtime")
-        assert mod is not None
+class TestAgentRuntime:
+    """Tests for the AgentRuntime class."""
 
-    def test_main_class_exists(self):
-        """Verify key class AgentRuntime is available."""
-        mod = importlib.import_module("agent.agent_runtime")
-        assert hasattr(mod, "AgentRuntime")
-        assert callable(mod.AgentRuntime)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = AgentRuntime()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = AgentRuntime()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

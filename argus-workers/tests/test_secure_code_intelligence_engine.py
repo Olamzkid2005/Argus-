@@ -1,25 +1,28 @@
-"""Smoke tests for tools/secure_code_intelligence_engine.py
+"""Tests for tools.secure_code_intelligence_engine — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.secure_code_intelligence_engine import SecureCodeIntelligenceEngine
 
-class TestSmoke:
-    """Smoke tests for tools.secure_code_intelligence_engine."""
 
-    def test_module_imports(self):
-        """Verify secure_code_intelligence_engine.py imports cleanly."""
-        mod = importlib.import_module("tools.secure_code_intelligence_engine")
-        assert mod is not None
+class TestSecureCodeIntelligenceEngine:
+    """Tests for the SecureCodeIntelligenceEngine class."""
 
-    def test_main_class_exists(self):
-        """Verify key class SecureCodeIntelligenceEngine is available."""
-        mod = importlib.import_module("tools.secure_code_intelligence_engine")
-        assert hasattr(mod, "SecureCodeIntelligenceEngine")
-        assert callable(mod.SecureCodeIntelligenceEngine)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = SecureCodeIntelligenceEngine()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = SecureCodeIntelligenceEngine()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

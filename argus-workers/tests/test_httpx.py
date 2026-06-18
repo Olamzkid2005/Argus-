@@ -1,25 +1,36 @@
-"""Smoke tests for parsers/parsers/httpx.py
+"""Tests for parsers.parsers.httpx — Category: parser"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from parsers.parsers.httpx import HttpxParser
 
-class TestSmoke:
-    """Smoke tests for parsers.parsers.httpx."""
 
-    def test_module_imports(self):
-        """Verify httpx.py imports cleanly."""
-        mod = importlib.import_module("parsers.parsers.httpx")
-        assert mod is not None
+class TestHttpxParser:
+    """Tests for the HttpxParser parser."""
 
-    def test_main_class_exists(self):
-        """Verify key class HttpxParser is available."""
-        mod = importlib.import_module("parsers.parsers.httpx")
-        assert hasattr(mod, "HttpxParser")
-        assert callable(mod.HttpxParser)
+    def setup_method(self):
+        self.parser = HttpxParser()
+
+    def test_empty_input(self):
+        """Empty input returns empty list."""
+        result = self.parser.parse("")
+        assert result == []
+
+    def test_blank_lines(self):
+        """Whitespace-only input returns empty list."""
+        result = self.parser.parse("\n  \n\n")
+        assert result == []
+
+    def test_parse_results_are_list(self):
+        """parse() always returns a list."""
+        result = self.parser.parse("")
+        assert isinstance(result, list)
+
+    def test_findings_have_required_keys(self):
+        """Parsed findings have type, severity, endpoint."""
+        result = self.parser.parse("test input")
+        if result:
+            for finding in result:
+                assert "type" in finding
+                assert "severity" in finding
+                assert "endpoint" in finding or "tool" in finding

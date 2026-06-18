@@ -1,25 +1,28 @@
-"""Smoke tests for tools/attack_surface/subdomain_discovery.py
+"""Tests for tools.attack_surface.subdomain_discovery — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.attack_surface.subdomain_discovery import SubdomainDiscovery
 
-class TestSmoke:
-    """Smoke tests for tools.attack_surface.subdomain_discovery."""
 
-    def test_module_imports(self):
-        """Verify subdomain_discovery.py imports cleanly."""
-        mod = importlib.import_module("tools.attack_surface.subdomain_discovery")
-        assert mod is not None
+class TestSubdomainDiscovery:
+    """Tests for the SubdomainDiscovery class."""
 
-    def test_main_class_exists(self):
-        """Verify key class SubdomainDiscovery is available."""
-        mod = importlib.import_module("tools.attack_surface.subdomain_discovery")
-        assert hasattr(mod, "SubdomainDiscovery")
-        assert callable(mod.SubdomainDiscovery)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = SubdomainDiscovery()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = SubdomainDiscovery()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

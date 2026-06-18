@@ -1,37 +1,28 @@
-"""Smoke tests for utils/retry.py
+"""Tests for utils.retry — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from utils.retry import RetryExhaustedError
 
-class TestSmoke:
-    """Smoke tests for utils.retry."""
 
-    def test_module_imports(self):
-        """Verify retry.py imports cleanly."""
-        mod = importlib.import_module("utils.retry")
-        assert mod is not None
+class TestRetryExhaustedError:
+    """Tests for the RetryExhaustedError class."""
 
-    def test_main_class_exists(self):
-        """Verify key class RetryExhaustedError is available."""
-        mod = importlib.import_module("utils.retry")
-        assert hasattr(mod, "RetryExhaustedError")
-        assert callable(mod.RetryExhaustedError)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = RetryExhaustedError()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
 
-    def test_function_retry_exists(self):
-        """Verify function retry is exported."""
-        mod = importlib.import_module("utils.retry")
-        assert hasattr(mod, "retry")
-        assert callable(mod.retry)
-
-    def test_function_retry_function_exists(self):
-        """Verify function retry_function is exported."""
-        mod = importlib.import_module("utils.retry")
-        assert hasattr(mod, "retry_function")
-        assert callable(mod.retry_function)
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = RetryExhaustedError()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

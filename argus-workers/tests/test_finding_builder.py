@@ -1,25 +1,28 @@
-"""Smoke tests for tool_core/finding_builder.py
+"""Tests for tool_core.finding_builder — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tool_core.finding_builder import FindingBuilder
 
-class TestSmoke:
-    """Smoke tests for tool_core.finding_builder."""
 
-    def test_module_imports(self):
-        """Verify finding_builder.py imports cleanly."""
-        mod = importlib.import_module("tool_core.finding_builder")
-        assert mod is not None
+class TestFindingBuilder:
+    """Tests for the FindingBuilder class."""
 
-    def test_main_class_exists(self):
-        """Verify key class FindingBuilder is available."""
-        mod = importlib.import_module("tool_core.finding_builder")
-        assert hasattr(mod, "FindingBuilder")
-        assert callable(mod.FindingBuilder)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = FindingBuilder()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = FindingBuilder()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

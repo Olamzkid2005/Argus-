@@ -1,25 +1,28 @@
-"""Smoke tests for runtime/deterministic_runtime.py
+"""Tests for runtime.deterministic_runtime — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from runtime.deterministic_runtime import DeterministicRuntime
 
-class TestSmoke:
-    """Smoke tests for runtime.deterministic_runtime."""
 
-    def test_module_imports(self):
-        """Verify deterministic_runtime.py imports cleanly."""
-        mod = importlib.import_module("runtime.deterministic_runtime")
-        assert mod is not None
+class TestDeterministicRuntime:
+    """Tests for the DeterministicRuntime class."""
 
-    def test_main_class_exists(self):
-        """Verify key class DeterministicRuntime is available."""
-        mod = importlib.import_module("runtime.deterministic_runtime")
-        assert hasattr(mod, "DeterministicRuntime")
-        assert callable(mod.DeterministicRuntime)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = DeterministicRuntime()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = DeterministicRuntime()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

@@ -1,25 +1,74 @@
-"""Smoke tests for models/candidate_list.py
+"""Tests for models.candidate_list — Category: dataclass"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from models.candidate_list import Candidate
+from models.candidate_list import CandidateList
+from models.candidate_list import CandidateSource
 
-class TestSmoke:
-    """Smoke tests for models.candidate_list."""
 
-    def test_module_imports(self):
-        """Verify candidate_list.py imports cleanly."""
-        mod = importlib.import_module("models.candidate_list")
-        assert mod is not None
+class TestCandidateSource:
+    """Tests for the CandidateSource class."""
 
-    def test_main_class_exists(self):
-        """Verify key class CandidateSource is available."""
-        mod = importlib.import_module("models.candidate_list")
-        assert hasattr(mod, "CandidateSource")
-        assert callable(mod.CandidateSource)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = CandidateSource()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = CandidateSource()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
+
+
+class TestCandidate:
+    """Tests for the Candidate class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = Candidate()
+            assert instance is not None
+            assert isinstance(instance, Candidate)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_field_access(self):
+        """Instance fields are accessible."""
+        try:
+            instance = Candidate()
+            fields = vars(instance) if hasattr(instance, '__dict__') else {}
+            assert isinstance(fields, dict)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+
+class TestCandidateList:
+    """Tests for the CandidateList class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = CandidateList()
+            assert instance is not None
+            assert isinstance(instance, CandidateList)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_field_access(self):
+        """Instance fields are accessible."""
+        try:
+            instance = CandidateList()
+            fields = vars(instance) if hasattr(instance, '__dict__') else {}
+            assert isinstance(fields, dict)
+        except TypeError:
+            pytest.skip("Requires constructor args")

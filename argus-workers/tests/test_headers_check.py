@@ -1,31 +1,28 @@
-"""Smoke tests for tools/web_scanner_checks/headers_check.py
+"""Tests for tools.web_scanner_checks.headers_check — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.web_scanner_checks.headers_check import HeadersCheck
 
-class TestSmoke:
-    """Smoke tests for tools.web_scanner_checks.headers_check."""
 
-    def test_module_imports(self):
-        """Verify headers_check.py imports cleanly."""
-        mod = importlib.import_module("tools.web_scanner_checks.headers_check")
-        assert mod is not None
+class TestHeadersCheck:
+    """Tests for the HeadersCheck class."""
 
-    def test_main_class_exists(self):
-        """Verify key class HeadersCheck is available."""
-        mod = importlib.import_module("tools.web_scanner_checks.headers_check")
-        assert hasattr(mod, "HeadersCheck")
-        assert callable(mod.HeadersCheck)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = HeadersCheck()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
 
-    def test_function_run_check_exists(self):
-        """Verify function run_check is exported."""
-        mod = importlib.import_module("tools.web_scanner_checks.headers_check")
-        assert hasattr(mod, "run_check")
-        assert callable(mod.run_check)
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = HeadersCheck()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

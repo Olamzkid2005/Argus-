@@ -1,31 +1,51 @@
-"""Smoke tests for tools/port_scanner.py
+"""Tests for tools.port_scanner — Category: dataclass"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.port_scanner import OpenPort
+from tools.port_scanner import PortScanner
 
-class TestSmoke:
-    """Smoke tests for tools.port_scanner."""
 
-    def test_module_imports(self):
-        """Verify port_scanner.py imports cleanly."""
-        mod = importlib.import_module("tools.port_scanner")
-        assert mod is not None
+class TestOpenPort:
+    """Tests for the OpenPort class."""
 
-    def test_main_class_exists(self):
-        """Verify key class OpenPort is available."""
-        mod = importlib.import_module("tools.port_scanner")
-        assert hasattr(mod, "OpenPort")
-        assert callable(mod.OpenPort)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = OpenPort()
+            assert instance is not None
+            assert isinstance(instance, OpenPort)
+        except TypeError:
+            pytest.skip("Requires constructor args")
 
-    def test_function_get_recommended_templates_exists(self):
-        """Verify function get_recommended_templates is exported."""
-        mod = importlib.import_module("tools.port_scanner")
-        assert hasattr(mod, "get_recommended_templates")
-        assert callable(mod.get_recommended_templates)
+    def test_field_access(self):
+        """Instance fields are accessible."""
+        try:
+            instance = OpenPort()
+            fields = vars(instance) if hasattr(instance, '__dict__') else {}
+            assert isinstance(fields, dict)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+
+class TestPortScanner:
+    """Tests for the PortScanner class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = PortScanner()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = PortScanner()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

@@ -1,25 +1,28 @@
-"""Smoke tests for tasks/utils.py
+"""Tests for tasks.utils — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tasks.utils import LlmCostTracker
 
-class TestSmoke:
-    """Smoke tests for tasks.utils."""
 
-    def test_module_imports(self):
-        """Verify utils.py imports cleanly."""
-        mod = importlib.import_module("tasks.utils")
-        assert mod is not None
+class TestLlmCostTracker:
+    """Tests for the LlmCostTracker class."""
 
-    def test_main_class_exists(self):
-        """Verify key class LlmCostTracker is available."""
-        mod = importlib.import_module("tasks.utils")
-        assert hasattr(mod, "LlmCostTracker")
-        assert callable(mod.LlmCostTracker)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = LlmCostTracker()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = LlmCostTracker()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

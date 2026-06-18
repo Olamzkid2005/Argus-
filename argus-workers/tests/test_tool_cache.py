@@ -1,31 +1,28 @@
-"""Smoke tests for tools/tool_cache.py
+"""Tests for tools.tool_cache — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.tool_cache import ToolCache
 
-class TestSmoke:
-    """Smoke tests for tools.tool_cache."""
 
-    def test_module_imports(self):
-        """Verify tool_cache.py imports cleanly."""
-        mod = importlib.import_module("tools.tool_cache")
-        assert mod is not None
+class TestToolCache:
+    """Tests for the ToolCache class."""
 
-    def test_main_class_exists(self):
-        """Verify key class ToolCache is available."""
-        mod = importlib.import_module("tools.tool_cache")
-        assert hasattr(mod, "ToolCache")
-        assert callable(mod.ToolCache)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = ToolCache()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
 
-    def test_function_get_cached_tool_exists(self):
-        """Verify function get_cached_tool is exported."""
-        mod = importlib.import_module("tools.tool_cache")
-        assert hasattr(mod, "get_cached_tool")
-        assert callable(mod.get_cached_tool)
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = ToolCache()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

@@ -1,25 +1,30 @@
-"""Smoke tests for tools/_browser_scan_worker.py
+"""Tests for tools._browser_scan_worker — Category: function"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
+pytest.importorskip("playwright")
+
+from tools._browser_scan_worker import _validate_url
+from tools._browser_scan_worker import scan
 
 
-class TestSmoke:
-    """Smoke tests for tools._browser_scan_worker."""
+class TestValidateUrl:
+    """Tests for the _validate_url function."""
 
-    def test_module_imports(self):
-        """Verify _browser_scan_worker.py imports cleanly."""
-        mod = importlib.import_module("tools._browser_scan_worker")
-        assert mod is not None
+    def test_valid_url(self):
+        """Valid URL returns the URL."""
+        result = _validate_url("https://example.com")
+        assert result == "https://example.com"
 
-    def test_function_scan_exists(self):
-        """Verify function scan is exported."""
-        mod = importlib.import_module("tools._browser_scan_worker")
-        assert hasattr(mod, "scan")
-        assert callable(mod.scan)
+    def test_invalid_url_raises(self):
+        """Invalid URL raises ValueError."""
+        with pytest.raises((ValueError, TypeError)):
+            _validate_url("")
+
+
+class TestScan:
+    """Tests for the scan function."""
+
+    def test_requires_target(self):
+        """Requires a target URL."""
+        with pytest.raises(TypeError):
+            scan()

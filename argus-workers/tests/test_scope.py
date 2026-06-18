@@ -1,19 +1,20 @@
-"""Smoke tests for tool_core/validators/scope.py
+"""Tests for tool_core.validators.scope — Category: module"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
 
-class TestSmoke:
-    """Smoke tests for tool_core.validators.scope."""
+class TestModule:
+    """Tests for tool_core.validators.scope."""
 
-    def test_module_imports(self):
-        """Verify scope.py imports cleanly."""
+    def test_import(self):
+        """Module imports cleanly."""
+        import importlib
         mod = importlib.import_module("tool_core.validators.scope")
         assert mod is not None
+
+    def test_has_public_api(self):
+        """Module has public symbols."""
+        import importlib
+        mod = importlib.import_module("tool_core.validators.scope")
+        public = [x for x in dir(mod) if not x.startswith('_')]
+        assert len(public) > 0

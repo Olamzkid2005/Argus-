@@ -1,19 +1,20 @@
-"""Smoke tests for tools/tool_result.py
+"""Tests for tools.tool_result — Category: module"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
 
-class TestSmoke:
-    """Smoke tests for tools.tool_result."""
+class TestModule:
+    """Tests for tools.tool_result."""
 
-    def test_module_imports(self):
-        """Verify tool_result.py imports cleanly."""
+    def test_import(self):
+        """Module imports cleanly."""
+        import importlib
         mod = importlib.import_module("tools.tool_result")
         assert mod is not None
+
+    def test_has_public_api(self):
+        """Module has public symbols."""
+        import importlib
+        mod = importlib.import_module("tools.tool_result")
+        public = [x for x in dir(mod) if not x.startswith('_')]
+        assert len(public) > 0

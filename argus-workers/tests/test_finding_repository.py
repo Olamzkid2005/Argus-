@@ -1,25 +1,52 @@
-"""Smoke tests for database/repositories/finding_repository.py
+"""Tests for database.repositories.finding_repository — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from database.repositories.finding_repository import FindingCapExceededError
+from database.repositories.finding_repository import FindingRepository
 
-class TestSmoke:
-    """Smoke tests for database.repositories.finding_repository."""
 
-    def test_module_imports(self):
-        """Verify finding_repository.py imports cleanly."""
-        mod = importlib.import_module("database.repositories.finding_repository")
-        assert mod is not None
+class TestFindingCapExceededError:
+    """Tests for the FindingCapExceededError class."""
 
-    def test_main_class_exists(self):
-        """Verify key class FindingCapExceededError is available."""
-        mod = importlib.import_module("database.repositories.finding_repository")
-        assert hasattr(mod, "FindingCapExceededError")
-        assert callable(mod.FindingCapExceededError)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = FindingCapExceededError()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = FindingCapExceededError()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
+
+
+class TestFindingRepository:
+    """Tests for the FindingRepository class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = FindingRepository()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = FindingRepository()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

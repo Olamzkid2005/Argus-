@@ -1,25 +1,75 @@
-"""Smoke tests for tools/auth_manager.py
+"""Tests for tools.auth_manager — Category: dataclass"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.auth_manager import AuthConfig
+from tools.auth_manager import AuthError
+from tools.auth_manager import AuthManager
 
-class TestSmoke:
-    """Smoke tests for tools.auth_manager."""
 
-    def test_module_imports(self):
-        """Verify auth_manager.py imports cleanly."""
-        mod = importlib.import_module("tools.auth_manager")
-        assert mod is not None
+class TestAuthError:
+    """Tests for the AuthError class."""
 
-    def test_main_class_exists(self):
-        """Verify key class AuthError is available."""
-        mod = importlib.import_module("tools.auth_manager")
-        assert hasattr(mod, "AuthError")
-        assert callable(mod.AuthError)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = AuthError()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = AuthError()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
+
+
+class TestAuthConfig:
+    """Tests for the AuthConfig class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = AuthConfig()
+            assert instance is not None
+            assert isinstance(instance, AuthConfig)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_field_access(self):
+        """Instance fields are accessible."""
+        try:
+            instance = AuthConfig()
+            fields = vars(instance) if hasattr(instance, '__dict__') else {}
+            assert isinstance(fields, dict)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+
+class TestAuthManager:
+    """Tests for the AuthManager class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = AuthManager()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = AuthManager()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

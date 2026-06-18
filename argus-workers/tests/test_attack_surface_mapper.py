@@ -1,25 +1,28 @@
-"""Smoke tests for tools/attack_surface_mapper.py
+"""Tests for tools.attack_surface_mapper — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.attack_surface_mapper import AttackSurfaceMapper
 
-class TestSmoke:
-    """Smoke tests for tools.attack_surface_mapper."""
 
-    def test_module_imports(self):
-        """Verify attack_surface_mapper.py imports cleanly."""
-        mod = importlib.import_module("tools.attack_surface_mapper")
-        assert mod is not None
+class TestAttackSurfaceMapper:
+    """Tests for the AttackSurfaceMapper class."""
 
-    def test_main_class_exists(self):
-        """Verify key class AttackSurfaceMapper is available."""
-        mod = importlib.import_module("tools.attack_surface_mapper")
-        assert hasattr(mod, "AttackSurfaceMapper")
-        assert callable(mod.AttackSurfaceMapper)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = AttackSurfaceMapper()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = AttackSurfaceMapper()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

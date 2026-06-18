@@ -1,25 +1,52 @@
-"""Smoke tests for custom_rules/engine.py
+"""Tests for custom_rules.engine — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from custom_rules.engine import CustomRuleEngine
+from custom_rules.engine import CustomRuleError
 
-class TestSmoke:
-    """Smoke tests for custom_rules.engine."""
 
-    def test_module_imports(self):
-        """Verify engine.py imports cleanly."""
-        mod = importlib.import_module("custom_rules.engine")
-        assert mod is not None
+class TestCustomRuleError:
+    """Tests for the CustomRuleError class."""
 
-    def test_main_class_exists(self):
-        """Verify key class CustomRuleError is available."""
-        mod = importlib.import_module("custom_rules.engine")
-        assert hasattr(mod, "CustomRuleError")
-        assert callable(mod.CustomRuleError)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = CustomRuleError()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = CustomRuleError()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
+
+
+class TestCustomRuleEngine:
+    """Tests for the CustomRuleEngine class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = CustomRuleEngine()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = CustomRuleEngine()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

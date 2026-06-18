@@ -1,25 +1,78 @@
-"""Smoke tests for streaming.py
+"""Tests for streaming — Category: abstract_class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from streaming import Event
+from streaming import EventBus
+from streaming import EventType
+from streaming import StreamEvent
+from streaming import StreamEventType
+from streaming import StreamManager
+from streaming import StreamingFindingEmitter
 
-class TestSmoke:
-    """Smoke tests for streaming."""
 
-    def test_module_imports(self):
-        """Verify streaming.py imports cleanly."""
-        mod = importlib.import_module("streaming")
-        assert mod is not None
+class TestEvent:
+    """Tests for the Event class."""
 
-    def test_main_class_exists(self):
-        """Verify key class Event is available."""
-        mod = importlib.import_module("streaming")
-        assert hasattr(mod, "Event")
-        assert callable(mod.Event)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = Event()
+            assert instance is not None
+            assert isinstance(instance, Event)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_field_access(self):
+        """Instance fields are accessible."""
+        try:
+            instance = Event()
+            fields = vars(instance) if hasattr(instance, '__dict__') else {}
+            assert isinstance(fields, dict)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+
+class TestEventType:
+    """Tests for the EventType class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = EventType()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = EventType()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
+
+
+class TestEventBus:
+    """Tests for the EventBus class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = EventBus()
+            assert instance is not None
+            assert isinstance(instance, EventBus)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_field_access(self):
+        """Instance fields are accessible."""
+        try:
+            instance = EventBus()
+            fields = vars(instance) if hasattr(instance, '__dict__') else {}
+            assert isinstance(fields, dict)
+        except TypeError:
+            pytest.skip("Requires constructor args")

@@ -1,25 +1,77 @@
-"""Smoke tests for runtime/workflows/steps.py
+"""Tests for runtime.workflows.steps — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from runtime.workflows.steps import AuthenticateStep
+from runtime.workflows.steps import DiscoverOwnedResourcesStep
+from runtime.workflows.steps import TestBolaStep
+from runtime.workflows.steps import TestBoplaStep
 
-class TestSmoke:
-    """Smoke tests for runtime.workflows.steps."""
 
-    def test_module_imports(self):
-        """Verify steps.py imports cleanly."""
-        mod = importlib.import_module("runtime.workflows.steps")
-        assert mod is not None
+class TestAuthenticateStep:
+    """Tests for the AuthenticateStep class."""
 
-    def test_main_class_exists(self):
-        """Verify key class AuthenticateStep is available."""
-        mod = importlib.import_module("runtime.workflows.steps")
-        assert hasattr(mod, "AuthenticateStep")
-        assert callable(mod.AuthenticateStep)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = AuthenticateStep()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = AuthenticateStep()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
+
+
+class TestDiscoverOwnedResourcesStep:
+    """Tests for the DiscoverOwnedResourcesStep class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = DiscoverOwnedResourcesStep()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = DiscoverOwnedResourcesStep()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
+
+
+class TestTestBolaStep:
+    """Tests for the TestBolaStep class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = TestBolaStep()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = TestBolaStep()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

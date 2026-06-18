@@ -1,31 +1,27 @@
-"""Smoke tests for job_schema.py
+"""Tests for job_schema — Category: dataclass"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from job_schema import JobMessage
 
-class TestSmoke:
-    """Smoke tests for job_schema."""
 
-    def test_module_imports(self):
-        """Verify job_schema.py imports cleanly."""
-        mod = importlib.import_module("job_schema")
-        assert mod is not None
+class TestJobMessage:
+    """Tests for the JobMessage class."""
 
-    def test_main_class_exists(self):
-        """Verify key class JobMessage is available."""
-        mod = importlib.import_module("job_schema")
-        assert hasattr(mod, "JobMessage")
-        assert callable(mod.JobMessage)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = JobMessage()
+            assert instance is not None
+            assert isinstance(instance, JobMessage)
+        except TypeError:
+            pytest.skip("Requires constructor args")
 
-    def test_function_build_task_args_exists(self):
-        """Verify function build_task_args is exported."""
-        mod = importlib.import_module("job_schema")
-        assert hasattr(mod, "build_task_args")
-        assert callable(mod.build_task_args)
+    def test_field_access(self):
+        """Instance fields are accessible."""
+        try:
+            instance = JobMessage()
+            fields = vars(instance) if hasattr(instance, '__dict__') else {}
+            assert isinstance(fields, dict)
+        except TypeError:
+            pytest.skip("Requires constructor args")

@@ -1,25 +1,28 @@
-"""Smoke tests for tools/infrastructure_security_analyzer.py
+"""Tests for tools.infrastructure_security_analyzer — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.infrastructure_security_analyzer import InfrastructureSecurityAnalyzer
 
-class TestSmoke:
-    """Smoke tests for tools.infrastructure_security_analyzer."""
 
-    def test_module_imports(self):
-        """Verify infrastructure_security_analyzer.py imports cleanly."""
-        mod = importlib.import_module("tools.infrastructure_security_analyzer")
-        assert mod is not None
+class TestInfrastructureSecurityAnalyzer:
+    """Tests for the InfrastructureSecurityAnalyzer class."""
 
-    def test_main_class_exists(self):
-        """Verify key class InfrastructureSecurityAnalyzer is available."""
-        mod = importlib.import_module("tools.infrastructure_security_analyzer")
-        assert hasattr(mod, "InfrastructureSecurityAnalyzer")
-        assert callable(mod.InfrastructureSecurityAnalyzer)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = InfrastructureSecurityAnalyzer()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = InfrastructureSecurityAnalyzer()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

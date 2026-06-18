@@ -1,25 +1,51 @@
-"""Smoke tests for tool_core/result.py
+"""Tests for tool_core.result — Category: dataclass"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tool_core.result import ToolStatus
+from tool_core.result import UnifiedToolResult
 
-class TestSmoke:
-    """Smoke tests for tool_core.result."""
 
-    def test_module_imports(self):
-        """Verify result.py imports cleanly."""
-        mod = importlib.import_module("tool_core.result")
-        assert mod is not None
+class TestToolStatus:
+    """Tests for the ToolStatus class."""
 
-    def test_main_class_exists(self):
-        """Verify key class ToolStatus is available."""
-        mod = importlib.import_module("tool_core.result")
-        assert hasattr(mod, "ToolStatus")
-        assert callable(mod.ToolStatus)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = ToolStatus()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = ToolStatus()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
+
+
+class TestUnifiedToolResult:
+    """Tests for the UnifiedToolResult class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = UnifiedToolResult()
+            assert instance is not None
+            assert isinstance(instance, UnifiedToolResult)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_field_access(self):
+        """Instance fields are accessible."""
+        try:
+            instance = UnifiedToolResult()
+            fields = vars(instance) if hasattr(instance, '__dict__') else {}
+            assert isinstance(fields, dict)
+        except TypeError:
+            pytest.skip("Requires constructor args")

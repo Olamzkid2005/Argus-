@@ -1,25 +1,36 @@
-"""Smoke tests for parsers/parsers/govulncheck.py
+"""Tests for parsers.parsers.govulncheck — Category: parser"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from parsers.parsers.govulncheck import GovulncheckParser
 
-class TestSmoke:
-    """Smoke tests for parsers.parsers.govulncheck."""
 
-    def test_module_imports(self):
-        """Verify govulncheck.py imports cleanly."""
-        mod = importlib.import_module("parsers.parsers.govulncheck")
-        assert mod is not None
+class TestGovulncheckParser:
+    """Tests for the GovulncheckParser parser."""
 
-    def test_main_class_exists(self):
-        """Verify key class GovulncheckParser is available."""
-        mod = importlib.import_module("parsers.parsers.govulncheck")
-        assert hasattr(mod, "GovulncheckParser")
-        assert callable(mod.GovulncheckParser)
+    def setup_method(self):
+        self.parser = GovulncheckParser()
+
+    def test_empty_input(self):
+        """Empty input returns empty list."""
+        result = self.parser.parse("")
+        assert result == []
+
+    def test_blank_lines(self):
+        """Whitespace-only input returns empty list."""
+        result = self.parser.parse("\n  \n\n")
+        assert result == []
+
+    def test_parse_results_are_list(self):
+        """parse() always returns a list."""
+        result = self.parser.parse("")
+        assert isinstance(result, list)
+
+    def test_findings_have_required_keys(self):
+        """Parsed findings have type, severity, endpoint."""
+        result = self.parser.parse("test input")
+        if result:
+            for finding in result:
+                assert "type" in finding
+                assert "severity" in finding
+                assert "endpoint" in finding or "tool" in finding

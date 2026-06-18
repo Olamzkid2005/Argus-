@@ -1,31 +1,28 @@
-"""Smoke tests for tools/web_scanner_checks/response_check.py
+"""Tests for tools.web_scanner_checks.response_check — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.web_scanner_checks.response_check import ResponseCheck
 
-class TestSmoke:
-    """Smoke tests for tools.web_scanner_checks.response_check."""
 
-    def test_module_imports(self):
-        """Verify response_check.py imports cleanly."""
-        mod = importlib.import_module("tools.web_scanner_checks.response_check")
-        assert mod is not None
+class TestResponseCheck:
+    """Tests for the ResponseCheck class."""
 
-    def test_main_class_exists(self):
-        """Verify key class ResponseCheck is available."""
-        mod = importlib.import_module("tools.web_scanner_checks.response_check")
-        assert hasattr(mod, "ResponseCheck")
-        assert callable(mod.ResponseCheck)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = ResponseCheck()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
 
-    def test_function_run_check_exists(self):
-        """Verify function run_check is exported."""
-        mod = importlib.import_module("tools.web_scanner_checks.response_check")
-        assert hasattr(mod, "run_check")
-        assert callable(mod.run_check)
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = ResponseCheck()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

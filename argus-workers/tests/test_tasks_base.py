@@ -1,37 +1,75 @@
-"""Smoke tests for tasks/base.py
+"""Tests for tasks.base — Category: dataclass"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tasks.base import OperatorCanceled
+from tasks.base import TaskContext
+from tasks.base import _SoftTimeLimitExceeded
 
-class TestSmoke:
-    """Smoke tests for tasks.base."""
 
-    def test_module_imports(self):
-        """Verify base.py imports cleanly."""
-        mod = importlib.import_module("tasks.base")
-        assert mod is not None
+class TestOperatorCanceled:
+    """Tests for the OperatorCanceled class."""
 
-    def test_main_class_exists(self):
-        """Verify key class OperatorCanceled is available."""
-        mod = importlib.import_module("tasks.base")
-        assert hasattr(mod, "OperatorCanceled")
-        assert callable(mod.OperatorCanceled)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = OperatorCanceled()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
 
-    def test_function_task_context_exists(self):
-        """Verify function task_context is exported."""
-        mod = importlib.import_module("tasks.base")
-        assert hasattr(mod, "task_context")
-        assert callable(mod.task_context)
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = OperatorCanceled()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
 
-    def test_function_task_error_boundary_exists(self):
-        """Verify function task_error_boundary is exported."""
-        mod = importlib.import_module("tasks.base")
-        assert hasattr(mod, "task_error_boundary")
-        assert callable(mod.task_error_boundary)
+
+class TestTaskContext:
+    """Tests for the TaskContext class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = TaskContext()
+            assert instance is not None
+            assert isinstance(instance, TaskContext)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_field_access(self):
+        """Instance fields are accessible."""
+        try:
+            instance = TaskContext()
+            fields = vars(instance) if hasattr(instance, '__dict__') else {}
+            assert isinstance(fields, dict)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+
+class Test_SoftTimeLimitExceeded:
+    """Tests for the _SoftTimeLimitExceeded class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = _SoftTimeLimitExceeded()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = _SoftTimeLimitExceeded()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

@@ -1,19 +1,20 @@
-"""Smoke tests for agent/agent_config.py
+"""Tests for agent.agent_config — Category: module"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
 
-class TestSmoke:
-    """Smoke tests for agent.agent_config."""
+class TestModule:
+    """Tests for agent.agent_config."""
 
-    def test_module_imports(self):
-        """Verify agent_config.py imports cleanly."""
+    def test_import(self):
+        """Module imports cleanly."""
+        import importlib
         mod = importlib.import_module("agent.agent_config")
         assert mod is not None
+
+    def test_has_public_api(self):
+        """Module has public symbols."""
+        import importlib
+        mod = importlib.import_module("agent.agent_config")
+        public = [x for x in dir(mod) if not x.startswith('_')]
+        assert len(public) > 0

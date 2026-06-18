@@ -1,25 +1,28 @@
-"""Smoke tests for models/confidence_scorer.py
+"""Tests for models.confidence_scorer — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from models.confidence_scorer import ConfidenceScorer
 
-class TestSmoke:
-    """Smoke tests for models.confidence_scorer."""
 
-    def test_module_imports(self):
-        """Verify confidence_scorer.py imports cleanly."""
-        mod = importlib.import_module("models.confidence_scorer")
-        assert mod is not None
+class TestConfidenceScorer:
+    """Tests for the ConfidenceScorer class."""
 
-    def test_main_class_exists(self):
-        """Verify key class ConfidenceScorer is available."""
-        mod = importlib.import_module("models.confidence_scorer")
-        assert hasattr(mod, "ConfidenceScorer")
-        assert callable(mod.ConfidenceScorer)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = ConfidenceScorer()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = ConfidenceScorer()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

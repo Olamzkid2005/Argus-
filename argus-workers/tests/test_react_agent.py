@@ -1,25 +1,52 @@
-"""Smoke tests for agent/react_agent.py
+"""Tests for agent.react_agent — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from agent.react_agent import ReActAgent
+from agent.react_agent import _DoneSentinel
 
-class TestSmoke:
-    """Smoke tests for agent.react_agent."""
 
-    def test_module_imports(self):
-        """Verify react_agent.py imports cleanly."""
-        mod = importlib.import_module("agent.react_agent")
-        assert mod is not None
+class Test_DoneSentinel:
+    """Tests for the _DoneSentinel class."""
 
-    def test_main_class_exists(self):
-        """Verify key class ReActAgent is available."""
-        mod = importlib.import_module("agent.react_agent")
-        assert hasattr(mod, "ReActAgent")
-        assert callable(mod.ReActAgent)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = _DoneSentinel()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = _DoneSentinel()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
+
+
+class TestReActAgent:
+    """Tests for the ReActAgent class."""
+
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = ReActAgent()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = ReActAgent()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

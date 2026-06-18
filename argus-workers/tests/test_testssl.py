@@ -1,25 +1,36 @@
-"""Smoke tests for parsers/parsers/testssl.py
+"""Tests for parsers.parsers.testssl — Category: parser"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from parsers.parsers.testssl import TestsslParser
 
-class TestSmoke:
-    """Smoke tests for parsers.parsers.testssl."""
 
-    def test_module_imports(self):
-        """Verify testssl.py imports cleanly."""
-        mod = importlib.import_module("parsers.parsers.testssl")
-        assert mod is not None
+class TestTestsslParser:
+    """Tests for the TestsslParser parser."""
 
-    def test_main_class_exists(self):
-        """Verify key class TestsslParser is available."""
-        mod = importlib.import_module("parsers.parsers.testssl")
-        assert hasattr(mod, "TestsslParser")
-        assert callable(mod.TestsslParser)
+    def setup_method(self):
+        self.parser = TestsslParser()
+
+    def test_empty_input(self):
+        """Empty input returns empty list."""
+        result = self.parser.parse("")
+        assert result == []
+
+    def test_blank_lines(self):
+        """Whitespace-only input returns empty list."""
+        result = self.parser.parse("\n  \n\n")
+        assert result == []
+
+    def test_parse_results_are_list(self):
+        """parse() always returns a list."""
+        result = self.parser.parse("")
+        assert isinstance(result, list)
+
+    def test_findings_have_required_keys(self):
+        """Parsed findings have type, severity, endpoint."""
+        result = self.parser.parse("test input")
+        if result:
+            for finding in result:
+                assert "type" in finding
+                assert "severity" in finding
+                assert "endpoint" in finding or "tool" in finding

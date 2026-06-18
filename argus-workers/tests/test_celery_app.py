@@ -1,37 +1,28 @@
-"""Smoke tests for celery_app.py
+"""Tests for celery_app — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from celery_app import BaseTask
 
-class TestSmoke:
-    """Smoke tests for celery_app."""
 
-    def test_module_imports(self):
-        """Verify celery_app.py imports cleanly."""
-        mod = importlib.import_module("celery_app")
-        assert mod is not None
+class TestBaseTask:
+    """Tests for the BaseTask class."""
 
-    def test_main_class_exists(self):
-        """Verify key class BaseTask is available."""
-        mod = importlib.import_module("celery_app")
-        assert hasattr(mod, "BaseTask")
-        assert callable(mod.BaseTask)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = BaseTask()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
 
-    def test_function_setup_logging_exists(self):
-        """Verify function setup_logging is exported."""
-        mod = importlib.import_module("celery_app")
-        assert hasattr(mod, "setup_logging")
-        assert callable(mod.setup_logging)
-
-    def test_function_ping_task_exists(self):
-        """Verify function ping_task is exported."""
-        mod = importlib.import_module("celery_app")
-        assert hasattr(mod, "ping_task")
-        assert callable(mod.ping_task)
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = BaseTask()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

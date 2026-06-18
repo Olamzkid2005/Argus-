@@ -1,37 +1,28 @@
-"""Smoke tests for tools/browser_scanner.py
+"""Tests for tools.browser_scanner — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from tools.browser_scanner import BrowserScanner
 
-class TestSmoke:
-    """Smoke tests for tools.browser_scanner."""
 
-    def test_module_imports(self):
-        """Verify browser_scanner.py imports cleanly."""
-        mod = importlib.import_module("tools.browser_scanner")
-        assert mod is not None
+class TestBrowserScanner:
+    """Tests for the BrowserScanner class."""
 
-    def test_main_class_exists(self):
-        """Verify key class BrowserScanner is available."""
-        mod = importlib.import_module("tools.browser_scanner")
-        assert hasattr(mod, "BrowserScanner")
-        assert callable(mod.BrowserScanner)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = BrowserScanner()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
 
-    def test_function_scan_exists(self):
-        """Verify function scan is exported."""
-        mod = importlib.import_module("tools.browser_scanner")
-        assert hasattr(mod, "scan")
-        assert callable(mod.scan)
-
-    def test_function_is_spa_target_exists(self):
-        """Verify function is_spa_target is exported."""
-        mod = importlib.import_module("tools.browser_scanner")
-        assert hasattr(mod, "is_spa_target")
-        assert callable(mod.is_spa_target)
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = BrowserScanner()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass

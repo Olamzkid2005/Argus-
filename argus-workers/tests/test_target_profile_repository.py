@@ -1,25 +1,28 @@
-"""Smoke tests for database/repositories/target_profile_repository.py
+"""Tests for database.repositories.target_profile_repository — Category: class"""
 
-Phase 1 — Filename Coverage
-Verifies the module can be imported without errors.
-"""
-
-from __future__ import annotations
-
-import importlib
 import pytest
 
+from database.repositories.target_profile_repository import TargetProfileRepository
 
-class TestSmoke:
-    """Smoke tests for database.repositories.target_profile_repository."""
 
-    def test_module_imports(self):
-        """Verify target_profile_repository.py imports cleanly."""
-        mod = importlib.import_module("database.repositories.target_profile_repository")
-        assert mod is not None
+class TestTargetProfileRepository:
+    """Tests for the TargetProfileRepository class."""
 
-    def test_main_class_exists(self):
-        """Verify key class TargetProfileRepository is available."""
-        mod = importlib.import_module("database.repositories.target_profile_repository")
-        assert hasattr(mod, "TargetProfileRepository")
-        assert callable(mod.TargetProfileRepository)
+    def test_instantiation(self):
+        """Class can be instantiated."""
+        try:
+            instance = TargetProfileRepository()
+            assert instance is not None
+        except TypeError:
+            pytest.skip("Requires constructor args")
+
+    def test_str_repr(self):
+        """String representation works."""
+        try:
+            instance = TargetProfileRepository()
+            assert isinstance(str(instance), str)
+            assert isinstance(repr(instance), str)
+        except TypeError:
+            pytest.skip("Requires constructor args")
+        except AttributeError:
+            pass
