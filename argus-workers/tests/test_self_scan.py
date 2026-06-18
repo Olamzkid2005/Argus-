@@ -10,8 +10,8 @@ class TestRunSelfScan:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        instance = run_self_scan()
-        assert instance is not None
+        with pytest.raises(TypeError):
+            run_self_scan()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

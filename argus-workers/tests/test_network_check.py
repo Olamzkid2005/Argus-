@@ -9,7 +9,7 @@ class TestNetworkCheck:
     """Tests for the NetworkCheck class."""
 
     def test_instantiation(self):
-        """Class requires constructor args."""
+        """Default instantiation succeeds."""
         instance = NetworkCheck()
         assert instance is not None
 

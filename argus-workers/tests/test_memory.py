@@ -9,7 +9,7 @@ class TestMemoryRetriever:
     """Tests for the MemoryRetriever class."""
 
     def test_instantiation(self):
-        """Class requires constructor args."""
+        """Default instantiation succeeds."""
         instance = MemoryRetriever()
         assert instance is not None
 

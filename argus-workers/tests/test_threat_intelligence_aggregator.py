@@ -9,7 +9,7 @@ class TestThreatIntelligenceAggregator:
     """Tests for the ThreatIntelligenceAggregator class."""
 
     def test_instantiation(self):
-        """Class requires constructor args."""
+        """Default instantiation succeeds."""
         instance = ThreatIntelligenceAggregator()
         assert instance is not None
 

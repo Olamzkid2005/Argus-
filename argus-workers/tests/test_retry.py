@@ -9,7 +9,7 @@ class TestRetryExhaustedError:
     """Tests for the RetryExhaustedError class."""
 
     def test_instantiation(self):
-        """Class requires constructor args."""
+        """Default instantiation succeeds."""
         instance = RetryExhaustedError()
         assert instance is not None
 

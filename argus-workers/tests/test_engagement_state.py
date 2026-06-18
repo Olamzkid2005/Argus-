@@ -12,13 +12,12 @@ class TestToolExecutionRecord:
     def test_instantiation(self):
         """Class requires constructor args."""
         with pytest.raises(TypeError):
-            EngagementState()
+            ToolExecutionRecord()
 
     def test_str_repr(self):
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
-            EngagementState()
-            str(EngagementState())
+            ToolExecutionRecord()
 
 
 class TestEngagementState:
@@ -33,4 +32,3 @@ class TestEngagementState:
         """String representation not available (requires constructor args)."""
         with pytest.raises(TypeError):
             EngagementState()
-            str(EngagementState())

@@ -9,7 +9,7 @@ class TestVerificationEvidenceCollector:
     """Tests for the VerificationEvidenceCollector class."""
 
     def test_instantiation(self):
-        """Class requires constructor args."""
+        """Default instantiation succeeds."""
         instance = VerificationEvidenceCollector()
         assert instance is not None
 

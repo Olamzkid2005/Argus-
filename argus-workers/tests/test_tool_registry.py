@@ -9,7 +9,7 @@ class TestToolRegistry:
     """Tests for the ToolRegistry class."""
 
     def test_instantiation(self):
-        """Class requires constructor args."""
+        """Default instantiation succeeds."""
         instance = ToolRegistry()
         assert instance is not None
 

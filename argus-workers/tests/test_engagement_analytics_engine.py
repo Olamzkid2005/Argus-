@@ -9,7 +9,7 @@ class TestEngagementAnalyticsEngine:
     """Tests for the EngagementAnalyticsEngine class."""
 
     def test_instantiation(self):
-        """Class requires constructor args."""
+        """Default instantiation succeeds."""
         instance = EngagementAnalyticsEngine()
         assert instance is not None
 

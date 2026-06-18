@@ -9,7 +9,7 @@ class TestAssessmentOrchestrator:
     """Tests for the AssessmentOrchestrator class."""
 
     def test_instantiation(self):
-        """Class requires constructor args."""
+        """Default instantiation succeeds."""
         instance = AssessmentOrchestrator()
         assert instance is not None
 

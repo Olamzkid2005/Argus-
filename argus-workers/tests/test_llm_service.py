@@ -27,23 +27,15 @@ class TestLLMServiceConfig:
 
     def test_instantiation(self):
         """Class can be instantiated."""
-        try:
-            instance = LLMServiceConfig()
-            assert instance is not None
-            assert isinstance(instance, LLMServiceConfig)
-        except TypeError:
-            instance = LLMServiceConfig()
-            assert instance is not None
+        instance = LLMServiceConfig()
+        assert instance is not None
+        assert isinstance(instance, LLMServiceConfig)
 
     def test_field_access(self):
         """Instance fields are accessible."""
-        try:
-            instance = LLMServiceConfig()
-            fields = vars(instance) if hasattr(instance, '__dict__') else {}
-            assert isinstance(fields, dict)
-        except TypeError:
-            instance = LLMServiceConfig()
-            assert instance is not None
+        instance = LLMServiceConfig()
+        fields = vars(instance) if hasattr(instance, '__dict__') else {}
+        assert isinstance(fields, dict)
 
 
 class TestLLMService:

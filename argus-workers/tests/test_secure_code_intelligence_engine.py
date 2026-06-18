@@ -9,7 +9,7 @@ class TestSecureCodeIntelligenceEngine:
     """Tests for the SecureCodeIntelligenceEngine class."""
 
     def test_instantiation(self):
-        """Class requires constructor args."""
+        """Default instantiation succeeds."""
         instance = SecureCodeIntelligenceEngine()
         assert instance is not None
 

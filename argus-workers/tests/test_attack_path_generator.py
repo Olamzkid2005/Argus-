@@ -9,7 +9,7 @@ class TestAttackPathGenerator:
     """Tests for the AttackPathGenerator class."""
 
     def test_instantiation(self):
-        """Class requires constructor args."""
+        """Default instantiation succeeds."""
         instance = AttackPathGenerator()
         assert instance is not None
 
