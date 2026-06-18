@@ -18,7 +18,8 @@ class TestSanitizeString:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            sanitize_string()
 
 
 class TestSanitizeEvidence:
@@ -27,11 +28,12 @@ class TestSanitizeEvidence:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            sanitize_string()
+            sanitize_evidence()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            sanitize_evidence()
 
 
 class TestCheckForDangerousContent:
@@ -40,11 +42,12 @@ class TestCheckForDangerousContent:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            sanitize_string()
+            check_for_dangerous_content()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            check_for_dangerous_content()
 
 
 class TestStripDangerousTags:
@@ -53,8 +56,9 @@ class TestStripDangerousTags:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            sanitize_string()
+            strip_dangerous_tags()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            strip_dangerous_tags()

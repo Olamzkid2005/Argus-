@@ -16,7 +16,8 @@ class TestRunRecon:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            run_recon()
 
 
 class TestExpandRecon:
@@ -25,8 +26,9 @@ class TestExpandRecon:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            run_recon()
+            expand_recon()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            expand_recon()

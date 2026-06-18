@@ -21,7 +21,8 @@ class TestGenerateCredentials:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            generate_credentials()
 
 
 class TestRunRegister:
@@ -34,7 +35,8 @@ class TestRunRegister:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            run_register()
 
 
 class TestBuildRegisterPayload:
@@ -47,7 +49,8 @@ class TestBuildRegisterPayload:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _build_register_payload()
 
 
 class TestGeneratePassword:
@@ -60,7 +63,8 @@ class TestGeneratePassword:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _generate_password()
 
 
 class TestTryLogin:
@@ -73,7 +77,8 @@ class TestTryLogin:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _try_login()
 
 
 class TestExtractCookieString:
@@ -86,7 +91,8 @@ class TestExtractCookieString:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _extract_cookie_string()
 
 
 class TestRateLimitBackoff:
@@ -99,4 +105,5 @@ class TestRateLimitBackoff:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _rate_limit_backoff()

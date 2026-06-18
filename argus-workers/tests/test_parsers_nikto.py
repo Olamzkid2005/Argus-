@@ -15,11 +15,12 @@ class TestInferSeverity:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            parse()
+            _infer_severity()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _infer_severity()
 
 
 class TestParseJson:
@@ -28,11 +29,12 @@ class TestParseJson:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            parse()
+            _parse_json()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _parse_json()
 
 
 class TestParseCsv:
@@ -41,11 +43,12 @@ class TestParseCsv:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            parse()
+            _parse_csv()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _parse_csv()
 
 
 class TestParseText:
@@ -54,11 +57,12 @@ class TestParseText:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            parse()
+            _parse_text()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _parse_text()
 
 
 class TestParse:
@@ -71,4 +75,5 @@ class TestParse:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            parse()

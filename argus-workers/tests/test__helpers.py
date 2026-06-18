@@ -19,7 +19,8 @@ class TestSafeRequest:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            safe_request()
 
 
 class TestMakeFinding:
@@ -28,11 +29,12 @@ class TestMakeFinding:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            safe_request()
+            make_finding()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            make_finding()
 
 
 class TestDetectFramework:
@@ -41,11 +43,12 @@ class TestDetectFramework:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            safe_request()
+            detect_framework()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            detect_framework()
 
 
 class TestTestJwtAlgNone:
@@ -54,11 +57,12 @@ class TestTestJwtAlgNone:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            safe_request()
+            test_jwt_alg_none()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            test_jwt_alg_none()
 
 
 class TestTestJwtRs256Hs256:
@@ -67,8 +71,9 @@ class TestTestJwtRs256Hs256:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            safe_request()
+            test_jwt_rs256_hs256()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            test_jwt_rs256_hs256()

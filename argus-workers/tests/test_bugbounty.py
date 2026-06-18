@@ -17,7 +17,8 @@ class TestGenerateBugbountyReport:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            generate_bugbounty_report()
 
 
 class TestFetchFindings:
@@ -26,11 +27,12 @@ class TestFetchFindings:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            generate_bugbounty_report()
+            _fetch_findings()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _fetch_findings()
 
 
 class TestFetchEngagement:
@@ -39,8 +41,9 @@ class TestFetchEngagement:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            generate_bugbounty_report()
+            _fetch_engagement()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _fetch_engagement()

@@ -16,7 +16,8 @@ class TestUpdateNucleiTemplates:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            update_nuclei_templates()
 
 
 class TestGetTemplateCount:
@@ -29,4 +30,5 @@ class TestGetTemplateCount:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            get_template_count()

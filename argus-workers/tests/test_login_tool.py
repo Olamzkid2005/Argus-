@@ -21,7 +21,8 @@ class TestRunLogin:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            run_login()
 
 
 class TestBuildLoginPayload:
@@ -30,11 +31,12 @@ class TestBuildLoginPayload:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            run_login()
+            _build_login_payload()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _build_login_payload()
 
 
 class TestDetect2fa:
@@ -43,11 +45,12 @@ class TestDetect2fa:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            run_login()
+            _detect_2fa()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _detect_2fa()
 
 
 class TestExtractCookieString:
@@ -56,11 +59,12 @@ class TestExtractCookieString:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            run_login()
+            _extract_cookie_string()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _extract_cookie_string()
 
 
 class TestExtractJwt:
@@ -69,11 +73,12 @@ class TestExtractJwt:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            run_login()
+            _extract_jwt()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _extract_jwt()
 
 
 class TestRateLimitBackoff:
@@ -82,11 +87,12 @@ class TestRateLimitBackoff:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            run_login()
+            _rate_limit_backoff()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _rate_limit_backoff()
 
 
 class TestFailResult:
@@ -95,8 +101,9 @@ class TestFailResult:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            run_login()
+            _fail_result()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _fail_result()

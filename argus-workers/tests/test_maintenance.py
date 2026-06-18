@@ -18,7 +18,8 @@ class TestCleanupOldResults:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            cleanup_old_results()
 
 
 class TestCleanupFailedEngagements:
@@ -31,7 +32,8 @@ class TestCleanupFailedEngagements:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            cleanup_failed_engagements()
 
 
 class TestCleanupCheckpoints:
@@ -44,7 +46,8 @@ class TestCleanupCheckpoints:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            cleanup_checkpoints()
 
 
 class TestWorkerHealthCheck:
@@ -57,4 +60,5 @@ class TestWorkerHealthCheck:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            worker_health_check()

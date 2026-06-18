@@ -17,7 +17,8 @@ class TestRenderTextPath:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            render_text_path()
 
 
 class TestRenderAllPaths:
@@ -26,11 +27,12 @@ class TestRenderAllPaths:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            render_text_path()
+            render_all_paths()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            render_all_paths()
 
 
 class TestRenderMermaid:
@@ -39,8 +41,9 @@ class TestRenderMermaid:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            render_text_path()
+            render_mermaid()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            render_mermaid()

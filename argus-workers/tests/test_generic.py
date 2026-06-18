@@ -13,11 +13,12 @@ class TestTryJson:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            parse()
+            _try_json()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _try_json()
 
 
 class TestRegexExtract:
@@ -26,11 +27,12 @@ class TestRegexExtract:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            parse()
+            _regex_extract()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _regex_extract()
 
 
 class TestParse:
@@ -43,4 +45,5 @@ class TestParse:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            parse()

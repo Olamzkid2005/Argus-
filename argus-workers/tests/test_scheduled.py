@@ -17,7 +17,8 @@ class TestBuildBudgetFromAggressiveness:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _build_budget_from_aggressiveness()
 
 
 class TestRunDueScans:
@@ -30,7 +31,8 @@ class TestRunDueScans:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            run_due_scans()
 
 
 class TestSpawnEngagement:
@@ -43,4 +45,5 @@ class TestSpawnEngagement:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _spawn_engagement()

@@ -17,7 +17,8 @@ class TestGetWordlistPath:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            get_wordlist_path()
 
 
 class TestGetNucleiTemplatesPath:
@@ -26,11 +27,12 @@ class TestGetNucleiTemplatesPath:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            get_wordlist_path()
+            get_nuclei_templates_path()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            get_nuclei_templates_path()
 
 
 class TestToolTimeout:
@@ -39,8 +41,9 @@ class TestToolTimeout:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            get_wordlist_path()
+            tool_timeout()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            tool_timeout()

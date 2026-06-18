@@ -82,9 +82,8 @@ class TestCleanupEmittedFingerprints:
             result = _cleanup_emitted_fingerprints()
             assert result is None or result is True
         except TypeError:
-            pytest.skip("Requires args")
-
-
+            with pytest.raises(TypeError):
+                _cleanup_emitted_fingerprints()
 class TestGetFingerprintSet:
     """Tests for the _get_fingerprint_set function."""
 

@@ -15,4 +15,5 @@ class TestScoreConfidence:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            score_confidence()

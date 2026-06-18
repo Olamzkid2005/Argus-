@@ -18,7 +18,8 @@ class TestEnsureTrackingTable:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _ensure_tracking_table()
 
 
 class TestGetApplied:
@@ -31,7 +32,8 @@ class TestGetApplied:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _get_applied()
 
 
 class TestMarkApplied:
@@ -44,7 +46,8 @@ class TestMarkApplied:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _mark_applied()
 
 
 class TestRunMigrations:
@@ -57,4 +60,5 @@ class TestRunMigrations:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            run_migrations()

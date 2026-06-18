@@ -17,7 +17,8 @@ class TestGetAugmentedPath:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            get_augmented_path()
 
 
 class TestResolveToolBinary:
@@ -30,7 +31,8 @@ class TestResolveToolBinary:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            resolve_tool_binary()
 
 
 class TestIsToolAvailable:
@@ -43,4 +45,5 @@ class TestIsToolAvailable:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            is_tool_available()

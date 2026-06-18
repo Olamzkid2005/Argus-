@@ -19,7 +19,8 @@ class TestNormalizeForComparison:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _normalize_for_comparison()
 
 
 class TestComputeHash:
@@ -32,7 +33,8 @@ class TestComputeHash:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _compute_hash()
 
 
 class TestShadowCompare:
@@ -45,7 +47,8 @@ class TestShadowCompare:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            shadow_compare()
 
 
 class TestGetShadowStats:
@@ -58,7 +61,8 @@ class TestGetShadowStats:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            get_shadow_stats()
 
 
 class TestResetShadowStats:
@@ -71,4 +75,5 @@ class TestResetShadowStats:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            reset_shadow_stats()

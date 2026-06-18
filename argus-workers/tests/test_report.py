@@ -23,7 +23,8 @@ class TestGenerateReport:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            generate_report()
 
 
 class TestGetFindingsSummary:
@@ -32,11 +33,12 @@ class TestGetFindingsSummary:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            generate_report()
+            get_findings_summary()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            get_findings_summary()
 
 
 class TestGenerateScheduledReports:
@@ -45,11 +47,12 @@ class TestGenerateScheduledReports:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            generate_report()
+            generate_scheduled_reports()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            generate_scheduled_reports()
 
 
 class TestGenerateReportData:
@@ -58,11 +61,12 @@ class TestGenerateReportData:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            generate_report()
+            _generate_report_data()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _generate_report_data()
 
 
 class TestSendReportEmail:
@@ -71,11 +75,12 @@ class TestSendReportEmail:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            generate_report()
+            _send_report_email()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _send_report_email()
 
 
 class TestCalculateNextRun:
@@ -84,11 +89,12 @@ class TestCalculateNextRun:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            generate_report()
+            _calculate_next_run()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _calculate_next_run()
 
 
 class TestGenerateComplianceReport:
@@ -97,11 +103,12 @@ class TestGenerateComplianceReport:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            generate_report()
+            generate_compliance_report()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            generate_compliance_report()
 
 
 class TestGenerateFullReport:
@@ -110,11 +117,12 @@ class TestGenerateFullReport:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            generate_report()
+            generate_full_report()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            generate_full_report()
 
 
 class TestGetComplianceReports:
@@ -123,8 +131,9 @@ class TestGetComplianceReports:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            generate_report()
+            get_compliance_reports()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            get_compliance_reports()

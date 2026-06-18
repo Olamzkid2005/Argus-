@@ -15,11 +15,12 @@ class TestNormalize:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            deduplicate()
+            _normalize()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _normalize()
 
 
 class TestTokenSet:
@@ -28,11 +29,12 @@ class TestTokenSet:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            deduplicate()
+            _token_set()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _token_set()
 
 
 class TestJaccard:
@@ -41,11 +43,12 @@ class TestJaccard:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            deduplicate()
+            _jaccard()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _jaccard()
 
 
 class TestFindingFingerprint:
@@ -54,11 +57,12 @@ class TestFindingFingerprint:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            deduplicate()
+            _finding_fingerprint()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _finding_fingerprint()
 
 
 class TestDeduplicate:
@@ -71,4 +75,5 @@ class TestDeduplicate:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            deduplicate()

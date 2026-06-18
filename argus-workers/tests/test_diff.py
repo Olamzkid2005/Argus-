@@ -17,7 +17,8 @@ class TestRunScanDiff:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            run_scan_diff()
 
 
 class TestGetEngagementTarget:
@@ -26,11 +27,12 @@ class TestGetEngagementTarget:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            run_scan_diff()
+            _get_engagement_target()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _get_engagement_target()
 
 
 class TestUpdateFixedFingerprints:
@@ -39,8 +41,9 @@ class TestUpdateFixedFingerprints:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            run_scan_diff()
+            _update_fixed_fingerprints()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _update_fixed_fingerprints()

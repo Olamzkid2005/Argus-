@@ -13,11 +13,12 @@ class TestRootCauseKey:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            find_root_causes()
+            _root_cause_key()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            _root_cause_key()
 
 
 class TestGroupByRootCause:
@@ -26,11 +27,12 @@ class TestGroupByRootCause:
     def test_basic_execution(self):
         """Function requires arguments."""
         with pytest.raises(TypeError):
-            find_root_causes()
+            group_by_root_cause()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            group_by_root_cause()
 
 
 class TestFindRootCauses:
@@ -43,4 +45,5 @@ class TestFindRootCauses:
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
-        pytest.skip("Requires arguments")  # Skip if args needed
+        with pytest.raises(TypeError):
+            find_root_causes()
