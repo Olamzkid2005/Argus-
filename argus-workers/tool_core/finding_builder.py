@@ -99,6 +99,12 @@ class FindingBuilder:
             "WEBSOCKET_NO_AUTH",
             "WEBSOCKET_INJECTION",
             "WEBSOCKET_NO_RATE_LIMIT",
+            "API_BOLA",
+            "API_MASS_ASSIGNMENT",
+            "API_AUTH_BYPASS",
+            "API_RATE_LIMITED",
+            "API_NO_RATE_LIMIT",
+            "API_RATE_LIMIT_INCONCLUSIVE",
         }
     )
 

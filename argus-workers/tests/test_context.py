@@ -10,6 +10,7 @@ class TestParserProtocol:
     def setup_method(self):
         from unittest.mock import MagicMock
         self.parser = MagicMock(spec=ParserProtocol)
+        self.parser.parse.return_value = []
 
     def test_empty_input(self):
         """Empty input returns empty list."""

@@ -36,18 +36,3 @@ class TestCircuitOpenError:
             raise CircuitOpenError("Test error")
         except CircuitOpenError as e:
             assert str(e) == "Test error"
-
-    def test_members_exist(self):
-        """Enum has expected members."""
-        members = list(CircuitOpenError)
-        assert len(members) > 0
-        for member in members:
-            assert member.name
-            assert member.value is not None
-
-    def test_from_value(self):
-        """Can construct from string value."""
-        members = list(CircuitOpenError)
-        if members:
-            val = members[0].value
-            assert CircuitOpenError(val) == members[0]
