@@ -38,5 +38,11 @@ class TestFfufParser:
 
     def test_parses_valid_input(self):
         """Parses realistic sample input."""
-        result = self.parser.parse("{\"url\": \"https://example.com/admin\", \"status\": 200, \"length\": 1234}\n{\"url\": \"https://example.com/config\", \"status\": 403, \"length\": 56}\n")
+        result = self.parser.parse("{\"results\": [{\"url\": \"https://example.com/admin\", \"status\": 200, \"length\": 1234}, {\"url\": \"https://example.com/config\", \"status\": 403, \"length\": 56}]}\n")
+        assert isinstance(result, list)
+        assert len(result) > 0, "Sample input should produce findings"
+        assert "type" in result[0], "Finding should have a type"
+        assert "severity" in result[0], "Finding should have a severity"
+        assert "endpoint" in result[0], "Finding should have an endpoint"
+
 

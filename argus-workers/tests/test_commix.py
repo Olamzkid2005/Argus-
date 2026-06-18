@@ -38,5 +38,11 @@ class TestCommixParser:
 
     def test_parses_valid_input(self):
         """Parses realistic sample input."""
-        result = self.parser.parse("{\"id\": \"xss\", \"type\": \"cmd-execution\", \"payload\": \"cat /etc/passwd\"}\n")
+        result = self.parser.parse("[*] Setting the OS shell...\\n[*] Setting the pseudo terminal...\\n[+] Command executed: id\\n")
+        assert isinstance(result, list)
+        assert len(result) > 0, "Sample input should produce findings"
+        assert "type" in result[0], "Finding should have a type"
+        assert "severity" in result[0], "Finding should have a severity"
+        assert "endpoint" in result[0], "Finding should have an endpoint"
+
 

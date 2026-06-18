@@ -39,4 +39,10 @@ class TestBanditParser:
     def test_parses_valid_input(self):
         """Parses realistic sample input."""
         result = self.parser.parse("{\"results\": [{\"issue_severity\": \"HIGH\", \"issue_confidence\": \"HIGH\", \"code\": \"eval()\", \"filename\": \"app.py\", \"line_number\": 10, \"test_name\": \"B102\", \"issue_text\": \"Use of exec detected\"}]}\n")
+        assert isinstance(result, list)
+        assert len(result) > 0, "Sample input should produce findings"
+        assert "type" in result[0], "Finding should have a type"
+        assert "severity" in result[0], "Finding should have a severity"
+        assert "endpoint" in result[0], "Finding should have an endpoint"
+
 

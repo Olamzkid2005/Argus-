@@ -39,4 +39,10 @@ class TestKatanaParser:
     def test_parses_valid_input(self):
         """Parses realistic sample input."""
         result = self.parser.parse("{\"url\": \"https://example.com/admin\", \"status-code\": 200, \"title\": \"Admin\"}\n{\"url\": \"https://example.com/login\", \"status-code\": 200, \"title\": \"Login\"}\n")
+        assert isinstance(result, list)
+        assert len(result) > 0, "Sample input should produce findings"
+        assert "type" in result[0], "Finding should have a type"
+        assert "severity" in result[0], "Finding should have a severity"
+        assert "endpoint" in result[0], "Finding should have an endpoint"
+
 

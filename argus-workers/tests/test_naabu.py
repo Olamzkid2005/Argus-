@@ -41,4 +41,7 @@ class TestNaabuParser:
         result = self.parser.parse("{\"host\": \"1.2.3.4\", \"port\": 80, \"protocol\": \"tcp\"}\n{\"host\": \"1.2.3.4\", \"port\": 443, \"protocol\": \"tcp\"}\n")
         assert isinstance(result, list)
         assert len(result) > 0, "Sample input should produce findings"
+        assert "type" in result[0], "Finding should have a type"
+        assert "severity" in result[0], "Finding should have a severity"
+        assert "endpoint" in result[0], "Finding should have an endpoint"
 

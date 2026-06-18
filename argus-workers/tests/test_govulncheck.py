@@ -39,4 +39,10 @@ class TestGovulncheckParser:
     def test_parses_valid_input(self):
         """Parses realistic sample input."""
         result = self.parser.parse("{\"Vulns\": [{\"OSV\": \"CVE-2024-1234\", \"PkgPath\": \"stdlib\", \"Symbol\": \"ReadFile\", \"CurrentVersion\": \"1.21.0\", \"FixedVersion\": \"1.21.1\"}]}\n")
+        assert isinstance(result, list)
+        assert len(result) > 0, "Sample input should produce findings"
+        assert "type" in result[0], "Finding should have a type"
+        assert "severity" in result[0], "Finding should have a severity"
+        assert "endpoint" in result[0], "Finding should have an endpoint"
+
 

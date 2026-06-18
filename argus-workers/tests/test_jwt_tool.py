@@ -41,4 +41,7 @@ class TestJwtToolParser:
         result = self.parser.parse("[+] alg:none detected!\n[+] Signature verified with algorithm none!\n")
         assert isinstance(result, list)
         assert len(result) > 0, "Sample input should produce findings"
+        assert "type" in result[0], "Finding should have a type"
+        assert "severity" in result[0], "Finding should have a severity"
+        assert "endpoint" in result[0], "Finding should have an endpoint"
 

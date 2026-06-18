@@ -41,4 +41,7 @@ class TestWpscanParser:
         result = self.parser.parse("{\"target_url\": \"https://example.com\", \"interesting_findings\": [{\"type\": \"db_backup\", \"url\": \"https://example.com/wp-content/backup.zip\", \"to_s\": \"DB backup exposed\"}], \"version\": {\"number\": \"5.0\", \"vulnerabilities\": [{\"title\": \"XSS\", \"cvss\": {\"severity\": \"high\"}}]}}\n")
         assert isinstance(result, list)
         assert len(result) > 0, "Sample input should produce findings"
+        assert "type" in result[0], "Finding should have a type"
+        assert "severity" in result[0], "Finding should have a severity"
+        assert "endpoint" in result[0], "Finding should have an endpoint"
 
