@@ -29,14 +29,14 @@ class TestLoadLicensePolicy:
     """Tests for the _load_license_policy function."""
 
     def test_basic_execution(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            _load_license_policy()
+        """Function executes successfully."""
+        instance = _load_license_policy()
+        assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            _load_license_policy()
+        """Returns a dict."""
+        instance = _load_license_policy()
+        assert isinstance(instance, dict)
 
 
 class TestRunRepoScan:

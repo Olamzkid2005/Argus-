@@ -14,9 +14,9 @@ class TestGetAugmentedPath:
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            get_augmented_path()
+        """Returns a string path."""
+        instance = get_augmented_path()
+        assert isinstance(instance, str)
 
 
 class TestResolveToolBinary:
@@ -24,8 +24,8 @@ class TestResolveToolBinary:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        instance = get_augmented_path()
-        assert instance is not None
+        with pytest.raises(TypeError):
+            resolve_tool_binary()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -38,8 +38,8 @@ class TestIsToolAvailable:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        instance = get_augmented_path()
-        assert instance is not None
+        with pytest.raises(TypeError):
+            is_tool_available()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

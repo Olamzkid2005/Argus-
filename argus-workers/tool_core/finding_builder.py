@@ -93,6 +93,12 @@ class FindingBuilder:
             "CORRELATION_GROUP",
             "TREND_ANALYSIS",
             "PATTERN_DETECTION",
+            "SQLI",
+            "PARAM_DISCOVERY",
+            "WEBSOCKET_ORIGIN_BYPASS",
+            "WEBSOCKET_NO_AUTH",
+            "WEBSOCKET_INJECTION",
+            "WEBSOCKET_NO_RATE_LIMIT",
         }
     )
 
