@@ -23,11 +23,11 @@ class TestMain:
     """Tests for the main function."""
 
     def test_basic_execution(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
+        """Function requires arguments (raises SystemExit)."""
+        with pytest.raises(SystemExit):
             main()
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
+        """Function requires arguments (raises SystemExit)."""
+        with pytest.raises(SystemExit):
             main()

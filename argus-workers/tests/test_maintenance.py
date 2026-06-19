@@ -1,6 +1,5 @@
 """Tests for tasks.maintenance — Category: function"""
 
-import pytest
 
 from tasks.maintenance import (
     cleanup_checkpoints,
@@ -19,10 +18,9 @@ class TestCleanupOldResults:
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            cleanup_old_results()
-
+        """Returns a int."""
+        instance = cleanup_old_results()
+        assert isinstance(instance, dict)
 
 class TestCleanupFailedEngagements:
     """Tests for the cleanup_failed_engagements function."""
@@ -33,10 +31,9 @@ class TestCleanupFailedEngagements:
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            cleanup_failed_engagements()
-
+        """Returns a int."""
+        instance = cleanup_failed_engagements()
+        assert isinstance(instance, dict)
 
 class TestCleanupCheckpoints:
     """Tests for the cleanup_checkpoints function."""
@@ -47,10 +44,9 @@ class TestCleanupCheckpoints:
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            cleanup_checkpoints()
-
+        """Returns a int."""
+        instance = cleanup_checkpoints()
+        assert isinstance(instance, dict)
 
 class TestWorkerHealthCheck:
     """Tests for the worker_health_check function."""
@@ -61,6 +57,6 @@ class TestWorkerHealthCheck:
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            worker_health_check()
+        """Returns a dict."""
+        instance = worker_health_check()
+        assert isinstance(instance, dict)

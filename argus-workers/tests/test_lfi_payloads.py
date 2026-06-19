@@ -1,6 +1,5 @@
 """Tests for tools.web_scanner_checks.payloads.lfi_payloads — Category: function"""
 
-import pytest
 
 from tools.web_scanner_checks.payloads.lfi_payloads import get_lfi_payloads
 
@@ -14,6 +13,6 @@ class TestGetLfiPayloads:
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            get_lfi_payloads()
+        """Returns a list."""
+        instance = get_lfi_payloads()
+        assert isinstance(instance, list)

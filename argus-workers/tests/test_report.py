@@ -1,5 +1,6 @@
 """Tests for tasks.report — Category: function"""
 
+
 import pytest
 
 from tasks.report import (
@@ -46,15 +47,17 @@ class TestGetFindingsSummary:
 class TestGenerateScheduledReports:
     """Tests for the generate_scheduled_reports function."""
 
+    @pytest.mark.skipif("not os.environ.get('DATABASE_URL')", reason="Requires database")
     def test_basic_execution(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            generate_scheduled_reports()
+        """Function executes successfully."""
+        instance = generate_scheduled_reports()
+        assert instance is not None
 
+    @pytest.mark.skipif("not os.environ.get('DATABASE_URL')", reason="Requires database")
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            generate_scheduled_reports()
+        """Returns a list."""
+        instance = generate_scheduled_reports()
+        assert isinstance(instance, list)
 
 
 class TestGenerateReportData:

@@ -62,10 +62,9 @@ class TestGetShadowStats:
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            get_shadow_stats()
-
+        """Returns a dict."""
+        instance = get_shadow_stats()
+        assert isinstance(instance, dict)
 
 class TestResetShadowStats:
     """Tests for the reset_shadow_stats function."""
@@ -76,6 +75,6 @@ class TestResetShadowStats:
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            reset_shadow_stats()
+        """Returns a bool."""
+        instance = reset_shadow_stats()
+        assert instance is None

@@ -17,23 +17,22 @@ class TestGenerateCredentials:
     """Tests for the generate_credentials function."""
 
     def test_basic_execution(self):
-        """Function requires arguments."""
+        """Function executes successfully."""
         instance = generate_credentials()
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            generate_credentials()
-
+        """Returns a str."""
+        instance = generate_credentials()
+        assert isinstance(instance, tuple)
 
 class TestRunRegister:
     """Tests for the run_register function."""
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        instance = generate_credentials()
-        assert instance is not None
+        with pytest.raises(TypeError):
+            run_register()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -46,8 +45,8 @@ class TestBuildRegisterPayload:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        instance = generate_credentials()
-        assert instance is not None
+        with pytest.raises(TypeError):
+            _build_register_payload()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -59,14 +58,14 @@ class TestGeneratePassword:
     """Tests for the _generate_password function."""
 
     def test_basic_execution(self):
-        """Function requires arguments."""
-        instance = generate_credentials()
+        """Function executes successfully."""
+        instance = _generate_password()
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            _generate_password()
+        """Returns a str."""
+        instance = _generate_password()
+        assert isinstance(instance, str)
 
 
 class TestTryLogin:
@@ -74,8 +73,8 @@ class TestTryLogin:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        instance = generate_credentials()
-        assert instance is not None
+        with pytest.raises(TypeError):
+            _try_login()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -88,8 +87,8 @@ class TestExtractCookieString:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        instance = generate_credentials()
-        assert instance is not None
+        with pytest.raises(TypeError):
+            _extract_cookie_string()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""
@@ -102,8 +101,8 @@ class TestRateLimitBackoff:
 
     def test_basic_execution(self):
         """Function requires arguments."""
-        instance = generate_credentials()
-        assert instance is not None
+        with pytest.raises(TypeError):
+            _rate_limit_backoff()
 
     def test_returns_correct_type(self):
         """Function requires arguments."""

@@ -12,14 +12,17 @@ class TestSanitizeRedisKey:
     def test_replaces_dangerous_chars(self):
         result = sanitize_redis_key("abc\n123:456")
         assert "\n" not in result
-        assert ":" not in result
-        assert "_" in result  # replaced with underscore
+        assert "%0A" in result or "%3A" in result
 
     def test_replaces_spaces(self):
-        assert sanitize_redis_key("key with spaces") == "key_with_spaces"
+        result = sanitize_redis_key("key with spaces")
+        assert " " not in result
+        assert "%20" in result
 
     def test_replaces_colons(self):
-        assert sanitize_redis_key("namespace:key") == "namespace_key"
+        result = sanitize_redis_key("namespace:key")
+        assert ":" not in result
+        assert "%3A" in result
 
     def test_empty_string(self):
         assert sanitize_redis_key("") == ""

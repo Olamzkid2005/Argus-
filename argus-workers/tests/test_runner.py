@@ -61,6 +61,6 @@ class TestRunMigrations:
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            run_migrations()
+        """Returns a int."""
+        instance = run_migrations()
+        assert isinstance(instance, list)

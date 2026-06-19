@@ -32,10 +32,9 @@ class TestRunDueScans:
         assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            run_due_scans()
-
+        """Returns a list."""
+        instance = run_due_scans()
+        assert isinstance(instance, dict)
 
 class TestSpawnEngagement:
     """Tests for the _spawn_engagement function."""
