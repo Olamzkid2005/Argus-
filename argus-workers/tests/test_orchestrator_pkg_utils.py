@@ -27,14 +27,15 @@ class TestGetNucleiTemplatesPath:
     """Tests for the get_nuclei_templates_path function."""
 
     def test_basic_execution(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            get_nuclei_templates_path()
+        """Function executes successfully."""
+        instance = get_nuclei_templates_path()
+        assert instance is not None
 
     def test_returns_correct_type(self):
-        """Function requires arguments."""
-        with pytest.raises(TypeError):
-            get_nuclei_templates_path()
+        """Returns a PosixPath."""
+        from pathlib import PosixPath
+        instance = get_nuclei_templates_path()
+        assert isinstance(instance, PosixPath)
 
 
 class TestToolTimeout:

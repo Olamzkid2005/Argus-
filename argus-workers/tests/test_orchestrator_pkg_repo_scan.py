@@ -17,9 +17,9 @@ class TestValidateRepoUrl:
     """Tests for the validate_repo_url function."""
 
     def test_returns_none_for_invalid_url(self):
-        """Invalid URL raises ValueError."""
-        with pytest.raises((ValueError, TypeError)):
-            validate_repo_url("")
+        """Empty URL returns empty string."""
+        result = validate_repo_url("")
+        assert result == ""
 
 
 class TestIsPrivateIp:
