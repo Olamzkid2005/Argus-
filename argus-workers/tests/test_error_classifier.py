@@ -4,6 +4,8 @@ Tests for error_classifier.py
 
 from unittest.mock import patch
 
+import pytest
+
 from error_classifier import (
     ErrorCategory,
     ErrorClassification,
@@ -274,6 +276,7 @@ class TestLogClassifiedError:
 class TestSendAlert:
     """Test suite for send_alert function"""
 
+    @pytest.mark.requires_db
     @patch("error_classifier.os.getenv")
     @patch("httpx.Client")
     @patch("error_classifier.logger")

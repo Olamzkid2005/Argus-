@@ -35,4 +35,4 @@ class TestSummarizeReconFindings:
         from models.recon_context import ReconContext
         result = summarize_recon_findings(target="https://example.com", findings=[])
         assert isinstance(result, ReconContext)
-        assert result.target == "https://example.com"
+        assert result.target_url == "https://example.com"

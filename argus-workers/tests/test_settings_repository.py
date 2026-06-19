@@ -7,6 +7,8 @@ that loads API keys from the user_settings table as fallback in LLMClient.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from database.settings_repository import SettingsRepository, get_user_api_keys
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -233,6 +235,7 @@ class TestLLMClientSettingsRepositoryWiring:
     """Tests for the SettingsRepository wiring in LLMClient._load_key_from_db()."""
 
     @patch("database.connection.db_cursor")
+    @pytest.mark.requires_db
     def test_load_key_from_db_queries_all_users(self, mock_db_cursor):
         """_load_key_from_db queries DISTINCT ON (key) across ALL users."""
         mock_cursor = MagicMock()
@@ -253,6 +256,7 @@ class TestLLMClientSettingsRepositoryWiring:
         assert "updated_at DESC" in sql
 
     @patch("database.connection.db_cursor")
+    @pytest.mark.requires_db
     def test_load_key_from_db_returns_first_valid_key(self, mock_db_cursor):
         """First non-None key with len > 10 is returned."""
         mock_cursor = MagicMock()
@@ -271,6 +275,7 @@ class TestLLMClientSettingsRepositoryWiring:
         assert result == "sk-llm-test-key-abcdef123"
 
     @patch("database.connection.db_cursor")
+    @pytest.mark.requires_db
     def test_load_key_from_db_filters_short_values(self, mock_db_cursor):
         """Keys with len <= 10 are skipped (likely placeholders)."""
         mock_cursor = MagicMock()
@@ -289,6 +294,7 @@ class TestLLMClientSettingsRepositoryWiring:
         assert result == "sk-valid-long-key-abcdef123456"
 
     @patch("database.connection.db_cursor")
+    @pytest.mark.requires_db
     def test_load_key_from_db_returns_none_when_no_keys(self, mock_db_cursor):
         """No valid keys returns None."""
         mock_cursor = MagicMock()
@@ -303,6 +309,7 @@ class TestLLMClientSettingsRepositoryWiring:
         assert result is None
 
     @patch("database.connection.db_cursor")
+    @pytest.mark.requires_db
     def test_load_key_from_db_handles_error_gracefully(self, mock_db_cursor):
         """DB errors return None without raising."""
         mock_db_cursor.side_effect = Exception("Table does not exist")
@@ -314,6 +321,7 @@ class TestLLMClientSettingsRepositoryWiring:
 
         assert result is None
 
+    @pytest.mark.requires_db
     @patch(
         "llm_client.LLMClient._load_key_from_db",
         return_value="sk-or-v1-db-fallback-key-12345",

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
+import pytest
+
 from runtime.workflows.base import WorkflowResult
 
 # ── E2E: Feature Flag Dispatch via execute_scan_tools ──────────────────
@@ -45,6 +47,8 @@ class TestFeatureFlagE2E:
 
         assert _feature_enabled("bola_workflow", default=False) is True
 
+    @pytest.mark.e2e
+    @pytest.mark.e2e
     def test_bola_workflow_result_contract(self) -> None:
         """BolaWorkflow.execute() returns a WorkflowResult matching the contract."""
         from runtime.engagement_state import EngagementState
@@ -79,6 +83,7 @@ class TestFeatureFlagE2E:
         assert "engagement_id" in result.metadata
         assert "target" in result.metadata
 
+    @pytest.mark.e2e
     def test_bola_workflow_produces_obstacles_on_unreachable_target(self) -> None:
         """Workflow produces obstacles when target is unreachable."""
         from runtime.engagement_state import EngagementState
@@ -105,6 +110,7 @@ class TestFeatureFlagE2E:
         assert result.obstacles_encountered > 0
         assert result.outcome == "partial"
 
+    @pytest.mark.e2e
     def test_bola_workflow_zero_findings_success(self) -> None:
         """Clean run with zero findings is success=True, not a failure."""
         from unittest.mock import Mock
@@ -131,6 +137,7 @@ class TestFeatureFlagE2E:
         assert result.outcome in ("complete", "partial")
         assert result.findings_created == 0
 
+    @pytest.mark.e2e
     def test_bola_workflow_sse_streaming_path(self) -> None:
         """Findings produced by BolaWorkflow are emitted via the callback.
 

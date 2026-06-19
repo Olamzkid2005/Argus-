@@ -444,6 +444,7 @@ class TestFeedbackLearningLoop:
 
     FP_ALERT_THRESHOLD = 0.30
 
+    @pytest.mark.requires_db
     def test_on_feedback_returns_none_when_feature_disabled(self):
         with patch("models.feedback.is_enabled", return_value=False):
             loop = FeedbackLearningLoop()
@@ -451,6 +452,7 @@ class TestFeedbackLearningLoop:
             result = loop.on_feedback(fb)
             assert result is None
 
+    @pytest.mark.requires_db
     def test_on_feedback_stores_feedback_when_enabled(self):
         with (
             patch("models.feedback.is_enabled", return_value=True),
@@ -475,6 +477,7 @@ class TestFeedbackLearningLoop:
             assert result["accuracy_adjusted"] is True
             assert result["weights_adjusted"] is True
 
+    @pytest.mark.requires_db
     def test_on_feedback_sends_alert_when_fp_rate_exceeds_threshold(self):
         with (
             patch("models.feedback.is_enabled", return_value=True),
@@ -498,6 +501,7 @@ class TestFeedbackLearningLoop:
             assert result["alert_sent"] is True
             mock_alert.assert_called_once_with("nikto", 0.50)
 
+    @pytest.mark.requires_db
     def test_on_feedback_does_not_send_alert_when_fp_rate_below_threshold(self):
         with (
             patch("models.feedback.is_enabled", return_value=True),
@@ -519,6 +523,7 @@ class TestFeedbackLearningLoop:
             result = loop.on_feedback(fb)
             assert "alert_sent" not in result
 
+    @pytest.mark.requires_db
     def test_on_feedback_skips_alert_when_no_source_tool(self):
         with (
             patch("models.feedback.is_enabled", return_value=True),
@@ -539,12 +544,14 @@ class TestFeedbackLearningLoop:
             result = loop.on_feedback(fb)
             assert "alert_sent" not in result
 
+    @pytest.mark.requires_db
     def test_update_tool_accuracy_returns_false_without_source_tool(self):
         loop = FeedbackLearningLoop()
         with patch.object(loop, "_get_finding_source_tool", return_value=None):
             fb = FindingFeedback("f-001", "eng-001", True)
             assert loop._update_tool_accuracy(fb) is False
 
+    @pytest.mark.requires_db
     def test_update_tool_accuracy_returns_false_without_org_id(self):
         loop = FeedbackLearningLoop()
         with (
@@ -554,6 +561,7 @@ class TestFeedbackLearningLoop:
             fb = FindingFeedback("f-001", "eng-001", True)
             assert loop._update_tool_accuracy(fb) is False
 
+    @pytest.mark.requires_db
     def test_update_tool_accuracy_records_verdict(self):
         mock_repo = MagicMock()
         mock_repo.record_verdict.return_value = True
@@ -571,12 +579,14 @@ class TestFeedbackLearningLoop:
                 is_true_positive=True,
             )
 
+    @pytest.mark.requires_db
     def test_update_confidence_model_returns_false_without_source_tool(self):
         loop = FeedbackLearningLoop()
         with patch.object(loop, "_get_finding_source_tool", return_value=None):
             fb = FindingFeedback("f-001", "eng-001", True)
             assert loop._update_confidence_model(fb) is False
 
+    @pytest.mark.requires_db
     def test_update_confidence_model_returns_true(self):
         loop = FeedbackLearningLoop()
         with (
@@ -586,5 +596,6 @@ class TestFeedbackLearningLoop:
             fb = FindingFeedback("f-001", "eng-001", True)
             assert loop._update_confidence_model(fb) is True
 
+    @pytest.mark.requires_db
     def test_fp_alert_threshold_class_constant(self):
         assert FeedbackLearningLoop.FP_ALERT_THRESHOLD == 0.30

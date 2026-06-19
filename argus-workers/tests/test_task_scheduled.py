@@ -53,6 +53,7 @@ class TestRunDueScans:
 
         assert result == {"status": "skipped", "reason": "no DATABASE_URL"}
 
+    @pytest.mark.requires_db
     @patch("tasks.scheduled.run_recon")
     @patch("database.connection.connect")
     @patch("tasks.scheduled.os.getenv")
@@ -89,6 +90,7 @@ class TestRunDueScans:
         mock_connect.assert_called_once_with("postgres://localhost/argus")
         mock_run_recon.delay.assert_called_once()
 
+    @pytest.mark.requires_db
     @patch("tasks.scheduled.run_recon")
     @patch("database.connection.connect")
     @patch("tasks.scheduled.os.getenv")
@@ -159,6 +161,7 @@ class TestRunDueScans:
 
         mock_conn.commit.assert_called_once()
 
+    @pytest.mark.requires_db
     @patch("tasks.scheduled.run_recon")
     @patch("database.connection.connect")
     @patch("tasks.scheduled.os.getenv")
@@ -215,6 +218,7 @@ class TestSpawnEngagement:
         mock_conn.cursor.return_value = mock_cursor
         return mock_conn, mock_cursor
 
+    @pytest.mark.requires_db
     def test_creates_engagement_with_all_required_fields(self, mock_db):
         mock_conn, mock_cursor = mock_db
         sched_id = str(uuid.uuid4())
@@ -252,6 +256,7 @@ class TestSpawnEngagement:
         assert params[7] == "default"
         assert params[8] is True
 
+    @pytest.mark.requires_db
     def test_initializes_loop_budget_from_aggressiveness(self, mock_db):
         mock_conn, mock_cursor = mock_db
         sched_id = str(uuid.uuid4())
@@ -276,6 +281,7 @@ class TestSpawnEngagement:
         assert params[3] == 5
         assert result["engagement_id"] is not None
 
+    @pytest.mark.requires_db
     def test_records_initial_state_and_looks_up_previous_engagement(self, mock_db):
         mock_conn, mock_cursor = mock_db
         prev_id = str(uuid.uuid4())
@@ -309,6 +315,7 @@ class TestSpawnEngagement:
 
         assert result["prev_engagement_id"] == prev_id
 
+    @pytest.mark.requires_db
     def test_updates_scheduled_engagement_next_run_at(self, mock_db):
         mock_conn, mock_cursor = mock_db
         sched_id = str(uuid.uuid4())
@@ -344,6 +351,7 @@ class TestSpawnEngagement:
         assert params[0] == result["engagement_id"]
         assert params[1] == sched_id
 
+    @pytest.mark.requires_db
     def test_scope_is_serialized_to_json_when_dict(self, mock_db):
         mock_conn, mock_cursor = mock_db
         sched_id = str(uuid.uuid4())
