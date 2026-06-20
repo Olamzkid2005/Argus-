@@ -47,7 +47,7 @@ export function Home() {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
       const all = store.listEngagements()
-      const recent = all.slice(-5).reverse()
+      const recent = all.slice(0, 5)
       const enriched = recent.map((e: any) => {
         const findings = store.getFindings(e.id)
         return { id: e.id, target: e.target, status: e.status, findings: findings.length }

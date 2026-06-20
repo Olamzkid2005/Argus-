@@ -53,6 +53,7 @@ import { ArgusDashboard } from "@/argus/tui/routes/dashboard"
 import { EngagementBrowser } from "@/argus/tui/routes/engagements"
 import { EngagementDetail } from "@/argus/tui/routes/engagement-detail"
 import { Workspace } from "@/argus/tui/routes/workspace"
+import { ReportDashboard } from "@/argus/tui/routes/report"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -1136,6 +1137,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
                 engagementId={(route.data as any).engagementId}
                 initialTab={(route.data as any).tab}
               />
+            </Match>
+            <Match when={route.data.type === "report"}>
+              <ReportDashboard engagementId={(route.data as any).engagementId} />
             </Match>
             <Match when={route.data.type === "engagements"}>
               <EngagementBrowser />

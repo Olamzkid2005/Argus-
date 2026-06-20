@@ -13,7 +13,7 @@ export interface NormalizedFinding {
   title: string
   severity: Severity
   confidence: Confidence
-  status: "PENDING" | "CONFIRMED" | "REJECTED" | "FINALIZED"
+  status: "PENDING" | "CONFIRMED" | "REJECTED" | "FINALIZED" | "DISMISSED"
   description: string
   subtype?: string
   evidence?: EvidencePackage[]

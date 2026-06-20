@@ -97,23 +97,6 @@ export class FeatureFlags implements IFeatureFlags {
     } catch { /* config file missing or invalid — use defaults */ }
   }
 
-  /** Apply CLI flag overrides */
-  loadFromCLI(cliFlags: Record<string, boolean>): void {
-    const featureMap: Record<string, Feature> = {
-      "enable-workflow-registry": Feature.WORKFLOW_REGISTRY,
-      "enable-engagement-store": Feature.ENGAGEMENT_STORE,
-      "enable-approval-gates": Feature.APPROVAL_GATES,
-      "disable-deterministic": Feature.DETERMINISTIC_FALLBACK,
-      "enable-llm-analysis": Feature.LLM_FINDING_ANALYSIS,
-    }
-    for (const [cliKey, feature] of Object.entries(featureMap)) {
-      if (cliFlags[cliKey] !== undefined) {
-        this.flags.set(feature, cliFlags[cliKey])
-        this.sources.set(feature, "cli")
-      }
-    }
-  }
-
   /** Check if a feature is enabled */
   isEnabled(feature: Feature): boolean {
     return this.flags.get(feature) ?? DEFAULT_FEATURES[feature] ?? false

@@ -67,7 +67,7 @@ describe("FeatureFlags", () => {
     process.env["ARGUS_FEATURE_WORKFLOW_REGISTRY"] = "true"
     flags.loadFromEnv()
     // CLI overrides back to false
-    flags.loadFromCLI({ "disable-deterministic": true })
+    flags.applyOverrides({ [Feature.DETERMINISTIC_FALLBACK]: true }, "cli")
 
     expect(flags.isEnabled(Feature.WORKFLOW_REGISTRY)).toBe(true)
     expect(flags.dump()["workflow_registry"].source).toBe("env")

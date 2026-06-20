@@ -39,6 +39,7 @@ function statusIcon(status: string): string {
   switch (status.toUpperCase()) {
     case "CONFIRMED": return "✓"
     case "REJECTED": return "✗"
+    case "DISMISSED": return "⊘"
     case "FINALIZED": return "🔒"
     case "PENDING": return "○"
     default: return "○"
@@ -49,6 +50,7 @@ function statusColor(status: string, theme: ReturnType<typeof useTheme>["theme"]
   switch (status.toUpperCase()) {
     case "CONFIRMED": return theme.success
     case "REJECTED": return theme.error
+    case "DISMISSED": return theme.warning
     case "FINALIZED": return theme.info
     default: return theme.textMuted
   }
@@ -141,7 +143,7 @@ export function FindingsViewer() {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
       const all = store.listEngagements() as Array<{ id: string; target: string }>
-      const engId = route.engagementId ?? (all.length > 0 ? all[all.length - 1].id : null)
+      const engId = route.engagementId ?? (all.length > 0 ? all[0].id : null)
       if (engId) {
         const [findings, evidenceCounts] = await Promise.all([
           Promise.resolve(store.getFindings(engId)),

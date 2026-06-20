@@ -137,7 +137,7 @@ const commands: ArgusTuiCommand[] = [
       const engagements = store.listEngagements()
       if (engagements.length === 0) return "No engagements found."
       // Accept optional engagement ID (e.g., /findings ENG-001)
-      const engId = args.trim().toUpperCase() || engagements[engagements.length - 1].id
+      const engId = args.trim().toUpperCase() || engagements[0].id
       const eng = store.getEngagement(engId)
       if (!eng) return `Engagement ${engId} not found.`
       const findings = store.getFindings(engId)
@@ -265,7 +265,7 @@ const commands: ArgusTuiCommand[] = [
       const engagements = store.listEngagements()
       if (engagements.length === 0) return "No engagements found. Run /assess first."
 
-      engId = engId || engagements[engagements.length - 1].id
+      engId = engId || engagements[0].id
       const eng = store.getEngagement(engId)
       if (!eng) return `Engagement ${engId} not found.`
 
