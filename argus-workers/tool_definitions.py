@@ -88,6 +88,14 @@ class ToolParameter:
 class ToolDefinition:
     """Declarative definition for a security tool.
 
+    NOTE: Keep in sync with mcp_server.py ToolDefinition.
+    Key fields shared by both:
+        name, description, capabilities, signal_quality, requires, priority, cost
+    This class has additional declarative fields (phases, parallel_safe, risk_level, etc.)
+    that mcp_server.py does not have. The two classes have diverged
+    intentionally — this one is the declarative registry representation,
+    mcp_server.py is the runtime MCP server representation.
+
     All metadata about a tool in one place — no more hunting across
     orchestrator.py, agent_loop.py, and tool_adapter_registry.py.
     """

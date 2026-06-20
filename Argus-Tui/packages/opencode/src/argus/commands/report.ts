@@ -1,5 +1,7 @@
 import { ReportGenerator } from "../reporting/generator"
 import { EngagementStore } from "../engagement/store"
+import { FindingAnalyzer } from "../engagement/finding-analyzer"
+import { getLlmClient } from "../engagement/llm-client"
 import { Feature, getFeatureFlags } from "../config/feature-flags"
 import type { FindingAnalysis } from "../shared/types"
 import type { ProgressCallback } from "../shared/progress"
@@ -7,16 +9,16 @@ import type { ProgressCallback } from "../shared/progress"
 export async function enhanceReportWithAnalysis(
   engagementId: string,
   onProgress?: ProgressCallback,
-  injectedAnalyzer?: { analyze(finding: any, evidence: any[]): Promise<FindingAnalysis | null> },
+  injectedAnalyzer?: FindingAnalyzer,
   store?: EngagementStore,
 ): Promise<FindingAnalysis[]> {
   const db = store ?? new EngagementStore()
   const findings = db.getFindings(engagementId)
   const analyzer = injectedAnalyzer ?? await (async () => {
-    const { FindingAnalyzer } = await import("../engagement/finding-analyzer")
-    const { getLlmClient } = await import("../engagement/llm-client")
-    const llmClient = getLlmClient()
-    return new FindingAnalyzer(db, llmClient.isConfigured() ? llmClient : undefined)
+    const { FindingAnalyzer: FA } = await import("../engagement/finding-analyzer")
+    const { getLlmClient: getLLM } = await import("../engagement/llm-client")
+    const llmClient = getLLM()
+    return new FA(db, llmClient.isConfigured() ? llmClient : undefined)
   })()
   const CONCURRENCY = 3
   const results: FindingAnalysis[] = []
@@ -75,7 +77,9 @@ export async function reportCommand(
   const generator = new ReportGenerator()
 
   if (getFeatureFlags().isEnabled(Feature.LLM_FINDING_ANALYSIS)) {
-    const analyses = await enhanceReportWithAnalysis(engagementId, onProgress)
+    const llmClient = getLlmClient()
+    const analyzer = new FindingAnalyzer(db, llmClient.isConfigured() ? llmClient : undefined)
+    const analyses = await enhanceReportWithAnalysis(engagementId, onProgress, analyzer)
     generator.setAnalyses(analyses)
   }
 

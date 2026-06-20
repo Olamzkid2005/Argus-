@@ -88,16 +88,21 @@ export class StoredXSSVerifier implements VerificationScenario {
 
     const pageContent = (await victimPage.content()).toLowerCase()
     this.domOnVictim = pageContent
-    // Check raw innerHTML (unescaped) for attribute-based XSS markers
+    // Check raw innerHTML (unescaped) for XSS markers — this is where
+    // actually executing payloads will appear (script tags, event handlers).
+    // The serialized DOM (pageContent) may contain HTML-escaped payload
+    // text that does NOT execute — do NOT flag those as findings.
     const innerHtml = (await victimPage.evaluate(() => document.body?.innerHTML ?? "")).toLowerCase()
     const attrMarkersFound = XSS_ATTR_MARKERS.filter(m => innerHtml.includes(m))
     const tagMarkersFound = XSS_TAG_MARKERS.filter(m => innerHtml.includes(m))
-    // Check if payload text appears in the serialized DOM (indicates persistence, even if escaped)
+    // Log whether the payload text appears in serialized DOM (may be HTML-escaped)
+    // but only flag as finding if markers found in unescaped innerHTML.
     const payloadTextInDom = pageContent.includes(this.payload.toLowerCase())
     // Only consider XSS confirmed if markers found in unescaped innerHTML
-    // or if the payload appears in raw attribute/tag context
+    // (script/event-handler context). Payload text that only appears in the
+    // serialized DOM was HTML-escaped and will NOT execute.
     const confirmedExecution = tagMarkersFound.length > 0
-    const probableExecution = attrMarkersFound.length > 0 || (payloadTextInDom && tagMarkersFound.length === 0 && attrMarkersFound.length === 0)
+    const probableExecution = attrMarkersFound.length > 0
     this.payloadExecuted = confirmedExecution || probableExecution
 
     try {

@@ -54,6 +54,8 @@ const [scanState, setScanState] = createStore<ScanState>({ ...initialState })
 const savedStates = new Map<string, ScanState>()
 
 let activeEngagementId: string | null = null
+let _processingLock: string | null = null
+const _pendingQueue: Array<{ event: ProgressEvent; engagementId?: string }> = []
 
 function snapshot(): ScanState {
   return {
@@ -163,12 +165,24 @@ function findPhaseIndex(phaseId: string): number {
   return scanState.phases.findIndex((p) => p.id === phaseId)
 }
 
-export function handleProgressEvent(event: ProgressEvent, engagementId?: string) {
-  const prevActive = activeEngagementId
-  if (engagementId && engagementId !== activeEngagementId) {
-    persistActive()
-    restore(engagementId)
+function drainQueue() {
+  while (_pendingQueue.length > 0) {
+    const next = _pendingQueue.shift()!
+    const prevActive = activeEngagementId
+    if (next.engagementId && next.engagementId !== activeEngagementId) {
+      persistActive()
+      restore(next.engagementId)
+    }
+    processEventInner(next.event, next.engagementId)
+    if (next.engagementId && next.engagementId !== prevActive) {
+      persistActive()
+      if (prevActive) restore(prevActive)
+    }
   }
+  _processingLock = null
+}
+
+function processEventInner(event: ProgressEvent, engagementId?: string) {
   switch (event.type) {
     case "phase_start":
       addPhase({ id: event.phaseId, name: event.name, index: scanState.phases.length, total: event.total })
@@ -219,8 +233,31 @@ export function handleProgressEvent(event: ProgressEvent, engagementId?: string)
     default:
       break
   }
+}
+
+export function handleProgressEvent(event: ProgressEvent, engagementId?: string) {
+  const targetId = engagementId ?? activeEngagementId ?? ""
+
+  if (_processingLock && _processingLock !== targetId) {
+    _pendingQueue.push({ event, engagementId })
+    return
+  }
+
+  const isNewLock = !_processingLock
+  if (isNewLock) _processingLock = targetId
+
+  const prevActive = activeEngagementId
+  if (engagementId && engagementId !== activeEngagementId) {
+    persistActive()
+    restore(engagementId)
+  }
+
+  processEventInner(event, engagementId)
+
   if (engagementId && engagementId !== prevActive) {
     persistActive()
     if (prevActive) restore(prevActive)
   }
+
+  if (isNewLock) drainQueue()
 }

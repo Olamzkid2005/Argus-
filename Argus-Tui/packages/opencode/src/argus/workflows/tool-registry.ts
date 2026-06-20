@@ -61,8 +61,14 @@ export class ToolRegistry {
   }
 
   load(definitionsPath: string): void {
-    const content = readFileSync(definitionsPath, "utf-8")
-    const parsed: ToolDefsFile = YAML.parse(content)
+    let content: string
+    let parsed: ToolDefsFile
+    try {
+      content = readFileSync(definitionsPath, "utf-8")
+      parsed = YAML.parse(content)
+    } catch (err) {
+      throw new Error(`Failed to read or parse tool definitions file '${definitionsPath}': ${(err as Error).message}`)
+    }
 
     if (!parsed?.tools || !Array.isArray(parsed.tools)) {
       throw new Error(`Tool definitions file ${definitionsPath} is missing the 'tools' key or it is not an array`)

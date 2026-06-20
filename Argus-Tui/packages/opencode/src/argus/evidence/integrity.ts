@@ -3,14 +3,17 @@ import { join } from "path"
 import { createHash } from "crypto"
 import type { EvidenceManifest, IntegrityReport } from "./types"
 
-function hashFileSync(filePath: string): string {
-  const hash = createHash("sha256")
-  const content = readFileSync(filePath)
-  hash.update(content)
-  return hash.digest("hex")
+function hashFile(filePath: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const hash = createHash("sha256")
+    const stream = createReadStream(filePath)
+    stream.on("data", (chunk) => hash.update(chunk))
+    stream.on("end", () => resolve(hash.digest("hex")))
+    stream.on("error", (err) => reject(err))
+  })
 }
 
-export function verifyPackage(baseDir: string, engagementId: string, packageId: string): IntegrityReport {
+export async function verifyPackage(baseDir: string, engagementId: string, packageId: string): Promise<IntegrityReport> {
   if (!/^[\w-]+$/.test(packageId)) {
     return { valid: false, packageId, manifestHash: "", computedHash: "", errors: ["Invalid package ID"] }
   }
@@ -49,7 +52,7 @@ export function verifyPackage(baseDir: string, engagementId: string, packageId: 
       errors.push(`Artifact missing: ${artifact.path}`)
       continue
     }
-    const actualHash = hashFileSync(artifactPath)
+    const actualHash = await hashFile(artifactPath)
     if (actualHash !== artifact.hash) {
       errors.push(`Hash mismatch for ${artifact.path}: expected ${artifact.hash}, got ${actualHash}`)
     }

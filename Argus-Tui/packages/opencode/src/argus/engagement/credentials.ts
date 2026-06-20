@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, chmodSync, existsSync, mkdirSync } from "fs"
+import { readFileSync, writeFileSync, chmodSync, existsSync, mkdirSync, statSync } from "fs"
 import { join } from "path"
 import { homedir } from "os"
 
@@ -28,6 +28,12 @@ export class CredentialStore {
     try {
       this.data = JSON.parse(readFileSync(resolved, "utf-8")) as CredentialFile
       if (!this.data.roles) this.data.roles = {}
+      try {
+        const stats = statSync(resolved)
+        if (stats.mode & 0o077) {
+          console.warn(`[Argus] WARNING: Credentials file ${resolved} has world-readable permissions (${(stats.mode & 0o777).toString(8)}). Run: chmod 0600 "${resolved}"`)
+        }
+      } catch { /* stat check best-effort */ }
     } catch {
       this.data = { roles: {} }
     }

@@ -29,7 +29,7 @@ export async function loginIfFormPresent(page: Page, creds: Credentials): Promis
 
   if (!submitted) return false
 
-  await page.waitForLoadState("networkidle")
+  await page.waitForLoadState("networkidle", { timeout: 30000 })
   return true
 }
 

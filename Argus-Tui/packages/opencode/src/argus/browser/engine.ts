@@ -16,7 +16,7 @@ export class PlaywrightEngine implements BrowserEngine {
 
   async launch(headless = true): Promise<void> {
     const { chromium } = await import("playwright")
-    this.browser = await chromium.launch({ headless })
+    this.browser = await chromium.launch({ headless, args: ["--no-sandbox"] })
   }
 
   async createContext(): Promise<BrowserContext> {
@@ -28,7 +28,7 @@ export class PlaywrightEngine implements BrowserEngine {
   async navigate(url: string): Promise<Page> {
     if (!this.context) throw new Error("No browser context")
     const page = await this.context.newPage()
-    await page.goto(url, { waitUntil: "networkidle" })
+    await page.goto(url, { waitUntil: "networkidle", timeout: 30000 })
     return page
   }
 

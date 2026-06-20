@@ -192,8 +192,8 @@ export class ReportGenerator {
         const sevLabel = severityLabels[f.severity] ?? "INFO"
         const badges = [`<span class="badge badge-${sevLabel.toLowerCase()}">${sevLabel}</span>`]
         const refs: string[] = []
-        if (f.cve) refs.push(`<a href="https://nvd.nist.gov/vuln/detail/${f.cve}">${f.cve}</a>`)
-        if (f.cwe) refs.push(`<a href="https://cwe.mitre.org/data/definitions/${f.cwe.replace("CWE-", "")}.html">${f.cwe}</a>`)
+        if (f.cve) refs.push(`<a href="https://nvd.nist.gov/vuln/detail/${this.escapeHtml(f.cve)}">${this.escapeHtml(f.cve)}</a>`)
+        if (f.cwe) refs.push(`<a href="https://cwe.mitre.org/data/definitions/${this.escapeHtml(f.cwe.replace("CWE-", ""))}.html">${this.escapeHtml(f.cwe)}</a>`)
 
         // Include AI analysis if available
         const analysis = this.getAnalysisForFinding(f.id)
@@ -223,11 +223,11 @@ export class ReportGenerator {
         return `
         <div class="finding severity-${f.severity}">
           <div class="title">${this.escapeHtml(f.title)}</div>
-          <div>${badges.join(" ")} <span class="badge" style="background:#0d6efd;color:white">${f.tool}</span></div>
+          <div>${badges.join(" ")} <span class="badge" style="background:#0d6efd;color:white">${this.escapeHtml(f.tool)}</span></div>
           <div class="details">${this.escapeHtml(f.description || "")}</div>
           ${refs.length > 0 ? `<div class="refs">${refs.join(" · ")}</div>` : ""}
           ${analysisHtml}
-          <div style="margin-top:0.5rem;font-size:0.8rem;color:#6c757d">Phase: ${f.phase} · ${f.status}</div>
+          <div style="margin-top:0.5rem;font-size:0.8rem;color:#6c757d">Phase: ${this.escapeHtml(f.phase)} · ${this.escapeHtml(f.status)}</div>
         </div>`
       }).join("\n")
 
@@ -257,7 +257,7 @@ export class ReportGenerator {
   }
 
   private escapeHtml(text: string): string {
-    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;")
   }
 
   generateSARIF(findings: NormalizedFinding[], engagementId: string, target: string, workflow: string): string {

@@ -85,6 +85,14 @@ class ToolDefinition:
     A tool definition loaded from YAML or registered programmatically.
     Mirrors CyberStrikeAI's YAML tool definitions pattern.
 
+    NOTE: Keep in sync with tool_definitions.py ToolDefinition.
+    Key fields shared by both:
+        name, description, capabilities, signal_quality, requires, priority, cost
+    This class has additional execution fields (command, args, timeout, env, binary)
+    that tool_definitions.py does not have. The two classes have diverged
+    intentionally — this one is the runtime MCP server representation,
+    tool_definitions.py is the declarative registry representation.
+
     Extended with planner intelligence fields:
         capabilities   — capabilities this tool satisfies (e.g. sqli_detection)
         signal_quality — reliability tier for confidence baseline

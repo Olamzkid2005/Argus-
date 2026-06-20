@@ -168,6 +168,7 @@ export class WorkersBridge {
       input: this.process.stdout!,
     })
 
+    let malformedLineCount = 0
     this.rl.on("line", (line: string) => {
       try {
         const response: RPCResponse = JSON.parse(line)
@@ -184,12 +185,14 @@ export class WorkersBridge {
           }
         }
       } catch {
-        // Ignore malformed JSON lines
+        malformedLineCount++
+        if (malformedLineCount <= 5) {
+          console.warn(`[MCP] Skipped malformed JSON line #${malformedLineCount} (first 200 chars): ${line.slice(0, 200)}`)
+        }
       }
     })
 
     this.process.on("exit", (code) => {
-      this.setLLMStatus("UNAVAILABLE")
       // Reject all pending requests — process is gone
       for (const [id, pending] of this.pending) {
         clearTimeout(pending.timer)
@@ -197,6 +200,13 @@ export class WorkersBridge {
       }
       this.pending.clear()
       this.pendingCount = 0
+      if (code !== 0) {
+        console.warn(`[MCP] Worker exited with code ${code} — attempting restart`)
+        this.restartWorker().catch((err) => {
+          console.error(`[MCP] Worker restart failed after exit code ${code}:`, err)
+          this.setLLMStatus("UNAVAILABLE")
+        })
+      }
     })
 
     this.process.stderr?.on("data", (data: Buffer) => {

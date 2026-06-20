@@ -54,10 +54,8 @@ export function loadAllWorkflows(workflowsDir: string): WorkflowDefinition[] {
       try {
         const workflow = loadWorkflowYaml(fullPath)
         workflows.push(workflow)
-      } catch {
-        // Not all YAMLs in the workflows dir are workflows —
-        // tool-definitions.yaml and approval-policies.yaml use different schemas.
-        // Skip silently — this is expected.
+      } catch (err) {
+        console.warn(`Skipping unparseable workflow YAML '${fullPath}': ${(err as Error).message}`)
       }
     }
   }

@@ -2,7 +2,7 @@ import type { Page } from "playwright"
 import type { Observation, DiffResult } from "./types"
 
 export async function observeUrl(page: Page, url: string): Promise<Observation> {
-  const response = await page.goto(url, { waitUntil: "networkidle" })
+  const response = await page.goto(url, { waitUntil: "networkidle", timeout: 30000 })
   const domSnapshot = await page.content()
 
   return {

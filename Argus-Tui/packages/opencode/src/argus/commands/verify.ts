@@ -28,13 +28,15 @@ export async function verifyCommand(
   // Find which engagement this finding belongs to
   const allEngagements = store.listEngagements()
   let engagementId: string | null = null
+  let engagementTarget = ""
   let finding = null
 
   for (const eng of allEngagements) {
-    const findings = store.getFindings(eng.id)
-    const found = findings.find((f) => f.id === findingId)
+    const engFindings = store.getFindings(eng.id)
+    const found = engFindings.find((f) => f.id === findingId)
     if (found) {
       engagementId = eng.id
+      engagementTarget = eng.target
       finding = found
       break
     }
@@ -50,7 +52,7 @@ export async function verifyCommand(
   const allRoles = credStore.getAllCredentials()
   credStore.clear()
 
-  const targetUrl = options?.targetUrl ?? finding.description ?? finding.title
+  const targetUrl = options?.targetUrl ?? engagementTarget
   const engine = options?.engineOverride ?? new PlaywrightEngine()
   const evidenceBaseDir = join(homedir(), ".argus", "engagements")
   const evidenceCollector = options?.collectorOverride ?? new EvidenceCollector(evidenceBaseDir)
@@ -88,7 +90,7 @@ export async function verifyCommand(
   try {
     const ctx = await engine.createContext()
     const page = await ctx.newPage()
-    await page.goto(targetUrl, { waitUntil: "networkidle" })
+    await page.goto(targetUrl, { waitUntil: "networkidle", timeout: 30000 })
     const shot = await engine.captureScreenshot(page)
     await evidenceCollector.captureScreenshot(engagementId, findingId, shot)
     await evidenceCollector.createPackage(engagementId, findingId, [])

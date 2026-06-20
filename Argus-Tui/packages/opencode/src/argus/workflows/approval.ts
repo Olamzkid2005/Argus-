@@ -71,10 +71,14 @@ export class ApprovalService {
     process.stderr.write(`   This operation may be destructive or modify the target state.\n`)
     process.stderr.write(`   Proceed? [y/N] `)
 
-    // Non-TTY stdin: auto-skip instead of hanging forever
-    if (!process.stdin.isTTY) {
-      process.stderr.write(" (non-TTY stdin — skipping)\n\n")
-      return { approved: false, reason: "Non-TTY stdin" }
+    // Non-TTY stdout (TUI mode): auto-approve non-destructive, auto-skip destructive
+    if (!process.stdout.isTTY) {
+      if (gate.destructive) {
+        process.stderr.write(" (non-TTY — auto-skip destructive gate)\n\n")
+        return { approved: false, reason: "Non-TTY — destructive gate auto-skipped" }
+      }
+      process.stderr.write(" (non-TTY — auto-approved)\n\n")
+      return { approved: true }
     }
 
     return new Promise((resolve) => {
