@@ -27,9 +27,10 @@ export async function resumeCommand(
     workflowsPath?: string
     useLLM?: boolean
     onProgress?: (event: ProgressEvent | string) => void
+    storeOverride?: EngagementStore
   },
 ): Promise<string> {
-  const store = new EngagementStore()
+  const store = options?.storeOverride ?? new EngagementStore()
   const engagement = store.getEngagement(engagementId)
   const emit = options?.onProgress ?? (() => {})
 

@@ -7,8 +7,12 @@ import { join } from "path"
 export async function evidenceCommand(
   action: "list" | "show" | "prune" | "verify-package",
   args: string[],
+  overrides?: {
+    store?: EngagementStore
+    collector?: EvidenceCollector
+  },
 ): Promise<string> {
-  const store = new EngagementStore()
+  const store = overrides?.store ?? new EngagementStore()
   const evidenceBaseDir = join(homedir(), ".argus", "engagements")
   const lines: string[] = []
 
@@ -68,7 +72,7 @@ export async function evidenceCommand(
       const engagements = store.listEngagements()
       let totalPruned = 0
       for (const eng of engagements) {
-        const collector = new EvidenceCollector(evidenceBaseDir)
+        const collector = overrides?.collector ?? new EvidenceCollector(evidenceBaseDir)
         const pruned = await collector.pruneEngagement(eng.id, retentionDays)
         totalPruned += pruned
         store.appendAuditLog(eng.id, "EVIDENCE_PRUNE", `Pruned ${pruned} artifact(s) older than ${retentionDays} days`)

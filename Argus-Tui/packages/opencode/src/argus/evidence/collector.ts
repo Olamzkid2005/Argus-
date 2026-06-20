@@ -103,7 +103,7 @@ export class EvidenceCollector {
 
             try {
               const fileStat = await stat(filePath)
-              if (fileStat.mtimeMs < cutoff) {
+              if (fileStat.mtimeMs <= cutoff) {
                 await unlink(filePath)
                 pruned++
               }

@@ -15,9 +15,15 @@ export async function verifyCommand(
   options?: {
     targetUrl?: string
     credsPath?: string
+    storeOverride?: EngagementStore
+    engineOverride?: PlaywrightEngine
+    credStoreOverride?: CredentialStore
+    collectorOverride?: EvidenceCollector
+    confidenceOverride?: ConfidenceEngine
+    runnerOverride?: VerificationRunner
   },
 ): Promise<string> {
-  const store = new EngagementStore()
+  const store = options?.storeOverride ?? new EngagementStore()
 
   // Find which engagement this finding belongs to
   const allEngagements = store.listEngagements()
@@ -39,17 +45,17 @@ export async function verifyCommand(
   }
 
   // Load credentials
-  const credStore = new CredentialStore()
+  const credStore = options?.credStoreOverride ?? new CredentialStore()
   const creds = options?.credsPath ? credStore.load(options.credsPath) : credStore.load()
   const allRoles = credStore.getAllCredentials()
   credStore.clear()
 
   const targetUrl = options?.targetUrl ?? finding.description ?? finding.title
-  const engine = new PlaywrightEngine()
+  const engine = options?.engineOverride ?? new PlaywrightEngine()
   const evidenceBaseDir = join(homedir(), ".argus", "engagements")
-  const evidenceCollector = new EvidenceCollector(evidenceBaseDir)
-  const confidenceEngine = new ConfidenceEngine()
-  const runner = new VerificationRunner()
+  const evidenceCollector = options?.collectorOverride ?? new EvidenceCollector(evidenceBaseDir)
+  const confidenceEngine = options?.confidenceOverride ?? new ConfidenceEngine()
+  const runner = options?.runnerOverride ?? new VerificationRunner()
 
   const lines: string[] = []
   lines.push(`[Argus] Re-running verification for finding: ${finding.id}`)

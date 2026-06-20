@@ -10,6 +10,11 @@ import { mkdirSync, existsSync, readFileSync } from "fs"
 // `id DESC` is deterministic because higher counter values correspond to
 // later-created engagements.
 let _engagementSeq = 0
+
+// Monotonic counter for audit log entries. Ensures entries with the same
+// millisecond-precision `created_at` timestamp sort deterministically
+// when ordered by `id DESC`.
+let _auditSeq = 0
 import {
   engagements,
   findings as findingsTable,
@@ -324,20 +329,21 @@ export class EngagementStore {
   }
 
   appendAuditLog(engagementId: string, eventType: string, message: string, metadata?: Record<string, unknown>): void {
+    const now = Date.now()
     this.db.insert(audit_log).values({
-      id: `aud-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      id: `aud-${now.toString(36)}-${(_auditSeq++).toString(36)}`,
       engagement_id: engagementId,
       event_type: eventType,
       message,
       metadata: metadata ?? {},
-      created_at: Date.now(),
+      created_at: now,
     }).run()
   }
 
   getAuditLog(engagementId: string): Array<{ id: string; eventType: string; message: string; metadata: Record<string, unknown>; createdAt: number }> {
     const rows = this.db.select().from(audit_log)
       .where(eq(audit_log.engagement_id, engagementId))
-      .orderBy(desc(audit_log.created_at))
+      .orderBy(desc(audit_log.created_at), desc(audit_log.id))
       .all()
     return rows.map((r) => ({
       id: r.id,

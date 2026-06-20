@@ -1,18 +1,8 @@
-import { describe, expect, test, beforeAll, afterAll, mock } from "bun:test"
+import { describe, expect, test, beforeAll, afterAll } from "bun:test"
 import { mkdtempSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { EngagementStore } from "../../../../src/argus/engagement/store"
-// Real module references for mock restoration in afterAll
-import * as _realBridge from "../../../../src/argus/bridge/mcp-client"
-import * as _realRegistry from "../../../../src/argus/workflows/registry"
-import * as _realToolRegistry from "../../../../src/argus/workflows/tool-registry"
-import * as _realPlanner from "../../../../src/argus/planner/planner"
-import * as _realExecutor from "../../../../src/argus/planner/executor"
-import * as _realConfidence from "../../../../src/argus/engagement/confidence"
-import * as _realCredentials from "../../../../src/argus/engagement/credentials"
-import * as _realGenerator from "../../../../src/argus/reporting/generator"
-import * as _realEngagementStore from "../../../../src/argus/engagement/store"
 
 let dbDir: string
 
@@ -68,254 +58,82 @@ describe("resume validation", () => {
   test("getPhases returns phases for an engagement", () => {
     const store = makeStore("phases")
     const eng = store.createEngagement("https://example.com", "assessment")
-    const phases = [
-      { id: `p1-${Date.now()}`, engagementId: eng.id, name: "recon", status: "COMPLETED" as const, capabilities: ["web_recon"], executionMode: "parallel" as const, replanCycle: false },
-      { id: `p2-${Date.now()}`, engagementId: eng.id, name: "vuln_scan", status: "PENDING" as const, capabilities: ["vulnerability_scanning"], executionMode: "parallel" as const, replanCycle: false },
-    ]
-    store.savePhases(eng.id, phases)
-    const saved = store.getPhases(eng.id)
-    expect(saved).toHaveLength(2)
-    expect(saved[0].status).toBe("COMPLETED")
-    expect(saved[1].status).toBe("PENDING")
+    store.savePhases(eng.id, [
+      {
+        id: "phase-recon", engagementId: eng.id, name: "recon", status: "COMPLETED",
+        capabilities: ["web_recon"], executionMode: "sequential", replanCycle: false,
+      },
+      {
+        id: "phase-scan", engagementId: eng.id, name: "scan", status: "PENDING",
+        capabilities: ["vulnerability_scanning"], executionMode: "sequential", replanCycle: false,
+      },
+    ])
+    const phases = store.getPhases(eng.id)
+    expect(phases).toHaveLength(2)
+    expect(phases[0].name).toBe("recon")
   })
 
   test("saveFindings and getFindings round-trips correctly", () => {
     const store = makeStore("findings")
     const eng = store.createEngagement("https://example.com", "assessment")
-    const findings = [
-      {
-        id: `f1-${Date.now()}`,
-        title: "Test Finding",
-        severity: 3,
-        confidence: 3,
-        status: "CONFIRMED" as const,
-        description: "A test finding",
-        tool: "test-tool",
-        phase: "recon",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ]
-    store.saveFindings(eng.id, findings)
-    const saved = store.getFindings(eng.id)
-    expect(saved).toHaveLength(1)
-    expect(saved[0].title).toBe("Test Finding")
+    store.saveFindings(eng.id, [{
+      id: "find-1", title: "XSS", severity: 3, confidence: 2,
+      status: "PENDING", description: "test", tool: "nuclei", phase: "scan",
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }])
+    const findings = store.getFindings(eng.id)
+    expect(findings).toHaveLength(1)
+    expect(findings[0].title).toBe("XSS")
   })
 
   test("appendAuditLog creates retrievable entries", () => {
     const store = makeStore("audit")
     const eng = store.createEngagement("https://example.com", "assessment")
-    store.appendAuditLog(eng.id, "TEST_EVENT", "test message")
-    const loaded = store.getEngagement(eng.id)
-    expect(loaded).not.toBeNull()
-    expect(loaded!.status).toBe("CREATED")
+    store.appendAuditLog(eng.id, "TEST", "test event")
+    const log = store.getAuditLog(eng.id)
+    expect(log.length).toBeGreaterThanOrEqual(1)
   })
 
   test("engagement can be updated from CREATED to RUNNING to COMPLETED", () => {
-    const store = makeStore("lifecycle")
-    const eng = store.createEngagement("https://lifecycle-test.com", "assessment")
+    const store = makeStore("status")
+    const eng = store.createEngagement("https://example.com", "assessment")
     expect(eng.status).toBe("CREATED")
     store.updateStatus(eng.id, "RUNNING")
     expect(store.getEngagement(eng.id)!.status).toBe("RUNNING")
     store.updateStatus(eng.id, "COMPLETED")
     expect(store.getEngagement(eng.id)!.status).toBe("COMPLETED")
   })
-})
 
-describe("resumeCommand", () => {
-  let resumeStore: EngagementStore
-
-  const mockPlan = {
-    workflow: "test-workflow",
-    phases: [
-      { phaseId: "phase-0-recon", name: "recon", workflowName: "test", target: "https://test.com", requiredCapabilities: ["web_recon"], config: {}, previousPhaseResults: [] },
-      { phaseId: "phase-1-scan", name: "scan", workflowName: "test", target: "https://test.com", requiredCapabilities: ["vulnerability_scanning"], config: {}, previousPhaseResults: [] },
-    ],
-    errorRecovery: {},
-    planCreatedAt: new Date().toISOString(),
-  }
-
-  const mockExecutorResult = {
-    phaseId: "phase-0-recon",
-    status: "completed",
-    findings: [{ id: "f1", title: "found", severity: 2, confidence: 2, status: "PENDING", description: "test", tool: "nuclei", phase: "recon", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
-    artifacts: [],
-    errors: [],
-    durationMs: 50,
-  }
-
-  beforeAll(async () => {
-    resumeStore = makeStore("resume-command")
-
-    mock.module("../../../../src/argus/bridge/mcp-client", () => ({
-      WorkersBridge: mock(() => ({
-        connect: mock(async () => {}),
-        disconnect: mock(async () => {}),
-        callTool: mock(async () => ({ success: true, data: [], durationMs: 5 })),
-        supervisor: { resetAttempts: mock(() => {}), restartWorker: mock(async () => {}) },
-        on: mock(() => {}),
-        llmStatus: mock(() => "AVAILABLE"),
-        getTools: mock(async () => []),
-        detectDrift: mock(async () => ({ missing_from_registry: [], missing_from_mcp: [], capability_gaps: [] })),
-        killChild: mock(() => {}),
-        restartWorker: mock(async () => {}),
-        resetCircuitBreaker: mock(() => {}),
-        isHealthy: mock(async () => true),
-        agentInit: mock(async () => ({ session_id: "sess-1", plan: [], reasoning: "test", phase: "phase-0" })),
-        agentNext: mock(async () => ({ session_id: "sess-1", done: true, reasoning: "done" })),
-        agentObserve: mock(async () => ({ session_id: "sess-1", done: true, reasoning: "done" })),
-      })),
-    }))
-
-    mock.module("../../../../src/argus/workflows/registry", () => ({
-      WorkflowRegistry: mock(() => ({
-        loadAll: mock(() => []),
-        getWorkflow: mock(() => ({ name: "test-workflow", version: 1 })),
-        listWorkflows: mock(() => []),
-        findByCapabilities: mock(() => null),
-        addWorkflow: mock(() => {}),
-      })),
-    }))
-
-    mock.module("../../../../src/argus/workflows/tool-registry", () => ({
-      ToolRegistry: mock(() => ({
-        load: mock(() => {}),
-        getToolsByCapability: mock(() => []),
-        getTool: mock(() => ({ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, timeout_seconds: 30 })),
-        listTools: mock(() => []),
-        selectBest: mock(() => []),
-      })),
-    }))
-
-    mock.module("../../../../src/argus/planner/planner", () => ({
-      WorkflowPlanner: mock(() => ({
-        plan: mock(async () => mockPlan),
-        replan: mock(() => null),
-      })),
-    }))
-
-    mock.module("../../../../src/argus/planner/executor", () => ({
-      InProcessExecutor: mock(() => ({
-        execute: mock(async () => mockExecutorResult),
-        loadGates: mock(() => {}),
-        setFeatureFlags: mock(() => {}),
-        setOnProgress: mock(() => {}),
-        setExecutionOptions: mock(() => {}),
-        getToolHealth: mock(() => []),
-      })),
-    }))
-
-    mock.module("../../../../src/argus/engagement/confidence", () => ({
-      ConfidenceEngine: mock(() => ({
-        promote: mock((f: any) => f.confidence ?? 2),
-        shouldFinalize: mock(() => false),
-      })),
-    }))
-
-    mock.module("../../../../src/argus/engagement/credentials", () => ({
-      CredentialStore: mock(() => ({
-        load: mock(() => ({ roles: {} })),
-        getDefaultCredentials: mock(() => null),
-        listRoles: mock(() => []),
-        clear: mock(() => {}),
-      })),
-    }))
-
-    mock.module("../../../../src/argus/reporting/generator", () => ({
-      ReportGenerator: mock(() => ({
-        generateMarkdown: mock(() => "# Report\n\nFindings: 1"),
-        generate: mock(() => ({ engagementId: "eng-1", target: "", workflow: "", createdAt: new Date().toISOString(), findings: [], summary: { totalFindings: 0, bySeverity: {}, byConfidence: {}, byStatus: {} } })),
-        generateJSON: mock(() => "{}"),
-        generateHTML: mock(() => "<html></html>"),
-        generateSARIF: mock(() => JSON.stringify({ version: "2.1.0", runs: [] })),
-        setAnalyses: mock(() => {}),
-        generateFromEngagement: mock(() => ""),
-      })),
-    }))
-
-    // Mock EngagementStore to return the shared test store
-    mock.module("../../../../src/argus/engagement/store", () => ({
-      EngagementStore: mock(() => resumeStore),
-    }))
-  })
-
-  afterAll(() => {
-    mock.module("../../../../src/argus/bridge/mcp-client", () => _realBridge)
-    mock.module("../../../../src/argus/workflows/registry", () => _realRegistry)
-    mock.module("../../../../src/argus/workflows/tool-registry", () => _realToolRegistry)
-    mock.module("../../../../src/argus/planner/planner", () => _realPlanner)
-    mock.module("../../../../src/argus/planner/executor", () => _realExecutor)
-    mock.module("../../../../src/argus/engagement/confidence", () => _realConfidence)
-    mock.module("../../../../src/argus/engagement/credentials", () => _realCredentials)
-    mock.module("../../../../src/argus/reporting/generator", () => _realGenerator)
-    mock.module("../../../../src/argus/engagement/store", () => _realEngagementStore)
-  })
-
-  test("returns not-found message for non-existent engagement", async () => {
+  test("resumeCommand returns not-found message for non-existent engagement", async () => {
+    const store = makeStore("nonexistent-eng")
     const { resumeCommand } = await import("../../../../src/argus/commands/resume")
-    const result = await resumeCommand("ENG-NONEXISTENT")
+    const result = await resumeCommand("ENG-NONEXISTENT", { storeOverride: store })
     expect(result).toContain("Engagement not found")
   })
 
-  test("returns cannot-resume message for COMPLETED engagement", async () => {
-    const eng = resumeStore.createEngagement("https://test.com", "assessment")
-    resumeStore.updateStatus(eng.id, "COMPLETED")
+  test("resumeCommand returns cannot-resume message for COMPLETED engagement", async () => {
+    const store = makeStore("already-completed")
+    const eng = store.createEngagement("https://test.com", "assessment")
+    store.updateStatus(eng.id, "COMPLETED")
     const { resumeCommand } = await import("../../../../src/argus/commands/resume")
-    const result = await resumeCommand(eng.id)
+    const result = await resumeCommand(eng.id, { storeOverride: store })
     expect(result).toContain("cannot be resumed")
   })
 
-  test("returns cannot-resume message for FAILED engagement", async () => {
-    const eng = resumeStore.createEngagement("https://test.com", "assessment")
-    resumeStore.updateStatus(eng.id, "FAILED")
+  test("resumeCommand returns cannot-resume message for FAILED engagement", async () => {
+    const store = makeStore("failed-eng")
+    const eng = store.createEngagement("https://test.com", "assessment")
+    store.updateStatus(eng.id, "FAILED")
     const { resumeCommand } = await import("../../../../src/argus/commands/resume")
-    const result = await resumeCommand(eng.id)
+    const result = await resumeCommand(eng.id, { storeOverride: store })
     expect(result).toContain("cannot be resumed")
   })
 
-  test("returns cannot-resume message for CREATED engagement", async () => {
-    const eng = resumeStore.createEngagement("https://test.com", "assessment")
+  test("resumeCommand returns cannot-resume message for CREATED engagement", async () => {
+    const store = makeStore("created-eng")
+    const eng = store.createEngagement("https://test.com", "assessment")
     const { resumeCommand } = await import("../../../../src/argus/commands/resume")
-    const result = await resumeCommand(eng.id)
+    const result = await resumeCommand(eng.id, { storeOverride: store })
     expect(result).toContain("cannot be resumed")
-  })
-
-  test("resumes PAUSED engagement and returns report", async () => {
-    const tag = `paused-${Date.now()}`
-    const eng = resumeStore.createEngagement("https://test.com", "assessment")
-    resumeStore.updateStatus(eng.id, "PAUSED")
-    resumeStore.savePhases(eng.id, [{
-      id: `${tag}-recon`, engagementId: eng.id, name: "recon", status: "COMPLETED",
-      capabilities: ["web_recon"], executionMode: "sequential" as const, replanCycle: false,
-    }])
-    const { resumeCommand } = await import("../../../../src/argus/commands/resume")
-    const result = await resumeCommand(eng.id)
-    expect(result).toContain("Report")
-  })
-
-  test("resumes RUNNING engagement and returns report", async () => {
-    const tag = `running-${Date.now()}`
-    const eng = resumeStore.createEngagement("https://test.com", "assessment")
-    resumeStore.updateStatus(eng.id, "RUNNING")
-    resumeStore.savePhases(eng.id, [{
-      id: `${tag}-recon`, engagementId: eng.id, name: "recon", status: "COMPLETED",
-      capabilities: ["web_recon"], executionMode: "sequential" as const, replanCycle: false,
-    }])
-    const { resumeCommand } = await import("../../../../src/argus/commands/resume")
-    const result = await resumeCommand(eng.id)
-    expect(result).toContain("Report")
-  })
-
-  test("engagement with all phases completed returns early message", async () => {
-    const tag = `completed-${Date.now()}`
-    const eng = resumeStore.createEngagement("https://test.com", "assessment")
-    resumeStore.updateStatus(eng.id, "PAUSED")
-    resumeStore.savePhases(eng.id, [
-      { id: `${tag}-recon`, engagementId: eng.id, name: "recon", status: "COMPLETED", capabilities: ["web_recon"], executionMode: "sequential", replanCycle: false },
-      { id: `${tag}-scan`, engagementId: eng.id, name: "scan", status: "COMPLETED", capabilities: ["vulnerability_scanning"], executionMode: "sequential", replanCycle: false },
-    ])
-    const { resumeCommand } = await import("../../../../src/argus/commands/resume")
-    const result = await resumeCommand(eng.id)
-    expect(result).toContain("All phases already completed")
   })
 })

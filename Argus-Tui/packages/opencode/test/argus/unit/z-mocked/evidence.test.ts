@@ -3,9 +3,11 @@ import { mkdtempSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { EngagementStore } from "../../../../src/argus/engagement/store"
+import type { EvidenceCollector } from "../../../../src/argus/evidence/collector"
 
 let dbDir: string
 let store: EngagementStore
+let mockCollector: EvidenceCollector
 
 function makeStore(name: string): EngagementStore {
   return new EngagementStore(join(dbDir, `${name}.db`))
@@ -18,24 +20,14 @@ describe("evidenceCommand", () => {
     dbDir = mkdtempSync(join(tmpdir(), "argus-evidence-test-"))
     store = makeStore("evidence")
 
-    mock.module("../../../../src/argus/engagement/store", () => ({
-      EngagementStore: mock(() => store),
-    }))
-
-    mock.module("../../../../src/argus/evidence/collector", () => ({
-      EvidenceCollector: mock(() => ({
-        pruneEngagement: mock(async () => mockPruneReturn),
-        saveRequest: mock(async () => ({ path: "requests/req.txt", type: "request" as const, hash: "abc", size_bytes: 5 })),
-        saveResponse: mock(async () => ({ path: "responses/res.txt", type: "response" as const, hash: "def", size_bytes: 6 })),
-        captureScreenshot: mock(async () => ({ path: "shot.png", type: "screenshot" as const, hash: "abc", size_bytes: 100 })),
-        createPackage: mock(async () => ({ package_id: "pkg1", artifacts: [{ path: "req.txt", type: "request" as const, hash: "abc", size_bytes: 5 }] })),
-        checkStorageLimit: mock(async () => true),
-      })),
-    }))
-
-    // NOTE: verifyPackage is NOT mocked to avoid contaminating integrity.test.ts
-
-
+    mockCollector = {
+      pruneEngagement: mock(async () => mockPruneReturn),
+      saveRequest: mock(async () => ({ path: "requests/req.txt", type: "request" as const, hash: "abc", size_bytes: 5 })),
+      saveResponse: mock(async () => ({ path: "responses/res.txt", type: "response" as const, hash: "def", size_bytes: 6 })),
+      captureScreenshot: mock(async () => ({ path: "shot.png", type: "screenshot" as const, hash: "abc", size_bytes: 100 })),
+      createPackage: mock(async () => ({ package_id: "pkg1", artifacts: [{ path: "req.txt", type: "request" as const, hash: "abc", size_bytes: 5 }] })),
+      checkStorageLimit: mock(async () => true),
+    } as unknown as EvidenceCollector
   })
 
   afterAll(() => {
@@ -49,7 +41,7 @@ describe("evidenceCommand", () => {
   describe("list", () => {
     test("returns string output", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("list", [])
+      const output = await evidenceCommand("list", [], { store })
       expect(typeof output).toBe("string")
     })
 
@@ -57,7 +49,7 @@ describe("evidenceCommand", () => {
       const eng = store.createEngagement("https://empty-eng.com", "assessment")
 
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("list", [eng.id])
+      const output = await evidenceCommand("list", [eng.id], { store })
 
       expect(output).toContain(`No findings for engagement ${eng.id}`)
     })
@@ -79,7 +71,7 @@ describe("evidenceCommand", () => {
       }])
 
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("list", [eng.id])
+      const output = await evidenceCommand("list", [eng.id], { store })
 
       expect(output).toContain(`Evidence for engagement ${eng.id}`)
       expect(output).toContain(`${tag}-f1`)
@@ -90,7 +82,7 @@ describe("evidenceCommand", () => {
       store.createEngagement("https://list-all-test.com", "assessment")
 
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("list", [])
+      const output = await evidenceCommand("list", [], { store })
 
       expect(output).toContain("Engagements with evidence:")
     })
@@ -99,13 +91,13 @@ describe("evidenceCommand", () => {
   describe("show", () => {
     test("returns usage message when no package-id provided", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("show", [])
+      const output = await evidenceCommand("show", [], { store })
       expect(output).toBe("Usage: evidence show <package-id>")
     })
 
     test("shows package details for package-id", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("show", ["pkg-abc"])
+      const output = await evidenceCommand("show", ["pkg-abc"], { store })
 
       expect(output).toContain("Package ID: pkg-abc")
       expect(output).toContain("not found")
@@ -113,7 +105,7 @@ describe("evidenceCommand", () => {
 
     test("shows errors for invalid package", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("show", ["pkg-bad"])
+      const output = await evidenceCommand("show", ["pkg-bad"], { store })
 
       expect(output).toContain("Package ID: pkg-bad")
       expect(output).toContain("not found")
@@ -123,13 +115,13 @@ describe("evidenceCommand", () => {
   describe("verify-package", () => {
     test("returns usage message when no package-id provided", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("verify-package", [])
+      const output = await evidenceCommand("verify-package", [], { store })
       expect(output).toBe("Usage: evidence verify-package <package-id>")
     })
 
     test("returns INVALID for nonexistent package", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("verify-package", ["pkg-valid-1"])
+      const output = await evidenceCommand("verify-package", ["pkg-valid-1"], { store })
 
       expect(output).toContain("INVALID")
       expect(output).toContain("not found")
@@ -137,7 +129,7 @@ describe("evidenceCommand", () => {
 
     test("returns INVALID with errors for nonexistent package", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("verify-package", ["pkg-invalid-1"])
+      const output = await evidenceCommand("verify-package", ["pkg-invalid-1"], { store })
 
       expect(output).toContain("INVALID")
       expect(output).toContain("not found")
@@ -145,7 +137,7 @@ describe("evidenceCommand", () => {
 
     test("reports integrity error for nonexistent package", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("verify-package", ["pkg-multi-err"])
+      const output = await evidenceCommand("verify-package", ["pkg-multi-err"], { store })
 
       expect(output).toContain("INVALID")
       expect(output).toContain("not found")
@@ -158,7 +150,7 @@ describe("evidenceCommand", () => {
       store.createEngagement("https://prune-test-2.com", "assessment")
 
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("prune", [])
+      const output = await evidenceCommand("prune", [], { store, collector: mockCollector })
 
       expect(output).toMatch(/Pruned \d+ artifact\(s\) older than 30 days across \d+ engagement\(s\)/)
     })
@@ -167,7 +159,7 @@ describe("evidenceCommand", () => {
       store.createEngagement("https://prune-custom.com", "assessment")
 
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("prune", ["15"])
+      const output = await evidenceCommand("prune", ["15"], { store, collector: mockCollector })
 
       expect(output).toMatch(/Pruned \d+ artifact\(s\) older than 15 days across \d+ engagement\(s\)/)
     })
@@ -176,7 +168,7 @@ describe("evidenceCommand", () => {
       const eng = store.createEngagement("https://prune-audit.com", "assessment")
 
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      await evidenceCommand("prune", [])
+      await evidenceCommand("prune", [], { store, collector: mockCollector })
 
       const auditLog = store.getAuditLog(eng.id)
       expect(auditLog.some(e => e.eventType === "EVIDENCE_PRUNE")).toBe(true)
@@ -187,7 +179,7 @@ describe("evidenceCommand", () => {
       store.createEngagement("https://prune-zero.com", "assessment")
 
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("prune", [])
+      const output = await evidenceCommand("prune", [], { store, collector: mockCollector })
 
       expect(output).toMatch(/Pruned 0 artifact/)
     })
@@ -196,7 +188,7 @@ describe("evidenceCommand", () => {
   describe("error handling", () => {
     test("returns error message for unknown action", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("unknown-action" as any, [])
+      const output = await evidenceCommand("unknown-action" as any, [], { store })
       expect(output).toContain("Unknown evidence action")
       expect(output).toContain("unknown-action")
     })
