@@ -33,7 +33,7 @@ class TestSnapshotManager:
         assert result == 10.5
         assert isinstance(result, float)
 
-    @pytest.mark.xfail(reason="Regex pattern mismatch", strict=False)
+    @pytest.mark.xfail(reason="Regex pattern mismatch", strict=True)
     def test_to_jsonable_converts_datetime(self, manager):
         dt = datetime(2026, 6, 3, tzinfo=UTC)
         result = manager._to_jsonable(dt)
@@ -62,7 +62,7 @@ class TestSnapshotManager:
         result = manager._to_jsonable(None)
         assert result is None
 
-    @pytest.mark.xfail(reason="Regex pattern mismatch", strict=False)
+    @pytest.mark.xfail(reason="Regex pattern mismatch", strict=True)
     def test_create_snapshot_db_error(self, manager):
         # snapshot_manager uses get_db() (pool-based), not connect() directly.
         with patch("snapshot_manager.get_db", side_effect=Exception("DB error")):

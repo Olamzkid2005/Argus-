@@ -7,9 +7,9 @@ import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
 import { WorkersBridge } from "../bridge/mcp-client"
 
-// Project root resolved once from __dirname to avoid brittle relative-path chains.
-// __dirname = .../packages/opencode/src/argus/commands/ => up 6 levels to repo root.
-const projectRoot = resolve(__dirname, "../../../../../../")
+// Project root resolved once from import.meta.url to avoid brittle relative-path chains.
+const _dirname = decodeURIComponent(new URL(".", import.meta.url).pathname)
+const projectRoot = resolve(_dirname, "../../../../../../")
 
 /**
  * Read provider credentials from OpenCode's own auth.json (stored in XDG data dir).

@@ -3,13 +3,14 @@ import { loadAllWorkflows, loadWorkflowYaml } from "./loader"
 import type { WorkflowDefinition } from "./types"
 import { Capability } from "../shared/capabilities"
 
+const _dirname = decodeURIComponent(new URL(".", import.meta.url).pathname)
+
 export class WorkflowRegistry {
   private workflows = new Map<string, WorkflowDefinition>()
   private workflowsDir: string
 
   constructor(workflowsDir?: string) {
-    // __dirname is stable in Bun and this codebase targets Bun. For Node ESM use fileURLToPath(import.meta.url).
-    this.workflowsDir = workflowsDir ?? join(__dirname, ".")
+    this.workflowsDir = workflowsDir ?? join(_dirname, ".")
   }
 
   loadAll(): WorkflowDefinition[] {

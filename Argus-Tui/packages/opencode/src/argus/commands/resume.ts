@@ -17,8 +17,9 @@ import type { PlannerContext } from "../planner/types"
 import { homedir } from "os"
 import { join, resolve } from "path"
 
-// Project root resolved once from __dirname to avoid brittle relative-path chains.
-const projectRoot = resolve(__dirname, "../../../../../../")
+// Project root resolved once from import.meta.url to avoid brittle relative-path chains.
+const _dirname = decodeURIComponent(new URL(".", import.meta.url).pathname)
+const projectRoot = resolve(_dirname, "../../../../../../")
 
 export async function resumeCommand(
   engagementId: string,
@@ -42,7 +43,7 @@ export async function resumeCommand(
     return `Engagement ${engagementId} cannot be resumed (status: ${engagement.status})`
   }
 
-  const workflowsDir = options?.workflowsPath ?? join(__dirname, "../workflows")
+  const workflowsDir = options?.workflowsPath ?? join(_dirname, "../workflows")
   const toolsPath = join(workflowsDir, "tool-definitions.yaml")
 
   // Load registries

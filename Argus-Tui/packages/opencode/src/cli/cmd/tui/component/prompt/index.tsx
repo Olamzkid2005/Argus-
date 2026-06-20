@@ -1211,15 +1211,20 @@ export function Prompt(props: PromptProps) {
           argusHandled = true
           const arg = firstLine.slice(firstWord.length).trim()
           // Navigate to scan dashboard for assess/recon commands
-          let scanEngagementId: string | undefined
           if (cmdName === "assess" || cmdName === "scan" || cmdName === "recon") {
+            const trimmed = arg.trim()
+            if (!trimmed) {
+              toast.show({ variant: "error", title: "Assessment Error", message: "Usage: /assess <target> [--no-cache] [--refresh-cache]" })
+              return
+            }
+            let scanEngagementId: string | undefined
             try {
               const { navigateTo } = await import("@/argus/tui/navigator")
               const { EngagementStore } = await import("@/argus/engagement/store")
               const store = new EngagementStore()
-              const eng = store.createEngagement(arg, "assessment")
+              const eng = store.createEngagement(trimmed, "assessment")
               scanEngagementId = eng.id
-              navigateTo({ type: "scan", target: arg, engagementId: eng.id })
+              navigateTo({ type: "scan", target: trimmed, engagementId: eng.id })
             } catch (e) {
               console.error("Failed to navigate to scan dashboard:", e)
             }

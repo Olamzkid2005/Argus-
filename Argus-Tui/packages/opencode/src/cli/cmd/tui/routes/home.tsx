@@ -14,14 +14,13 @@ import { useTuiConfig } from "../context/tui-config"
 import { useTheme } from "@tui/context/theme"
 import { logo as argusLogo } from "@/argus/logo"
 
-let once = false
-
 const placeholder = {
   normal: ["/assess https://example.com", "/recon https://testphp.vulnweb.com", "/doctor - run health checks"],
   shell: ["argus doctor", "argus status", "argus --help"],
 }
 
 export function Home() {
+  const [once, setOnce] = createSignal(false)
   const sync = useSync()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
@@ -85,10 +84,10 @@ export function Home() {
 
   const bind = (r: PromptRef | undefined) => {
     setRef(r); promptRef.set(r)
-    if (once || !r) return
-    if (route.prompt) { r.set(route.prompt); once = true; return }
+    if (once() || !r) return
+    if (route.prompt) { r.set(route.prompt); setOnce(true); return }
     if (!args.prompt) return
-    r.set({ input: args.prompt, parts: [] }); once = true
+    r.set({ input: args.prompt, parts: [] }); setOnce(true)
   }
 
   createEffect(() => {

@@ -51,7 +51,8 @@ const commands: ArgusTuiCommand[] = [
       // Parse flags from the argument string
       // e.g., /assess https://target.com --no-cache
       const parts = args.trim().split(/\s+/)
-      const target = parts.find(p => !p.startsWith("--")) ?? parts[0]
+      const target = parts.find(p => !p.startsWith("--"))
+      if (!target) return "Usage: /assess <target> [--no-cache] [--refresh-cache]"
       const noCache = parts.includes("--no-cache")
       const refreshCache = parts.includes("--refresh-cache")
       const result = await assessCommand(target, {
@@ -91,7 +92,8 @@ const commands: ArgusTuiCommand[] = [
     needsTarget: true,
     handler: async (args: string) => {
       const parts = args.trim().split(/\s+/)
-      const target = parts.find(p => !p.startsWith("--")) ?? parts[0]
+      const target = parts.find(p => !p.startsWith("--"))
+      if (!target) return "Usage: /recon <target> [--no-cache] [--refresh-cache]"
       const noCache = parts.includes("--no-cache")
       const refreshCache = parts.includes("--refresh-cache")
       const result = await assessCommand(target, {

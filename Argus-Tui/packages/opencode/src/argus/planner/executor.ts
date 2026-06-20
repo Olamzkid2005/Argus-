@@ -119,12 +119,11 @@ export class InProcessExecutor implements PhaseExecutor {
 
   async execute(phase: PhaseExecutionRequest, options?: ExecutionOptions): Promise<PhaseExecutionResult> {
     const execOptions = { ...this.executionOptions, ...options }
-    if (phase.execution === "llm_driven") {
-      return this.executeHybrid(phase, execOptions)
-    }
-
     if (!this.gatesLoaded) {
       throw new Error("loadGates must be called before execute")
+    }
+    if (phase.toolExecution === "llm_driven") {
+      return this.executeHybrid(phase, execOptions)
     }
 
     this.phaseCount++
@@ -273,7 +272,7 @@ export class InProcessExecutor implements PhaseExecutor {
     const maxIterations = 50
 
     while (!done) {
-      if (++iterations > maxIterations) {
+      if (++iterations >= maxIterations) {
         errors.push(`Hybrid executor exceeded maximum iterations (${maxIterations}) — stopping`)
         break
       }

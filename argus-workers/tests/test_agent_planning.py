@@ -78,7 +78,7 @@ class TestPlanNextAction:
 
         assert action is None
 
-    @pytest.mark.xfail(reason="Tool list mismatch", strict=False)
+    @pytest.mark.xfail(reason="Tool list mismatch", strict=True)
     def test_plan_next_action_llm_unknown_tool(self, agent, recon_context):
         """LLM returns unregistered tool, verify deterministic fallback used."""
         mock_llm = Mock()
@@ -97,7 +97,7 @@ class TestPlanNextAction:
         assert action is not None
         assert action.tool in ("nuclei", "dalfox")  # deterministic fallback
 
-    @pytest.mark.xfail(reason="Tool list mismatch", strict=False)
+    @pytest.mark.xfail(reason="Tool list mismatch", strict=True)
     def test_plan_next_action_llm_exception(self, agent, recon_context):
         """chat_sync raises exception, verify deterministic fallback used."""
         mock_llm = Mock()
@@ -114,7 +114,7 @@ class TestPlanNextAction:
         assert action is not None
         assert action.tool in ("nuclei", "dalfox")  # deterministic fallback
 
-    @pytest.mark.xfail(reason="Tool list mismatch", strict=False)
+    @pytest.mark.xfail(reason="Tool list mismatch", strict=True)
     def test_plan_next_action_no_llm(self, agent):
         """llm_client=None, verify deterministic path used directly."""
         action = agent.plan_next_action(
@@ -125,7 +125,7 @@ class TestPlanNextAction:
         assert action is not None
         assert action.tool in ("nuclei", "dalfox")
 
-    @pytest.mark.xfail(reason="Tool list mismatch", strict=False)
+    @pytest.mark.xfail(reason="Tool list mismatch", strict=True)
     def test_plan_next_action_all_tools_tried(self, agent):
         """When all tools are in tried_tools, should return None."""
         action = agent.plan_next_action(

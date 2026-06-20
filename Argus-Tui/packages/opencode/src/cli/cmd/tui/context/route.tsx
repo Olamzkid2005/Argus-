@@ -67,9 +67,11 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
       props.initialRoute ??
         (process.env["OPENCODE_ROUTE"]
           ? JSON.parse(process.env["OPENCODE_ROUTE"])
-          : {
-              type: "home",
-            }),
+          : process.env["ARGUS_MODE"] === "1"
+            ? { type: "dashboard" }
+            : {
+                type: "home",
+              }),
     )
 
     return {

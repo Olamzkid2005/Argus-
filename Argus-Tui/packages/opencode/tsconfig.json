@@ -12,7 +12,8 @@
       "@/*": ["./src/*"],
       "@tui/*": ["./src/cli/cmd/tui/*"],
       "@test/*": ["./test/*"],
-      "@argus/*": ["./src/argus/*"]
+      "@argus/*": ["./src/argus/*"],
+      "@opencode/runtime": ["./src/opencode-runtime.ts"]
     }
   },
   "exclude": ["node_modules", "drizzle.config.ts"]
