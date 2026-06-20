@@ -60,3 +60,7 @@ celerybeat-schedule-wal
 
 # L-02: Build artifacts that may have been tracked before gitignore was added.
 # Remove from tracking with: git rm --cached -r argus-platform/**/__pycache__/
+
+# Windows Redis binaries — shipped for legacy start-argus.ps1 support
+# but should not be tracked in git (22MB+ of binary bloat).
+redis/*.exe

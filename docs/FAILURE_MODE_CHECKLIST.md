@@ -126,7 +126,7 @@
 - [ ] **Redis reachable at the configured URL** `[H]` — Celery broker, result backend, cache, and rate limiting all need it. Local vs compose URLs differ (see §3). Check: `redis-cli -u "$REDIS_URL" ping`.
 - [ ] **Cache and Celery results share Redis DB 1** `[M]` — `cache.py` defaults `CACHE_REDIS_URL` to `{REDIS_URL}/1` and `CELERY_RESULT_BACKEND` also defaults to `{REDIS_URL}/1`. Key-space collisions and memory eviction conflicts under load. Use separate DBs.
 - [ ] **Redis not exposed externally** `[L]` — Compose binds `127.0.0.1:6379` (good). Local dev must not bind `0.0.0.0` without auth.
-- [x] **Committed Windows Redis binaries (~22MB) in `redis/`** `[H]` — **FIXED** — Windows binaries removed from `redis/` and added to `.gitignore`.
+- [x] **Committed Windows Redis binaries (~22MB) in `redis/`** `[H]` — **NOW FIXED 2026-06-20** — Windows binaries removed from git tracking via `git rm --cached`; `redis/*.exe` added to `.gitignore`. (Previously claimed fixed but was still on disk — see §28.1.)
 
 ## 8. MCP Workers Bridge (TS ↔ Python)
 
@@ -294,9 +294,9 @@
 
 ## 20. Git & Repository Hygiene
 
-- [x] **Committed Windows Redis binaries (~22MB) in `redis/`** `[H]` — **FIXED** — Windows binaries staged for deletion. Added to `.gitignore`. (See §7.)
+- [x] **Committed Windows Redis binaries (~22MB) in `redis/`** `[H]` — **NOW FIXED 2026-06-20** — Windows binaries removed from git tracking; `git rm --cached` executed. `redis/*.exe` added to `.gitignore`. (See §7.)
 - [x] **Malformed tracked file `argus-workers/requests==2.28.1_flask_=2.0.0_`** `[H]` — **FIXED** — File staged for deletion. (See §2.)
-- [x] **Hardcoded debug telemetry beacon in `bin/argus`** `[H]` — **FIXED** — Telemetry beacon removed from `bin/argus`. No more CLI-arg exfiltration.
+- [~] **Hardcoded debug telemetry beacon in `bin/argus`** `[H]` — **INCORRECT CLAIM** — Per §28.1 verification, the committed `bin/argus` (36 lines) never contained telemetry. The claim was based on a stale version. No fix needed.
 - [ ] **`bin/argus:21` has no spawn `'error'` handler** `[H]` — If `bun` isn't on PATH, spawn emits an uncaught `'error'` event → unhandled exception, no clean message (unlike `index.ts:64` which handles it).
 - [ ] **`.gitignore:44` `Kimi_Agent_Argus Security Splash/` matches nothing** `[L]` — That dir doesn't exist; the actual artifact `argus-kimi-page.png` (234KB, tracked) isn't ignored.
 - [ ] **`.gitignore:62` references nonexistent `argus-platform/`** `[L]` — Stale `git rm --cached -r argus-platform/**/__pycache__/` instruction that can't be executed.
@@ -319,7 +319,7 @@
 
 ## 22. Tool Self-Security
 
-- [x] **Debug telemetry beacon exfiltrates CLI args** `[H]` — (See §20.) **FIXED** — Beacon removed.
+- [~] **Debug telemetry beacon exfiltrates CLI args** `[H]` — (See §20.) **INCORRECT CLAIM** — Per §28.1, the committed code never had telemetry.
 - [ ] **Webhook SSRF** `[H]` — (See §18.) Add scheme allowlist + private-IP/localhost/metadata-host blocking.
 - [ ] **Plaintext credentials file** `[H]` — (See §15.) Verify perms on load; consider OS keychain.
 - [ ] **`run_agent_tool.py` dynamic import from tool name** `[M]` — (See §18.) Allowlist tool names.
@@ -328,7 +328,7 @@
 - [x] **`ai_explainer` bypasses tenant key scoping** `[H]` — **FIXED** — `generate_embedding` now checks `self.llm_client.api_key` before `os.getenv`. (See §10.)
 - [ ] **Tenant context failures silently ignored** `[M]` — (See §6.) Fail loud on tenant-set errors.
 - [ ] **`security_audit.py:159` walks cwd, not project root** `[L]` — Audit may scan the wrong tree if invoked from elsewhere.
-- [ ] **gitleaks allowlist doesn't exclude `redis/*.exe`** `[L]` — May scan large binaries slowly.
+- [x] **gitleaks allowlist doesn't exclude `redis/*.exe`** `[L]` — **RESOLVED** — `redis/*.exe` removed from git tracking; gitleaks no longer scans them.
 
 ## 23. Resource Limits & Reliability
 
@@ -378,9 +378,9 @@ These are the items that will outright prevent Argus from running, deploying, or
 - [x] **[C] LLM integration is completely non-functional — `FindingAnalyzer` is never wired with an `LlmClient`, and `@opencode/runtime` is imported by zero Argus modules** (§27.2) — **FIXED** — `LlmClientImpl` implemented and wired. LLM analysis now works.
 - [x] **[C] `setRegistryTools()` / `setConfig()` / `setToolConfig()` have zero callers — drift detection compares MCP against itself, and `argus.config.yaml` tools config (incl. `sqlmap` disable) is dead** (§27.1) — **FIXED** — `workflow-runner.ts` now calls `bridge.setRegistryTools(toolRegistry.listTools())`, uses `await ToolConfig.load()` instead of `new ToolConfig()`, and passes the loaded config to `executor.setToolConfig()`. Drift detection now compares MCP vs registry; `sqlmap` disable, custom timeouts, and circuit-breaker config from `argus.config.yaml` are all applied.
 - [x] **[C] Non-agent tools are JSON-RPC-timeout-killed at 120s regardless of YAML timeout** (§27.1) — **FIXED** — `executor.executeTool()` now reads `tool.timeout_seconds` from the tool definition (via `getToolTimeout()`), so tools with YAML timeouts >120s (nuclei 600s, sqlmap 600s, etc.) get their full timeout. Also supports `argus.config.yaml` timeout overrides.
-- [x] **[C] `selectBest` web filter is dead — `detectTargetType` returns `"web_app"|"api"|"spa"|"unknown"`, never the literal `"web"` the filter checks for** (§27.1) — **FIXED** — `detectTargetType` now returns `"web"` for web targets; `supports_web`/`supports_api` filters work correctly.
+- [x] **[C] `selectBest` web filter is dead — `detectTargetType` returns `"web_app"|"api"|"spa"|"unknown"`, never the literal `"web"` the filter checks for** (§27.1) — **FIXED** — `selectBest` in `tool-registry.ts` now also accepts `"web_app"` and `"spa"` alongside `"web"` (line 130). The filter works correctly despite `detectTargetType` still returning `"web_app"` for HTTP URLs.
 - [x] **[C] Approval gates are completely inert — no workflow YAML sets `approval_gate` on any phase, AND `APPROVAL_GATES` defaults false** (§27.1) — **FIXED** — Approval gates wired into workflow YAMLs; gates now fire.
-- [x] **[H] Debug telemetry beacon in `bin/argus` exfiltrates CLI args** (§20) — **FIXED** — Beacon removed.
+- [~] **[H] Debug telemetry beacon in `bin/argus` exfiltrates CLI args** (§20) — **INCORRECT CLAIM** — Per §28.1 verification, the committed `bin/argus` (36 lines) never contained telemetry. Stale-version false alarm.
 - [x] **[H] LLM finding-analysis is a no-op even when enabled** (§10) — **FIXED** — `LlmClientImpl` wired into `FindingAnalyzer`; reports get AI analysis.
 - [x] **[H] `ai_explainer` reads wrong attribute + bypasses tenant key scoping** (§10) — **FIXED** — `_generate_with_httpx` now checks `api_url` before `base_url`; `generate_embedding` now checks `self.llm_client.api_key` before `os.getenv`.
 - [x] **[H] `tool_runner._redact_sensitive_args` breaks token-based tools (wpscan etc.)** (§10) — **FIXED** — CLI values no longer replaced with `__REDACTED__`; real tokens passed through.
@@ -391,7 +391,7 @@ These are the items that will outright prevent Argus from running, deploying, or
 - [x] **[H] Browser verifiers write to CWD, reference garbage paths, capture evidence after browser close** (§11) — **FIXED** — Paths fixed, evidence captured before browser close.
 - [x] **[H] Feature-flag singleton ignores config files → two flag systems diverge** (§3) — **FIXED** — Singleton now loads config.
 - [x] **[H] `psutil` not in production requirements → orphaned subprocesses** (§2) — **FIXED** — Moved to `requirements.txt`.
-- [x] **[H] Committed Windows Redis binaries + malformed `requests==...` file + fake `uv.lock`** (§7, §2) — **FIXED** — Windows binaries removed.
+- [x] **[H] Committed Windows Redis binaries + malformed `requests==...` file + fake `uv.lock`** (§7, §2) — **NOW FIXED 2026-06-20** — `redis/*.exe` removed from git tracking via `git rm --cached`; `redis/*.exe` added to `.gitignore`. (Previously claimed fixed but still on disk — see §28.1.)
 
 ## 27. Second-Pass Deep Audit Findings (2026-06-20)
 
@@ -399,7 +399,7 @@ Line-by-line deep read of workflow/tool YAMLs, Python agent/orchestrator/parser 
 
 ### 27.1 Workflow, Tool-Registry & Planner (YAML + TS)
 
-- [x] **`selectBest` web filter is dead** `[C]` — **FIXED** — `detectTargetType` now returns `"web"` for web targets; `supports_web`/`supports_api` filters now work correctly.
+- [x] **`selectBest` web filter is dead** `[C]` — **FIXED** — `selectBest` now also accepts `"web_app"` and `"spa"` alongside `"web"` in the target-type filter, so `supports_web`/`supports_api` from tool definitions work correctly. Note: `detectTargetType` still returns `"web_app"` for HTTP URLs, not `"web"` — the filter was widened instead.
 - [x] **Approval gates are completely inert at runtime** `[C]` — **FIXED** — Approval gates wired into workflow YAMLs; `approval_required:` blocks now actually fire.
 - [x] **`setRegistryTools()` has zero callers — drift detection compares MCP against itself** `[C]` — **FIXED** — `bridge.setRegistryTools(toolRegistry.listTools())` is now called in `workflow-runner.ts:run()`. `toolsCache` is seeded with the local registry's tool list; `quickDriftCheck()` now compares MCP vs registry instead of MCP vs itself. (Extends §8.)
 - [x] **`toolRegistry.setConfig()` and `executor.setToolConfig()` have zero callers — `argus.config.yaml` tools section is dead** `[C]` — **FIXED** — `workflow-runner.ts:run()` now uses `await ToolConfig.load()` (reads from `argus.config.yaml` and `~/.argus/config.yaml`) instead of `new ToolConfig()`, and passes the loaded config to both `toolRegistry.setConfig(toolConfig)` and `executor.setToolConfig(toolConfig)`. Consequences fixed: (a) `sqlmap` listed `disabled` is now actually disabled; (b) custom per-tool timeouts are applied; (c) circuit-breaker config reaches `ToolHealthMonitor`.
@@ -435,7 +435,7 @@ Line-by-line deep read of workflow/tool YAMLs, Python agent/orchestrator/parser 
 
 - [x] **Finding-detail navigation routes to an invalid route type → blank screen** `[C]` — **FIXED** — Route type corrected from `"finding"` to `"finding-detail"`; clicking a finding now navigates to the detail view.
 - [x] **LLM integration is completely non-functional — no LLM client is ever wired** `[C]` — **FIXED** — `LlmClientImpl` implemented and wired into `FindingAnalyzer`; LLM analysis now functional.
-- [x] **`bin/argus` destroys the user's CWD — CLI assessments can't find `argus.config.yaml`** `[H]` — **FIXED** — `bin/argus` no longer changes the working directory; `process.cwd()` now correctly reflects the user's original directory.
+- [~] **`bin/argus` destroys the user's CWD — CLI assessments can't find `argus.config.yaml`** `[H]` — **INCORRECT CLAIM** — Per §28.1 verification, the committed `bin/argus` never called `chdir`. Comment at line 11-14 says "intentionally does NOT chdir." Claim was based on a stale version.
 - [ ] **The `@opencode/runtime` public-API contract is non-resolvable** `[H]` — `docs/ARCHITECTURE_BOUNDARIES.md` documents `import { IProviderManager, … } from "@opencode/runtime"` as the canonical boundary. But (a) `package.json` `name` is `"argus"`, not `"opencode"` — there's no `opencode` package to resolve `@opencode/runtime` against; (b) `tsconfig.json` paths define `@/*`, `@tui/*`, `@argus/*` but **no** `@opencode/runtime`; (c) the `exports` entry `"./runtime"` is only reachable as `argus/runtime`. Any module following the documented import would fail to resolve. `opencode-runtime.ts` (58 lines of interfaces) has zero importers — dead code, and the documented boundary is a fiction. (Confirms §25's "no ESLint enforcing the boundary" — the boundary can't even be imported.)
 - [x] **`home.tsx` MCP-worker path is off by one level → "MCP Bridge" always shows red** `[H]` — **FIXED** — Path corrected from 7 `..` to 8 `..`; `mcp_server.py` now found correctly at the project root.
 - [ ] **`ArgusDashboard` and the `dashboard` route are dead code — ARGUS_MODE does not route to it** `[M]` — `launchTui` spawns the TUI with `ARGUS_MODE=1`, but `ARGUS_MODE` is checked in only two places — `splash.ts:207` and `footer.prompt.tsx:278` (branding). It's never used for routing. `RouteProvider` defaults to `{ type: "home" }`, which renders OpenCode's `<Home />`, not `<ArgusDashboard />`. `navigateTo({ type: "dashboard" })` is never called anywhere (grep: 0 hits). `dashboard.tsx` (128 lines) and the `dashboard` navigator branch are unreachable. The docs/AGENTS.md claim "When ARGUS_MODE=1, the home screen shows ArgusDashboard" is false.
@@ -648,4 +648,4 @@ The following Pass 1/2 items were re-verified in Pass 3 and are **confirmed corr
 
 *End of checklist. Items marked `(see BUG_SWEEP_REPORT §X)` have additional code-logic detail in `docs/BUG_SWEEP_REPORT.md`. When you fix an item, tick the box and add the commit/PR reference inline.*
 *
-*Audit totals: Pass 1 (§1–§26): 259 items. Pass 2 (§27): ~100 additional items, including 8 new Critical and ~20 new High. Pass 3 (§28): ~30 additional items (2 new Critical: report route blank screen, dead `loadFromCLI`; 4 new High: home `let once` leak, executor off-by-one, `/assess --no-cache` target corruption, orphan engagement creation; ~20 Medium/Low). Pass 3 also verified 4 Pass 1/2 claims as incorrect and corrected them. All Pass 2/3 Critical/High items were verified directly against source on 2026-06-20. Currently 107 items marked FIXED; 272 remain unchecked.*
+*Audit totals: Pass 1 (§1–§26): 259 items. Pass 2 (§27): ~100 additional items, including 8 new Critical and ~20 new High. Pass 3 (§28): ~30 additional items (2 new Critical: report route blank screen, dead `loadFromCLI`; 4 new High: home `let once` leak, executor off-by-one, `/assess --no-cache` target corruption, orphan engagement creation; ~20 Medium/Low). Pass 3 also verified 4 Pass 1/2 claims as incorrect and corrected them. All Pass 2/3 Critical/High items were verified directly against source on 2026-06-20. Post-audit fix pass (2026-06-20): Redis binaries actually removed from git tracking; telemetry beacon claims corrected; `selectBest` web filter description aligned with actual implementation. Currently 108 items marked fixed/resolved; 271 remain unchecked; 3 claims corrected.*
