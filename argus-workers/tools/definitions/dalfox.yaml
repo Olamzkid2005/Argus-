@@ -20,7 +20,7 @@ parameters:
     flag: "--deep-dom"
 capabilities:
   - vulnerability_scanning
-  - sqli_detection
+  - xss_detection
 signal_quality: PROBABLE
 priority: 75
 cost: medium

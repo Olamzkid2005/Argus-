@@ -63,8 +63,11 @@ export function FindingDetail(props: FindingDetailProps) {
       const store = new EngagementStore()
       const f = finding()
       if (!f) return
-            const { FindingAnalyzer } = await import("@/argus/engagement/finding-analyzer")
-      const analyzer = new FindingAnalyzer(store)
+      const { FindingAnalyzer } = await import("@/argus/engagement/finding-analyzer")
+      const { getLlmClient } = await import("@/argus/engagement/llm-client")
+      const llmClient = getLlmClient()
+      if (!llmClient.isConfigured()) { setAnalysisError("LLM client not configured — set LLM_API_KEY or OPENAI_API_KEY"); return }
+      const analyzer = new FindingAnalyzer(store, llmClient)
       const result = await analyzer.analyze(f, [])
       if (!result) { setAnalysisError("LLM client not configured"); return }
 

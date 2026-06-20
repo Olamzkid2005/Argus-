@@ -113,9 +113,9 @@ describe("strategy", () => {
       expect(caps).toContain(Capability.GRAPHQL_ASSESSMENT)
     })
 
-    test("adds express cve scan when tech stack includes express", () => {
+    test("adds vulnerability_scanning when tech stack includes express (no dedicated Express CVE scanner)", () => {
       const caps = determineRequiredCapabilities("web_app", "none", ["express"])
-      expect(caps).toContain(Capability.EXPRESS_CVE_SCAN)
+      expect(caps).toContain(Capability.VULNERABILITY_SCANNING)
     })
 
     test("adds api docs analysis for swagger/openapi", () => {
@@ -150,7 +150,7 @@ describe("strategy", () => {
     test("is case insensitive for tech stack", () => {
       const caps = determineRequiredCapabilities("api", "none", ["GraphQL", "Express"])
       expect(caps).toContain(Capability.GRAPHQL_ASSESSMENT)
-      expect(caps).toContain(Capability.EXPRESS_CVE_SCAN)
+      expect(caps).toContain(Capability.VULNERABILITY_SCANNING)
     })
   })
 })

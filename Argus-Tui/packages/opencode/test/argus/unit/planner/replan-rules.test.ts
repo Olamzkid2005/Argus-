@@ -55,10 +55,10 @@ describe("determineNewCapabilities", () => {
     expect(result.size).toBe(1)
   })
 
-  test("adds EXPRESS_CVE_SCAN for expressjs subtype", () => {
+  test("adds VULNERABILITY_SCANNING for expressjs subtype (no dedicated Express CVE scanner)", () => {
     const ctx = makeContext({ findings: [makeFinding("expressjs")] })
     const result = determineNewCapabilities(ctx)
-    expect(result.has(Capability.EXPRESS_CVE_SCAN)).toBe(true)
+    expect(result.has(Capability.VULNERABILITY_SCANNING)).toBe(true)
     expect(result.size).toBe(1)
   })
 

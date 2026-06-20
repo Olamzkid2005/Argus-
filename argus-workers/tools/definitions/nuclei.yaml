@@ -36,6 +36,8 @@ parameters:
 capabilities:
   - vulnerability_scanning
   - template_scanning
+  - graphql_assessment
+  - api_docs_analysis
 signal_quality: CONFIRMED
 priority: 95
 cost: medium

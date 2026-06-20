@@ -9,6 +9,7 @@ optimization, not a durability requirement.
 
 from __future__ import annotations
 
+import copy
 import threading
 import time
 from dataclasses import dataclass, field
@@ -37,6 +38,7 @@ class AgentSession:
     phase: str
     created_at: int
     tech_stack: list[str]
+    last_accessed_at: int = 0
     tool_history: list[ToolExecution] = field(default_factory=list)
     observations: list[str] = field(default_factory=list)
     findings: list[dict] = field(default_factory=list)
@@ -52,10 +54,20 @@ class AgentSessionStore:
     phase and are discarded when the assessment completes.
     """
 
+    # Class-level guard to prevent unbounded eviction-thread accumulation.
+    # Each AgentSessionStore instance would otherwise spawn a new daemon
+    # thread, which becomes a problem if multiple instances are created
+    # (e.g. during test fixtures or if the MCP server singleton pattern
+    # is bypassed). The thread is daemon=True so it won't prevent shutdown.
+    _eviction_thread_started: bool = False
+
     def __init__(self) -> None:
         self._sessions: dict[str, AgentSession] = {}
         self._lock = threading.Lock()
-        self._eviction_ttl = 3600  # 1 hour
+        # Use 2-hour TTL to cover the maximum assessment phase duration (7200s).
+        # Actively-used sessions are never evicted because every access method
+        # bumps last_accessed_at.
+        self._eviction_ttl = 7200  # 2 hours
         self._last_eviction = time.time()
         self._start_eviction_loop()
 
@@ -76,19 +88,30 @@ class AgentSessionStore:
             A unique session identifier (uuid4 hex string).
         """
         self._evict_expired()
+        now = int(time.time())
         session_id = uuid4().hex
         with self._lock:
             self._sessions[session_id] = AgentSession(
                 session_id=session_id,
                 target=target,
                 phase=phase,
-                created_at=int(time.time()),
+                created_at=now,
+                last_accessed_at=now,
                 tech_stack=tech_stack or [],
             )
         return session_id
 
+    def _touch(self, session: AgentSession) -> None:
+        """Update the last_accessed_at timestamp on a session."""
+        session.last_accessed_at = int(time.time())
+
     def _evict_expired(self) -> None:
-        """Remove sessions that have exceeded the TTL."""
+        """Remove sessions that have exceeded the TTL.
+
+        Uses last_accessed_at to determine expiry — actively-used sessions
+        are never evicted mid-scan. Falls back to created_at if
+        last_accessed_at is 0 (legacy sessions from prior runs).
+        """
         now = time.time()
         if now - self._last_eviction < 300:  # only evict every 5 mins
             return
@@ -97,13 +120,23 @@ class AgentSessionStore:
             expired = [
                 sid
                 for sid, s in self._sessions.items()
-                if now - s.created_at > self._eviction_ttl
+                if (
+                    s.last_accessed_at > 0
+                    and now - s.last_accessed_at > self._eviction_ttl
+                )
+                or (
+                    s.last_accessed_at == 0
+                    and now - s.created_at > self._eviction_ttl
+                )
             ]
             for sid in expired:
                 del self._sessions[sid]
 
     def _start_eviction_loop(self) -> None:
-        """Background thread for periodic eviction."""
+        """Start the background eviction thread (singleton via class-level guard)."""
+        if AgentSessionStore._eviction_thread_started:
+            return
+        AgentSessionStore._eviction_thread_started = True
 
         def _loop():
             while True:
@@ -114,13 +147,18 @@ class AgentSessionStore:
         t.start()
 
     def get(self, session_id: str) -> AgentSession:
-        """Retrieve a session by ID.
+        """Retrieve a copy of a session by ID.
+
+        Returns a deep copy so callers cannot mutate the session's internal
+        state (tool_history, findings, observations) outside the store lock.
+        Use the dedicated mutation methods (add_execution, add_observation,
+        etc.) to modify session state safely.
 
         Args:
             session_id: The session identifier.
 
         Returns:
-            The AgentSession instance.
+            A copy of the AgentSession.
 
         Raises:
             ValueError: If the session does not exist.
@@ -128,7 +166,20 @@ class AgentSessionStore:
         with self._lock:
             if session_id not in self._sessions:
                 raise ValueError(f"Session {session_id} not found")
-            return self._sessions[session_id]
+            self._touch(self._sessions[session_id])
+            return copy.deepcopy(self._sessions[session_id])
+
+    def _get_and_touch(self, session_id: str) -> AgentSession:
+        """Get the live session under lock and update last_accessed_at.
+
+        Internal helper for mutation methods. Returns the live object
+        (safe because the caller already holds the lock).
+        """
+        session = self._sessions.get(session_id)
+        if session is None:
+            raise ValueError(f"Session {session_id} not found")
+        self._touch(session)
+        return session
 
     def add_execution(self, session_id: str, execution: ToolExecution) -> None:
         """Record a tool execution in the session history.
@@ -141,9 +192,7 @@ class AgentSessionStore:
             ValueError: If the session does not exist.
         """
         with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None:
-                raise ValueError(f"Session {session_id} not found")
+            session = self._get_and_touch(session_id)
             session.tool_history.append(execution)
 
     def add_observation(self, session_id: str, observation: str) -> None:
@@ -157,9 +206,7 @@ class AgentSessionStore:
             ValueError: If the session does not exist.
         """
         with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None:
-                raise ValueError(f"Session {session_id} not found")
+            session = self._get_and_touch(session_id)
             session.observations.append(observation)
 
     def set_plan(self, session_id: str, plan: list[str]) -> None:
@@ -173,9 +220,7 @@ class AgentSessionStore:
             ValueError: If the session does not exist.
         """
         with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None:
-                raise ValueError(f"Session {session_id} not found")
+            session = self._get_and_touch(session_id)
             session.current_plan = plan
             session.plan_step = 0
 
@@ -195,9 +240,7 @@ class AgentSessionStore:
             ValueError: If the session does not exist.
         """
         with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None:
-                raise ValueError(f"Session {session_id} not found")
+            session = self._get_and_touch(session_id)
             if session.current_plan is not None and session.plan_step < len(
                 session.current_plan
             ):
@@ -217,7 +260,5 @@ class AgentSessionStore:
             ValueError: If the session does not exist.
         """
         with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None:
-                raise ValueError(f"Session {session_id} not found")
+            session = self._get_and_touch(session_id)
             session.findings.append(finding)

@@ -4,7 +4,7 @@ description: "Subdomain permutation generator for expanding recon surface"
 args:
   - "-silent"
 parameters:
-  - name: domain
+  - name: target
     type: string
     description: "Root domain to generate permutations for"
     required: true

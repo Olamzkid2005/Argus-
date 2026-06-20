@@ -245,6 +245,14 @@ export class WorkflowRunner {
 
       const confidenceEngine = this.deps?.confidenceEngine ?? new ConfidenceEngine()
       const executor = this.deps?.executor ?? new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
+      // Wire up tool config for drift detection, circuit-breaker config, and tool enable/disable
+      const { ToolConfig } = await import("./config/tool-config")
+      const toolConfig = await ToolConfig.load()
+      toolRegistry.setConfig(toolConfig)
+      executor.setToolConfig(toolConfig)
+      // Seed the bridge's tool cache with the local registry for drift comparison
+      // Cast is safe: setRegistryTools only introspects .name and .capabilities, both present on ToolDef
+      bridge.setRegistryTools(toolRegistry.listTools() as unknown as import("./bridge/types").ToolDefinition[])
       executor.setFeatureFlags(featureFlags)
       executor.loadGates(plan.workflow)
       executor.setOnProgress((event) => { if (typeof event !== "string") emit(event) })

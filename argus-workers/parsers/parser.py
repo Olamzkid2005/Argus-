@@ -26,7 +26,8 @@ class Parser:
     Main parser class that routes to appropriate tool parser.
 
     Discovers parsers dynamically from the parsers/parsers/ registry.
-    Falling back to BaseParser for tools without a dedicated parser.
+    Falls back to GenericParser when no dedicated parser is
+    registered for a tool, so tool output is never lost.
     """
 
     @staticmethod
@@ -66,7 +67,10 @@ class Parser:
 
     def parse(self, tool_name: str, raw_output: str) -> list[dict]:
         """
-        Route to appropriate parser based on tool name
+        Route to appropriate parser based on tool name.
+
+        Falls back to GenericParser when no dedicated parser is
+        registered for the tool, so tool output is never dropped.
 
         Args:
             tool_name: Name of the tool
@@ -74,14 +78,15 @@ class Parser:
 
         Returns:
             List of parsed findings
-
-        Raises:
-            ParserError: If no parser exists for tool
         """
         parser = self.parsers.get(tool_name.lower())
 
         if not parser:
-            raise ParserError(f"No parser found for tool: {tool_name}")
+            logger.info(
+                "No dedicated parser for '%s' — falling back to generic parser",
+                tool_name,
+            )
+            return self._generic_parse(tool_name, raw_output)
 
         # Record start time
         start_time = time.time()
@@ -152,6 +157,43 @@ class Parser:
 
                 raise ParserError(f"Failed to parse {tool_name} output: {e}") from e
 
+    def _generic_parse(self, tool_name: str, raw_output: str) -> list[dict]:
+        """Fall back to generic heuristic parsing when no dedicated parser exists.
+
+        Uses the GenericParser to extract findings from tool output via
+        JSON detection and regex patterns (URLs, IPs, CVEs, error keywords).
+        Tags findings with the original tool name so they can be traced.
+
+        Args:
+            tool_name: Name of the tool that produced the output
+            raw_output: Raw tool output string
+
+        Returns:
+            List of findings, possibly empty.
+        """
+        try:
+            from parsers.parsers.generic import GenericParser
+
+            parser = GenericParser()
+            findings = parser.parse(raw_output)
+
+            # Tag findings with the original tool name
+            for f in findings:
+                if f.get("tool") == "unknown":
+                    f["tool"] = tool_name
+
+            if findings:
+                logger.info(
+                    "Generic parser recovered %d findings from %s output",
+                    len(findings),
+                    tool_name,
+                )
+            return findings
+
+        except Exception as e:
+            logger.warning("Generic parser failed for %s: %s", tool_name, e)
+            return []
+
     def _try_llm_fallback(self, tool_name: str, raw_output: str) -> list[dict]:
         """Attempt LLM-powered fallback parsing when primary parser fails.
 
@@ -191,6 +233,9 @@ class Parser:
         which is useful for large tool outputs. Yields batches
         of findings that can be inserted into the database.
 
+        Falls back to GenericParser when no dedicated parser is
+        registered for the tool.
+
         Args:
             tool_name: Name of the tool
             raw_output: Raw tool output
@@ -199,9 +244,6 @@ class Parser:
         Yields:
             Batches of parsed findings (List[Dict])
 
-        Raises:
-            ParserError: If no parser exists for tool
-
         Example:
             for batch in runner.parse_stream("nuclei", output, batch_size=50):
                 db.insert_findings(batch)  # Insert 50 at a time
@@ -209,7 +251,15 @@ class Parser:
         parser = self.parsers.get(tool_name.lower())
 
         if not parser:
-            raise ParserError(f"No parser found for tool: {tool_name}")
+            logger.info(
+                "No dedicated parser for '%s' — falling back to generic parser (stream)",
+                tool_name,
+            )
+            findings = self._generic_parse(tool_name, raw_output)
+            if findings:
+                for i in range(0, len(findings), batch_size):
+                    yield findings[i : i + batch_size]
+            return
 
         # Record start time
         start_time = time.time()

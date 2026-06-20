@@ -11,6 +11,7 @@ export enum Capability {
   BROWSER_VERIFICATION = "browser_verification",
   REPORT_GENERATION = "report_generation",
   SQLI_DETECTION = "sqli_detection",
+  XSS_DETECTION = "xss_detection",
   DATABASE_EXFILTRATION = "database_exfiltration",
   HTTP_PROBE = "http_probe",
   GRAPHQL_ASSESSMENT = "graphql_assessment",
@@ -18,11 +19,13 @@ export enum Capability {
   API_DOCS_ANALYSIS = "api_docs_analysis",
   JWT_ANALYSIS = "jwt_analysis",
   SSRF_CHECK = "ssrf_check",
+  COMMAND_INJECTION = "command_injection",
 
   SECURITY_ANALYSIS = "security_analysis",
   SECRET_DETECTION = "secret_detection",
   SAST = "sast",
   SCA = "sca",
+  /** @deprecated No tool provider exists — generic VULNERABILITY_SCANNING covers CVEs. */
   CVE_SCANNING = "cve_scanning",
   CLOUD_ENUM = "cloud_enum",
   S3_SCANNING = "s3_scanning",

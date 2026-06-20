@@ -16,7 +16,7 @@ _register(ToolDefinition(
     phases=["recon"],
     default_args=["-silent"],
     parameters=[
-    ToolParameter(name="domain", description="Root domain to generate permutations for", required=True, flag="-d"),
+    ToolParameter(name="target", description="Root domain to generate permutations for", required=True, flag="-d"),
 ],
     timeout=120,
     signal_quality=SignalQuality.CANDIDATE,

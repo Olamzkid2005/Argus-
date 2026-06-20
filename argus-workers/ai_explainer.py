@@ -433,7 +433,7 @@ Keep response under 500 tokens. Be factual and specific."""
             logger.error("httpx not installed, cannot make async HTTP calls")
             return "Failed: httpx not installed"
 
-        api_url = getattr(self.llm_client, "base_url", None) or os.getenv("LLM_API_URL")
+        api_url = getattr(self.llm_client, "api_url", None) or getattr(self.llm_client, "base_url", None) or os.getenv("LLM_API_URL")
         api_key = getattr(self.llm_client, "api_key", None) or os.getenv("LLM_API_KEY")
 
         if not api_url:
@@ -570,7 +570,7 @@ Keep response under 500 tokens. Be factual and specific."""
         # Try OpenRouter embeddings endpoint (for sk-or- keys)
         import os
 
-        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+        api_key = getattr(self.llm_client, "api_key", None) or os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
         if api_key and api_key.startswith("sk-or-"):
             try:
                 import httpx

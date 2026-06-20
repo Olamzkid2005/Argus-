@@ -7,7 +7,7 @@ import { determineNewCapabilities, REPLAN_INSERTABLE } from "./replan-rules"
 import { planDeterministic } from "./planDeterministic"
 import { resolvePipeline, formatPipelineGaps } from "./pipeline"
 
-export const MAX_REPLANS = Number(process.env.ARGUS_MAX_REPLANS) || 10
+export const MAX_REPLANS = Number(process.env.ARGUS_MAX_REPLANS) ?? 10
 
 interface PlanOptions {
   useLLM?: boolean

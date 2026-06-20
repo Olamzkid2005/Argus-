@@ -69,7 +69,10 @@ export function determineRequiredCapabilities(
 
   const tech = techStack?.map((t) => t.toLowerCase()) ?? []
   if (tech.includes("graphql")) caps.add(Capability.GRAPHQL_ASSESSMENT)
-  if (tech.includes("express")) caps.add(Capability.EXPRESS_CVE_SCAN)
+  // EXPRESS_CVE_SCAN → VULNERABILITY_SCANNING: no dedicated Express CVE scanner exists.
+  // Generic vulnerability scanners (nuclei, nikto, DependencyCheck, etc.) already
+  // handle Express CVEs during the standard scan phase.
+  if (tech.includes("express")) caps.add(Capability.VULNERABILITY_SCANNING)
   if (tech.includes("swagger") || tech.includes("openapi")) caps.add(Capability.API_DOCS_ANALYSIS)
   if (tech.includes("jwt")) caps.add(Capability.JWT_ANALYSIS)
 

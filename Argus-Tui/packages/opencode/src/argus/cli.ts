@@ -365,6 +365,8 @@ export const ArgusToolsCommand = {
       content_discovery: "Content Discovery",
       vulnerability_scanning: "Vulnerability Scanning",
       sqli_detection: "SQL Injection",
+      xss_detection: "Cross-Site Scripting",
+      command_injection: "Command Injection",
       browser_verification: "Browser Verification",
       auth_detection: "Authentication",
       security_analysis: "Security Analysis",

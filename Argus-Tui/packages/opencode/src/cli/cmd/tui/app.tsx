@@ -389,7 +389,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       } else if (r.type === "findings") {
         route.navigate({ type: "findings", engagementId: r.engagementId })
       } else if (r.type === "finding") {
-        route.navigate({ type: "finding", findingId: r.findingId } as any)
+        route.navigate({ type: "finding-detail", findingId: r.findingId })
       } else if (r.type === "engagements") {
         route.navigate({ type: "engagements" })
       } else if (r.type === "engagement") {

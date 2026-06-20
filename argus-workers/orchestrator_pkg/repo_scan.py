@@ -23,6 +23,7 @@ from config.constants import (
 )
 from orchestrator_pkg.normalizer_utils import normalize_finding
 from utils.logging_utils import ScanLogger
+from utils.validation import is_private_ip
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ def validate_repo_url(repo_url: str) -> str:
             addr_info = socket.getaddrinfo(hostname, None)
             for family, type_, proto, canonname, sockaddr in addr_info:
                 ip = sockaddr[0]
-                if _is_private_ip(ip):
+                if is_private_ip(ip):
                     raise ValueError(
                         f"Git host '{hostname}' resolves to private IP '{ip}' (SSRF risk)"
                     )
@@ -98,33 +99,6 @@ def validate_repo_url(repo_url: str) -> str:
             raise ValueError(f"Failed to resolve hostname: '{hostname}'")
 
     return repo_url
-
-
-def _is_private_ip(ip: str) -> bool:
-    """Check if an IP address is private, loopback, or link-local."""
-    parts = ip.split(".")
-    if len(parts) == 4:
-        if parts[0] == "10":
-            return True
-        if parts[0] == "172" and 16 <= int(parts[1]) <= 31:
-            return True
-        if parts[0] == "192" and parts[1] == "168":
-            return True
-        if parts[0] == "127":
-            return True
-        if parts[0] == "169" and parts[1] == "254":
-            return True
-        if parts[0] == "0":
-            return True
-        if parts[0] == "100" and 64 <= int(parts[1]) <= 127:
-            return True
-        if parts[0] == "198" and parts[1] == "18":
-            return True
-    if ip == "::1":
-        return True
-    if ip.startswith("fe80:"):
-        return True
-    return bool(ip.startswith("fc") or ip.startswith("fd"))
 
 
 def run_npm_audit(repo_path: str) -> list[dict]:

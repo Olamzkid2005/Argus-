@@ -54,11 +54,12 @@ export async function evidenceCommand(
     }
 
     case "show": {
-      const packageId = args[0]
-      if (!packageId) {
-        return "Usage: evidence show <package-id>"
+      const engagementId = args[0]
+      const packageId = args[1]
+      if (!engagementId || !packageId) {
+        return "Usage: evidence show <engagement-id> <package-id>"
       }
-      const result = await verifyPackage(evidenceBaseDir, packageId)
+      const result = await verifyPackage(evidenceBaseDir, engagementId, packageId)
       lines.push(`Package ID: ${result.packageId}`)
       lines.push(`Valid: ${result.valid}`)
       for (const err of result.errors) {
@@ -82,11 +83,12 @@ export async function evidenceCommand(
     }
 
     case "verify-package": {
-      const packageId = args[0]
-      if (!packageId) {
-        return "Usage: evidence verify-package <package-id>"
+      const engagementId = args[0]
+      const packageId = args[1]
+      if (!engagementId || !packageId) {
+        return "Usage: evidence verify-package <engagement-id> <package-id>"
       }
-      const result = await verifyPackage(evidenceBaseDir, packageId)
+      const result = await verifyPackage(evidenceBaseDir, engagementId, packageId)
       if (result.valid) {
         lines.push(`Package ${packageId}: OK (${result.manifestHash})`)
       } else {

@@ -18,6 +18,7 @@ parameters:
     default: 10
 capabilities:
   - api_probing
+  - api_docs_analysis
 signal_quality: CANDIDATE
 priority: 50
 cost: medium

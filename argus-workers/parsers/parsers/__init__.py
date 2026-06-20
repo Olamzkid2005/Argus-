@@ -40,7 +40,7 @@ for module_info in pkgutil.iter_modules([str(_this_dir)]):
         continue
 
     try:
-        module = importlib.import_module("parsers.parsers.%s", module_name)
+        module = importlib.import_module(f"parsers.parsers.{module_name}")
         # Only register modules that actually contain a parser class (fix 11.10)
         if not _is_parser_module(module):
             logger.debug(

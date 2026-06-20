@@ -4,7 +4,7 @@ Tests for validation utilities
 
 import pytest
 
-from utils.validation import validate_uuid
+from utils.validation import is_private_ip, validate_uuid
 
 
 class TestValidateUUID:
@@ -49,3 +49,85 @@ class TestValidateUUID:
         """Test that custom field_name appears in error message"""
         with pytest.raises(ValueError, match="custom_field"):
             validate_uuid("bad-uuid", field_name="custom_field")
+
+
+class TestIsPrivateIp:
+    """Tests for is_private_ip function."""
+
+    # ── IPv4 private ranges ──
+
+    def test_ipv4_10_dot_is_private(self):
+        assert is_private_ip("10.0.0.1") is True
+        assert is_private_ip("10.255.255.255") is True
+
+    def test_ipv4_172_16_31_is_private(self):
+        assert is_private_ip("172.16.0.1") is True
+        assert is_private_ip("172.31.255.255") is True
+
+    def test_ipv4_172_outside_range_is_public(self):
+        assert is_private_ip("172.32.0.1") is False
+        assert is_private_ip("172.15.0.1") is False
+
+    def test_ipv4_192_168_is_private(self):
+        assert is_private_ip("192.168.0.1") is True
+        assert is_private_ip("192.168.255.255") is True
+
+    def test_ipv4_loopback_is_private(self):
+        assert is_private_ip("127.0.0.1") is True
+        assert is_private_ip("127.255.255.255") is True
+
+    def test_ipv4_link_local_is_private(self):
+        assert is_private_ip("169.254.1.1") is True
+        assert is_private_ip("169.254.254.254") is True
+
+    def test_ipv4_current_network_is_private(self):
+        assert is_private_ip("0.0.0.0") is True
+
+    def test_ipv4_cgnat_is_private(self):
+        assert is_private_ip("100.64.0.1") is True
+        assert is_private_ip("100.127.255.255") is True
+
+    def test_ipv4_benchmarking_is_private(self):
+        assert is_private_ip("198.18.0.1") is True
+        assert is_private_ip("198.19.255.255") is True
+
+    def test_ipv4_public_is_not_private(self):
+        assert is_private_ip("8.8.8.8") is False
+        assert is_private_ip("93.184.216.34") is False
+        assert is_private_ip("1.1.1.1") is False
+
+    # ── IPv6 private ranges ──
+
+    def test_ipv6_loopback_is_private(self):
+        assert is_private_ip("::1") is True
+
+    def test_ipv6_unspecified_is_private(self):
+        assert is_private_ip("::") is True
+
+    def test_ipv6_ula_is_private(self):
+        assert is_private_ip("fc00::1") is True
+        assert is_private_ip("fd00::1") is True
+        assert is_private_ip("fd12:3456:789a::1") is True
+
+    def test_ipv6_link_local_is_private(self):
+        assert is_private_ip("fe80::1") is True
+        assert is_private_ip("fe80::abcd:1234") is True
+
+    def test_ipv6_documentation_is_private(self):
+        assert is_private_ip("2001:db8::1") is True
+        assert is_private_ip("2001:db8:1234::") is True
+
+    def test_ipv6_public_is_not_private(self):
+        assert is_private_ip("2001:470:1f15:1abc::1") is False
+        assert is_private_ip("2606:4700::6810:8fa7") is False
+
+    # ── IPv4-mapped IPv6 ──
+
+    def test_ipv4_mapped_ipv6_private(self):
+        assert is_private_ip("::ffff:127.0.0.1") is True
+        assert is_private_ip("::ffff:10.0.0.1") is True
+        assert is_private_ip("::ffff:192.168.1.1") is True
+
+    def test_ipv4_mapped_ipv6_public(self):
+        assert is_private_ip("::ffff:8.8.8.8") is False
+        assert is_private_ip("::ffff:93.184.216.34") is False

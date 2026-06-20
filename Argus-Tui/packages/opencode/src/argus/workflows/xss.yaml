@@ -7,17 +7,19 @@ phases:
       - browser_verification
     execution: sequential
     error_recovery: retry_once_then_skip
+    approval_gate: destructive_tools
   - name: victim_view
     required_capabilities:
       - browser_verification
     execution: sequential
     error_recovery: skip_and_continue
+    approval_gate: destructive_tools
   - name: evidence_collection
     required_capabilities:
       - browser_verification
     execution: sequential
     error_recovery: skip_and_continue
 approval_required:
-  destructive_tools: false
+  destructive_tools: true
   auth_testing: false
   privilege_escalation: false

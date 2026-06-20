@@ -82,14 +82,47 @@ class JwtToolParser(BaseParser):
                 continue
         return findings
 
+    # Informational keywords that should NOT be treated as findings.
+    # jwt_tool outputs many [+]/[!] lines that are status updates, not vulnerabilities.
+    _INFO_KEYWORDS = {
+        "loaded", "decoded", "identified", "using file",
+        "processed", "parsed", "reading", "checking",
+        "attempting", "trying", "running",
+    }
+    # Confirmed vulnerability keywords — only these trigger a finding.
+    _VULN_KEYWORDS = {
+        "vulnerable", "vulnerability", "CVE",
+        "weak", "weakness", "bypass", "bypassed",
+        "misconfiguration", "exploit", "exploitable",
+        "unrestricted", "insecure",
+        # jwt_tool-specific vulnerability indicators
+        "cracked",
+        "forged", "forgery",
+        "traversal",
+        "none algorithm", "none' algorithm",
+        "accepts none", "empty signature", "no signature",
+    }
+
     def _parse_text_lines(self, raw_output: str) -> list[dict]:
-        """Parse text indicators: [+], [!], [WARNING]."""
+        """Parse text indicators: [+], [!], [WARNING].
+
+        Only lines containing confirmed vulnerability keywords are treated as
+        findings. Lines with informational keywords ("loaded", "decoded", etc.)
+        are skipped to prevent false positives.
+        """
         findings = []
         for line in raw_output.splitlines():
             stripped = line.strip()
             if not stripped:
                 continue
             if stripped.startswith("[+]"):
+                line_lower = stripped.lower()
+                # Skip informational lines — they're not vulnerabilities
+                if any(kw in line_lower for kw in self._INFO_KEYWORDS):
+                    continue
+                # Only emit a finding if a confirmed vulnerability keyword is present
+                if not any(kw in line_lower for kw in self._VULN_KEYWORDS):
+                    continue
                 finding = {
                     "type": "JWT_VULNERABILITY",
                     "severity": "HIGH",

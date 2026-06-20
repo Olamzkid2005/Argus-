@@ -683,7 +683,14 @@ class Orchestrator:
                 skip_tools=agent_tried,
                 recon_context=recon_context,
             )
-            findings.extend(deterministic_findings)
+            # Normalize deterministic findings before extending — they are raw
+            # dicts from execute_scan_pipeline, not normalized via _normalize_finding().
+            # Without this, downstream persistence/storage receives findings with
+            # missing source_tool, malformed evidence, etc.
+            for f in deterministic_findings:
+                norm = self._normalize_finding(f, f.get("source_tool", "fallback"))
+                if norm:
+                    findings.append(norm)
             slog.tool_complete(
                 "scan_with_fallback", success=True, findings=len(findings)
             )

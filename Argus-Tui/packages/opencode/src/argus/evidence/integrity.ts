@@ -10,12 +10,12 @@ function hashFileSync(filePath: string): string {
   return hash.digest("hex")
 }
 
-export function verifyPackage(baseDir: string, packageId: string): IntegrityReport {
+export function verifyPackage(baseDir: string, engagementId: string, packageId: string): IntegrityReport {
   if (!/^[\w-]+$/.test(packageId)) {
     return { valid: false, packageId, manifestHash: "", computedHash: "", errors: ["Invalid package ID"] }
   }
 
-  const manifestPath = join(baseDir, "artifacts", packageId, "manifest.json")
+  const manifestPath = join(baseDir, engagementId, "artifacts", packageId, "manifest.json")
 
   if (!existsSync(manifestPath)) {
     return {

@@ -32,6 +32,9 @@ jinja2==3.1.5
 # Encryption (settings/credentials)
 cryptography==44.0.2
 
+# Process management (orphaned subprocess cleanup)
+psutil>=6.1.0,<7
+
 # Logging and Monitoring
 structlog==24.4.0
 

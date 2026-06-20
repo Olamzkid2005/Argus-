@@ -397,9 +397,11 @@ class MCPServer:
         """Get a tool definition by name."""
         return self._tools.get(name)
 
-    # Blocklist of dangerous shell metacharacters in argument values
-    # to prevent command injection via tool arguments
-    _SHELL_INJECTION_PATTERN = set(";&|`$(){}[]!<>\n\t\x00")
+    # Blocklist of characters that are dangerous in ANY execution context.
+    # subprocess.run uses list form (no shell=True), so shell metacharacters
+    # like &, $, (), [], <> are NOT dangerous. Only null bytes and control
+    # characters that could corrupt the process execution are blocked.
+    _SHELL_INJECTION_PATTERN = set("\x00\n\r")
 
     def _validate_args_safe(self, args: list[str]) -> None:
         """Validate that no arguments contain shell injection characters.

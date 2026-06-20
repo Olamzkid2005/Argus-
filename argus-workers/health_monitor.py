@@ -335,19 +335,27 @@ class ToolHealthTracker:
             )
             all_metrics = cursor.fetchall()
 
-            # Compute consecutive failures per tool (newest-first order)
+            # Compute consecutive failures per tool (newest-first order).
+            # Data is ordered by tool_name, created_at DESC. For each tool,
+            # count failures from newest to oldest until a success is found.
             cons_failures: dict[str, int] = {}
-            seen_tools: set[str] = set()
+            finalized_tools: set[str] = set()
             for row in all_metrics:
                 tool = row[0]
                 success = row[1]
-                if tool not in seen_tools:
-                    seen_tools.add(tool)
+
+                # Skip tools we've already finalized (found a success in their history)
+                if tool in finalized_tools:
+                    continue
+
+                if tool not in cons_failures:
                     cons_failures[tool] = 0
+
                 if not success:
                     cons_failures[tool] += 1
                 else:
-                    break  # most recent record is a success — no consecutive failures
+                    # Success found for this tool — stop counting failures for it
+                    finalized_tools.add(tool)
 
             results = []
             for row in rows:

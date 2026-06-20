@@ -12,6 +12,7 @@ phases:
       - browser_verification
     execution: sequential
     error_recovery: skip_and_continue
+    approval_gate: auth_testing
   - name: evidence_collection
     required_capabilities:
       - browser_verification

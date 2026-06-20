@@ -87,6 +87,12 @@ def sanitize_input(text: str) -> str:
     )
     # Strip LLM prompt-escape delimiters
     sanitized = strip_delimiters(sanitized)
+    # Strip angle brackets to prevent <user_input> tag injection.
+    # The user input is wrapped in <user_input>...</user_input> tags in the
+    # prompt; an attacker could inject </user_input> to close the tag early
+    # and insert <system> instructions. Angle brackets have no legitimate
+    # use in scan intent descriptions.
+    sanitized = re.sub(r"[<>]", " ", sanitized)
     # Normalize leetspeak characters to detect obfuscated injection attempts
     leet_map = str.maketrans(
         {

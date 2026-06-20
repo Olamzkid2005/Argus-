@@ -73,7 +73,7 @@ export function Home() {
         const { join, dirname } = await import("path")
         const { fileURLToPath } = await import("url")
         const _dirname = dirname(fileURLToPath(import.meta.url))
-        const wp = join(_dirname, "../../../../../../../argus-workers/mcp_server.py")
+        const wp = join(_dirname, "../../../../../../../../argus-workers/mcp_server.py")
         const mcpOk = existsSync(wp)
         setServices({ planner: true, workflow: true, mcp: mcpOk, evidence: true, report: true, verify: true })
       } catch {}

@@ -4,6 +4,8 @@ tools:
     capabilities:
       - vulnerability_scanning
       - template_scanning
+      - graphql_assessment
+      - api_docs_analysis
     requires_auth: false
     destructive: false
     supports_api: true
@@ -202,7 +204,7 @@ tools:
     label: Dalfox XSS Scanner
     capabilities:
       - vulnerability_scanning
-      - sqli_detection
+      - xss_detection
     requires_auth: false
     destructive: false
     supports_api: true
@@ -224,6 +226,9 @@ tools:
     supports_api: true
     supports_web: true
     timeout_seconds: 600
+    requires:
+      recon_signals:
+        - parameterized_forms
     scoring:
       confidence_score: 95
       coverage_score: 90
@@ -232,6 +237,7 @@ tools:
     label: Arjun HTTP Parameter Discovery
     capabilities:
       - api_probing
+      - api_docs_analysis
     requires_auth: false
     destructive: false
     supports_api: true
@@ -250,6 +256,10 @@ tools:
     supports_api: true
     supports_web: true
     timeout_seconds: 120
+    requires:
+      recon_signals:
+        - has_api
+        - has_login_page
     scoring:
       confidence_score: 75
       coverage_score: 60
@@ -257,12 +267,15 @@ tools:
   - name: commix
     label: Commix Command Injection Scanner
     capabilities:
-      - ssrf_check
+      - command_injection
     requires_auth: false
     destructive: true
     supports_api: true
     supports_web: true
     timeout_seconds: 300
+    requires:
+      recon_signals:
+        - has_file_upload
     scoring:
       confidence_score: 75
       coverage_score: 65
@@ -276,6 +289,9 @@ tools:
     supports_api: false
     supports_web: true
     timeout_seconds: 300
+    requires:
+      target_scheme:
+        - https
     scoring:
       confidence_score: 85
       coverage_score: 80
@@ -341,6 +357,9 @@ tools:
     supports_api: true
     supports_web: false
     timeout_seconds: 300
+    requires:
+      tech_contains:
+        - python
     scoring:
       confidence_score: 75
       coverage_score: 70
@@ -354,6 +373,9 @@ tools:
     supports_api: true
     supports_web: false
     timeout_seconds: 300
+    requires:
+      tech_contains:
+        - python
     scoring:
       confidence_score: 70
       coverage_score: 65
@@ -369,6 +391,10 @@ tools:
     supports_api: false
     supports_web: true
     timeout_seconds: 600
+    requires:
+      tech_contains:
+        - wordpress
+        - wp-
     scoring:
       confidence_score: 65
       coverage_score: 60
@@ -397,6 +423,9 @@ tools:
     supports_api: false
     supports_web: false
     timeout_seconds: 600
+    requires:
+      tech_contains:
+        - go
     scoring:
       confidence_score: 75
       coverage_score: 70
@@ -411,6 +440,9 @@ tools:
     supports_api: false
     supports_web: false
     timeout_seconds: 600
+    requires:
+      tech_contains:
+        - ruby
     scoring:
       confidence_score: 75
       coverage_score: 70
@@ -425,6 +457,10 @@ tools:
     supports_api: false
     supports_web: false
     timeout_seconds: 600
+    requires:
+      tech_contains:
+        - javascript
+        - typescript
     scoring:
       confidence_score: 70
       coverage_score: 65
@@ -439,6 +475,10 @@ tools:
     supports_api: false
     supports_web: false
     timeout_seconds: 600
+    requires:
+      tech_contains:
+        - java
+        - kotlin
     scoring:
       confidence_score: 70
       coverage_score: 65
@@ -453,6 +493,9 @@ tools:
     supports_api: false
     supports_web: false
     timeout_seconds: 600
+    requires:
+      tech_contains:
+        - php
     scoring:
       confidence_score: 65
       coverage_score: 60
@@ -467,6 +510,9 @@ tools:
     supports_api: false
     supports_web: false
     timeout_seconds: 300
+    requires:
+      tech_contains:
+        - go
     scoring:
       confidence_score: 75
       coverage_score: 70
@@ -495,6 +541,10 @@ tools:
     supports_api: true
     supports_web: false
     timeout_seconds: 300
+    requires:
+      tech_contains:
+        - javascript
+        - typescript
     scoring:
       confidence_score: 55
       coverage_score: 50

@@ -302,9 +302,15 @@ class ToolRunner:
         args: list[str], env: dict[str, str]
     ) -> tuple[list[str], dict[str, str]]:
         """
-        Redact sensitive CLI arguments (API tokens, passwords) that would otherwise
-        be visible in /proc/<pid>/cmdline. Instead of passing them as CLI flags,
-        inject them as environment variables (TOOL_TOKEN, TOOL_SECRET).
+        Inject sensitive CLI arguments (API tokens, passwords) into environment
+        variables (TOOL_TOKEN, TOOL_SECRET, etc.) so they are available to tools
+        that support env-var auth. The CLI arguments themselves are passed through
+        unchanged — subprocess.run uses list form (no shell), so the values are
+        never interpreted by a shell and cannot cause injection.
+
+        Previously this method replaced CLI values with "__REDACTED__", but no
+        tool consumed the TOOL_* env vars. This broke every token-based tool
+        (wpscan, etc.) that expects values on the command line.
 
         Handles both --flag=value and --flag value formats.
 
@@ -313,13 +319,10 @@ class ToolRunner:
             env: Environment dict to inject redacted values into
 
         Returns:
-            Tuple of (sanitized_args, updated_env)
+            Tuple of (original_args, updated_env) — args are passed through
+            unchanged; env receives TOOL_* vars as a bonus.
         """
-        # Sensitive flag prefixes to redact from command line.
-        # Uses exact match for short prefixes to avoid false positives (M1):
-        # e.g. --key would match --key-file, --key-id, --key-derivation.
-        # Only --token, --password, --secret, --auth are used with exact prefix
-        # matching below; --key and --api-token use more specific checks.
+        # Sensitive flag prefixes to detect.
         sensitive_prefixes = (
             "--api-token",
             "--token",
@@ -327,7 +330,6 @@ class ToolRunner:
             "--secret",
             "--auth",
         )
-        sanitized_args: list[str] = []
         i = 0
         while i < len(args):
             arg = args[i]
@@ -339,7 +341,6 @@ class ToolRunner:
                 env[f"TOOL_{flag_key.removeprefix('--').upper().replace('-', '_')}"] = (
                     flag_value
                 )
-                sanitized_args.append(flag_key + "=__REDACTED__")
                 i += 1
                 continue
             if any(arg.startswith(p) for p in sensitive_prefixes):
@@ -353,13 +354,11 @@ class ToolRunner:
                     env[f"TOOL_{flag.removeprefix('--').upper().replace('-', '_')}"] = (
                         value
                     )
-                    sanitized_args.append(flag)
-                    sanitized_args.append("__REDACTED__")
                     i += 2
                     continue
-            sanitized_args.append(arg)
             i += 1
-        return sanitized_args, env
+        # Pass args through unchanged — subprocess uses list form, no shell involved
+        return args[:], env
 
     def run(
         self,

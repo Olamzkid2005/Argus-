@@ -9,42 +9,6 @@ import type { ToolDef } from "../workflows/tool-registry"
 import { Capability } from "../shared/capabilities"
 
 /**
- * Default per-tool timeout in milliseconds for external binary tools.
- * Most security scanners should complete within 120 seconds.
- * Tools that time out are handled by error recovery (retry then skip).
- */
-const PER_TOOL_TIMEOUT_MS = 120_000
-
-/**
- * Extended per-tool timeout for agent-internal tools (register, login, etc.).
- * These are Python scripts that perform HTTP interactions with retries and
- * need more time to discover forms, submit, and verify.
- */
-const AGENT_TOOL_TIMEOUT_MS = 300_000
-
-/**
- * Set of agent-internal tools that use the extended timeout.
- */
-const AGENT_INTERNAL_TOOLS = new Set([
-  "register",
-  "login",
-  "finding_correlation_engine",
-  "attack_path_generator",
-  "verification_agent",
-  "browser_security_operator",
-  "attack_surface_mapper",
-  "evidence_intelligence_engine",
-  "executive_report_generator",
-  "threat_intelligence_aggregator",
-  "vulnerability_knowledge_engine",
-  "secure_code_intelligence_engine",
-  "infrastructure_security_analyzer",
-  "assessment_orchestrator",
-  "workflow_intelligence_engine",
-  "engagement_analytics_engine",
-])
-
-/**
  * Maximum parallelism for phases marked with `execution: parallel`.
  * Limits concurrent subprocess/network tool execution to avoid resource starvation.
  */
@@ -140,9 +104,9 @@ export class InProcessExecutor implements PhaseExecutor {
     })
   }
 
-  /** Check whether a feature is enabled (defaults true if no flag system attached) */
+  /** Check whether a feature is enabled (defaults false if no flag system attached) */
   private isFeatureEnabled(feature: Feature): boolean {
-    return this.featureFlags?.isEnabled(feature) ?? true
+    return this.featureFlags?.isEnabled(feature) ?? false
   }
 
   private gatesLoaded = false
@@ -340,11 +304,14 @@ export class InProcessExecutor implements PhaseExecutor {
       const toolStartTime = Date.now()
       try {
         const cap = pipeline.find(p => p.tool === next.tool)?.capabilities?.[0] ?? Capability.WEB_RECON
-        const result = await this.bridge.callTool(next.tool, {
+        const toolArgs: Record<string, unknown> = {
           target: phase.target,
           capability: cap,
           config: phase.config,
-        }, undefined, execOptions.cacheMode)
+        };
+        const extra = this.buildExtraFromCredentials(phase.config);
+        if (extra) toolArgs.extra = extra;
+        const result = await this.bridge.callTool(next.tool, toolArgs, undefined, execOptions.cacheMode)
         const durationMs = Date.now() - toolStartTime
 
         if (result.success) {
@@ -448,13 +415,24 @@ export class InProcessExecutor implements PhaseExecutor {
 
     for (let attempt = 1; attempt <= 2; attempt++) {
       const attemptStartTime = Date.now()
-      const toolTimeout = AGENT_INTERNAL_TOOLS.has(tool.name) ? AGENT_TOOL_TIMEOUT_MS : PER_TOOL_TIMEOUT_MS
+      // Use per-tool timeout from registry (checks argus.config.yaml override first,
+      // then YAML tool-definition timeout, defaulting to 120s). This ensures:
+      // 1. Custom timeouts from argus.config.yaml are respected
+      // 2. YAML-defined timeouts (e.g. nuclei 600s, sqlmap 600s) aren't killed at 120s
+      // 3. Agent-internal tools get their extended timeout from tool-definitions.yaml
+      const timeoutSeconds = this.toolRegistry.getToolTimeout(tool.name)
+      const toolTimeout = timeoutSeconds * 1000
       try {
-        const result = await this.bridge.callTool(tool.name, {
+        // Populate extra with credentials for tools (login/register) that
+        // expect credential data in the --extra JSON parameter.
+        const toolArgs: Record<string, unknown> = {
           target: phase.target,
           capability: cap,
           config: phase.config,
-        }, toolTimeout, execOptions.cacheMode)
+        };
+        const extra = this.buildExtraFromCredentials(phase.config);
+        if (extra) toolArgs.extra = extra;
+        const result = await this.bridge.callTool(tool.name, toolArgs, toolTimeout, execOptions.cacheMode)
 
         if (result.success && result.data) {
           const data = result.data
@@ -521,6 +499,38 @@ export class InProcessExecutor implements PhaseExecutor {
     }
 
     return { findings, errors: [], failFast: false }
+  }
+
+  /**
+   * Build an `extra` JSON string from credentials in the phase config.
+   * Tools like login/register use the `--extra` JSON parameter for
+   * credential data (email/password), but the executor previously never
+   * populated this field — causing "NO_CREDENTIALS" errors.
+   *
+   * At runtime, credentials are stored as a single CredentialEntry-like
+   * object: `{ username, password }` or `{ email, password }`.
+   */
+  private buildExtraFromCredentials(config: Record<string, unknown>): string | undefined {
+    const creds = config?.credentials as Record<string, unknown> | undefined
+    if (!creds) return undefined
+
+    // Support both direct CredentialEntry { username, password }
+    // and CredentialRef array [{ role, credentialType }] formats
+    if (Array.isArray(creds)) {
+      if (creds.length === 0) return undefined
+      const first = creds[0] as Record<string, unknown>
+      const entry = (first.credentialType as Record<string, unknown>) ?? first
+      const email = (entry.username ?? entry.email ?? "") as string
+      const password = (entry.password ?? "") as string
+      if (!email && !password) return undefined
+      return JSON.stringify({ email, password })
+    }
+
+    // Single CredentialEntry object { username, password }
+    const email = (creds.username ?? creds.email ?? "") as string
+    const password = (creds.password ?? "") as string
+    if (!email && !password) return undefined
+    return JSON.stringify({ email, password })
   }
 
   private resolveErrorRecovery(phase: PhaseExecutionRequest, toolName: string): ErrorRecovery {

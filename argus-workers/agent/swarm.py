@@ -627,7 +627,8 @@ class SwarmOrchestrator:
             timeout // max(len(active), 1), 300
         )  # at least 5 min per agent
 
-        with ThreadPoolExecutor(max_workers=len(active)) as pool:
+        pool = ThreadPoolExecutor(max_workers=len(active))
+        try:
             futures_map: dict[concurrent.futures.Future, str] = {}
             for agent in active:
                 future = pool.submit(agent.run)
@@ -640,7 +641,7 @@ class SwarmOrchestrator:
                 ):
                     domain = futures_map.get(future, "?")
                     try:
-                        result = future.result(timeout=per_agent_timeout)
+                        result = future.result()  # future is already done (returned by as_completed); per-agent timeout is dead code here
                         if result:
                             logger.info(
                                 "Specialist %s returned %d findings",
@@ -662,6 +663,12 @@ class SwarmOrchestrator:
                                 domain,
                                 findings_count=0,
                             )
+                            completed.add(domain)
+                    # Mark domain as completed even on error.
+                    # Without this, the kill-loop guard (len(completed) < len(futures_map))
+                    # would be True on normal completion with empty findings, causing
+                    # the orphan-subprocess cleanup to run unnecessarily (and potentially
+                    # kill subprocesses from concurrent tasks in the same worker).
                     except concurrent.futures.TimeoutError:
                         logger.warning(
                             "Swarm: agent %s timed out per-task (%ds)",
@@ -671,11 +678,13 @@ class SwarmOrchestrator:
                         emit_swarm_agent_complete(
                             active[0].engagement_id, domain, findings_count=0
                         )
+                        completed.add(domain)
                     except Exception as e:
                         logger.warning("Swarm agent %s failed: %s", domain, e)
                         emit_swarm_agent_complete(
                             active[0].engagement_id, domain, findings_count=0
                         )
+                        completed.add(domain)
             except concurrent.futures.TimeoutError:
                 remaining = set(futures_map.values()) - completed
                 for domain in remaining:
@@ -685,12 +694,8 @@ class SwarmOrchestrator:
                     emit_swarm_agent_complete(
                         active[0].engagement_id, domain, findings_count=0
                     )
-                # Shut down the pool immediately — without this, ThreadPoolExecutor.__exit__
-                # calls shutdown(wait=True) which blocks indefinitely on hung threads.
-                pool.shutdown(wait=False, cancel_futures=True)
 
             # Cancel remaining futures and actively terminate any running tool subprocesses.
-            # Uses process group kill to ensure children (sqlmap, nuclei, etc.) are reaped.
             for future, domain in futures_map.items():
                 if domain not in completed:
                     logger.warning(
@@ -700,46 +705,55 @@ class SwarmOrchestrator:
                     future.cancel()
 
             # Kill orphaned tool subprocesses spawned by timed-out agents.
-            # Only kill processes matching known scan tool names to avoid
-            # killing subprocesses from concurrent tasks in the same worker.
-            _KNOWN_TOOL_PROCS = {
-                "nuclei",
-                "sqlmap",
-                "dalfox",
-                "nikto",
-                "nmap",
-                "arjun",
-                "jwt_tool",
-                "ffuf",
-                "commix",
-                "testssl",
-            }
-            try:
-                from contextlib import suppress
+            # GUARD: Only run cleanup when there were actual timeouts (agents not in
+            # `completed`). Without this guard, the kill loop would run on EVERY swarm
+            # completion and could kill subprocesses belonging to CONCURRENT tasks in
+            # the same Celery worker process (e.g., a nuclei running for another
+            # engagement would be killed by this swarm's cleanup).
+            if len(completed) < len(futures_map):
+                _KNOWN_TOOL_PROCS = {
+                    "nuclei",
+                    "sqlmap",
+                    "dalfox",
+                    "nikto",
+                    "nmap",
+                    "arjun",
+                    "jwt_tool",
+                    "ffuf",
+                    "commix",
+                    "testssl",
+                }
+                try:
+                    from contextlib import suppress
 
-                import psutil
+                    import psutil
 
-                current_process = psutil.Process()
-                for child in current_process.children(recursive=True):
-                    with suppress(psutil.NoSuchProcess):
-                        try:
-                            child_name = child.name().lower()
-                            if any(tool in child_name for tool in _KNOWN_TOOL_PROCS):
-                                logger.info(
-                                    "Swarm cleanup: killing orphaned %s (pid=%d)",
-                                    child_name,
-                                    child.pid,
-                                )
-                                child.kill()
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            pass
-            except ImportError:
-                logger.warning(
-                    "psutil not installed — cannot kill orphaned tool subprocesses. "
-                    "Install psutil to prevent resource leaks from timed-out swarm agents."
-                )
-            except Exception:
-                logger.debug("Could not kill orphaned tool processes", exc_info=True)
+                    current_process = psutil.Process()
+                    for child in current_process.children(recursive=True):
+                        with suppress(psutil.NoSuchProcess):
+                            try:
+                                child_name = child.name().lower()
+                                if any(tool in child_name for tool in _KNOWN_TOOL_PROCS):
+                                    logger.info(
+                                        "Swarm cleanup: killing orphaned %s (pid=%d)",
+                                        child_name,
+                                        child.pid,
+                                    )
+                                    child.kill()
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+                except ImportError:
+                    logger.warning(
+                        "psutil not installed — cannot kill orphaned tool subprocesses. "
+                        "Install psutil to prevent resource leaks from timed-out swarm agents."
+                    )
+                except Exception:
+                    logger.debug("Could not kill orphaned tool processes", exc_info=True)
+        finally:
+            # Shut down the pool with wait=False to avoid blocking on hung threads.
+            # Using a manual pool (not `with ThreadPoolExecutor()`) because __exit__
+            # calls shutdown(wait=True) which blocks indefinitely on hung threads.
+            pool.shutdown(wait=False, cancel_futures=True)
 
         deduped = self._deduplicate(all_findings)
         dedup_removed = len(all_findings) - len(deduped)

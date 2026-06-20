@@ -25,9 +25,8 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./argus-platform/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-      - ./argus-platform/db/audit_logging.sql:/docker-entrypoint-initdb.d/02-audit.sql
-      - ./argus-platform/db/performance.sql:/docker-entrypoint-initdb.d/03-perf.sql
+      - ./argus-workers/database/init/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./argus-workers/database/init/02-audit.sql:/docker-entrypoint-initdb.d/02-audit.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-argus_user} -d ${POSTGRES_DB:-argus_pentest}"]
       interval: 10s
@@ -67,30 +66,15 @@ services:
       - CHOWN
 
   # Next.js platform (frontend + API)
-  platform:
-    build:
-      context: ./argus-platform
-      dockerfile: Dockerfile
-    ports:
-      - "127.0.0.1:3000:3000"
-    environment:
-      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required}"
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
-      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}"
-      NODE_ENV: ${NODE_ENV:-production}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
+  # Platform service temporarily removed — argus-platform/ directory was removed
+  # during v5 migration. Re-add when Next.js platform is rebuilt.
+  # platform:
+  #   build:
+  #     context: ./argus-platform
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "127.0.0.1:3000:3000"
+  #   ...
 
   # Celery worker (distributed scan tasks)
   worker:

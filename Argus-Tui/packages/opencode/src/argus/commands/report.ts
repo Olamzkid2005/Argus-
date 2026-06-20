@@ -14,7 +14,9 @@ export async function enhanceReportWithAnalysis(
   const findings = db.getFindings(engagementId)
   const analyzer = injectedAnalyzer ?? await (async () => {
     const { FindingAnalyzer } = await import("../engagement/finding-analyzer")
-    return new FindingAnalyzer(db)
+    const { getLlmClient } = await import("../engagement/llm-client")
+    const llmClient = getLlmClient()
+    return new FindingAnalyzer(db, llmClient.isConfigured() ? llmClient : undefined)
   })()
   const CONCURRENCY = 3
   const results: FindingAnalysis[] = []

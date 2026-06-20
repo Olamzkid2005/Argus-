@@ -16,12 +16,14 @@ phases:
       - content_discovery
     execution: sequential
     error_recovery: skip_and_continue
+    approval_gate: destructive_tools
 
   - name: auth_detection
     required_capabilities:
       - auth_detection
     execution: sequential
     error_recovery: skip_and_continue
+    approval_gate: auth_testing
 
   - name: verification
     required_capabilities:

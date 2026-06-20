@@ -1,5 +1,28 @@
-import { Database } from "bun:sqlite"
+// bun:sqlite is only available in Bun. We use createRequire for a lazy
+// dynamic import so that under Node the error is a clear "Bun required"
+// message at construction time rather than a cryptic module-not-found
+// at import time (which would prevent the entire module from loading).
+import { createRequire } from "node:module"
 import { drizzle } from "drizzle-orm/bun-sqlite"
+
+const _require = createRequire(import.meta.url)
+type BunSqliteDatabaseConstructor = typeof import("bun:sqlite").Database
+
+/**
+ * Load the bun:sqlite Database class with a clear error if not running under Bun.
+ * This avoids a module-level crash — the error only happens at construction time.
+ */
+function _loadBunSqlite(): BunSqliteDatabaseConstructor {
+  try {
+    return _require("bun:sqlite").Database as BunSqliteDatabaseConstructor
+  } catch {
+    throw new Error(
+      "EngagementStore requires Bun's built-in bun:sqlite module.\n" +
+      "Run this under `bun` — Node.js is not supported by the engagement store.\n" +
+      "See https://bun.sh/docs/api/sqlite for details."
+    )
+  }
+}
 import { eq, desc, asc, sql } from "drizzle-orm"
 import { join, dirname } from "path"
 import { homedir } from "os"
@@ -180,7 +203,9 @@ export class EngagementStore {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
     }
-    const sqlite = new Database(this.dbPath)
+    // Lazy-load bun:sqlite — gives a clear "Bun required" error under Node
+    const BunSqliteDatabase = _loadBunSqlite()
+    const sqlite = new BunSqliteDatabase(this.dbPath)
     sqlite.exec("PRAGMA journal_mode = WAL")
     sqlite.exec("PRAGMA foreign_keys = ON")
     this.db = drizzle({ client: sqlite })

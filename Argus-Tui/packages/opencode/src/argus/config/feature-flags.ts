@@ -148,7 +148,19 @@ let _instance: FeatureFlags | null = null
 export function getFeatureFlags(): FeatureFlags {
   if (!_instance) {
     _instance = new FeatureFlags()
+    // Load from env vars first (takes precedence over config files)
     _instance.loadFromEnv()
+    // Then load from project config file (argus.config.yaml)
+    try {
+      const configPath = join(process.cwd(), "argus.config.yaml")
+      const raw = readFileSync(configPath, "utf-8")
+      const parsed = YAML(raw) as { features?: Record<string, boolean> } | undefined
+      if (parsed?.features) {
+        _instance.loadFromConfig(parsed.features)
+      }
+    } catch { /* config file missing or invalid — use env/defaults */ }
+    // Then load from user config (~/.argus/config.yaml)
+    _instance.loadFromUserConfig()
   }
   return _instance
 }

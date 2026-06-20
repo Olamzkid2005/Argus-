@@ -49,6 +49,12 @@ export async function assessCommand(target: string, options?: {
   cacheMode?: "normal" | "no_cache" | "refresh"
   features?: Partial<Record<Feature, boolean>>
   onProgress?: (event: ProgressEvent | string) => void
+  /**
+   * When true (default for CLI, false for TUI), writes a markdown summary
+   * to stdout after the assessment completes. TUI callers should set this
+   * to false to avoid raw markdown polluting the terminal UI.
+   */
+  writeReport?: boolean
 }): Promise<WorkflowRunResult> {
   const runner = new WorkflowRunner()
   const result = await runner.run({
@@ -61,7 +67,7 @@ export async function assessCommand(target: string, options?: {
     onProgress: options?.onProgress ?? cliProgress,
   })
 
-  if (result.allFindings.length > 0) {
+  if (result.allFindings.length > 0 && (options?.writeReport ?? true)) {
     const reportGen = new ReportGenerator()
     const report = reportGen.generateMarkdown(result.allFindings, result.engagementId, target, "assessment")
     process.stdout.write(report + "\n")

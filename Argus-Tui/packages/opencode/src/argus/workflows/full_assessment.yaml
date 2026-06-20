@@ -17,6 +17,7 @@ phases:
       - credential_analysis
     execution: sequential
     error_recovery: skip_and_continue
+    approval_gate: auth_testing
 
   - name: api_discovery
     required_capabilities:
@@ -31,6 +32,7 @@ phases:
       - template_scanning
     execution: parallel
     error_recovery: retry_once_then_skip
+    approval_gate: destructive_tools
 
   - name: code_analysis
     required_capabilities:

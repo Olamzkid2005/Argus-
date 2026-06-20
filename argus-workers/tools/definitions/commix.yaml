@@ -10,7 +10,7 @@ parameters:
     required: true
     flag: "--url"
 capabilities:
-  - ssrf_check
+  - command_injection
 signal_quality: PROBABLE
 requires:
   recon_signals:

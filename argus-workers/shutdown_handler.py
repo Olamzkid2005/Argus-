@@ -71,9 +71,10 @@ class GracefulShutdownHandler:
         if not has_active:
             return True
 
-        return (
-            True  # Signal shutdown is requested, task should check and finish quickly
-        )
+        # Shutdown requested, deadline not exceeded, active tasks exist
+        # — do NOT force exit. The caller should finish current work and
+        # re-check. should_force_exit() handles the deadline case.
+        return False
 
     def should_force_exit(self) -> bool:
         """Check if we should force exit immediately"""

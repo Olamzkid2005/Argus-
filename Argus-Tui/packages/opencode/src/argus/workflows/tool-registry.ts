@@ -47,6 +47,8 @@ export interface GateContext {
   techStack?: string[]
   /** Target URL scheme (e.g. "http" or "https") */
   targetScheme?: string
+  /** Recon signals published by earlier phases (e.g. "parameterized_forms", "has_api") */
+  reconSignals?: string[]
 }
 
 export class ToolRegistry {
@@ -123,8 +125,12 @@ export class ToolRegistry {
     for (const cap of capabilities) {
       const tools = this.getToolsByCapability(cap)
       for (const tool of tools) {
-        // Filter by target type (web vs non-web)
-        if (targetType === "web" && tool.supports_web === false) {
+        // Filter by target type (web vs api vs non-web)
+        // detectTargetType returns "web_app"|"api"|"spa"|"unknown", not "web"
+        if ((targetType === "web" || targetType === "web_app" || targetType === "spa") && tool.supports_web === false) {
+          continue
+        }
+        if (targetType === "api" && tool.supports_api === false) {
           continue
         }
 
@@ -174,8 +180,22 @@ export class ToolRegistry {
       if (!requires.target_scheme.includes(scheme)) return false
     }
 
-    // recon_signals: requires the planner to pass them explicitly — skip here
-    // (the planner is responsible for setting recon_signals in the context)
+    // recon_signals: tool only runs if recon has published matching signals.
+    // If no recon_signals context is provided, the gate is skipped (no data yet).
+    // If context IS provided (even empty), ALL required signals must be present (AND logic).
+    if (requires.recon_signals && requires.recon_signals.length > 0) {
+      // No recon data yet — skip gate (don't block tools while recon is pending)
+      if (context.reconSignals === undefined) {
+        // pass through — planner hasn't populated signals yet
+      } else {
+        const hasAllSignals = requires.recon_signals.every((s) =>
+          (context.reconSignals ?? []).some((sig) =>
+            sig.toLowerCase().includes(s.toLowerCase()),
+          ),
+        )
+        if (!hasAllSignals) return false
+      }
+    }
 
     return true
   }

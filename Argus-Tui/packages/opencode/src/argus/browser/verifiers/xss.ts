@@ -2,6 +2,7 @@ import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
 import { Confidence } from "../../shared/types"
 import { loginIfFormPresent } from "../login"
+import type { EvidenceCollector } from "../../evidence/collector"
 
 const XSS_ATTR_MARKERS = [
   "<img src=x onerror=",
@@ -30,6 +31,9 @@ export class StoredXSSVerifier implements VerificationScenario {
     private injectUrl: string,
     private victimViewUrl: string,
     private payload: string,
+    private collector?: EvidenceCollector,
+    private engagementId?: string,
+    private findingId?: string,
   ) {}
 
   async setup(): Promise<void> {
@@ -121,10 +125,23 @@ export class StoredXSSVerifier implements VerificationScenario {
   }
 
   async collectEvidence(): Promise<EvidencePackage> {
+    // Persist screenshots and requests/responses through the EvidenceCollector if available
+    if (this.collector && this.engagementId && this.findingId) {
+      for (const shot of this.capturedScreenshots) {
+        await this.collector.captureScreenshot(this.engagementId, this.findingId, shot.data).catch(() => {})
+      }
+      for (const req of this.capturedRequests) {
+        await this.collector.saveRequest(this.engagementId, this.findingId, req).catch(() => {})
+      }
+      for (const res of this.capturedResponses) {
+        await this.collector.saveResponse(this.engagementId, this.findingId, res).catch(() => {})
+      }
+      await this.collector.createPackage(this.engagementId, this.findingId, []).catch(() => {})
+    }
+
     const artifacts: import("../../shared/types").ArtifactRef[] = []
     for (const shot of this.capturedScreenshots) {
       const filename = `xss-${shot.label}.png`
-      await Bun.write(filename, shot.data)
       artifacts.push({ path: filename, type: "screenshot" })
     }
     for (const req of this.capturedRequests) {
@@ -134,7 +151,8 @@ export class StoredXSSVerifier implements VerificationScenario {
       artifacts.push({ path: res, type: "response" })
     }
     return {
-      packageId: "", findingId: "",
+      packageId: this.findingId ?? "",
+      findingId: this.findingId ?? "",
       artifacts,
       packageHash: "",
       createdAt: new Date().toISOString(),

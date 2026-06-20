@@ -189,7 +189,7 @@ export async function resumeCommand(
           executedCapabilities,
           insertedPhases: insertedPhaseIds,
           replanCount,
-          maxReplans: Number(process.env.ARGUS_MAX_REPLANS) || undefined,
+          maxReplans: Number(process.env.ARGUS_MAX_REPLANS) ?? undefined,
         }
         const replanPhases = planner.replan(replanCtx)
         replanCount = replanCtx.replanCount

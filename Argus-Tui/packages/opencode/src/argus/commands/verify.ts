@@ -64,16 +64,16 @@ export async function verifyCommand(
   // Determine which verifier to run based on finding tool
   try {
     if (finding.tool?.includes("bola") && allRoles.attacker && allRoles.victim) {
-      const verifier = new BOLAVerifier(engine, targetUrl, "/api/resource", allRoles.attacker, allRoles.victim)
+      const verifier = new BOLAVerifier(engine, targetUrl, "/api/resource", allRoles.attacker, allRoles.victim, evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
       lines.push(`[BOLA] ${result.summary} (confidence: ${result.confidence})`)
     } else if (finding.tool?.includes("xss") && (allRoles.user || allRoles.admin)) {
       const creds = allRoles.user ?? allRoles.admin!
-      const verifier = new StoredXSSVerifier(engine, targetUrl, targetUrl, "<script>alert('xss')</script>")
+      const verifier = new StoredXSSVerifier(engine, targetUrl, targetUrl, "<script>alert('xss')</script>", evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
       lines.push(`[XSS] ${result.summary} (confidence: ${result.confidence})`)
     } else if (finding.tool?.includes("priv-esc") && allRoles.user) {
-      const verifier = new PrivilegeEscalationVerifier(engine, targetUrl, ["/admin"], allRoles.user)
+      const verifier = new PrivilegeEscalationVerifier(engine, targetUrl, ["/admin"], allRoles.user, evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
       lines.push(`[PrivEsc] ${result.summary} (confidence: ${result.confidence})`)
     } else {

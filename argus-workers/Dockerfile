@@ -12,14 +12,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Go (version-pinned with SHA256 verification)
+# Install Go (version-pinned with checksum verification from official source)
 RUN set -eux; \
-    GO_TARBALL="go1.22.0.linux-amd64.tar.gz"; \
-    EXPECTED_SHA256="f6c8a87aa03b92d04e24a1e8a9962486e1f7ab72b1c2c0e3d5c12d8f3b4c5a6d"; \
+    GO_VERSION="1.22.10"; \
+    GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"; \
     curl -fsSL "https://go.dev/dl/${GO_TARBALL}" -o /tmp/go.tar.gz; \
-    echo "${EXPECTED_SHA256}  /tmp/go.tar.gz" | sha256sum -c -; \
+    curl -fsSL "https://go.dev/dl/${GO_TARBALL}.sha256" -o /tmp/go.tar.gz.sha256; \
+    sha256sum -c /tmp/go.tar.gz.sha256; \
     tar -C /usr/local -xzf /tmp/go.tar.gz; \
-    rm /tmp/go.tar.gz; \
+    rm /tmp/go.tar.gz /tmp/go.tar.gz.sha256; \
     go version
 ENV PATH=$PATH:/usr/local/go/bin:/root/go/bin
 

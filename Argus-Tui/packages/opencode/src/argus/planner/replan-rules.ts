@@ -3,7 +3,9 @@ import { Capability } from "./capabilities"
 
 export const REPLAN_INSERTABLE: Record<string, Capability> = {
   graphql: Capability.GRAPHQL_ASSESSMENT,
-  expressjs: Capability.EXPRESS_CVE_SCAN,
+  // expressjs subtype → VULNERABILITY_SCANNING: no dedicated Express CVE scanner exists.
+  // Replan will re-run generic vulnerability scanners to catch Express-specific CVEs.
+  expressjs: Capability.VULNERABILITY_SCANNING,
   swagger: Capability.API_DOCS_ANALYSIS,
   openapi: Capability.API_DOCS_ANALYSIS,
   jwt: Capability.JWT_ANALYSIS,

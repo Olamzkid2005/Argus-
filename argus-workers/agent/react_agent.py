@@ -645,37 +645,41 @@ class ReActAgent:
                     from urllib.parse import urlparse
 
                     hostname = urlparse(target).hostname
-                    if hostname:
-                        try:
-                            ip = ipaddress.ip_address(hostname)
-                            if ip.is_private or ip.is_loopback or ip.is_link_local:
-                                logger.warning(
-                                    "Blocked internal target '%s' (param=%s) for tool '%s'",
-                                    target,
-                                    param_name,
-                                    action.tool,
-                                )
-                                return False
-                        except ValueError:
-                            # M-v4-08: Block known cloud metadata hostnames to prevent SSRF.
-                            # Covers AWS, GCP, Azure, and Alibaba metadata endpoints.
-                            _blocked_metadata_hostnames = {
-                                "localhost",
-                                "169.254.169.254",
-                                "metadata.google.internal",  # GCP
-                                "metadata",  # GCP short name
-                                "instance-data",  # AWS short name
-                                "instance-data.us-east-1.compute.internal",  # AWS regional
-                                "100.100.100.200",  # Alibaba Cloud
-                            }
-                            if hostname.lower() in _blocked_metadata_hostnames:
-                                logger.warning(
-                                    "Blocked internal hostname '%s' (param=%s) for tool '%s'",
-                                    hostname,
-                                    param_name,
-                                    action.tool,
-                                )
-                                return False
+                    if not hostname:
+                        # urlparse treats scheme-less targets (e.g. "169.254.169.254")
+                        # as paths — .hostname is None. Use the raw target string
+                        # for validation instead.
+                        hostname = target.split("/")[0].split(":")[0]
+                    try:
+                        ip = ipaddress.ip_address(hostname)
+                        if ip.is_private or ip.is_loopback or ip.is_link_local:
+                            logger.warning(
+                                "Blocked internal target '%s' (param=%s) for tool '%s'",
+                                target,
+                                param_name,
+                                action.tool,
+                            )
+                            return False
+                    except ValueError:
+                        # M-v4-08: Block known cloud metadata hostnames to prevent SSRF.
+                        # Covers AWS, GCP, Azure, and Alibaba metadata endpoints.
+                        _blocked_metadata_hostnames = {
+                            "localhost",
+                            "169.254.169.254",
+                            "metadata.google.internal",  # GCP
+                            "metadata",  # GCP short name
+                            "instance-data",  # AWS short name
+                            "instance-data.us-east-1.compute.internal",  # AWS regional
+                            "100.100.100.200",  # Alibaba Cloud
+                        }
+                        if hostname.lower() in _blocked_metadata_hostnames:
+                            logger.warning(
+                                "Blocked internal hostname '%s' (param=%s) for tool '%s'",
+                                hostname,
+                                param_name,
+                                action.tool,
+                            )
+                            return False
                 except Exception as e:
                     logger.debug(
                         "Target validation failed for '%s' (param=%s): %s",
@@ -785,7 +789,18 @@ class ReActAgent:
         self._ensure_phase_tools()
 
         self.add_to_history("system", f"Task: {task}")
-        initial_target = task.split(":", 1)[-1].strip() if ":" in task else task
+        # Parse initial_target robustly: only split on first colon if the prefix
+        # is a known phase name. Otherwise treat the whole task as the target,
+        # avoiding mangling URLs like "https://example.com:8080" → "//example.com:8080".
+        _known_phases = {"recon", "scan", "deep_scan", "repo_scan", "analyze", "report"}
+        if ":" in task:
+            phase_part = task.split(":", 1)[0].strip().lower()
+            if phase_part in _known_phases:
+                initial_target = task.split(":", 1)[-1].strip()
+            else:
+                initial_target = task
+        else:
+            initial_target = task
 
         # Restore AuthContext from checkpoint if available (Celery retry resilience)
         if self._auth_context is None and self.engagement_id:
@@ -794,23 +809,38 @@ class ReActAgent:
 
                 checkpoint = load_auth_checkpoint(self.engagement_id)
                 if checkpoint and checkpoint.email and checkpoint.password:
+                    import concurrent.futures
                     import requests
 
-                    http_session = requests.Session()
                     from agent.tools.login_tool import run_login
 
-                    result, ctx = run_login(
-                        target=initial_target,
-                        http_session=http_session,
-                        email=checkpoint.email,
-                        password=checkpoint.password,
-                    )
-                    if ctx and ctx.is_authenticated():
-                        self.set_auth_context(ctx)
-                        slog.info(
-                            "Auth session restored from checkpoint for %s",
+                    http_session = requests.Session()
+
+                    def _restore_login():
+                        return run_login(
+                            target=initial_target,
+                            http_session=http_session,
+                            email=checkpoint.email,
+                            password=checkpoint.password,
+                        )
+
+                    _login_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                    try:
+                        login_future = _login_pool.submit(_restore_login)
+                        result, ctx = login_future.result(timeout=30)
+                        if ctx and ctx.is_authenticated():
+                            self.set_auth_context(ctx)
+                            slog.info(
+                                "Auth session restored from checkpoint for %s",
+                                checkpoint.email,
+                            )
+                    except concurrent.futures.TimeoutError:
+                        slog.warning(
+                            "Auth checkpoint restore timed out after 30s for %s",
                             checkpoint.email,
                         )
+                    finally:
+                        _login_pool.shutdown(wait=False, cancel_futures=True)
             except Exception as exc:
                 slog.warning("Failed to restore auth checkpoint: %s", exc)
 
@@ -847,6 +877,12 @@ class ReActAgent:
                 logger.info("Agent: no more actions at iteration %d", iteration)
                 break
 
+            # ── Track cost regardless of governance mode ──
+            # Cost tracking must run BEFORE the governance cost guard check, so it's
+            # not lost when GOVERNANCE_V2 is active (which previously skipped the
+            # legacy `else` branch containing `total_cost_usd += ...`).
+            total_cost_usd += getattr(action, "cost_usd", 0.0)
+
             # ── Governance check (Phase 6) ──
             # When GOVERNANCE_V2 flag is enabled and a Governance instance
             # is provided, use unified safety controls instead of ad-hoc cost guard.
@@ -874,7 +910,6 @@ class ReActAgent:
                     break
             else:
                 # Legacy cost guard (backward compatible when governance is absent)
-                total_cost_usd += getattr(action, "cost_usd", 0.0)
                 if total_cost_usd > LLM_AGENT_MAX_COST_USD:
                     logger.warning(
                         "Cost guard: $%.4f exceeds $%.4f. Switching to deterministic for remaining tools.",
@@ -1016,12 +1051,19 @@ class ReActAgent:
                 if not result.success:
                     pass
                 else:
-                    output_content = (result.output or "").strip()
+                    # Safely handle non-string output (e.g. dict from tool wrappers)
+                    raw_output = result.output
+                    if not isinstance(raw_output, str):
+                        try:
+                            raw_output = str(raw_output)
+                        except Exception:
+                            raw_output = ""
+                    output_content = (raw_output or "").strip()
                     if len(output_content) < 30:
                         if output_content.startswith(("{", "[")):
-                            try:
-                                import json as _json
+                            import json as _json
 
+                            try:
                                 _json.loads(output_content)
                                 empty_output_consecutive = 0
                             except (ValueError, _json.JSONDecodeError):

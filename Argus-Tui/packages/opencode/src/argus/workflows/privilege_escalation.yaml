@@ -7,11 +7,13 @@ phases:
       - browser_verification
     execution: sequential
     error_recovery: retry_once_then_skip
+    approval_gate: privilege_escalation
   - name: endpoint_access_check
     required_capabilities:
       - browser_verification
     execution: parallel
     error_recovery: skip_and_continue
+    approval_gate: privilege_escalation
   - name: evidence_collection
     required_capabilities:
       - browser_verification

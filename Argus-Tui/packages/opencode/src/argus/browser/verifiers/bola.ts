@@ -2,6 +2,7 @@ import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
 import { Confidence } from "../../shared/types"
 import { loginIfFormPresent, isAccessDenied } from "../login"
+import type { EvidenceCollector } from "../../evidence/collector"
 
 export class BOLAVerifier implements VerificationScenario {
   name = "bola"
@@ -22,6 +23,9 @@ export class BOLAVerifier implements VerificationScenario {
     private resourcePath: string,
     private userACreds: { username: string; password: string },
     private userBCreds: { username: string; password: string },
+    private collector?: EvidenceCollector,
+    private engagementId?: string,
+    private findingId?: string,
   ) {}
 
   async setup(): Promise<void> {
@@ -70,8 +74,23 @@ export class BOLAVerifier implements VerificationScenario {
   }
 
   async collectEvidence(): Promise<EvidencePackage> {
+    // Persist screenshots and requests/responses through the EvidenceCollector if available
+    if (this.collector && this.engagementId && this.findingId) {
+      for (const shot of this.capturedScreenshots) {
+        await this.collector.captureScreenshot(this.engagementId, this.findingId, shot.data).catch(() => {})
+      }
+      for (const req of this.capturedRequests) {
+        await this.collector.saveRequest(this.engagementId, this.findingId, req).catch(() => {})
+      }
+      for (const res of this.capturedResponses) {
+        await this.collector.saveResponse(this.engagementId, this.findingId, res).catch(() => {})
+      }
+      await this.collector.createPackage(this.engagementId, this.findingId, []).catch(() => {})
+    }
+
     return {
-      packageId: "", findingId: "",
+      packageId: this.findingId ?? "",
+      findingId: this.findingId ?? "",
       artifacts: [
         ...this.capturedScreenshots.map((s) => ({ path: s.label, type: "screenshot" as const })),
         ...this.capturedRequests.map((r) => ({ path: r, type: "request" as const })),

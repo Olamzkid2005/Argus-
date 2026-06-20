@@ -12,9 +12,6 @@ dev: ## Start all services (Next.js + Celery workers)
 stop: ## Stop all services
 	@./stop-argus.sh
 
-dev-platform: ## Start only Next.js dashboard
-	cd argus-platform && npm run dev
-
 dev-worker: ## Start only Celery workers
 	cd argus-workers && source venv/bin/activate && celery -A celery_app worker --loglevel=info --concurrency=4
 
@@ -23,38 +20,28 @@ dev-flower: ## Start Flower (Celery monitoring)
 
 # ── Testing ──
 
-test: test-frontend test-backend ## Run all tests
-
-test-frontend: ## Run frontend tests
-	cd argus-platform && npm test -- --passWithNoTests --ci
+test: test-v5 test-backend ## Run all tests (V5 TUI tests + Python backend tests)
 
 test-backend: ## Run backend tests
 	cd argus-workers && source venv/bin/activate && pytest tests/ -q --tb=short
 
-test-e2e: ## Run E2E tests (requires running services)
-	cd argus-platform && npm run test:e2e
-
-test-coverage: ## Run tests with coverage reports
-	cd argus-platform && npm run test:coverage
+test-coverage: ## Run tests with coverage reports (V5 + Python backend)
+	cd Argus-Tui/packages/opencode && bun test test/argus/ --coverage --timeout 30000
 	cd argus-workers && source venv/bin/activate && pytest tests/ --cov=. --cov-report=html
 
 # ── Linting ──
 
-lint: lint-frontend lint-backend ## Run all linters
-
-lint-frontend: ## Lint frontend code
-	cd argus-platform && npm run lint
+lint: lint-v5 lint-backend ## Run all linters
 
 lint-backend: ## Lint backend code
 	cd argus-workers && source venv/bin/activate && ruff check . --fix
 
-typecheck: ## TypeScript type checking
-	cd argus-platform && npx tsc --noEmit
+# ── Build (V5 CLI — argus-platform was removed during v5 migration) ──
+# `make build` was removed because argus-platform/ no longer exists.
+# The V5 CLI is run directly via `bun run` — no build step is needed.
+# If you need to bundle the CLI, see: Argus-Tui/package.json for bundling scripts.
 
-# ── Build ──
-
-build: ## Build Next.js for production
-	cd argus-platform && npm run build
+typecheck: typecheck-v5 ## TypeScript type checking
 
 # ── Docker ──
 
@@ -76,34 +63,24 @@ docker-down: ## Stop Docker Compose services
 docker-logs: ## View Docker Compose logs
 	docker-compose logs -f
 
-# ── Database ──
+# ── Database (migrations run via Python runner) ──
 
-db-setup: ## Set up database
-	cd argus-platform/db && ./setup.sh
-
-db-verify: ## Verify database setup
-	cd argus-platform/db && ./verify.sh
-
-db-reset: ## Reset database (WARNING: deletes all data)
-	cd argus-platform/db && ./setup.sh
+db-migrate: ## Run database migrations
+	cd argus-workers && python3 -m database.migrations.runner
 
 # ── Cleanup ──
 
-clean: ## Clean build artifacts and caches
-	cd argus-platform && rm -rf .next node_modules/.cache
+clean: clean-v5 ## Clean build artifacts and caches
 	cd argus-workers && rm -rf __pycache__ .pytest_cache .semgrep_cache
 	rm -rf logs/*.log
 
 clean-all: clean ## Deep clean (including node_modules and venv)
-	cd argus-platform && rm -rf node_modules
+	cd Argus-Tui/packages/opencode && rm -rf node_modules
 	cd argus-workers && rm -rf venv
 
 # ── Installation ──
 
-install: install-frontend install-backend ## Install all dependencies
-
-install-frontend: ## Install frontend dependencies
-	cd argus-platform && npm install
+install: install-v5 install-backend ## Install all dependencies
 
 install-backend: ## Install backend dependencies
 	cd argus-workers && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt

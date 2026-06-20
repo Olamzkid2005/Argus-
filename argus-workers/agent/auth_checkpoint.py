@@ -62,7 +62,12 @@ def save_auth_checkpoint(engagement_id: str, ctx: AuthContext) -> bool:
                     (engagement_id, action_id, selected_tool, arguments,
                      execution_success, created_at)
                 VALUES (%s, %s, %s, %s, %s, NOW())
-                ON CONFLICT (id) DO NOTHING
+                -- No ON CONFLICT clause: duplicates are harmless because
+                -- load_auth_checkpoint uses ORDER BY created_at DESC LIMIT 1.
+                -- The auto-generated primary key (id) is always unique, so
+                -- ON CONFLICT (id) was a no-op. A UNIQUE constraint on
+                -- (engagement_id, action_id) does not exist, so using that
+                -- as the conflict target would crash at runtime.
                 """,
                 (
                     engagement_id,

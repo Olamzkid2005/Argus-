@@ -117,7 +117,7 @@ jobs:
           report_paths: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
           check_name: "unit results (linux)"
           detailed_summary: true
-          fail_on_failure: false
+          fail_on_failure: true
 
       - name: Upload unit artifacts
         if: always()
@@ -152,10 +152,7 @@ jobs:
 
       - name: Run argus unit tests
         working-directory: Argus-Tui/packages/opencode
-        # `|| true` absorbs bun's spurious exit code 1 on Windows (all 558 tests
-        # pass, but orphaned child processes from assess handler can cause a
-        # non-zero exit). The JUnit report step below captures real failures.
-        run: bun test --timeout 60000 test/argus/ --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml || true
+        run: bun test --timeout 60000 test/argus/ --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml
 
       - name: Run llm unit tests
         working-directory: Argus-Tui/packages/llm
@@ -176,7 +173,7 @@ jobs:
           report_paths: Argus-Tui/packages/opencode/.artifacts/unit/junit.xml
           check_name: "unit results (windows)"
           detailed_summary: true
-          fail_on_failure: false
+          fail_on_failure: true
 
       - name: Upload unit artifacts
         if: always()

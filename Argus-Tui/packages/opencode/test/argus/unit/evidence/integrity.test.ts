@@ -17,8 +17,9 @@ function sha256(content: string | Buffer): string {
 function setupPackage(
   packageId: string,
   artifacts: { path: string; content: string }[],
+  engagementId: string = "eng-1",
 ): string {
-  const artifactDir = join(baseDir, "artifacts", packageId)
+  const artifactDir = join(baseDir, engagementId, "artifacts", packageId)
   mkdirSync(artifactDir, { recursive: true })
 
   const entries: ArtifactEntry[] = artifacts.map((a) => ({
@@ -57,7 +58,7 @@ function setupPackage(
 
 describe("verifyPackage", () => {
   test("Returns invalid with error when manifest file not found", () => {
-    const result = verifyPackage(baseDir, "nonexistent")
+    const result = verifyPackage(baseDir, "eng-1", "nonexistent")
     expect(result.valid).toBe(false)
     expect(result.packageId).toBe("nonexistent")
     expect(result.errors).toContain("Manifest file not found")
@@ -68,7 +69,7 @@ describe("verifyPackage", () => {
       { path: "requests/req.txt", content: "request data" },
       { path: "responses/res.txt", content: "response data" },
     ])
-    const result = verifyPackage(baseDir, pkgId)
+    const result = verifyPackage(baseDir, "eng-1", pkgId)
     expect(result.valid).toBe(true)
     expect(result.errors).toHaveLength(0)
     expect(result.packageId).toBe(pkgId)
@@ -78,7 +79,7 @@ describe("verifyPackage", () => {
 
   test("Detects missing artifacts", () => {
     const pkgId = "missing-artifact"
-    const artifactDir = join(baseDir, "artifacts", pkgId)
+    const artifactDir = join(baseDir, "eng-1", "artifacts", pkgId)
     mkdirSync(artifactDir, { recursive: true })
 
     const entryHash = sha256("file content that does not exist")
@@ -107,7 +108,7 @@ describe("verifyPackage", () => {
       JSON.stringify(manifest, null, 2),
     )
 
-    const result = verifyPackage(baseDir, pkgId)
+    const result = verifyPackage(baseDir, "eng-1", pkgId)
     expect(result.valid).toBe(false)
     expect(result.errors.some((e) => e.includes("Artifact missing"))).toBe(true)
   })
@@ -144,14 +145,14 @@ describe("verifyPackage", () => {
       JSON.stringify(manifest, null, 2),
     )
 
-    const result = verifyPackage(baseDir, pkgId)
+    const result = verifyPackage(baseDir, "eng-1", pkgId)
     expect(result.valid).toBe(false)
     expect(result.errors.some((e) => e.includes("Hash mismatch"))).toBe(true)
   })
 
   test("Detects package hash mismatch", () => {
     const pkgId = "pkg-hash-mismatch"
-    const artifactDir = join(baseDir, "artifacts", pkgId)
+    const artifactDir = join(baseDir, "eng-1", "artifacts", pkgId)
     mkdirSync(join(artifactDir, "requests"), { recursive: true })
 
     const content = "actual content"
@@ -179,7 +180,7 @@ describe("verifyPackage", () => {
       JSON.stringify(manifest, null, 2),
     )
 
-    const result = verifyPackage(baseDir, pkgId)
+    const result = verifyPackage(baseDir, "eng-1", pkgId)
     expect(result.valid).toBe(false)
     expect(
       result.errors.some((e) => e.includes("Package hash does not match")),

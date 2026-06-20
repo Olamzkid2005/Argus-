@@ -22,6 +22,50 @@ class InvalidStateTransitionError(Exception):
     pass
 
 
+# Maps agent/phase naming conventions to canonical state machine state names.
+# The ReActAgent uses "scan", "analyze", "report" for tool selection and phase
+# management; the state machine uses "scanning", "analyzing", "reporting" for
+# DB persistence. This mapping is the single source of truth for translation.
+PHASE_TO_STATE_MAP: dict[str, str] = {
+    "recon": "recon",
+    "scan": "scanning",
+    "deep_scan": "scanning",
+    "repo_scan": "scanning",
+    "analyze": "analyzing",
+    "report": "reporting",
+}
+
+
+def resolve_state_for_phase(phase_name: str) -> str:
+    """Translate an agent phase name to the canonical state machine state.
+
+    Returns the state machine state name for the given agent phase.
+    If the phase name is already a valid state, returns it as-is.
+    If unknown, returns the phase name unchanged (conservative fallback).
+    """
+    if phase_name in EngagementStateMachine.STATES:
+        return phase_name
+    return PHASE_TO_STATE_MAP.get(phase_name, phase_name)
+
+
+def resolve_phase_for_state(state_name: str) -> str:
+    """Translate a state machine state name back to an agent phase name.
+
+    Returns the canonical agent phase name for the given state machine state.
+    If the state is already a valid phase name, returns it as-is.
+    If unknown, returns the state name unchanged (conservative fallback).
+
+    Note: Multiple phases map to the same state (e.g. "scan", "deep_scan",
+    "repo_scan" → "scanning"). The canonical (first) phase is returned.
+    """
+    # Build reverse map keeping the first canonical phase for each state
+    _reverse_map: dict[str, str] = {}
+    for phase, sm_state in PHASE_TO_STATE_MAP.items():
+        if sm_state not in _reverse_map:
+            _reverse_map[sm_state] = phase
+    return _reverse_map.get(state_name, state_name)
+
+
 class EngagementStateMachine:
     """
     Enforces valid engagement state transitions and records history
