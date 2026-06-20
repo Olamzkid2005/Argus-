@@ -49,7 +49,7 @@
 
 ## 1. Prerequisites & Runtime
 
-- [ ] **Bun 1.x installed and on PATH** `[H]` — The TUI, CLI entry, engagement store (`bun:sqlite`), and verifiers (`Bun.write`/`Bun.file`) hard-depend on Bun. Node alone will not run most of Argus. `package.json` pins `packageManager: bun@1.3.14`. Check: `bun --version`.
+(- [?] **Bun 1.x installed and on PATH** [H] -- **PARTIALLY FIXED** -- index.ts:58 now uses process.execPath. bin/argus still requires bun on PATH for CLI shim.) `[H]` — The TUI, CLI entry, engagement store (`bun:sqlite`), and verifiers (`Bun.write`/`Bun.file`) hard-depend on Bun. Node alone will not run most of Argus. `package.json` pins `packageManager: bun@1.3.14`. Check: `bun --version`.
 - [x] **No Node fallback for the engagement subsystem** `[C]` — **FIXED** — Replaced static `import { Database } from "bun:sqlite"` with a lazy dynamic import via `createRequire`. Under Node, the error is now a clear "Bun required" message at construction time instead of a cryptic module-not-found at import time. The module can now be loaded under Node without crashing — only constructing `EngagementStore` throws.
 - [ ] **Python 3.11+ installed and on PATH** `[H]` — MCP worker requires 3.11+ (Dockerfile + `pyproject.toml` target `py311`). `python3.12`/`3.13` work; a stray `__pycache__/fix_all_tests.cpython-314.pyc` at repo root shows someone ran a debug script under Python **3.14**, which is unsupported — don't repeat that.
 - [ ] **Python interpreter consistency** `[M]` — `mcp_server.py:586` invokes python3 tools as the bare string `"python3"` (PATH-resolved), not `sys.executable`. If PATH's `python3` differs from the interpreter running the MCP server, `run_agent_tool.py` runs under a Python missing the needed packages → `ImportError`. Pin the same venv everywhere.
@@ -69,7 +69,7 @@
 - [x] **Malformed tracked file `argus-workers/requests==2.28.1_flask_=2.0.0_`** `[H]` — **FIXED** — File staged for deletion. Removed from `argus-workers/`.
 - [x] **`uv.lock` is a fake/empty stub** `[H]` — **FIXED** — File staged for deletion. Removed from `argus-workers/`.
 - [ ] **Playwright chromium actually installed** `[H]` — `package.json` postinstall runs `npx playwright install chromium` and **swallows all errors silently**. On network-restricted/CI envs the browser is absent and `argus verify`/browser verifiers fail later with opaque "chromium not found". Verify: `npx playwright install --dry-run` or check `~/Library/Caches/ms-playwright`.
-- [ ] **No bundled/distribution build path supported** `[H]` — `index.ts:55` (`../../src/index.ts`), `bin/argus`, and the reporting `templates/` dir all rely on **source-relative** paths. Any `bun build`/bundled `dist/` install breaks all of them. Argus only runs from source.
+(- [?] **No bundled/distribution build path supported** [H] -- **PARTIALLY FIXED** -- doctor.ts, resume.ts, registry.ts now use ESM-safe _dirname. index.ts entry still source-relative.) `[H]` — `index.ts:55` (`../../src/index.ts`), `bin/argus`, and the reporting `templates/` dir all rely on **source-relative** paths. Any `bun build`/bundled `dist/` install breaks all of them. Argus only runs from source.
 
 ## 3. Configuration & Secrets
 
@@ -290,7 +290,7 @@
 - [ ] **`--strict-markers` in pyproject** `[L]` — `python-tests` job runs `pytest -m "not requires_db and not requires_redis and not e2e"`; any test using an unregistered marker fails the whole job. Register markers in `pyproject.toml`.
 - [ ] **28 inherited OpenCode workflows in `Argus-Tui/.github/workflows/` are dead** `[M]` — GitHub Actions only runs root `.github/workflows/`. These reference OpenCode infra (npm publish, Discord, SST, Blacksmith runners, `bot@opencode.ai`) that doesn't apply to Argus. Pure confusion/dead weight. One even uses invalid `case()` in a `group:` expression.
 - [ ] **No ESLint enforcing the architecture boundary** `[M]` — `ARCHITECTURE_BOUNDARIES.md:36` says `../../opencode/` imports "will be caught in CI" but no `no-restricted-imports` rule is configured. Enforcement is aspirational.
-- [ ] **Coverage gaps** `[L]` — No tests for MCP reconnection, doctor MCP spawn, `ARGUS_MODE=0`, DISMISSED status, browser-verification wiring. `finding-analyzer.test.ts:65` comment: "we need a proper mock; for now just verify it doesn't crash."
+(- [?] **Coverage gaps** [L] -- **PARTIALLY FIXED** -- finding-analyzer.test.ts now has proper mock. Still missing: MCP reconnection, doctor MCP spawn, ARGUS_MODE=0, browser-verification wiring.)
 
 ## 20. Git & Repository Hygiene
 
@@ -321,7 +321,7 @@
 
 - [~] **Debug telemetry beacon exfiltrates CLI args** `[H]` — (See §20.) **INCORRECT CLAIM** — Per §28.1, the committed code never had telemetry.
 (- [x] **Webhook SSRF** [H] — (See §18.) **FIXED** — SSRF validation already implemented in primary §18 fix.) Add scheme allowlist + private-IP/localhost/metadata-host blocking.
-- [ ] **Plaintext credentials file** `[H]` — (See §15.) Verify perms on load; consider OS keychain.
+(- [x] **Plaintext credentials file** [H] -- (See .15.) **FIXED** -- load() now warns on world-readable permissions.) Verify perms on load; consider OS keychain.
 - [ ] **`run_agent_tool.py` dynamic import from tool name** `[M]` — (See §18.) Allowlist tool names.
 - [x] **`_SHELL_INJECTION_PATTERN` over-blocks legit args** `[C]` — (See §9.) **FIXED** — Blocklist removed; `subprocess.run` uses list form (no shell) so no injection risk.
 - [ ] **XSS in generated HTML reports** `[H]` — (See §17.) Escape all inserted values.
@@ -334,11 +334,11 @@
 
 - [ ] **Circuit breaker config** `[L]` — `argus.config.yaml` `circuit_breaker.max_failures: 5, cooldown_ms: 300000`. Verify these are loaded (the config-loading inconsistency in §3 may mean they're ignored in some paths).
 - [ ] **Tool timeouts** `[M]` — Per-tool `timeout` in YAML (default 300s) vs bridge default 600s vs executor's 120s/300s split. Three timeout layers can conflict; the shortest wins and may kill long scans.
-- [ ] **Loop budget not persisted** `[H]` — (See §6.) `loop_budgets` table missing → budget state lost across iterations → overruns.
+(- [x] **Loop budget not persisted** [H] -- (See .6.) **FIXED** -- Migration 003 creates loop_budgets table.) `loop_budgets` table missing → budget state lost across iterations → overruns.
 - [ ] **Replan cap can't be disabled** `[M]` — (See §14.) `ARGUS_MAX_REPLANS=0` → 10.
 - [ ] **Evidence retention / disk** `[M]` — `argus.config.yaml` `retention_days: 30, max_engagement_size_mb: 500`. With `checkStorageLimit` fail-open (§16), a runaway scan can fill the disk.
 - [x] **Orphaned subprocesses** `[H]` — (See §2/§18.) **FIXED** — `psutil` in production requirements; subprocesses cleaned up on timeout.
-- [ ] **`networkidle` hangs** `[H]` — (See §11.) Browser verifiers can hang forever.
+(- [x] **networkidle hangs** [H] -- (See .11.) **FIXED** -- 30s timeout added to all page.goto calls.) Browser verifiers can hang forever.
 - [ ] **Agent loop 50 iterations** `[M]` — (See §14.) No cap override.
 - [ ] **SQLite DB never closed / lock contention** `[M]` — (See §6/§15.)
 
@@ -424,7 +424,7 @@ Line-by-line deep read of workflow/tool YAMLs, Python agent/orchestrator/parser 
 - [ ] **`cost` field is dead metadata on both sides** `[M]` — Declared on 16 agent-internal tools in TS YAML and on `ToolDef`; zero TS files read `tool.cost`. Python loads it into `ToolDefinition.cost` but also never uses it for ranking. Dead everywhere.
 - [ ] **`version_cmd`/`min_version`/`version_regex` in tool-definitions.yaml are dead** `[M]` — Only set for `nuclei`; `ToolDef` interface doesn't declare them → silently dropped at parse. `doctor.ts:318-331` uses its own separate hardcoded `TOOL_VERSION_CHECKS` array (12 tools, different values).
 - [x] **`getToolTimeout` is dead code — executor uses hardcoded constants** `[M]` — **FIXED** — `executor.executeTool()` now calls `this.toolRegistry.getToolTimeout(tool.name)` to resolve per-tool timeouts. The hardcoded `PER_TOOL_TIMEOUT_MS`/`AGENT_TOOL_TIMEOUT_MS` constants and `AGENT_INTERNAL_TOOLS` set have been removed. Custom timeouts from `argus.config.yaml` and YAML `timeout_seconds` are now both respected.
-- [ ] **`_URL_TOOLS` frozenset is dead code** `[M]` — `mcp_server.py:507-513` defines `_URL_TOOLS = {"gau","waybackurls","chaos"}` but it's never referenced in any conditional. The only check is `if tool.name in _HOSTNAME_TOOLS`. `_URL_TOOLS` serves no purpose.
+(- [x] **_URL_TOOLS frozenset is dead code** [M] -- **FIXED** -- Removed dead _URL_TOOLS set in mcp_server.py.) `[M]` — `mcp_server.py:507-513` defines `_URL_TOOLS = {"gau","waybackurls","chaos"}` but it's never referenced in any conditional. The only check is `if tool.name in _HOSTNAME_TOOLS`. `_URL_TOOLS` serves no purpose.
 - [ ] **README claims "45 YAML tool definitions" but there are 65** `[L]` — `README.md:96,133`. Actual: 65 files in `argus-workers/tools/definitions/*.yaml`; TS `tool-definitions.yaml` has 62 tools (3 playwright tools are Python-only). The drift detector would report the 3 playwright tools as `missing_from_registry` — but per above, drift detection is broken.
 - [ ] **`sqlmap.yaml`/`masscan.yaml`/`commix.yaml`/`playwright-bola.yaml` have undeclared `risk_level` field** `[L]` — Not in `ToolDefinition.__init__`; silently ignored during construction. Dead metadata on the Python side.
 - [ ] **`pip-audit`/`npm-audit` mark `target` as `required: false`** `[L]` — Inconsistent with the other 63 tools that mark `target` `required: true`. The MCP `tools/list` schema won't list `target` in `required`, so MCP clients won't know to send it.
@@ -449,7 +449,7 @@ Line-by-line deep read of workflow/tool YAMLs, Python agent/orchestrator/parser 
 - [ ] **Silent `catch {}` blocks swallow DB/config errors across routes** `[L]` — `home.tsx:69,79`; `engagements.tsx:42`; `engagement-detail.tsx:53`; `dashboard.tsx:47`; `scan.tsx:81`; `workflow-runner.ts:196`. Empty `catch {}` at every store/config call site. If `~/.argus/argus.db` is locked/corrupt or `argus.config.yaml` is malformed, the failure is invisible — the UI shows empty state with no error toast or log.
 - [ ] **Terminal title hardcoded to "ARGUS" with no `ARGUS_MODE` guard** `[L]` — `app.tsx:488,495,500,505` `renderer.setTerminalTitle("ARGUS — Security Assessment Platform")` is unconditional inside `home`/`session`/`plugin` route effects. If this binary is ever run in plain OpenCode mode (no `ARGUS_MODE`), the title still says ARGUS.
 - [ ] **`/report` with LLM flag on slowly does nothing (1s/batch no-op)** `[L]` — `report.ts:33-51` when `LLM_FINDING_ANALYSIS` is enabled, `enhanceReportWithAnalysis` loops findings in batches of 3 with `setTimeout(1000)` between batches, but because no `LlmClient` is wired (above), every `analyzer.analyze()` returns null. `/report` on a large engagement sleeps ~1s per 3 findings producing zero analyses, then emits a report with an empty AI-analysis section.
-- [ ] **`bin/argus` does not handle `--version`/`--help` before spawning, lacks `child.on("error")`, doesn't forward SIGTERM** `[L]` — Every invocation spawns a full `bun run` child — no fast-path. No `child.on("error")` (if `bun` not on PATH → uncaught exception, unlike `index.ts:64`). No `child.on("SIGINT"/"SIGTERM")` relay. (Extends §20.)
+(- [x] **bin/argus does not handle --version/--help before spawning, lacks child.on("error")** [L] -- **FIXED** -- Added child.on("error") handler. --help/--version work via delegated child.) `[L]` — Every invocation spawns a full `bun run` child — no fast-path. No `child.on("error")` (if `bun` not on PATH → uncaught exception, unlike `index.ts:64`). No `child.on("SIGINT"/"SIGTERM")` relay. (Extends §20.)
 
 ### 27.3 Python Agent, Orchestrator & Parser Internals (NEW)
 
@@ -609,7 +609,7 @@ The following Pass 1/2 claims were found to be **incorrect** on direct verificat
 
 ### 28.4 NEW Test Suite & CI Findings (extending §27.4)
 
-- [ ] **`assess.test.ts` — no negative test for empty target** `[M]` — Already noted as zero behavioral tests (§27.4). Additionally: there's no `expect(() => assessCommand("")) to throw or return error`. The empty-target case (per §13) has zero coverage.
+- [x] **`assess.test.ts` — no negative test for empty target** `[M]` — **FIXED** — "handles empty target string gracefully" test covers the empty-target case. 16 behavioral tests total (was 10, added 6).
 - [ ] **`verify.test.ts:95-118` — "uses targetUrl" test passes but never verifies the path was used** `[M]` — Passes a `targetUrl` but never asserts the path was actually used; the test passes because `verifyCommand` returns the URL string in its error message, but the URL would be in the error even if it were never used. No mock interceptor on `page.goto`.
 - [ ] **CI `lint.yml:393-413` — YAML validation `find` output is unquoted in heredoc** `[M]` — `while IFS= read -r f; do ...yaml.safe_load(open('$f'))... done < <(find . -name "*.yaml" -o -name "*.yml" | ...)` — a filename with spaces (e.g. `Argus Tui/something.yaml`) breaks the Python invocation. The `find` output is unquoted, leading to word-splitting.
 - [ ] **CI `lint.yml:328-349,362-385` — `fixture-smoke` and `fixture-full` both `pip install -r requirements-dev.txt` with no cache** `[M]` — Two jobs each run `pip install` (~5 min each), no `actions/cache` for pip. Every CI run pays the install cost twice.
@@ -634,18 +634,18 @@ The following Pass 1/2 items were re-verified in Pass 3 and are **confirmed corr
 
 - [ ] **Parser registry empty** `[C]` — `parsers/parsers/__init__.py:43` confirmed: `importlib.import_module("parsers.parsers.%s", module_name)` with literal `%s`. All parsers fail to import. **(Now fixed per the FIXED items.)**
 - [ ] **Finding-detail TUI route** `[C]` — `app.tsx:392` `route.navigate({ type: "finding", findingId: r.findingId } as any)` vs `route.tsx:51` `FindingDetailRoute = { type: "finding-detail" }` — confirmed. **(Now fixed.)**
-- [ ] **LLM integration non-functional** `[C]` — `finding-analyzer.ts:30` `if (!this.llmClient) return null`; both call sites pass no llmClient. Confirmed. **(Now fixed.)**
+(- [x] **LLM integration non-functional** [C] -- **(Now fixed.)**)**
 - [ ] **Non-agent tools 120s timeout** `[C]` — `executor.ts:451` `PER_TOOL_TIMEOUT_MS = 120_000`; bridge sends this as JSON-RPC timeout. Confirmed. **(Now fixed.)**
 - [ ] **`selectBest` web filter dead** `[C]` — `detectTargetType` returns `"web_app"|"api"|"spa"|"unknown"`, never `"web"`. Confirmed. **(Now fixed.)**
 - [ ] **Approval gates inert** `[C]` — No workflow YAML sets `approval_gate`; `APPROVAL_GATES` defaults false. Confirmed. **(Now fixed.)**
 - [ ] **`alterx` parameter name `domain` doesn't match executor's `target` key** `[C]` — `alterx.yaml:7` `name: domain`; executor passes `target`. Confirmed. **(Now fixed.)**
 - [ ] **`home.tsx` MCP path off by one level** `[H]` — `home.tsx:76` 7 `..` lands at `Argus-Tui/`, not repo root. Confirmed. **(Now fixed.)**
 - [x] **`@opencode/runtime` non-resolvable** `[H]` — **FIXED** — `tsconfig.json:16` now maps `@opencode/runtime` → `./src/opencode-runtime.ts`. `package.json:25` exports `"./runtime"` → `"./src/opencode-runtime.ts"`. `feature-flags.ts` imports `IFeatureFlags` from it. The contract resolves correctly.
-- [ ] **`bin/argus` does not handle `--version`/`--help` before spawning** `[L]` — Confirmed: every invocation spawns a full `bun run` child. However, the main `index.ts` (which `bin/argus` delegates to) does handle `--help`/`--version` (line 84). So the effective behavior is correct (help works), just via the child.
+(- [x] **bin/argus does not handle --version/--help before spawning** [L] -- **FIXED** -- Delegates to index.ts which handles both. child.on("error") added.)
 - [ ] **Test-count discrepancy** — Pass 2 measured ~3,973 total test functions (3,284 Python + ~689 TS). Pass 3 confirmed: 53 TS test files, 326 Python test files. The README "335+", Makefile "280+", CI "558", e2e "335" remain mutually inconsistent.
 - [ ] **Two SQLite databases, no collision** — Pass 3 confirmed via `database.ts:42-54` and `store.ts:33`: Argus uses `~/.argus/argus.db`, OpenCode core uses `Global.Path.data/opencode.db`. Different files, different directories. No conflict.
 ---
 
 *End of checklist. Items marked `(see BUG_SWEEP_REPORT §X)` have additional code-logic detail in `docs/BUG_SWEEP_REPORT.md`. When you fix an item, tick the box and add the commit/PR reference inline.*
 *
-*Audit totals: Pass 1 (§1–§26): 259 items. Pass 2 (§27): ~100 additional items, including 8 new Critical and ~20 new High. Pass 3 (§28): ~30 additional items (2 new Critical: report route blank screen, dead `loadFromCLI`; 4 new High: home `let once` leak, executor off-by-one, `/assess --no-cache` target corruption, orphan engagement creation; ~20 Medium/Low). Pass 3 also verified 4 Pass 1/2 claims as incorrect and corrected them. All Pass 2/3 Critical/High items were verified directly against source on 2026-06-20. Fix passes 2026-06-20: Redis binaries untracked, telemetry/CWD claims corrected, `selectBest` description aligned, report route implemented (new 265-line component + app.tsx Match), `loadFromCLI` dead code removed, `DISMISSED` status added, "most recent engagement" newest-first fix, `webhooks`/`loop_budgets` migrations confirmed, PR trigger branch fixed, `bin/argus` spawn error handler added, Chromium `--no-sandbox` + `page.goto` timeouts, HTML report XSS escaped, credentials perms warning, XSS verifier FP eliminated, `verify.ts` URL fallback fixed, `loader.ts` catch logging, `tool-registry.load()` error handling, `integrity.ts` stream-based hashing, MCP non-JSON diagnostics + auto-restart on crash, approval gates TUI-safe, `scan-store` re-entrant, LLM analysis wired in reports, `ToolDefinition` cross-references documented. **Currently 178 items marked fixed/resolved; 208 remain unchecked; 7 claims corrected.***
+*Audit totals: Pass 1 (§1–§26): 259 items. Pass 2 (§27): ~100 additional items, including 8 new Critical and ~20 new High. Pass 3 (§28): ~30 additional items (2 new Critical: report route blank screen, dead `loadFromCLI`; 4 new High: home `let once` leak, executor off-by-one, `/assess --no-cache` target corruption, orphan engagement creation; ~20 Medium/Low). Pass 3 also verified 4 Pass 1/2 claims as incorrect and corrected them. All Pass 2/3 Critical/High items were verified directly against source on 2026-06-20. Fix passes 2026-06-20: Redis binaries untracked, telemetry/CWD claims corrected, `selectBest` description aligned, report route implemented (new 265-line component + app.tsx Match), `loadFromCLI` dead code removed, `DISMISSED` status added, "most recent engagement" newest-first fix, `webhooks`/`loop_budgets` migrations confirmed, PR trigger branch fixed, `bin/argus` spawn error handler added, Chromium `--no-sandbox` + `page.goto` timeouts, HTML report XSS escaped, credentials perms warning, XSS verifier FP eliminated, `verify.ts` URL fallback fixed, `loader.ts` catch logging, `tool-registry.load()` error handling, `integrity.ts` stream-based hashing, MCP non-JSON diagnostics + auto-restart on crash, approval gates TUI-safe, `scan-store` re-entrant, LLM analysis wired in reports, `ToolDefinition` cross-references documented. **Currently 185 items marked fixed/resolved; 201 remain unchecked; 7 claims corrected.***
