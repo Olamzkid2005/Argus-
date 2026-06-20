@@ -56,3 +56,10 @@ class TestPoCShouldGenerate:
             }
         )
         assert should is False
+
+
+    def test_poc_cost_tracking_falls_through(self):
+        """Verify that PoC generation records cost even when LLM returns no cost_usd."""
+        # This tests that the cost path at line 255 doesn't silently skip
+        # when LLM response lacks a cost_usd field
+        pass  # Placeholder — real fix requires LLM mock

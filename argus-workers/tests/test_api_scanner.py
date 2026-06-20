@@ -17,7 +17,6 @@ class TestAPISecurityScanner:
     def scanner(self):
         return LegacyAPISecurityScanner()
 
-    @pytest.mark.xfail(reason="Requires network", strict=True)
     def test_scan_missing_security_headers(self, scanner):
         mock_response = Mock()
         mock_response.headers = {"Content-Type": "application/json"}
@@ -32,7 +31,6 @@ class TestAPISecurityScanner:
         assert len(header_findings) == 1
         assert header_findings[0]["severity"] == "MEDIUM"
 
-    @pytest.mark.xfail(reason="Requires network", strict=True)
     def test_scan_wildcard_cors(self, scanner):
         mock_response = Mock()
         mock_response.headers = {
@@ -48,7 +46,6 @@ class TestAPISecurityScanner:
         assert len(cors_findings) == 1
         assert cors_findings[0]["severity"] == "HIGH"
 
-    @pytest.mark.xfail(reason="Requires network", strict=True)
     def test_scan_graphql_introspection_enabled(self, scanner):
         mock_response = Mock()
         mock_response.status_code = 200
@@ -65,7 +62,6 @@ class TestAPISecurityScanner:
         ]
         assert len(intro_findings) >= 1
 
-    @pytest.mark.xfail(reason="Requires network", strict=True)
     def test_scan_graphql_introspection_disabled(self, scanner):
         mock_response = Mock()
         mock_response.status_code = 200
@@ -79,7 +75,6 @@ class TestAPISecurityScanner:
 
         assert isinstance(findings, list)
 
-    @pytest.mark.xfail(reason="Requires network", strict=True)
     def test_scan_with_api_key_auth(self, scanner):
         mock_response = Mock()
         mock_response.headers = {"content-type": "application/json"}
@@ -97,7 +92,6 @@ class TestAPISecurityScanner:
 
         assert isinstance(findings, list)
 
-    @pytest.mark.xfail(reason="Requires network", strict=True)
     def test_scan_rate_limiting(self, scanner):
         mock_response = Mock()
         mock_response.status_code = 200
@@ -108,7 +102,6 @@ class TestAPISecurityScanner:
 
         assert isinstance(findings, list)
 
-    @pytest.mark.xfail(reason="Requires network", strict=True)
     def test_scan_request_failure(self, scanner):
         with patch.object(
             scanner.session,
@@ -119,7 +112,6 @@ class TestAPISecurityScanner:
         assert isinstance(findings, list)
         assert len(findings) == 0
 
-    @pytest.mark.xfail(reason="Requires network", strict=True)
     def test_scan_rest_endpoints(self, scanner):
         mock_response = Mock()
         mock_response.status_code = 200

@@ -132,4 +132,58 @@ describe("assessCommand", () => {
 
     await expect(assessCommand("https://example.com")).rejects.toThrow("Worker crashed")
   })
+
+  test("passes credsPath option to WorkflowRunner", async () => {
+    mockRun.mockResolvedValue(makeEmptyResult())
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+    await assessCommand("https://example.com", { credsPath: "/path/to/creds.json" })
+    expect(mockRun.mock.calls[0][0].credsPath).toBe("/path/to/creds.json")
+  })
+
+  test("passes features option to WorkflowRunner", async () => {
+    mockRun.mockResolvedValue(makeEmptyResult())
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+    const features = { approval_gates: true }
+    await assessCommand("https://example.com", { features })
+    expect(mockRun.mock.calls[0][0].features).toEqual(features)
+  })
+
+  test("does NOT write markdown report when no findings exist", async () => {
+    const emptyResult = makeEmptyResult()
+    mockRun.mockResolvedValue(emptyResult)
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+    await assessCommand("https://example.com")
+    expect(mockGenerateMarkdown).not.toHaveBeenCalled()
+  })
+
+  test("calls onProgress for ProgressEvent objects", async () => {
+    mockRun.mockImplementation(async (opts: any) => {
+      opts.onProgress?.({ type: "phase_complete", phaseId: "p1", name: "recon", findings: 5, status: "completed" })
+      return makeEmptyResult()
+    })
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+    const onProgress = mock<(event: any) => void>()
+    await assessCommand("https://example.com", { onProgress })
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "phase_complete" })
+    )
+  })
+
+  test("sets default onProgress when not provided", async () => {
+    mockRun.mockImplementation(async (opts: any) => {
+      expect(typeof opts.onProgress).toBe("function")
+      return makeEmptyResult()
+    })
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+    await assessCommand("https://example.com")
+  })
+
+  test("returns empty findings summary for empty results", async () => {
+    mockRun.mockResolvedValue(makeEmptyResult())
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+    const result = await assessCommand("https://example.com")
+    expect(result.findings).toBe(0)
+    expect(result.critical).toBe(0)
+    expect(result.high).toBe(0)
+  })
 })

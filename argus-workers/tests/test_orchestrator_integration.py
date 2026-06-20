@@ -313,7 +313,10 @@ class TestReActAgent:
         assert d["success"]
         assert "found 3" in d["summary"]
 
-    @pytest.mark.xfail(reason="Tool list mismatch", strict=False)
+    # NOTE: This xfail hides a real planner bug — phase→tool mapping doesn't
+    # select nuclei for a "scan" phase even when nuclei is registered.
+    # Change strict=True when the planner is fixed.
+    @pytest.mark.xfail(reason="Tool list mismatch", strict=True)
     def test_agent_real_plan_with_matching_phase(self):
         """Test that real plan_next_action picks the right tool for a phase."""
         from agent_loop import AgentResult, ReActAgent, ToolRegistry
@@ -341,7 +344,10 @@ class TestReActAgent:
         action = agent.plan_next_action("no-match-phase", "", set())
         assert action is None
 
-    @pytest.mark.xfail(reason="Tool list mismatch", strict=False)
+    # NOTE: This xfail hides a real planner bug — phase→tool mapping doesn't
+    # select nuclei for a "scan" phase even when nuclei is registered.
+    # Change strict=True when the planner is fixed.
+    @pytest.mark.xfail(reason="Tool list mismatch", strict=True)
     def test_agent_real_plan_already_tried_tool(self):
         """Test that plan_next_action skips already-tried tools."""
         from agent_loop import AgentResult, ReActAgent, ToolRegistry

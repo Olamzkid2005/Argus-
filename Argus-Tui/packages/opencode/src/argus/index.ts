@@ -55,7 +55,7 @@ function launchTui() {
   const entry = join(_dirname, "../../src/index.ts")
   const pkgDir = join(_dirname, "../..")
 
-  const child = spawn("bun", ["run", "--conditions=browser", entry, "run", "--interactive"], {
+  const child = spawn(process.execPath, ["run", "--conditions=browser", entry, "run", "--interactive"], {
     stdio: "inherit",
     cwd: pkgDir,
     env: { ...process.env, ARGUS_MODE: "1" },
