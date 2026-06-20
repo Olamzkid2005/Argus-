@@ -42,29 +42,36 @@ describe("FindingAnalyzer", () => {
     expect(result).toBeNull()
   })
 
-  test("returns null if analysis is stale", async () => {
-    const staleAnalysis: FindingAnalysis = {
-      findingId: "find-3",
-      explanation: "Stale",
-      impact: [], remediation: [],
-      model: "test",
-      generatedAt: Date.now() - 100000,
-      findingUpdatedAt: Date.now() - 100000,
+  test("returns LLM analysis response when client is configured", async () => {
+    const store = makeMockStore()
+    const mockClient = {
+      complete: mock(async () => ({
+        text: JSON.stringify({
+          explanation: "Real analysis",
+          impact: ["impact1"],
+          remediation: ["fix1"],
+        }),
+      })),
     }
-    const mockStoreWithStale = {
-      getValidAnalysis: (id: string) => null,
-      saveFindingAnalysis: () => {},
-    }
-    const analyzer = new FindingAnalyzer(mockStoreWithStale as any, {} as any)
+    const analyzer = new FindingAnalyzer(store as any, mockClient as any)
     const result = await analyzer.analyze({
       id: "find-3", title: "Test", severity: 2, confidence: 2,
       description: "desc", tool: "nuclei", phase: "phase-1",
-      updated_at: new Date(Date.now()).toISOString(),
+      updated_at: new Date().toISOString(),
     }, [])
-    // With LLM client present and feature enabled, would try actual analysis
-    // Since we mock the LLM client but it returns nothing, the analysis will try to call it
-    // We need a proper mock. For now just verify it doesn't crash.
+
     expect(result).not.toBeNull()
+    expect(typeof result!.explanation).toBe("string")
+  })
+
+  test("returns null when llmClient is undefined and no cached analysis", async () => {
+    const store = makeMockStore()
+    const analyzer = new FindingAnalyzer(store as any)
+    const result = await analyzer.analyze({
+      id: "find-4", title: "Test", severity: 2, confidence: 2,
+      description: "desc", tool: "nuclei", phase: "phase-1",
+    }, [])
+    expect(result).toBeNull()
   })
 
   test("getCachedAnalysis delegates to store", async () => {

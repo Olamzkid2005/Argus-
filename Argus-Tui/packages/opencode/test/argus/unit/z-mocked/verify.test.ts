@@ -20,16 +20,69 @@ let mockRunnerRunThrow = false
 let mockEvidenceCaptureThrow = false
 
 const mockPage = {
-  goto: mock(async () => {}),
+  goto: mock(async () => ({ status: () => 200 })),
   close: mock(async () => {}),
   content: mock(async () => "<html></html>"),
   url: mock(() => "https://example.com"),
   waitForLoadState: mock(async () => {}),
+  locator: mock(() => ({
+    innerText: mock(async () => "Dashboard"),
+    count: mock(async () => 0),
+    first: mock(() => ({
+      isVisible: mock(async () => false),
+      fill: mock(async () => {}),
+      press: mock(async () => {}),
+      click: mock(async () => {}),
+    })),
+  })),
 }
 
 const mockContext = {
   newPage: mock(async () => mockPage),
   close: mock(async () => {}),
+}
+
+const mockEngine = {
+  launch: mock(async () => {}),
+  createContext: mock(async () => mockContext),
+  navigate: mock(async () => mockPage),
+  observe: mock(async () => ({ url: "", domSnapshot: "", responseHeaders: {}, statusCode: 200, timestamp: new Date().toISOString() })),
+  captureScreenshot: mock(async () => Buffer.from("mock")),
+  close: mock(async () => {}),
+}
+
+const mockCredStore = {
+  load: mock(() => ({ roles: {} })),
+  getAllCredentials: mock(() => ({
+    attacker: { username: "attacker", password: "pass" },
+    victim: { username: "victim", password: "pass" },
+  })),
+  clear: mock(() => {}),
+  getCredentials: mock(() => null),
+  listRoles: mock(() => []),
+  getDefaultRole: mock(() => undefined),
+  getDefaultCredentials: mock(() => null),
+  save: mock(() => {}),
+}
+
+const mockCollector = {
+  captureScreenshot: mock(async () => ({
+    path: "screenshots/test.png",
+    hash: "abc123",
+    type: "screenshot" as const,
+    size_bytes: 100,
+  })),
+  createPackage: mock(async () => ({
+    package_id: "test",
+    engagement_id: "test",
+    created_at: new Date().toISOString(),
+    artifacts: [],
+    package_hash: "",
+  })),
+}
+
+const mockConfidence = {
+  promote: mock((finding: any) => finding.confidence),
 }
 
 function resetEngineMocks(): void {
@@ -49,6 +102,7 @@ describe("verifyCommand", () => {
 
   afterEach(() => {
     resetEngineMocks()
+    store = makeStore(`verify-${Date.now()}`)
   })
 
   test("returns finding-not-found message for non-existent finding", async () => {
@@ -162,5 +216,63 @@ describe("verifyCommand", () => {
 
     expect(output).toContain(findingId)
     expect(output).toContain("unknown-scanner")
+  })
+
+  test("passes engineOverride to verifier via VerificationRunner", async () => {
+    const eng = store.createEngagement("https://bola-test.com", "assessment")
+    const findingId = `find-bola-${Date.now()}`
+    store.saveFindings(eng.id, [{
+      id: findingId,
+      title: "BOLA finding",
+      severity: 3,
+      confidence: 2,
+      status: "PENDING",
+      description: "https://bola-test.com/api/resource",
+      tool: "bola-scanner",
+      phase: "phase-1",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }])
+
+    const { verifyCommand } = await import("../../../../src/argus/commands/verify")
+    const output = await verifyCommand(findingId, {
+      storeOverride: store,
+      engineOverride: mockEngine,
+      credStoreOverride: mockCredStore,
+      collectorOverride: mockCollector,
+      confidenceOverride: mockConfidence,
+    })
+
+    expect(output).toContain("BOLA")
+    expect(output).toContain("confidence")
+  })
+
+  test("runs BOLA verification with mocked dependencies", async () => {
+    const eng = store.createEngagement("https://bola-test.com", "assessment")
+    const findingId = `find-bola-${Date.now()}`
+    store.saveFindings(eng.id, [{
+      id: findingId,
+      title: "BOLA finding",
+      severity: 3,
+      confidence: 2,
+      status: "PENDING",
+      description: "https://bola-test.com/api/resource",
+      tool: "bola-scanner",
+      phase: "phase-1",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }])
+
+    const { verifyCommand } = await import("../../../../src/argus/commands/verify")
+    const output = await verifyCommand(findingId, {
+      storeOverride: store,
+      engineOverride: mockEngine,
+      credStoreOverride: mockCredStore,
+      collectorOverride: mockCollector,
+      confidenceOverride: mockConfidence,
+    })
+
+    expect(output).toContain("BOLA")
+    expect(output).toContain("confidence")
   })
 })

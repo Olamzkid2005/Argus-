@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeAll, afterAll, afterEach, mock } from "bun:test"
-import { mkdtempSync, rmSync } from "fs"
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { EngagementStore } from "../../../../src/argus/engagement/store"
@@ -121,26 +121,50 @@ describe("evidenceCommand", () => {
 
     test("returns INVALID for nonexistent package", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("verify-package", ["pkg-valid-1"], { store })
+      const output = await evidenceCommand("verify-package", ["nonexistent-eng", "nonexistent-pkg"], { store })
 
       expect(output).toContain("INVALID")
       expect(output).toContain("not found")
     })
 
-    test("returns INVALID with errors for nonexistent package", async () => {
+    test("creates and verifies a valid package successfully", async () => {
+      const eng = store.createEngagement("https://verify-test.com", "assessment")
+      const findingId = `find-verify-${Date.now()}`
+      store.saveFindings(eng.id, [{
+        id: findingId, title: "Test", severity: 2, confidence: 2,
+        status: "PENDING", description: "test", tool: "nuclei", phase: "phase-1",
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }])
+
+      const evidenceBaseDir = join(dbDir, "engagements")
+      const artifactDir = join(evidenceBaseDir, eng.id, "artifacts", findingId)
+      mkdirSync(join(evidenceBaseDir, "artifacts", findingId), { recursive: true })
+      mkdirSync(artifactDir, { recursive: true })
+
+      writeFileSync(join(evidenceBaseDir, "artifacts", findingId, "req.txt"), "request body")
+
+      const { createHash } = await import("crypto")
+      const fileHash = createHash("sha256").update("request body").digest("hex")
+      const manifest = {
+        package_id: findingId,
+        engagement_id: eng.id,
+        finding_id: findingId,
+        created_at: Date.now(),
+        artifacts: [{ path: "req.txt", hash: fileHash, type: "request", size_bytes: 12 }],
+        package_hash: "",
+      }
+      const manifestStr = JSON.stringify({ ...manifest, package_hash: "" }, null, 2) + fileHash
+      manifest.package_hash = createHash("sha256").update(manifestStr).digest("hex")
+      writeFileSync(join(artifactDir, "manifest.json"), JSON.stringify(manifest))
+
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("verify-package", ["pkg-invalid-1"], { store })
+      const output = await evidenceCommand("verify-package", [eng.id, findingId], {
+        store,
+        evidenceBaseDir,
+      })
 
-      expect(output).toContain("INVALID")
-      expect(output).toContain("not found")
-    })
-
-    test("reports integrity error for nonexistent package", async () => {
-      const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("verify-package", ["pkg-multi-err"], { store })
-
-      expect(output).toContain("INVALID")
-      expect(output).toContain("not found")
+      expect(output).toContain("OK")
+      expect(output).not.toContain("INVALID")
     })
   })
 

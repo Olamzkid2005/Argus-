@@ -10,10 +10,11 @@ export async function evidenceCommand(
   overrides?: {
     store?: EngagementStore
     collector?: EvidenceCollector
+    evidenceBaseDir?: string
   },
 ): Promise<string> {
   const store = overrides?.store ?? new EngagementStore()
-  const evidenceBaseDir = join(homedir(), ".argus", "engagements")
+  const evidenceBaseDir = overrides?.evidenceBaseDir ?? join(homedir(), ".argus", "engagements")
   const lines: string[] = []
 
   switch (action) {

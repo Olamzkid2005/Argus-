@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { EngagementStore } from "../../../../src/argus/engagement/store"
+import { canResume } from "../../../../src/argus/engagement/recovery"
 
 let dbDir: string
 
@@ -25,7 +26,7 @@ describe("resume validation", () => {
     store.updateStatus(eng.id, "RUNNING")
     const loaded = store.getEngagement(eng.id)
     expect(loaded).not.toBeNull()
-    expect(loaded!.status).toBe("RUNNING")
+    expect(canResume(loaded!)).toBe(true)
   })
 
   test("canResume returns true for PAUSED engagement", () => {
@@ -34,7 +35,7 @@ describe("resume validation", () => {
     store.updateStatus(eng.id, "PAUSED")
     const loaded = store.getEngagement(eng.id)
     expect(loaded).not.toBeNull()
-    expect(loaded!.status).toBe("PAUSED")
+    expect(canResume(loaded!)).toBe(true)
   })
 
   test("canResume returns false for COMPLETED engagement", () => {
@@ -43,7 +44,7 @@ describe("resume validation", () => {
     store.updateStatus(eng.id, "COMPLETED")
     const loaded = store.getEngagement(eng.id)
     expect(loaded).not.toBeNull()
-    expect(loaded!.status).toBe("COMPLETED")
+    expect(canResume(loaded!)).toBe(false)
   })
 
   test("canResume returns false for FAILED engagement", () => {
@@ -52,7 +53,7 @@ describe("resume validation", () => {
     store.updateStatus(eng.id, "FAILED")
     const loaded = store.getEngagement(eng.id)
     expect(loaded).not.toBeNull()
-    expect(loaded!.status).toBe("FAILED")
+    expect(canResume(loaded!)).toBe(false)
   })
 
   test("getPhases returns phases for an engagement", () => {
@@ -135,5 +136,15 @@ describe("resume validation", () => {
     const { resumeCommand } = await import("../../../../src/argus/commands/resume")
     const result = await resumeCommand(eng.id, { storeOverride: store })
     expect(result).toContain("cannot be resumed")
+  })
+
+  test("resumeCommand returns success message for RUNNING engagement", async () => {
+    const store = makeStore("happy-resume")
+    const eng = store.createEngagement("https://test.com", "assessment")
+    store.updateStatus(eng.id, "RUNNING")
+    const { resumeCommand } = await import("../../../../src/argus/commands/resume")
+    const result = await resumeCommand(eng.id, { storeOverride: store })
+    expect(result).not.toContain("cannot be resumed")
+    expect(result).not.toContain("Engagement not found")
   })
 })
