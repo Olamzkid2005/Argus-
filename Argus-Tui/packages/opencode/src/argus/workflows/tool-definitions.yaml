@@ -748,7 +748,7 @@ tools:
       confidence_score: 90
       coverage_score: 85
     signal_quality: CONFIRMED
-    priority: 85
+    priority: 90
     cost: low
 
   - name: browser_security_operator
@@ -765,8 +765,8 @@ tools:
       confidence_score: 85
       coverage_score: 80
     signal_quality: CONFIRMED
-    priority: 85
-    cost: medium
+    priority: 90
+    cost: low
 
   - name: attack_surface_mapper
     label: Attack Surface Mapper
@@ -781,8 +781,8 @@ tools:
     scoring:
       confidence_score: 80
       coverage_score: 85
-    signal_quality: PROBABLE
-    priority: 80
+    signal_quality: CONFIRMED
+    priority: 90
     cost: low
 
   - name: evidence_intelligence_engine
@@ -798,7 +798,7 @@ tools:
       confidence_score: 85
       coverage_score: 80
     signal_quality: CONFIRMED
-    priority: 75
+    priority: 90
     cost: low
 
   - name: executive_report_generator
@@ -815,7 +815,7 @@ tools:
       confidence_score: 90
       coverage_score: 90
     signal_quality: CONFIRMED
-    priority: 70
+    priority: 90
     cost: low
 
   - name: threat_intelligence_aggregator
@@ -830,8 +830,8 @@ tools:
     scoring:
       confidence_score: 75
       coverage_score: 70
-    signal_quality: PROBABLE
-    priority: 70
+    signal_quality: CONFIRMED
+    priority: 90
     cost: low
 
   - name: vulnerability_knowledge_engine
@@ -847,7 +847,7 @@ tools:
       confidence_score: 85
       coverage_score: 80
     signal_quality: CONFIRMED
-    priority: 65
+    priority: 90
     cost: low
 
   - name: secure_code_intelligence_engine
@@ -864,7 +864,7 @@ tools:
       confidence_score: 80
       coverage_score: 75
     signal_quality: CONFIRMED
-    priority: 75
+    priority: 90
     cost: low
 
   - name: infrastructure_security_analyzer
@@ -880,7 +880,7 @@ tools:
       confidence_score: 80
       coverage_score: 75
     signal_quality: CONFIRMED
-    priority: 70
+    priority: 90
     cost: low
 
   - name: assessment_orchestrator
@@ -912,7 +912,7 @@ tools:
       confidence_score: 80
       coverage_score: 75
     signal_quality: CONFIRMED
-    priority: 65
+    priority: 90
     cost: low
 
   - name: engagement_analytics_engine
@@ -929,7 +929,7 @@ tools:
       confidence_score: 85
       coverage_score: 80
     signal_quality: CONFIRMED
-    priority: 60
+    priority: 90
     cost: low
 
   # ── Auth Tools ───────────────────────────────────────────────
@@ -946,7 +946,7 @@ tools:
     scoring:
       confidence_score: 75
       coverage_score: 70
-    signal_quality: PROBABLE
+    signal_quality: CONFIRMED
     priority: 95
     cost: low
 

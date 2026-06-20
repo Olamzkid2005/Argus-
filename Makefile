@@ -13,28 +13,28 @@ stop: ## Stop all services
 	@./stop-argus.sh
 
 dev-worker: ## Start only Celery workers
-	cd argus-workers && source venv/bin/activate && celery -A celery_app worker --loglevel=info --concurrency=4
+	cd argus-workers && test -f venv/bin/activate || { echo "venv not found — run 'make install-backend' first"; exit 1; } && source venv/bin/activate && celery -A celery_app worker --loglevel=info --concurrency=4
 
 dev-flower: ## Start Flower (Celery monitoring)
-	cd argus-workers && source venv/bin/activate && celery -A celery_app flower
+	cd argus-workers && test -f venv/bin/activate || { echo "venv not found — run 'make install-backend' first"; exit 1; } && source venv/bin/activate && celery -A celery_app flower
 
 # ── Testing ──
 
 test: test-v5 test-backend ## Run all tests (V5 TUI tests + Python backend tests)
 
 test-backend: ## Run backend tests
-	cd argus-workers && source venv/bin/activate && pytest tests/ -q --tb=short
+	cd argus-workers && test -f venv/bin/activate || { echo "venv not found — run 'make install-backend' first"; exit 1; } && source venv/bin/activate && pytest tests/ -q --tb=short
 
 test-coverage: ## Run tests with coverage reports (V5 + Python backend)
 	cd Argus-Tui/packages/opencode && bun test test/argus/ --coverage --timeout 30000
-	cd argus-workers && source venv/bin/activate && pytest tests/ --cov=. --cov-report=html
+	cd argus-workers && test -f venv/bin/activate || { echo "venv not found — run 'make install-backend' first"; exit 1; } && source venv/bin/activate && pytest tests/ --cov=. --cov-report=html
 
 # ── Linting ──
 
 lint: lint-v5 lint-backend ## Run all linters
 
 lint-backend: ## Lint backend code
-	cd argus-workers && source venv/bin/activate && ruff check . --fix
+	cd argus-workers && test -f venv/bin/activate || { echo "venv not found — run 'make install-backend' first"; exit 1; } && source venv/bin/activate && ruff check . --fix
 
 # ── Build (V5 CLI — argus-platform was removed during v5 migration) ──
 # `make build` was removed because argus-platform/ no longer exists.
@@ -117,4 +117,4 @@ clean-v5: ## Clean V5 build artifacts
 # ── Security ──
 
 self-scan: ## Run Argus self-security scan
-	cd argus-workers && source venv/bin/activate && python3 -c "from tasks.self_scan import run_self_scan; run_self_scan()"
+	cd argus-workers && test -f venv/bin/activate || { echo "venv not found — run 'make install-backend' first"; exit 1; } && source venv/bin/activate && python3 -c "from tasks.self_scan import run_self_scan; run_self_scan()"

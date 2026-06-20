@@ -4,7 +4,13 @@
 # Get the directory of this script
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_PYTHON="$SCRIPT_DIR/venv/bin/python"
-CELERY_BIN="$SCRIPT_DIR/venv/bin/celery"
+
+# Use venv celery if available, fall back to system PATH
+if [ -f "$SCRIPT_DIR/venv/bin/celery" ]; then
+  CELERY_BIN="$SCRIPT_DIR/venv/bin/celery"
+else
+  CELERY_BIN="celery"
+fi
 
 # Change to workers directory so PYTHONPATH is correct
 cd "$SCRIPT_DIR"

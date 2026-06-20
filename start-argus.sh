@@ -96,6 +96,11 @@ ensure_bun_deps() {
 }
 
 launch_tui() {
+  if [ ! -t 0 ]; then
+    echo -e "${RED}TTY not detected — TUI requires an interactive terminal${NC}" >&2
+    echo -e "${YELLOW}Use: ./start-argus.sh doctor | assess <target> | cli <handler>${NC}" >&2
+    exit 1
+  fi
   ensure_bun_deps "$ARGUS_PKG"
   cd "$ARGUS_PKG" || exit 1
   echo -e "${BLUE}[Argus] Launching interactive TUI...${NC}"

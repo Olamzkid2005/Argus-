@@ -20,6 +20,9 @@ if not os.path.exists(VENV_PYTHON):
     VENV_PYTHON = sys.executable
 
 CELERY_BIN = os.path.join(SCRIPT_DIR, "venv", "bin", "celery")
+if not os.path.exists(CELERY_BIN):
+    # Fallback to celery on PATH
+    CELERY_BIN = "celery"
 
 # Ensure we're in the workers directory
 os.chdir(SCRIPT_DIR)

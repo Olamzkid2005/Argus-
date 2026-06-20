@@ -506,22 +506,21 @@ class MCPServer:
                             "masscan",
                             "shuffledns",
                             "alterx",
-                            "github-endpoints",
                             "cloud_enum",
-                            "s3scanner",
-                            "bucket_upload",
-                        }
-                    )
-                    # Tools that accept domains but usually expect URLs -
-                    # these are NOT in _HOSTNAME_TOOLS so they keep the full URL
-                    _URL_TOOLS = frozenset(
-                        {
-                            "gau",
-                            "waybackurls",
                             "chaos",
                         }
                     )
-                    if tool.name in _HOSTNAME_TOOLS:
+                    # Tools that need the full URL including path (bucket/org names)
+                    _FULL_URL_TOOLS = frozenset(
+                        {
+                            "s3scanner",
+                            "bucket_upload",
+                            "github-endpoints",
+                        }
+                    )
+                    if tool.name in _FULL_URL_TOOLS:
+                        pass  # Keep full URL including path
+                    elif tool.name in _HOSTNAME_TOOLS:
                         stripped = (
                             parsed.hostname or value.split("://", 1)[1].split("/")[0]
                         )
