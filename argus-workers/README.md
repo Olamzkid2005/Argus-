@@ -6,27 +6,32 @@ This directory contains the Python worker system for the Argus Pentest Platform.
 
 ```
 argus-workers/
-├── celery_app.py          # Celery application configuration
-├── orchestrator.py        # Main orchestration logic
-├── intelligence_engine.py # AI-powered decision making
-├── tools/                 # Tool execution wrappers
-│   ├── nuclei_tool.py
-│   ├── httpx_tool.py
-│   ├── subfinder_tool.py
-│   ├── ffuf_tool.py
-│   └── sqlmap_tool.py
-├── parsers/               # Tool output parsers
+├── mcp_server.py           # MCP protocol server (entry point)
+├── celery_app.py           # Celery application configuration
+├── tool_definitions.py     # Legacy Python tool registry
+├── intelligence_engine.py  # AI-powered decision making
+├── orchestrator_pkg/       # Main orchestration logic (package)
+├── tools/                  # Tool execution wrappers
+│   ├── nucleus_scanner.py
+│   ├── web_scanner.py
+│   ├── port_scanner.py
+│   ├── ffuf_scanner.py
+│   └── ...
+├── parsers/                # Tool output parsers
 │   ├── nuclei_parser.py
 │   ├── httpx_parser.py
 │   └── ...
-├── models/                # Pydantic models
+├── models/                 # Pydantic models
 │   ├── engagement.py
 │   ├── finding.py
 │   └── ...
-├── database/              # Database access layer
+├── database/               # Database access layer
 │   ├── connection.py
 │   └── repositories/
-└── tests/                 # Unit and integration tests
+├── tests/                  # Unit and integration tests
+├── reporting/              # Report generation
+├── tasks/                  # Celery task definitions
+└── config/                 # Application configuration
 ```
 
 ## Setup
@@ -168,8 +173,8 @@ Key metrics tracked:
 
 ## Next Steps
 
-1. Implement `celery_app.py` with Celery configuration
-2. Create `orchestrator.py` with main orchestration logic
-3. Implement tool wrappers in `tools/`
-4. Create parsers in `parsers/`
-5. Build intelligence engine in `intelligence_engine.py`
+1. Add more tool wrappers in `tools/` (e.g., WPScan, Hydra)
+2. Expand parser coverage for additional tool output formats
+3. Improve LLM-based finding analysis and report generation
+4. Add more scan phases and workflow definitions
+5. Enhance streaming output and real-time progress reporting

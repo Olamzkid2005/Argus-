@@ -47,7 +47,8 @@ export class ConfigLoader {
 
   /**
    * Load and validate config from project config file.
-   * Returns defaults if file is missing or invalid.
+   * Returns defaults if file is missing or unparseable.
+   * Throws ZodError if the file exists but has structurally invalid fields.
    */
   static loadProjectConfig(): ArgusConfig {
     return ConfigLoader.loadFrom(ConfigLoader.PROJECT_CONFIG_PATH)
@@ -55,7 +56,8 @@ export class ConfigLoader {
 
   /**
    * Load and validate config from user config file.
-   * Returns defaults if file is missing or invalid.
+   * Returns defaults if file is missing or unparseable.
+   * Throws ZodError if the file exists but has structurally invalid fields.
    */
   static loadUserConfig(): ArgusConfig {
     return ConfigLoader.loadFrom(ConfigLoader.USER_CONFIG_PATH)

@@ -55,13 +55,13 @@ e2e: ## Run full E2E test suite
 	./scripts/e2e-test.sh
 
 docker-up: ## Start all services with Docker Compose
-	docker-compose up -d --build
+	docker compose up -d --build
 
 docker-down: ## Stop Docker Compose services
-	docker-compose down
+	docker compose down
 
 docker-logs: ## View Docker Compose logs
-	docker-compose logs -f
+	docker compose logs -f
 
 # ── Database (migrations run via Python runner) ──
 
@@ -93,7 +93,7 @@ install-v5: ## Install V5 CLI dependencies
 typecheck-v5: ## Type-check V5 TypeScript code
 	cd Argus-Tui/packages/opencode && bun typecheck
 
-test-v5: ## Run V5 CLI tests (280+ tests)
+test-v5: ## Run V5 CLI tests (689+ tests)
 	cd Argus-Tui/packages/opencode && bun test test/argus/ --timeout 30000
 
 test-v5-ci: ## Run V5 CLI tests with JUnit output

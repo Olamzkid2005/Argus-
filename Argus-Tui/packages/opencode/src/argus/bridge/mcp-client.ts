@@ -35,6 +35,7 @@ export class WorkersBridge {
   private requestId = 0
   public supervisor: WorkerSupervisor
   private toolsCache: ToolDefinition[] = []
+  private _toolsEverFetched = false
   private _llmStatus: LLMStatus = "AVAILABLE"
   private statusListeners: Array<(status: string) => void> = []
 
@@ -63,7 +64,7 @@ export class WorkersBridge {
   }
 
   private validatePaths(): void {
-    const VALID_PYTHON = new Set(["python3", "python"])
+    const VALID_PYTHON = new Set(["python3", "python", "python3.12"])
     if (!VALID_PYTHON.has(this.pythonPath)) {
       try {
         accessSync(this.pythonPath, constants.X_OK)
@@ -201,20 +202,24 @@ export class WorkersBridge {
       this.pending.clear()
       this.pendingCount = 0
       if (code !== 0) {
-        console.warn(`[MCP] Worker exited with code ${code} — attempting restart`)
+        if (stderrBuffer.length > 0) {
+          console.error(`[MCP Worker stderr]:\n${stderrBuffer.join("")}`)
+        }
+        console.warn(`[MCP] Worker exited with code ${code} — setting UNAVAILABLE`)
+        this.setLLMStatus("UNAVAILABLE")
         this.restartWorker().catch((err) => {
           console.error(`[MCP] Worker restart failed after exit code ${code}:`, err)
-          this.setLLMStatus("UNAVAILABLE")
         })
       }
     })
 
+    const stderrBuffer: string[] = []
     this.process.stderr?.on("data", (data: Buffer) => {
-      process.stderr.write(`[MCP Worker] ${data.toString()}`)
+      stderrBuffer.push(data.toString())
     })
 
     await this.waitForReady()
-    this.toolsCache = await this.getTools()
+    await this.getTools()
   }
 
   killChild(): void {
@@ -350,8 +355,13 @@ export class WorkersBridge {
   async getTools(): Promise<ToolDefinition[]> {
     try {
       const result = await this.sendRequest("list_tools", {}) as { tools: ToolDefinition[] }
-      return result.tools ?? []
+      this.toolsCache = result.tools ?? []
+      this._toolsEverFetched = true
+      return this.toolsCache
     } catch {
+      if (!this._toolsEverFetched) {
+        throw new Error("MCP worker tools never successfully fetched")
+      }
       return this.toolsCache
     }
   }

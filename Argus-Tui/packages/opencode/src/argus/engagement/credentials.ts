@@ -34,7 +34,8 @@ export class CredentialStore {
           console.warn(`[Argus] WARNING: Credentials file ${resolved} has world-readable permissions (${(stats.mode & 0o777).toString(8)}). Run: chmod 0600 "${resolved}"`)
         }
       } catch { /* stat check best-effort */ }
-    } catch {
+    } catch (e) {
+      console.warn(`[Argus] WARNING: Failed to parse credentials file — resetting to empty: ${(e as Error).message}`)
       this.data = { roles: {} }
     }
     return this.data

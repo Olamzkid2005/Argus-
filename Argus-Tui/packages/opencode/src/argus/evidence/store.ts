@@ -1,8 +1,8 @@
 import { readFile, readdir, writeFile, mkdir, stat } from "fs/promises"
 import { join, dirname } from "path"
 import { existsSync } from "fs"
-import { createHash } from "crypto"
 import type { EvidenceManifest, ArtifactEntry } from "./types"
+import { computePackageHash } from "./hash"
 
 /**
  * ArtifactStore — filesystem-backed evidence storage with manifest tracking.
@@ -41,12 +41,7 @@ export class ArtifactStore {
       package_hash: "",
     }
 
-    const manifestStr =
-      JSON.stringify(manifest, null, 2) +
-      artifacts.map((a) => a.hash).join("")
-    manifest.package_hash = createHash("sha256")
-      .update(manifestStr)
-      .digest("hex")
+    manifest.package_hash = computePackageHash(manifest, artifacts)
 
     const pkgDir = join(this.baseDir, engagementId, "artifacts", findingId)
     await this.ensureDir(pkgDir)

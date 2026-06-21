@@ -204,7 +204,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   const left = color(input.theme.left, fallback(81, "#38bdf8"))
   const right = color(input.theme.right, RGBA.defaultForeground(RGBA.fromHex("#f8fafc")))
   const leftShadow = color(input.theme.leftShadow, fallback(238, "#334155"))
-  const isArgus = !!process.env.ARGUS_MODE
+  const isArgus = process.env.ARGUS_MODE === "1"
   let height = 1
 
   if (kind === "entry") {

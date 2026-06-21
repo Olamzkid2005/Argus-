@@ -17,6 +17,7 @@ export class WorkerSupervisor {
     // Exponential backoff: base, base*2, base*4
     await new Promise(r => setTimeout(r, this.backoffMs * Math.pow(2, this.attempts - 1)))
     await this.callbacks.connect()
+    this.attempts = 0
   }
 
   isHealthy(): Promise<boolean> {

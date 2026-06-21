@@ -161,6 +161,10 @@ class AsyncToolRunner:
 
         # 4. Resolve tool path
         tool_path = self.registry.resolve(tool) or runner._resolve_tool_path(tool)
+        if not tool_path:
+            raise RuntimeError(
+                f"Tool {tool!r} could not be resolved — no path found via registry or runner"
+            )
 
         # 5. Locked env + arg redaction
         env = runner._locked_env(tool)

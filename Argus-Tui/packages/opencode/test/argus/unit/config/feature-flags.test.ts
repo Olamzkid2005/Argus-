@@ -15,8 +15,8 @@ describe("FeatureFlags", () => {
     expect(flags.isEnabled(Feature.APPROVAL_GATES)).toBe(false)
   })
 
-  test("DETERMINISTIC_FALLBACK defaults to true", () => {
-    expect(flags.isEnabled(Feature.DETERMINISTIC_FALLBACK)).toBe(true)
+  test("DETERMINISTIC_FALLBACK defaults to false (opt-in)", () => {
+    expect(flags.isEnabled(Feature.DETERMINISTIC_FALLBACK)).toBe(false)
   })
 
   test("constructor overrides enable features", () => {

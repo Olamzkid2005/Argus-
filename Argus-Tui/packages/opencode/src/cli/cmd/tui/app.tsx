@@ -484,6 +484,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   // Update terminal window title based on current route and session
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+    if (process.env.ARGUS_MODE !== "1") return
 
     if (route.data.type === "home") {
       renderer.setTerminalTitle("ARGUS — Security Assessment Platform")

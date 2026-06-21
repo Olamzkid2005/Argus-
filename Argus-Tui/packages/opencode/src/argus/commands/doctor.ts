@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "fs"
 import { join, resolve } from "path"
 import { homedir } from "os"
 import { spawn, execFile, execFileSync } from "child_process"
+import { connect as tcpConnect } from "net"
 import { xdgData } from "xdg-basedir"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
@@ -65,9 +66,11 @@ export async function doctorCommand(options?: {
   results.push(await pythonCheck(options?.pythonPath))
   results.push(await mcpCheck(options?.workersPath, options?.pythonPath))
   results.push(await playwrightCheck())
+  results.push(await redisCheck())
   results.push(dbCheck())
   results.push(credCheck())
   results.push(envCheck())
+  results.push(configValidationCheck())
   results.push(toolchainCheck())
 
   // --online flag: runs LLM provider connectivity check
@@ -181,6 +184,84 @@ async function playwrightCheck(): Promise<CheckResult> {
   }
 }
 
+/**
+ * Check Redis connectivity by TCP-connecting to the configured URL
+ * and sending a PING command. Uses raw TCP (no redis client library needed).
+ */
+async function redisCheck(): Promise<CheckResult> {
+  const redisUrl = process.env.REDIS_URL || process.env.CELERY_BROKER_URL || ""
+  if (!redisUrl) {
+    return {
+      name: "Redis",
+      status: "WARN",
+      message: "REDIS_URL not set — Celery/caching unavailable. Set REDIS_URL for full functionality.",
+    }
+  }
+
+  // Parse host/port from redis:// URL
+  let host = "localhost"
+  let port = 6379
+  try {
+    const u = new URL(redisUrl)
+    host = u.hostname || "localhost"
+    port = parseInt(u.port || "6379", 10) || 6379
+  } catch {
+    return {
+      name: "Redis",
+      status: "WARN",
+      message: `Cannot parse REDIS_URL: ${redisUrl}. Expected redis://host:port`,
+    }
+  }
+
+  // TCP connect + PING
+  try {
+    const result = await new Promise<{ ok: boolean; data: string }>((resolve_) => {
+      const socket = tcpConnect(port, host, () => {
+        // Send Redis PING command
+        socket.write("*1\r\n$4\r\nPING\r\n")
+      })
+      const timer = setTimeout(() => {
+        socket.destroy()
+        resolve_({ ok: false, data: "connection timed out after 5s" })
+      }, 5000)
+      let data = ""
+      socket.on("data", (chunk: Buffer) => {
+        data += chunk.toString()
+      })
+      socket.on("end", () => {
+        clearTimeout(timer)
+        resolve_({ ok: true, data })
+      })
+      socket.on("error", (err: Error) => {
+        clearTimeout(timer)
+        socket.destroy()
+        resolve_({ ok: false, data: err.message })
+      })
+    })
+
+    // Redis PONG response is "+PONG\r\n"
+    if (result.ok && result.data.includes("PONG")) {
+      return {
+        name: "Redis",
+        status: "PASS",
+        message: `Redis reachable at ${host}:${port} — responded to PING`,
+      }
+    }
+
+    return {
+      name: "Redis",
+      status: "FAIL",
+      message: `Redis at ${host}:${port} did not respond with PONG. Got: ${result.data.slice(0, 80)}`,
+    }
+  } catch (err) {
+    return {
+      name: "Redis",
+      status: "FAIL",
+      message: `Redis unreachable at ${host}:${port}: ${(err as Error).message}`,
+    }
+  }
+}
+
 function dbCheck(): CheckResult {
   try {
     const store = new EngagementStore()
@@ -253,6 +334,77 @@ function envCheck(): CheckResult {
     name: "Configuration",
     status: "WARN",
     message: "No .env file, OpenCode provider registry, or env var API key found. Deterministic mode will still work.",
+  }
+}
+
+/**
+ * Validate that key .env configuration values are consistent.
+ * Checks:
+ *  - POSTGRES_PASSWORD matches the password embedded in DATABASE_URL
+ *  - NEXTAUTH_SECRET is not empty (required for NextAuth)
+ *  - .env file exists (warn if it doesn't)
+ */
+function configValidationCheck(): CheckResult {
+  const issues: string[] = []
+
+  // Check .env file exists in the project root (for docker-compose users)
+  const envPath = join(projectRoot, ".env")
+  if (!existsSync(envPath)) {
+    issues.push("No .env file found at project root. Copy .env.example to .env before running docker-compose.")
+  }
+
+  // Check POSTGRES_PASSWORD matches the password in DATABASE_URL
+  const pgPass = process.env.POSTGRES_PASSWORD
+  const dbUrl = process.env.DATABASE_URL
+
+  if (pgPass && dbUrl) {
+    try {
+      // Extract password from DATABASE_URL: postgresql://user:password@host:port/db
+      const match = dbUrl.match(/postgresql:\/\/[^:]+:([^@]+)@/)
+      if (match) {
+        const urlPassword = match[1]
+        if (urlPassword !== pgPass) {
+          issues.push(
+            `POSTGRES_PASSWORD ("${pgPass}") does not match the password in DATABASE_URL ("${urlPassword}"). ` +
+            "PostgreSQL authentication will fail. Update both to match."
+          )
+        }
+      }
+    } catch {
+      // If parsing fails, skip the check
+    }
+  }
+
+  // Check NEXTAUTH_SECRET is not empty
+  const nextAuthSecret = process.env.NEXTAUTH_SECRET
+  if (nextAuthSecret === undefined || nextAuthSecret === "" || nextAuthSecret?.trim() === "") {
+    issues.push("NEXTAUTH_SECRET is not set. NextAuth will fail at startup. Generate one with: openssl rand -base64 32")
+  }
+
+  // Check ARGUS_MODE=0 correctly disables Argus (fixed in footer.prompt/splash/app)
+  if (process.env.ARGUS_MODE === "0") {
+    issues.push(
+      'ARGUS_MODE=0 is set (disables Argus mode). Set ARGUS_MODE=1 to enable.'
+    )
+  }
+
+  // Check REDIS_URL is set for workflows (celery/cache need it)
+  if (!process.env.REDIS_URL) {
+    issues.push("REDIS_URL is not set. Celery workers and caching require Redis.")
+  }
+
+  if (issues.length === 0) {
+    return {
+      name: "Config Validation",
+      status: "PASS",
+      message: "Environment configuration is consistent",
+    }
+  }
+
+  return {
+    name: "Config Validation",
+    status: "WARN",
+    message: issues.join(" | "),
   }
 }
 

@@ -20,8 +20,40 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+ALLOWED_TOOLS = frozenset({
+    "ai_vuln_scanner",
+    "api_scanner",
+    "arjun_scanner",
+    "assessment_orchestrator",
+    "attack_path_generator",
+    "attack_surface_mapper",
+    "browser_scanner",
+    "browser_security_operator",
+    "dual_auth_scanner",
+    "engagement_analytics_engine",
+    "evidence_intelligence_engine",
+    "executive_report_generator",
+    "ffuf_scanner",
+    "finding_correlation_engine",
+    "infrastructure_security_analyzer",
+    "login",
+    "port_scanner",
+    "register",
+    "secure_code_intelligence_engine",
+    "threat_intelligence_aggregator",
+    "verification_agent",
+    "vulnerability_knowledge_engine",
+    "web_scanner",
+    "workflow_intelligence_engine",
+})
+
+
 def resolve_tool_class(tool_name: str):
     """Dynamically import the tool module and find the AbstractTool subclass."""
+    if tool_name not in ALLOWED_TOOLS:
+        raise ValueError(
+            f"Tool {tool_name!r} is not in the allowed tools list"
+        )
     module = importlib.import_module(f"tools.{tool_name}")
 
     from tool_core.base import AbstractTool

@@ -65,6 +65,7 @@ export async function reportCommand(
   format: "markdown" | "json" | "sarif" | "html" = "markdown",
   store?: EngagementStore,
   onProgress?: ProgressCallback,
+  useLLM?: boolean,
 ): Promise<string> {
   const db = store ?? new EngagementStore()
   const engagement = db.getEngagement(engagementId)
@@ -76,7 +77,8 @@ export async function reportCommand(
   const findings = db.getFindings(engagementId)
   const generator = new ReportGenerator()
 
-  if (getFeatureFlags().isEnabled(Feature.LLM_FINDING_ANALYSIS)) {
+  const llmEnabled = useLLM ?? getFeatureFlags().isEnabled(Feature.LLM_FINDING_ANALYSIS)
+  if (llmEnabled) {
     const llmClient = getLlmClient()
     const analyzer = new FindingAnalyzer(db, llmClient.isConfigured() ? llmClient : undefined)
     const analyses = await enhanceReportWithAnalysis(engagementId, onProgress, analyzer)

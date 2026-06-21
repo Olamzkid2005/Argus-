@@ -23,7 +23,7 @@ import contextlib  # noqa: E402
 
 from config.redis import REDIS_URL as _BASE_REDIS_URL  # noqa: E402
 
-CACHE_DB = int(os.getenv("CACHE_REDIS_DB", "1"))
+CACHE_DB = int(os.getenv("CACHE_REDIS_DB", "2"))
 CACHE_REDIS_URL = os.getenv("CACHE_REDIS_URL", f"{_BASE_REDIS_URL}/{CACHE_DB}")
 
 # Lazy Redis client with auto-reconnect on failure (not module-level)

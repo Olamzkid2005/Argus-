@@ -275,7 +275,7 @@ export function RunPromptBody(props: {
 export function createPromptState(input: PromptInput): PromptState {
   const [shell, setShell] = createSignal(false)
   const placeholder = createMemo(() => {
-    const isArgus = !!process.env.ARGUS_MODE
+    const isArgus = process.env.ARGUS_MODE === "1"
 
     if (shell()) {
       const text = isArgus ? 'Run a command... "nmap -sV target"' : 'Run a command... "git status"'

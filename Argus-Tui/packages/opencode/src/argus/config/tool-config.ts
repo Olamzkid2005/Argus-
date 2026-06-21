@@ -56,7 +56,7 @@ export class ToolConfig implements ResolvedToolConfig {
 
   isEnabled(toolName: string): boolean {
     if (this.settings.disabled?.includes(toolName)) return false
-    if (this.settings.enabled && !this.settings.enabled.includes(toolName)) return false
+    if (this.settings.enabled && this.settings.enabled.length > 0 && !this.settings.enabled.includes(toolName)) return false
     return true
   }
 

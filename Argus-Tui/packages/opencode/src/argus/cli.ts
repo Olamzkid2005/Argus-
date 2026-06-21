@@ -7,7 +7,7 @@ import type { ProgressCallback } from "./shared/progress"
 import { verifyCommand } from "./commands/verify"
 import { evidenceCommand } from "./commands/evidence"
 import { configCommand } from "./commands/config"
-import { Feature } from "./config/feature-flags"
+import { Feature, getFeatureFlags } from "./config/feature-flags"
 
 export const ArgusAssessCommand = {
   command: "assess <target>",
@@ -27,6 +27,12 @@ export const ArgusAssessCommand = {
   handler: async (argv: Record<string, unknown>) => {
     const target = argv.target as string
     process.stderr.write(`[Argus] Starting assessment against: ${target}\n`)
+
+    // Warn if all feature flags are disabled (degraded mode)
+    const flags = getFeatureFlags()
+    if (flags.isDegradedMode()) {
+      process.stderr.write("[Argus] WARNING: All feature flags are disabled — running in degraded mode.\n")
+    }
 
     // Build feature flag overrides from CLI
     const featureOverrides: Partial<Record<Feature, boolean>> = {}
@@ -144,6 +150,7 @@ export const ArgusEvidenceCommand = {
       .positional("action", {
         describe: "Action: list, show <package-id>, prune [keep-last], verify-package <package-id>",
         type: "string", demandOption: true,
+        choices: ["list", "show", "prune", "verify-package"] as const,
       })
       .positional("args", { describe: "Arguments for the action", type: "string", array: true }),
   handler: async (argv: Record<string, unknown>) => {

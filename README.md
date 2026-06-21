@@ -22,11 +22,18 @@ cd Argus-Tui && bun install
 # Run the interactive TUI
 bun dev
 
-# Run health checks
-argus doctor
+# Run health checks (via launcher script — recommended)
+./start-argus.sh doctor
+
+# Or run health checks directly (from the package directory)
+cd Argus-Tui/packages/opencode && bun run src/argus/main.ts doctor
 
 # Run an assessment
-argus assess https://example.com
+./start-argus.sh assess https://example.com
+
+# Make the `argus` CLI available globally (optional)
+cd Argus-Tui/packages/opencode && bun link
+argus doctor           # now works anywhere
 
 # Run tests
 make test-v5
@@ -35,6 +42,9 @@ make test-v5
 ## Usage
 
 ### CLI Mode
+
+> **Note:** The `argus` CLI is available after running `bun link` from `Argus-Tui/packages/opencode`.
+> Alternatively, use `./start-argus.sh <command>` or `bun run src/argus/main.ts <command>` from the package directory.
 
 | Command | Description |
 |---------|-------------|
@@ -132,7 +142,7 @@ argus-workers/               # Python MCP server
 │   ├── mcp_server.py              # Tool execution server
 │   └── tools/definitions/         # 45 tool YAML definitions
 │
-├── start-argus.sh             # Test suite launcher
+├── start-argus.sh             # Interactive TUI/CLI launcher
 ├── stop-argus.sh              # Cleanup script
 ├── Makefile                   # Build/test targets
 └── .github/workflows/lint.yml  # CI: typecheck, tests, lint
@@ -141,7 +151,7 @@ argus-workers/               # Python MCP server
 ## Development
 
 ```bash
-# Run all Argus tests (335+ tests)
+# Run all Argus tests (~4,000 tests: 3,284 Python + 689 TypeScript)
 make test-v5
 
 # Type check
@@ -161,6 +171,10 @@ cd argus-workers && ruff check .
 - **Python** 3.11+ — MCP worker
 - **Security tools** — nuclei, nmap, nikto, httpx, subfinder, etc.
 - **Playwright** — Browser verification (`npx playwright install chromium`)
+- **Docker** — Containerized deployment (optional, for docker-compose)
+- **PostgreSQL** — Database for engagement/finding storage (docker-compose or local)
+- **Redis** — Cache and Celery message broker (docker-compose or local)
+- **pgvector** — Vector similarity search for AI analysis (PostgreSQL extension)
 
 ## License
 

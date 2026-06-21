@@ -2,6 +2,9 @@
  * Argus CLI entry point.
  * Wires command definitions into yargs and parses process.argv.
  * Run: bun run src/argus/main.ts <command> [options]
+ *
+ * NOTE: .env files are auto-loaded by Bun; for Node.js runtimes,
+ * add `import "dotenv/config"` here (requires dotenv dependency).
  */
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"

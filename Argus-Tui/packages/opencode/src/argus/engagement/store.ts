@@ -195,7 +195,12 @@ function toNormalizedFinding(row: typeof findingsTable.$inferSelect): Normalized
 
 export class EngagementStore {
   private db: ReturnType<typeof drizzle>
+  private _sqlite: InstanceType<BunSqliteDatabaseConstructor>
   readonly dbPath: string
+
+  private static finalizer = new FinalizationRegistry((sqlite: { close(): void }) => {
+    try { sqlite.close() } catch { /* finalizer best-effort */ }
+  })
 
   constructor(dbPath?: string) {
     this.dbPath = dbPath ?? defaultDbPath()
@@ -205,11 +210,36 @@ export class EngagementStore {
     }
     // Lazy-load bun:sqlite — gives a clear "Bun required" error under Node
     const BunSqliteDatabase = _loadBunSqlite()
-    const sqlite = new BunSqliteDatabase(this.dbPath)
-    sqlite.exec("PRAGMA journal_mode = WAL")
-    sqlite.exec("PRAGMA foreign_keys = ON")
-    this.db = drizzle({ client: sqlite })
+    this._sqlite = new BunSqliteDatabase(this.dbPath)
+    this._sqlite.exec("PRAGMA journal_mode = WAL")
+    this._sqlite.exec("PRAGMA foreign_keys = ON")
+    this.db = drizzle({ client: this._sqlite })
     this.ensureTables()
+    // Seed sequence counters from existing data so they persist across restarts
+    this._seedCounters()
+    EngagementStore.finalizer.register(this, this._sqlite)
+  }
+
+  close(): void {
+    EngagementStore.finalizer.unregister(this)
+    try { this._sqlite.close() } catch { /* already closed */ }
+  }
+
+  private _seedCounters(): void {
+    try {
+      const engRows = this.db.select({ id: engagements.id }).from(engagements).orderBy(desc(engagements.id)).limit(1).all()
+      if (engRows.length > 0) {
+        const parts = engRows[0].id.split("-")
+        _engagementSeq = parseInt(parts[parts.length - 1], 36) + 1
+      }
+      const audRows = this.db.select({ id: audit_log.id }).from(audit_log).orderBy(desc(audit_log.id)).limit(1).all()
+      if (audRows.length > 0) {
+        const parts = audRows[0].id.split("-")
+        _auditSeq = parseInt(parts[parts.length - 1], 36) + 1
+      }
+    } catch {
+      // If tables don't exist yet, counters stay at 0 — harmless
+    }
   }
 
   private ensureTables(): void {
@@ -219,7 +249,11 @@ export class EngagementStore {
     // Migration: add negative column to findings for existing databases
     try {
       this.db.run(sql`ALTER TABLE findings ADD COLUMN negative INTEGER NOT NULL DEFAULT 0`)
-    } catch { /* column already exists — ignore */ }
+    } catch (e) {
+      const msg = (e as Error).message ?? ""
+      if (!msg.includes("duplicate column")) throw e
+      // column already exists — ignore
+    }
   }
 
   createEngagement(target: string, workflow: string): EngagementState {
@@ -385,6 +419,13 @@ export class EngagementStore {
       finding_id: findingId,
       package_hash: packageHash,
       created_at: Date.now(),
+    }).onConflictDoUpdate({
+      target: evidence_packages.id,
+      set: {
+        finding_id: findingId,
+        package_hash: packageHash,
+        created_at: Date.now(),
+      },
     }).run()
   }
 
@@ -451,6 +492,15 @@ export class EngagementStore {
       sha256,
       size_bytes: sizeBytes,
       type,
+    }).onConflictDoUpdate({
+      target: artifacts.id,
+      set: {
+        package_id: packageId,
+        path,
+        sha256,
+        size_bytes: sizeBytes,
+        type,
+      },
     }).run()
   }
 

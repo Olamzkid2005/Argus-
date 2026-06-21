@@ -222,7 +222,7 @@ class ToolRunner:
             "PATH": f"{venv_bin}:{go_bin}:/usr/local/bin:/usr/bin:/bin",
             # Pass through HOME so tools (gitleaks, nmap, git, nuclei) can find
             # ~/.config/ and other user-level configuration. Do NOT override it.
-            "HOME": os.environ.get("HOME", "/root"),
+            "HOME": os.environ.get("HOME", os.path.expanduser("~")),
             "TMPDIR": str(self.sandbox_dir / "tmp"),
             "PYTHONPATH": python_path_str,
             "PYTHONDONTWRITEBYTECODE": "1",

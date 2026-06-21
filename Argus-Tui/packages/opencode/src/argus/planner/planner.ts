@@ -154,7 +154,6 @@ export class WorkflowPlanner {
     if (unhandled.length === 0) return null
 
     const nextReplanCount = context.replanCount + 1
-    context.replanCount = nextReplanCount
 
     return unhandled.map((cap) => ({
       phaseId: `replan-${nextReplanCount}-${cap}`,

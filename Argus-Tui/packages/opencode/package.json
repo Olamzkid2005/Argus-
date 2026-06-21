@@ -15,7 +15,7 @@
     "build": "bun run script/build.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts",
-    "postinstall": "node -e \"try{require('child_process').execSync('npx playwright install chromium 2>/dev/null',{stdio:'ignore'})}catch(e){}\""
+    "postinstall": "bash scripts/postinstall-playwright.sh"
   },
   "bin": {
     "argus": "./bin/argus"

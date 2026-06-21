@@ -3,6 +3,7 @@ import { join, extname } from "path"
 import { existsSync } from "fs"
 import { createHash, randomBytes } from "crypto"
 import type { EvidenceManifest, ArtifactEntry } from "./types"
+import { computePackageHash } from "./hash"
 import { Confidence } from "../shared/types"
 
 interface CollectorConfig {
@@ -57,7 +58,10 @@ export class EvidenceCollector {
           totalBytes += (await stat(filePath)).size
         }
       }
-    } catch { return true } // Can't check — allow write
+    } catch (e) {
+      console.warn(`[Evidence] Failed to check storage limit for ${engagementId}: ${(e as Error).message}`)
+      return false
+    }
 
     const maxBytes = this.config.max_engagement_size_mb * 1024 * 1024
     const warnThreshold = maxBytes * 0.8
@@ -194,8 +198,7 @@ export class EvidenceCollector {
       package_hash: "",
     }
 
-    const manifestStr = JSON.stringify(manifest, null, 2) + artifacts.map((a) => a.hash).join("")
-    manifest.package_hash = createHash("sha256").update(manifestStr).digest("hex")
+    manifest.package_hash = computePackageHash(manifest, artifacts)
 
     const manifestDir = join(this.baseDir, engagementId, "artifacts", findingId)
     await this.ensureDir(manifestDir)

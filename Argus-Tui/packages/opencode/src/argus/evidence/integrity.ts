@@ -1,7 +1,8 @@
 import { readFileSync, existsSync, createReadStream } from "fs"
-import { join } from "path"
 import { createHash } from "crypto"
+import { join } from "path"
 import type { EvidenceManifest, IntegrityReport } from "./types"
+import { computePackageHash } from "./hash"
 
 function hashFile(filePath: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -58,9 +59,7 @@ export async function verifyPackage(baseDir: string, engagementId: string, packa
     }
   }
 
-  const manifestStr = JSON.stringify({ ...manifest, package_hash: "" }, null, 2) +
-    manifest.artifacts.map((a) => a.hash).join("")
-  const computedHash = createHash("sha256").update(manifestStr).digest("hex")
+  const computedHash = computePackageHash(manifest, manifest.artifacts)
   const hashValid = computedHash === manifest.package_hash
 
   if (!hashValid) {

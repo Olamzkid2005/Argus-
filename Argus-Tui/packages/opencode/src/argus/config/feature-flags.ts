@@ -29,7 +29,7 @@ export enum Feature {
 const DEFAULT_FEATURES: Record<Feature, boolean> = {
   [Feature.WORKFLOW_REGISTRY]: false,
   [Feature.ENGAGEMENT_STORE]: false,
-  [Feature.DETERMINISTIC_FALLBACK]: true,       // Always-on safe default
+  [Feature.DETERMINISTIC_FALLBACK]: false,       // Opt-in (was true pre-v5)
   [Feature.APPROVAL_GATES]: false,
   [Feature.LLM_FINDING_ANALYSIS]: false,
 }
@@ -72,12 +72,14 @@ export class FeatureFlags implements IFeatureFlags {
 
   /** Load from a config object (from argus.config.yaml) */
   loadFromConfig(configObj: Record<string, boolean>): void {
+    const known = new Set(Object.values(Feature))
     for (const [key, value] of Object.entries(configObj)) {
-      const feature = Object.values(Feature).find((f) => f === key)
-      if (feature !== undefined) {
-        this.flags.set(feature, value)
-        this.sources.set(feature, "config")
+      if (!known.has(key as Feature)) {
+        console.warn(`[argus] Unknown feature key "${key}" in config — expected one of: ${Object.values(Feature).join(", ")}`)
+        continue
       }
+      this.flags.set(key as Feature, value)
+      this.sources.set(key as Feature, "config")
     }
   }
 
@@ -95,6 +97,11 @@ export class FeatureFlags implements IFeatureFlags {
         }
       }
     } catch { /* config file missing or invalid — use defaults */ }
+  }
+
+  /** Returns true when ALL feature flags are disabled (degraded mode) */
+  isDegradedMode(): boolean {
+    return Object.values(Feature).every((f) => !this.isEnabled(f))
   }
 
   /** Check if a feature is enabled */

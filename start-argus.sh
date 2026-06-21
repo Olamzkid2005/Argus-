@@ -89,6 +89,15 @@ save_pid() {
 
 ensure_bun_deps() {
   local pkg="$1"
+
+  # If the root project hasn't been installed, do that first.
+  # The root has bun.lock and node_modules/ with all workspace deps.
+  if [ ! -f "$SCRIPT_DIR/Argus-Tui/node_modules/.bun-install-stamp" ] && [ ! -f "$SCRIPT_DIR/Argus-Tui/bun.lock" ]; then
+    echo -e "${YELLOW}[Argus] Root workspace not installed. Running: cd Argus-Tui && bun install${NC}"
+    (cd "$SCRIPT_DIR/Argus-Tui" && bun install)
+  fi
+
+  # Ensure this specific package has its node_modules (workspace symlinks)
   if [ ! -d "$pkg/node_modules" ]; then
     echo -e "${YELLOW}[Argus] Installing dependencies for $(basename "$pkg")...${NC}"
     (cd "$pkg" && bun install)
@@ -153,11 +162,11 @@ interactive_prompt() {
 
   # Exit immediately if not a TTY — can't interact
   if [ ! -t 0 ]; then
-    echo -e "${YELLOW}Non-interactive terminal — launching TUI by default.${NC}"
-    echo -e "${YELLOW}Use: ./start-argus.sh tui | cli | doctor | assess <target>${NC}"
-    echo ""
-    launch_tui
-    exit 0
+    echo -e "${YELLOW}Non-interactive terminal — please specify a command:${NC}" >&2
+    echo -e "${YELLOW}  ./start-argus.sh doctor       # Health checks${NC}" >&2
+    echo -e "${YELLOW}  ./start-argus.sh assess <url>  # Run assessment${NC}" >&2
+    echo -e "${YELLOW}  ./start-argus.sh tui           # TUI (requires TTY)${NC}" >&2
+    exit 1
   fi
 
   while true; do

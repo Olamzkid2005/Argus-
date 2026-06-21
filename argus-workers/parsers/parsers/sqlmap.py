@@ -129,7 +129,7 @@ class SqlmapParser(BaseParser):
             # Extract target URL from text output if possible
             import re
 
-            url_match = re.search(r"(https?://[^\s]+)", raw_output)
+            url_match = re.search(r"(https?://(?:www\.)?(?!sqlmap\.org)[^\s]+)", raw_output)
             endpoint = url_match.group(1) if url_match else "unknown_target"
             finding = {
                 "type": "SQL_INJECTION",

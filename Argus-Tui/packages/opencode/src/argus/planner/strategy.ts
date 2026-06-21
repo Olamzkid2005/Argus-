@@ -5,7 +5,7 @@ export function detectTargetType(url: string, techStack?: string[]): TargetType 
   const lowerUrl = url.toLowerCase()
   const tech = techStack?.map((t) => t.toLowerCase()) ?? []
 
-  if (lowerUrl.includes("/api") || lowerUrl.includes("/graphql") || lowerUrl.endsWith(".json")) {
+  if (/\/api(\/|$|\?|#)/.test(lowerUrl) || lowerUrl.includes("/graphql") || lowerUrl.endsWith(".json")) {
     return "api"
   }
 
@@ -30,7 +30,7 @@ export function detectTargetType(url: string, techStack?: string[]): TargetType 
  */
 export function detectAuthState(url: string): AuthState {
   const lowerUrl = url.toLowerCase()
-  if (lowerUrl.includes("oauth") || lowerUrl.includes("auth")) return "oauth"
+  if (/(^|\/)(auth|login|signin|oauth)(\/|$|\?|#)/.test(lowerUrl)) return "oauth"
   if (lowerUrl.includes("jwt") || lowerUrl.includes("token")) return "jwt"
   if (lowerUrl.includes("session")) return "session"
   if (lowerUrl.startsWith("http")) return "basic"
