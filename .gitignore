@@ -43,6 +43,10 @@ nikto_*.json
 # Reference designs
 Kimi_Agent_Argus Security Splash/
 
+# Planning/scratch files
+task_plan.md
+findings.md
+
 # IDE
 .idea/
 .vscode/
