@@ -68,3 +68,4 @@ celerybeat-schedule-wal
 # Windows Redis binaries — shipped for legacy start-argus.ps1 support
 # but should not be tracked in git (22MB+ of binary bloat).
 redis/*.exe
+redis/*.dll
