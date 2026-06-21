@@ -15,11 +15,8 @@ import type { NormalizedFinding } from "../shared/types"
 import type { ProgressEvent } from "../shared/progress"
 import type { PlannerContext } from "../planner/types"
 import { homedir } from "os"
-import { join, resolve } from "path"
-
-// Project root resolved once from import.meta.url to avoid brittle relative-path chains.
-const _dirname = decodeURIComponent(new URL(".", import.meta.url).pathname)
-const projectRoot = resolve(_dirname, "../../../../../../")
+import { join } from "path"
+import { PROJECT_ROOT } from "../shared/path"
 
 export async function resumeCommand(
   engagementId: string,
@@ -43,7 +40,7 @@ export async function resumeCommand(
     return `Engagement ${engagementId} cannot be resumed (status: ${engagement.status})`
   }
 
-  const workflowsDir = options?.workflowsPath ?? join(_dirname, "../workflows")
+  const workflowsDir = options?.workflowsPath ?? join(PROJECT_ROOT, "Argus-Tui/packages/opencode/src/argus/workflows")
   const toolsPath = join(workflowsDir, "tool-definitions.yaml")
 
   // Load registries
@@ -65,7 +62,7 @@ export async function resumeCommand(
   }
 
   // Re-connect bridge
-  const bridge = new WorkersBridge(options?.workersPath ?? join(projectRoot, "argus-workers/mcp_server.py"))
+  const bridge = new WorkersBridge(options?.workersPath ?? join(PROJECT_ROOT, "argus-workers/mcp_server.py"))
   await bridge.connect()
 
   const confidenceEngine = new ConfidenceEngine()
@@ -190,7 +187,12 @@ export async function resumeCommand(
           executedCapabilities,
           insertedPhases: insertedPhaseIds,
           replanCount,
-          maxReplans: Number(process.env.ARGUS_MAX_REPLANS) ?? undefined,
+          maxReplans: (() => {
+            const raw = process.env.ARGUS_MAX_REPLANS
+            if (!raw) return undefined  // unset → planner default
+            const n = Number(raw)
+            return Number.isFinite(n) && n >= 0 ? n : undefined
+          })(),
         }
         const replanPhases = planner.replan(replanCtx)
         replanCount = replanCtx.replanCount

@@ -7,7 +7,12 @@ import { determineNewCapabilities, REPLAN_INSERTABLE } from "./replan-rules"
 import { planDeterministic } from "./planDeterministic"
 import { resolvePipeline, formatPipelineGaps } from "./pipeline"
 
-export const MAX_REPLANS = Number(process.env.ARGUS_MAX_REPLANS) ?? 10
+export const MAX_REPLANS = (() => {
+  const raw = process.env.ARGUS_MAX_REPLANS
+  if (raw === undefined || raw === "") return 10     // default
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : 10       // coerce NaN/negative to default
+})()
 
 interface PlanOptions {
   useLLM?: boolean
@@ -133,7 +138,9 @@ export class WorkflowPlanner {
   replan(context: PlannerContext): PhaseExecutionRequest[] | null {
     // Negative findings are exempt from MAX_REPLANS on first consideration
     const hasNegativeFindings = context.findings.some((f) => f.negative)
-    const maxReplans = context.maxReplans ?? MAX_REPLANS
+    const maxReplans = (context.maxReplans != null && Number.isFinite(context.maxReplans) && context.maxReplans >= 0)
+      ? context.maxReplans
+      : MAX_REPLANS
     const effectiveMax = hasNegativeFindings ? maxReplans + 1 : maxReplans
     if (context.replanCount >= effectiveMax) {
       return null

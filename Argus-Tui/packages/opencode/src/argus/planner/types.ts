@@ -54,7 +54,7 @@ export interface PhaseExecutionRequest {
   execution?: "deterministic" | "llm_driven"
   /** Whether tools in this phase execute in parallel or sequentially.
    *  Drawn from the workflow YAML `execution` property. */
-  toolExecution?: "parallel" | "sequential"
+  toolExecution?: "parallel" | "sequential" | "llm_driven"
   replanCycle?: boolean
 }
 

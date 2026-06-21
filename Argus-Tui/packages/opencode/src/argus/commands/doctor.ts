@@ -7,10 +7,7 @@ import { xdgData } from "xdg-basedir"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
 import { WorkersBridge } from "../bridge/mcp-client"
-
-// Project root resolved once from import.meta.url to avoid brittle relative-path chains.
-const _dirname = decodeURIComponent(new URL(".", import.meta.url).pathname)
-const projectRoot = resolve(_dirname, "../../../../../../")
+import { PROJECT_ROOT } from "../shared/path"
 
 /**
  * Read provider credentials from OpenCode's own auth.json (stored in XDG data dir).
@@ -115,7 +112,7 @@ async function pythonCheck(pythonPath?: string): Promise<CheckResult> {
 }
 
 async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<CheckResult> {
-  const wp = workersPath ?? join(projectRoot, "argus-workers/mcp_server.py")
+  const wp = workersPath ?? join(PROJECT_ROOT, "argus-workers/mcp_server.py")
 
   if (!existsSync(wp)) {
     const alt = join(homedir(), "argus-workers", "mcp_server.py")
@@ -287,7 +284,7 @@ function dbCheck(): CheckResult {
 
 function envCheck(): CheckResult {
   const envPath = join(homedir(), ".argus", ".env")
-  const localEnv = join(projectRoot, ".env")
+  const localEnv = join(PROJECT_ROOT, ".env")
   const envKeyFound = !!(process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)
 
   // Check OpenCode's own provider registry as well
@@ -348,7 +345,7 @@ function configValidationCheck(): CheckResult {
   const issues: string[] = []
 
   // Check .env file exists in the project root (for docker-compose users)
-  const envPath = join(projectRoot, ".env")
+  const envPath = join(PROJECT_ROOT, ".env")
   if (!existsSync(envPath)) {
     issues.push("No .env file found at project root. Copy .env.example to .env before running docker-compose.")
   }
@@ -516,7 +513,7 @@ function toolchainCheck(): CheckResult {
 
   // ── Scan the authoritative tool definitions directory ──────────────
   // This is the same directory the Python MCP worker reads.
-  const toolsDefDir = join(projectRoot, "argus-workers/tools/definitions")
+  const toolsDefDir = join(PROJECT_ROOT, "argus-workers/tools/definitions")
   let allToolNames: string[] = []
   try {
     const files = readdirSync(toolsDefDir)

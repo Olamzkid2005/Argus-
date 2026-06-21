@@ -8,6 +8,7 @@ import { verifyCommand } from "./commands/verify"
 import { evidenceCommand } from "./commands/evidence"
 import { configCommand } from "./commands/config"
 import { Feature, getFeatureFlags } from "./config/feature-flags"
+import { MCP_WORKER_PATH } from "./shared/path"
 
 export const ArgusAssessCommand = {
   command: "assess <target>",
@@ -338,12 +339,8 @@ export const ArgusToolsCommand = {
   describe: "List all registered MCP tools and their capabilities",
   handler: async () => {
     const { WorkersBridge } = await import("./bridge/mcp-client")
-    const { homedir } = await import("os")
-    const { join } = await import("path")
     const { existsSync } = await import("fs")
-    const { fileURLToPath } = await import("url")
-    const dir = typeof __dirname !== "undefined" ? __dirname : fileURLToPath(new URL(".", import.meta.url))
-    const wp = join(dir, "../../../../../argus-workers/mcp_server.py")
+    const wp = MCP_WORKER_PATH
     if (!existsSync(wp)) {
       process.stdout.write("MCP worker not found. Run `argus doctor` to check setup.\n")
       return

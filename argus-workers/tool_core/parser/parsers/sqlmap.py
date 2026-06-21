@@ -74,7 +74,7 @@ def _parse_json(output: str) -> list[NormalizedFinding]:
 def _parse_text(output: str) -> list[NormalizedFinding]:
     findings = []
     if "sqlmap identified the following injection point" in output.lower():
-        url_match = re.search(r"(https?://[^\s]+)", output)
+        url_match = re.search(r"(https?://(?:www\.)?(?!sqlmap\.org)[^\s]+)", output)
         endpoint = url_match.group(1) if url_match else "unknown_target"
 
         findings.append(

@@ -48,7 +48,7 @@ export async function verifyPackage(baseDir: string, engagementId: string, packa
 
   // Stream-based hash for large files to avoid loading entire artifact into memory
   for (const artifact of manifest.artifacts) {
-    const artifactPath = join(baseDir, "artifacts", packageId, artifact.path)
+    const artifactPath = join(baseDir, engagementId, "artifacts", packageId, artifact.path)
     if (!existsSync(artifactPath)) {
       errors.push(`Artifact missing: ${artifact.path}`)
       continue

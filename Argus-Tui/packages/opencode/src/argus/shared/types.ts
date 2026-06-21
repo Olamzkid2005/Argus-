@@ -1,6 +1,6 @@
 export type TargetType = "web_app" | "api" | "spa" | "unknown"
 export type AuthState = "none" | "basic" | "session" | "oauth" | "jwt"
-export type ExecutionMode = "parallel" | "sequential"
+export type ExecutionMode = "parallel" | "sequential" | "llm_driven"
 export type ErrorRecovery = "retry_once_then_skip" | "skip_and_continue" | "fail_fast"
 
 export interface CredentialRef {

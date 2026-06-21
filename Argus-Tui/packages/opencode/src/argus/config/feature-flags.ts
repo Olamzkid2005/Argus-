@@ -16,7 +16,7 @@ import { homedir } from "os"
 import { join } from "path"
 import { readFileSync } from "fs"
 import { parse as YAML } from "yaml"
-import type { IFeatureFlags } from "../../opencode-runtime"
+import type { IFeatureFlags } from "@opencode/runtime"
 
 export enum Feature {
   WORKFLOW_REGISTRY = "workflow_registry",

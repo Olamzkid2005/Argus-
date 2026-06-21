@@ -116,17 +116,21 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
 
   async collectEvidence(): Promise<EvidencePackage> {
     // Persist screenshots and requests/responses through the EvidenceCollector if available
+    const collectedArtifacts: import("../../evidence/types").ArtifactEntry[] = []
     if (this.collector && this.engagementId && this.findingId) {
       for (const shot of this.capturedScreenshots) {
-        await this.collector.captureScreenshot(this.engagementId, this.findingId, shot.data).catch(() => {})
+        const entry = await this.collector.captureScreenshot(this.engagementId, this.findingId, shot.data).catch(() => null)
+        if (entry) collectedArtifacts.push(entry)
       }
       for (const req of this.capturedRequests) {
-        await this.collector.saveRequest(this.engagementId, this.findingId, req).catch(() => {})
+        const entry = await this.collector.saveRequest(this.engagementId, this.findingId, req).catch(() => null)
+        if (entry) collectedArtifacts.push(entry)
       }
       for (const res of this.capturedResponses) {
-        await this.collector.saveResponse(this.engagementId, this.findingId, res).catch(() => {})
+        const entry = await this.collector.saveResponse(this.engagementId, this.findingId, res).catch(() => null)
+        if (entry) collectedArtifacts.push(entry)
       }
-      await this.collector.createPackage(this.engagementId, this.findingId, []).catch(() => {})
+      await this.collector.createPackage(this.engagementId, this.findingId, collectedArtifacts).catch(() => {})
     }
 
     const artifacts: import("../../shared/types").ArtifactRef[] = []

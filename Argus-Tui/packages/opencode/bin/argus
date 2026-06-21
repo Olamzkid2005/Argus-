@@ -20,10 +20,13 @@ import { dirname, join } from "path"
 const binDir = dirname(fileURLToPath(import.meta.url))
 const entry = join(binDir, "..", "src", "argus", "index.ts")
 
-// Re-exec via bun with the argus entry point, preserving all args
+// Re-exec via bun with the argus entry point, preserving all args.
+// Uses process.execPath instead of the bare string "bun" so that we don't
+// depend on bun being on PATH for spawned children — process.execPath is
+// the full path to the current bun interpreter that is running this script.
 const { spawn } = await import("child_process")
 
-const child = spawn("bun", ["run", entry, ...process.argv.slice(2)], {
+const child = spawn(process.execPath, ["run", entry, ...process.argv.slice(2)], {
   stdio: "inherit",
 })
 

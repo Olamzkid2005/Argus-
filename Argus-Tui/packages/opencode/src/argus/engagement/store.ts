@@ -2,8 +2,9 @@
 // dynamic import so that under Node the error is a clear "Bun required"
 // message at construction time rather than a cryptic module-not-found
 // at import time (which would prevent the entire module from loading).
+// NOTE: drizzle-orm/bun-sqlite must also be dynamically imported because it
+// eagerly requires bun:sqlite at module level in its driver.cjs.
 import { createRequire } from "node:module"
-import { drizzle } from "drizzle-orm/bun-sqlite"
 
 const _require = createRequire(import.meta.url)
 type BunSqliteDatabaseConstructor = typeof import("bun:sqlite").Database
@@ -22,6 +23,18 @@ function _loadBunSqlite(): BunSqliteDatabaseConstructor {
       "See https://bun.sh/docs/api/sqlite for details."
     )
   }
+}
+
+// Lazy drizzle loader — drizzle-orm/bun-sqlite eagerly requires bun:sqlite
+// at module level in its driver.cjs, so we must load it dynamically via createRequire
+// to keep the module importable under Node.js (it will only throw on construction).
+type DrizzleFunction = (opts: { client: import("bun:sqlite").Database }) => ReturnType<typeof import("drizzle-orm/bun-sqlite")["drizzle"]>
+let _drizzle: DrizzleFunction | null = null
+function _loadDrizzle(): DrizzleFunction {
+  if (!_drizzle) {
+    _drizzle = _require("drizzle-orm/bun-sqlite").drizzle as DrizzleFunction
+  }
+  return _drizzle
 }
 import { eq, desc, asc, sql } from "drizzle-orm"
 import { join, dirname } from "path"
@@ -194,7 +207,7 @@ function toNormalizedFinding(row: typeof findingsTable.$inferSelect): Normalized
 }
 
 export class EngagementStore {
-  private db: ReturnType<typeof drizzle>
+  private db: ReturnType<DrizzleFunction>
   private _sqlite: InstanceType<BunSqliteDatabaseConstructor>
   readonly dbPath: string
 
@@ -213,6 +226,9 @@ export class EngagementStore {
     this._sqlite = new BunSqliteDatabase(this.dbPath)
     this._sqlite.exec("PRAGMA journal_mode = WAL")
     this._sqlite.exec("PRAGMA foreign_keys = ON")
+    // Lazy-load drizzle-orm/bun-sqlite — same reason as bun:sqlite, its
+    // driver.cjs eagerly requires bun:sqlite at module level
+    const drizzle = _loadDrizzle()
     this.db = drizzle({ client: this._sqlite })
     this.ensureTables()
     // Seed sequence counters from existing data so they persist across restarts

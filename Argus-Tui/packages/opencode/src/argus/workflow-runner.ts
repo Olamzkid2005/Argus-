@@ -18,7 +18,7 @@ import { CredentialStore } from "./engagement/credentials"
 import { ConfidenceEngine } from "./engagement/confidence"
 import { FeatureFlags, Feature } from "./config/feature-flags"
 import { detectTargetType, detectAuthState } from "./planner/strategy"
-import { join } from "path"
+import { join, resolve } from "path"
 import { Capability } from "./planner/capabilities"
 import type { NormalizedFinding } from "./shared/types"
 import type { PhaseRecord } from "./engagement/types"
@@ -26,6 +26,7 @@ import type { ProgressEvent } from "./shared/progress"
 import type { PlannerContext } from "./planner/types"
 import { handleProgressEvent } from "./tui/scan-store"
 import type { CacheMode } from "./bridge/types"
+import { PROJECT_ROOT, MCP_WORKER_PATH } from "./shared/path"
 
 export interface WorkflowRunOptions {
   target: string
@@ -151,15 +152,9 @@ export class WorkflowRunner {
 
     emit(`✓ Target validated: ${target}`)
 
-    // Resolve paths relative to this file (src/argus/workflow-runner.ts)
-    // File location:  Argus-Tui/packages/opencode/src/argus/workflow-runner.ts
-    // Project root:   Argus Cli/  (parent of Argus-Tui/ and argus-workers/)
-    // From src/argus/ to project root: 5 levels up
-    // Use decodeURIComponent to handle spaces in path (e.g. "Argus Cli" → "Argus%20Cli" in file:// URL)
-    const _dirname = decodeURIComponent(new URL(".", import.meta.url).pathname)
-
-    const workersPath = options.workersPath ?? join(_dirname, "../../../../../argus-workers/mcp_server.py")
-    const workflowsDir = options.workflowsDir ?? join(_dirname, "./workflows")
+    // Paths resolved from the central project-root helper (shared/path.ts)
+    const workersPath = options.workersPath ?? MCP_WORKER_PATH
+    const workflowsDir = options.workflowsDir ?? resolve(PROJECT_ROOT, "Argus-Tui/packages/opencode/src/argus/workflows")
     const toolsPath = join(workflowsDir, "tool-definitions.yaml")
 
     // ── 1. Create or use existing engagement ──

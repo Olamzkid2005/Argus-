@@ -122,6 +122,25 @@ export class InProcessExecutor implements PhaseExecutor {
     if (!this.gatesLoaded) {
       throw new Error("loadGates must be called before execute")
     }
+
+    // Approval gate check runs BEFORE phase dispatch (including hybrid)
+    const gate = this.isFeatureEnabled(Feature.APPROVAL_GATES)
+      ? this.approvalService.needsApproval(phase, this.requiredGates)
+      : null
+    if (gate) {
+      const result = await this.approvalService.requestApproval(gate, phase.phaseId, phase.target)
+      if (!result.approved) {
+        return {
+          phaseId: phase.phaseId,
+          status: "skipped",
+          findings: [],
+          artifacts: [],
+          errors: [result.reason ?? "Skipped by user"],
+          durationMs: 0,
+        }
+      }
+    }
+
     if (phase.toolExecution === "llm_driven") {
       return this.executeHybrid(phase, execOptions)
     }
@@ -141,23 +160,6 @@ export class InProcessExecutor implements PhaseExecutor {
         }
       } catch {
         // Drift check is advisory — never fail a phase for it
-      }
-    }
-
-    const gate = this.isFeatureEnabled(Feature.APPROVAL_GATES)
-      ? this.approvalService.needsApproval(phase, this.requiredGates)
-      : null
-    if (gate) {
-      const result = await this.approvalService.requestApproval(gate, phase.phaseId, phase.target)
-      if (!result.approved) {
-        return {
-          phaseId: phase.phaseId,
-          status: "skipped",
-          findings: [],
-          artifacts: [],
-          errors: [result.reason ?? "Skipped by user"],
-          durationMs: 0,
-        }
       }
     }
 

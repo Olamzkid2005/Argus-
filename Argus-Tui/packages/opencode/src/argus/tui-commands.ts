@@ -24,6 +24,7 @@
 import { assessCommand } from "./commands/assess"
 import { doctorCommand } from "./commands/doctor"
 import { navigateTo } from "./tui/navigator"
+import { MCP_WORKER_PATH } from "./shared/path"
 
 export interface ArgusTuiCommand {
   /** Unique command name (without leading /) */
@@ -58,6 +59,7 @@ const commands: ArgusTuiCommand[] = [
       const result = await assessCommand(target, {
         useLLM: true,
         cacheMode: noCache ? "no_cache" : refreshCache ? "refresh" : undefined,
+        writeReport: false, // TUI manages its own output — don't write raw markdown to stdout
       })
       if (!result.success) throw new Error(result.error ?? "Assessment failed")
       return `Assessment completed against ${target}${noCache ? " (no cache)" : refreshCache ? " (refresh cache)" : ""}`
@@ -99,6 +101,7 @@ const commands: ArgusTuiCommand[] = [
       const result = await assessCommand(target, {
         useLLM: false,
         cacheMode: noCache ? "no_cache" : refreshCache ? "refresh" : undefined,
+        writeReport: false, // TUI manages its own output
       })
       if (!result.success) throw new Error(result.error ?? "Recon failed")
       return `Recon completed against ${target}${noCache ? " (no cache)" : refreshCache ? " (refresh cache)" : ""}`
@@ -171,12 +174,8 @@ const commands: ArgusTuiCommand[] = [
     needsTarget: false,
     handler: async () => {
       const { WorkersBridge } = await import("./bridge/mcp-client")
-      const { homedir } = await import("os")
-      const { join } = await import("path")
       const { existsSync } = await import("fs")
-      const { fileURLToPath } = await import("url")
-      const dir = typeof __dirname !== "undefined" ? __dirname : fileURLToPath(new URL(".", import.meta.url))
-      const wp = join(dir, "../../../../../argus-workers/mcp_server.py")
+      const wp = MCP_WORKER_PATH
       if (!existsSync(wp)) return "MCP worker not found. Run `argus doctor` to check setup."
       const bridge = new WorkersBridge(wp)
       let toolDefs: Awaited<ReturnType<typeof bridge.getTools>> = []

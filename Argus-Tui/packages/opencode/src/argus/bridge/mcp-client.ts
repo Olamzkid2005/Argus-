@@ -34,7 +34,8 @@ export class WorkersBridge {
   private pending = new Map<string, PendingRequest>()
   private requestId = 0
   public supervisor: WorkerSupervisor
-  private toolsCache: ToolDefinition[] = []
+  private toolsCache: ToolDefinition[] = []     // Registry tools (set by setRegistryTools)
+  private _mcpToolsCache: ToolDefinition[] = []  // MCP tools (fetched from worker)
   private _toolsEverFetched = false
   private _llmStatus: LLMStatus = "AVAILABLE"
   private statusListeners: Array<(status: string) => void> = []
@@ -355,14 +356,14 @@ export class WorkersBridge {
   async getTools(): Promise<ToolDefinition[]> {
     try {
       const result = await this.sendRequest("list_tools", {}) as { tools: ToolDefinition[] }
-      this.toolsCache = result.tools ?? []
+      this._mcpToolsCache = result.tools ?? []
       this._toolsEverFetched = true
-      return this.toolsCache
+      return this._mcpToolsCache
     } catch {
       if (!this._toolsEverFetched) {
         throw new Error("MCP worker tools never successfully fetched")
       }
-      return this.toolsCache
+      return this._mcpToolsCache
     }
   }
   /** Reset circuit breaker — called after cooldown or manual recovery */
@@ -386,7 +387,8 @@ export class WorkersBridge {
    */
   async quickDriftCheck(): Promise<boolean> {
     const { createHash } = await import("crypto")
-    const mcpTools = await this.getTools()
+    // Use the separate MCP tools cache so setRegistryTools() is not overwritten
+    const mcpTools = this._toolsEverFetched ? this._mcpToolsCache : await this.getTools()
     const regTools = this.toolsCache
 
     const mcpKey = mcpTools

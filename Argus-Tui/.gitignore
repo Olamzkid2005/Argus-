@@ -30,3 +30,7 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Redis — Windows binaries (including .dll) must not be tracked
+redis/*.exe
+redis/*.dll
