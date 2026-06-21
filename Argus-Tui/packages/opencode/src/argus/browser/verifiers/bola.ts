@@ -115,7 +115,7 @@ export class BOLAVerifier implements VerificationScenario {
     const context = await this.engine.createContext()
     const page = await context.newPage()
     try {
-      const response = await page.goto(resourceUrl, { waitUntil: "networkidle" })
+      const response = await page.goto(resourceUrl, { waitUntil: "networkidle", timeout: 30000 })
       const httpStatus = response?.status() ?? 0
       if (httpStatus === 401 || httpStatus === 403) return false
       const bodyText = await page.locator("body").innerText().catch(() => "")
@@ -134,15 +134,15 @@ export class BOLAVerifier implements VerificationScenario {
     const context = await this.engine.createContext()
     const page = await context.newPage()
     try {
-      await page.goto(this.targetUrl, { waitUntil: "networkidle" })
+      await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30000 })
       this.capturedRequests.push(`GET ${this.targetUrl} [${label} login]`)
 
       await loginIfFormPresent(page, creds)
 
-      const loginResponse = await page.goto(this.targetUrl, { waitUntil: "networkidle" })
+      const loginResponse = await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30000 })
       this.capturedResponses.push(`[${label}] Login page status: ${loginResponse?.status() ?? "unknown"}`)
 
-      const resourceResponse = await page.goto(resourceUrl, { waitUntil: "networkidle" })
+      const resourceResponse = await page.goto(resourceUrl, { waitUntil: "networkidle", timeout: 30000 })
       this.capturedRequests.push(`GET ${resourceUrl} [${label}]`)
       this.capturedResponses.push(`[${label}] Resource page status: ${resourceResponse?.status() ?? "unknown"}`)
 

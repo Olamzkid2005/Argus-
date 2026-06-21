@@ -26,12 +26,11 @@ def check_stored_xss(
 ) -> list[dict]:
     findings = []
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
         context = browser.new_context()
 
         page = context.new_page()
-        page.goto(f"{target}/login")
-        page.wait_for_load_state("networkidle")
+        page.goto(f"{target}/login", timeout=30000, wait_until="networkidle")
         page.fill(username_selector, credentials["username"])
         page.fill(password_selector, credentials["password"])
         page.click(submit_selector)
@@ -41,15 +40,13 @@ def check_stored_xss(
             browser.close()
             return findings
 
-        page.goto(f"{target}{form_path}")
-        page.wait_for_load_state("networkidle")
+        page.goto(f"{target}{form_path}", timeout=30000, wait_until="networkidle")
 
         page.fill("textarea, input[type=text]", payload)
         page.click("button[type=submit]")
         page.wait_for_load_state("networkidle")
 
-        page.goto(f"{target}")
-        page.wait_for_load_state("networkidle")
+        page.goto(f"{target}", timeout=30000, wait_until="networkidle")
 
         content = page.content()
         if payload in content:

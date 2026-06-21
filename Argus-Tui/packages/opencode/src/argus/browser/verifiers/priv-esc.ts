@@ -42,7 +42,7 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
     const context = await this.engine.createContext()
     const page = await context.newPage()
     try {
-      const response = await page.goto(endpointUrl, { waitUntil: "networkidle" })
+      const response = await page.goto(endpointUrl, { waitUntil: "networkidle", timeout: 30000 })
       const httpStatus = response?.status() ?? 0
       if (httpStatus === 401 || httpStatus === 403) return false
       const bodyText = await page.locator("body").innerText()
@@ -71,7 +71,7 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
 
       this.capturedRequests.push(`GET ${endpointUrl} [low-priv as ${this.lowPrivCreds.username}]`)
 
-      const response = await page.goto(endpointUrl, { waitUntil: "networkidle" })
+      const response = await page.goto(endpointUrl, { waitUntil: "networkidle", timeout: 30000 })
       const httpStatus = response?.status() ?? 0
       this.capturedResponses.push(`Endpoint ${ep}: HTTP ${httpStatus}`)
 

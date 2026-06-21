@@ -31,12 +31,11 @@ def check_privesc(
 ) -> list[dict]:
     findings = []
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
         context = browser.new_context()
 
         page = context.new_page()
-        page.goto(f"{target}/login")
-        page.wait_for_load_state("networkidle")
+        page.goto(f"{target}/login", timeout=30000, wait_until="networkidle")
         page.fill(username_selector, low_priv["username"])
         page.fill(password_selector, low_priv["password"])
         page.click(submit_selector)
@@ -47,7 +46,7 @@ def check_privesc(
             return findings
 
         for path in admin_paths:
-            response = page.goto(f"{target}{path}")
+            response = page.goto(f"{target}{path}", timeout=30000, wait_until="networkidle")
             if response.status == 200:
                 findings.append(
                     {

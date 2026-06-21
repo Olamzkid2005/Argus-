@@ -70,7 +70,7 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
     slog.tool_start("browser_scan", target=target_url)
     with sync_playwright() as p:
         try:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
             page = browser.new_page()
             # Use a fresh list per payload to avoid TOCTOU race between
             # collecting errors and checking them (M7 fix)

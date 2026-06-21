@@ -24,12 +24,11 @@ def check_bola(
 ) -> list[dict]:
     findings = []
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
         context = browser.new_context()
 
         page = context.new_page()
-        page.goto(f"{target}/login")
-        page.wait_for_load_state("networkidle")
+        page.goto(f"{target}/login", timeout=30000, wait_until="networkidle")
         page.fill(username_selector, attacker["username"])
         page.fill(password_selector, attacker["password"])
         page.click(submit_selector)
@@ -40,7 +39,7 @@ def check_bola(
             return findings
 
         resource_url = f"{target}{resource_pattern.format(username=victim['username'])}"
-        response = page.goto(resource_url)
+        response = page.goto(resource_url, timeout=30000, wait_until="networkidle")
         if response.status == 200:
             try:
                 body = response.json()
