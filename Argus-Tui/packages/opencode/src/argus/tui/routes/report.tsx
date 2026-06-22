@@ -8,6 +8,7 @@
 
 import { createSignal, onMount, For, Show } from "solid-js"
 import { useTheme } from "@tui/context/theme"
+import { Toast } from "@tui/ui/toast"
 
 interface ReportDashboardProps {
   engagementId: string
@@ -258,6 +259,7 @@ export function ReportDashboard(props: ReportDashboardProps) {
       </Show>
 
       <box flexGrow={1} />
+      <Toast />
     </box>
   )
 }

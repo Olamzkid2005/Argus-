@@ -8,7 +8,6 @@ Handles the first-scan case (no previous engagement to diff against).
 Auto-closes fixed findings and fires webhooks for actionable changes.
 """
 
-import contextlib
 import json
 import logging
 import os
@@ -119,7 +118,7 @@ def run_scan_diff(
 
 
 def _get_engagement_target(engagement_id: str) -> str | None:
-    """Get target_url from engagement.
+    """Get target_url from engagement using the connection pool.
 
     Args:
         engagement_id: UUID of the engagement
@@ -127,25 +126,19 @@ def _get_engagement_target(engagement_id: str) -> str | None:
     Returns:
         target_url string, or None
     """
-    from database.connection import connect
+    from database.connection import db_cursor
 
-    conn = None
     try:
-        conn = connect(os.getenv("DATABASE_URL"))
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT target_url FROM engagements WHERE id = %s",
-            (engagement_id,),
-        )
-        row = cursor.fetchone()
-        return str(row[0]) if row else None
+        with db_cursor() as cursor:
+            cursor.execute(
+                "SELECT target_url FROM engagements WHERE id = %s",
+                (engagement_id,),
+            )
+            row = cursor.fetchone()
+            return str(row[0]) if row else None
     except Exception as e:
         logger.warning("Failed to get engagement target for %s: %s", engagement_id, e)
         return None
-    finally:
-        if conn:
-            with contextlib.suppress(Exception):
-                conn.close()
 
 
 def _update_fixed_fingerprints(
@@ -158,6 +151,8 @@ def _update_fixed_fingerprints(
 
     Deduplicates the list and caps it at 1000 entries to prevent
     unbounded JSONB column growth (L-03 fix).
+
+    Uses the connection pool.
 
     Args:
         profile_repo: TargetProfileRepository instance
@@ -174,37 +169,29 @@ def _update_fixed_fingerprints(
     # Deduplicate new fingerprints before storing
     fps = list(set(fps))
 
-    conn = None
     try:
-        from database.connection import connect
+        from database.connection import db_connection
 
-        conn = connect(os.getenv("DATABASE_URL"))
-        cursor = conn.cursor()
-        # Merge new fingerprints with existing, deduplicate, and cap at 1000
-        # to prevent unbounded JSONB growth (L-03).
-        cursor.execute(
-            """
-            UPDATE target_profiles
-            SET fixed_finding_fingerprints = (
-                SELECT jsonb_agg(elem ORDER BY elem)
-                FROM (
-                    SELECT DISTINCT elem
-                    FROM jsonb_array_elements(
-                        COALESCE(fixed_finding_fingerprints, '[]'::jsonb) || %s::jsonb
-                    ) AS elem
-                    ORDER BY elem DESC
-                    LIMIT 1000
-                ) deduped
-            ),
-            updated_at = NOW()
-            WHERE org_id = %s AND target_domain = %s
-            """,
-            (json.dumps(fps), org_id, domain),
-        )
-        conn.commit()
+        with db_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE target_profiles
+                    SET fixed_finding_fingerprints = (
+                        SELECT jsonb_agg(elem ORDER BY elem)
+                        FROM (
+                            SELECT DISTINCT elem
+                            FROM jsonb_array_elements(
+                                COALESCE(fixed_finding_fingerprints, '[]'::jsonb) || %s::jsonb
+                            ) AS elem
+                            ORDER BY elem DESC
+                            LIMIT 1000
+                        ) deduped
+                    ),
+                    updated_at = NOW()
+                    WHERE org_id = %s AND target_domain = %s
+                    """,
+                    (json.dumps(fps), org_id, domain),
+                )
     except Exception as e:
         logger.warning("Failed to update fixed fingerprints: %s", e)
-    finally:
-        if conn:
-            with contextlib.suppress(Exception):
-                conn.close()

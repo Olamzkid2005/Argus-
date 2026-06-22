@@ -7,6 +7,7 @@
 import { createSignal, onMount, Show } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useRoute } from "@tui/context/route"
+import { Toast, useToast } from "@tui/ui/toast"
 
 export function Workspace() {
   const { theme } = useTheme()
@@ -16,6 +17,7 @@ export function Workspace() {
   const [findingCount, setFindingCount] = createSignal(0)
   const [criticalCount, setCriticalCount] = createSignal(0)
   const [loading, setLoading] = createSignal(true)
+  const toast = useToast()
 
   onMount(async () => {
     try {
@@ -34,7 +36,7 @@ export function Workspace() {
       setFindingCount(findings)
       setCriticalCount(critical)
       setLoading(false)
-    } catch { setLoading(false) }
+    } catch (e) { toast.error(e); setLoading(false) }
   })
 
   return (
@@ -106,6 +108,7 @@ export function Workspace() {
       </box>
 
       <box flexGrow={1} />
+      <Toast />
     </box>
   )
 }

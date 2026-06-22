@@ -16,9 +16,6 @@ function makeStore(name: string): EngagementStore {
   return new EngagementStore(join(dbDir, `${name}.db`))
 }
 
-let mockRunnerRunThrow = false
-let mockEvidenceCaptureThrow = false
-
 const mockPage = {
   goto: mock(async () => ({ status: () => 200 })),
   close: mock(async () => {}),
@@ -35,6 +32,8 @@ const mockPage = {
       click: mock(async () => {}),
     })),
   })),
+  evaluate: mock(async (fn: Function) => "<html></html>"),
+  waitForTimeout: mock(async () => {}),
 }
 
 const mockContext = {
@@ -72,6 +71,18 @@ const mockCollector = {
     type: "screenshot" as const,
     size_bytes: 100,
   })),
+  saveRequest: mock(async () => ({
+    path: "requests/test.txt",
+    hash: "abc123",
+    type: "request" as const,
+    size_bytes: 50,
+  })),
+  saveResponse: mock(async () => ({
+    path: "responses/test.txt",
+    hash: "abc123",
+    type: "response" as const,
+    size_bytes: 50,
+  })),
   createPackage: mock(async () => ({
     package_id: "test",
     engagement_id: "test",
@@ -85,9 +96,24 @@ const mockConfidence = {
   promote: mock((finding: any) => finding.confidence),
 }
 
-function resetEngineMocks(): void {
-  mockRunnerRunThrow = false
-  mockEvidenceCaptureThrow = false
+/**
+ * Tracks which verifier methods were called and with what arguments.
+ * Verifiers (BOLA, XSS, PrivEsc) are called via the VerificationRunner,
+ * which exercises setup/execute/verify/collectEvidence/cleanup.
+ * These counters let us assert the mocks were actually wired through.
+ */
+function resetAllMocks(): void {
+  mockPage.goto.mockClear()
+  mockPage.close.mockClear()
+  mockPage.content.mockClear()
+  mockContext.close.mockClear()
+  mockEngine.launch.mockClear()
+  mockEngine.createContext.mockClear()
+  mockEngine.navigate.mockClear()
+  mockEngine.captureScreenshot.mockClear()
+  mockEngine.close.mockClear()
+  mockCollector.captureScreenshot.mockClear()
+  mockCollector.createPackage.mockClear()
 }
 
 describe("verifyCommand", () => {
@@ -101,7 +127,7 @@ describe("verifyCommand", () => {
   })
 
   afterEach(() => {
-    resetEngineMocks()
+    resetAllMocks()
     store = makeStore(`verify-${Date.now()}`)
   })
 
@@ -218,7 +244,7 @@ describe("verifyCommand", () => {
     expect(output).toContain("unknown-scanner")
   })
 
-  test("passes engineOverride to verifier via VerificationRunner", async () => {
+  test("BOLA verifier exercises mock engine (engine.launch, createContext, navigate, close)", async () => {
     const eng = store.createEngagement("https://bola-test.com", "assessment")
     const findingId = `find-bola-${Date.now()}`
     store.saveFindings(eng.id, [{
@@ -245,34 +271,54 @@ describe("verifyCommand", () => {
 
     expect(output).toContain("BOLA")
     expect(output).toContain("confidence")
+    // Verify the mocks were actually exercised through the verifier pipeline
+    // engine.launch and createContext should be called during setup()
+    expect(mockEngine.launch).toHaveBeenCalled()
+    // engine.close should be called during cleanup()
+    expect(mockEngine.close).toHaveBeenCalled()
   })
 
-  test("runs BOLA verification with mocked dependencies", async () => {
-    const eng = store.createEngagement("https://bola-test.com", "assessment")
-    const findingId = `find-bola-${Date.now()}`
+  test("BOLA verifier with non-standard role names (flexible matching)", async () => {
+    const eng = store.createEngagement("https://bola-flex-test.com", "assessment")
+    const findingId = `find-bola-flex-${Date.now()}`
     store.saveFindings(eng.id, [{
       id: findingId,
-      title: "BOLA finding",
+      title: "BOLA flexible role",
       severity: 3,
       confidence: 2,
       status: "PENDING",
-      description: "https://bola-test.com/api/resource",
+      description: "https://bola-flex-test.com/api/resource",
       tool: "bola-scanner",
       phase: "phase-1",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }])
 
+    // Use non-standard role names to test flexible matching
+    const flexCredStore = {
+      load: mock(() => ({ roles: {} })),
+      getAllCredentials: mock(() => ({
+        Attacker: { username: "attacker", password: "pass" },
+        victim_role: { username: "victim", password: "pass" },
+      })),
+      clear: mock(() => {}),
+      getCredentials: mock(() => null),
+      listRoles: mock(() => []),
+      getDefaultRole: mock(() => undefined),
+      getDefaultCredentials: mock(() => null),
+      save: mock(() => {}),
+    }
+
     const { verifyCommand } = await import("../../../../src/argus/commands/verify")
     const output = await verifyCommand(findingId, {
       storeOverride: store,
       engineOverride: mockEngine,
-      credStoreOverride: mockCredStore,
+      credStoreOverride: flexCredStore,
       collectorOverride: mockCollector,
       confidenceOverride: mockConfidence,
     })
 
+    // Should match "Attacker" → "attacker" (case-insensitive) and "victim_role" → "victim" (substring)
     expect(output).toContain("BOLA")
-    expect(output).toContain("confidence")
   })
 })

@@ -63,19 +63,41 @@ export async function verifyCommand(
   lines.push(`[Argus] Re-running verification for finding: ${finding.id}`)
   lines.push(`[Argus] Tool: ${finding.tool}, Target: ${targetUrl}`)
 
+  // Match roles flexibly: try exact match first, then case-insensitive, then substring
+  // This ensures verifiers work with arbitrary role names (e.g. "Attacker", "victim1",
+  // "regular-user", "admin_role") rather than only exact lowercase "attacker"/"victim".
+  const matchRole = (name: string): { username: string; password: string } | undefined => {
+    // 1. Exact case-insensitive match
+    const exactMatch = Object.entries(allRoles).find(
+      ([key]) => key.toLowerCase() === name.toLowerCase(),
+    )
+    if (exactMatch) return exactMatch[1] as { username: string; password: string }
+    // 2. Substring match (e.g. "attacker1" matches "attacker")
+    const substringMatch = Object.entries(allRoles).find(
+      ([key]) => key.toLowerCase().includes(name.toLowerCase()),
+    )
+    if (substringMatch) return substringMatch[1] as { username: string; password: string }
+    return undefined
+  }
+
+  const attackerRole = matchRole("attacker")
+  const victimRole = matchRole("victim")
+  const userRole = matchRole("user")
+  const adminRole = matchRole("admin")
+
   // Determine which verifier to run based on finding tool
   try {
-    if (finding.tool?.includes("bola") && allRoles.attacker && allRoles.victim) {
-      const verifier = new BOLAVerifier(engine, targetUrl, "/api/resource", allRoles.attacker, allRoles.victim, evidenceCollector, engagementId, findingId)
+    if (finding.tool?.includes("bola") && attackerRole && victimRole) {
+      const verifier = new BOLAVerifier(engine, targetUrl, "/api/resource", attackerRole, victimRole, evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
       lines.push(`[BOLA] ${result.summary} (confidence: ${result.confidence})`)
-    } else if (finding.tool?.includes("xss") && (allRoles.user || allRoles.admin)) {
-      const creds = allRoles.user ?? allRoles.admin!
+    } else if (finding.tool?.includes("xss") && (userRole || adminRole)) {
+      const creds = userRole ?? adminRole!
       const verifier = new StoredXSSVerifier(engine, targetUrl, targetUrl, "<script>alert('xss')</script>", evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
       lines.push(`[XSS] ${result.summary} (confidence: ${result.confidence})`)
-    } else if (finding.tool?.includes("priv-esc") && allRoles.user) {
-      const verifier = new PrivilegeEscalationVerifier(engine, targetUrl, ["/admin"], allRoles.user, evidenceCollector, engagementId, findingId)
+    } else if (finding.tool?.includes("priv-esc") && userRole) {
+      const verifier = new PrivilegeEscalationVerifier(engine, targetUrl, ["/admin"], userRole, evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
       lines.push(`[PrivEsc] ${result.summary} (confidence: ${result.confidence})`)
     } else {

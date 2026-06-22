@@ -6,6 +6,7 @@ import { LLMUnavailableError } from "../bridge/types"
 import type { WorkersBridge } from "../bridge/mcp-client"
 import type { ProgressEvent, ErrorHintData } from "../shared/progress"
 import type { ToolDef } from "../workflows/tool-registry"
+import crypto from "crypto"
 import { Capability } from "../shared/capabilities"
 
 /**
@@ -357,7 +358,7 @@ export class InProcessExecutor implements PhaseExecutor {
             } else if (typeof data === "string" && data.length > 0) {
               const baseConfidence = baselineConfidence(result.signalQuality)
               findings.push({
-                id: `find-${next.tool}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                id: `find-${next.tool}-${crypto.randomUUID()}`,
                 title: `${next.tool} scan against ${phase.target}`,
                 severity: 2,
                 confidence: baseConfidence,
@@ -488,7 +489,7 @@ export class InProcessExecutor implements PhaseExecutor {
           } else if (typeof data === "string" && data.length > 0) {
             const truncated = data.length > 500 ? data.substring(0, 500) + "..." : data
             findings.push({
-              id: `find-${tool.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              id: `find-${tool.name}-${crypto.randomUUID()}`,
               title: `${tool.name} scan against ${phase.target}`,
               severity: 2,
               confidence: baseConfidence,

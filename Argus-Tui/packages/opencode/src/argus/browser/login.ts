@@ -7,7 +7,18 @@ export interface Credentials {
 
 export async function loginIfFormPresent(page: Page, creds: Credentials): Promise<boolean> {
   const content = await page.content()
-  if (!content.includes("password") && !content.includes("login") && !content.includes("sign in")) return false
+  // Use case-insensitive word-boundary regex to avoid:
+  // - Misses: "Password", "LOGIN", "Sign In", "Log In"
+  // - False positives: CSS classes like "password-field", "login-btn"
+  // Word boundary (\b) ensures we match the word, not substrings.
+  const hasLoginForm = /\bpassword\b/i.test(content) && (
+    /\blogin\b/i.test(content) ||
+    /\bsign\s*in\b/i.test(content) ||
+    /\blog\s*in\b/i.test(content) ||
+    /\busername\b/i.test(content) ||
+    /\bemail\b/i.test(content)
+  )
+  if (!hasLoginForm) return false
 
   const passwordFields = await page.locator("input[type=password]").count()
   if (passwordFields === 0) return false

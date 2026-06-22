@@ -27,6 +27,7 @@ import type { PlannerContext } from "./planner/types"
 import { handleProgressEvent } from "./tui/scan-store"
 import type { CacheMode } from "./bridge/types"
 import { PROJECT_ROOT, MCP_WORKER_PATH } from "./shared/path"
+import { getTargetValidator } from "./shared/target-validator"
 
 export interface WorkflowRunOptions {
   target: string
@@ -156,6 +157,15 @@ export class WorkflowRunner {
       if (typeof event !== "string") handleProgressEvent(event, engagementId)
     }
 
+    // ── Target scope validation (hard guardrail) ──
+    const validator = getTargetValidator()
+    const validationResult = await validator.validateTarget(target)
+    if (!validationResult.valid) {
+      throw new Error(validationResult.message)
+    }
+    if (!validationResult.dnsReachable) {
+      emit(`⚠ Target DNS resolution failed for ${target} — target may be unreachable`)
+    }
     emit(`✓ Target validated: ${target}`)
 
     // Paths resolved from the central project-root helper (shared/path.ts)
@@ -194,7 +204,10 @@ export class WorkflowRunner {
         featureFlags.loadFromConfig(parsed.features)
       }
       configMaxReplans = parsed?.replan?.max_cycles
-    } catch { /* config file missing or invalid — use defaults */ }
+    } catch {
+      console.warn("Config file missing or invalid, using defaults")
+      /* config file missing or invalid — use defaults */
+    }
     featureFlags.loadFromEnv()
 
     const credStore = this.deps?.credStore ?? new CredentialStore()

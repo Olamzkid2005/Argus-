@@ -8,6 +8,7 @@ import { createMemo, createSignal, onMount, For, Show } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useRouteData } from "@tui/context/route"
 import { navigateTo } from "@/argus/tui/navigator"
+import { Toast } from "@tui/ui/toast"
 
 interface FindingRow {
   id: string
@@ -285,6 +286,7 @@ export function FindingsViewer() {
           </Show>
         </Show>
       </Show>
+      <Toast />
     </box>
   )
 }

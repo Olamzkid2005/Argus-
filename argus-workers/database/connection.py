@@ -359,8 +359,19 @@ def connect(connection_string: str | None = None) -> psycopg2.extensions.connect
     """
     Standardized database connection helper.
 
-    Prefer using get_db().get_connection() for pool connections.
-    This helper is for one-off connections when the pool is not available.
+    **Deprecated** — Prefer using pool-based connections via ``get_db().get_connection()``
+    or the ``db_connection()`` / ``db_cursor()`` context managers.
+    One-off connections bypass the pool, its statement_timeout enforcement,
+    and its connection limits, and risk leaking if callers forget to close().
+
+    When *connection_string* is omitted (uses default DATABASE_URL), this function
+    now returns a **pool** connection via ``get_db().get_connection()``.
+    Callers **must** use ``get_db().release_connection(conn)`` instead of
+    ``conn.close()`` when finished.
+
+    When *connection_string* is provided explicitly, this function creates a
+    one-off ``psycopg2.connect()`` connection (no pool). These callers must
+    still call ``conn.close()`` manually.
 
     Args:
         connection_string: Optional connection string. Defaults to DATABASE_URL env var.
@@ -374,6 +385,25 @@ def connect(connection_string: str | None = None) -> psycopg2.extensions.connect
     conn_string = connection_string or os.getenv("DATABASE_URL")
     if not conn_string:
         raise DatabaseConnectionError("DATABASE_URL environment variable not set")
+
+    if not connection_string:
+        # Default DATABASE_URL — use the pool so connection limits,
+        # statement_timeout, and lifecycle tracking are enforced.
+        logger.warning(
+            "connect() is deprecated — use get_db().get_connection() or "
+            "the db_connection()/db_cursor() context managers instead. "
+            "connect() without an explicit connection_string now returns "
+            "a pool connection; use get_db().release_connection(conn) "
+            "instead of conn.close()."
+        )
+        return get_db().get_connection()
+
+    # Explicit connection string — create a one-off connection (no pool)
+    logger.warning(
+        "connect() is deprecated — use get_db().get_connection() or "
+        "the db_connection()/db_cursor() context managers instead. "
+        "One-off connections bypass the pool and may leak if not closed."
+    )
     try:
         return psycopg2.connect(conn_string)
     except psycopg2.Error as e:

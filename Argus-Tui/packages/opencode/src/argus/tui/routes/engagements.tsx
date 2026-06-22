@@ -7,6 +7,7 @@
 import { createSignal, createMemo, onMount, For, Show } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useRoute } from "@tui/context/route"
+import { Toast, useToast } from "@tui/ui/toast"
 
 interface EngagementRow {
   id: string
@@ -24,6 +25,7 @@ export function EngagementBrowser() {
   const [engagements, setEngagements] = createSignal<EngagementRow[]>([])
   const [loading, setLoading] = createSignal(true)
   const [filter, setFilter] = createSignal<string>("all")
+  const toast = useToast()
 
   onMount(async () => {
     try {
@@ -39,7 +41,8 @@ export function EngagementBrowser() {
       })
       setEngagements(rows)
       setLoading(false)
-    } catch {
+    } catch (e) {
+      toast.error(e)
       setLoading(false)
     }
   })
@@ -129,6 +132,7 @@ export function EngagementBrowser() {
       </Show>
 
       <box flexGrow={1} />
+      <Toast />
     </box>
   )
 }

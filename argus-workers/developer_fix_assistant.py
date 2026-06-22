@@ -84,7 +84,10 @@ class DeveloperFixAssistant:
         if not llm_service or not llm_service.is_available():
             return None
 
-        if cost_tracker and not cost_tracker.has_remaining_budget():
+        # Check budget (duck-typed: supports both has_remaining_budget() and exceeded())
+        _has_remaining = getattr(cost_tracker, "has_remaining_budget", None)
+        _exceeded = getattr(cost_tracker, "exceeded", None)
+        if (_has_remaining and not _has_remaining()) or (_exceeded and _exceeded()):
             logger.info("LLM budget exhausted — skipping fix generation")
             return None
 
@@ -129,8 +132,11 @@ class DeveloperFixAssistant:
             if result.get("_fallback"):
                 return None
 
-            if cost_tracker and "cost_usd" in result:
-                cost_tracker.record_llm_call(result.get("cost_usd", 0))
+            # Track cost (duck-typed: result is parsed JSON, not LLMResponse)
+            if cost_tracker:
+                _record = getattr(cost_tracker, "add", None) or getattr(cost_tracker, "record_llm_call", None)
+                if _record:
+                    _record(0.005)
 
             result["generated_at"] = datetime.now(UTC).isoformat()
             result["tech_stack"] = tech_stack[:5]

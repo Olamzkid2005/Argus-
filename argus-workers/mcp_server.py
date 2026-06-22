@@ -15,7 +15,6 @@ from typing import Any
 
 from agent.session_store import AgentSessionStore, ToolExecution
 from tool_core.parser import dispatch
-from tracing import setup_tracing
 
 # ── Signal quality tiers for planner intelligence ──
 
@@ -50,8 +49,6 @@ class ToolCost:
     MEDIUM = "medium"
     HIGH = "high"
 
-
-tracer = setup_tracing()
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +230,15 @@ class MCPServer:
             logger.info("Created tools definitions directory: %s", tools_path)
             return
 
-        # Blocklist of dangerous command patterns for YAML-defined tools
+        # Blocklist of dangerous command patterns for YAML-defined tools.
+        # Categories of blocked commands, all verified as unused by any of the 65+
+        # YAML tool definitions (see argus-workers/tools/definitions/):
+        #   - Shell interpreters: sh, bash, zsh, dash           (arbitrary code exec)
+        #   - File destruction:  rm, mv, cp, dd, mkfs, chmod, chown (data loss)
+        #   - Data exfiltration: nc, netcat, curl, wget, telnet, ssh (network leakage)
+        #   - Script interpreters: ruby, perl, node, php          (arbitrary code exec)
+        # All security tools use their own binary names (nuclei, nmap, sqlmap, etc.),
+        # so this blocklist does not block any legitimate tool registration.
         blocked_command_patterns = {
             "sh",
             "bash",
@@ -588,7 +593,7 @@ class MCPServer:
             # Preserve any existing PATH customizations (e.g. from start-argus.sh)
             _existing_path = _env.get("PATH", "")
             _env["PATH"] = (
-                f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:/usr/local/bin:/usr/bin:/bin:{_existing_path}"
+                f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:/snap/bin:/usr/local/bin:/usr/bin:/bin:{_existing_path}"
             )
             _env["PYTHONDONTWRITEBYTECODE"] = "1"
 
@@ -808,6 +813,16 @@ def get_mcp_server() -> MCPServer:
 
 def main():
     """Entry point for stdio JSON-RPC transport mode."""
+    # Set up tracing on-demand when the MCP server is actually used,
+    # not at import time. This avoids a redundant OpenTelemetry setup
+    # when both celery_app.py and mcp_server.py are imported in the
+    # same process (e.g. orchestrator importing get_mcp_server).
+    # The setup is idempotent — if celery_app already initialized it,
+    # this call is a no-op.
+    from tracing import setup_tracing
+
+    setup_tracing()
+
     logging.basicConfig(
         level=logging.INFO,
         stream=sys.stderr,

@@ -2,7 +2,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createEffect, createMemo, createSignal, onMount, For, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
-import { Toast } from "../ui/toast"
+import { Toast, useToast } from "../ui/toast"
 import { useArgs } from "../context/args"
 import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
@@ -40,6 +40,7 @@ export function Home() {
   const [engagements, setEngagements] = createSignal<Array<{ id: string; target: string; status: string; findings: number }>>([])
   const [stats, setStats] = createSignal<{ targets: number; active: number; findings: number; critical: number; high: number; medium: number } | null>(null)
   const [services, setServices] = createSignal<Record<string, boolean>>({})
+  const toast = useToast()
 
   onMount(async () => {
     try {
@@ -65,7 +66,7 @@ export function Home() {
         }
       }
       setStats({ targets: totalTargets, active: openEngagements, findings: totalF, critical, high, medium })
-    } catch {}
+    } catch (e) { toast.error(e) }
     Promise.resolve().then(async () => {
       try {
         const { existsSync } = await import("fs")
@@ -75,7 +76,7 @@ export function Home() {
         const wp = join(_dirname, "../../../../../../../../argus-workers/mcp_server.py")
         const mcpOk = existsSync(wp)
         setServices({ planner: true, workflow: true, mcp: mcpOk, evidence: true, report: true, verify: true })
-      } catch {}
+      } catch (e) { toast.error(e) }
     })
   })
 

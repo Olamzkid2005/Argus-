@@ -1,3 +1,4 @@
+import crypto from "crypto"
 import type { NormalizedFinding, EvidencePackage } from "../shared/types"
 import { Severity, Confidence } from "../shared/types"
 
@@ -17,7 +18,7 @@ export function normalizeFinding(raw: unknown): NormalizedFinding {
   const input = raw as Record<string, unknown>
 
   return {
-    id: (input.id as string) ?? `find-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    id: (input.id as string) ?? `find-${crypto.randomUUID()}`,
     title: (input.title as string) || "Unknown Finding",
     severity: enumValue(Severity, input.severity, Severity.INFO),
     confidence: enumValue(Confidence, input.confidence, Confidence.INFORMATIONAL),

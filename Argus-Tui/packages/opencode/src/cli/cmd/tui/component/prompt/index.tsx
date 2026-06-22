@@ -1283,7 +1283,7 @@ export function Prompt(props: PromptProps) {
                     parts: [{ id: PartID.ascending(), type: "text" as const, text: progressMessages.join("\n") }],
                   })
                 }
-                output = formatFindingsSummary(result.allFindings, result.engagementId, arg)
+                output = formatFindingsSummary(result.allFindings, result.engagementId, strippedTarget ?? arg)
               } else {
                 output = await argusCmd.handler(arg)
               }

@@ -16,6 +16,15 @@ evidence:
 
 security:
   allowed_git_hosts: []
+  # Target scope enforcement — hard technical guardrails preventing scans
+  # against unauthorized targets. When allowed_targets is non-empty, only
+  # matching targets will be scanned. When blocked_targets is non-empty,
+  # matching targets are always rejected (takes precedence over allowed).
+  # Glob patterns: *.example.com, example.*, * (all), or exact hostnames.
+  scope:
+    # allowed_targets: []   # Uncomment to enable allowlist mode
+    # blocked_targets: []   # Uncomment to block specific targets
+    # require_confirmation: false  # Ask before scanning new targets
 
 tools:
   enabled: []

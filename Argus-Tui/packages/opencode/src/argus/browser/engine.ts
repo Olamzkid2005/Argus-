@@ -21,6 +21,12 @@ export class PlaywrightEngine implements BrowserEngine {
 
   async createContext(): Promise<BrowserContext> {
     if (!this.browser) throw new Error("Browser not launched")
+    // Close the previous context before creating a new one to avoid context leaks.
+    // Verifiers (bola.ts, priv-esc.ts) call createContext() multiple times per
+    // access check — without this guard, each call leaks an orphaned context.
+    if (this.context) {
+      await this.context.close().catch(() => {})
+    }
     this.context = await this.browser.newContext()
     return this.context
   }

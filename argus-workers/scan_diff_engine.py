@@ -17,6 +17,10 @@ import json
 import logging
 from urllib.parse import urlparse
 
+import psycopg2
+
+from database.connection import get_db
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,6 +29,10 @@ class ScanDiffEngine:
 
     Categorizes findings into: new, fixed, regressed, persistent, severity_changed.
     Used by the Continuous Monitoring feature (Steps 9-11).
+
+    All database access uses the connection pool via get_db() to prevent
+    connection leaks (previously used connect() which created one-off
+    connections that bypassed the pool).
     """
 
     CAT_NEW = "new"
@@ -35,6 +43,25 @@ class ScanDiffEngine:
 
     def __init__(self, db_url: str | None = None):
         self.db_url = db_url
+
+    def _get_connection(self):
+        """Get a database connection from the pool."""
+        return get_db().get_connection()
+
+    def _release_connection(self, conn):
+        """Release connection back to pool."""
+        if conn is None:
+            return
+        try:
+            get_db().release_connection(conn)
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                logger.warning(
+                    "Failed to close connection after failed release_connection",
+                    exc_info=True,
+                )
 
     # ── Fingerprinting ─────────────────────────────────────────────
 
@@ -138,17 +165,18 @@ class ScanDiffEngine:
     def _load_findings(self, engagement_id: str) -> dict[str, dict]:
         """Load findings for an engagement, keyed by fingerprint.
 
+        Uses connection pool via _get_connection().
+
         Args:
             engagement_id: UUID of the engagement
 
         Returns:
             Dict mapping fingerprint → finding dict
         """
-        from database.connection import connect
-
         conn = None
+        cursor = None
         try:
-            conn = connect(self.db_url)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -179,9 +207,10 @@ class ScanDiffEngine:
                 f"Failed to load findings for engagement {engagement_id}: {e}"
             ) from e
         finally:
+            if cursor:
+                cursor.close()
             if conn:
-                with contextlib.suppress(Exception):
-                    conn.close()
+                self._release_connection(conn)
 
     # ── Core diff ──────────────────────────────────────────────────
 
@@ -391,6 +420,7 @@ class ScanDiffEngine:
 
         Uses SELECT ... FOR UPDATE to prevent concurrent diff tasks from
         racing on the same finding row and corrupting audit trails.
+        Uses connection pool via _get_connection().
 
         Args:
             finding_id: UUID of finding to mark fixed
@@ -400,10 +430,9 @@ class ScanDiffEngine:
             True if the finding was updated
         """
         conn = None
+        cursor = None
         try:
-            from database.connection import connect
-
-            conn = connect(self.db_url)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -439,9 +468,10 @@ class ScanDiffEngine:
                     conn.rollback()
             return False
         finally:
+            if cursor:
+                cursor.close()
             if conn:
-                with contextlib.suppress(Exception):
-                    conn.close()
+                self._release_connection(conn)
 
     def batch_mark_fixed(
         self, finding_ids: list[str], closed_in_engagement_id: str
@@ -451,6 +481,7 @@ class ScanDiffEngine:
 
         Replaces N separate mark_fixed() calls with one bulk UPDATE,
         reducing N round-trips to 1.
+        Uses connection pool via _get_connection().
 
         Args:
             finding_ids: List of finding UUIDs to mark fixed
@@ -463,10 +494,9 @@ class ScanDiffEngine:
             return 0
 
         conn = None
+        cursor = None
         try:
-            from database.connection import connect
-
-            conn = connect(self.db_url)
+            conn = self._get_connection()
             cursor = conn.cursor()
             # Lock rows before updating to prevent concurrent diff tasks
             # from racing on the same findings (matches single-row mark_fixed).
@@ -506,9 +536,10 @@ class ScanDiffEngine:
                     conn.rollback()
             return 0
         finally:
+            if cursor:
+                cursor.close()
             if conn:
-                with contextlib.suppress(Exception):
-                    conn.close()
+                self._release_connection(conn)
 
     def batch_mark_fixed_with_fps(
         self,
@@ -524,6 +555,7 @@ class ScanDiffEngine:
         L-09: Combines batch_mark_fixed and fingerprint update in a single
         transaction to prevent inconsistency where findings are marked fixed
         but the profile's fingerprint list isn't updated (or vice versa).
+        Uses connection pool via _get_connection().
 
         Args:
             finding_ids: List of finding UUIDs to mark fixed
@@ -552,10 +584,9 @@ class ScanDiffEngine:
             fps = []
 
         conn = None
+        cursor = None
         try:
-            from database.connection import connect
-
-            conn = connect(self.db_url)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -616,12 +647,15 @@ class ScanDiffEngine:
                     conn.rollback()
             return 0
         finally:
+            if cursor:
+                cursor.close()
             if conn:
-                with contextlib.suppress(Exception):
-                    conn.close()
+                self._release_connection(conn)
 
     def store_diff_in_profile(self, org_id: str, domain: str, diff: dict) -> bool:
         """Store the diff summary in the target profile.
+
+        Uses connection pool via _get_connection().
 
         Args:
             org_id: Organization ID
@@ -632,10 +666,9 @@ class ScanDiffEngine:
             True if stored successfully
         """
         conn = None
+        cursor = None
         try:
-            from database.connection import connect
-
-            conn = connect(self.db_url)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -655,6 +688,7 @@ class ScanDiffEngine:
                     conn.rollback()
             return False
         finally:
+            if cursor:
+                cursor.close()
             if conn:
-                with contextlib.suppress(Exception):
-                    conn.close()
+                self._release_connection(conn)

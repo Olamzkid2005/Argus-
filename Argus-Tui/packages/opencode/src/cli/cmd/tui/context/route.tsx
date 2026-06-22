@@ -63,16 +63,27 @@ export type Route = HomeRoute | SessionRoute | PluginRoute | ScanRoute | Finding
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
   init: (props: { initialRoute?: Route }) => {
-    const [store, setStore] = createStore<Route>(
-      props.initialRoute ??
-        (process.env["OPENCODE_ROUTE"]
-          ? JSON.parse(process.env["OPENCODE_ROUTE"])
-          : process.env["ARGUS_MODE"] === "1"
-            ? { type: "dashboard" }
-            : {
-                type: "home",
-              }),
-    )
+    let initial: Route
+    if (props.initialRoute) {
+      initial = props.initialRoute
+    } else if (process.env["OPENCODE_ROUTE"]) {
+      try {
+        initial = JSON.parse(process.env["OPENCODE_ROUTE"]) as Route
+      } catch {
+        console.warn(
+          "Invalid OPENCODE_ROUTE env var, ignoring: %s",
+          process.env["OPENCODE_ROUTE"],
+        )
+        initial = process.env["ARGUS_MODE"] === "1"
+          ? { type: "dashboard" }
+          : { type: "home" }
+      }
+    } else {
+      initial = process.env["ARGUS_MODE"] === "1"
+        ? { type: "dashboard" }
+        : { type: "home" }
+    }
+    const [store, setStore] = createStore<Route>(initial)
 
     return {
       get data() {

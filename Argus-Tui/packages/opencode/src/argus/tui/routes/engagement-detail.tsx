@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useRoute } from "@tui/context/route"
+import { Toast, useToast } from "@tui/ui/toast"
 
 interface EngagementDetailProps {
   engagementId: string
@@ -28,6 +29,7 @@ export function EngagementDetail(props: EngagementDetailProps) {
     id: string; eventType: string; message: string; createdAt: number
   }>>([])
   const [loading, setLoading] = createSignal(true)
+  const toast = useToast()
 
   onMount(async () => {
     try {
@@ -50,7 +52,8 @@ export function EngagementDetail(props: EngagementDetailProps) {
         setTimeline(rawTimeline)
       }
       setLoading(false)
-    } catch {
+    } catch (e) {
+      toast.error(e)
       setLoading(false)
     }
   })
@@ -185,6 +188,7 @@ export function EngagementDetail(props: EngagementDetailProps) {
         )}
       </Show>
       <box flexGrow={1} />
+      <Toast />
     </box>
   )
 }

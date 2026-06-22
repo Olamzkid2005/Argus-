@@ -154,13 +154,16 @@ class PoCGenerator:
             logger.warning("No LLM available for PoC generation")
             return None
 
-        # Check budget
-        if cost_tracker and not cost_tracker.has_remaining_budget():
-            logger.info(
-                "LLM budget exhausted — skipping PoC for engagement %s",
-                getattr(cost_tracker, "engagement_id", "?"),
-            )
-            return None
+        # Check budget — duck-type: support both has_remaining_budget() and exceeded()
+        if cost_tracker:
+            _has_remaining = getattr(cost_tracker, "has_remaining_budget", None)
+            _exceeded = getattr(cost_tracker, "exceeded", None)
+            if (_has_remaining and not _has_remaining()) or (_exceeded and _exceeded()):
+                logger.info(
+                    "LLM budget exhausted — skipping PoC for engagement %s",
+                    getattr(cost_tracker, "engagement_id", "?"),
+                )
+                return None
 
         if llm_service and not llm_service.is_available():
             return None
@@ -251,9 +254,14 @@ class PoCGenerator:
                 logger.warning("PoC generation returned fallback for %s", vuln_type)
                 return None
 
-            # Track cost
-            if cost_tracker and "cost_usd" in result:
-                cost_tracker.record_llm_call(result.get("cost_usd", 0))
+            # Track cost — llm_service.chat_json() tracks internally;
+            # also update external cost_tracker with an estimated cost.
+            # Note: result is parsed JSON from the LLM, NOT an LLMResponse,
+            # so cost_usd is never present in the dict.
+            if cost_tracker:
+                _record = getattr(cost_tracker, "add", None) or getattr(cost_tracker, "record_llm_call", None)
+                if _record:
+                    _record(0.005)  # ~$0.005 estimated per 800-token call
 
             result["generated_at"] = datetime.now(UTC).isoformat()
             result["finding_type"] = vuln_type

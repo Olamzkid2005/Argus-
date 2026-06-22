@@ -69,9 +69,6 @@ def setup_tracing(service_name: str = "argus-workers"):
         return trace.get_tracer(__name__)
 
 
-tracer = trace.get_tracer(__name__)
-
-
 class TracingError(Exception):
     """Raised when tracing operations fail"""
 

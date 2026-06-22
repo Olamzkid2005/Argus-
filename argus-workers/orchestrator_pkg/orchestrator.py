@@ -65,6 +65,10 @@ class Orchestrator:
     def __init__(self, engagement_id: str, trace_id: str = None):
         self.engagement_id = engagement_id
         self.start_time = time.time()
+        # Engagement-level timeout reference, lazily resolved from DB created_at.
+        # Using a cached DB timestamp ensures the timeout spans ALL phases
+        # (recon, scan, analyze, report) rather than resetting per Celery task.
+        self._timeout_reference: float | None = None
         self.trace_id = trace_id
         self.bug_bounty_mode = False
 
@@ -1027,9 +1031,39 @@ class Orchestrator:
         return None
 
     def _check_timeout(self):
-        if self.start_time is None:
+        if self._timeout_reference is None:
+            # Lazily resolve the engagement-level start time from the DB.
+            # This ensures the timeout spans ALL phases (recon, scan,
+            # analyze, report) rather than resetting per Celery task.
+            ref = self.start_time
+            if self.engagement_repo:
+                try:
+                    eng = self.engagement_repo.find_by_id(self.engagement_id)
+                    if eng and eng.get("created_at"):
+                        created_ts = eng["created_at"]
+                        if hasattr(created_ts, "timestamp"):
+                            created_ts = created_ts.timestamp()
+                        elif isinstance(created_ts, str):
+                            from datetime import datetime
+
+                            created_ts = datetime.fromisoformat(
+                                created_ts
+                            ).timestamp()
+                        ref = (
+                            min(ref, created_ts)
+                            if ref is not None
+                            else created_ts
+                        )
+                except Exception:
+                    logger.debug(
+                        "Failed to load engagement created_at for timeout",
+                        exc_info=True,
+                    )
+            self._timeout_reference = ref
+
+        if self._timeout_reference is None:
             return
-        elapsed = time.time() - self.start_time
+        elapsed = time.time() - self._timeout_reference
         if elapsed > HARD_TIMEOUT_SECONDS:
             self._log_timeout_event(elapsed)
             raise EngagementTimeoutError(

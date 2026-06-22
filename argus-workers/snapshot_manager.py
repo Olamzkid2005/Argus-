@@ -174,18 +174,23 @@ class SnapshotManager:
             except Exception as e:
                 if conn:
                     conn.rollback()
-                # Check for serialization failure first
+                # Check for serialization or unique-violation failures
                 if conn:
                     try:
-                        from psycopg2.errorcodes import SERIALIZATION_FAILURE
+                        from psycopg2.errorcodes import (
+                            SERIALIZATION_FAILURE,
+                            UNIQUE_VIOLATION,
+                        )
 
                         pgcode = getattr(e, "pgcode", None)
                         if (
-                            pgcode == SERIALIZATION_FAILURE
+                            pgcode in (SERIALIZATION_FAILURE, UNIQUE_VIOLATION)
                             and attempt < max_retries - 1
                         ):
                             logger.info(
-                                "Snapshot serialization failure (attempt %d/%d), retrying in %ds",
+                                "Snapshot version conflict (%s) "
+                                "(attempt %d/%d), retrying in %ds",
+                                "serialization" if pgcode == SERIALIZATION_FAILURE else "unique_violation",
                                 attempt + 1,
                                 max_retries,
                                 retry_delay * (2**attempt),
@@ -196,13 +201,13 @@ class SnapshotManager:
                         logger.debug(
                             "Failed to inspect pgcode for snapshot retry", exc_info=True
                         )
-                # Re-raise all non-serialization exceptions immediately
+                # Re-raise all non-retryable exceptions immediately
                 if attempt == max_retries - 1:
                     raise Exception(
                         f"Failed to create snapshot after {max_retries} attempts: {e}"
                     ) from e
                 else:
-                    raise  # Non-serialization failures: don't retry silently
+                    raise  # Non-retryable failures: don't retry silently
             finally:
                 if cursor:
                     cursor.close()
@@ -227,6 +232,13 @@ class SnapshotManager:
         """
         Store snapshot in decision_snapshots table
 
+        Computes the version via SELECT MAX(version)+1 within the active
+        SERIALIZABLE transaction. Concurrent workers are handled by the
+        outer retry loop in create_snapshot(), which retries on both
+        SERIALIZATION_FAILURE and UNIQUE_VIOLATION. This avoids depending
+        on an ON CONFLICT clause (which requires a unique constraint that
+        may or may not exist on the table).
+
         Args:
             engagement_id: Engagement ID
             snapshot_data: Snapshot data dictionary
@@ -237,7 +249,8 @@ class SnapshotManager:
         """
         snapshot_id = str(uuid.uuid4())
 
-        # Get next version number
+        # Get next version number — the SERIALIZABLE isolation level and
+        # outer retry loop handle concurrent-writer races.
         cursor.execute(
             """
             SELECT COALESCE(MAX(version), 0) + 1 as next_version
@@ -248,7 +261,6 @@ class SnapshotManager:
         )
         version = cursor.fetchone()["next_version"]
 
-        # Insert snapshot
         cursor.execute(
             """
             INSERT INTO decision_snapshots (

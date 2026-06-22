@@ -6,6 +6,7 @@ import { useTheme } from "@tui/context/theme"
 import { EvidenceViewer } from "./evidence-viewer"
 import { Feature, getFeatureFlags } from "@/argus/config/feature-flags"
 import type { NormalizedFinding, FindingAnalysis } from "@/argus/shared/types"
+import { Toast } from "@tui/ui/toast"
 
 const SEV_LABELS = ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
 const CONF_LABELS = ["INFORMATIONAL", "LOW", "MEDIUM", "HIGH", "VERIFIED", "CONFIRMED"]
@@ -195,6 +196,7 @@ export function FindingDetail(props: FindingDetailProps) {
           </>
         )}
       </Show>
+      <Toast />
     </box>
   )
 }

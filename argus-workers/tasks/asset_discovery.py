@@ -8,7 +8,6 @@ import logging
 import os
 
 from celery_app import app
-from database.connection import connect
 from tracing import TracingManager
 
 logger = logging.getLogger(__name__)
@@ -60,11 +59,11 @@ def run_asset_discovery(
     with tracing_manager.trace_execution(engagement_id, "asset_discovery", trace_id):
         assets_discovered = []
 
-        conn = None
-        cursor = None
         try:
-            conn = connect(db_conn_string)
-            cursor = conn.cursor()
+            from database.connection import db_connection
+
+            with db_connection() as conn:
+                cursor = conn.cursor()
 
             # Discover domain asset
             # Use urlparse to safely extract netloc, handling URLs with
@@ -116,8 +115,6 @@ def run_asset_discovery(
                 (engagement_id,),
             )
 
-            conn.commit()
-
             return {
                 "status": "completed",
                 "assets_discovered": len(assets_discovered),
@@ -126,18 +123,11 @@ def run_asset_discovery(
             }
 
         except Exception as e:
-            if conn:
-                conn.rollback()
             return {
                 "status": "failed",
                 "error": str(e),
                 "trace_id": trace_id,
             }
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
 
 
 @app.task(bind=True, name="tasks.asset_discovery.update_asset_risk_scores")
@@ -172,14 +162,14 @@ def update_asset_risk_scores(self, org_id: str):
     # Estimate CVSS per severity — uses shared canonical mapping from attack_graph
     from attack_graph import AttackGraph
 
-    conn = None
-    cursor = None
     try:
-        conn = connect(db_conn_string)
-        cursor = conn.cursor()
+        from database.connection import db_connection
 
-        # Get all assets with their engagement findings by severity
-        cursor.execute(
+        with db_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get all assets with their engagement findings by severity
+            cursor.execute(
             """
             SELECT a.id,
                    COUNT(f.id) FILTER (WHERE f.severity = 'CRITICAL') as critical_count,
@@ -261,16 +251,7 @@ def update_asset_risk_scores(self, org_id: str):
             )
             scored_count += 1
 
-        conn.commit()
-
         return {"status": "completed", "assets_scored": scored_count}
 
     except Exception as e:
-        if conn:
-            conn.rollback()
         return {"status": "failed", "error": str(e)}
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()

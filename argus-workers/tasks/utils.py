@@ -207,35 +207,49 @@ def get_engagement_state(
     Returns None instead of defaulting to "created" so callers can distinguish
     "state not found" from "engagement is in 'created' state" (issue 3.13).
 
+    Uses the connection pool by default. Falls back to a one-off connection
+    when a custom *db_conn_string* is explicitly provided (e.g. from task context).
+
     Args:
         engagement_id: Engagement UUID
-        db_conn_string: Database connection string (auto-resolves from env if not provided)
+        db_conn_string: Optional custom connection string.
+                        If omitted, uses the pool (recommended).
 
     Returns:
         Current engagement status string, or None if not found or on error
     """
-    if not db_conn_string:
-        db_conn_string = os.getenv("DATABASE_URL")
-    if not db_conn_string:
-        return None
     try:
-        from database.connection import connect
         from utils.validation import validate_uuid
 
         valid_id = validate_uuid(engagement_id, "engagement_id")
-        conn = connect(db_conn_string)
-        try:
-            cursor = conn.cursor()
+
+        if db_conn_string:
+            # Custom connection string — one-off connection
+            from database.connection import connect
+
+            conn = connect(db_conn_string)
             try:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        "SELECT status FROM engagements WHERE id = %s", (valid_id,)
+                    )
+                    row = cursor.fetchone()
+                    return row[0] if row else None
+                finally:
+                    cursor.close()
+            finally:
+                conn.close()
+        else:
+            # Default DATABASE_URL — use pool
+            from database.connection import db_cursor
+
+            with db_cursor() as cursor:
                 cursor.execute(
                     "SELECT status FROM engagements WHERE id = %s", (valid_id,)
                 )
                 row = cursor.fetchone()
                 return row[0] if row else None
-            finally:
-                cursor.close()
-        finally:
-            conn.close()
     except (ValueError, OSError):
         logger.warning("Failed to get engagement status for %s", engagement_id)
         return None

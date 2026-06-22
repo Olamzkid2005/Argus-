@@ -50,6 +50,7 @@ import { ScanDashboard } from "@/argus/tui/routes/scan"
 import { FindingsViewer } from "@/argus/tui/routes/findings"
 import { FindingDetail } from "@/argus/tui/routes/finding-detail"
 import { ArgusDashboard } from "@/argus/tui/routes/dashboard"
+import { ArgusCommandRegistry } from "@/argus/tui-command-registry"
 import { EngagementBrowser } from "@/argus/tui/routes/engagements"
 import { EngagementDetail } from "@/argus/tui/routes/engagement-detail"
 import { Workspace } from "@/argus/tui/routes/workspace"
@@ -248,11 +249,10 @@ async function mountTui(input: TuiInput & { keymap: ReturnType<typeof createDefa
                   <RouteProvider
                     initialRoute={
                       input.args.continue
-                        ? {
-                            type: "session",
-                            sessionID: "dummy",
-                          }
-                        : undefined
+                        ? { type: "session", sessionID: "dummy" }
+                        : process.env.ARGUS_MODE === "1"
+                          ? { type: "dashboard" }
+                          : undefined
                     }
                   >
                     <TuiConfigProvider config={input.config}>
@@ -274,7 +274,8 @@ async function mountTui(input: TuiInput & { keymap: ReturnType<typeof createDefa
                                         <PromptHistoryProvider>
                                           <PromptRefProvider>
                                             <EditorContextProvider>
-                                              <App onSnapshot={input.onSnapshot} />
+                                              <ArgusCommandRegistry />
+                      <App onSnapshot={input.onSnapshot} />
                                             </EditorContextProvider>
                                           </PromptRefProvider>
                                         </PromptHistoryProvider>

@@ -6,6 +6,7 @@ import { detectTargetType, detectAuthState, determineRequiredCapabilities } from
 import { determineNewCapabilities, REPLAN_INSERTABLE } from "./replan-rules"
 import { planDeterministic } from "./planDeterministic"
 import { resolvePipeline, formatPipelineGaps } from "./pipeline"
+import { getTargetValidator } from "../shared/target-validator"
 
 export const MAX_REPLANS = (() => {
   const raw = process.env.ARGUS_MAX_REPLANS
@@ -27,6 +28,22 @@ export class WorkflowPlanner {
   async plan(target: string, context?: Partial<PlannerContext>, options?: PlanOptions): Promise<AssessmentPlan> {
     const targetType = detectTargetType(target)
     const authState = detectAuthState(target)
+
+    // Enforce allowed_git_hosts when the target looks like a git repository URL
+    // (e.g. github.com/org/repo, gitlab.com/namespace/project.git)
+    const gitHostMatch = target.match(
+      /^(?:https?:\/\/)?(?:git@)?((?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,})(?=\/|:|$)/
+    )
+    if (gitHostMatch) {
+      const validator = getTargetValidator()
+      if (!validator.isGitHostAllowed(gitHostMatch[1])) {
+        throw new Error(
+          `Git host "${gitHostMatch[1]}" is not in the allowed list. ` +
+          `Add it to security.allowed_git_hosts in argus.config.yaml or ` +
+          `set allowed_git_hosts to [] to allow all hosts.`
+        )
+      }
+    }
 
     const plannerContext: PlannerContext = {
       target,

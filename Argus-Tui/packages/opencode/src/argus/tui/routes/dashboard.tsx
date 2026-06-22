@@ -7,6 +7,7 @@
 import { createSignal, onMount, For, Show } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useRoute } from "@tui/context/route"
+import { Toast, useToast } from "@tui/ui/toast"
 
 interface EngagementSummary {
   id: string
@@ -28,6 +29,7 @@ export function ArgusDashboard() {
   const route = useRoute()
   const [data, setData] = createSignal<DashboardData | null>(null)
   const [loading, setLoading] = createSignal(true)
+  const toast = useToast()
 
   onMount(async () => {
     try {
@@ -44,7 +46,8 @@ export function ArgusDashboard() {
       })
       setData({ totalTargets, openEngagements, confirmedFindings, recent })
       setLoading(false)
-    } catch {
+    } catch (e) {
+      toast.error(e)
       setLoading(false)
     }
   })
@@ -121,6 +124,8 @@ export function ArgusDashboard() {
           <text fg={theme.textMuted}>ARGUS v5</text>
           <text fg={theme.success}>● Ready</text>
         </box>
+      </Show>
+      <Toast />
       </Show>
     </box>
   )

@@ -343,13 +343,15 @@ class EngagementStateMachine:
                     f"Concurrent state change detected for engagement {self.engagement_id}"
                 )
 
-            # If looping back from analyzing to recon, increment budget.
-            # Use INSERT ... ON CONFLICT DO UPDATE (UPSERT) so the row is
-            # auto-created for non-scheduled engagements that were created
-            # without an explicit loop_budgets INSERT.
-            # Enforce max_cycles to prevent infinite looping.
+            # If looping back from analyzing to recon, enforce max_cycles.
+            # NOTE: The budget counter (current_cycles) is NOT incremented here.
+            # LoopBudgetManager.consume() is the sole owner of budget tracking.
+            # This block only checks max_cycles as a safety guard — it reads
+            # the current DB value (which LoopBudgetManager.persist_to_db()
+            # has already written) and rejects the transition if budget is
+            # exhausted, preventing a double-increment bug where both
+            # state_machine and LoopBudgetManager increased the counter.
             if from_state == "analyzing" and to_state == "recon":
-                # First, read current cycles to check against max
                 cursor.execute(
                     "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
                     (self.engagement_id,),
@@ -362,18 +364,6 @@ class EngagementStateMachine:
                         f"Loop budget exhausted for engagement {self.engagement_id}: "
                         f"{current_cycles}/{max_cycles} cycles used."
                     )
-                cursor.execute(
-                    """
-                    INSERT INTO loop_budgets (id, engagement_id, max_cycles, max_depth,
-                                               current_cycles, current_depth, created_at)
-                    VALUES (%s, %s, %s, 3, 1, 0, NOW())
-                    ON CONFLICT (engagement_id)
-                    DO UPDATE SET
-                        current_cycles = loop_budgets.current_cycles + 1,
-                        updated_at = NOW()
-                    """,
-                    (str(uuid.uuid4()), self.engagement_id, max_cycles),
-                )
 
             conn.commit()
 
@@ -569,16 +559,15 @@ class EngagementStateMachine:
                     f"Concurrent state change detected for engagement {self.engagement_id}"
                 )
 
-            # If looping through analyze→recon in the chain, increment budget.
-            # Use INSERT ... ON CONFLICT DO UPDATE (UPSERT) so the row is
-            # auto-created for non-scheduled engagements that were created
-            # without an explicit loop_budgets INSERT.
-            # Enforce max_cycles to prevent infinite looping.
+            # If looping through analyze→recon in the chain, enforce max_cycles.
+            # NOTE: The budget counter (current_cycles) is NOT incremented here.
+            # LoopBudgetManager.consume() is the sole owner of budget tracking.
+            # This block only checks max_cycles as a safety guard (same rationale
+            # as _persist_state_and_budget) — prevents double-increment bug.
             recon_loop_count = sum(
                 1 for f, t in states if f == "analyzing" and t == "recon"
             )
             if recon_loop_count > 0:
-                # Read current cycles to check against max
                 cursor.execute(
                     "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
                     (self.engagement_id,),
@@ -592,24 +581,6 @@ class EngagementStateMachine:
                         f"Loop budget exhausted for engagement {self.engagement_id}: "
                         f"{current_cycles + recon_loop_count}/{max_cycles} cycles required."
                     )
-                cursor.execute(
-                    """
-                    INSERT INTO loop_budgets (id, engagement_id, max_cycles, max_depth,
-                                               current_cycles, current_depth, created_at)
-                    VALUES (%s, %s, %s, 3, %s, 0, NOW())
-                    ON CONFLICT (engagement_id)
-                    DO UPDATE SET
-                        current_cycles = loop_budgets.current_cycles + %s,
-                        updated_at = NOW()
-                    """,
-                    (
-                        str(uuid.uuid4()),
-                        self.engagement_id,
-                        max_cycles,
-                        recon_loop_count,
-                        recon_loop_count,
-                    ),
-                )
 
             conn.commit()
 
