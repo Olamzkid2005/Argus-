@@ -1,16 +1,8 @@
 import { Capability } from "../shared/capabilities"
-import type { ExecutionMode, ErrorRecovery } from "../shared/types"
 
-// WorkflowDefinition is shared with the planner — import it from there to avoid duplication
-export type { WorkflowDefinition } from "../planner/types"
-
-export interface PhaseDefinition {
-  name: string
-  required_capabilities: Capability[]
-  execution: ExecutionMode
-  error_recovery: ErrorRecovery
-  approval_gate?: string
-}
+// WorkflowDefinition and PhaseDefinition are shared with the planner.
+// Import them from planner/types to avoid duplication and drift.
+export type { WorkflowDefinition, PhaseDefinition } from "../planner/types"
 
 export interface ToolRequirement {
   name: string

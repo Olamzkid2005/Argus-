@@ -31,7 +31,7 @@ export function determineNewCapabilities(context: PlannerContext): Set<Capabilit
           result.add(cap)
         }
       } else {
-        process.stderr.write(`[replan-rules] Unknown subtype "${subtype}" — no capability mapping (add to REPLAN_INSERTABLE if needed)\n`)
+        console.debug(`[replan-rules] Unknown subtype "${subtype}" — no capability mapping (add to REPLAN_INSERTABLE if needed)`)
       }
     }
   }

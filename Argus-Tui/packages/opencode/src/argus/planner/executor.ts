@@ -271,7 +271,12 @@ export class InProcessExecutor implements PhaseExecutor {
 
     let done = false
     let iterations = 0
-    const maxIterations = 50
+    const maxIterations = (() => {
+      const raw = process.env.ARGUS_HYBRID_MAX_ITERATIONS
+      if (raw === undefined || raw === "") return 50
+      const n = Number(raw)
+      return Number.isFinite(n) && n > 0 ? n : 50
+    })()
 
     while (!done) {
       if (++iterations >= maxIterations) {
@@ -473,6 +478,16 @@ export class InProcessExecutor implements PhaseExecutor {
           break
         }
 
+        // When result.success is true, the RPC call succeeded — the tool ran without crashing.
+        // Even if it returned error findings (MCP isError), the tool is functioning correctly.
+        // Only actual RPC failures (timeouts, connection errors, crashes) should trip the
+        // circuit breaker. A tool that successfully finds vulnerabilities and reports them
+        // as "errors" is working as designed.
+        if (result.success) {
+          this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
+          success = true
+          break
+        }
         lastError = new Error(result.error ?? "Tool returned unsuccessful result")
         this.toolHealth.recordFailure(tool.name, lastError.message)
         if (errorRecovery === "fail_fast") {

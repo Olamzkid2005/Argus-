@@ -70,6 +70,11 @@ export class WorkflowPlanner {
     const workflow = this.workflowRegistry.findByCapabilities(requiredCaps)
 
     if (!workflow) {
+      console.warn(
+        `[planner] No workflow found covering required capabilities for target "${target}" ` +
+        `(${targetType}, ${authState}) — falling back to deterministic plan. ` +
+        `Some capabilities may have no tool provider.`
+      )
       return planDeterministic(target)
     }
 

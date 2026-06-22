@@ -273,9 +273,11 @@ const commands: ArgusTuiCommand[] = [
       const eng = store.getEngagement(engId)
       if (!eng) return `Engagement ${engId} not found.`
 
-      // Wire progress to ScanStore so ScanDashboard shows analysis progress
+      // Wire progress to ScanStore so ScanDashboard shows analysis progress.
+      // Pass engagementId so analysis_progress events route to the correct
+      // engagement in ScanStore rather than mutating whatever is active.
       const { createScanStoreWriter } = await import("./tui/scan-store-writer")
-      const onProgress = createScanStoreWriter()
+      const onProgress = createScanStoreWriter(engId)
 
       const { Feature, getFeatureFlags } = await import("./config/feature-flags")
       const useLLM = getFeatureFlags().isEnabled(Feature.LLM_FINDING_ANALYSIS)

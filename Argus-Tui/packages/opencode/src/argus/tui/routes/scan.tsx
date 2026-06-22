@@ -13,6 +13,7 @@ import { useTheme } from "@tui/context/theme"
 import { Toast } from "@tui/ui/toast"
 import { useRouteData } from "@tui/context/route"
 import { getScanState, initScan, addPhase, completePhase, resetScan } from "../scan-store"
+import { responsiveBarWidth } from "../../shared/terminal"
 
 const SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -107,9 +108,9 @@ export function ScanDashboard() {
   const spinner = createMemo(() => SPINNER_CHARS[spinnerIdx()])
 
   // Progress bar characters
-  const barWidth = 30
-  const filledBars = createMemo(() => Math.round((progressPct() / 100) * barWidth))
-  const emptyBars = createMemo(() => barWidth - filledBars())
+  const barWidth = createMemo(() => responsiveBarWidth())
+  const filledBars = createMemo(() => Math.round((progressPct() / 100) * barWidth()))
+  const emptyBars = createMemo(() => barWidth() - filledBars())
   const barFilled = createMemo(() => "█".repeat(filledBars()))
   const barEmpty = createMemo(() => "░".repeat(emptyBars()))
 

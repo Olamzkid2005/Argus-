@@ -3,6 +3,10 @@ Basic Self-Scan Task
 
 Performs a lightweight security scan of the Argus platform itself.
 This is a scheduled Celery task for continuous security monitoring.
+
+Now that the module is named security.py, the auto-derived Celery task name
+("tasks.security.run_self_scan") matches the registered beat schedule target.
+No fragile explicit name= override is needed.
 """
 
 import logging
@@ -13,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 @app.task(
-    bind=True, name="tasks.security.run_self_scan", soft_time_limit=300, time_limit=360
+    bind=True, soft_time_limit=300, time_limit=360
 )
 def run_self_scan(self):
     """

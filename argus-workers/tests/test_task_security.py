@@ -1,16 +1,30 @@
 """
-Tests for tasks/self_scan.py — Argus platform security self-scan.
+Tests for tasks/security.py — Argus platform security self-scan.
 """
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tasks.self_scan import run_self_scan
+from tasks.security import run_self_scan
 
 
 class TestRunSelfScan:
     """Test suite for run_self_scan"""
+
+    # ── Basic sanity tests (merged from test_self_scan.py) ──
+
+    def test_basic_execution(self):
+        """Function can be instantiated."""
+        instance = run_self_scan()
+        assert instance is not None
+
+    def test_returns_correct_type(self):
+        """Function returns a dict when executed."""
+        instance = run_self_scan()
+        assert isinstance(instance, dict)
+
+    # ── Mocked execution tests ──
 
     @patch("security_audit.SecurityAudit")
     def test_runs_security_audit_and_returns_completed_with_summary(
@@ -51,7 +65,7 @@ class TestRunSelfScan:
         }
         mock_security_audit.return_value = mock_audit
 
-        with patch("tasks.self_scan.logger") as mock_logger:
+        with patch("tasks.security.logger") as mock_logger:
             result = run_self_scan.run()
 
         assert result["status"] == "completed"
@@ -83,7 +97,7 @@ class TestRunSelfScan:
         }
         mock_security_audit.return_value = mock_audit
 
-        with patch("tasks.self_scan.logger") as mock_logger:
+        with patch("tasks.security.logger") as mock_logger:
             result = run_self_scan.run()
 
         assert result["status"] == "completed"

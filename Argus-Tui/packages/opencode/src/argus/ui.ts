@@ -5,6 +5,7 @@
  */
 import { EOL } from "os"
 import { logo as glyphs } from "./logo"
+import { responsiveBoxWidth } from "./shared/terminal"
 
 const wordmark = [
   `    █████╗ ██████╗  ██████╗ ██╗   ██╗███████╗`,
@@ -151,7 +152,7 @@ function box(width: number, lines: string[]): string[] {
 
 export function dashboard(stats?: DashboardStats): string {
   const lines: string[] = []
-  const W = 62
+  const W = responsiveBoxWidth()
 
   // Logo + tagline
   lines.push("")
@@ -209,7 +210,8 @@ export function dashboard(stats?: DashboardStats): string {
 
   // Tip
   lines.push(Style.TEXT_DIM + "  Tip: " + Style.TEXT_NORMAL + "Run " + Style.TEXT_HIGHLIGHT + "argus --help" + Style.TEXT_NORMAL + " to see all commands")
-  lines.push(Style.TEXT_DIM + "  " + "─".repeat(W - 2) + Style.TEXT_NORMAL)
+  const bottomPad = Math.max(W - 2, 2)
+  lines.push(Style.TEXT_DIM + "  " + "─".repeat(bottomPad) + Style.TEXT_NORMAL)
   lines.push(Style.TEXT_DIM + "  Run with no arguments to launch the interactive TUI" + Style.TEXT_NORMAL)
   lines.push("")
 

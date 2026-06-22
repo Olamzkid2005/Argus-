@@ -16,10 +16,16 @@ Requirements: 4.9
 import logging
 import os
 import threading
+import time
 from enum import Enum
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+# Default TTL for cached flag values (seconds). After this period,
+# the next get() will re-read from env/DB instead of returning stale data.
+_DEFAULT_CACHE_TTL_SECONDS = 60.0
 
 
 class FlagSource(Enum):
@@ -40,15 +46,19 @@ class FeatureFlags:
     3. Default value
     """
 
-    def __init__(self, db_connection=None):
+    def __init__(self, db_connection=None, cache_ttl: float = _DEFAULT_CACHE_TTL_SECONDS):
         """
         Initialize feature flags manager.
 
         Args:
             db_connection: Optional database connection for persistent flags
+            cache_ttl: Seconds before cached values are re-fetched (default 60s).
+                       Set to 0 to disable caching entirely.
         """
         self.db = db_connection
-        self._cache: dict[str, tuple] = {}  # name -> (value, source)
+        self._cache_ttl = cache_ttl
+        # _cache: flag_name -> (value, source, timestamp)
+        self._cache: dict[str, tuple[Any, FlagSource, float]] = {}
 
     def is_enabled(self, flag_name: str, default: bool = False) -> bool:
         """
@@ -85,38 +95,44 @@ class FeatureFlags:
 
     def _get_value(self, flag_name: str, default: Any) -> tuple:
         """
-        Get flag value and source.
+        Get flag value and source with TTL-based caching.
 
         Returns:
             Tuple of (value, source)
         """
-        # Check cache
+        now = time.monotonic()
+
+        # Check cache with TTL expiry
         if flag_name in self._cache:
-            return self._cache[flag_name]
+            cached_val, cached_src, cached_at = self._cache[flag_name]
+            if self._cache_ttl <= 0 or (now - cached_at) < self._cache_ttl:
+                return (cached_val, cached_src)
+            # TTL expired — fall through to re-fetch
+            del self._cache[flag_name]
 
         # 1. Check environment variable
         env_name = f"ARGUS_FF_{flag_name.upper()}"
         env_value = os.environ.get(env_name)
         if env_value is not None:
             parsed = self._parse_value(env_value)
-            self._cache[flag_name] = (parsed, FlagSource.ENV)
+            self._cache[flag_name] = (parsed, FlagSource.ENV, now)
             logger.debug("Feature flag %s=%s from env", flag_name, parsed)
-            return self._cache[flag_name]
+            return (parsed, FlagSource.ENV)
 
         # 2. Check database
         if self.db:
             try:
                 db_value = self._load_flag_from_db(flag_name)
                 if db_value is not None:
-                    self._cache[flag_name] = (db_value, FlagSource.DB)
+                    self._cache[flag_name] = (db_value, FlagSource.DB, now)
                     logger.debug("Feature flag %s=%s from db", flag_name, db_value)
-                    return self._cache[flag_name]
+                    return (db_value, FlagSource.DB)
             except Exception as e:
                 logger.warning("Failed to read feature flag from DB: %s", e)
 
         # 3. Use default
-        self._cache[flag_name] = (default, FlagSource.DEFAULT)
-        return self._cache[flag_name]
+        self._cache[flag_name] = (default, FlagSource.DEFAULT, now)
+        return (default, FlagSource.DEFAULT)
 
     def _parse_value(self, value: str) -> Any:
         """Parse a string value into appropriate type."""

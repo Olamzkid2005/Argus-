@@ -22,19 +22,51 @@ from utils.validation import validate_uuid
 logger = logging.getLogger(__name__)
 
 
+# Module-level guard for idempotent setup_tracing().
+# Both celery_app.py and mcp_server.py call setup_tracing() at import time.
+# When both modules are imported in the same process (e.g. mcp_server
+# importing celery internals), the second call would trigger OpenTelemetry's
+# "Overriding of TracerProvider is not allowed" warning.
+_tracing_initialized = False
+_tracing_lock = threading.Lock()
+
+
 def setup_tracing(service_name: str = "argus-workers"):
-    resource = Resource.create({"service.name": service_name})
-    provider = TracerProvider(resource=resource)
+    """Set up OpenTelemetry tracing.
 
-    provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+    Idempotent — only creates the TracerProvider once. Subsequent calls
+    return the existing tracer without re-creating the provider, avoiding
+    OpenTelemetry's "Overriding of TracerProvider is not allowed" warning
+    when both celery_app.py and mcp_server.py call setup_tracing() at
+    module level in the same process.
 
-    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-    if endpoint:
-        exporter = OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces")
-        provider.add_span_processor(BatchSpanProcessor(exporter))
+    Uses double-checked locking: the fast path reads the module-level flag
+    without acquiring the lock; only the first call enters the critical
+    section. The lock covers the entire provider setup so concurrent
+    callers see either the fully-configured provider or none at all.
+    """
+    global _tracing_initialized
+    if _tracing_initialized:
+        logger.debug("TracerProvider already set — reusing existing tracer")
+        return trace.get_tracer(__name__)
 
-    trace.set_tracer_provider(provider)
-    return trace.get_tracer(__name__)
+    with _tracing_lock:
+        if _tracing_initialized:
+            return trace.get_tracer(__name__)
+
+        resource = Resource.create({"service.name": service_name})
+        provider = TracerProvider(resource=resource)
+
+        provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+
+        endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+        if endpoint:
+            exporter = OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces")
+            provider.add_span_processor(BatchSpanProcessor(exporter))
+
+        trace.set_tracer_provider(provider)
+        _tracing_initialized = True
+        return trace.get_tracer(__name__)
 
 
 tracer = trace.get_tracer(__name__)

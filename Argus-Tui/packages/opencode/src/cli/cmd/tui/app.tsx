@@ -508,6 +508,14 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
   })
 
+  // ── Route-level isTTY note ──
+  // If stdout is not a TTY, SolidJS terminal rendering would produce garbage
+  // ANSI escape codes. The @opentui/solid renderer is designed for TTY output;
+  // piping stdout will include ANSI sequences in the pipe output.
+  // The navigator.ts isTuiAvailable() helper provides route components with
+  // a way to check before calling navigateTo(), and emits a console.warn()
+  // when navigation is attempted in non-TTY mode without a registered handler.
+
   const args = useArgs()
   onMount(() => {
     batch(() => {

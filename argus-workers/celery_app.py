@@ -123,7 +123,7 @@ app = Celery(
         "tasks.repo_scan",
         "tasks.llm_review",
         "tasks.maintenance",
-        "tasks.self_scan",
+        "tasks.security",
         "tasks.asset_discovery",
         "tasks.scheduled",
         "tasks.replay",
