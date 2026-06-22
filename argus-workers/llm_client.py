@@ -839,8 +839,19 @@ class LLMClient:
         Does NOT reset _circuit_failures to 0 here — that only happens
         on actual successful API responses, ensuring proper half-open
         semantics.
+
+        Also rejects placeholder values like "your_openai_api_key_here" or
+        "change_me_" prefixed strings that are clearly not real API keys.
         """
         if not self.api_key:
+            return False
+        # Reject obvious placeholder values that are not real API keys.
+        # Placeholder patterns: "your_*_key_here", "change_me_*"
+        _placeholder_prefixes = ("your_", "change_me_")
+        if any(self.api_key.lower().startswith(p) for p in _placeholder_prefixes):
+            return False
+        # Also reject keys that are too short to be valid (most API keys are 20+ chars)
+        if len(self.api_key) < 10:
             return False
         with self._circuit_lock:
             if (

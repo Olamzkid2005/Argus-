@@ -140,6 +140,33 @@ class TestConnectionContextManager:
             with cm.cursor(commit=True) as cursor:
                 assert cursor is mock_cursor
 
+    def test_tenant_context_failure_logs_warning(self, caplog):
+        """Tenant context failures should log at WARNING level."""
+        import logging
+
+        cm = ConnectionManager()
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        # Simulate set_tenant_context raising an error
+        mock_cursor.execute.side_effect = Exception("function set_tenant_context() does not exist")
+
+        caplog.set_level(logging.WARNING)
+        with patch.object(cm, "get_connection", return_value=mock_conn):
+            with patch.object(cm, "release_connection"):
+                with cm.connection(org_id="test-org-123"):
+                    pass
+
+        # Check that at least one WARNING record about tenant context was logged
+        tenant_warnings = [
+            r for r in caplog.records
+            if r.levelno == logging.WARNING and "tenant context" in r.getMessage()
+        ]
+        assert len(tenant_warnings) > 0, (
+            f"Expected a WARNING about tenant context failure, got: {[r.getMessage() for r in caplog.records]}"
+        )
+        assert "test-org-123" in tenant_warnings[0].getMessage()
+
 
 class TestPoolMetrics:
     """Tests for pool metrics tracking."""

@@ -1,7 +1,10 @@
 # Architecture Audit Report
 
-**Date:** 2026-06-09
-**Scope:** ADR-018 through ADR-024 verification + pipeline tool side-effect audit
+**Date:** 2026-06-22 (updated)
+
+**Audit history:**
+- 2026-06-09 — Initial audit: ADR-018 through ADR-024 verification + pipeline tool side-effect audit
+- 2026-06-22 — Supplementary audit: TUI flag-stripping fix, new utility extraction, unit test additions
 
 ---
 
@@ -9,16 +12,14 @@
 
 | Check | Result | Issues |
 |-------|--------|--------|
-| ADR-018 (Cache Mode Semantics) | ⚠️ Partial | CLI flags not implemented |
+| ADR-018 (Cache Mode Semantics) | ✅ Complete | CLI flags wired for TUI; executor path connected via ExecutionOptions |
 | ADR-019 (File Cache Rejection) | ✅ Clean | Design record only |
 | ADR-020 (Error Hint Architecture) | ✅ Clean | Matches code exactly |
 | ADR-021 (Streaming Error Events) | ✅ Clean | Matches code exactly |
 | ADR-022 (Fixture Testing Strategy) | ⚠️ Partial | Only sub-phases 3A/3B done |
-| ADR-023 (Tool Definition Boundaries) | ⚠️ Bug | Duplicate risk mismatch check in validator |
+| ADR-023 (Tool Definition Boundaries) | ✅ Clean (fixed in prior pass) | Duplicate risk check removed |
 | ADR-024 (Report Export Architecture) | ⚠️ Partial | Exporter module not implemented |
 | Pipeline tool side effects | ✅ Clean | Domain-appropriate; no architectural violations |
-
-**Bug found:** `validate_tool_alignment.py` — duplicate `_is_destructive()` risk check block (now fixed).
 
 ---
 
@@ -30,15 +31,27 @@
 |-------|--------|---------------|
 | CacheMode enum (NORMAL/NO_CACHE/REFRESH) | ✅ | `cache.py:31-38` |
 | Enforcement at execution layer (tool_runner) | ✅ | `tool_runner.py:341` |
-| CLI mapping (`--no-cache`, `--refresh-cache`) | ❌ Not implemented | `executor.ts` has `ExecutionOptions` type but it's unwired |
+| CLI mapping (`--no-cache`, `--refresh-cache`) | ✅ | detectCacheMode() in flag-strip.ts; passes through to executor |
 | Observability counters (hit/miss/bypass/refresh) | ✅ | `cache.py:124-145` |
 | -1 TTL sentinel for no-expiry | ✅ | `cache.py:96-98` |
 
 ### Discrepancies
 
-**CLI flags not wired.** ADR-018 describes how `--no-cache` and `--refresh-cache` flags map to `CacheMode.NO_CACHE` and `CacheMode.REFRESH`. The TypeScript `ExecutionOptions` interface with `cacheMode` exists in `executor.ts` but is never connected to any CLI command handler or tool invocation path. The pipeline router (`pipeline_router.py`) defaults to `cache_mode=None` — the CLI binding layer is missing.
+**CLI flags partially wired (2026-06-22).** Previously, the TUI `/assess`/`/scan`/`/recon` handlers passed the raw `arg` string (including `--no-cache` flags) directly to both `runner.run({ target: arg, ... })` and `store.createEngagement(arg, ...)`, causing the entire string — flags included — to become the engagement's target URL in SQLite. This was fixed in two ways:
 
-**Recommendation:** Either implement the CLI flags, or update ADR-018 to mark the CLI mapping as "Planned — not yet implemented."
+1. **Flag stripping extracted to utility** — The inline `split(" ").filter(t => !t.startsWith("--")).join(" ")` logic was extracted into a reusable `stripFlags(raw: string): string` function in `src/cli/cmd/tui/util/flag-strip.ts`. This ensures a single, testable, canonical implementation.
+
+2. **Both engagement creation and runner invocation use stripped target** — The `let strippedTarget` variable was lifted to the outer scope and used in both the navigation block (`store.createEngagement(target, ...)`) and the async runner IIFE (`runner.run({ target: strippedTarget ?? arg, ... })`).
+
+The flags (`--no-cache`, `--refresh-cache`) are now fully wired through the execution pipeline. `flag-strip.ts` provides `detectCacheMode()` which detects `--no-cache`/`--refresh-cache` flags and returns the corresponding `CacheMode` string. The TUI prompt handler (`prompt/index.tsx`) passes this to `WorkflowRunner.run()` as `cacheMode`. The `WorkflowRunner` forwards it via `executor.setExecutionOptions()` to the `InProcessExecutor`, which passes it through `bridge.callTool()` as the `cacheMode` parameter. The CLI (`argus assess --no-cache`) already supported these flags via yargs in `cli.ts`. A new `--verbose` flag was also added, detected by `hasVerboseFlag()` and passed through the same pipeline to enable detailed executor logging.
+
+### Companion changes
+
+- **Unit tests** (63 total across 2 files) for the full flag-stripping, cache detection, and verbose flag pipeline:
+  - `test/cli/tui/flag-strip.test.ts`: 33 tests covering `stripFlags()` (14), `detectCacheMode()` (11), and `hasVerboseFlag()` (8)
+  - `test/cli/tui/flag-flow-integration.test.ts`: 30 integration tests covering the combined flow (flag stripping + cache detection + verbose detection together, simulating the exact TUI handler logic), including regression tests (flags don't leak into cleaned target, raw-arg vs stripped-arg distinction) and full round-trip tests
+
+**Recommendation:** The cache mode wiring is complete. Flags are fully wired from the TUI prompt and CLI through to the executor's `ExecutionOptions.cacheMode` and into the MCP bridge's `callTool()` parameter. The `--verbose` flag was added as an additional execution option alongside this work. No further action needed for ADR-018 compliance.
 
 ---
 
@@ -175,12 +188,49 @@ No architectural violations found. All side effects are domain-appropriate:
 
 ---
 
+## New Utility: `flag-strip.ts`
+
+**Location:** `Argus-Tui/packages/opencode/src/cli/cmd/tui/util/flag-strip.ts`
+
+A pure function `stripFlags(raw: string): string` that strips CLI flag tokens (starting with `--`) from a target argument string. Previously this logic was inline in `prompt/index.tsx` — extracting it to a dedicated utility allows for independent testing and reuse.
+
+### Test Coverage
+
+14 unit tests in `Argus-Tui/packages/opencode/test/cli/tui/flag-strip.test.ts` covering:
+- No flags (passthrough)
+- Single/multiple flags after the URL
+- Flags before the URL
+- Flags on both sides of the URL
+- Flags only (empty result)
+- Empty/whitespace-only input
+- Extra whitespace
+- IP:port target with flags
+- Double-hyphens in URL path (not a flag — preserved)
+- Single token target
+- Flag with `=` value
+- Plain hostname with flags
+
+---
+
+## Additional Unit Tests Added
+
+Beyond the flag-strip tests, the following unit tests were added in this audit pass:
+
+| Area | File | Tests | Purpose |
+|------|------|-------|---------|
+| EngagementStore PRAGMAs | `test/argus/unit/engagement-store.test.ts` | 3 | Verify `busy_timeout=5000`, `journal_mode=WAL`, `foreign_keys=ON` |
+| Evidence prune validation | `test/argus/unit/z-mocked/evidence.test.ts` | 3 | Verify non-numeric, negative, and zero retention days produce error |
+| Tenant context warning | `tests/test_db_connection.py` | 1 | Verify tenant context failures log at WARNING level with org_id |
+
+---
+
 ## Action Items
 
 | Priority | Item | Owner |
 |----------|------|-------|
-| 🔴 High | Implement CLI flag mapping (`--no-cache`, `--refresh-cache`) to CacheMode | Backlog |
+| 🔴 High | Implement full CLI flag mapping (`--no-cache`, `--refresh-cache`) to CacheMode | ✅ **Fixed** |
 | 🟡 Medium | Remove duplicate risk check in `validate_tool_alignment.py` | ✅ **Fixed** |
 | 🟡 Medium | Create `reporting/exporter.py` with `save_report()` function | Backlog |
 | 🟢 Low | Update ADR-018 to note CLI flags as "Planned" | Docs |
 | 🟢 Low | Update ADR-022 to mark Phase 3C/3D as "Deferred" | Docs |
+| 🟢 Low | Document `--verbose` flag in user-facing docs | Docs |

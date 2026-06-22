@@ -60,6 +60,12 @@ export interface WorkflowRunOptions {
    * Feature flag overrides.
    */
   features?: Partial<Record<Feature, boolean>>
+  /**
+   * Enable verbose logging in the executor.
+   * When true, the executor will emit additional detail about tool execution,
+   * timing, and phase transitions via console.log.
+   */
+  verbose?: boolean
 }
 
 export interface WorkflowRunResult {
@@ -251,9 +257,10 @@ export class WorkflowRunner {
       executor.setFeatureFlags(featureFlags)
       executor.loadGates(plan.workflow)
       executor.setOnProgress((event) => { if (typeof event !== "string") emit(event) })
-      if (options.cacheMode) {
-        executor.setExecutionOptions({ cacheMode: options.cacheMode })
-      }
+      executor.setExecutionOptions({
+        ...(options.cacheMode ? { cacheMode: options.cacheMode } : {}),
+        ...(options.verbose ? { verbose: options.verbose } : {}),
+      })
       const executedCapabilities = new Set<Capability>()
       const insertedPhaseIds = new Set<string>()
       let replanCount = 0

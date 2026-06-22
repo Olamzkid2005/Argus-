@@ -41,6 +41,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install sqlmap (pinned version)
+# NOTE: sqlmap is disabled by default in argus.config.yaml (tools.disabled: [sqlmap])
+# to avoid running invasive SQL injection scans without explicit opt-in.
+# Users can enable it by removing "sqlmap" from the disabled list in their config.
+# We still install it in the Docker image so it's available when enabled.
 RUN pip install --no-cache-dir sqlmap==1.8
 
 COPY . .

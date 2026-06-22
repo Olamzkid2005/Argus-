@@ -88,14 +88,13 @@ CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", f"{REDIS_URL}/1")
 
 # Ensure required environment variables are set
 if not os.getenv("DATABASE_URL"):
-    # Try to read from platform .env.local (development fallback only)
-    platform_root = os.path.dirname(os.path.abspath(__file__))
-    platform_env = os.path.join(
-        os.path.dirname(platform_root), "argus-platform", ".env.local"
+    # Try to read from root .env (development fallback only)
+    root_env = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"
     )
-    if os.path.exists(platform_env):
+    if os.path.exists(root_env):
         try:
-            with open(platform_env) as f:
+            with open(root_env) as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
@@ -104,11 +103,7 @@ if not os.getenv("DATABASE_URL"):
                             os.environ[key] = value.strip()
                             break
         except OSError as e:
-            logger.warning("Failed to read DATABASE_URL from %s: %s", platform_env, e)
-    else:
-        logger.warning(
-            "DATABASE_URL not set and fallback .env.local not found at %s", platform_env
-        )
+            logger.warning("Failed to read DATABASE_URL from %s: %s", root_env, e)
 
 # Create Celery application
 app = Celery(

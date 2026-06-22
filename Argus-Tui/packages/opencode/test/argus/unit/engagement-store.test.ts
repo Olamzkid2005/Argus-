@@ -130,6 +130,41 @@ describe("EngagementStore — analysis methods", () => {
   })
 })
 
+describe("EngagementStore — connection pragmas", () => {
+  test("sets PRAGMA busy_timeout = 5000 on initialization", () => {
+    const { store, cleanup } = makeStore()
+    // Access the store's own connection (PRAGMA busy_timeout is per-connection)
+    const sqlite = (store as any)._sqlite
+    const row = sqlite.query("PRAGMA busy_timeout").get() as Record<string, unknown>
+    // The column name may vary by SQLite version; use Object.values to get the value
+    const value = Object.values(row!)[0]
+    expect(value).toBe(5000)
+    cleanup()
+  })
+
+  test("sets PRAGMA journal_mode = WAL on initialization", () => {
+    const { store, cleanup } = makeStore()
+    // journal_mode is database-level, verifiable from a separate connection
+    const { Database } = require("bun:sqlite")
+    const sqlite = new Database(store.dbPath)
+    const row = sqlite.query("PRAGMA journal_mode").get() as Record<string, unknown>
+    const value = Object.values(row!)[0] as string
+    expect(value.toLowerCase()).toBe("wal")
+    sqlite.close()
+    cleanup()
+  })
+
+  test("sets PRAGMA foreign_keys = ON on initialization", () => {
+    const { store, cleanup } = makeStore()
+    // foreign_keys is per-connection; use the store's own connection
+    const sqlite = (store as any)._sqlite
+    const row = sqlite.query("PRAGMA foreign_keys").get() as Record<string, unknown>
+    const value = Object.values(row!)[0]
+    expect(value).toBe(1)
+    cleanup()
+  })
+})
+
 describe("EngagementStore — engagement CRUD", () => {
   test("createEngagement returns engagement with correct fields", () => {
     const { store, cleanup } = makeStore()

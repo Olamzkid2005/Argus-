@@ -217,7 +217,7 @@ export class EngagementStore {
 
   constructor(dbPath?: string) {
     this.dbPath = dbPath ?? defaultDbPath()
-    const dir = join(this.dbPath, "..")
+    const dir = dirname(this.dbPath)
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
     }
@@ -226,6 +226,7 @@ export class EngagementStore {
     this._sqlite = new BunSqliteDatabase(this.dbPath)
     this._sqlite.exec("PRAGMA journal_mode = WAL")
     this._sqlite.exec("PRAGMA foreign_keys = ON")
+    this._sqlite.exec("PRAGMA busy_timeout = 5000")
     // Lazy-load drizzle-orm/bun-sqlite — same reason as bun:sqlite, its
     // driver.cjs eagerly requires bun:sqlite at module level
     const drizzle = _loadDrizzle()
@@ -263,12 +264,15 @@ export class EngagementStore {
       this.db.run(stmt)
     }
     // Migration: add negative column to findings for existing databases
-    try {
+    // (databases created before the column was added to the CREATE TABLE).
+    // Use PRAGMA table_info to check if the column already exists first.
+    // This avoids brittle error-message matching across different SQLite versions
+    // (bun:sqlite may say "duplicate column name: negative" not "duplicate column").
+    const columns = this._sqlite
+      .query<{ name: string }, []>("SELECT name FROM pragma_table_info('findings') WHERE name = 'negative'")
+      .all()
+    if (columns.length === 0) {
       this.db.run(sql`ALTER TABLE findings ADD COLUMN negative INTEGER NOT NULL DEFAULT 0`)
-    } catch (e) {
-      const msg = (e as Error).message ?? ""
-      if (!msg.includes("duplicate column")) throw e
-      // column already exists — ignore
     }
   }
 

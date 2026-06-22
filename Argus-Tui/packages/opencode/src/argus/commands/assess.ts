@@ -47,6 +47,7 @@ export async function assessCommand(target: string, options?: {
   useLLM?: boolean
   credsPath?: string
   cacheMode?: "normal" | "no_cache" | "refresh"
+  verbose?: boolean
   features?: Partial<Record<Feature, boolean>>
   onProgress?: (event: ProgressEvent | string) => void
   /**
@@ -63,6 +64,7 @@ export async function assessCommand(target: string, options?: {
     workersPath: options?.workersPath,
     credsPath: options?.credsPath,
     cacheMode: options?.cacheMode,
+    verbose: options?.verbose,
     features: options?.features,
     onProgress: options?.onProgress ?? cliProgress,
   })

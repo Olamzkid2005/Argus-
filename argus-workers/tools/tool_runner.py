@@ -44,10 +44,10 @@ class ToolRunner:
     MVP implementation uses subprocess with locked environment.
     """
 
-    # Dangerous patterns that should be blocked.
-    # Uses regex word boundaries (\b) for short patterns to avoid false
-    # positives in URLs (e.g. "curl" in "circular", "rm" in "armament").
-    # Must be kept in sync with _is_dangerous().
+    # Dangerous patterns that should be blocked (literal substring match).
+    # These are checked via simple substring matching — no regex interpretation,
+    # so metacharacters like |, $, () are treated as plain text, not regex ops.
+    # Must be kept in sync with is_dangerous().
     DANGEROUS_PATTERNS = [
         # File/disk destruction
         "rm -rf",
@@ -66,11 +66,16 @@ class ToolRunner:
         # Redirection to devices
         ">/dev/",
         ">/dev/null",
-        # Database destruction
-        "DROP TABLE",
-        "DROP DATABASE",
-        "DELETE FROM",
-        "TRUNCATE",
+    ]
+
+    # Database destruction patterns (regex with word boundaries to avoid URL
+    # false positives — e.g. "/api/truncate" should NOT be blocked).
+    # These use re.search() separately so regex metacharacters like \b work.
+    _DANGEROUS_REGEX = [
+        r"\bDROP\s+TABLE\b",
+        r"\bDROP\s+DATABASE\b",
+        r"\bDELETE\s+FROM\b",
+        r"\bTRUNCATE\b",
     ]
 
     # Short tool names that are dangerous when used standalone.
@@ -138,17 +143,18 @@ class ToolRunner:
         if tool in self.DANGEROUS_TOOLS:
             return True
 
-        # Check args and full command for dangerous patterns
-        # Patterns like "rm -rf" include the tool name, so we check both
-        # the args alone and the combined command
+        # Check args and full command for dangerous patterns (literal substring match)
+        # Patterns like "rm -rf" include the tool name, so we check the combined command
         args_str = " ".join(args)
         full_command = f"{tool} {args_str}"
         for pattern in self.DANGEROUS_PATTERNS:
-            pattern_lower = pattern.lower()
-            if (
-                pattern_lower in args_str.lower()
-                or pattern_lower in full_command.lower()
-            ):
+            if pattern.lower() in full_command.lower():
+                return True
+
+        # Check for database destruction patterns using regex word boundaries
+        import re
+        for pattern in self._DANGEROUS_REGEX:
+            if re.search(pattern, full_command, re.IGNORECASE):
                 return True
 
         # Check for sensitive file paths (exact substring)

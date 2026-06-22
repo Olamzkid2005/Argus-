@@ -260,7 +260,13 @@ class ConnectionManager:
                     with conn.cursor() as cursor:
                         cursor.execute("SELECT set_tenant_context(%s)", (org_id,))
                 except Exception as ctx_e:
-                    logger.debug("Failed to set tenant context: %s", ctx_e)
+                    logger.warning(
+                        "Failed to set tenant context for org %s: %s — "
+                        "data isolation cannot be guaranteed without tenant context. "
+                        "Ensure set_tenant_context() function exists in the database.",
+                        org_id,
+                        ctx_e,
+                    )
 
             yield conn
             if commit:

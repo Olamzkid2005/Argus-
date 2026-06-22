@@ -25,6 +25,12 @@ import type { ToolHealthRecord } from "../bridge/tool-health"
 
 export interface ExecutionOptions {
   cacheMode?: CacheMode
+  /**
+   * Enable verbose execution logging.
+   * When true, the executor emits additional detail about tool selection,
+   * timing, and circuit-breaker status via console.log.
+   */
+  verbose?: boolean
 }
 
 /**
@@ -85,10 +91,17 @@ export class InProcessExecutor implements PhaseExecutor {
 
   setExecutionOptions(options: ExecutionOptions): void {
     this.executionOptions = options
+    if (options.verbose) {
+      console.log("[executor] Verbose mode enabled")
+    }
   }
 
   getToolHealth(): ToolHealthRecord[] {
-    return this.toolHealth.getStatus()
+    const status = this.toolHealth.getStatus()
+    if (this.executionOptions.verbose && status.length > 0) {
+      console.log("[executor] Tool health:", JSON.stringify(status.map(s => ({ tool: s.tool, healthy: s.healthy }))))
+    }
+    return status
   }
 
   setFeatureFlags(flags: FeatureFlags): void {
@@ -142,10 +155,14 @@ export class InProcessExecutor implements PhaseExecutor {
     }
 
     if (phase.toolExecution === "llm_driven") {
+      if (execOptions.verbose) console.log(`[executor] Phase ${phase.phaseId}: hybrid (LLM-driven) execution`)
       return this.executeHybrid(phase, execOptions)
     }
 
     this.phaseCount++
+    if (execOptions.verbose) {
+      console.log(`[executor] Phase ${this.phaseCount}: ${phase.name} (${phase.toolExecution}) — ${phase.requiredCapabilities.length} capability(ies)`)
+    }
 
     // Periodic MCP drift check: every 5 phases, run a lightweight capability
     // hash comparison. On mismatch, run the full detectDrift() and log.
@@ -182,6 +199,7 @@ export class InProcessExecutor implements PhaseExecutor {
         }
         const cap = (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability
         toolConfigs.push({ tool, cap })
+        if (execOptions.verbose) console.log(`[executor]  Tool: ${step.tool} (capability: ${cap})`)
       }
     } else {
       // Fallback: select tools by capability (legacy path)
@@ -195,12 +213,16 @@ export class InProcessExecutor implements PhaseExecutor {
           if (calledTools.has(tool.name)) continue
           calledTools.add(tool.name)
           toolConfigs.push({ tool, cap })
+          if (execOptions.verbose) console.log(`[executor]  Tool: ${tool.name} (capability: ${cap})`)
         }
       }
     }
 
+    if (execOptions.verbose) console.log(`[executor]  ${toolConfigs.length} tool(s) configured for this phase`)
+
     // Execute tools: parallel for `parallel` phases, sequential for `sequential` phases
     if (phase.toolExecution === "parallel") {
+      if (execOptions.verbose) console.log(`[executor]  Executing ${toolConfigs.length} tool(s) in parallel (batch size: ${MAX_PARALLEL_TOOLS})`)
       // Run tools in batches of MAX_PARALLEL_TOOLS to avoid resource starvation
       for (let i = 0; i < toolConfigs.length; i += MAX_PARALLEL_TOOLS) {
         const batch = toolConfigs.slice(i, i + MAX_PARALLEL_TOOLS)
@@ -221,6 +243,7 @@ export class InProcessExecutor implements PhaseExecutor {
       }
     } else {
       // Sequential execution
+      if (execOptions.verbose) console.log(`[executor]  Executing ${toolConfigs.length} tool(s) sequentially`)
       for (const { tool, cap } of toolConfigs) {
         const result = await this.executeTool(tool, cap, phase, startTime, execOptions)
         findings.push(...result.findings)
@@ -411,8 +434,11 @@ export class InProcessExecutor implements PhaseExecutor {
     execOptions: ExecutionOptions,
   ): Promise<{ findings: NormalizedFinding[]; errors: string[]; failFast: boolean }> {
     if (!this.toolHealth.isHealthy(tool.name)) {
+      if (execOptions.verbose) console.log(`[executor]  ⛔ Tool ${tool.name} skipped — circuit breaker open`)
       return { findings: [], errors: [`Tool ${tool.name} is temporarily unavailable (circuit breaker)`], failFast: false }
     }
+
+    if (execOptions.verbose) console.log(`[executor]  ▶ Tool ${tool.name} (attempt 1, capability: ${cap})`)
 
     const errorRecovery = this.resolveErrorRecovery(phase, tool.name)
     let lastError: Error | null = null
@@ -438,7 +464,14 @@ export class InProcessExecutor implements PhaseExecutor {
         };
         const extra = this.buildExtraFromCredentials(phase.config);
         if (extra) toolArgs.extra = extra;
+        if (execOptions.verbose) {
+          // Only log safe fields to avoid leaking credentials from config
+          const safeArgs = { target: toolArgs.target, capability: toolArgs.capability }
+          console.log(`[executor]    Args:`, JSON.stringify(safeArgs))
+        }
         const result = await this.bridge.callTool(tool.name, toolArgs, toolTimeout, execOptions.cacheMode)
+
+        if (execOptions.verbose) console.log(`[executor]    Result: success=${result.success}, duration=${result.durationMs}ms`)
 
         if (result.success && result.data) {
           const data = result.data

@@ -188,6 +188,33 @@ describe("evidenceCommand", () => {
       expect(output).toMatch(/Pruned \d+ artifact\(s\) older than 15 days across \d+ engagement\(s\)/)
     })
 
+    test("returns error for non-numeric retention days", async () => {
+      const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
+      const output = await evidenceCommand("prune", ["abc"], { store, collector: mockCollector })
+
+      expect(output).toContain("Invalid retention days")
+      expect(output).toContain("abc")
+      expect(output).toContain("positive integer")
+    })
+
+    test("returns error for negative retention days", async () => {
+      const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
+      const output = await evidenceCommand("prune", ["-5"], { store, collector: mockCollector })
+
+      expect(output).toContain("Invalid retention days")
+      expect(output).toContain("-5")
+      expect(output).toContain("positive integer")
+    })
+
+    test("returns error for zero retention days", async () => {
+      const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
+      const output = await evidenceCommand("prune", ["0"], { store, collector: mockCollector })
+
+      expect(output).toContain("Invalid retention days")
+      expect(output).toContain("0")
+      expect(output).toContain("positive integer")
+    })
+
     test("appends audit log for pruned engagements", async () => {
       const eng = store.createEngagement("https://prune-audit.com", "assessment")
 

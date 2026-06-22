@@ -70,7 +70,11 @@ export async function evidenceCommand(
     }
 
     case "prune": {
-      const retentionDays = parseInt(args[0] ?? "30", 10)
+      const rawDays = args[0] ?? "30"
+      const retentionDays = parseInt(rawDays, 10)
+      if (isNaN(retentionDays) || retentionDays < 1) {
+        return `Invalid retention days: "${rawDays}". Usage: evidence prune [days] (must be a positive integer, defaults to 30)`
+      }
       const engagements = store.listEngagements()
       let totalPruned = 0
       for (const eng of engagements) {

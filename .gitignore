@@ -40,12 +40,15 @@ Thumbs.db
 # Scan artifacts
 nikto_*.json
 
-# Reference designs
-Kimi_Agent_Argus Security Splash/
-
 # Planning/scratch files
 task_plan.md
 findings.md
+
+# Personal notes
+.commandcode/
+
+# Cache / build artifacts
+.semgrep_cache/
 
 # IDE
 .idea/
@@ -60,10 +63,8 @@ celerybeat-schedule-shm
 celerybeat-schedule-wal
 
 # L-01: nuclei-templates should be a git submodule (large YAML data ~1.5M LOC)
-# Convert with: git submodule add <repo_url> nuclei-templates && git rm --cached -r nuclei-templates/
 
-# L-02: Build artifacts that may have been tracked before gitignore was added.
-# Remove from tracking with: git rm --cached -r argus-platform/**/__pycache__/
+# L-02: argus-platform/ was removed during v5 migration — no longer needed.
 
 # Windows Redis binaries — shipped for legacy start-argus.ps1 support
 # but should not be tracked in git (22MB+ of binary bloat).

@@ -21,6 +21,7 @@ export const ArgusAssessCommand = {
       .option("deterministic", { describe: "Use deterministic mode only (no LLM)", type: "boolean", default: false })
       .option("no-cache", { describe: "Skip cache reads and writes (fresh scan)", type: "boolean", default: false })
       .option("refresh-cache", { describe: "Skip cache reads but still write results (refresh stale data)", type: "boolean", default: false })
+      .option("verbose", { describe: "Enable verbose executor logging with detailed tool execution info", type: "boolean", default: false })
       // Task 4.1: Feature flags — all opt-in
       .option("enable-workflow-registry", { describe: "Enable workflow registry for capability-based planning", type: "boolean", default: undefined })
       .option("enable-engagement-store", { describe: "Enable SQLite engagement persistence", type: "boolean", default: undefined })
@@ -52,6 +53,7 @@ export const ArgusAssessCommand = {
     await assessCommand(target, {
       useLLM: !argv.deterministic,
       cacheMode: argv.noCache ? "no_cache" as const : argv.refreshCache ? "refresh" as const : undefined,
+      verbose: argv.verbose as boolean,
       credsPath: argv.creds as string | undefined,
       features: featureOverrides,
     }).catch((e: Error) => process.stderr.write(`[Argus] assess error: ${e.message}\n`))

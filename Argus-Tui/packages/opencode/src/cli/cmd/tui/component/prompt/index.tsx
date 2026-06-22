@@ -1211,20 +1211,31 @@ export function Prompt(props: PromptProps) {
           argusHandled = true
           const arg = firstLine.slice(firstWord.length).trim()
           // Navigate to scan dashboard for assess/recon commands
+          // Lifted to outer scope so the runner.run() IIFE below can access it
+          let strippedTarget: string | undefined
+          let cacheMode: "no_cache" | "refresh" | undefined
+          let verbose = false
           if (cmdName === "assess" || cmdName === "scan" || cmdName === "recon") {
-            const trimmed = arg.trim()
-            if (!trimmed) {
+            // Strip CLI flags (--no-cache, --refresh-cache, etc.) from the target
+            // so they don't become part of the engagement's target URL in SQLite.
+            // Also detect flags to pass to the executor.
+            const { stripFlags, detectCacheMode, hasVerboseFlag } = await import("@/cli/cmd/tui/util/flag-strip")
+            strippedTarget = stripFlags(arg)
+            cacheMode = detectCacheMode(arg)
+            verbose = hasVerboseFlag(arg)
+            if (!strippedTarget) {
               toast.show({ variant: "error", title: "Assessment Error", message: "Usage: /assess <target> [--no-cache] [--refresh-cache]" })
               return
             }
+            const target = strippedTarget
             let scanEngagementId: string | undefined
             try {
               const { navigateTo } = await import("@/argus/tui/navigator")
               const { EngagementStore } = await import("@/argus/engagement/store")
               const store = new EngagementStore()
-              const eng = store.createEngagement(trimmed, "assessment")
+              const eng = store.createEngagement(target, "assessment")
               scanEngagementId = eng.id
-              navigateTo({ type: "scan", target: trimmed, engagementId: eng.id })
+              navigateTo({ type: "scan", target, engagementId: eng.id })
             } catch (e) {
               console.error("Failed to navigate to scan dashboard:", e)
             }
@@ -1238,7 +1249,9 @@ export function Prompt(props: PromptProps) {
                 // Send progress updates as streaming messages
                 const progressMessages: string[] = []
                 const result = await runner.run({
-                  target: arg,
+                  target: strippedTarget ?? arg,
+                  cacheMode,
+                  verbose,
                   engagementId: scanEngagementId,
                   useLLM: cmdName === "assess" || cmdName === "scan",
                   onProgress: (status: any) => {
