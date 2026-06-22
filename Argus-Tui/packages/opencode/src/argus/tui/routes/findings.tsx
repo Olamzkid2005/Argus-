@@ -137,6 +137,7 @@ export function FindingsViewer() {
   const [allFindings, setAllFindings] = createSignal<FindingRow[]>([])
   const [filterSev, setFilterSev] = createSignal<number | null>(null)
   const [loading, setLoading] = createSignal(true)
+  const [loadError, setLoadError] = createSignal<string | null>(null)
 
   onMount(async () => {
     try {
@@ -144,33 +145,41 @@ export function FindingsViewer() {
       const store = new EngagementStore()
       const all = store.listEngagements() as Array<{ id: string; target: string }>
       const engId = route.engagementId ?? (all.length > 0 ? all[0].id : null)
-      if (engId) {
-        const [findings, evidenceCounts] = await Promise.all([
-          Promise.resolve(store.getFindings(engId)),
-          Promise.resolve(store.getEvidenceCountsByEngagement(engId)),
-        ])
-        const rows: FindingRow[] = []
-        for (const f of findings) {
-          rows.push({
-            id: f.id ?? "",
-            title: f.title,
-            severity: f.severity ?? 0,
-            confidence: f.confidence ?? 0,
-            description: (f.description ?? "").slice(0, 500),
-            tool: f.tool ?? "",
-            phase: f.phase ?? "",
-            status: f.status ?? "PENDING",
-            cwe: f.cwe,
-            owasp: f.owasp,
-            remediation: f.remediation,
-            createdAt: f.created_at ?? "",
-            evidenceCount: evidenceCounts[f.id] ?? 0,
-          })
-        }
-        setAllFindings(rows)
+      if (!engId) {
+        setLoadError("No engagement found — run an assessment first.")
+        setLoading(false)
+        return
       }
+      const [findings, evidenceCounts] = await Promise.all([
+        Promise.resolve(store.getFindings(engId)),
+        Promise.resolve(store.getEvidenceCountsByEngagement(engId)),
+      ])
+      const rows: FindingRow[] = []
+      for (const f of findings) {
+        rows.push({
+          id: f.id ?? "",
+          title: f.title,
+          severity: f.severity ?? 0,
+          confidence: f.confidence ?? 0,
+          description: (f.description ?? "").slice(0, 500),
+          tool: f.tool ?? "",
+          phase: f.phase ?? "",
+          status: f.status ?? "PENDING",
+          cwe: f.cwe,
+          owasp: f.owasp,
+          remediation: f.remediation,
+          createdAt: f.created_at ?? "",
+          evidenceCount: evidenceCounts[f.id] ?? 0,
+        })
+      }
+      setAllFindings(rows)
       setLoading(false)
-    } catch (e) { console.error("Failed to load findings:", e); setLoading(false) }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error"
+      console.error("Failed to load findings:", e)
+      setLoadError(msg)
+      setLoading(false)
+    }
   })
 
   const filtered = createMemo(() => {
@@ -182,7 +191,8 @@ export function FindingsViewer() {
     critical: allFindings().filter((f) => f.severity >= 4).length,
     high: allFindings().filter((f) => f.severity === 3).length,
     medium: allFindings().filter((f) => f.severity === 2).length,
-    low: allFindings().filter((f) => f.severity <= 1).length,
+    low: allFindings().filter((f) => f.severity === 1).length,
+    info: allFindings().filter((f) => f.severity === 0).length,
   }))
 
   // Pagination
@@ -223,6 +233,11 @@ export function FindingsViewer() {
             Medium ({counts().medium})
           </text>
         </box>
+        <box {...({ onClick: () => { setFilterSev(0); setPage(1) } } as any)}>
+          <text fg={filterSev() === 0 ? theme.info : theme.textMuted}>
+            Info ({counts().info})
+          </text>
+        </box>
         <box {...({ onClick: () => { setFilterSev(1); setPage(1) } } as any)}>
           <text fg={filterSev() === 1 ? theme.text : theme.textMuted}>
             Low ({counts().low})
@@ -230,7 +245,19 @@ export function FindingsViewer() {
         </box>
       </box>
 
-      <Show when={!loading()} fallback={<text fg={theme.primary}>⠋ Loading...</text>}>
+      {/* Error state */}
+      <Show when={loadError() !== null}>
+        <box flexDirection="row" gap={1} paddingTop={2}>
+          <text fg={theme.error}>✗</text>
+          <text fg={theme.text}>{loadError()}</text>
+        </box>
+      </Show>
+
+      <Show when={!loading() && loadError() === null} fallback={
+        <Show when={loading()}>
+          <text fg={theme.primary}>⠋ Loading...</text>
+        </Show>
+      }>
         <Show when={pagedFindings().length > 0} fallback={
           <box>
             <Show when={filterSev() === null}>

@@ -60,14 +60,23 @@ export function ScanDashboard() {
       initScan(engagement.target, engagement.id)
 
       const engPhases = store.getPhases(route.engagementId) as Array<{ id: string; name: string; status: string; error?: string }>
-      const totalFindings = store.getFindings(route.engagementId).length
+      const allFindings = store.getFindings(route.engagementId)
+      const totalFindings = allFindings.length
+
+      // Group findings by phase id for per-phase count display
+      const findingsByPhase = new Map<string, number>()
+      for (const f of allFindings) {
+        const phaseKey = f.phase || "unknown"
+        findingsByPhase.set(phaseKey, (findingsByPhase.get(phaseKey) ?? 0) + 1)
+      }
 
       for (let i = 0; i < engPhases.length; i++) {
         const p = engPhases[i]
         addPhase({ id: p.id, name: p.name || p.id, index: i, total: engPhases.length })
         if (p.status === "COMPLETED" || p.status === "FAILED" || p.status === "PARTIAL") {
           const status = p.status === "PARTIAL" ? "partial" : p.status === "FAILED" ? "failed" : "completed"
-          completePhase(i, 0, p.error ? [p.error] : [], status)
+          const phaseFindings = findingsByPhase.get(p.id) ?? 0
+          completePhase(i, phaseFindings, p.error ? [p.error] : [], status)
         }
       }
 

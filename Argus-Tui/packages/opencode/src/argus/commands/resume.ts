@@ -97,10 +97,25 @@ export async function resumeCommand(
   // Update engagement status back to RUNNING
   store.updateStatus(engagementId, "RUNNING")
 
-  // Build phase records for remaining phases
-  const allPhaseRecords: PhaseRecord[] = plan.phases.map((p, i) => {
-    const existing = existingPhases.find((ep) => ep.id === p.phaseId)
-    return existing ?? {
+  // Build phase records for remaining phases.
+  // Match by ID first (exact phase identity), then by name (workflow may have
+  // shifted indices). Without name fallback, a reordered workflow would assign
+  // PENDING status to all phases, causing the inner loop to re-execute
+  // already-completed work.
+  const allPhaseRecords: PhaseRecord[] = plan.phases.map((p) => {
+    // Exact ID match — same phase from the same workflow position
+    const byId = existingPhases.find((ep) => ep.id === p.phaseId)
+    if (byId) return byId
+
+    // Name fallback — same phase name but possibly shifted index.
+    // Only reuse completed/partial status; a PENDING stored phase at a
+    // different index is a genuinely new variant of that phase.
+    const byName = existingPhases.find(
+      (ep) => ep.name === p.name && (ep.status === "COMPLETED" || ep.status === "PARTIAL"),
+    )
+    if (byName) return byName
+
+    return {
       id: p.phaseId,
       engagementId,
       name: p.name,
