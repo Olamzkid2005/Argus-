@@ -8,7 +8,7 @@ parameters:
   - name: target
     type: string
     description: "Target project directory (must contain package.json)"
-    required: false
+    required: true
 capabilities:
   - vulnerability_scanning
   - sca

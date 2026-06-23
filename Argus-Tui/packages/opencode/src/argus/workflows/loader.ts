@@ -14,6 +14,14 @@ export function loadWorkflowYaml(path: string): WorkflowDefinition {
     throw new Error(`Invalid workflow YAML: missing 'name' or 'phases' in ${path}`)
   }
 
+  if (!workflow.version) {
+    throw new Error(`Invalid workflow YAML: missing 'version' in ${path} (required by WorkflowDefinition type)`)
+  }
+
+  if (!workflow.label) {
+    throw new Error(`Invalid workflow YAML: missing 'label' in ${path} (required by WorkflowDefinition type)`)
+  }
+
   for (const phase of workflow.phases) {
     if (!phase.required_capabilities || !Array.isArray(phase.required_capabilities)) {
       throw new Error(`Phase '${phase.name}' in ${path} missing required_capabilities`)

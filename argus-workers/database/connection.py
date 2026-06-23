@@ -267,6 +267,9 @@ class ConnectionManager:
                         org_id,
                         ctx_e,
                     )
+                    # Re-raise so callers know tenant isolation was not established.
+                    # Silent failures here risk cross-org data exposure.
+                    raise
 
             yield conn
             if commit:

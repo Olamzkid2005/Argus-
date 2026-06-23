@@ -14,6 +14,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Resolve project root from script location, not CWD.
+# This prevents the audit from scanning the wrong tree when invoked
+# from a different working directory.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 @dataclass
 class SecurityFinding:
@@ -156,7 +161,7 @@ class SecurityAudit:
         sensitive_exact_names = {".env", ".env.local", ".env.production", "id_rsa"}
         sensitive_extensions = {".pem", ".key", ".env"}
 
-        for root, dirs, files in os.walk("."):
+        for root, dirs, files in os.walk(_PROJECT_ROOT):
             # Skip node_modules and venv
             dirs[:] = [
                 d

@@ -175,7 +175,8 @@ describe("verifyCommand", () => {
     expect(output).toContain("No matching verifier found")
   })
 
-  test("uses targetUrl option when provided", async () => {
+  test("uses targetUrl option when provided — targetUrl flows into verifier", async () => {
+    resetAllMocks()
     const eng = store.createEngagement("https://target-test.com", "assessment")
     const findingId = `find-target-${Date.now()}`
     store.saveFindings(eng.id, [{
@@ -185,7 +186,7 @@ describe("verifyCommand", () => {
       confidence: 1,
       status: "PENDING",
       description: "test",
-      tool: "unknown-scanner",
+      tool: "bola",          // Use a tool that has a registered verifier
       phase: "phase-1",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -195,9 +196,19 @@ describe("verifyCommand", () => {
     const output = await verifyCommand(findingId, {
       storeOverride: store,
       targetUrl: "https://custom-target.com",
+      engineOverride: mockEngine as any,
+      collectorOverride: mockCollector as any,
+      confidenceOverride: mockConfidence as any,
+      credStoreOverride: mockCredStore as any,
     })
 
+    // The BOLA verifier should have been invoked with the targetUrl,
+    // not just echoed in the output string.
+    expect(output).toContain("[BOLA]")
     expect(output).toContain("https://custom-target.com")
+    expect(output).not.toContain("No matching verifier found")
+    // Verify the mock engine was actually used (mocks were wired through)
+    expect(mockEngine.createContext).toHaveBeenCalled()
   })
 
   test("includes finding id and tool info in output", async () => {

@@ -103,7 +103,7 @@ argus                         # CLI + TUI entry point
 
 argus-workers/               # Python MCP server
   ├── mcp_server.py           # MCP protocol server
-  ├── tools/definitions/      # 45 YAML tool definitions
+  ├── tools/definitions/      # 65 YAML tool definitions
   │   ├── nuclei.yaml         #  with capabilities,
   │   ├── sqlmap.yaml         #  signal_quality,
   │   ├── nmap.yaml           #  requires gates,
@@ -140,7 +140,7 @@ argus-workers/               # Python MCP server
 │
 ├── argus-workers/            # Python MCP server
 │   ├── mcp_server.py              # Tool execution server
-│   └── tools/definitions/         # 45 tool YAML definitions
+│   └── tools/definitions/         # 65 tool YAML definitions
 │
 ├── start-argus.sh             # Interactive TUI/CLI launcher
 ├── stop-argus.sh              # Cleanup script

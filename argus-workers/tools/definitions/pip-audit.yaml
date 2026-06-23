@@ -9,7 +9,7 @@ parameters:
   - name: target
     type: string
     description: "Audit target path (project dir or requirements file)"
-    required: false
+    required: true
 capabilities:
   - vulnerability_scanning
 signal_quality: CANDIDATE

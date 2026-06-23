@@ -22,7 +22,9 @@
   },
   "exports": {
     "./*": "./src/*.ts",
-    "./runtime": "./src/opencode-runtime.ts"
+    "./runtime": "./src/opencode-runtime.ts",
+    "./argus/*": "./src/argus/*.ts",
+    "./cli/*": "./src/cli/*.ts"
   },
   "imports": {
     "#db": {

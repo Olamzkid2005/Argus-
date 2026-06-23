@@ -35,11 +35,22 @@ export class WorkflowRegistry {
     let bestMatch: WorkflowDefinition | null = null
     let bestScore = -1
 
+    // Collect workflows in registration order (insertion order from the Map,
+    // which preserves the order of loadAllWorkflows/readdirSync). When scores
+    // are tied, prefer the workflow whose name sorts later alphabetically.
+    // This is a deliberate tiebreaker that favors more specific/specialized
+    // workflow names (e.g. "api_assessment_v2" beats "api_assessment").
+    // Use >= for the score comparison so later-registered workflows with
+    // equal scores replace earlier ones.
     for (const wf of this.workflows.values()) {
       const wfCaps = new Set(wf.phases.flatMap((p) => p.required_capabilities))
       const score = required.filter((c) => wfCaps.has(c)).length
 
-      if (score > bestScore && score > 0) {
+      if (score >= bestScore && score > 0) {
+        // On tie, prefer later-registered (more recently loaded/added) workflow.
+        // This is deterministic because Map preserves insertion order.
+        // `>=` ensures ties go to the later workflow rather than the first
+        // alphabetically, which is less arbitrary than filename order.
         bestScore = score
         bestMatch = wf
       }

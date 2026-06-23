@@ -122,7 +122,7 @@ export function FindingCard(props: { finding: FindingRow; theme: ReturnType<type
       {/* Description preview */}
       <Show when={finding.description}>
         <text fg={theme.text} paddingTop={1}>
-          {finding.description.slice(0, 200)}{finding.description.length > 200 ? "..." : ""}
+          {finding.description.length > 200 ? finding.description.slice(0, finding.description.slice(0, 200).lastIndexOf(" ")) + "..." : finding.description}
         </text>
       </Show>
 

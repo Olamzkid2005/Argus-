@@ -8,6 +8,7 @@
     "types": [],
     "noUncheckedIndexedAccess": false,
     "customConditions": ["browser"],
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@tui/*": ["./src/cli/cmd/tui/*"],
