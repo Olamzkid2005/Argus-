@@ -151,7 +151,7 @@ export function ReportDashboard(props: ReportDashboardProps) {
                 gap={2}
                 paddingY={1}
                 paddingX={1}
-                border={["round"]}
+                border={["round"] as any}
                 borderColor={theme.border}
                 marginBottom={1}
               >

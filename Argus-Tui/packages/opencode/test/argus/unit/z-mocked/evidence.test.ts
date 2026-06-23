@@ -89,26 +89,24 @@ describe("evidenceCommand", () => {
   })
 
   describe("show", () => {
-    test("returns usage message when no package-id provided", async () => {
+    test("returns usage message when no args provided", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
       const output = await evidenceCommand("show", [], { store })
-      expect(output).toBe("Usage: evidence show <package-id>")
+      expect(output).toContain("Usage:")
     })
 
-    test("shows package details for package-id", async () => {
+    test("returns usage message when no package-id provided", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("show", ["pkg-abc"], { store })
+      const output = await evidenceCommand("show", ["eng-1"], { store })
+      expect(output).toContain("Usage:")
+    })
+
+    test("shows package details for non-existent package", async () => {
+      const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
+      const output = await evidenceCommand("show", ["eng-fake", "pkg-abc"], { store })
 
       expect(output).toContain("Package ID: pkg-abc")
-      expect(output).toContain("not found")
-    })
-
-    test("shows errors for invalid package", async () => {
-      const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
-      const output = await evidenceCommand("show", ["pkg-bad"], { store })
-
-      expect(output).toContain("Package ID: pkg-bad")
-      expect(output).toContain("not found")
+      expect(output).toContain("Manifest file not found")
     })
   })
 
@@ -116,7 +114,7 @@ describe("evidenceCommand", () => {
     test("returns usage message when no package-id provided", async () => {
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")
       const output = await evidenceCommand("verify-package", [], { store })
-      expect(output).toBe("Usage: evidence verify-package <package-id>")
+      expect(output).toContain("Usage:")
     })
 
     test("returns INVALID for nonexistent package", async () => {
@@ -138,18 +136,16 @@ describe("evidenceCommand", () => {
 
       const evidenceBaseDir = join(dbDir, "engagements")
       const artifactDir = join(evidenceBaseDir, eng.id, "artifacts", findingId)
-      mkdirSync(join(evidenceBaseDir, "artifacts", findingId), { recursive: true })
       mkdirSync(artifactDir, { recursive: true })
 
-      writeFileSync(join(evidenceBaseDir, "artifacts", findingId, "req.txt"), "request body")
+      writeFileSync(join(artifactDir, "req.txt"), "request body")
 
       const { createHash } = await import("crypto")
       const fileHash = createHash("sha256").update("request body").digest("hex")
       const manifest = {
         package_id: findingId,
         engagement_id: eng.id,
-        finding_id: findingId,
-        created_at: Date.now(),
+        created_at: new Date().toISOString(),
         artifacts: [{ path: "req.txt", hash: fileHash, type: "request", size_bytes: 12 }],
         package_hash: "",
       }

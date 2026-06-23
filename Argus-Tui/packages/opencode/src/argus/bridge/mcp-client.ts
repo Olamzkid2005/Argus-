@@ -337,15 +337,32 @@ export class WorkersBridge {
       }
       return result
     } catch (error) {
-      const isLLMError = (error as any)?.code === -32000 || (error as Error).message.includes("LLM is not available")
+      // Python mcp_transport wraps ALL exceptions with code -32603 (Internal error).
+      // We cannot use code-based detection. Use narrow keyword matching instead.
+      // WARNING: keep this list tight — callTool() is called for ALL tools (incl.
+      // nuclei, nmap, etc.), not just LLM tools. Broad terms like "model" or
+      // "api key" would cause cross-contamination from non-LLM tool errors.
+      const errMsg = ((error as any)?.message ?? "").toLowerCase()
+      const isLLMError = /\b(llm|openai|anthropic)\b/i.test(errMsg)
+        || /\bai (provider|model)\b/i.test(errMsg)
+        || errMsg.includes("llm is not available")
 
       if (isLLMError) {
         this.circuitFailures++
         if (this.circuitFailures >= this.circuitThreshold) {
+          const cooldownSec = Math.ceil(this.circuitCooldown / 1000)
+          console.warn(
+            `[LLM Circuit Breaker] ${this.circuitFailures} consecutive LLM failures — ` +
+            `circuit OPEN for ${cooldownSec}s. Subsequent LLM calls will fail fast until cooldown expires.`
+          )
           this.circuitOpenUntil = now + this.circuitCooldown
           this.setLLMStatus("UNAVAILABLE")
-          throw new LLMUnavailableError("UNAVAILABLE", Math.ceil(this.circuitCooldown / 1000))
+          throw new LLMUnavailableError("UNAVAILABLE", cooldownSec)
         }
+        console.warn(
+          `[LLM Circuit Breaker] LLM failure ${this.circuitFailures}/${this.circuitThreshold} — ` +
+          `circuit DEGRADED. ${this.circuitThreshold - this.circuitFailures} more failure(s) before circuit opens.`
+        )
         this.setLLMStatus("DEGRADED")
         throw new LLMUnavailableError("DEGRADED", 30)
       }

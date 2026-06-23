@@ -19,6 +19,7 @@ const mockToolRegistry = {
     if (name === "high-sig-tool") return { name: "high-sig-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, timeout_seconds: 30, signal_quality: "CONFIRMED" }
     return undefined
   },
+  getToolTimeout: () => 120,
   listTools: () => [],
   load: () => {},
 }
@@ -244,6 +245,7 @@ describe("InProcessExecutor", () => {
       let initTarget = ""
       const bridge = {
         ...mockBridge,
+        getToolsByCapability: () => [],
         agentInit: async (params: any) => {
           initTarget = params.target
           return { session_id: "sess-1", plan: ["test"], reasoning: "test", phase: "phase-0" }
@@ -252,7 +254,7 @@ describe("InProcessExecutor", () => {
       }
       const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
       exec.loadGates("test")
-      const phase = makePhase({ execution: "llm_driven" as const })
+      const phase = makePhase({ toolExecution: "llm_driven" as const, requiredCapabilities: [] })
       await exec.execute(phase)
       expect(initTarget).toBe("https://example.com")
     })

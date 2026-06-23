@@ -46,10 +46,14 @@ class IntelligenceEngine:
     # ── Threat Intel Caching ──
     # In-memory fallback cache when Redis is unavailable.
     # Structure: {key: (expiry_timestamp, value)}
+    # Use OrderedDict so we can evict oldest entries when the cache grows too large.
     _in_memory_cache: dict[str, tuple[float, Any]] = {}
     # TTL for NVD/EPSS API responses (1 hour by default — these datasets
     # only update every 2-8 hours, so hourly refresh is sufficient).
     THREAT_INTEL_CACHE_TTL = 3600  # 1 hour
+    # Maximum entries in the in-memory cache before eviction kicks in.
+    # Prevents unbounded growth under sustained load.
+    _CACHE_MAX_SIZE = 10000
 
     def __init__(self, connection_string: str = None):
         """
@@ -1095,6 +1099,17 @@ class IntelligenceEngine:
         cache.set(key, value, ttl)
         # Always set in-memory fallback for when Redis is unavailable
         self._in_memory_cache[key] = (_time.time() + ttl, value)
+        # Evict oldest entries when cache exceeds max size
+        if len(self._in_memory_cache) > self._CACHE_MAX_SIZE:
+            # First pass: remove expired entries
+            now = _time.time()
+            expired_keys = [k for k, (expiry, _) in self._in_memory_cache.items() if now >= expiry]
+            for k in expired_keys:
+                del self._in_memory_cache[k]
+            # Second pass: if still over limit, remove oldest entries
+            while len(self._in_memory_cache) > self._CACHE_MAX_SIZE:
+                # dicts preserve insertion order in Python 3.7+, so the first key is the oldest
+                self._in_memory_cache.pop(next(iter(self._in_memory_cache)))
 
     def _fetch_nvd_cve_data(self, cve_ids: list[str]) -> dict[str, dict]:
         """

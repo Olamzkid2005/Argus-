@@ -183,8 +183,8 @@ export class TargetValidator {
     this.load()
     const { scope } = this.config
     return (
-      (scope?.allowed_targets && scope.allowed_targets.length > 0) ||
-      (scope?.blocked_targets && scope.blocked_targets.length > 0)
+      (!!scope?.allowed_targets && scope.allowed_targets.length > 0) ||
+      (!!scope?.blocked_targets && scope.blocked_targets.length > 0)
     )
   }
 

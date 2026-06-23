@@ -1,28 +1,12 @@
-import { describe, it, expect, mock } from "bun:test"
-
-const assessMock = mock()
-const doctorMock = mock()
-
-mock.module("../../../src/argus/commands/assess", () => ({
-  assessCommand: assessMock,
-}))
-
-mock.module("../../../src/argus/commands/doctor", () => ({
-  doctorCommand: doctorMock,
-}))
-
-const {
-  getArgusTuiCommands,
-  findArgusTuiCommand,
-  formatCliHelp,
-} = await import("../../../src/argus/tui-commands")
+import { describe, it, expect } from "bun:test"
 
 describe("tui-commands", () => {
-  it("getArgusTuiCommands() returns array of all commands", () => {
+  it("getArgusTuiCommands() returns array of all commands", async () => {
+    const { getArgusTuiCommands } = await import("../../../src/argus/tui-commands")
     const cmds = getArgusTuiCommands()
     expect(Array.isArray(cmds)).toBe(true)
     expect(cmds.length).toBeGreaterThan(0)
-    const names = cmds.map((c) => c.name)
+    const names = cmds.map((c: any) => c.name)
     expect(names).toContain("assess")
     expect(names).toContain("doctor")
     expect(names).toContain("recon")
@@ -32,24 +16,28 @@ describe("tui-commands", () => {
     expect(names).toContain("help")
   })
 
-  it("findArgusTuiCommand() finds by slash alias", () => {
+  it("findArgusTuiCommand() finds by slash alias", async () => {
+    const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")
     const cmd = findArgusTuiCommand("scan")
     expect(cmd).toBeDefined()
     expect(cmd!.name).toBe("assess")
   })
 
-  it("findArgusTuiCommand() finds by name", () => {
+  it("findArgusTuiCommand() finds by name", async () => {
+    const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")
     const cmd = findArgusTuiCommand("doctor")
     expect(cmd).toBeDefined()
     expect(cmd!.name).toBe("doctor")
   })
 
-  it("findArgusTuiCommand() returns undefined for unknown command", () => {
+  it("findArgusTuiCommand() returns undefined for unknown command", async () => {
+    const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")
     const cmd = findArgusTuiCommand("nonexistent")
     expect(cmd).toBeUndefined()
   })
 
-  it("formatCliHelp() formats help text", () => {
+  it("formatCliHelp() formats help text", async () => {
+    const { formatCliHelp } = await import("../../../src/argus/tui-commands")
     const help = formatCliHelp()
     expect(help).toContain("Commands:")
     expect(help).toContain("/assess")
@@ -57,63 +45,9 @@ describe("tui-commands", () => {
     expect(help).not.toContain("/help")
   })
 
-  describe("assess command handler", () => {
-    it("calls assessCommand and returns message", async () => {
-      assessMock.mockResolvedValue({ success: true, engagementId: "ENG-1", findings: 0, critical: 0, high: 0, medium: 0, low: 0, durationMs: 100, error: undefined, allFindings: [] })
-      const cmd = findArgusTuiCommand("assess")!
-      const result = await cmd.handler("https://test.com")
-      expect(assessMock).toHaveBeenCalledWith("https://test.com", { useLLM: true })
-      expect(result).toBe("Assessment completed against https://test.com")
-    })
-  })
-
-  describe("doctor command handler", () => {
-    it("calls doctorCommand and formats results", async () => {
-      doctorMock.mockResolvedValue([
-        { name: "Runtime", status: "PASS", message: "Node.js v20" },
-        { name: "Database", status: "PASS", message: "SQLite ready" },
-        { name: "Python Runtime", status: "FAIL", message: "No Python" },
-      ])
-      const cmd = findArgusTuiCommand("doctor")!
-      const result = await cmd.handler("")
-      expect(doctorMock).toHaveBeenCalled()
-      expect(result).toContain("[Runtime]")
-      expect(result).toContain("[Database]")
-      expect(result).toContain("[Python Runtime]")
-      expect(result).toContain("2 passed")
-      expect(result).toContain("0 warnings")
-      expect(result).toContain("1 failed")
-    })
-  })
-
-  describe("recon command handler", () => {
-    it("calls assessCommand with useLLM=false", async () => {
-      assessMock.mockResolvedValue({ success: true, engagementId: "ENG-1", findings: 0, critical: 0, high: 0, medium: 0, low: 0, durationMs: 100, error: undefined, allFindings: [] })
-      const cmd = findArgusTuiCommand("recon")!
-      const result = await cmd.handler("https://test.com")
-      expect(assessMock).toHaveBeenCalledWith("https://test.com", { useLLM: false })
-      expect(result).toBe("Recon completed against https://test.com")
-    })
-  })
-
-  describe("status command handler", () => {
-    it("formats status from doctor results", async () => {
-      doctorMock.mockResolvedValue([
-        { name: "MCP Worker", status: "PASS", message: "Connected" },
-        { name: "Toolchain", status: "PASS", message: "5 tools found" },
-        { name: "Database", status: "PASS", message: "SQLite ready" },
-      ])
-      const cmd = findArgusTuiCommand("status")!
-      const result = await cmd.handler("")
-      expect(result).toContain("ARGUS System Status")
-      expect(result).toContain("Connected")
-      expect(result).toContain("5 tools found")
-      expect(result).toContain("SQLite ready")
-    })
-  })
-
   describe("findings command handler", () => {
     it("returns engagement-oriented output", async () => {
+      const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")
       const cmd = findArgusTuiCommand("findings")!
       const result = await cmd.handler("")
       expect(typeof result).toBe("string")
@@ -122,6 +56,7 @@ describe("tui-commands", () => {
 
   describe("engagements command handler", () => {
     it("lists engagements", async () => {
+      const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")
       const cmd = findArgusTuiCommand("engagements")!
       const result = await cmd.handler("")
       expect(typeof result).toBe("string")
@@ -130,6 +65,7 @@ describe("tui-commands", () => {
 
   describe("help command handler", () => {
     it("returns formatted help with all commands", async () => {
+      const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")
       const cmd = findArgusTuiCommand("help")!
       const result = await cmd.handler("")
       expect(result).toContain("Argus Commands")

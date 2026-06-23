@@ -810,6 +810,7 @@ class ReActAgent:
                 checkpoint = load_auth_checkpoint(self.engagement_id)
                 if checkpoint and checkpoint.email and checkpoint.password:
                     import concurrent.futures
+
                     import requests
 
                     from agent.tools.login_tool import run_login

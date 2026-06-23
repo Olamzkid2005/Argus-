@@ -25,6 +25,7 @@ Pattern: Per-workflow DI container with explicit injection, no-op defaults,
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -172,6 +173,7 @@ def set_container_factory(factory: ContainerFactory) -> None:
 
 #: Map of engagement_id to Container instance.
 _containers: dict[str, Container] = {}
+_containers_lock = threading.Lock()
 
 
 def get_or_create_container(
@@ -180,7 +182,7 @@ def get_or_create_container(
     redis_url: str | None = None,
     **kwargs,
 ) -> Container:
-    """Get or create a Container for an engagement.
+    """Get or create a Container for an engagement (thread-safe).
 
     Args:
         engagement_id: Engagement ID to scope the container.
@@ -191,22 +193,23 @@ def get_or_create_container(
     Returns:
         Container instance for the engagement.
     """
-    if engagement_id in _containers:
-        return _containers[engagement_id]
+    with _containers_lock:
+        if engagement_id in _containers:
+            return _containers[engagement_id]
 
-    deps = ContainerDependencies(
-        db_url=db_url,
-        redis_url=redis_url,
-        engagement_id=engagement_id,
-        **kwargs,
-    )
-    container = _factory(deps)
-    _containers[engagement_id] = container
-    return container
+        deps = ContainerDependencies(
+            db_url=db_url,
+            redis_url=redis_url,
+            engagement_id=engagement_id,
+            **kwargs,
+        )
+        container = _factory(deps)
+        _containers[engagement_id] = container
+        return container
 
 
 def get_container(engagement_id: str) -> Container | None:
-    """Get an existing Container for an engagement, if one exists.
+    """Get an existing Container for an engagement, if one exists (thread-safe).
 
     Unlike get_or_create_container, this does NOT create a new container.
 
@@ -216,13 +219,15 @@ def get_container(engagement_id: str) -> Container | None:
     Returns:
         Container instance or None.
     """
-    return _containers.get(engagement_id)
+    with _containers_lock:
+        return _containers.get(engagement_id)
 
 
 def remove_container(engagement_id: str) -> None:
-    """Remove a Container when an engagement completes.
+    """Remove a Container when an engagement completes (thread-safe).
 
     Args:
         engagement_id: Engagement ID to remove.
     """
-    _containers.pop(engagement_id, None)
+    with _containers_lock:
+        _containers.pop(engagement_id, None)

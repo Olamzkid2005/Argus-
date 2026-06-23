@@ -1213,6 +1213,7 @@ export function Prompt(props: PromptProps) {
           // Navigate to scan dashboard for assess/recon commands
           // Lifted to outer scope so the runner.run() IIFE below can access it
           let strippedTarget: string | undefined
+          let scanEngagementId: string | undefined
           let cacheMode: "no_cache" | "refresh" | undefined
           let verbose = false
           if (cmdName === "assess" || cmdName === "scan" || cmdName === "recon") {
@@ -1228,7 +1229,6 @@ export function Prompt(props: PromptProps) {
               return
             }
             const target = strippedTarget
-            let scanEngagementId: string | undefined
             try {
               const { navigateTo } = await import("@/argus/tui/navigator")
               const { EngagementStore } = await import("@/argus/engagement/store")

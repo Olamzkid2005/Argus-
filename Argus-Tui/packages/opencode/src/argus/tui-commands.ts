@@ -21,8 +21,6 @@
  *   /status    — Show system status
  */
 
-import { assessCommand } from "./commands/assess"
-import { doctorCommand } from "./commands/doctor"
 import { navigateTo } from "./tui/navigator"
 import { MCP_WORKER_PATH } from "./shared/path"
 
@@ -56,6 +54,7 @@ const commands: ArgusTuiCommand[] = [
       if (!target) return "Usage: /assess <target> [--no-cache] [--refresh-cache]"
       const noCache = parts.includes("--no-cache")
       const refreshCache = parts.includes("--refresh-cache")
+      const { assessCommand } = await import("./commands/assess")
       const result = await assessCommand(target, {
         useLLM: true,
         cacheMode: noCache ? "no_cache" : refreshCache ? "refresh" : undefined,
@@ -72,6 +71,7 @@ const commands: ArgusTuiCommand[] = [
     slashes: ["doctor", "health"],
     needsTarget: false,
     handler: async () => {
+      const { doctorCommand } = await import("./commands/doctor")
       const results = await doctorCommand()
       let output = ""
       let passes = 0, warns = 0, fails = 0
@@ -98,6 +98,7 @@ const commands: ArgusTuiCommand[] = [
       if (!target) return "Usage: /recon <target> [--no-cache] [--refresh-cache]"
       const noCache = parts.includes("--no-cache")
       const refreshCache = parts.includes("--refresh-cache")
+      const { assessCommand } = await import("./commands/assess")
       const result = await assessCommand(target, {
         useLLM: false,
         cacheMode: noCache ? "no_cache" : refreshCache ? "refresh" : undefined,
@@ -114,6 +115,7 @@ const commands: ArgusTuiCommand[] = [
     slashes: ["status"],
     needsTarget: false,
     handler: async () => {
+      const { doctorCommand } = await import("./commands/doctor")
       const results = await doctorCommand()
       const mcpResult = results.find((r) => r.name === "MCP Worker")
       const toolResult = results.find((r) => r.name === "Toolchain")

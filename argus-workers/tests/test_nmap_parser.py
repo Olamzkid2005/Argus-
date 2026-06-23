@@ -1,7 +1,5 @@
 """Tests for parsers.parsers.nmap (System B NmapParser) — Category: parser"""
 
-import pytest
-
 from parsers.parser import Parser
 from parsers.parsers.nmap import NmapParser
 

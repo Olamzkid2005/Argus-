@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { WorkflowPlanner, MAX_REPLANS } from "@argus/planner/planner"
-import { Capability } from "@argus/planner/capabilities"
-import type { PlannerContext } from "@argus/planner/types"
-import type { WorkflowDefinition } from "@argus/workflows/types"
+import { WorkflowPlanner, MAX_REPLANS } from "../../../../src/argus/planner/planner"
+import { Capability } from "../../../../src/argus/planner/capabilities"
+import type { PlannerContext } from "../../../../src/argus/planner/types"
+import type { WorkflowDefinition } from "../../../../src/argus/workflows/types"
 
 function mockWorkflow(overrides?: Partial<WorkflowDefinition>): WorkflowDefinition {
   return {
@@ -211,7 +211,7 @@ describe("WorkflowPlanner", () => {
       const result = planner.replan(ctx)
 
       expect(result).not.toBeNull()
-      expect(ctx.replanCount).toBe(1)
+      expect(result![0].replanCycle).toBe(true)
     })
 
     test("uses maxReplans from context when provided", () => {

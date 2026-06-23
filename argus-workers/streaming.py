@@ -204,6 +204,12 @@ class StreamManager(EventBus):
         self._queues: dict[str, list[queue.Queue]] = {}
         self._history: dict[str, list[Event]] = {}
         self._dropped_count: dict[str, int] = {}
+        # Tracks consecutive queue.Full failures per queue (keyed by id(q)).
+        # A queue is removed only after CONSECUTIVE_FULL_LIMIT consecutive Full
+        # events, giving slow consumers a grace period while still cleaning up
+        # zombie queues from dead/disconnected consumers.
+        self._consecutive_full: dict[int, int] = {}
+        self._CONSECUTIVE_FULL_LIMIT = 10
         # Periodic eviction counter — triggers stale cleanup every 500
         # publishes to prevent unbounded history growth (M2).
         self._publish_count = 0
@@ -258,10 +264,12 @@ class StreamManager(EventBus):
 
             # Publish to all subscriber queues
             if engagement_id in self._queues:
-                dead_queues = []
+                dead_queues: list[queue.Queue] = []
                 for q in self._queues[engagement_id]:
                     try:
                         q.put_nowait(event)
+                        # Successful publish resets consecutive-failure count
+                        self._consecutive_full.pop(id(q), None)
                     except queue.Full:
                         self._dropped_count[engagement_id] = (
                             self._dropped_count.get(engagement_id, 0) + 1
@@ -274,11 +282,18 @@ class StreamManager(EventBus):
                                 engagement_id,
                                 dropped,
                             )
-                        dead_queues.append(q)
+                        # Track consecutive failures — remove only after
+                        # repeated Full events (dead consumer), not on a
+                        # single slow-consumer hiccup.
+                        qid = id(q)
+                        self._consecutive_full[qid] = self._consecutive_full.get(qid, 0) + 1
+                        if self._consecutive_full[qid] >= self._CONSECUTIVE_FULL_LIMIT:
+                            dead_queues.append(q)
 
                 for q in dead_queues:
                     with contextlib.suppress(ValueError):
                         self._queues[engagement_id].remove(q)
+                        self._consecutive_full.pop(id(q), None)
 
     def publish_event(self, event: Event):
         self.publish(event)
@@ -828,8 +843,11 @@ def emit_finding_rt(
             logger.log(5, "Dedup emit_finding_rt: %s", fp)
             return
         # Evict oldest entries when set exceeds max (H-05)
+        # Use pop() to remove one arbitrary element instead of clear(),
+        # so we keep recent fingerprints and avoid re-emitting finding 1
+        # when finding 50,001 arrives.
         if len(engagement_fps) >= _RT_FINGERPRINTS_MAX_PER_ENGAGEMENT:
-            engagement_fps.clear()
+            engagement_fps.pop()
         engagement_fps.add(fp)
 
     # 1. SSE emission (in-process stream manager)

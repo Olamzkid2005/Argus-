@@ -17,8 +17,6 @@ import json
 import logging
 from urllib.parse import urlparse
 
-import psycopg2
-
 from database.connection import get_db
 
 logger = logging.getLogger(__name__)

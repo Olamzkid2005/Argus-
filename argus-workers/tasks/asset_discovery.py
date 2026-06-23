@@ -148,7 +148,6 @@ def update_asset_risk_scores(self, org_id: str):
     Args:
         org_id: Organization ID
     """
-    db_conn_string = os.getenv("DATABASE_URL")
 
     # Severity penalty weights — mirrors security-rating.ts
     severity_weights = {

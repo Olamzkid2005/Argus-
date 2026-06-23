@@ -181,6 +181,7 @@ class StructuredLogger:
             db = get_db()
             conn = db.get_connection()
             cursor = conn.cursor()
+            need_rollback = True
             try:
                 cursor.execute(
                     """
@@ -198,7 +199,10 @@ class StructuredLogger:
                     ),
                 )
                 conn.commit()
+                need_rollback = False
             finally:
+                if need_rollback:
+                    conn.rollback()
                 cursor.close()
                 db.release_connection(conn)
         except Exception as e:

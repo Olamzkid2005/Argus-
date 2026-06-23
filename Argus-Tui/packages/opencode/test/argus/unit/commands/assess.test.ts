@@ -1,38 +1,43 @@
-import { describe, expect, test, jest, mock } from "bun:test"
+import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test"
+import { WorkflowRunner } from "../../../../src/argus/workflow-runner"
+import { ReportGenerator } from "../../../../src/argus/reporting/generator"
 import type { WorkflowRunResult } from "../../../../src/argus/workflow-runner"
 
-// Mock WorkflowRunner and ReportGenerator
+// Use prototype-level mocking instead of mock.module to avoid cross-file leakage
+
 const mockRun = mock<(opts: any) => Promise<WorkflowRunResult>>()
 const mockGenerateMarkdown = mock<(findings: any[], engagementId: string, target: string, type: string) => string>()
 
-mock.module("../../../../src/argus/workflow-runner", () => ({
-  WorkflowRunner: mock(() => ({
-    run: mockRun,
-  })),
-}))
+let originalRun: any
+let originalGenerateMarkdown: any
 
-mock.module("../../../../src/argus/reporting/generator", () => ({
-  ReportGenerator: mock(() => ({
-    generateMarkdown: mockGenerateMarkdown,
-  })),
-}))
+beforeEach(() => {
+  // Save originals and patch prototype methods
+  originalRun = WorkflowRunner.prototype.run
+  originalGenerateMarkdown = ReportGenerator.prototype.generateMarkdown
+
+  WorkflowRunner.prototype.run = mockRun as any
+  ReportGenerator.prototype.generateMarkdown = mockGenerateMarkdown as any
+
+  mockRun.mockReset()
+  mockGenerateMarkdown.mockReset()
+})
+
+// Restore prototypes after each test to prevent leaking
+afterEach(() => {
+  if (originalRun) WorkflowRunner.prototype.run = originalRun
+  if (originalGenerateMarkdown) ReportGenerator.prototype.generateMarkdown = originalGenerateMarkdown
+})
 
 const makeEmptyResult = (overrides: Partial<WorkflowRunResult> = {}): WorkflowRunResult => ({
   allFindings: [],
   engagementId: "eng-1",
-  phaseResults: {},
   toolsExecuted: new Set(),
   replanCount: 0,
   ...overrides,
-})
+} as unknown as WorkflowRunResult)
 
 describe("assessCommand", () => {
-  beforeEach(() => {
-    mockRun.mockReset()
-    mockGenerateMarkdown.mockReset()
-    // Manually clear the module cache so re-imports get fresh mocks
-  })
-
   test("delegates to WorkflowRunner.run with target", async () => {
     mockRun.mockResolvedValue(makeEmptyResult())
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
@@ -81,7 +86,7 @@ describe("assessCommand", () => {
   })
 
   test("writes markdown report by default when findings exist", async () => {
-    const findings = [{ id: "f-1", title: "Test", severity: "HIGH" }]
+    const findings: any[] = [{ id: "f-1", title: "Test", severity: "HIGH" }]
     mockRun.mockResolvedValue(makeEmptyResult({ allFindings: findings }))
     mockGenerateMarkdown.mockReturnValue("# Report content")
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
@@ -124,6 +129,71 @@ describe("assessCommand", () => {
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
 
     await expect(assessCommand("")).resolves.toBeDefined()
+  })
+
+  test("passes verbose option to WorkflowRunner", async () => {
+    mockRun.mockResolvedValue(makeEmptyResult())
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+
+    await assessCommand("https://example.com", { verbose: true })
+
+    expect(mockRun.mock.calls[0][0].verbose).toBe(true)
+  })
+
+  test("passes multiple combined options simultaneously", async () => {
+    mockRun.mockResolvedValue(makeEmptyResult())
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+
+    await assessCommand("https://example.com", {
+      cacheMode: "refresh",
+      credsPath: "/path/to/creds.json",
+      features: { approval_gates: true },
+      verbose: true,
+      useLLM: false,
+    })
+
+    const opts = mockRun.mock.calls[0][0]
+    expect(opts.cacheMode).toBe("refresh")
+    expect(opts.credsPath).toBe("/path/to/creds.json")
+    expect(opts.features).toEqual({ approval_gates: true })
+    expect(opts.verbose).toBe(true)
+    expect(opts.useLLM).toBe(false)
+  })
+
+  test("default onProgress is a function that writes to stderr without crashing", async () => {
+    const originalStderrWrite = process.stderr.write
+    const written: string[] = []
+    process.stderr.write = (chunk: any) => { written.push(String(chunk)); return true }
+
+    try {
+      mockRun.mockImplementation(async (opts: any) => {
+        // Trigger all the cliProgress branches
+        opts.onProgress?.("Raw string message")
+        opts.onProgress?.({ type: "phase_start", phaseIndex: 0, total: 3, name: "recon" })
+        opts.onProgress?.({ type: "phase_complete", phaseId: "p1", name: "recon", findings: 5, status: "completed" })
+        opts.onProgress?.({ type: "phase_error", phaseId: "p1", name: "recon", error: "timeout" })
+        opts.onProgress?.({ type: "finding", severity: "4", title: "Critical bug" })
+        opts.onProgress?.({ type: "phase_replan", count: 2 })
+        opts.onProgress?.({ type: "scan_complete", totalFindings: 10 })
+        opts.onProgress?.({ type: "unexpected_event", data: "ignored" } as any)
+        return makeEmptyResult()
+      })
+
+      const { assessCommand } = await import("../../../../src/argus/commands/assess")
+      await assessCommand("https://example.com")
+
+      // Should not crash and should write expected strings to stderr
+      expect(written.length).toBeGreaterThan(0)
+      expect(written.some((w) => w.includes("Raw string message"))).toBe(true)
+      expect(written.some((w) => w.includes("Phase 1/3"))).toBe(true)
+      expect(written.some((w) => w.includes("5 finding(s)"))).toBe(true)
+      expect(written.some((w) => w.includes("timeout"))).toBe(true)
+      expect(written.some((w) => w.includes("[CRITICAL] Critical bug"))).toBe(true)
+      expect(written.some((w) => w.includes("2 new phase(s)"))).toBe(true)
+      expect(written.some((w) => w.includes("10 total finding(s)"))).toBe(true)
+    } finally {
+      process.stderr.write = originalStderrWrite
+    }
   })
 
   test("forwards errors from WorkflowRunner", async () => {
@@ -182,8 +252,32 @@ describe("assessCommand", () => {
     mockRun.mockResolvedValue(makeEmptyResult())
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
     const result = await assessCommand("https://example.com")
-    expect(result.findings).toBe(0)
-    expect(result.critical).toBe(0)
-    expect(result.high).toBe(0)
+    expect(result.allFindings).toEqual([])
+    expect(result.engagementId).toBe("eng-1")
+    expect(result.replanCount).toBe(0)
+  })
+
+  test("passes cacheMode 'normal' explicitly", async () => {
+    mockRun.mockResolvedValue(makeEmptyResult())
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+
+    await assessCommand("https://example.com", { cacheMode: "normal" })
+
+    expect(mockRun.mock.calls[0][0].cacheMode).toBe("normal")
+  })
+
+  test("forwards WorkflowRunResult with toolsExecuted set", async () => {
+    const result = makeEmptyResult({
+      toolsExecuted: new Set(["nmap", "nuclei"]),
+      allFindings: [{ id: "f-1", title: "XSS", severity: "HIGH" } as any],
+    })
+    mockRun.mockResolvedValue(result)
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+
+    const output = await assessCommand("https://example.com")
+
+    expect(output.toolsExecuted).toBeDefined()
+    expect(output.toolsExecuted.size).toBe(2)
+    expect(output.allFindings).toHaveLength(1)
   })
 })

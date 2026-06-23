@@ -3,6 +3,7 @@ import { join } from "path"
 import { mkdtempSync, rmSync } from "fs"
 import { tmpdir } from "os"
 import { EngagementStore } from "../../../../src/argus/engagement/store"
+import type { FindingAnalyzer } from "../../../../src/argus/engagement/finding-analyzer"
 import type { ProgressEvent } from "../../../../src/argus/shared/progress"
 
 let dbDir: string
@@ -76,6 +77,48 @@ describe("reportCommand", () => {
     expect(typeof result).toBe("string")
     expect(result.length).toBeGreaterThan(0)
   })
+
+  test("generates report for engagement with 0 findings", async () => {
+    const testDir = mkdtempSync(join(tmpdir(), "report-zero-"))
+    const testStore = new EngagementStore(join(testDir, "test.db"))
+    const eng = testStore.createEngagement("https://zero.com", "assessment")
+
+    try {
+      const { reportCommand } = await import("../../../../src/argus/commands/report")
+      const result = await reportCommand(eng.id, "markdown", testStore)
+      expect(typeof result).toBe("string")
+      expect(result.length).toBeGreaterThan(0)
+    } finally {
+      try { rmSync(testDir, { recursive: true, force: true }) } catch {}
+    }
+  })
+
+  test("generates JSON report for engagement with 0 findings", async () => {
+    const testDir = mkdtempSync(join(tmpdir(), "report-zero-json-"))
+    const testStore = new EngagementStore(join(testDir, "test.db"))
+    const eng = testStore.createEngagement("https://zero.com", "assessment")
+
+    try {
+      const { reportCommand } = await import("../../../../src/argus/commands/report")
+      const result = await reportCommand(eng.id, "json", testStore)
+      // JSON with 0 findings should still produce valid output
+      expect(typeof result).toBe("string")
+      expect(result.length).toBeGreaterThan(0)
+      // Should be parseable as JSON
+      expect(() => JSON.parse(result)).not.toThrow()
+    } finally {
+      try { rmSync(testDir, { recursive: true, force: true }) } catch {}
+    }
+  })
+
+  test("usesLLM=false skips LLM analysis", async () => {
+    const { reportCommand } = await import("../../../../src/argus/commands/report")
+    const engagements = store.listEngagements()
+    const eId = engagements[0].id
+    const result = await reportCommand(eId, "markdown", store, undefined, false)
+    expect(typeof result).toBe("string")
+    expect(result.length).toBeGreaterThan(0)
+  })
 })
 
 describe("enhanceReportWithAnalysis", () => {
@@ -146,7 +189,7 @@ describe("enhanceReportWithAnalysis", () => {
         progressEvents.push(event)
       }
 
-      const results = await enhanceReportWithAnalysis(testEng.id, onProgress, mockAnalyzer, testStore)
+      const results = await enhanceReportWithAnalysis(testEng.id, onProgress, mockAnalyzer as unknown as FindingAnalyzer, testStore)
 
       // 1. Concurrency limited to 3
       expect(maxConcurrent).toBeLessThanOrEqual(3)
@@ -202,6 +245,106 @@ describe("enhanceReportWithAnalysis", () => {
       const { enhanceReportWithAnalysis } = await import("../../../../src/argus/commands/report")
       const results = await enhanceReportWithAnalysis(testEng.id, undefined, undefined, testStore)
       expect(results).toEqual([])
+    } finally {
+      try { rmSync(testDir, { recursive: true, force: true }) } catch {}
+    }
+  })
+
+  test("handles null analyzer (no LLM client configured)", async () => {
+    const testDir = mkdtempSync(join(tmpdir(), "enhance-no-llm-"))
+    const testStore = new EngagementStore(join(testDir, "test.db"))
+    const testEng = testStore.createEngagement("https://no-llm.com", "assignment")
+
+    const findings = Array.from({ length: 3 }, (_, i) => ({
+      id: `find-no-llm-${i + 1}`,
+      title: `Finding ${i + 1}`,
+      severity: 2,
+      confidence: 2,
+      status: "PENDING" as const,
+      description: `Description ${i + 1}`,
+      tool: "scanner",
+      phase: "phase-1",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }))
+    testStore.saveFindings(testEng.id, findings)
+
+    try {
+      const { enhanceReportWithAnalysis } = await import("../../../../src/argus/commands/report")
+
+      // Create mock analyzer that returns null (simulating no LLM client)
+      const nullAnalyzer = {
+        async analyze(_finding: any, _evidence: any[]) {
+          return null // Simulates LLM not configured
+        },
+      }
+
+      const results = await enhanceReportWithAnalysis(
+        testEng.id,
+        undefined,
+        nullAnalyzer as any,
+        testStore,
+      )
+
+      // All results that return null should be excluded
+      expect(results).toHaveLength(0)
+    } finally {
+      try { rmSync(testDir, { recursive: true, force: true }) } catch {}
+    }
+  })
+
+  test("progress callback receives all expected events", async () => {
+    const testDir = mkdtempSync(join(tmpdir(), "enhance-progress-"))
+    const testStore = new EngagementStore(join(testDir, "test.db"))
+    const testEng = testStore.createEngagement("https://progress.com", "assignment")
+
+    const findings = Array.from({ length: 7 }, (_, i) => ({
+      id: `find-progress-${i + 1}`,
+      title: `PF ${i + 1}`,
+      severity: 2,
+      confidence: 2,
+      status: "PENDING" as const,
+      description: `D${i + 1}`,
+      tool: "scanner",
+      phase: "phase-1",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }))
+    testStore.saveFindings(testEng.id, findings)
+
+    try {
+      const { enhanceReportWithAnalysis } = await import("../../../../src/argus/commands/report")
+
+      const fastAnalyzer = {
+        async analyze(finding: any, _evidence: any[]) {
+          await new Promise((r) => setTimeout(r, 5))
+          return {
+            findingId: finding.id,
+            explanation: `Analysis for ${finding.id}`,
+            impact: ["test"],
+            remediation: ["test"],
+            model: "test",
+            generatedAt: Date.now(),
+            findingUpdatedAt: Date.now(),
+          }
+        },
+      }
+
+      const progressEvents: any[] = []
+      const results = await enhanceReportWithAnalysis(
+        testEng.id,
+        (e: any) => progressEvents.push(e),
+        fastAnalyzer as any,
+        testStore,
+      )
+
+      // Should have progress before batch 0 (0/7), batch 3 (3/7), batch 6 (6/7), and final (7/7)
+      expect(progressEvents.length).toBe(4)
+      expect(progressEvents[0]).toEqual({ type: "analysis_progress", current: 0, total: 7 })
+      expect(progressEvents[1]).toEqual({ type: "analysis_progress", current: 3, total: 7 })
+      expect(progressEvents[2]).toEqual({ type: "analysis_progress", current: 6, total: 7 })
+      expect(progressEvents[3]).toEqual({ type: "analysis_progress", current: 7, total: 7 })
+      expect(results).toHaveLength(7)
     } finally {
       try { rmSync(testDir, { recursive: true, force: true }) } catch {}
     }

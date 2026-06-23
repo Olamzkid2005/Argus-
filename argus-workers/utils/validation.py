@@ -122,7 +122,4 @@ def is_private_ip(ip: str) -> bool:
         return True
 
     # IPv6 Documentation (2001:db8::/32)
-    if ip_lower.startswith("2001:db8"):
-        return True
-
-    return False
+    return bool(ip_lower.startswith("2001:db8"))

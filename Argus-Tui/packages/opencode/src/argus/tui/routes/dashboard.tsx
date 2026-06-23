@@ -126,7 +126,6 @@ export function ArgusDashboard() {
         </box>
       </Show>
       <Toast />
-      </Show>
     </box>
   )
 }

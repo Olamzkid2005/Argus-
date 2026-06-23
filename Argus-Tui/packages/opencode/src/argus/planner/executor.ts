@@ -100,7 +100,7 @@ export class InProcessExecutor implements PhaseExecutor {
   getToolHealth(): ToolHealthRecord[] {
     const status = this.toolHealth.getStatus()
     if (this.executionOptions.verbose && status.length > 0) {
-      console.log("[executor] Tool health:", JSON.stringify(status.map(s => ({ tool: s.tool, healthy: s.healthy }))))
+      console.log("[executor] Tool health:", JSON.stringify(status.map(s => ({ tool: s.toolName, healthy: !s.circuitOpen }))))
     }
     return status
   }

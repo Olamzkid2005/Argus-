@@ -49,6 +49,8 @@ describe("DriftReport structure", () => {
   test("detectDrift returns required fields", async () => {
     const { WorkersBridge } = await import("../../../../src/argus/bridge/mcp-client")
     const bridge = new WorkersBridge("/path/to/mcp_server.py")
+    ;(bridge as any).getTools = async () => []
+    ;(bridge as any).toolsCache = []
     const drift = await bridge.detectDrift()
     expect(drift).toHaveProperty("missing_from_registry")
     expect(drift).toHaveProperty("missing_from_mcp")
@@ -587,7 +589,8 @@ describe("WorkersBridge — Tool management", () => {
     const bridge = new WorkersBridge("/path/to/mcp_server.py")
 
     const cached = [{ name: "cached-tool", description: "", inputSchema: { type: "object", properties: {}, required: [] }, capabilities: [] }]
-    ;(bridge as any).toolsCache = cached
+    ;(bridge as any)._mcpToolsCache = cached
+    ;(bridge as any)._toolsEverFetched = true
     ;(bridge as any).sendRequest = async () => { throw new Error("RPC failed") }
 
     const tools = await bridge.getTools()

@@ -94,6 +94,7 @@ const mockCollector = {
 
 const mockConfidence = {
   promote: mock((finding: any) => finding.confidence),
+  shouldFinalize: mock((finding: any) => finding.confidence >= 4),
 }
 
 /**
@@ -103,17 +104,19 @@ const mockConfidence = {
  * These counters let us assert the mocks were actually wired through.
  */
 function resetAllMocks(): void {
-  mockPage.goto.mockClear()
-  mockPage.close.mockClear()
-  mockPage.content.mockClear()
-  mockContext.close.mockClear()
-  mockEngine.launch.mockClear()
-  mockEngine.createContext.mockClear()
-  mockEngine.navigate.mockClear()
-  mockEngine.captureScreenshot.mockClear()
-  mockEngine.close.mockClear()
-  mockCollector.captureScreenshot.mockClear()
-  mockCollector.createPackage.mockClear()
+  // Reset mock call tracking — type-safe via any cast for Bun mock API
+  const clear = (fn: any) => fn.mockClear()
+  clear(mockPage.goto)
+  clear(mockPage.close)
+  clear(mockPage.content)
+  clear(mockContext.close)
+  clear(mockEngine.launch)
+  clear(mockEngine.createContext)
+  clear(mockEngine.navigate)
+  clear(mockEngine.captureScreenshot)
+  clear(mockEngine.close)
+  clear(mockCollector.captureScreenshot)
+  clear(mockCollector.createPackage)
 }
 
 describe("verifyCommand", () => {
@@ -263,19 +266,189 @@ describe("verifyCommand", () => {
     const { verifyCommand } = await import("../../../../src/argus/commands/verify")
     const output = await verifyCommand(findingId, {
       storeOverride: store,
-      engineOverride: mockEngine,
-      credStoreOverride: mockCredStore,
-      collectorOverride: mockCollector,
-      confidenceOverride: mockConfidence,
+      engineOverride: mockEngine as unknown as PlaywrightEngine,
+      credStoreOverride: mockCredStore as unknown as CredentialStore,
+      collectorOverride: mockCollector as unknown as EvidenceCollector,
+      confidenceOverride: mockConfidence as unknown as ConfidenceEngine,
     })
 
     expect(output).toContain("BOLA")
     expect(output).toContain("confidence")
     // Verify the mocks were actually exercised through the verifier pipeline
     // engine.launch and createContext should be called during setup()
-    expect(mockEngine.launch).toHaveBeenCalled()
+    expect((mockEngine.launch as any)).toHaveBeenCalled()
     // engine.close should be called during cleanup()
-    expect(mockEngine.close).toHaveBeenCalled()
+    expect((mockEngine.close as any)).toHaveBeenCalled()
+  })
+
+  test("XSS verifier exercises mock engine when finding tool includes 'xss'", async () => {
+    const eng = store.createEngagement("https://xss-test.com", "assessment")
+    const findingId = `find-xss-${Date.now()}`
+    store.saveFindings(eng.id, [{
+      id: findingId,
+      title: "Stored XSS",
+      severity: 3,
+      confidence: 2,
+      status: "PENDING",
+      description: "https://xss-test.com/profile",
+      tool: "xss-scanner",
+      phase: "phase-1",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }])
+
+    // XSS verifier needs a "user" or "admin" role
+    const xssCredStore = {
+      load: mock(() => ({ roles: {} })),
+      getAllCredentials: mock(() => ({
+        user: { username: "regular", password: "pass" },
+      })),
+      clear: mock(() => {}),
+      getCredentials: mock(() => null),
+      listRoles: mock(() => []),
+      getDefaultRole: mock(() => undefined),
+      getDefaultCredentials: mock(() => null),
+      save: mock(() => {}),
+    }
+
+    const { verifyCommand } = await import("../../../../src/argus/commands/verify")
+    const output = await verifyCommand(findingId, {
+      storeOverride: store,
+      engineOverride: mockEngine as unknown as PlaywrightEngine,
+      credStoreOverride: xssCredStore as unknown as CredentialStore,
+      collectorOverride: mockCollector as unknown as EvidenceCollector,
+      confidenceOverride: mockConfidence as unknown as ConfidenceEngine,
+    })
+
+    expect(output).toContain("XSS")
+    expect(output).toContain("confidence")
+    expect((mockEngine.launch as any)).toHaveBeenCalled()
+    expect((mockEngine.close as any)).toHaveBeenCalled()
+  })
+
+  test("PrivEsc verifier exercises mock engine when finding tool includes 'priv-esc'", async () => {
+    const eng = store.createEngagement("https://privesc-test.com", "assessment")
+    const findingId = `find-privesc-${Date.now()}`
+    store.saveFindings(eng.id, [{
+      id: findingId,
+      title: "Privilege Escalation",
+      severity: 4,
+      confidence: 3,
+      status: "PENDING",
+      description: "https://privesc-test.com/admin",
+      tool: "priv-esc-scanner",
+      phase: "phase-1",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }])
+
+    // PrivEsc needs a user role
+    const userCredStore = {
+      load: mock(() => ({ roles: {} })),
+      getAllCredentials: mock(() => ({
+        user: { username: "regular", password: "pass" },
+      })),
+      clear: mock(() => {}),
+      getCredentials: mock(() => null),
+      listRoles: mock(() => []),
+      getDefaultRole: mock(() => undefined),
+      getDefaultCredentials: mock(() => null),
+      save: mock(() => {}),
+    }
+
+    const { verifyCommand } = await import("../../../../src/argus/commands/verify")
+    const output = await verifyCommand(findingId, {
+      storeOverride: store,
+      engineOverride: mockEngine as unknown as PlaywrightEngine,
+      credStoreOverride: userCredStore as unknown as CredentialStore,
+      collectorOverride: mockCollector as unknown as EvidenceCollector,
+      confidenceOverride: mockConfidence as unknown as ConfidenceEngine,
+    })
+
+    expect(output).toContain("PrivEsc")
+    expect(output).toContain("confidence")
+    expect((mockEngine.launch as any)).toHaveBeenCalled()
+    expect((mockEngine.close as any)).toHaveBeenCalled()
+  })
+
+  test("handles verification failure gracefully", async () => {
+    const eng = store.createEngagement("https://fail-verify.com", "assessment")
+    const findingId = `find-fail-${Date.now()}`
+    store.saveFindings(eng.id, [{
+      id: findingId,
+      title: "Failing finding",
+      severity: 3,
+      confidence: 2,
+      status: "PENDING",
+      description: "test",
+      tool: "bola-scanner",
+      phase: "phase-1",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }])
+
+    // Create an engine that fails immediately
+    const failingEngine = {
+      launch: mock(async () => { throw new Error("Engine crashed") }),
+      createContext: mock(async () => { throw new Error("Engine crashed") }),
+      navigate: mock(async () => { throw new Error("Engine crashed") }),
+      captureScreenshot: mock(async () => { throw new Error("Engine crashed") }),
+      close: mock(async () => {}),
+    }
+
+    const { verifyCommand } = await import("../../../../src/argus/commands/verify")
+    const output = await verifyCommand(findingId, {
+      storeOverride: store,
+      engineOverride: failingEngine as unknown as PlaywrightEngine,
+      credStoreOverride: mockCredStore as unknown as CredentialStore,
+      collectorOverride: mockCollector as unknown as EvidenceCollector,
+      confidenceOverride: mockConfidence as unknown as ConfidenceEngine,
+    })
+
+    expect(output).toContain("Verification failed")
+    expect(output).toContain("Engine crashed")
+  })
+
+  test("handles evidence screenshot failure gracefully (does not crash)", async () => {
+    const eng = store.createEngagement("https://ev-fail-test.com", "assessment")
+    const findingId = `find-ev-fail-${Date.now()}`
+    store.saveFindings(eng.id, [{
+      id: findingId,
+      title: "Evidence fail",
+      severity: 2,
+      confidence: 1,
+      status: "PENDING",
+      description: "test",
+      tool: "unknown-scanner",
+      phase: "phase-1",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }])
+
+    // Engine where createContext works but capture fails gracefully
+    const semiFailingEngine = {
+      launch: mock(async () => {}),
+      createContext: mock(async () => ({
+        newPage: mock(async () => ({
+          goto: mock(async () => ({ status: () => 200 })),
+          close: mock(async () => {}),
+        })),
+        close: mock(async () => {}),
+      })),
+      captureScreenshot: mock(async () => { throw new Error("Screenshot failed") }),
+      close: mock(async () => {}),
+    }
+
+    const { verifyCommand } = await import("../../../../src/argus/commands/verify")
+    const output = await verifyCommand(findingId, {
+      storeOverride: store,
+      engineOverride: semiFailingEngine as unknown as PlaywrightEngine,
+      collectorOverride: mockCollector as unknown as EvidenceCollector,
+    })
+
+    // Should not throw — should return a string with no matching verifier
+    expect(typeof output).toBe("string")
+    expect(output).toContain("No matching verifier found")
   })
 
   test("BOLA verifier with non-standard role names (flexible matching)", async () => {
@@ -312,10 +485,10 @@ describe("verifyCommand", () => {
     const { verifyCommand } = await import("../../../../src/argus/commands/verify")
     const output = await verifyCommand(findingId, {
       storeOverride: store,
-      engineOverride: mockEngine,
-      credStoreOverride: flexCredStore,
-      collectorOverride: mockCollector,
-      confidenceOverride: mockConfidence,
+      engineOverride: mockEngine as unknown as PlaywrightEngine,
+      credStoreOverride: flexCredStore as unknown as CredentialStore,
+      collectorOverride: mockCollector as unknown as EvidenceCollector,
+      confidenceOverride: mockConfidence as unknown as ConfidenceEngine,
     })
 
     // Should match "Attacker" → "attacker" (case-insensitive) and "victim_role" → "victim" (substring)

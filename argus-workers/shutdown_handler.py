@@ -68,7 +68,7 @@ class GracefulShutdownHandler:
         # Allow shutdown if no active tasks
         with self._lock:
             has_active = bool(self.active_tasks)
-        if not has_active:
+        if not has_active:  # noqa: SIM103 (explicit condition for readability)
             return True
 
         # Shutdown requested, deadline not exceeded, active tasks exist
@@ -78,7 +78,7 @@ class GracefulShutdownHandler:
 
     def should_force_exit(self) -> bool:
         """Check if we should force exit immediately"""
-        return bool(self.shutdown_deadline and time.time() > self.shutdown_deadline)
+        return self.shutdown_deadline and time.time() > self.shutdown_deadline
 
     def register_task(self, task_id: str):
         """Register an active task"""

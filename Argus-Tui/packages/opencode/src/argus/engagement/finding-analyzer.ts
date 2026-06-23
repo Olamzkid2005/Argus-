@@ -108,7 +108,17 @@ Provide a JSON response with:
     })
 
     try {
-      return JSON.parse(response.text)
+      const parsed = JSON.parse(response.text)
+      // Validate shape: impact and remediation must be arrays
+      if (!parsed || !Array.isArray(parsed.impact) || !Array.isArray(parsed.remediation)) {
+        return {
+          explanation: typeof parsed?.explanation === "string" ? parsed.explanation : response.text.slice(0, 500),
+          impact: Array.isArray(parsed?.impact) ? parsed.impact : ["LLM returned malformed analysis"],
+          remediation: Array.isArray(parsed?.remediation) ? parsed.remediation : ["Review raw LLM output for guidance"],
+          references: Array.isArray(parsed?.references) ? parsed.references : undefined,
+        }
+      }
+      return parsed
     } catch {
       return {
         explanation: response.text.slice(0, 500),
