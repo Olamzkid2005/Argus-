@@ -144,7 +144,7 @@ describe("ApprovalService", () => {
         // In non-TTY environments, gates auto-skip with a different reason
         expect(result.approved).toBe(false);
         expect(typeof result.reason).toBe("string");
-        expect(result.reason.length).toBeGreaterThan(0)
+        expect(result.reason?.length ?? 0).toBeGreaterThan(0)
       } finally {
         process.stdin = origStdin
         process.stderr.write = origWrite

@@ -338,7 +338,7 @@ describe("evidence flow: prune with audit log verification", () => {
   let engId: string
   let findingId: string
 
-  const mockCollector = {
+  const mockCollector: any = {
     pruneEngagement: mock(async () => 3),
     saveRequest: mock(async () => ({ path: "requests/req.txt", type: "request" as const, hash: "abc", size_bytes: 5 })),
     saveResponse: mock(async () => ({ path: "responses/res.txt", type: "response" as const, hash: "def", size_bytes: 6 })),

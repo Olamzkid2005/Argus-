@@ -251,7 +251,7 @@ describe("assessCommand", () => {
   test("returns empty findings summary for empty results", async () => {
     mockRun.mockResolvedValue(makeEmptyResult())
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    const result = await assessCommand("https://example.com")
+    const result: any = await assessCommand("https://example.com")
     expect(result.allFindings).toEqual([])
     expect(result.engagementId).toBe("eng-1")
     expect(result.replanCount).toBe(0)
@@ -267,14 +267,14 @@ describe("assessCommand", () => {
   })
 
   test("forwards WorkflowRunResult with toolsExecuted set", async () => {
-    const result = makeEmptyResult({
+    const opts: any = {
       toolsExecuted: new Set(["nmap", "nuclei"]),
       allFindings: [{ id: "f-1", title: "XSS", severity: "HIGH" } as any],
-    })
-    mockRun.mockResolvedValue(result)
+    }
+    mockRun.mockResolvedValue(makeEmptyResult(opts))
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
 
-    const output = await assessCommand("https://example.com")
+    const output: any = await assessCommand("https://example.com")
 
     expect(output.toolsExecuted).toBeDefined()
     expect(output.toolsExecuted.size).toBe(2)

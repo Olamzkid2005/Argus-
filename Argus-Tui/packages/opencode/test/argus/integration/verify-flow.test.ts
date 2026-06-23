@@ -45,7 +45,7 @@ const mockContext = {
   close: mock(async () => {}),
 }
 
-const mockEngine: Partial<PlaywrightEngine> = {
+const mockEngine: any = {
   launch: mock(async () => {}),
   createContext: mock(async () => mockContext),
   navigate: mock(async () => mockPage),
@@ -54,7 +54,7 @@ const mockEngine: Partial<PlaywrightEngine> = {
   close: mock(async () => {}),
 }
 
-const mockCredStore: Partial<CredentialStore> = {
+const mockCredStore: any = {
   load: mock(() => ({ roles: {} })),
   getAllCredentials: mock(() => ({
     attacker: { username: "attacker", password: "pass" },
@@ -70,7 +70,7 @@ const mockCredStore: Partial<CredentialStore> = {
   save: mock(() => {}),
 }
 
-const mockCollector: Partial<EvidenceCollector> = {
+const mockCollector: any = {
   captureScreenshot: mock(async () => ({
     path: "screenshots/test.png",
     hash: "abc123",
@@ -100,7 +100,7 @@ const mockCollector: Partial<EvidenceCollector> = {
   checkStorageLimit: mock(async () => true),
 }
 
-const mockConfidence: Partial<ConfidenceEngine> = {
+const mockConfidence: any = {
   promote: mock((finding: any) => finding.confidence),
   shouldFinalize: mock((finding: any) => finding.confidence >= 4),
 }
