@@ -11,23 +11,25 @@ export function ArgusCommandRegistry() {
   const promptRef = usePromptRef()
   const keymap = useKeymap()
 
-  const argusCommands = getArgusTuiCommands().map((cmd) => {
+  // Register each slash alias as a separate command entry so that typing /scan
+  // inserts "/scan " (not "/assess "). Previously slashes[0] was always used,
+  // funneling users who memorized "/scan" to "/assess".
+  const argusCommands = getArgusTuiCommands().flatMap((cmd) => {
     const needsTarget = cmd.name === "assess" || cmd.name === "recon" || cmd.name === "report" || cmd.name === "verify" || cmd.name === "open"
-    const insertText = `/${cmd.slashes[0]}${needsTarget ? " " : ""}`
-    return {
+    return cmd.slashes.map((slash) => ({
       namespace: "palette" as const,
       title: cmd.title,
-      name: `argus.${cmd.name}`,
+      name: `argus.${cmd.name}.${slash}`,
       category: "Argus",
       desc: cmd.description,
-      slashName: cmd.name,
-      slashAliases: cmd.slashes.filter((s) => s !== cmd.name),
+      slashName: slash,
+      slashAliases: [] as string[],
       hidden: false,
       run: () => {
         const ref = promptRef.current
-        if (ref) ref.set({ input: insertText, parts: [] })
+        if (ref) ref.set({ input: "/" + slash + (needsTarget ? " " : ""), parts: [] })
       },
-    }
+    }))
   })
 
   // Register commands via useBindings (same mechanism as built-in commands)

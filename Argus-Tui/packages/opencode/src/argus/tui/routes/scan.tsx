@@ -80,9 +80,11 @@ export function ScanDashboard() {
         }
       }
 
-      // Set total findings count and scan status directly
-      const { completeScan, setTotalFindings } = await import("../scan-store")
-      setTotalFindings(totalFindings)
+      // Set scan status directly (total findings are accumulated per-phase via completePhase)
+      // We intentionally do NOT call setTotalFindings(totalFindings) here because the per-phase
+      // completePhase() calls above already add the per-phase counts to the total. Calling
+      // setTotalFindings() on top would double-count findings from completed/partial phases on resume.
+      const { completeScan } = await import("../scan-store")
       if (engagement.status === "COMPLETED" || engagement.status === "FAILED") {
         completeScan(engagement.status !== "FAILED")
       }

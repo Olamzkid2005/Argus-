@@ -157,6 +157,64 @@ describe("scan-store", () => {
     expect(getScanState().totalFindings).toBe(42)
   })
 
+  // --- Findings accumulation tests (Fix 3: cumulative findings on resume) ---
+
+  it("completePhase accumulates findings across multiple completed phases", () => {
+    initScan("https://test.com", "eng-1")
+    addPhase({ id: "p0", name: "recon", index: 0, total: 3 })
+    addPhase({ id: "p1", name: "scan", index: 1, total: 3 })
+    addPhase({ id: "p2", name: "analyze", index: 2, total: 3 })
+
+    completePhase(0, 10, [])
+    expect(getScanState().totalFindings).toBe(10)
+
+    completePhase(1, 20, [])
+    expect(getScanState().totalFindings).toBe(30)
+
+    completePhase(2, 5, [])
+    expect(getScanState().totalFindings).toBe(35)
+  })
+
+  it("completePhase is idempotent for findings count — completing a phase twice doesn't add more", () => {
+    initScan("https://test.com", "eng-1")
+    addPhase({ id: "p0", name: "recon", index: 0, total: 2 })
+    completePhase(0, 10, [], "completed")
+    expect(getScanState().totalFindings).toBe(10)
+    // Second call should be a no-op (phase already completed)
+    completePhase(0, 10, [], "completed")
+    expect(getScanState().totalFindings).toBe(10)
+  })
+
+  it("resume scenario: completePhase accumulates correctly without setTotalFindings double-counting", () => {
+    // Simulates scan.tsx resume: phases are completed from DB state without calling setTotalFindings
+    initScan("https://test.com", "eng-1")
+    addPhase({ id: "p0", name: "recon", index: 0, total: 2 })
+    addPhase({ id: "p1", name: "scan", index: 1, total: 2 })
+
+    // Resume: restore phases from DB — completePhase adds per-phase counts
+    completePhase(0, 10, [], "completed")  // totalFindings: 0 + 10 = 10
+    completePhase(1, 5, [], "completed")   // totalFindings: 10 + 5 = 15
+
+    // totalFindings should be exactly the sum of per-phase findings
+    expect(getScanState().totalFindings).toBe(15)
+
+    // If setTotalFindings with total from DB were called here (as in the original bug),
+    // it would set totalFindings to the DB total = 15, which happens to be correct
+    // IF the totals match. But if there are additional findings outside completed phases,
+    // setTotalFindings would overwrite the accumulated sum incorrectly.
+    // Since the fix removes the setTotalFindings call, totalFindings stays at 15.
+  })
+
+  it("finding from a failed phase does not affect findings total when errors are present", () => {
+    initScan("https://test.com", "eng-1")
+    addPhase({ id: "p0", name: "recon", index: 0, total: 2 })
+    // The default resolution: errors.length > 0 && findings === 0 => status "failed"
+    completePhase(0, 0, ["connection error"])
+    expect(getScanState().phases[0].status).toBe("failed")
+    expect(getScanState().phases[0].findings).toBe(0)
+    expect(getScanState().totalFindings).toBe(0)
+  })
+
   it("addErrorHint adds error hints", () => {
     initScan("https://test.com", "eng-1")
     addErrorHint({ tool: "nuclei", summary: "test", detail: "detail" })

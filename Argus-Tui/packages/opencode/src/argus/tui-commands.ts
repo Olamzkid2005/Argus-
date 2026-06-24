@@ -23,6 +23,7 @@
 
 import { navigateTo } from "./tui/navigator"
 import { MCP_WORKER_PATH } from "./shared/path"
+import type { ToolDefinition } from "./bridge/types"
 
 export interface ArgusTuiCommand {
   /** Unique command name (without leading /) */
@@ -175,25 +176,25 @@ const commands: ArgusTuiCommand[] = [
     slashes: ["tools"],
     needsTarget: false,
     handler: async () => {
+      // Use cached tool list if available — spawning a fresh Python worker every
+      // invocation takes 2-5s and kills the running worker if one is mid-scan.
+      if (_cachedTools && _cachedTools.length > 0) {
+        return formatToolList(_cachedTools)
+      }
       const { WorkersBridge } = await import("./bridge/mcp-client")
       const { existsSync } = await import("fs")
       const wp = MCP_WORKER_PATH
       if (!existsSync(wp)) return "MCP worker not found. Run `argus doctor` to check setup."
       const bridge = new WorkersBridge(wp)
-      let toolDefs: Awaited<ReturnType<typeof bridge.getTools>> = []
+      let toolDefs: ToolDefinition[] = []
       try {
         await bridge.connect()
         toolDefs = await bridge.getTools()
+        _cachedTools = toolDefs
       } finally {
         await bridge.disconnect()
       }
-      let output = `Registered MCP Tools (${toolDefs.length}):\n${"=".repeat(50)}\n`
-      for (const t of toolDefs) {
-        const caps = t.capabilities?.join(", ") ?? ""
-        const quality = t.signal_quality ?? ""
-        output += `\n  ${t.name}${caps ? ` — ${caps}` : ""}${quality ? ` [${quality}]` : ""}`
-      }
-      return output
+      return formatToolList(toolDefs)
     },
   },
   {
@@ -403,8 +404,13 @@ const commands: ArgusTuiCommand[] = [
     slashes: ["verify"],
     needsTarget: true,
     handler: async (args: string) => {
+      const findingId = args.trim()
+      if (!findingId) return "Usage: /verify <finding-id>"
+      // verifyCommand already resolves the engagement and target URL internally.
+      // No need to duplicate the lookup here — just pass the finding ID.
+      // The default behavior uses the real store and credentials, which is correct for the TUI.
       const { verifyCommand } = await import("./commands/verify")
-      return await verifyCommand(args.trim())
+      return await verifyCommand(findingId)
     },
   },
   {
@@ -428,6 +434,19 @@ export function getArgusTuiCommands(): ArgusTuiCommand[] {
 
 export function findArgusTuiCommand(slashName: string): ArgusTuiCommand | undefined {
   return commands.find((c) => c.slashes.includes(slashName) || c.name === slashName)
+}
+
+/** Module-level cache for /tools command — avoids spawning a fresh Python worker on every invocation */
+let _cachedTools: ToolDefinition[] = []
+
+function formatToolList(toolDefs: ToolDefinition[]): string {
+  let output = `Registered MCP Tools (${toolDefs.length}):\n${"=".repeat(50)}\n`
+  for (const t of toolDefs) {
+    const caps = t.capabilities?.join(", ") ?? ""
+    const quality = t.signal_quality ?? ""
+    output += `\n  ${t.name}${caps ? ` — ${caps}` : ""}${quality ? ` [${quality}]` : ""}`
+  }
+  return output
 }
 
 /** Format a short help text for CLI usage */

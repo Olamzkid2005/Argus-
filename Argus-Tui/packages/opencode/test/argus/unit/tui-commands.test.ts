@@ -45,6 +45,93 @@ describe("tui-commands", () => {
     expect(help).not.toContain("/help")
   })
 
+  // --- Slash alias tests (Fix 2: each alias gets its own palette entry) ---
+
+  it("all commands have at least one slash alias", async () => {
+    const { getArgusTuiCommands } = await import("../../../src/argus/tui-commands")
+    const cmds = getArgusTuiCommands()
+    for (const cmd of cmds) {
+      expect(
+        cmd.slashes.length,
+        `Command "${cmd.name}" has no slash aliases`
+      ).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  it('/assess has slashes ["assess", "scan"] so both /assess and /scan work', async () => {
+    const { getArgusTuiCommands } = await import("../../../src/argus/tui-commands")
+    const assess = getArgusTuiCommands().find((c) => c.name === "assess")
+    expect(assess).toBeDefined()
+    expect(assess!.slashes).toContain("assess")
+    expect(assess!.slashes).toContain("scan")
+  })
+
+  it('/doctor has slashes ["doctor", "health"]', async () => {
+    const { getArgusTuiCommands } = await import("../../../src/argus/tui-commands")
+    const doctor = getArgusTuiCommands().find((c) => c.name === "doctor")
+    expect(doctor).toBeDefined()
+    expect(doctor!.slashes).toContain("doctor")
+    expect(doctor!.slashes).toContain("health")
+  })
+
+  it('/help has slashes ["help", "?"]', async () => {
+    const { getArgusTuiCommands } = await import("../../../src/argus/tui-commands")
+    const help = getArgusTuiCommands().find((c) => c.name === "help")
+    expect(help).toBeDefined()
+    expect(help!.slashes).toContain("help")
+    expect(help!.slashes).toContain("?")
+  })
+
+  it("each command's primary name is the first slash (for backwards compatibility)", async () => {
+    const { getArgusTuiCommands } = await import("../../../src/argus/tui-commands")
+    const cmds = getArgusTuiCommands()
+    for (const cmd of cmds) {
+      expect(cmd.slashes[0], `Command "${cmd.name}" primary slash mismatch`).toBe(cmd.name)
+    }
+  })
+
+  // --- Tools cache tests (Fix 4: module-level _cachedTools avoids re-spawning worker) ---
+
+  it("/tools command is registered with correct description", async () => {
+    const { getArgusTuiCommands } = await import("../../../src/argus/tui-commands")
+    const tools = getArgusTuiCommands().find((c) => c.name === "tools")
+    expect(tools).toBeDefined()
+    expect(tools!.description).toContain("MCP tools")
+    expect(tools!.needsTarget).toBe(false)
+  })
+
+  it("//tools handler returns a string (not throw) even with empty store", async () => {
+    const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")
+    const cmd = findArgusTuiCommand("tools")
+    expect(cmd).toBeDefined()
+    const result = await cmd!.handler("")
+    expect(typeof result).toBe("string")
+  })
+
+  // --- Verify handler tests (Fix 5: empty finding ID validation + delegates to verifyCommand) ---
+
+  it("/verify with empty args returns usage message", async () => {
+    const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")
+    const cmd = findArgusTuiCommand("verify")!
+    const result = await cmd.handler("")
+    expect(result).toContain("Usage:")
+  })
+
+  it("/verify with whitespace-only args returns usage message", async () => {
+    const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")
+    const cmd = findArgusTuiCommand("verify")!
+    const result = await cmd.handler("   ")
+    expect(result).toContain("Usage:")
+  })
+
+  it("/verify with a finding ID returns a string (delegates to verifyCommand)", async () => {
+    const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")
+    const cmd = findArgusTuiCommand("verify")!
+    // verifyCommand with a nonexistent finding ID should return an error string, not throw
+    const result = await cmd.handler("FIND-999999")
+    expect(typeof result).toBe("string")
+  })
+
   describe("findings command handler", () => {
     it("returns engagement-oriented output", async () => {
       const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")

@@ -106,7 +106,17 @@ export function ArgusDashboard() {
                 flexDirection="row"
                 gap={1}
                 paddingTop={1}
-                {...({ onClick: () => route.navigate({ type: "scan", target: eng.target, engagementId: eng.id }) } as any)}
+                {...({ onClick: () => {
+                  // Validate target URL before navigating to scan route
+                  // Malformed targets ("foo", "javascript:...", "") would break the scan dashboard
+                  try {
+                    new URL(eng.target)
+                  } catch {
+                    toast.error(`Invalid target URL: ${eng.target}`)
+                    return
+                  }
+                  route.navigate({ type: "scan", target: eng.target, engagementId: eng.id })
+                } } as any)}
               >
                 <text fg={statusColor(eng.status)}>{statusIcon(eng.status)}</text>
                 <text fg={theme.textMuted}>{eng.id}</text>
