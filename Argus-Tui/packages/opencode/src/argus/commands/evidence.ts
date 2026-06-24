@@ -21,33 +21,33 @@ export async function evidenceCommand(
     case "list": {
       const engagementId = args[0]
       if (engagementId) {
-        // List evidence for a specific engagement
-        const findings = store.getFindings(engagementId)
-        if (findings.length === 0) {
+        // List evidence for a specific engagement (bulk query instead of N+1)
+        const evidenceByFinding = store.getEvidenceByEngagement(engagementId)
+        if (evidenceByFinding.length === 0) {
           return `No findings for engagement ${engagementId}`
         }
         lines.push(`Evidence for engagement ${engagementId}:`)
-        for (const f of findings) {
-          const packages = store.getEvidencePackages(f.id)
-          lines.push(`  ${f.id}: ${f.title} (${packages.length} package(s))`)
-          for (const pkg of packages) {
-            const artifacts = store.getArtifacts(pkg.id)
-            for (const art of artifacts) {
+        for (const entry of evidenceByFinding) {
+          lines.push(`  ${entry.findingId}: ${entry.findingTitle} (${entry.packages.length} package(s))`)
+          for (const pkg of entry.packages) {
+            for (const art of pkg.artifacts) {
               lines.push(`    └─ ${art.type}: ${art.path} (${art.sizeBytes} bytes)`)
             }
           }
         }
       } else {
-        // List all engagements with findings
+        // List all engagements with findings (single grouped query instead of N+1)
         const engagements = store.listEngagements()
         if (engagements.length === 0) {
           return "No engagements found"
         }
+        const ids = engagements.map((e) => e.id)
+        const countsByEngId = store.getFindingCountsByEngagementIds(ids)
         lines.push("Engagements with evidence:")
         for (const eng of engagements) {
-          const findings = store.getFindings(eng.id)
-          if (findings.length > 0) {
-            lines.push(`  ${eng.id}: ${eng.target} (${findings.length} finding(s))`)
+          const count = countsByEngId.get(eng.id)?.total ?? 0
+          if (count > 0) {
+            lines.push(`  ${eng.id}: ${eng.target} (${count} finding(s))`)
           }
         }
       }

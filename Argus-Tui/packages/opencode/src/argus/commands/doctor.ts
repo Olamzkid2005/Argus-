@@ -468,11 +468,11 @@ interface ToolVersionDef {
  * Build a version check map from the canonical tool-definitions.yaml.
  * Falls back to an empty map if the YAML can't be loaded.
  */
-function loadToolVersionChecks(): Map<string, ToolVersionDef> {
+export function loadToolVersionChecks(definitionsPath?: string): Map<string, ToolVersionDef> {
   const map = new Map<string, ToolVersionDef>()
   try {
     const registry = new ToolRegistry()
-    const defsPath = join(PROJECT_ROOT, "packages/opencode/src/argus/workflows/tool-definitions.yaml")
+    const defsPath = definitionsPath ?? join(PROJECT_ROOT, "packages/opencode/src/argus/workflows/tool-definitions.yaml")
     registry.load(defsPath)
     for (const tool of registry.listTools()) {
       if (tool.version_cmd) {
@@ -490,14 +490,14 @@ function loadToolVersionChecks(): Map<string, ToolVersionDef> {
   return map
 }
 
-function parseSemver(version: string): number[] {
+export function parseSemver(version: string): number[] {
   return version.split(".").map((p) => {
     const n = parseInt(p, 10)
     return isNaN(n) ? 0 : n
   })
 }
 
-function compareVersions(a: string, b: string): number {
+export function compareVersions(a: string, b: string): number {
   const aParts = parseSemver(a)
   const bParts = parseSemver(b)
   for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {

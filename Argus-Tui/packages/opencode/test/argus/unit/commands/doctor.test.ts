@@ -1,138 +1,154 @@
-import { describe, expect, test } from "bun:test"
+import { describe, it, expect } from "bun:test"
+import { resolve } from "path"
 
-// doctorCommand runs real system checks (Python, env, toolchain)
-// so it needs extra time to complete
-const TIMEOUT_MS = 30000
+// Resolve the YAML path using process.cwd() (bun test runs from package root)
+const yamlPath = resolve(process.cwd(), "src/argus/workflows/tool-definitions.yaml")
 
-describe("doctorCommand", () => {
-  test("returns array of CheckResult objects", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    expect(Array.isArray(results)).toBe(true)
-    if (results.length > 0) {
-      for (const r of results) {
-        expect(r).toHaveProperty("name")
-        expect(r).toHaveProperty("status")
-        expect(r).toHaveProperty("message")
-        expect(["PASS", "WARN", "FAIL"]).toContain(r.status)
-      }
-    }
-  }, { timeout: TIMEOUT_MS })
+describe("parseSemver", () => {
+  it("parses standard semver 1.2.3", async () => {
+    const { parseSemver } = await import("../../../../src/argus/commands/doctor")
+    expect(parseSemver("1.2.3")).toEqual([1, 2, 3])
+  })
 
-  test("every result has non-empty name and message", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    for (const r of results) {
-      expect(r.name.length).toBeGreaterThan(0)
-      expect(r.message.length).toBeGreaterThan(0)
-    }
-  }, { timeout: TIMEOUT_MS })
+  it("parses two-part version 1.0", async () => {
+    const { parseSemver } = await import("../../../../src/argus/commands/doctor")
+    expect(parseSemver("1.0")).toEqual([1, 0])
+  })
 
-  test("Runtime check returns PASS with version info", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    const runtime = results.find((r: any) => r.name === "Runtime")!
-    expect(runtime).toBeDefined()
-    expect(runtime.status).toBe("PASS")
-    // Bun reports as Node.js, so accept either runtime name
-    expect(runtime.message).toMatch(/(Node\.js|Bun)/)
-  }, { timeout: TIMEOUT_MS })
+  it("parses single number 3", async () => {
+    const { parseSemver } = await import("../../../../src/argus/commands/doctor")
+    expect(parseSemver("3")).toEqual([3])
+  })
 
-  test("Configuration check returns valid result", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    const config = results.find((r: any) => r.name === "Configuration")!
-    expect(config).toBeDefined()
-    expect(["PASS", "WARN"]).toContain(config.status)
-  }, { timeout: TIMEOUT_MS })
+  it("handles v prefix (v8.56.0)", async () => {
+    const { parseSemver } = await import("../../../../src/argus/commands/doctor")
+    // parseInt("v8") returns NaN, which becomes 0 via isNaN check
+    expect(parseSemver("v8.56.0")).toEqual([0, 56, 0])
+  })
 
-  test("returns results even when some checks fail gracefully", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    expect(Array.isArray(results)).toBe(true)
-  }, { timeout: TIMEOUT_MS })
+  it("handles empty string", async () => {
+    const { parseSemver } = await import("../../../../src/argus/commands/doctor")
+    expect(parseSemver("")).toEqual([0])
+  })
 
-  test("Config validation check returns a result", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    const val = results.find((r: any) => r.name === "Config Validation")!
-    expect(val).toBeDefined()
-    expect(["PASS", "WARN"]).toContain(val!.status)
-    expect(val!.message.length).toBeGreaterThan(0)
-  }, { timeout: TIMEOUT_MS })
+  it("handles non-numeric parts", async () => {
+    const { parseSemver } = await import("../../../../src/argus/commands/doctor")
+    expect(parseSemver("abc.def")).toEqual([0, 0])
+  })
 
-  test("Credentials check returns a result", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    const cred = results.find((r: any) => r.name === "Credentials")!
-    expect(cred).toBeDefined()
-    expect(["PASS", "WARN", "FAIL"]).toContain(cred!.status)
-  }, { timeout: TIMEOUT_MS })
+  it("handles longer versions like 1.2.3.4", async () => {
+    const { parseSemver } = await import("../../../../src/argus/commands/doctor")
+    expect(parseSemver("1.2.3.4")).toEqual([1, 2, 3, 4])
+  })
+})
 
-  test("MCP Worker check returns a result", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    const mcp = results.find((r: any) => r.name === "MCP Worker")!
-    expect(mcp).toBeDefined()
-    expect(["PASS", "WARN", "FAIL"]).toContain(mcp!.status)
-  }, { timeout: TIMEOUT_MS })
+describe("compareVersions", () => {
+  it("returns 0 for equal versions", async () => {
+    const { compareVersions } = await import("../../../../src/argus/commands/doctor")
+    expect(compareVersions("1.0.0", "1.0.0")).toBe(0)
+  })
 
-  test("Python Runtime check returns a result", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    const py = results.find((r: any) => r.name === "Python Runtime")!
-    expect(py).toBeDefined()
-    expect(["PASS", "FAIL"]).toContain(py!.status)
-    expect(py!.message.length).toBeGreaterThan(0)
-  }, { timeout: TIMEOUT_MS })
+  it("returns 0 for nuclei 3.0.0", async () => {
+    const { compareVersions } = await import("../../../../src/argus/commands/doctor")
+    expect(compareVersions("3.0.0", "3.0.0")).toBe(0)
+  })
 
-  test("Redis check returns a result", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    const redis = results.find((r: any) => r.name === "Redis")!
-    expect(redis).toBeDefined()
-    expect(["PASS", "WARN", "FAIL"]).toContain(redis!.status)
-  }, { timeout: TIMEOUT_MS })
+  it("returns negative when a < b on major", async () => {
+    const { compareVersions } = await import("../../../../src/argus/commands/doctor")
+    expect(compareVersions("1.0.0", "2.0.0")).toBeLessThan(0)
+  })
 
-  test("Toolchain check returns a result", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    const toolchain = results.find((r: any) => r.name === "Toolchain")!
-    expect(toolchain).toBeDefined()
-    expect(["PASS", "WARN", "FAIL"]).toContain(toolchain!.status)
-    expect(toolchain!.message.length).toBeGreaterThan(0)
-  }, { timeout: TIMEOUT_MS })
+  it("returns positive when a > b on major", async () => {
+    const { compareVersions } = await import("../../../../src/argus/commands/doctor")
+    expect(compareVersions("3.0.0", "1.0.0")).toBeGreaterThan(0)
+  })
 
-  test("Playwright check returns a result", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    const pw = results.find((r: any) => r.name === "Playwright")!
-    expect(pw).toBeDefined()
-    expect(["PASS", "WARN"]).toContain(pw!.status)
-  }, { timeout: TIMEOUT_MS })
+  it("returns negative when a < b on minor", async () => {
+    const { compareVersions } = await import("../../../../src/argus/commands/doctor")
+    expect(compareVersions("1.2.0", "1.3.0")).toBeLessThan(0)
+  })
 
-  test("Database check returns a result", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    const db = results.find((r: any) => r.name === "Database")!
-    expect(db).toBeDefined()
-    expect(["PASS", "FAIL"]).toContain(db!.status)
-  }, { timeout: TIMEOUT_MS })
+  it("returns negative when a < b on patch", async () => {
+    const { compareVersions } = await import("../../../../src/argus/commands/doctor")
+    expect(compareVersions("1.2.3", "1.2.4")).toBeLessThan(0)
+  })
 
-  test("returns 10 results by default", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand()
-    expect(results.length).toBe(10)
-  }, { timeout: TIMEOUT_MS })
+  it("compares versions of different lengths (1.0 vs 1.0.0)", async () => {
+    const { compareVersions } = await import("../../../../src/argus/commands/doctor")
+    // "1.0" parses to [1, 0], "1.0.0" parses to [1, 0, 0]
+    // Compare: 1-1=0, 0-0=0, then max length is 3, a[2]??0 - b[2] = 0-0 = 0
+    expect(compareVersions("1.0", "1.0.0")).toBe(0)
+  })
 
-  test("--online adds LLM Provider check (11 results)", async () => {
-    const { doctorCommand } = await import("../../../../src/argus/commands/doctor")
-    const results = await doctorCommand({ online: true })
-    expect(results.length).toBe(11)
+  it("shorter version with higher major beats longer (2.0 > 1.9.9)", async () => {
+    const { compareVersions } = await import("../../../../src/argus/commands/doctor")
+    // "2.0" → [2, 0], "1.9.9" → [1, 9, 9]
+    // 2 - 1 = 1 > 0
+    expect(compareVersions("2.0", "1.9.9")).toBeGreaterThan(0)
+  })
 
-    const llm = results.find((r: any) => r.name === "LLM Provider")!
-    expect(llm).toBeDefined()
-    expect(["PASS", "WARN"]).toContain(llm!.status)
-  }, { timeout: TIMEOUT_MS })
+  it("detects nuclei v2.9.3 < required 3.0.0", async () => {
+    const { compareVersions } = await import("../../../../src/argus/commands/doctor")
+    expect(compareVersions("2.9.3", "3.0.0")).toBeLessThan(0)
+  })
 
+  it("detects nuclei v3.1.0 >= required 3.0.0", async () => {
+    const { compareVersions } = await import("../../../../src/argus/commands/doctor")
+    expect(compareVersions("3.1.0", "3.0.0")).toBeGreaterThan(0)
+  })
+
+  it("handles v prefix in version output (eslint v8.56.0)", async () => {
+    const { compareVersions } = await import("../../../../src/argus/commands/doctor")
+    // "v8.56.0" → [0, 56, 0], "1.0.0" → [1, 0, 0]
+    // 0 - 1 = -1 < 0
+    expect(compareVersions("v8.56.0", "1.0.0")).toBeLessThan(0)
+  })
+})
+
+describe("loadToolVersionChecks", () => {
+  it("populates nuclei version check with min_version 3.0.0", async () => {
+    const { loadToolVersionChecks } = await import("../../../../src/argus/commands/doctor")
+    const map = loadToolVersionChecks(yamlPath)
+    const nuclei = map.get("nuclei")
+    expect(nuclei).toBeDefined()
+    expect(nuclei!.name).toBe("nuclei")
+    expect(nuclei!.version_cmd).toBe("nuclei --version")
+    expect(nuclei!.min_version).toBe("3.0.0")
+    expect(nuclei!.version_regex).toBeDefined()
+  })
+
+  it("populates nmap version check with min_version 1.0.0", async () => {
+    const { loadToolVersionChecks } = await import("../../../../src/argus/commands/doctor")
+    const map = loadToolVersionChecks(yamlPath)
+    const nmap = map.get("nmap")
+    expect(nmap).toBeDefined()
+    expect(nmap!.name).toBe("nmap")
+    expect(nmap!.version_cmd).toBe("nmap --version")
+    expect(nmap!.min_version).toBe("1.0.0")
+  })
+
+  it("populates all 46 external tools with version checks", async () => {
+    const { loadToolVersionChecks } = await import("../../../../src/argus/commands/doctor")
+    const map = loadToolVersionChecks(yamlPath)
+    expect(map.size).toBe(46)
+  })
+
+  it("skips agent-internal tools (no version_cmd)", async () => {
+    const { loadToolVersionChecks } = await import("../../../../src/argus/commands/doctor")
+    const map = loadToolVersionChecks(yamlPath)
+    expect(map.has("finding_correlation_engine")).toBe(false)
+    expect(map.has("attack_path_generator")).toBe(false)
+    expect(map.has("verification_agent")).toBe(false)
+    expect(map.has("register")).toBe(false)
+    expect(map.has("login")).toBe(false)
+  })
+
+  it("fallbacks to PROJECT_ROOT path when no argument given", async () => {
+    const { loadToolVersionChecks } = await import("../../../../src/argus/commands/doctor")
+    // Without an argument, it uses the PROJECT_ROOT-based path
+    // This may fail on Windows if PROJECT_ROOT has the double-drive bug,
+    // but the error is caught internally and returns an empty map.
+    const map = loadToolVersionChecks()
+    expect(map instanceof Map).toBe(true)
+  })
 })

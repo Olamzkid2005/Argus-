@@ -36,7 +36,7 @@ function _loadDrizzle(): DrizzleFunction {
   }
   return _drizzle
 }
-import { eq, desc, asc, sql } from "drizzle-orm"
+import { eq, desc, asc, sql, SQL, AnyColumn } from "drizzle-orm"
 import { join, dirname } from "path"
 import { homedir } from "os"
 import { mkdirSync, existsSync, readFileSync } from "fs"
@@ -466,42 +466,78 @@ export class EngagementStore {
       artifacts: Array<{ id: string; path: string; type: string; sizeBytes: number }>
     }>
   }> {
-    const findings = this.db.select().from(findingsTable)
+    // 3 bulk queries instead of N+1 nested loops
+    const findings = this.db.select({
+      id: findingsTable.id,
+      title: findingsTable.title,
+    }).from(findingsTable)
       .where(eq(findingsTable.engagement_id, engagementId))
       .all()
-    const result: Array<{
-      findingId: string
-      findingTitle: string
-      packages: Array<{
-        id: string
-        packageHash: string
-        createdAt: number
-        artifacts: Array<{ id: string; path: string; type: string; sizeBytes: number }>
-      }>
-    }> = []
-    for (const f of findings) {
-      const packages = this.db.select().from(evidence_packages)
-        .where(eq(evidence_packages.finding_id, f.id))
+
+    if (findings.length === 0) return []
+
+    const findingIds = findings.map((f) => f.id)
+
+    // Bulk query 2: all evidence packages for all findings
+    const allPackages = this.db.select()
+      .from(evidence_packages)
+      .where(EngagementStore._inClause(evidence_packages.finding_id, findingIds))
+      .all()
+
+    const packageIds = allPackages.map((p) => p.id)
+
+    // Bulk query 3: all artifacts for all packages
+    const allArtifacts = packageIds.length > 0
+      ? this.db.select()
+        .from(artifacts)
+        .where(EngagementStore._inClause(artifacts.package_id, packageIds))
         .all()
-      const pkgList = packages.map((p) => {
-        const arts = this.db.select().from(artifacts)
-          .where(eq(artifacts.package_id, p.id))
-          .all()
-        return {
-          id: p.id,
-          packageHash: p.package_hash,
-          createdAt: p.created_at,
-          artifacts: arts.map((a) => ({
-            id: a.id,
-            path: a.path,
-            type: a.type,
-            sizeBytes: a.size_bytes,
-          })),
-        }
-      })
-      result.push({ findingId: f.id, findingTitle: f.title, packages: pkgList })
+      : []
+
+    // Index artifacts by package_id for O(1) lookup
+    const artifactsByPackageId = new Map<string, Array<{ id: string; path: string; type: string; sizeBytes: number }>>()
+    for (const art of allArtifacts) {
+      const list = artifactsByPackageId.get(art.package_id) ?? []
+      list.push({ id: art.id, path: art.path, type: art.type, sizeBytes: art.size_bytes })
+      artifactsByPackageId.set(art.package_id, list)
     }
+
+    // Index packages by finding_id for O(1) lookup
+    const packagesByFindingId = new Map<string, Array<{
+      id: string; packageHash: string; createdAt: number
+      artifacts: Array<{ id: string; path: string; type: string; sizeBytes: number }>
+    }>>()
+    for (const pkg of allPackages) {
+      const list = packagesByFindingId.get(pkg.finding_id) ?? []
+      list.push({
+        id: pkg.id,
+        packageHash: pkg.package_hash,
+        createdAt: pkg.created_at,
+        artifacts: artifactsByPackageId.get(pkg.id) ?? [],
+      })
+      packagesByFindingId.set(pkg.finding_id, list)
+    }
+
+    // Assemble result using indexed Maps (O(F) instead of O(F*P*A))
+    const result = findings.map((f) => ({
+      findingId: f.id,
+      findingTitle: f.title,
+      packages: packagesByFindingId.get(f.id) ?? [],
+    }))
     return result
+  }
+
+  /**
+   * Build a parameterized SQL `IN (...)` clause from a list of string values.
+   * Used to replace N+1 nested loops with bulk queries across multiple methods.
+   * Example: `_inClause(evidence_packages.finding_id, ["id1", "id2"])` → `finding_id IN ($1, $2)`
+   */
+  private static _inClause(column: SQL | AnyColumn, values: string[]): SQL {
+    if (values.length === 0) {
+      // Return a clause that is always false — no values to match
+      return sql`1 = 0`
+    }
+    return sql`${column} IN ${sql.join(values.map((v) => sql`${v}`), sql`, `)}`
   }
 
   saveArtifact(id: string, packageId: string, path: string, sha256: string, sizeBytes: number, type: string): void {
@@ -546,7 +582,7 @@ export class EngagementStore {
         confirmed: sql<number>`sum(case when ${findingsTable.status} in ('CONFIRMED', 'FINALIZED') then 1 else 0 end)`.as("confirmed"),
       })
       .from(findingsTable)
-      .where(sql`${findingsTable.engagement_id} IN ${sql.join(ids.map((id) => sql`${id}`), sql`, `)}`)
+      .where(EngagementStore._inClause(findingsTable.engagement_id, ids))
       .groupBy(findingsTable.engagement_id)
       .all()
     const result = new Map<string, { total: number; critical: number; confirmed: number }>()
