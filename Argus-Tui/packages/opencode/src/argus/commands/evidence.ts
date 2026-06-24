@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "fs"
+import { join } from "path"
 import { EngagementStore } from "../engagement/store"
 import { EvidenceCollector } from "../evidence/collector"
 import { verifyPackage } from "../evidence/integrity"
@@ -62,9 +64,23 @@ export async function evidenceCommand(
       const result = await verifyPackage(evidenceBaseDir, engagementId, packageId)
       lines.push(`Package ID: ${result.packageId}`)
       lines.push(`Valid: ${result.valid}`)
-      for (const err of result.errors) {
-        lines.push(`  Error: ${err}`)
+      const manifestPath = join(evidenceBaseDir, engagementId, "artifacts", packageId, "manifest.json")
+      if (existsSync(manifestPath)) {
+        const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"))
+        if (manifest.artifacts?.length > 0) {
+          lines.push("Artifacts:")
+          for (const art of manifest.artifacts) {
+            lines.push(`  - ${art.path} (${art.type}, ${art.size_bytes} bytes)`)
+          }
+        }
       }
+      if (result.errors.length > 0) {
+        for (const err of result.errors) {
+          lines.push(`  Error: ${err}`)
+        }
+      }
+      const status = result.valid ? "INTACT" : "TAMPERED"
+      lines.push(`Status: ${status}`)
       break
     }
 

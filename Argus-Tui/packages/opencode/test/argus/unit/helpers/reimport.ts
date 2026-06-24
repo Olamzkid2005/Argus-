@@ -2,7 +2,7 @@
  * Re-import a module as a bundled ESM file, bypassing mock.module intercepts.
  * Uses Bun.build to create a self-contained bundle with all dependencies inlined.
  */
-import { mkdtempSync, writeFileSync } from "fs"
+import { mkdtempSync } from "fs"
 import { join, dirname, resolve } from "path"
 import { fileURLToPath } from "url"
 import { tmpdir } from "os"
@@ -34,7 +34,6 @@ export async function reimport<T = any>(relativePath: string): Promise<T> {
   }
   
   const bundlePath = join(tempDir, "bundle.mjs")
-  writeFileSync(bundlePath, "") // ensure file exists
   
   // Use file URL import for the bundle
   return import(bundlePath) as Promise<T>

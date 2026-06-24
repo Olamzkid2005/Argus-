@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
@@ -6,6 +6,12 @@ import { EngagementStore } from "../../../src/argus/engagement/store"
 import type { FindingAnalysis } from "../../../src/argus/shared/types"
 
 let dbDir: string
+
+afterAll(() => {
+  if (dbDir) {
+    rmSync(dbDir, { recursive: true, force: true })
+  }
+})
 
 function makeStore(): { store: EngagementStore; cleanup: () => void } {
   if (!dbDir) dbDir = mkdtempSync(join(tmpdir(), "argus-engagement-store-test-"))
