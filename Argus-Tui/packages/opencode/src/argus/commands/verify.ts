@@ -26,26 +26,16 @@ export async function verifyCommand(
 ): Promise<string> {
   const store = options?.storeOverride ?? new EngagementStore()
 
-  // Find which engagement this finding belongs to
-  const allEngagements = store.listEngagements()
-  let engagementId: string | null = null
-  let engagementTarget = ""
-  let finding = null
-
-  for (const eng of allEngagements) {
-    const engFindings = store.getFindings(eng.id)
-    const found = engFindings.find((f) => f.id === findingId)
-    if (found) {
-      engagementId = eng.id
-      engagementTarget = eng.target
-      finding = found
-      break
-    }
-  }
+  // Find finding by ID using direct DB lookup — replaces O(N×M) scan
+  const engagementId = store.getFindingEngagementId(findingId)
+  const finding = engagementId ? store.getFinding(findingId) : null
 
   if (!finding || !engagementId) {
     return `Finding not found: ${findingId}`
   }
+
+  const eng = store.getEngagement(engagementId)
+  const engagementTarget = eng?.target ?? "unknown"
 
   // Load credentials
   const credStore = options?.credStoreOverride ?? new CredentialStore()

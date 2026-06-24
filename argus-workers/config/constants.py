@@ -148,6 +148,16 @@ class CircuitBreakerConfig:
         Falls back to the dataclass defaults if the ConfigManager is
         not available or the keys are not set.
 
+        The YAML uses ``max_failures`` / ``cooldown_ms`` keys::
+
+            tools:
+              circuit_breaker:
+                max_failures: 5
+                cooldown_ms: 300000
+
+        The ``from_config`` method maps these to the dataclass field names
+        ``failure_threshold`` / ``cooldown_seconds``.
+
         Args:
             config_manager: Optional ConfigManager instance. If provided,
                             it is used directly instead of the singleton.
@@ -162,11 +172,11 @@ class CircuitBreakerConfig:
 
             return cls(
                 failure_threshold=int(
-                    cm.get("tools.circuit_breaker.failure_threshold",
+                    cm.get("tools.circuit_breaker.max_failures",
                            cls.failure_threshold)
                 ),
                 cooldown_seconds=int(
-                    cm.get("tools.circuit_breaker.cooldown_seconds",
+                    cm.get("tools.circuit_breaker.cooldown_ms",
                            cls.cooldown_seconds)
                 ),
             )

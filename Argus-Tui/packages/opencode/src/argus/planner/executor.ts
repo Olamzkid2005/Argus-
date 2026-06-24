@@ -116,6 +116,12 @@ export class InProcessExecutor implements PhaseExecutor {
       maxConsecutiveFailures: cb.maxFailures,
       cooldownMs: cb.cooldownMs,
     })
+    // Re-attach the onErrorHint callback — the constructor set it on the old
+    // ToolHealthMonitor instance, which was just replaced above. Without this
+    // reassignment, error hints from tool health failures are silently dropped.
+    this.toolHealth.onErrorHint = (hint: ErrorHintData) => {
+      this.emitProgress?.({ type: "error_hint", ...hint })
+    }
   }
 
   /** Check whether a feature is enabled (defaults false if no flag system attached) */

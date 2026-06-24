@@ -400,6 +400,20 @@ export class EngagementStore {
     return toNormalizedFinding(rows[0])
   }
 
+  /**
+   * Look up which engagement a finding belongs to using a single direct query.
+   * Replaces the O(N×M) pattern where callers iterated all engagements × all findings.
+   * Returns the engagement ID or null if the finding doesn't exist.
+   */
+  getFindingEngagementId(findingId: string): string | null {
+    const rows = this.db
+      .select({ engagement_id: findingsTable.engagement_id })
+      .from(findingsTable)
+      .where(eq(findingsTable.id, findingId))
+      .all()
+    return rows.length > 0 ? rows[0].engagement_id : null
+  }
+
   getFindings(engagementId: string): NormalizedFinding[] {
     const rows = this.db.select().from(findingsTable)
       .where(eq(findingsTable.engagement_id, engagementId))
