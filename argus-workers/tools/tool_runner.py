@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from cache import CacheMode, cache
+from config.constants import CIRCUIT_BREAKER_COOLDOWN, CIRCUIT_BREAKER_THRESHOLD
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
 from error_classifier import ErrorCode
 from streaming import emit_error_hint
@@ -89,8 +90,8 @@ class ToolRunner:
         self,
         sandbox_dir: str | None = None,
         connection_string: str = None,
-        failure_threshold: int = 3,
-        cooldown_seconds: int = 300,
+        failure_threshold: int = CIRCUIT_BREAKER_THRESHOLD,
+        cooldown_seconds: int = CIRCUIT_BREAKER_COOLDOWN,
         engagement_id: str = None,
     ):
         """

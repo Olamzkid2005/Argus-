@@ -138,6 +138,42 @@ class CircuitBreakerConfig:
     failure_threshold: int = 3
     cooldown_seconds: int = 300
 
+    @classmethod
+    def from_config(cls, config_manager: object | None = None) -> "CircuitBreakerConfig":
+        """
+        Create config from the YAML-backed ConfigManager singleton.
+
+        Accepts an optional ``config_manager`` parameter for testability
+        (dependency injection). When omitted, uses the module-level singleton.
+        Falls back to the dataclass defaults if the ConfigManager is
+        not available or the keys are not set.
+
+        Args:
+            config_manager: Optional ConfigManager instance. If provided,
+                            it is used directly instead of the singleton.
+        """
+        try:
+            if config_manager is None:
+                from config.config_manager import get_config
+
+                cm = get_config()
+            else:
+                cm = config_manager
+
+            return cls(
+                failure_threshold=int(
+                    cm.get("tools.circuit_breaker.failure_threshold",
+                           cls.failure_threshold)
+                ),
+                cooldown_seconds=int(
+                    cm.get("tools.circuit_breaker.cooldown_seconds",
+                           cls.cooldown_seconds)
+                ),
+            )
+        except (ImportError, RuntimeError, ValueError):
+            # If the config_manager isn't set up, fall through to defaults
+            return cls()
+
 
 # ──────────────────────────────────────────────
 # SSL/TLS
@@ -239,7 +275,7 @@ class ArgusConfig:
     retries: RetryConfig = field(default_factory=RetryConfig)
     scan: ScanConfig = field(default_factory=ScanConfig)
     git_ssrf: GitSSRFConfig = field(default_factory=GitSSRFConfig.from_env)
-    circuit_breaker: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig)
+    circuit_breaker: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig.from_config)
     tls: TLSConfig = field(default_factory=TLSConfig)
     llm: LLMGeneralConfig = field(default_factory=LLMGeneralConfig)
     llm_review: LLMReviewConfig = field(default_factory=LLMReviewConfig)
