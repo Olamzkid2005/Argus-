@@ -100,12 +100,48 @@ describe("tui-commands", () => {
     expect(tools!.needsTarget).toBe(false)
   })
 
-  it("//tools handler returns a string (not throw) even with empty store", async () => {
-    const { findArgusTuiCommand } = await import("../../../src/argus/tui-commands")
-    const cmd = findArgusTuiCommand("tools")
-    expect(cmd).toBeDefined()
-    const result = await cmd!.handler("")
-    expect(typeof result).toBe("string")
+  it("/tools cache starts empty after reset", async () => {
+    const { getToolsCache, resetToolsCache } = await import("../../../src/argus/tui-commands")
+    resetToolsCache()
+    expect(getToolsCache()).toEqual([])
+  })
+
+  it("/tools handler returns cached data without spawning a worker when cache is primed", async () => {
+    const mod = await import("../../../src/argus/tui-commands")
+    const { findArgusTuiCommand, resetToolsCache, getToolsCache, setToolsCache } = mod
+    const cmd = findArgusTuiCommand("tools")!
+
+    // Prime the cache with test data — avoids spawning a real Python worker
+    const mockTools = [
+      { name: "nuclei", capabilities: ["scan", "vuln"], signal_quality: "high" },
+      { name: "http-scanner", capabilities: ["web"], signal_quality: "medium" },
+    ]
+    setToolsCache(mockTools)
+    expect(getToolsCache()).toHaveLength(2)
+
+    // Handler should return cached data without attempting to spawn a worker
+    const result = await cmd.handler("")
+    expect(result).toContain("nuclei")
+    expect(result).toContain("http-scanner")
+    expect(result).toContain("scan, vuln")
+    expect(result).toContain("web")
+    expect(result).toContain("[high]")
+    expect(result).toContain("[medium]")
+  })
+
+  it("/tools handler falls through to worker path when cache is empty", async () => {
+    const { findArgusTuiCommand, resetToolsCache, getToolsCache } = await import("../../../src/argus/tui-commands")
+    const cmd = findArgusTuiCommand("tools")!
+
+    // Empty cache — handler will attempt to spawn a worker
+    resetToolsCache()
+    expect(getToolsCache()).toEqual([])
+
+    // MCP worker path doesn't exist in test env, so returns "not found"
+    const result = await cmd.handler("")
+    expect(result).toContain("not found")
+    // Cache stays empty since no tools were fetched
+    expect(getToolsCache()).toEqual([])
   })
 
   // --- Verify handler tests (Fix 5: empty finding ID validation + delegates to verifyCommand) ---

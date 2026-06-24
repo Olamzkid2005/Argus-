@@ -436,8 +436,35 @@ export function findArgusTuiCommand(slashName: string): ArgusTuiCommand | undefi
   return commands.find((c) => c.slashes.includes(slashName) || c.name === slashName)
 }
 
-/** Module-level cache for /tools command — avoids spawning a fresh Python worker on every invocation */
+/**
+ * Module-level cache for /tools command — avoids spawning a fresh Python worker
+ * on every invocation.
+ *
+ * Exported accessors allow tests to prime and inspect the cache without
+ * actually spawning a worker process.
+ */
 let _cachedTools: ToolDefinition[] = []
+
+/**
+ * Reset the tools cache to empty. Useful for test teardown between runs.
+ */
+export function resetToolsCache(): void {
+  _cachedTools = []
+}
+
+/**
+ * Returns a snapshot of the current tools cache.
+ */
+export function getToolsCache(): readonly ToolDefinition[] {
+  return [..._cachedTools]
+}
+
+/**
+ * Prime the tools cache with data. Useful for tests to avoid spawning a real worker.
+ */
+export function setToolsCache(tools: ToolDefinition[]): void {
+  _cachedTools = tools
+}
 
 function formatToolList(toolDefs: ToolDefinition[]): string {
   let output = `Registered MCP Tools (${toolDefs.length}):\n${"=".repeat(50)}\n`
