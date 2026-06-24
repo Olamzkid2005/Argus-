@@ -31,6 +31,12 @@ export interface ToolDef {
   requires?: RequiresGate
   priority?: number
   cost?: "low" | "medium" | "high"
+  /** Minimum required version (semver) */
+  min_version?: string
+  /** Shell command to get the installed version */
+  version_cmd?: string
+  /** Regex to extract version from command output */
+  version_regex?: string
   /** Data signals this tool consumes (needs from prior tools) */
   consumes?: string[]
   /** Data signals this tool produces (makes available to downstream tools) */

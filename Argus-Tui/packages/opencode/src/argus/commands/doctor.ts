@@ -8,6 +8,7 @@ import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
 import { WorkersBridge } from "../bridge/mcp-client"
 import { PROJECT_ROOT } from "../shared/path"
+import { ToolRegistry } from "../workflows/tool-registry"
 
 /**
  * Read provider credentials from OpenCode's own auth.json (stored in XDG data dir).
@@ -463,21 +464,31 @@ interface ToolVersionDef {
   version_regex?: string
 }
 
-/** Built-in version definitions for tools. These are checked if a tool is found on PATH. */
-const TOOL_VERSION_CHECKS: ToolVersionDef[] = [
-  { name: "nuclei", min_version: "3.0.0", version_cmd: "nuclei --version", version_regex: "\\d+\\.\\d+\\.\\d+" },
-  { name: "nmap", version_cmd: "nmap --version", version_regex: "\\d+\\.\\d+" },
-  { name: "nikto", version_cmd: "nikto -Version", version_regex: "\\d+\\.\\d+\\.\\d+" },
-  { name: "whatweb", version_cmd: "whatweb --version", version_regex: "\\d+\\.\\d+\\.\\d+" },
-  { name: "ffuf", version_cmd: "ffuf -V", version_regex: "\\d+\\.\\d+" },
-  { name: "httpx", version_cmd: "httpx -version", version_regex: "\\d+\\.\\d+\\.\\d+" },
-  { name: "subfinder", version_cmd: "subfinder -version", version_regex: "\\d+\\.\\d+\\.\\d+" },
-  { name: "dalfox", version_cmd: "dalfox version", version_regex: "\\d+\\.\\d+\\.\\d+" },
-  { name: "gitleaks", version_cmd: "gitleaks version", version_regex: "\\d+\\.\\d+\\.\\d+" },
-  { name: "trivy", version_cmd: "trivy --version", version_regex: "\\d+\\.\\d+\\.\\d+" },
-  { name: "semgrep", version_cmd: "semgrep --version", version_regex: "\\d+\\.\\d+\\.\\d+" },
-  { name: "katana", version_cmd: "katana -version", version_regex: "\\d+\\.\\d+\\.\\d+" },
-]
+/**
+ * Build a version check map from the canonical tool-definitions.yaml.
+ * Falls back to an empty map if the YAML can't be loaded.
+ */
+function loadToolVersionChecks(): Map<string, ToolVersionDef> {
+  const map = new Map<string, ToolVersionDef>()
+  try {
+    const registry = new ToolRegistry()
+    const defsPath = join(PROJECT_ROOT, "packages/opencode/src/argus/workflows/tool-definitions.yaml")
+    registry.load(defsPath)
+    for (const tool of registry.listTools()) {
+      if (tool.version_cmd) {
+        map.set(tool.name, {
+          name: tool.name,
+          version_cmd: tool.version_cmd,
+          version_regex: tool.version_regex,
+          min_version: tool.min_version,
+        })
+      }
+    }
+  } catch (e) {
+    process.stderr.write(`[doctor] Failed to load tool version checks: ${(e as Error).message}\n`)
+  }
+  return map
+}
 
 function parseSemver(version: string): number[] {
   return version.split(".").map((p) => {
@@ -502,11 +513,8 @@ function toolchainCheck(): CheckResult {
   const missing: string[] = []
   const versionWarnings: string[] = []
 
-  // Build a map of tool → version check info from builtins (these have min_version)
-  const versionCheckMap = new Map<string, ToolVersionDef>()
-  for (const def of TOOL_VERSION_CHECKS) {
-    versionCheckMap.set(def.name, def)
-  }
+  // Build a map of tool → version check info from the canonical tool-definitions.yaml
+  const versionCheckMap = loadToolVersionChecks()
 
   // Tools considered "core" (expected to be installed, warn if missing)
   const coreTools = new Set<string>(["nuclei", "nmap", "gitleaks", "semgrep", "trivy"])
