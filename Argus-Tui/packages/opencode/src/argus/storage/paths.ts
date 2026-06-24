@@ -24,6 +24,7 @@ import { homedir } from "os"
 import { join, dirname } from "path"
 import { existsSync, readFileSync } from "fs"
 import { parse as YAML } from "yaml"
+import { PROJECT_ROOT } from "../shared/path"
 
 let _resolvedBasePath: string | null = null
 let _configBasePath: string | null = null
@@ -36,7 +37,7 @@ let _configBasePath: string | null = null
 function readConfigBasePath(): string | null {
   if (_configBasePath !== null) return _configBasePath
   try {
-    const projectPath = join(process.cwd(), "argus.config.yaml")
+    const projectPath = join(PROJECT_ROOT, "argus.config.yaml")
     if (!existsSync(projectPath)) {
       _configBasePath = ""
       return null
