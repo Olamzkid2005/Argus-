@@ -26,6 +26,7 @@ const PROMOTION_RULES: Array<{ from: Confidence; to: Confidence; condition: (fin
     condition: (f) => f.evidence !== undefined && f.evidence.length > 0,
   },
   {
+    // CONFIRMED is set externally by the verification runner, not by the promotion engine.
     from: Confidence.VERIFIED,
     to: Confidence.CONFIRMED,
     condition: () => false,

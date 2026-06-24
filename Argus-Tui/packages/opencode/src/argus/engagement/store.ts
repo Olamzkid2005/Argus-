@@ -152,7 +152,10 @@ function toPhaseRecord(row: typeof phasesTable.$inferSelect): PhaseRecord {
     engagementId: row.engagement_id,
     name: row.name,
     status: row.status as PhaseStatus,
-    // NOTE: null coalesces to [] — original null vs empty distinction is lost
+    // NOTE: null coalesces to [] — original DB distinction is lost.
+    //   NULL  = phase not yet evaluated (capabilities unknown)
+    //   []    = phase evaluated, zero capabilities
+    //   [...] = phase evaluated with specific capabilities
     capabilities: row.capabilities ?? [],
     executionMode: (row.execution_mode ?? "sequential") as ExecutionMode,
     startedAt: row.started_at ? new Date(row.started_at).toISOString() : undefined,

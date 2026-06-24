@@ -1,3 +1,4 @@
+import crypto from "crypto"
 import type { PlannerContext, AssessmentPlan, PhaseExecutionRequest } from "./types"
 import { Capability } from "./capabilities"
 import { WorkflowRegistry } from "../workflows/registry"
@@ -132,7 +133,7 @@ export class WorkflowPlanner {
       }
 
       phases.push({
-        phaseId: `phase-${i}-${def.name}`,
+        phaseId: `phase-${i}-${def.name}-${crypto.randomUUID().slice(0, 8)}`,
         name: def.name,
         workflowName: workflow.name,
         target,

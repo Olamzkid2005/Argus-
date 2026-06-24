@@ -240,7 +240,7 @@ export class ReportGenerator {
       html = "<html><body><h1>Report: {{TARGET}}</h1><p>Template not found</p>{{FINDINGS}}</body></html>"
     }
 
-    html = html.replace("{{TARGET}}", this.escapeHtml(target))
+    html = html.replace(/{{TARGET}}/g, this.escapeHtml(target))
     html = html.replace("{{ENGAGEMENT_ID}}", this.escapeHtml(engagementId))
     html = html.replace("{{WORKFLOW}}", this.escapeHtml(workflow))
     html = html.replace(/{{DATE}}/g, report.createdAt)

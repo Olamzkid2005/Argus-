@@ -467,7 +467,7 @@ Line-by-line deep read of workflow/tool YAMLs, Python agent/orchestrator/parser 
 - [x] **Scope validation bypassed by scheme-less targets (SSRF via agent)** `[H]` — **FIXED** — When `urlparse(target).hostname` is `None`, falls back to extracting host from raw target string. SSRF validation now runs on all targets regardless of scheme.
 - [x] **Swarm `with ThreadPoolExecutor` block still blocks on hung threads** `[H]` — **FIXED** — Replaced `with ThreadPoolExecutor() as pool:` with manual `pool = ThreadPoolExecutor(...)` + `try/finally: pool.shutdown(wait=False, cancel_futures=True)`. The `with` block's `__exit__` no longer calls `shutdown(wait=True)`, so hung threads no longer block swarm completion.
 - [x] **Deterministic safety-net findings not normalized** `[H]` — **FIXED** — Deterministic findings from `execute_scan_pipeline()` are now normalized via `_normalize_finding()` before being extended, matching the pattern used by agent results and fallback paths. Downstream persistence now receives properly structured findings.
-- [ ] **Batch-saved findings never streamed or webhook'd** `[H]` — `orchestrator_pkg/persistence/finding_persistence_service.py:296-304,421-446` `_batch_save_non_secret` calls `batch_create_or_update_findings` which returns counts — but the repo already sets `_saved_id` on each finding dict, so this is NOT actually a bug. Streaming and webhooks work correctly for batch-saved findings.
+- [x] **Batch-saved findings never streamed or webhook'd** `[H]` — **NOT A BUG (verified)** — `orchestrator_pkg/persistence/finding_persistence_service.py:296-304,421-446` `_batch_save_non_secret` calls `batch_create_or_update_findings` which returns counts — but the repo already sets `_saved_id` on each finding dict, so streaming and webhooks work correctly for batch-saved findings.
 - [x] **`persist_to_db` double-counts budget on repeated calls** `[H]` — **FIXED** — Changed from `loop_budgets.current_cycles + EXCLUDED.current_cycles` (accumulate) to `EXCLUDED.current_cycles` (replace). No more quadratic growth.
 - [x] **Health monitor `break` exits the entire tool loop** `[H]` — **FIXED** — Replaced `break` with a `finalized_tools` set; each tool is now evaluated independently.
 - [x] **`should_shutdown()` always returns True (confirmed + new impact)** `[H]` — **FIXED** — Final `return True` changed to `return False` when active tasks exist and deadline hasn't been exceeded. Graceful shutdown now waits for in-flight work.
@@ -639,18 +639,18 @@ The following Pass 1/2 claims were found to be **incorrect** on direct verificat
 
 The following Pass 1/2 items were re-verified in Pass 3 and are **confirmed correct** (not incorrect as the corrections above):
 
-- [ ] **Parser registry empty** `[C]` — `parsers/parsers/__init__.py:43` confirmed: `importlib.import_module("parsers.parsers.%s", module_name)` with literal `%s`. All parsers fail to import. **(Now fixed per the FIXED items.)**
-- [ ] **Finding-detail TUI route** `[C]` — `app.tsx:392` `route.navigate({ type: "finding", findingId: r.findingId } as any)` vs `route.tsx:51` `FindingDetailRoute = { type: "finding-detail" }` — confirmed. **(Now fixed.)**
+- [x] **Parser registry empty** `[C]` — `parsers/parsers/__init__.py:43` confirmed: `importlib.import_module("parsers.parsers.%s", module_name)` with literal `%s`. All parsers fail to import. **(Now fixed per the FIXED items.)**
+- [x] **Finding-detail TUI route** `[C]` — `app.tsx:392` `route.navigate({ type: "finding", findingId: r.findingId } as any)` vs `route.tsx:51` `FindingDetailRoute = { type: "finding-detail" }` — confirmed. **(Now fixed.)**
 (- [x] **LLM integration non-functional** [C] -- **(Now fixed.)**)**
-- [ ] **Non-agent tools 120s timeout** `[C]` — `executor.ts:451` `PER_TOOL_TIMEOUT_MS = 120_000`; bridge sends this as JSON-RPC timeout. Confirmed. **(Now fixed.)**
-- [ ] **`selectBest` web filter dead** `[C]` — `detectTargetType` returns `"web_app"|"api"|"spa"|"unknown"`, never `"web"`. Confirmed. **(Now fixed.)**
-- [ ] **Approval gates inert** `[C]` — No workflow YAML sets `approval_gate`; `APPROVAL_GATES` defaults false. Confirmed. **(Now fixed.)**
-- [ ] **`alterx` parameter name `domain` doesn't match executor's `target` key** `[C]` — `alterx.yaml:7` `name: domain`; executor passes `target`. Confirmed. **(Now fixed.)**
-- [ ] **`home.tsx` MCP path off by one level** `[H]` — `home.tsx:76` 7 `..` lands at `Argus-Tui/`, not repo root. Confirmed. **(Now fixed.)**
+- [x] **Non-agent tools 120s timeout** `[C]` — `executor.ts:451` `PER_TOOL_TIMEOUT_MS = 120_000`; bridge sends this as JSON-RPC timeout. Confirmed. **(Now fixed.)**
+- [x] **`selectBest` web filter dead** `[C]` — `detectTargetType` returns `"web_app"|"api"|"spa"|"unknown"`, never `"web"`. Confirmed. **(Now fixed.)**
+- [x] **Approval gates inert** `[C]` — No workflow YAML sets `approval_gate`; `APPROVAL_GATES` defaults false. Confirmed. **(Now fixed.)**
+- [x] **`alterx` parameter name `domain` doesn't match executor's `target` key** `[C]` — `alterx.yaml:7` `name: domain`; executor passes `target`. Confirmed. **(Now fixed.)**
+- [x] **`home.tsx` MCP path off by one level** `[H]` — `home.tsx:76` 7 `..` lands at `Argus-Tui/`, not repo root. Confirmed. **(Now fixed.)**
 - [x] **`@opencode/runtime` non-resolvable** `[H]` — **FIXED** — `tsconfig.json:16` now maps `@opencode/runtime` → `./src/opencode-runtime.ts`. `package.json:25` exports `"./runtime"` → `"./src/opencode-runtime.ts"`. `feature-flags.ts` now imports `IFeatureFlags` via `"@opencode/runtime"` instead of relative path `"../../opencode-runtime"`. The alias is now actually consumed. **(Fixed 2026-06-21: `feature-flags.ts` now uses the `@opencode/runtime` alias.)**
 (- [x] **bin/argus does not handle --version/--help before spawning** [L] -- **FIXED** -- Delegates to index.ts which handles both. child.on("error") added.)
 - [x] **Test-count discrepancy** — **FIXED** — README updated to `~4,000 tests: 3,284 Python + 689 TypeScript`; Makefile updated to `689+` (TS count). Now consistent with measured totals.
-- [ ] **Two SQLite databases, no collision** — Pass 3 confirmed via `database.ts:42-54` and `store.ts:33`: Argus uses `~/.argus/argus.db`, OpenCode core uses `Global.Path.data/opencode.db`. Different files, different directories. No conflict.
+- [x] **Two SQLite databases, no collision** — **CONFIRMED (verified)** — Different files, different directories. No conflict.
 ---
 
 ## 29. Items Requiring Deeper Architectural Work

@@ -8,7 +8,7 @@ import { createMemo, createSignal, onMount, For, Show } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useRouteData } from "@tui/context/route"
 import { navigateTo } from "@/argus/tui/navigator"
-import { Toast } from "@tui/ui/toast"
+import { Toast, useToast } from "@tui/ui/toast"
 
 interface FindingRow {
   id: string
@@ -139,6 +139,7 @@ export function FindingsViewer() {
   const [filterSev, setFilterSev] = createSignal<number | null>(null)
   const [loading, setLoading] = createSignal(true)
   const [loadError, setLoadError] = createSignal<string | null>(null)
+  const toast = useToast()
 
   onMount(async () => {
     try {
@@ -179,6 +180,7 @@ export function FindingsViewer() {
       const msg = e instanceof Error ? e.message : "Unknown error"
       console.error("Failed to load findings:", e)
       setLoadError(msg)
+      toast.error(msg)
       setLoading(false)
     }
   })

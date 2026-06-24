@@ -868,7 +868,7 @@ class IntelligenceEngine:
 
         with ThreadPoolExecutor(max_workers=min(len(findings) or 1, 10)) as pool:
             futures = [pool.submit(_enrich_one, f) for f in findings]
-            enriched = [future.result() for future in as_completed(futures)]
+            enriched = [future.result() for future in futures]
 
         return enriched
 

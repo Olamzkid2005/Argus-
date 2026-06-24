@@ -215,8 +215,8 @@ export class WorkflowRunner {
     const defaultCreds = credStore.getDefaultCredentials()
     if (defaultCreds) {
       store.appendAuditLog(engagementId, "CREDS_LOADED", `Loaded credentials for roles: ${credStore.listRoles().join(", ")}`)
+      credStore.clear()
     }
-    credStore.clear()
 
     // ── 3. Load registries ──
     const workflowRegistry = this.deps?.workflowRegistry ?? new WorkflowRegistry(workflowsDir)

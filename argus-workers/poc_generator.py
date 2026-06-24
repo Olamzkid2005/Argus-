@@ -173,7 +173,7 @@ class PoCGenerator:
         template = DEFAULT_TEMPLATE
         if vuln_type and vuln_type != "UNKNOWN":
             for template_key in POC_TEMPLATES:
-                if template_key in vuln_type or vuln_type in template_key:
+                if template_key == vuln_type:
                     template = POC_TEMPLATES[template_key]
                     break
 

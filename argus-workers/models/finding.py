@@ -75,6 +75,8 @@ class VulnerabilityFinding(BaseModel):
             return v
         if isinstance(v, list):
             return {"items": v}
+        if v is None:
+            return {}
         return {"raw": str(v)}
 
     @field_validator("type")
