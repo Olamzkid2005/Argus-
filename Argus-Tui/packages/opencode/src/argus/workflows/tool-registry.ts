@@ -41,6 +41,9 @@ interface ToolDefsFile {
   tools: ToolDef[]
 }
 
+/** Cost ranking for tool selection tiebreaker (lower = cheaper, more preferred). */
+const COST_RANK: Record<string, number> = { low: 1, medium: 2, high: 3 }
+
 /** Filter context used by requires gates when selecting tools. */
 export interface GateContext {
   /** Tech stack detected from recon findings (e.g. ["python", "react", "graphql"]) */
@@ -156,9 +159,11 @@ export class ToolRegistry {
 
     return Array.from(candidates.values())
       .sort((a, b) => {
-        // Sort by score desc, then by priority desc as tiebreaker
+        // Sort by score desc, then by priority desc, then by cost asc (prefer cheaper)
         if (b.score !== a.score) return b.score - a.score
-        return (b.tool.priority ?? 50) - (a.tool.priority ?? 50)
+        if ((b.tool.priority ?? 50) !== (a.tool.priority ?? 50)) return (b.tool.priority ?? 50) - (a.tool.priority ?? 50)
+        // Cost tiebreaker: prefer lower cost when scores and priorities are tied
+        return (COST_RANK[a.tool.cost ?? "medium"]) - (COST_RANK[b.tool.cost ?? "medium"])
       })
       .map((c) => c.tool)
   }
