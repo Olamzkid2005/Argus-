@@ -12,8 +12,8 @@
  *   5. Built-in defaults (all false)
  */
 
-import { homedir } from "os"
 import { join } from "path"
+import { StoragePaths } from "../storage/paths"
 import { readFileSync } from "fs"
 import { parse as YAML } from "yaml"
 import type { IFeatureFlags } from "@opencode/runtime"
@@ -85,7 +85,7 @@ export class FeatureFlags implements IFeatureFlags {
 
   /** Load from ~/.argus/config.yaml (user config) */
   loadFromUserConfig(configPath?: string): void {
-    const path = configPath ?? join(homedir(), ".argus", "config.yaml")
+    const path = configPath ?? StoragePaths.config
     try {
       const content = readFileSync(path, "utf-8")
       const parsed = YAML(content) as { features?: Record<string, boolean> } | undefined

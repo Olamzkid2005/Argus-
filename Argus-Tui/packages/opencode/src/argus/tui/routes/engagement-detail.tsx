@@ -28,28 +28,41 @@ export function EngagementDetail(props: EngagementDetailProps) {
   const [timeline, setTimeline] = createSignal<Array<{
     id: string; eventType: string; message: string; createdAt: number
   }>>([])
+  const [eventFilter, setEventFilter] = createSignal<"all" | "phase" | "tool" | "error">("all")
   const [loading, setLoading] = createSignal(true)
+
+  // Map event types to filter categories — "all" shows everything
+  const eventCategory = (eventType: string): "phase" | "tool" | "error" => {
+    if (/^(PHASE|REPLAN|RESUME)/.test(eventType)) return "phase"
+    if (/^(CREDS|EVIDENCE)/.test(eventType)) return "tool"
+    return "error"  // RUNNER_ERROR, RESUME_ERROR, or anything else
+  }
+
+  // Derive filtered timeline reactively
+  const filteredTimeline = () => {
+    const f = eventFilter()
+    if (f === "all") return timeline()
+    return timeline().filter((e) => eventCategory(e.eventType) === f)
+  }
   const toast = useToast()
 
   onMount(async () => {
     try {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
-      const eng = store.getEngagement(props.engagementId)
-      if (eng) {
+      const detail = store.getEngagementDetail(props.engagementId)
+      if (detail) {
         setEngagement({
-          id: eng.id, target: eng.target, status: eng.status,
-          workflow: eng.workflow, createdAt: eng.createdAt,
+          id: detail.engagement.id, target: detail.engagement.target,
+          status: detail.engagement.status,
+          workflow: detail.engagement.workflow, createdAt: detail.engagement.createdAt,
         })
-        const rawFindings = store.getFindings(props.engagementId)
-        setFindings(rawFindings.map((f) => ({
+        setFindings(detail.findings.map((f) => ({
           id: f.id, title: f.title, severity: f.severity, confidence: f.confidence,
           tool: f.tool ?? "", status: f.status, description: f.description ?? "",
         })))
-        const rawEvidence = store.getEvidenceByEngagement(props.engagementId)
-        setEvidence(rawEvidence)
-        const rawTimeline = store.getAuditLog(props.engagementId)
-        setTimeline(rawTimeline)
+        setEvidence(detail.evidence)
+        setTimeline(detail.auditLog)
       }
       setLoading(false)
     } catch (e) {
@@ -74,7 +87,9 @@ export function EngagementDetail(props: EngagementDetailProps) {
   return (
     <box flexDirection="column" paddingX={2} paddingTop={1} flexGrow={1}>
       <Show when={engagement()} fallback={
-        <Show when={!loading()} fallback={<text fg={theme.primary}>⠋ Loading...</text>}>
+        <Show when={!loading()} fallback={
+          <SkeletonLoading theme={theme} />
+        }>
           <text fg={theme.error}>Engagement {props.engagementId} not found.</text>
         </Show>
       }>
@@ -156,10 +171,22 @@ export function EngagementDetail(props: EngagementDetailProps) {
 
               {/* Timeline tab */}
               <Show when={activeTab() === "timeline"}>
-                <Show when={timeline().length > 0} fallback={
+                {/* Filter bar */}
+                <box flexDirection="row" gap={2} paddingBottom={1}>
+                  <For each={["all", "phase", "tool", "error"] as const}>
+                    {(f) => (
+                      <box {...({ onClick: () => setEventFilter(f) } as any)}>
+                        <text fg={eventFilter() === f ? theme.primary : theme.textMuted}>
+                          {eventFilter() === f ? <b>[{f}]</b> : `[${f}]`}
+                        </text>
+                      </box>
+                    )}
+                  </For>
+                </box>
+                <Show when={filteredTimeline().length > 0} fallback={
                   <text fg={theme.textMuted}>No timeline events recorded.</text>
                 }>
-                  <For each={timeline()}>
+                  <For each={filteredTimeline()}>
                     {(evt) => (
                       <box flexDirection="row" gap={1} paddingTop={1}>
                         <text fg={theme.textMuted}>
@@ -189,6 +216,36 @@ export function EngagementDetail(props: EngagementDetailProps) {
       </Show>
       <box flexGrow={1} />
       <Toast />
+    </box>
+  )
+}
+
+/**
+ * Structural skeleton loading that matches the engagement detail page layout.
+ * Uses block characters (▓/░) in the muted text color to show the page structure
+ * while data is loading — header bars, tab row, and 5 finding list placeholders.
+ */
+function SkeletonLoading(props: { theme: Record<string, string> }) {
+  const { theme } = props
+  return (
+    <box flexDirection="column" padding={1}>
+      <text fg={theme.primary}>⠋ Loading engagement...</text>
+      <text fg={theme.textMuted}>▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓</text>
+      <text fg={theme.textMuted}>▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓</text>
+      <box flexDirection="row" gap={2} paddingTop={1} paddingBottom={1}>
+        <text fg={theme.textMuted}>▓▓▓▓▓▓▓▓▓</text>
+        <text fg={theme.textMuted}>▓▓▓▓▓▓▓▓▓▓▓</text>
+        <text fg={theme.textMuted}>▓▓▓▓▓▓▓▓▓▓</text>
+        <text fg={theme.textMuted}>▓▓▓▓▓▓▓▓</text>
+      </box>
+      <For each={[1, 2, 3, 4, 5]}>
+        {() => (
+          <box flexDirection="column" paddingTop={1}>
+            <text fg={theme.textMuted}>▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓</text>
+            <text fg={theme.textMuted}>▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓</text>
+          </box>
+        )}
+      </For>
     </box>
   )
 }

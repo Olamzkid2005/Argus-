@@ -1,8 +1,7 @@
 import { EngagementStore } from "../engagement/store"
 import { EvidenceCollector } from "../evidence/collector"
 import { verifyPackage } from "../evidence/integrity"
-import { homedir } from "os"
-import { join } from "path"
+import { StoragePaths } from "../storage/paths"
 
 export async function evidenceCommand(
   action: "list" | "show" | "prune" | "verify-package",
@@ -14,7 +13,7 @@ export async function evidenceCommand(
   },
 ): Promise<string> {
   const store = overrides?.store ?? new EngagementStore()
-  const evidenceBaseDir = overrides?.evidenceBaseDir ?? join(homedir(), ".argus", "engagements")
+  const evidenceBaseDir = overrides?.evidenceBaseDir ?? StoragePaths.engagementsDir
   const lines: string[] = []
 
   switch (action) {

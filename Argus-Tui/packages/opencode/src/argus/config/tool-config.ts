@@ -1,3 +1,5 @@
+import { StoragePaths } from "../storage/paths"
+
 export interface ToolSettings {
   enabled?: string[]
   disabled?: string[]
@@ -33,11 +35,10 @@ export class ToolConfig implements ResolvedToolConfig {
       const { readFileSync } = await import("fs")
       const { join } = await import("path")
       const { parse } = await import("yaml")
-      const { homedir } = await import("os")
 
       const paths = [
         join(process.cwd(), "argus.config.yaml"),
-        join(homedir(), ".argus", "config.yaml"),
+        StoragePaths.config,
       ]
 
       for (const configPath of paths) {

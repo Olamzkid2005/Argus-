@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, chmodSync, existsSync, mkdirSync, statSync } from "fs"
 import { join } from "path"
-import { homedir } from "os"
+import { StoragePaths } from "../storage/paths"
 
 export interface CredentialEntry {
   username: string
@@ -12,7 +12,7 @@ export interface CredentialFile {
   default_role?: string
 }
 
-const DEFAULT_CREDS_PATH = join(homedir(), ".argus", "credentials.json")
+const DEFAULT_CREDS_PATH = StoragePaths.credentials
 
 export class CredentialStore {
   private data: CredentialFile = { roles: {} }

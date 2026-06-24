@@ -9,6 +9,7 @@ import { EvidenceCollector } from "../evidence/collector"
 import { ConfidenceEngine } from "../engagement/confidence"
 import { homedir } from "os"
 import { join } from "path"
+import { StoragePaths } from "../storage/paths"
 
 export async function verifyCommand(
   findingId: string,
@@ -54,7 +55,7 @@ export async function verifyCommand(
 
   const targetUrl = options?.targetUrl ?? engagementTarget
   const engine = options?.engineOverride ?? new PlaywrightEngine()
-  const evidenceBaseDir = join(homedir(), ".argus", "engagements")
+  const evidenceBaseDir = StoragePaths.engagementsDir
   const evidenceCollector = options?.collectorOverride ?? new EvidenceCollector(evidenceBaseDir)
   const confidenceEngine = options?.confidenceOverride ?? new ConfidenceEngine()
   const runner = options?.runnerOverride ?? new VerificationRunner()

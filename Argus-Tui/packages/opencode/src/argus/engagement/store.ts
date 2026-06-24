@@ -36,10 +36,11 @@ function _loadDrizzle(): DrizzleFunction {
   }
   return _drizzle
 }
-import { eq, desc, asc, sql, SQL, AnyColumn } from "drizzle-orm"
+import { eq, desc, asc, sql, SQL, AnyColumn, inArray } from "drizzle-orm"
 import { join, dirname } from "path"
 import { homedir } from "os"
 import { mkdirSync, existsSync, readFileSync } from "fs"
+import { StoragePaths } from "../storage/paths"
 // Monotonic counter for engagement ID generation. Ensures deterministic
 // sort-order tiebreaking when multiple engagements share the same
 // millisecond-precision `created_at` timestamp. The secondary sort by
@@ -66,7 +67,7 @@ import type { ExecutionMode } from "../shared/types"
 import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
 
 function defaultDbPath(): string {
-  return join(homedir(), ".argus", "argus.db")
+  return StoragePaths.db
 }
 
 const TABLE_SQL = [
@@ -537,7 +538,7 @@ export class EngagementStore {
       // Return a clause that is always false — no values to match
       return sql`1 = 0`
     }
-    return sql`${column} IN ${sql.join(values.map((v) => sql`${v}`), sql`, `)}`
+    return inArray(column, values)
   }
 
   saveArtifact(id: string, packageId: string, path: string, sha256: string, sizeBytes: number, type: string): void {
@@ -609,6 +610,27 @@ export class EngagementStore {
       result[row.findingId] = row.count
     }
     return result
+  }
+
+  /**
+   * Fetch all engagement detail data in a single method call — avoids the 4 separate
+   * sequential store calls that engagement-detail.tsx was making on mount.
+   * Returns null if the engagement doesn't exist.
+   */
+  getEngagementDetail(engagementId: string): {
+    engagement: EngagementState
+    findings: NormalizedFinding[]
+    evidence: ReturnType<EngagementStore["getEvidenceByEngagement"]>
+    auditLog: ReturnType<EngagementStore["getAuditLog"]>
+  } | null {
+    const eng = this.getEngagement(engagementId)
+    if (!eng) return null
+    return {
+      engagement: eng,
+      findings: this.getFindings(engagementId),
+      evidence: this.getEvidenceByEngagement(engagementId),
+      auditLog: this.getAuditLog(engagementId),
+    }
   }
 
   saveWorkflowSnapshot(id: string, engagementId: string, workflowName: string, workflowVersion: number, workflowYaml: string): void {

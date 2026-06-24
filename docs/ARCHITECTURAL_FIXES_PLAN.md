@@ -183,7 +183,7 @@ hardcoded array.
 
 ### Item 5: N+1 queries in workspace.tsx
 
-**Status:** ✅ Valid
+**Status:** ✅ **Fixed in this session** — also fixed same pattern in dashboard.tsx, engagements.tsx, evidence.ts; rewrote `getEvidenceByEngagement()` with 3 bulk queries; extracted `_inClause` helper with `SQL | AnyColumn` typing; added unit tests for `getFindingCountsByEngagementIds()` and `getEvidenceByEngagement()`
 **Files:** `Argus-Tui/packages/opencode/src/argus/tui/routes/workspace.tsx`,
 `Argus-Tui/packages/opencode/src/argus/engagement/store.ts`
 
@@ -211,7 +211,7 @@ demonstrating this pattern.
 
 ### Item 6: engagement-detail.tsx 4 separate DB queries on mount
 
-**Status:** ✅ Valid
+**Status:** ✅ **Fixed in this session** — added `getEngagementDetail()` bundled method to `EngagementStore`; implemented structural skeleton loading with block characters (`▓`/`░`) matching page layout
 **Files:** `Argus-Tui/packages/opencode/src/argus/tui/routes/engagement-detail.tsx`,
 `Argus-Tui/packages/opencode/src/argus/engagement/store.ts`
 
@@ -260,7 +260,7 @@ function SkeletonLoading() {
 
 ### Item 7: engagement-detail.tsx audit log not filtered
 
-**Status:** ✅ Valid
+**Status:** ✅ **Fixed in this session** — added `eventFilter` signal (`"all" | "phase" | "tool" | "error"`), `eventCategory()` mapping by event type prefix, and clickable filter bar above timeline entries
 **Files:** `Argus-Tui/packages/opencode/src/argus/tui/routes/engagement-detail.tsx`
 
 **Problem:**
@@ -279,7 +279,7 @@ has `eventType` (line 29: `eventType: string`) but no filter UI exists.
 
 ### Subproject 14(a): Configurable storage base path
 
-**Status:** ✅ Bundled with Week 2
+**Status:** ✅ **Fixed in this session** — created `StoragePaths` utility with `ARGUS_DATA_DIR` env var / `storage.base_path` config / `~/.argus` fallback; replaced 11 hardcoded paths across 8 files; added unit tests pass
 **Files:** `Argus-Tui/packages/opencode/src/argus/storage/paths.ts` (new),
 `Argus-Tui/packages/opencode/src/argus/engagement/store.ts`,
 `Argus-Tui/packages/opencode/src/argus/engagement/credentials.ts`,
@@ -588,10 +588,10 @@ Week 1 ────────────────────────�
   ─── Total: ~1 day ───
 
 Week 2 ──────────────────────────────────────
-  Item 5  (N+1 queries)         ─ 30 min
-  Item 6  (4 DB queries)        ─ 1 hr
-  Item 7  (Audit log filter)    ─ 30 min
-  14(a)   (Configurable paths)  ─ 1 afternoon
+  Item 5  (N+1 queries)         ─ 30 min     ✅ Fixed
+  Item 6  (4 DB queries)        ─ 1 hr       ✅ Fixed
+  Item 7  (Audit log filter)    ─ 30 min     ✅ Fixed
+  14(a)   (Configurable paths)  ─ 1 afternoon ✅ Fixed
   ─── Total: ~1.5 days ───
 
 Week 3 ──────────────────────────────────────

@@ -9,8 +9,8 @@
  * Precedence (future):  CLI flags > Env vars > Project config > User config > Defaults
  * Current: Project config only (feature flags + evidence settings).
  */
-import { homedir } from "os"
 import { join } from "path"
+import { StoragePaths } from "../storage/paths"
 import { existsSync, readFileSync } from "fs"
 import { z } from "zod"
 import { parse as YAML } from "yaml"
@@ -43,7 +43,7 @@ export type ArgusConfig = z.infer<typeof ArgusConfigSchema>
 
 export class ConfigLoader {
   static readonly PROJECT_CONFIG_PATH = join(process.cwd(), "argus.config.yaml")
-  static readonly USER_CONFIG_PATH = join(homedir(), ".argus", "config.yaml")
+  static readonly USER_CONFIG_PATH = StoragePaths.config
 
   /**
    * Load and validate config from project config file.

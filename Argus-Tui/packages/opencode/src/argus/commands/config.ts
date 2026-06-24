@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "fs"
 import { join } from "path"
-import { homedir } from "os"
+import { StoragePaths } from "../storage/paths"
 
 interface ConfigEntry {
   key: string
@@ -22,8 +22,8 @@ export async function configCommand(filter?: string): Promise<string> {
     "browser.verification_enabled": "true",
     "workflows.autoload": "true",
     "replan.max_cycles": "10",
-    "credentials.default_path": join(homedir(), ".argus", "credentials.json"),
-    "db.path": join(homedir(), ".argus", "argus.db"),
+    "credentials.default_path": StoragePaths.credentials,
+    "db.path": StoragePaths.db,
     "db.wal_mode": "true",
   }
 
@@ -48,7 +48,7 @@ export async function configCommand(filter?: string): Promise<string> {
   }
 
   // User config file (~/.argus/config.yaml or credentials.json)
-  const userConfigPath = join(homedir(), ".argus", "credentials.json")
+  const userConfigPath = StoragePaths.credentials
   if (existsSync(userConfigPath)) {
     const size = readFileSync(userConfigPath).length
     entries.push({ key: "credentials.file_exists", value: "true", source: "user_config" })

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "fs"
 import { join, resolve } from "path"
 import { homedir } from "os"
+import { StoragePaths } from "../storage/paths"
 import { spawn, execFile, execFileSync } from "child_process"
 import { connect as tcpConnect } from "net"
 import { xdgData } from "xdg-basedir"
@@ -263,7 +264,7 @@ async function redisCheck(): Promise<CheckResult> {
 function dbCheck(): CheckResult {
   try {
     const store = new EngagementStore()
-    const path = join(homedir(), ".argus", "argus.db")
+    const path = StoragePaths.db
     const exists = existsSync(path)
     const engCount = store.listEngagements().length
 
@@ -284,7 +285,7 @@ function dbCheck(): CheckResult {
 }
 
 function envCheck(): CheckResult {
-  const envPath = join(homedir(), ".argus", ".env")
+  const envPath = StoragePaths.env
   const localEnv = join(PROJECT_ROOT, ".env")
   const envKeyFound = !!(process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)
 
