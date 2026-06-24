@@ -97,6 +97,11 @@ export class InProcessExecutor implements PhaseExecutor {
     }
   }
 
+  reset(): void {
+    this.emitProgress = null
+    this.executionOptions = {}
+  }
+
   getToolHealth(): ToolHealthRecord[] {
     const status = this.toolHealth.getStatus()
     if (this.executionOptions.verbose && status.length > 0) {

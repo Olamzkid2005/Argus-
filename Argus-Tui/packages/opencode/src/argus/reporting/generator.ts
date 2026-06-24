@@ -46,8 +46,8 @@ export class ReportGenerator {
    * Generate a report directly from the SQLite store — re-queries findings
    * and evidence on every call so the report always reflects the latest state.
    */
-  generateFromEngagement(engagementId: string, format: ReportFormat = "markdown"): string {
-    const store = new EngagementStore()
+  generateFromEngagement(engagementId: string, format: ReportFormat = "markdown", store?: EngagementStore): string {
+    const store = store ?? new EngagementStore()
     const engagement = store.getEngagement(engagementId)
     if (!engagement) return `Engagement not found: ${engagementId}`
 

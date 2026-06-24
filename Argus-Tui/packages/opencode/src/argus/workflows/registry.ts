@@ -14,12 +14,13 @@ export class WorkflowRegistry {
   }
 
   loadAll(): WorkflowDefinition[] {
-    // Clear stale entries so repeated calls don't accumulate orphaned workflows
-    this.workflows.clear()
+    // Load into a temporary map so partial failure doesn't corrupt the live map
     const loaded = loadAllWorkflows(this.workflowsDir)
+    const newMap = new Map<string, WorkflowDefinition>()
     for (const wf of loaded) {
-      this.workflows.set(wf.name, wf)
+      newMap.set(wf.name, wf)
     }
+    this.workflows = newMap // atomic swap
     return loaded
   }
 

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "fs"
+import { existsSync, readFileSync, statSync } from "fs"
 import { join } from "path"
 import { StoragePaths } from "../storage/paths"
 
@@ -50,7 +50,7 @@ export async function configCommand(filter?: string): Promise<string> {
   // User config file (~/.argus/config.yaml or credentials.json)
   const userConfigPath = StoragePaths.credentials
   if (existsSync(userConfigPath)) {
-    const size = readFileSync(userConfigPath).length
+    const size = statSync(userConfigPath).size
     entries.push({ key: "credentials.file_exists", value: "true", source: "user_config" })
     entries.push({ key: "credentials.file_size_bytes", value: String(size), source: "user_config" })
   }

@@ -336,7 +336,7 @@ export class WorkersBridge {
       }
       const text = mcpResponse.content?.[0]?.text ?? ""
       const result: ToolResult = {
-        success: mcpResponse.meta?.success ?? !mcpResponse.isError,
+        success: mcpResponse.meta?.success ?? (mcpResponse.isError !== undefined ? !mcpResponse.isError : false),
         data: text,
         error: mcpResponse.isError ? text : undefined,
         durationMs: mcpResponse.meta?.duration_ms ?? 0,

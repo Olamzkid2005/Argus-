@@ -124,9 +124,12 @@ class ToolRunner:
         )
 
         # Initialize per-tool circuit breakers for resilience
-        self._circuit_breaker_mgr = ToolCircuitBreakerManager()
         self._failure_threshold = failure_threshold
         self._cooldown_seconds = cooldown_seconds
+        self._circuit_breaker_mgr = ToolCircuitBreakerManager(
+            failure_threshold=self._failure_threshold,
+            cooldown_seconds=self._cooldown_seconds,
+        )
 
     def is_dangerous(self, tool: str, args: list[str]) -> bool:
         """

@@ -178,19 +178,21 @@ class ToolCircuitBreakerManager:
         breaker.record_failure()
     """
 
-    def __init__(self):
+    def __init__(self, failure_threshold: int = 3, cooldown_seconds: int = 300):
+        self._failure_threshold = failure_threshold
+        self._cooldown_seconds = cooldown_seconds
         self._breakers: dict[str, CircuitBreaker] = {}
         self._lock = threading.RLock()
 
     def get_breaker(
-        self, tool_name: str, failure_threshold: int = 3, cooldown_seconds: int = 300
+        self, tool_name: str, failure_threshold: int | None = None, cooldown_seconds: int | None = None
     ) -> CircuitBreaker:
         """Get or create circuit breaker for a tool."""
         with self._lock:
             if tool_name not in self._breakers:
                 self._breakers[tool_name] = CircuitBreaker(
-                    failure_threshold=failure_threshold,
-                    cooldown_seconds=cooldown_seconds,
+                    failure_threshold=failure_threshold if failure_threshold is not None else self._failure_threshold,
+                    cooldown_seconds=cooldown_seconds if cooldown_seconds is not None else self._cooldown_seconds,
                     name=tool_name,
                 )
             return self._breakers[tool_name]
