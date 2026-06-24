@@ -30,6 +30,11 @@ class MCPTransportError(Exception):
     pass
 
 
+# Sentinel used by _read_request to signal a malformed JSON line that should
+# be skipped (continue) rather than treated as EOF (break).
+_SKIP_LINE: dict = {}
+
+
 class MCPTransport:
     def __init__(self):
         self.handlers: dict[str, Callable] = {}
@@ -39,6 +44,13 @@ class MCPTransport:
         self.handlers[method] = handler
 
     def _read_request(self) -> dict | None:
+        """Read and parse one JSON-RPC request from stdin.
+        
+        Returns:
+            dict: Parsed request on success.
+            None: EOF (stdin closed) — caller should exit the run loop.
+            _SKIP_LINE: Malformed JSON — caller should continue to next line.
+        """
         line = sys.stdin.readline()
         if not line:
             return None
@@ -46,7 +58,7 @@ class MCPTransport:
             return json.loads(line.strip())
         except json.JSONDecodeError as e:
             logger.error("Invalid JSON-RPC request: %s", e)
-            return None
+            return _SKIP_LINE
 
     def _send_response(
         self, request: dict, result: Any = None, error: dict | None = None
@@ -99,7 +111,9 @@ class MCPTransport:
             try:
                 request = self._read_request()
                 if request is None:
-                    break
+                    break  # EOF — stdin closed
+                if request is _SKIP_LINE:
+                    continue  # malformed JSON — skip and keep reading
                 self._handle_request(request)
             except KeyboardInterrupt:
                 break

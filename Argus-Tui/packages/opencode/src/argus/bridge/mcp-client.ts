@@ -4,6 +4,7 @@ import { accessSync, constants } from "fs"
 import type { ToolDefinition, ToolResult, MCPError, DriftReport, CacheMode } from "./types"
 import { LLMUnavailableError } from "./types"
 import { WorkerSupervisor } from "./supervisor"
+import { PROJECT_ROOT } from "../shared/path"
 
 interface PendingRequest {
   resolve: (value: unknown) => void
@@ -41,7 +42,7 @@ export class WorkersBridge {
   private statusListeners: Array<(status: string) => void> = []
 
   private pendingCount = 0
-  private readonly maxPending = 10
+  private readonly maxPending: number
 
   // Circuit breaker state
   private circuitFailures = 0
@@ -56,7 +57,9 @@ export class WorkersBridge {
   constructor(
     private workersPath: string,
     private pythonPath: string = "python3",
+    options?: { maxPending?: number },
   ) {
+    this.maxPending = options?.maxPending ?? 10
     this.supervisor = new WorkerSupervisor({
       killChild: () => this.killChild(),
       connect: () => this.connect(),
@@ -164,6 +167,10 @@ export class WorkersBridge {
   private async spawnChild(): Promise<void> {
     this.process = spawn(this.pythonPath, [this.workersPath], {
       stdio: ["pipe", "pipe", "pipe"],
+      // Anchor the worker to the project root so it can resolve config files
+      // and tool definitions relative to a known location regardless of where
+      // the parent process was launched from.
+      cwd: PROJECT_ROOT,
     })
 
     this.rl = createInterface({

@@ -298,6 +298,7 @@ class ToolHealthTracker:
         """Query tool_metrics for the last 24 hours and return per-tool health."""
         conn = None
         cursor = None
+        db = None
         try:
             from database.connection import get_db
 
@@ -395,7 +396,7 @@ class ToolHealthTracker:
         finally:
             if cursor:
                 cursor.close()
-            if conn:
+            if conn and db:
                 db.release_connection(conn)
 
 
