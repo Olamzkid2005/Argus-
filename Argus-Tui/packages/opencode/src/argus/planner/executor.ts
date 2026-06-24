@@ -347,7 +347,11 @@ export class InProcessExecutor implements PhaseExecutor {
         };
         const extra = this.buildExtraFromCredentials(phase.config);
         if (extra) toolArgs.extra = extra;
-        const result = await this.bridge.callTool(next.tool, toolArgs, undefined, execOptions.cacheMode)
+        // Use per-tool timeout from registry — matches executeTool() at line 473.
+        // Without this, callTool defaults to 600s which may be too short for deep
+        // scans (sqlmap, nuclei) or unnecessarily long for quick tools (httpx, gau).
+        const toolTimeout = this.toolRegistry.getToolTimeout(next.tool) * 1000
+        const result = await this.bridge.callTool(next.tool, toolArgs, toolTimeout, execOptions.cacheMode)
         const durationMs = Date.now() - toolStartTime
 
         if (result.success) {

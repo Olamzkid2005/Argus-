@@ -109,16 +109,21 @@ Provide a JSON response with:
 
     try {
       const parsed = JSON.parse(response.text)
-      // Validate shape: impact and remediation must be arrays
-      if (!parsed || !Array.isArray(parsed.impact) || !Array.isArray(parsed.remediation)) {
-        return {
-          explanation: typeof parsed?.explanation === "string" ? parsed.explanation : response.text.slice(0, 500),
-          impact: Array.isArray(parsed?.impact) ? parsed.impact : ["LLM returned malformed analysis"],
-          remediation: Array.isArray(parsed?.remediation) ? parsed.remediation : ["Review raw LLM output for guidance"],
-          references: Array.isArray(parsed?.references) ? parsed.references : undefined,
-        }
-      }
-      return parsed
+      // Field-level schema validation: each field is validated independently so a
+      // single bad field doesn't discard the entire LLM response.
+      const explanation = typeof parsed?.explanation === "string" && parsed.explanation.length > 0
+        ? parsed.explanation
+        : response.text.slice(0, 500)
+      const impact = Array.isArray(parsed?.impact) && parsed.impact.length > 0
+        ? parsed.impact.filter((i: unknown) => typeof i === "string")
+        : ["LLM returned malformed impact assessment"]
+      const remediation = Array.isArray(parsed?.remediation) && parsed.remediation.length > 0
+        ? parsed.remediation.filter((r: unknown) => typeof r === "string")
+        : ["Review raw LLM output for remediation guidance"]
+      const references = Array.isArray(parsed?.references)
+        ? parsed.references.filter((r: unknown) => typeof r === "string")
+        : undefined
+      return { explanation, impact, remediation, references }
     } catch {
       return {
         explanation: response.text.slice(0, 500),
