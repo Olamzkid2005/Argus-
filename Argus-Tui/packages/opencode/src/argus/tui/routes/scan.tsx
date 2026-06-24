@@ -76,7 +76,7 @@ export function ScanDashboard() {
         if (p.status === "COMPLETED" || p.status === "FAILED" || p.status === "PARTIAL") {
           const status = p.status === "PARTIAL" ? "partial" : p.status === "FAILED" ? "failed" : "completed"
           const phaseFindings = findingsByPhase.get(p.id) ?? 0
-          completePhase(i, phaseFindings, p.error ? [p.error] : [], status)
+          completePhase(p.id, phaseFindings, p.error ? [p.error] : [], status)
         }
       }
 

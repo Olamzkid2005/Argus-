@@ -93,7 +93,7 @@ describe("scan-store", () => {
   it("completePhase() sets phase to completed, updates findings", () => {
     initScan("https://test.com", "eng-1")
     addPhase({ id: "phase-0", name: "recon", index: 0, total: 3 })
-    completePhase(0, 5, [])
+    completePhase("phase-0", 5, [])
     const state = getScanState()
     expect(state.phases[0].status).toBe("completed")
     expect(state.phases[0].findings).toBe(5)
@@ -103,7 +103,7 @@ describe("scan-store", () => {
   it("completePhase() sets phase to failed when errors present", () => {
     initScan("https://test.com", "eng-1")
     addPhase({ id: "phase-0", name: "recon", index: 0, total: 3 })
-    completePhase(0, 0, ["connection error"])
+    completePhase("phase-0", 0, ["connection error"])
     const state = getScanState()
     expect(state.phases[0].status).toBe("failed")
     expect(state.phases[0].errors).toEqual(["connection error"])
@@ -112,7 +112,7 @@ describe("scan-store", () => {
   it("completePhase() with explicit partial status", () => {
     initScan("https://test.com", "eng-1")
     addPhase({ id: "phase-0", name: "recon", index: 0, total: 3 })
-    completePhase(0, 3, ["some errors"], "partial")
+    completePhase("phase-0", 3, ["some errors"], "partial")
     const state = getScanState()
     expect(state.phases[0].status).toBe("partial")
     expect(state.phases[0].findings).toBe(3)
@@ -121,8 +121,8 @@ describe("scan-store", () => {
   it("completePhase() is idempotent — second call does not change status", () => {
     initScan("https://test.com", "eng-1")
     addPhase({ id: "phase-0", name: "recon", index: 0, total: 3 })
-    completePhase(0, 5, [], "completed")
-    completePhase(0, 0, ["error"], "failed")
+    completePhase("phase-0", 5, [], "completed")
+    completePhase("phase-0", 0, ["error"], "failed")
     const state = getScanState()
     expect(state.phases[0].status).toBe("completed")
     expect(state.phases[0].findings).toBe(5)
@@ -165,23 +165,23 @@ describe("scan-store", () => {
     addPhase({ id: "p1", name: "scan", index: 1, total: 3 })
     addPhase({ id: "p2", name: "analyze", index: 2, total: 3 })
 
-    completePhase(0, 10, [])
+    completePhase("p0", 10, [])
     expect(getScanState().totalFindings).toBe(10)
 
-    completePhase(1, 20, [])
+    completePhase("p1", 20, [])
     expect(getScanState().totalFindings).toBe(30)
 
-    completePhase(2, 5, [])
+    completePhase("p2", 5, [])
     expect(getScanState().totalFindings).toBe(35)
   })
 
   it("completePhase is idempotent for findings count — completing a phase twice doesn't add more", () => {
     initScan("https://test.com", "eng-1")
     addPhase({ id: "p0", name: "recon", index: 0, total: 2 })
-    completePhase(0, 10, [], "completed")
+    completePhase("p0", 10, [], "completed")
     expect(getScanState().totalFindings).toBe(10)
     // Second call should be a no-op (phase already completed)
-    completePhase(0, 10, [], "completed")
+    completePhase("p0", 10, [], "completed")
     expect(getScanState().totalFindings).toBe(10)
   })
 
@@ -192,8 +192,8 @@ describe("scan-store", () => {
     addPhase({ id: "p1", name: "scan", index: 1, total: 2 })
 
     // Resume: restore phases from DB — completePhase adds per-phase counts
-    completePhase(0, 10, [], "completed")  // totalFindings: 0 + 10 = 10
-    completePhase(1, 5, [], "completed")   // totalFindings: 10 + 5 = 15
+    completePhase("p0", 10, [], "completed")  // totalFindings: 0 + 10 = 10
+    completePhase("p1", 5, [], "completed")   // totalFindings: 10 + 5 = 15
 
     // totalFindings should be exactly the sum of per-phase findings
     expect(getScanState().totalFindings).toBe(15)
@@ -209,7 +209,7 @@ describe("scan-store", () => {
     initScan("https://test.com", "eng-1")
     addPhase({ id: "p0", name: "recon", index: 0, total: 2 })
     // The default resolution: errors.length > 0 && findings === 0 => status "failed"
-    completePhase(0, 0, ["connection error"])
+    completePhase("p0", 0, ["connection error"])
     expect(getScanState().phases[0].status).toBe("failed")
     expect(getScanState().phases[0].findings).toBe(0)
     expect(getScanState().totalFindings).toBe(0)

@@ -119,13 +119,15 @@ export function addPhase(phase: { id: string; name: string; index: number; total
   setScanState("currentPhase", phase.index)
 }
 
-export function completePhase(index: number, findings: number, errors: string[], status?: "completed" | "partial" | "failed") {
-  if (scanState.phases[index]?.status === "completed" || scanState.phases[index]?.status === "partial" || scanState.phases[index]?.status === "failed") return
+export function completePhase(phaseId: string, findings: number, errors: string[], status?: "completed" | "partial" | "failed") {
+  const idx = scanState.phases.findIndex((p) => p.id === phaseId)
+  if (idx < 0) return
+  if (scanState.phases[idx]?.status === "completed" || scanState.phases[idx]?.status === "partial" || scanState.phases[idx]?.status === "failed") return
   persistActive()
   const resolvedStatus = status ?? (errors.length > 0 && findings > 0 ? "partial" : errors.length > 0 ? "failed" : "completed")
-  setScanState("phases", index, "status", resolvedStatus)
-  setScanState("phases", index, "findings", findings)
-  setScanState("phases", index, "errors", errors)
+  setScanState("phases", idx, "status", resolvedStatus)
+  setScanState("phases", idx, "findings", findings)
+  setScanState("phases", idx, "errors", errors)
   setScanState("totalFindings", (prev) => prev + findings)
 }
 
@@ -161,10 +163,6 @@ export function resetScan() {
   activeEngagementId = null
 }
 
-function findPhaseIndex(phaseId: string): number {
-  return scanState.phases.findIndex((p) => p.id === phaseId)
-}
-
 function drainQueue() {
   while (_pendingQueue.length > 0) {
     const next = _pendingQueue.shift()!
@@ -188,14 +186,12 @@ function processEventInner(event: ProgressEvent, engagementId?: string) {
       addPhase({ id: event.phaseId, name: event.name, index: scanState.phases.length, total: event.total })
       break
     case "phase_complete": {
-      const ci = findPhaseIndex(event.phaseId)
       const ps = "status" in event ? event.status : undefined
-      if (ci >= 0) completePhase(ci, event.findings, [], ps === "PARTIAL" ? "partial" : ps === "COMPLETED" ? "completed" : undefined)
+      completePhase(event.phaseId, event.findings, [], ps === "PARTIAL" ? "partial" : ps === "COMPLETED" ? "completed" : undefined)
       break
     }
     case "phase_error": {
-      const ei = findPhaseIndex(event.phaseId)
-      if (ei >= 0) completePhase(ei, 0, [event.error], "failed")
+      completePhase(event.phaseId, 0, [event.error], "failed")
       break
     }
     case "analysis_progress":
