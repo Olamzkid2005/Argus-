@@ -531,6 +531,31 @@ export class EngagementStore {
     return rows.map((r) => ({ id: r.id, path: r.path, sha256: r.sha256, sizeBytes: r.size_bytes, type: r.type }))
   }
 
+  /**
+   * Get finding counts grouped by engagement IDs in a single query.
+   * Returns a Map of engagement_id → { total, critical, confirmed }.
+   * Replaces the N+1 pattern where callers looped `getFindings(e.id)` for each engagement.
+   */
+  getFindingCountsByEngagementIds(ids: string[]): Map<string, { total: number; critical: number; confirmed: number }> {
+    if (ids.length === 0) return new Map()
+    const rows = this.db
+      .select({
+        engagementId: findingsTable.engagement_id,
+        total: sql<number>`count(*)`.as("total"),
+        critical: sql<number>`sum(case when ${findingsTable.severity} >= 4 then 1 else 0 end)`.as("critical"),
+        confirmed: sql<number>`sum(case when ${findingsTable.status} in ('CONFIRMED', 'FINALIZED') then 1 else 0 end)`.as("confirmed"),
+      })
+      .from(findingsTable)
+      .where(sql`${findingsTable.engagement_id} IN ${sql.join(ids.map((id) => sql`${id}`), sql`, `)}`)
+      .groupBy(findingsTable.engagement_id)
+      .all()
+    const result = new Map<string, { total: number; critical: number; confirmed: number }>()
+    for (const row of rows) {
+      result.set(row.engagementId, { total: row.total, critical: row.critical, confirmed: row.confirmed })
+    }
+    return result
+  }
+
   getEvidenceCountsByEngagement(engagementId: string): Record<string, number> {
     const rows = this.db
       .select({

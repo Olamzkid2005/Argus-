@@ -32,11 +32,16 @@ export function EngagementBrowser() {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
       const list = store.listEngagements()
+
+      // Single grouped query instead of N+1
+      const ids = list.map((e) => e.id)
+      const countsByEngId = store.getFindingCountsByEngagementIds(ids)
+
       const rows = list.map((e) => {
-        const findings = store.getFindings(e.id)
+        const counts = countsByEngId.get(e.id)
         return {
           id: e.id, target: e.target, workflow: e.workflow, status: e.status,
-          findingCount: findings.length, createdAt: +e.createdAt, updatedAt: +e.updatedAt,
+          findingCount: counts?.total ?? 0, createdAt: +e.createdAt, updatedAt: +e.updatedAt,
         }
       })
       setEngagements(rows)

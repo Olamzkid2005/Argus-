@@ -24,12 +24,19 @@ export function Workspace() {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
       const engs = store.listEngagements()
+
+      // Single grouped query instead of N+1 (one query for all engagements)
+      const ids = engs.map((e) => e.id)
+      const countsByEngId = store.getFindingCountsByEngagementIds(ids)
+
       let findings = 0, critical = 0, running = 0
       for (const e of engs) {
         if (e.status === "RUNNING") running++
-        const f = store.getFindings(e.id)
-        findings += f.length
-        critical += f.filter((x) => (x.severity ?? 0) >= 4).length
+        const counts = countsByEngId.get(e.id)
+        if (counts) {
+          findings += counts.total
+          critical += counts.critical
+        }
       }
       setEngCount(engs.length)
       setRunningCount(running)

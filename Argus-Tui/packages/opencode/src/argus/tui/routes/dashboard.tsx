@@ -38,11 +38,17 @@ export function ArgusDashboard() {
       const engagements = store.listEngagements()
       const totalTargets = new Set(engagements.map((e) => e.target)).size
       const openEngagements = engagements.filter((e) => e.status === "RUNNING" || e.status === "CREATED").length
+
+      // Single grouped query instead of N+1
+      const recentIds = engagements.slice(0, 8).map((e) => e.id)
+      const countsByEngId = store.getFindingCountsByEngagementIds(recentIds)
+
       let confirmedFindings = 0
       const recent = engagements.slice(0, 8).map((e) => {
-        const findings = store.getFindings(e.id)
-        confirmedFindings += findings.filter((f) => f.status === "CONFIRMED" || f.status === "FINALIZED").length
-        return { id: e.id, target: e.target, status: e.status, findingCount: findings.length, updatedAt: +e.updatedAt }
+        const counts = countsByEngId.get(e.id)
+        const findingCount = counts?.total ?? 0
+        confirmedFindings += counts?.confirmed ?? 0
+        return { id: e.id, target: e.target, status: e.status, findingCount, updatedAt: +e.updatedAt }
       })
       setData({ totalTargets, openEngagements, confirmedFindings, recent })
       setLoading(false)
