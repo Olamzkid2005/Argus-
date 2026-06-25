@@ -62,7 +62,7 @@
 
 - [x] **`bun install` ran in `Argus-Tui/packages/opencode`** `[H]` — **FIXED** — `start-argus.sh` now checks root workspace install and runs `bun install` at the root level before checking individual packages.
 (- [x] **Python venv created in argus-workers/venv** — **FIXED** — Added `test -f venv/bin/activate` guard to all Makefile targets. start_worker.sh and celery_worker_launcher.py fall back to system celery PATH when venv celery missing.) `[H]` — `Makefile` `dev-worker`/`test-backend`/`lint-backend` all `source venv/bin/activate` with no `|| exit`; if `venv/` is missing, `source` fails and the recipe **silently proceeds with system Python**, importing wrong/incompatible deps. `start_worker.sh` and `celery_worker_launcher.py` hardcode `venv/bin/celery` with no fallback.
-- [ ] **`pip install -r requirements.txt` has `libpq-dev` available** `[M]` — `psycopg2>=2.9.10,<3` is a source build requiring `libpq-dev`/`postgresql-libs`. The mac v4 script installs `psycopg2-binary` instead — inconsistent. On a bare machine the build fails.
+- [x] **`pip install -r requirements.txt` has `libpq-dev` available** `[M]` — **FIXED** — Switched from `psycopg2` (source build, requires `libpq-dev`) to `psycopg2-binary` (no build dependency). Trade-off documented in requirements.txt.
 (- [x] **requirements-dev.txt-only installs break production imports** — **FIXED** — CI fixture-smoke and fixture-full jobs now install requirements.txt before requirements-dev.txt.) `[H]` — CI `fixture-smoke`/`fixture-full` jobs install only `requirements-dev.txt`, but fixture tests import production code needing `celery`/`sqlalchemy` from `requirements.txt` → import errors at collection time.
 - [x] **`psutil` not in production requirements** `[H]` — **FIXED** — `psutil` moved to `requirements.txt`. Orphaned subprocesses are now killed on timeout.
 - [x] **Duplicate `httpx` specifier** `[L]` — `requirements.txt` lists `httpx==0.28.1` and later `httpx>=0.28`. Pip resolves to 0.28.1 today; a stricter future pip may warn.
@@ -321,7 +321,7 @@
 - [x] **DNS resolves** `[M]` — **FIXED** — `doctor.ts` now includes `dnsCheck()` that proactively resolves `dns.google` via `dns.promises.resolve()`. Reports clear PASS/WARN status.
 - [x] **Outbound internet for LLM + tool installs** `[M]` — **FIXED** — Added `ARG AIRGAP=0` to Dockerfile. Go download is now conditional on `$AIRGAP = "0"`. Air-gap builds use `--build-arg AIRGAP=1` and expect tools pre-copied into `./vendor/`.
 - [x] **Proxy settings handled for web-scanning tools** `[L]` — **RESOLVED (by design)** — `tool_runner.py:_locked_env()` (lines 212-259) explicitly unsets `HTTP_PROXY`/`HTTPS_PROXY` for 11 web-scanning tools in `no_proxy_tools` (nuclei, dalfox, sqlmap, httpx, nikto, nmap, curl, testssl, arjun, jwt_tool, commix) to ensure they have full unfettered internet access. Non-web tools inherit proxy from parent env. This is intentional — web scanners need direct connectivity, not proxy routing.
-- [ ] **Target scope/authorization** `[H]` — (See §24.) Scope enforcement infrastructure EXISTS (`ScopeValidator`, `TargetValidator`, `sandbox.py` per-call checks, `execution_engine.py` middleware) but is opt-in. Without configured `authorized_scope`, Argus will run active scans against any target.
+- [x] **Target scope/authorization — scope bypass bug fixed** `[H]` — **FIXED** — `orchestrator_pkg/scan.py:457` had `if engagement_id and True:` which made scope validation always pass. Removed `and True`. Scope filter now actually runs when `engagement_id` is set. (The broader opt-in vs deny-by-default policy question remains as a separate item.)
 - [ ] **Rate limiting / WAF** `[L]` — Aggressive tools (nuclei, ffuf) may get IP-banned; no global rate-limit coordination across tools.
 
 ## 22. Tool Self-Security
@@ -354,7 +354,7 @@
 - [ ] **Written authorization obtained for the target** `[H]` — Argus runs active scans (nuclei, sqlmap, nmap) by default. README "Security Notice" requires written authorization. Technical scope guard infrastructure EXISTS (`ScopeValidator` in `scope_validator.py` with domain/CIDR/URL matching, `TargetValidator` in `target-validator.ts` with glob allowlist/blocklist, `sandbox.py:137-152` per-call enforcement, `execution_engine.py:46-51` middleware), but scope is **opt-in** — default is allow-all when `authorized_scope` is unconfigured. Without configuration, any target can be scanned.
 - [ ] **Scope limitations respected** `[H]` — An allowlist infrastructure EXISTS (`ScopeValidator` with domain/CIDR/URL matching enforced per-tool via `sandbox.py:137-152` + `execution_engine.py:46-51` middleware), but scope is **opt-in** (default allow-all when `authorized_scope` is unconfigured). Without configuration, subdomain enumeration that finds out-of-scope hosts will still be scanned by downstream phases.
 - [ ] **`allowed_git_hosts: []` empty** `[M]` — `argus.config.yaml:18` empty means no git-host restrictions; verify this is intended.
-- [ ] **Rate/scope guard for production targets** `[M]` — No global concurrency/rate cap across tools; easy to DoS an authorized-but-fragile target.
+- [x] **Rate/scope guard for production targets** `[M]` — **FIXED** — `SUBPROCESS_SEMAPHORE` (max 20 concurrent) and `HIGH_COST_SEMAPHORE` (max 6) now gate all tool subprocess execution via `tool_runner.run()` and `run_streaming()`. See §21:323.
 - [ ] **Data residency / evidence storage** `[M]` — Evidence + credentials stored under `~/.argus/` on the operator's machine. Ensure that location is encrypted/at-rest-appropriate for the engagement.
 
 ## 25. Documentation & UX Consistency
@@ -666,8 +666,8 @@ The following items remain unfixed because they require non-trivial infrastructu
 
 ### 29.2 Global Rate & Scope Coordination
 
-- [ ] **§21:323 No global cross-tool rate limit** `[L]` — No coordination between concurrent tools (nuclei, ffuf, nmap, etc.). Easy to DoS a fragile target. LLM API calls have Redis-backed rate limiting; scan tools do not. Need a global token bucket or semaphore in the `ExecutionEngine` middleware chain.
-- [ ] **§24:355 No global concurrency/rate cap for production targets** `[M]` — `MAX_CONCURRENT_REQUESTS = 20` is defined in `config/constants.py` but has zero usages. No `asyncio.Semaphore` or `ThreadPoolExecutor` bound at the engine level. Need the execution engine to enforce a global concurrency ceiling.
+- [x] **§21:323 No global cross-tool rate limit** `[L]` — **FIXED** — `runtime/concurrency.py` provides `SUBPROCESS_SEMAPHORE` (max 20) and `HIGH_COST_SEMAPHORE` (max 6), wired into both `tool_runner.run()` and `run_streaming()`. Per-host rate limiting for target protection (different concern) tracked separately.
+- [x] **§24:355 No global concurrency/rate cap for production targets** `[M]` — **FIXED** — `MAX_CONCURRENT_REQUESTS = 20` is now consumed by `SUBPROCESS_SEMAPHORE` in `runtime/concurrency.py`, wired into `tool_runner.py`. Duplicate of §21:323/§357.
 - [ ] **§24:354 `allowed_git_hosts: []` empty (allow-all)** `[M]` — `argus.config.yaml:18` has an empty allowlist, which the validator treats as "allow all." Need a documented decision on whether this should be changed to a deny-by-default model and what migration path looks like for existing users.
 
 ### 29.3 Tool Pipeline & Metadata Integration
