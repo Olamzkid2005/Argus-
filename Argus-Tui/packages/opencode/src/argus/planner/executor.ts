@@ -62,6 +62,12 @@ const RECOVERY_LABELS: Record<ErrorRecovery, string> = {
   fail_fast: "fail fast",
 }
 
+export interface ScopeConfig {
+  mode: "allowlist" | "allow_all"
+  allowed_targets?: string[]
+  blocked_targets?: string[]
+}
+
 export class InProcessExecutor implements PhaseExecutor {
   private approvalService: ApprovalService
   private requiredGates: ApprovalGate[] = []
@@ -69,6 +75,12 @@ export class InProcessExecutor implements PhaseExecutor {
   private toolConfig: ToolConfig = new ToolConfig()
   private phaseCount = 0
   private toolHealth: ToolHealthMonitor
+  private scopeConfig: ScopeConfig | null = null
+  private tempCredFiles: string[] = []
+
+  setScopeConfig(config: ScopeConfig): void {
+    this.scopeConfig = config
+  }
 
   private executionOptions: ExecutionOptions = {}
   private emitProgress: ((event: ProgressEvent) => void) | null = null
@@ -100,6 +112,7 @@ export class InProcessExecutor implements PhaseExecutor {
   reset(): void {
     this.emitProgress = null
     this.executionOptions = {}
+    this.cleanupCreds()
   }
 
   getToolHealth(): ToolHealthRecord[] {
@@ -352,6 +365,8 @@ export class InProcessExecutor implements PhaseExecutor {
         };
         const extra = this.buildExtraFromCredentials(phase.config);
         if (extra) toolArgs.extra = extra;
+        const credsFile = await this.buildCredsFile(next.tool, phase.config)
+        if (credsFile) toolArgs.creds_file = credsFile;
         // Use per-tool timeout from registry — matches executeTool() at line 473.
         // Without this, callTool defaults to 600s which may be too short for deep
         // scans (sqlmap, nuclei) or unnecessarily long for quick tools (httpx, gau).
@@ -471,6 +486,17 @@ export class InProcessExecutor implements PhaseExecutor {
       const timeoutSeconds = this.toolRegistry.getToolTimeout(tool.name)
       const toolTimeout = timeoutSeconds * 1000
       try {
+        // Scope check — skip if target is not in authorized scope
+        if (this.scopeConfig?.mode === "allowlist") {
+          const isAllowed = this.scopeConfig.allowed_targets?.some(
+            (pattern: string) => phase.target.includes(pattern.replace("*.", ""))
+          ) ?? false
+          if (!isAllowed) {
+            console.warn(`[executor] Target ${phase.target} is out of scope — skipping tool ${tool.name}`)
+            return { findings: [], errors: [`Target ${phase.target} is out of scope`], failFast: false }
+          }
+        }
+
         // Populate extra with credentials for tools (login/register) that
         // expect credential data in the --extra JSON parameter.
         const toolArgs: Record<string, unknown> = {
@@ -480,6 +506,8 @@ export class InProcessExecutor implements PhaseExecutor {
         };
         const extra = this.buildExtraFromCredentials(phase.config);
         if (extra) toolArgs.extra = extra;
+        const credsFile = await this.buildCredsFile(tool.name, phase.config)
+        if (credsFile) toolArgs.creds_file = credsFile;
         if (execOptions.verbose) {
           // Only log safe fields to avoid leaking credentials from config
           const safeArgs = { target: toolArgs.target, capability: toolArgs.capability }
@@ -596,6 +624,51 @@ export class InProcessExecutor implements PhaseExecutor {
     const password = (creds.password ?? "") as string
     if (!email && !password) return undefined
     return JSON.stringify({ email, password })
+  }
+
+  private cleanupCreds(): void {
+    if (this.tempCredFiles.length === 0) return
+    import("fs/promises").then(({ unlink }) => {
+      for (const f of this.tempCredFiles) unlink(f).catch(() => {})
+    }).catch(() => {})
+    this.tempCredFiles = []
+  }
+
+  /**
+   * Build a temporary JSON credentials file for tools that accept
+   * `--creds-file` (e.g. playwright-bola). The file is written with
+   * mode 0o600 and tracked for cleanup.
+   */
+  private async buildCredsFile(toolName: string, config: Record<string, unknown>): Promise<string | null> {
+    const creds = config?.credentials
+    if (!creds || (Array.isArray(creds) && creds.length === 0)) return null
+    const { CredentialStore } = await import("../engagement/credentials")
+    const { writeFile, mkdtemp } = await import("fs/promises")
+    const { join } = await import("path")
+    const { tmpdir } = await import("os")
+
+    const credStore = new CredentialStore()
+    credStore.load()
+    const allRoles = credStore.getAllCredentials()
+
+    const toolDef = this.toolRegistry.getTool(toolName)
+    const requiredRoles = toolDef?.credential_roles ?? ["attacker", "victim"]
+
+    const selected: Record<string, unknown> = {}
+    for (const role of requiredRoles) {
+      const match = Object.entries(allRoles).find(
+        ([key]) => key.toLowerCase() === role.toLowerCase() || key.toLowerCase().includes(role.toLowerCase()),
+      )
+      if (match) selected[role] = match[1]
+    }
+
+    if (Object.keys(selected).length === 0) return null
+
+    const tmpDir = await mkdtemp(join(tmpdir(), "argus-creds-"))
+    const credsPath = join(tmpDir, "credentials.json")
+    await writeFile(credsPath, JSON.stringify(selected, null, 2), { mode: 0o600 })
+    this.tempCredFiles.push(credsPath)
+    return credsPath
   }
 
   private resolveErrorRecovery(phase: PhaseExecutionRequest, toolName: string): ErrorRecovery {

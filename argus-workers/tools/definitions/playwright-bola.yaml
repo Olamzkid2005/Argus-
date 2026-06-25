@@ -9,26 +9,11 @@ parameters:
     type: string
     required: true
     description: Target URL
-  - name: attacker-username
-    flag: --attacker-username
+  - name: creds_file
+    flag: --creds-file
     type: string
     required: true
-    description: Attacker username
-  - name: attacker-password
-    flag: --attacker-password
-    type: string
-    required: true
-    description: Attacker password
-  - name: victim-username
-    flag: --victim-username
-    type: string
-    required: true
-    description: Victim username
-  - name: victim-password
-    flag: --victim-password
-    type: string
-    required: true
-    description: Victim password
+    description: Path to JSON credentials file with attacker/victim credentials
   - name: username-selector
     flag: --username-selector
     type: string

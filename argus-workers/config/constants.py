@@ -129,6 +129,34 @@ class GitSSRFConfig:
             )
         return base
 
+    @classmethod
+    def from_config(cls, config_manager: object | None = None) -> "GitSSRFConfig":
+        """
+        Create config from the YAML-backed ConfigManager singleton.
+
+        Reads ``security.git_host_policy`` and ``security.allowed_git_hosts``
+        from argus.config.yaml. Falls back to the curated default allowlist
+        when the ConfigManager is unavailable.
+        """
+        try:
+            if config_manager is None:
+                from config.config_manager import get_config
+
+                cm = get_config()
+            else:
+                cm = config_manager
+
+            policy = cm.get("security.git_host_policy", "allowlist")
+            if policy == "allow_all":
+                return cls(host_allowlist=())  # Empty tuple = allow all
+
+            extra_hosts = cm.get("security.allowed_git_hosts", [])
+            base = cls()  # Get defaults
+            merged = tuple(sorted(set(base.host_allowlist) | set(extra_hosts)))
+            return cls(host_allowlist=merged)
+        except (ImportError, RuntimeError):
+            return cls()
+
 
 # ──────────────────────────────────────────────
 # Circuit breaker
@@ -284,7 +312,7 @@ class ArgusConfig:
     content: ContentLimits = field(default_factory=ContentLimits)
     retries: RetryConfig = field(default_factory=RetryConfig)
     scan: ScanConfig = field(default_factory=ScanConfig)
-    git_ssrf: GitSSRFConfig = field(default_factory=GitSSRFConfig.from_env)
+    git_ssrf: GitSSRFConfig = field(default_factory=GitSSRFConfig.from_config)
     circuit_breaker: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig.from_config)
     tls: TLSConfig = field(default_factory=TLSConfig)
     llm: LLMGeneralConfig = field(default_factory=LLMGeneralConfig)

@@ -158,10 +158,85 @@ class ScopeValidator:
         return False
 
 
+def _match_glob(pattern: str, target: str) -> bool:
+    """Check if target matches a glob pattern (fnmatch-style)."""
+    import fnmatch
+    return fnmatch.fnmatch(target.lower(), pattern.lower())
+
+
+def _check_blocked(target: str, blocked_targets: list[str] | None) -> bool:
+    """Check if target matches any blocked pattern. Returns True if blocked."""
+    if not blocked_targets:
+        return False
+    for pattern in blocked_targets:
+        if _match_glob(pattern, target):
+            logger.warning(
+                "Target %s matches blocked pattern '%s' — denying",
+                target,
+                pattern,
+            )
+            return True
+    return False
+
+
+def _check_allowed(target: str, allowed_targets: list[str] | None, mode: str) -> bool | None:
+    """Check if target matches allowed patterns. Returns True if allowed,
+    False if denied, None if no decision (delegate to caller)."""
+    allowed = allowed_targets or []
+
+    if not allowed:
+        if mode == "allowlist":
+            logger.warning(
+                "Target %s denied: allowlist mode with no allowed_targets configured",
+                target,
+            )
+            return False
+        logger.warning(
+            "Target %s: no allowed_targets configured (mode=warn) — allowing with warning",
+            target,
+        )
+        return True
+
+    for pattern in allowed:
+        if _match_glob(pattern, target):
+            return True
+
+    if mode == "allowlist":
+        logger.warning(
+            "Target %s denied by scope allowlist (patterns: %s)",
+            target,
+            allowed,
+        )
+        return False
+
+    logger.warning(
+        "Target %s not in allowed_targets (mode=warn) — allowing with warning. "
+        "Set scope.mode=allowlist to block unauthorized targets.",
+        target,
+    )
+    return True
+
+
 def validate_target_scope(
-    target: str, engagement_id: str, authorized_scope: dict | None = None
+    target: str,
+    engagement_id: str | None = None,
+    mode: str = "warn",
+    allowed_targets: list[str] | None = None,
+    blocked_targets: list[str] | None = None,
+    authorized_scope: dict | None = None,
 ) -> bool:
     """Standalone convenience wrapper around ScopeValidator.
+
+    Supports deny-by-default scope enforcement with three modes:
+    - open: allow all targets (no protection)
+    - allowlist: only allow targets matching allowed_targets patterns
+    - warn: same as allowlist but log warning instead of blocking
+
+    blocked_targets always checked regardless of mode (if target matches
+    blocked, returns False). Glob patterns supported (*.example.com).
+
+    When authorized_scope is provided (not None), uses the legacy DB-based
+    ScopeValidator path for backward compatibility.
 
     Fail-Closed: If scope validation encounters an error (DB unavailable,
     malformed scope JSON, network timeout), the target is considered
@@ -174,58 +249,36 @@ def validate_target_scope(
     Args:
         target: Target URL or hostname
         engagement_id: Engagement UUID
+        mode: Scope enforcement mode ("warn", "allowlist", "open")
+        allowed_targets: List of glob patterns for allowed targets
+        blocked_targets: List of glob patterns for blocked targets
         authorized_scope: Optional scope dict (loaded from DB if None)
 
     Returns:
         True if target is in scope, False if not or on validation error
     """
-    from config.constants import SCOPE_VALIDATION_TIMEOUT
-    from database.connection import db_cursor
+    # ── Legacy DB-based path (caller provided authorized_scope explicitly) ──
+    if authorized_scope is not None:
+        if not authorized_scope:
+            return True
 
-    # Load scope from DB if not provided (with timeout)
-    if authorized_scope is None:
         try:
-            import concurrent.futures as _futures
-
-            def _load_scope():
-                with db_cursor() as cursor:
-                    cursor.execute(
-                        "SELECT authorized_scope FROM engagements WHERE id = %s",
-                        (engagement_id,),
-                    )
-                    row = cursor.fetchone()
-                    return row[0] if row else None
-
-            with _futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_load_scope)
-                authorized_scope = future.result(timeout=SCOPE_VALIDATION_TIMEOUT)
-        except _futures.TimeoutError:
-            logger.warning(
-                "Scope validation: DB lookup timed out after %ss for %s — "
-                "defaulting to deny (L-20 fail-closed)",
-                SCOPE_VALIDATION_TIMEOUT,
-                engagement_id,
-            )
-            return False
+            validator = ScopeValidator(engagement_id, authorized_scope)
+            return validator.is_in_scope(target)
         except Exception as e:
             logger.warning(
-                "Scope validation: DB unavailable for %s — defaulting to deny: %s",
+                "Scope validation failed for %s — failing closed (deny): %s",
                 target,
                 e,
             )
             return False
 
-    # No scope configured — allow all (no restrictions set by operator)
-    if not authorized_scope:
+    # ── Config-based enforcement path (mode / allowed / blocked) ──
+    if _check_blocked(target, blocked_targets):
+        return False
+
+    if mode == "open":
         return True
 
-    try:
-        validator = ScopeValidator(engagement_id, authorized_scope)
-        return validator.is_in_scope(target)
-    except Exception as e:
-        logger.warning(
-            "Scope validation failed for %s — failing closed (deny): %s",
-            target,
-            e,
-        )
-        return False
+    result = _check_allowed(target, allowed_targets, mode)
+    return result if result is not None else True

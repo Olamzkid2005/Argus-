@@ -458,10 +458,14 @@ def execute_scan_tools(
         try:
             from tools.scope_validator import validate_target_scope
 
+            scope_mode = getattr(ctx, "scope_mode", "warn")
+            allowed = getattr(ctx, "allowed_targets", None)
+            blocked = getattr(ctx, "blocked_targets", None)
+
             scoped_targets = []
             blocked_targets = []
             for t in targets:
-                if validate_target_scope(t, engagement_id):
+                if validate_target_scope(t, engagement_id, mode=scope_mode, allowed_targets=allowed, blocked_targets=blocked):
                     scoped_targets.append(t)
                 else:
                     blocked_targets.append(t)

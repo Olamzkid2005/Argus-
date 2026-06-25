@@ -34,9 +34,20 @@ const EvidenceConfigSchema = z.object({
 
 const FeaturesConfigSchema = z.record(z.string(), z.boolean())
 
+const ScopeConfigSchema = z.object({
+  mode: z.enum(["warn", "allowlist", "open"]).default("warn"),
+  allowed_targets: z.array(z.string()).default([]),
+  blocked_targets: z.array(z.string()).default([]),
+  git_host_policy: z.enum(["allowlist", "allow_all"]).default("allowlist"),
+  allowed_git_hosts: z.array(z.string()).default([]),
+})
+
 const ArgusConfigSchema = z.object({
   features: FeaturesConfigSchema.optional(),
   evidence: EvidenceConfigSchema.optional(),
+  security: z.object({
+    scope: ScopeConfigSchema.optional(),
+  }).optional(),
 })
 
 export type ArgusConfig = z.infer<typeof ArgusConfigSchema>

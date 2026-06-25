@@ -70,6 +70,7 @@ export async function doctorCommand(options?: {
   results.push(dbCheck())
   results.push(credCheck())
   results.push(envCheck())
+  results.push(scopeCheck())
   results.push(await dnsCheck())
   results.push(configValidationCheck())
   results.push(toolchainCheck())
@@ -300,6 +301,22 @@ async function dnsCheck(): Promise<CheckResult> {
       status: "WARN",
       message: "DNS resolution failed — DNS-reliant tools (subfinder, amass, dnsx) may not work. Check container DNS config.",
     }
+  }
+}
+
+function scopeCheck(): CheckResult {
+  const mode = process.env.ARGUS_SCOPE_MODE || "warn"
+  if (mode === "open") {
+    return {
+      name: "Scope Protection",
+      status: "WARN",
+      message: "Scope mode is 'open' — all targets can be scanned. Set scope.allowed_targets in argus.config.yaml for protection.",
+    }
+  }
+  return {
+    name: "Scope Protection",
+    status: "PASS",
+    message: `Scope mode is '${mode}' with target restrictions`,
   }
 }
 

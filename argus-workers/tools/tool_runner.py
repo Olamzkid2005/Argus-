@@ -21,6 +21,7 @@ from config.constants import CIRCUIT_BREAKER_COOLDOWN, CIRCUIT_BREAKER_THRESHOLD
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
 from error_classifier import ErrorCode
 from runtime.concurrency import HIGH_COST_SEMAPHORE, HIGH_COST_TOOLS, SUBPROCESS_SEMAPHORE
+from runtime.rate_limiter import PER_HOST_LIMITER, extract_host
 from streaming import emit_error_hint
 from tool_core.result import ToolStatus, UnifiedToolResult
 from tools.circuit_breaker import (
@@ -434,6 +435,10 @@ class ToolRunner:
         # CLI flags, inject them as environment variables (TOOL_TOKEN, TOOL_SECRET).
         args, env = self._redact_sensitive_args(args, env)
 
+        # Per-host rate limiting — extract target hostname from args
+        _target_host = next((extract_host(a) for a in args if extract_host(a)), None)
+        PER_HOST_LIMITER.acquire(_target_host)
+
         # Record start time
         start_time = time.time()
 
@@ -667,6 +672,10 @@ class ToolRunner:
 
         # Redact sensitive args from command line (visible in /proc/pid/cmdline)
         args, env = self._redact_sensitive_args(args, env)
+
+        # Per-host rate limiting — extract target hostname from args
+        _target_host = next((extract_host(a) for a in args if extract_host(a)), None)
+        PER_HOST_LIMITER.acquire(_target_host)
 
         slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
         slog.tool_start(tool, f"streaming, timeout={timeout}s")

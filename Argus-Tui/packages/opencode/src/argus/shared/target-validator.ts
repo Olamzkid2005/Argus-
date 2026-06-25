@@ -23,6 +23,31 @@ import { resolve } from "dns/promises"
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 
+/**
+ * Default curated list of allowed git hosts.
+ * Matches the Python-side GitSSRFConfig.host_allowlist.
+ */
+const DEFAULT_GIT_HOSTS: readonly string[] = [
+  "bitbucket.org",
+  "gist.github.com",
+  "git.kernel.org",
+  "git.savannah.gnu.org",
+  "git.savannah.nongnu.org",
+  "git.sr.ht",
+  "github.com",
+  "gitlab.com",
+  "gitlab.archlinux.org",
+  "gitlab.freedesktop.org",
+  "gitlab.gnome.org",
+  "gitlab.kitware.com",
+  "gitlab.xfce.org",
+]
+
+export interface GitHostPolicy {
+  policy: "allowlist" | "allow_all"
+  allowedHosts?: string[]
+}
+
 export interface ScopeConfig {
   /** Glob patterns for targets that ARE allowed (e.g. ["*.example.com"]) */
   allowed_targets?: string[]
@@ -44,6 +69,21 @@ export interface ValidationResult {
   message: string
   /** If true, DNS resolution succeeded */
   dnsReachable?: boolean
+}
+
+/**
+ * Check whether a git host is allowed by the configured policy.
+ * When policy is "allow_all", all hosts pass.
+ * When policy is "allowlist", the host must match the merged
+ * default + configured allowlist (exact match or subdomain match).
+ */
+export function isGitHostAllowed(host: string, config?: GitHostPolicy): boolean {
+  if (!config || config.policy === "allow_all") return true
+
+  const allowlist = [...DEFAULT_GIT_HOSTS, ...(config.allowedHosts ?? [])]
+  return allowlist.some(allowed =>
+    host === allowed || host.endsWith("." + allowed)
+  )
 }
 
 /* ── Defaults ──────────────────────────────────────────────────────── */

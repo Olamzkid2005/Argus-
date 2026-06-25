@@ -19,6 +19,7 @@ export interface ToolDef {
   capabilities: string[]
   requires_auth: boolean
   destructive: boolean
+  credential_roles?: string[]
   supports_api: boolean
   supports_web: boolean
   timeout_seconds: number

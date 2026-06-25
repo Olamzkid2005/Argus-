@@ -22,9 +22,15 @@ security:
   # matching targets are always rejected (takes precedence over allowed).
   # Glob patterns: *.example.com, example.*, * (all), or exact hostnames.
   scope:
-    # allowed_targets: []   # Uncomment to enable allowlist mode
-    # blocked_targets: []   # Uncomment to block specific targets
+    mode: warn  # "warn" | "allowlist" | "open" (default: warn)
+    allowed_targets: []
+    blocked_targets: []
     # require_confirmation: false  # Ask before scanning new targets
+    git_host_policy: allowlist  # "allowlist" | "allow_all"
+    allowed_git_hosts: []       # Additional hosts beyond the curated default list
+
+rate_limiting:
+  per_host_requests_per_second: 10  # 0 = disabled
 
 tools:
   enabled: []
