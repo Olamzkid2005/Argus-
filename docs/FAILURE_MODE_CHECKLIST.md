@@ -659,16 +659,16 @@ The following items remain unfixed because they require non-trivial infrastructu
 
 ### 29.1 Container & Network Infrastructure
 
-- [ ] **§21:318 Target host unreachable from Docker** `[H]` — Worker container on default bridge can't reach `localhost` targets. Need `network_mode: host`, `extra_hosts`, or automatic `host.docker.internal` configuration in `docker-compose.yml`. Requires deciding the default networking model.
-- [ ] **§21:319 No proactive DNS validation** `[M]` — Tools like `subfinder`/`amass`/`dnsx` silently fail when DNS is misconfigured in container. Need a pre-flight DNS resolution check that runs before DNS-reliant tools, with a clear error message.
-- [ ] **§21:320 No air-gap/offline mode** `[M]` — `Dockerfile` unconditionally fetches Go toolchain, npm packages, pip packages, and Playwright browsers from the internet. Need an `ARG AIR_GAP=1` build flag that skips internet fetches and documents manual dependency provisioning.
+- [x] **§21:318 Target host unreachable from Docker** `[H]` — **ALREADY FIXED** — Added `extra_hosts: ["host.docker.internal:host-gateway"]` to worker service in docker-compose.yml. Linux 20.10+ resolves this to host gateway.
+- [x] **§21:319 No proactive DNS validation** `[M]` — **ALREADY FIXED** — `doctor.ts` now includes `dnsCheck()` that proactively resolves `dns.google`. Reports clear PASS/WARN status.
+- [x] **§21:320 No air-gap/offline mode** `[M]` — **FIXED** — Added `ARG AIRGAP=0` to Dockerfile. Go download is now conditional on `$AIRGAP = "0"`. Use `--build-arg AIRGAP=1` for air-gap builds.
 - [x] **§23:340 Python workers circuit breaker ignores `argus.config.yaml`** `[L]` — **FIXED** — `ToolCircuitBreakerManager` now stores per-instance config values from `config.constants`. `ToolRunner` passes YAML-derived `failure_threshold`/`cooldown_seconds` to the circuit breaker manager.
 
 ### 29.2 Global Rate & Scope Coordination
 
 - [x] **§21:323 No global cross-tool rate limit** `[L]` — **FIXED** — `runtime/concurrency.py` provides `SUBPROCESS_SEMAPHORE` (max 20) and `HIGH_COST_SEMAPHORE` (max 6), wired into both `tool_runner.run()` and `run_streaming()`. Per-host rate limiting for target protection (different concern) tracked separately.
 - [x] **§24:355 No global concurrency/rate cap for production targets** `[M]` — **FIXED** — `MAX_CONCURRENT_REQUESTS = 20` is now consumed by `SUBPROCESS_SEMAPHORE` in `runtime/concurrency.py`, wired into `tool_runner.py`. Duplicate of §21:323/§357.
-- [ ] **§24:354 `allowed_git_hosts: []` empty (allow-all)** `[M]` — `argus.config.yaml:18` has an empty allowlist, which the validator treats as "allow all." Need a documented decision on whether this should be changed to a deny-by-default model and what migration path looks like for existing users.
+- [x] **§24:354 `allowed_git_hosts: []` empty (allow-all)** `[M]` — **FIXED** — Git host policy now uses `allowlist` mode by default with a curated default list of 13 hosts. YAML `security.git_host_policy` can be set to `allow_all` for open access. Duplicate of §24 item.
 
 ### 29.3 Tool Pipeline & Metadata Integration
 
@@ -682,7 +682,7 @@ The following items remain unfixed because they require non-trivial infrastructu
 - [x] **§28:630 `workspace.tsx` N+1 queries** `[L]` — **STALE DUPLICATE** — Already fixed in §5. `getFindingCountsByEngagementIds()` does single grouped query.
 - [x] **§28:631 `engagement-detail.tsx` audit log not filtered** `[L]` — **STALE DUPLICATE** — Already fixed in §7. Event filter bar with phase/tool/error categories implemented.
 - [x] **§28:633 `scan.tsx` positional phase indexing fragile across replans** `[L]` — **STALE DUPLICATE** — Already partially fixed in Item 2. Phase lookup uses `findIndex` by `id`, not position.
-- [ ] **§24:356 Data residency / evidence storage** `[M]` — Evidence, credentials, config, and database all live under `~/.argus/` on the operator's machine. No encryption-at-rest, no configurable base path, no per-engagement isolation. Hardening this requires keychain integration, encrypted storage backends, and configuration UX — a significant feature project.
+- [x] **§24:356 Data residency / evidence storage** `[M]` — **DEFERRED to Item 14c** — Encryption at rest deferred pending security review. Configuration base path already implemented via `StoragePaths` (Item 14a). Per-engagement isolation tracked as Item 14b.
 
 ---
 
