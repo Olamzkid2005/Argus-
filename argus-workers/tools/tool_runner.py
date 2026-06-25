@@ -671,14 +671,18 @@ class ToolRunner:
         slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
         slog.tool_start(tool, f"streaming, timeout={timeout}s")
 
-        proc = subprocess.Popen(  # noqa: S603 — safe: list form, tool_path resolved internally, args validated by is_dangerous()
-            [tool_path] + args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            cwd=str(self.sandbox_dir),
-            env=env,
-        )
+        # Acquire global concurrency semaphore — same pattern as run()
+        _sem = HIGH_COST_SEMAPHORE if tool in HIGH_COST_TOOLS else SUBPROCESS_SEMAPHORE
+        _sem.acquire()
+        try:
+            proc = subprocess.Popen(  # noqa: S603 — safe: list form, tool_path resolved internally, args validated by is_dangerous()
+                [tool_path] + args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                cwd=str(self.sandbox_dir),
+                env=env,
+            )
 
         stdout_lines = []
         max_streaming_bytes = 50 * 1024 * 1024  # 50MB — stop reading after this
@@ -794,6 +798,8 @@ class ToolRunner:
                         tool,
                         reap_err,
                     )
+            finally:
+                _sem.release()
 
         stdout = "".join(stdout_lines)
         returncode = proc.returncode if proc.returncode is not None else -1
