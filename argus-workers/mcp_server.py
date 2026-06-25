@@ -363,7 +363,8 @@ class MCPServer:
                         Path(__file__).resolve().parent.parent / "venv" / "bin"
                     )
                     _existing_path = os.environ.get("PATH", "")
-                    _augmented_path = f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:/usr/local/bin:/usr/bin:/bin:{_existing_path}"
+                    _extra_path = os.environ.get("ARGUS_EXTRA_PATH", "")
+                    _augmented_path = f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:/usr/local/bin:/usr/bin:/bin:{_extra_path}:{_existing_path}"
                     if not shutil.which(command, path=_augmented_path):
                         logger.warning(
                             "Skipping tool '%s': binary '%s' not found on PATH. "

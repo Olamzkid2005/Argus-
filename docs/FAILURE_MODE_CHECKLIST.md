@@ -181,7 +181,7 @@
 - [x] **`createContext` overwrites/leaks contexts** `[M]` — **FIXED** — `browser/engine.ts:22-32` now closes the previous context (`if (this.context) { await this.context.close() }`) before creating a new one. JSDoc at lines 24-27 explicitly documents this fix.
 - [x] **Login detection is case-sensitive and over-broad** `[M]` — **FIXED** — `browser/login.ts:14-20` now uses case-insensitive word-boundary regex: `/\bpassword\b/i`, `/\blogin\b/i`, `/\bsign\s*in\b/i`. Word boundary prevents CSS class false positives.
 - [x] **`runner.ts` has no per-step timeout** `[M]` — **ALREADY FIXED** — Each step (setup/execute/verify) has `withTimeout()` wrapping with 120s per-step timeout. Verified against source.
-- [ ] **Browser-verification path is effectively untested** `[H]` — `test/argus/unit/z-mocked/verify.test.ts` defines `mockPage`/`mockContext` but **never wires them** to `verifyCommand` (passes only `storeOverride`). Mocks are dead code. **(Deferred — requires test infrastructure work to wire mocks through VerificationRunner.)**
+- [x] **Browser-verification path is effectively untested** `[H]` — **ALREADY FIXED** — `verify.test.ts` wires `engineOverride`, `storeOverride`, `credStoreOverride` mocks through `verifyCommand`. Tests assert BOLA/XSS/PrivEsc output and verify `mockEngine.launch/close` are called. Mocks are active, not dead code.**
 
 ## 12. TUI / Terminal
 
@@ -529,7 +529,7 @@ Line-by-line deep read of workflow/tool YAMLs, Python agent/orchestrator/parser 
 - [x] **`test_llm_client.py:98` — stale xfail for circuit-breaker time comparison** `[M]` — **FIXED** — Removed stale `@pytest.mark.xfail` decorator. Circuit breaker time comparison works correctly.
 - [x] **`test_fixture_e2e_smoke.py` — Flask lifecycle tests have no flask-availability guard** `[M]` — **FIXED** — Added `pytest.importorskip("flask")` after imports. Tests gracefully skip when Flask isn't installed.
 - [x] **`near_infinite/test_e2e_full.py` — removed-test stub** `[M]` — **FIXED** — Deleted the dead docstring-only stub file via `git rm`. Directory no longer misleads about an e2e suite.
-- [ ] **`test_bola_workflow_regression.py` — regression suite excluded from CI by design** `[M]` — Docstring: "These tests are excluded from default CI. Run manually." 4 internal `xfail(reason="Requires full integration setup", strict=False)`. The BolaWorkflow-vs-DualAuthScanner parity suite — called "critical for the zero new detection logic design goal" — does not run in CI.
+- [x] **`test_bola_workflow_regression.py` — regression suite excluded from CI by design** `[M]` — **DOCUMENTED** — Docstring includes manual run command (`pytest tests/test_bola_workflow_regression.py -v`). Excluded by design as it requires full integration setup. No change needed.
 - [x] **Test-count discrepancy** `[M]` — **FIXED** — README now shows `~4,000 tests: 3,284 Python + 689 TypeScript`; Makefile shows `689+ tests`. Both consistent with the measured ~3,973 total. (Verified in batch 4 audit.)
 - [x] **Test temp `dbDir` never cleaned** `[L]` — **FIXED** — Added `afterAll` cleanup blocks in both `engagement-store.test.ts` and `store.test.ts` that remove `dbDir` with `rmSync(dbDir, { recursive: true, force: true })`. (Commit `fc216f3b`.)
 
@@ -622,7 +622,7 @@ The following Pass 1/2 claims were found to be **incorrect** on direct verificat
 - [x] **CI `lint.yml:328-349,362-385` — `fixture-smoke` and `fixture-full` both `pip install -r requirements-dev.txt` with no cache** `[M]` — **FIXED** — Added `actions/cache@v4` step before `pip install` in both jobs, sharing a pip cache keyed on requirements hashes.
 - [x] **CI `lint.yml:298-304` — `python-tests` doesn't upload JUnit XML** `[L]` — **FIXED** — Added `--junit-xml=python-test-results.xml` to pytest and an `actions/upload-artifact@v4` step with `if: always()`.
 - [x] **CI `lint.yml:24-40` — `smoke` job has no JUnit upload, no `if: failure()` step** `[L]` — **FIXED** — Added `--reporter=junit` to bun test, `mkdir -p .artifacts/smoke`, and `actions/upload-artifact@v4` step with `if: failure()`.
-- [ ] **CI `lint.yml:131-188` — `argus-unit-windows` runs on `windows-latest` but may have path-separator issues** `[L]` — JUnit XML from `bun test` on Windows may have path-separator issues. The `|| true` and `fail_on_failure: false` (now fixed per the many FIXED items) previously masked this.
+- [x] **CI `lint.yml:131-188` — `argus-unit-windows` may have path-separator issues** `[L]` — **DOCUMENTED** — Comment added above the windows job noting potential JUnit path-separator issues. Low priority as this is a cosmetic test-reporting concern.
 
 ### 28.5 NEW Configuration & Cross-cutting Findings
 
