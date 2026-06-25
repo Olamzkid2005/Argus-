@@ -454,7 +454,7 @@ def execute_scan_tools(
     # This ensures the deterministic path enforces scope even when the agent
     # path is not active (previously scope was only checked in LLM agent path).
     engagement_id = getattr(ctx, "engagement_id", "")
-    if engagement_id and True:
+    if engagement_id:
         try:
             from tools.scope_validator import validate_target_scope
 

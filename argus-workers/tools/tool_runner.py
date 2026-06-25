@@ -20,6 +20,7 @@ from cache import CacheMode, cache
 from config.constants import CIRCUIT_BREAKER_COOLDOWN, CIRCUIT_BREAKER_THRESHOLD
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
 from error_classifier import ErrorCode
+from runtime.concurrency import HIGH_COST_SEMAPHORE, HIGH_COST_TOOLS, SUBPROCESS_SEMAPHORE
 from streaming import emit_error_hint
 from tool_core.result import ToolStatus, UnifiedToolResult
 from tools.circuit_breaker import (
@@ -448,14 +449,18 @@ class ToolRunner:
                 # Execute with locked environment
                 # Limit captured output to prevent OOM from large tool output
                 max_output_bytes = 10 * 1024 * 1024  # 10MB
-                result = subprocess.run(  # noqa: S603 — safe: list form, tool_path resolved internally, args validated by is_dangerous()
-                    [tool_path] + args,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                    cwd=str(self.sandbox_dir),
-                    env=env,
-                )
+                # Acquire global concurrency semaphore — use stricter limit for
+                # high-cost tools (sqlmap, masscan, etc.) to avoid saturating CPU/memory.
+                _sem = HIGH_COST_SEMAPHORE if tool in HIGH_COST_TOOLS else SUBPROCESS_SEMAPHORE
+                with _sem:
+                    result = subprocess.run(  # noqa: S603 — safe: list form, tool_path resolved internally, args validated by is_dangerous()
+                        [tool_path] + args,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout,
+                        cwd=str(self.sandbox_dir),
+                        env=env,
+                    )
                 # Truncate oversized output to prevent memory exhaustion.
                 # Use byte-level truncation on the encoded string to handle
                 # multi-byte UTF-8 characters correctly (H1). Decode safely
