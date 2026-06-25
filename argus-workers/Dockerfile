@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
 FROM python:3.11-slim-bookworm@sha256:3b5425af5eb30e2753a40a3c2cf1e22a7b4a20335a80b0e24b05bfca01b290ef AS base
+ARG AIRGAP=0
 
 WORKDIR /app
 
@@ -16,9 +17,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN set -eux; \
     GO_VERSION="1.22.10"; \
     GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"; \
-    curl -fsSL "https://go.dev/dl/${GO_TARBALL}" -o /tmp/go.tar.gz; \
-    curl -fsSL "https://go.dev/dl/${GO_TARBALL}.sha256" -o /tmp/go.tar.gz.sha256; \
-    sha256sum -c /tmp/go.tar.gz.sha256; \
+    if [ "$AIRGAP" = "0" ]; then \
+      curl -fsSL "https://go.dev/dl/${GO_TARBALL}" -o /tmp/go.tar.gz; \
+      curl -fsSL "https://go.dev/dl/${GO_TARBALL}.sha256" -o /tmp/go.tar.gz.sha256; \
+      echo "  /tmp/go.tar.gz" >> /tmp/go.tar.gz.sha256; \
+      sha256sum -c /tmp/go.tar.gz.sha256; \
+    fi; \
     tar -C /usr/local -xzf /tmp/go.tar.gz; \
     rm /tmp/go.tar.gz /tmp/go.tar.gz.sha256; \
     go version

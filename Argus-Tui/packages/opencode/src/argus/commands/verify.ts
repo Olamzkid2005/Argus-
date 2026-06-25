@@ -54,6 +54,11 @@ export async function verifyCommand(
   lines.push(`[Argus] Re-running verification for finding: ${finding.id}`)
   lines.push(`[Argus] Tool: ${finding.tool}, Target: ${targetUrl}`)
 
+  // NOTE: Verifiers are purpose-built for four role archetypes:
+  // attacker, victim, user, admin. Custom role names that don't
+  // match one of these (even via substring) will silently skip
+  // verification. Add new verifiers in browser/verifiers/ for
+  // custom role archetypes.
   // Match roles flexibly: try exact match first, then case-insensitive, then substring
   // This ensures verifiers work with arbitrary role names (e.g. "Attacker", "victim1",
   // "regular-user", "admin_role") rather than only exact lowercase "attacker"/"victim".

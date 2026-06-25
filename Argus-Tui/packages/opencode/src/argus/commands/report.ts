@@ -20,6 +20,7 @@ export async function enhanceReportWithAnalysis(
     const llmClient = getLLM()
     return new FA(db, llmClient.isConfigured() ? llmClient : undefined)
   })()
+  const hasLlm = analyzer.hasLlmClient()
   const CONCURRENCY = 3
   const results: FindingAnalysis[] = []
   let processed = 0
@@ -48,8 +49,8 @@ export async function enhanceReportWithAnalysis(
       processed++
     }
 
-    // Rate-limit gap between batches
-    if (i + CONCURRENCY < findings.length) {
+    // Rate-limit gap between batches (skip when no LLM client — all calls return instantly)
+    if (hasLlm && i + CONCURRENCY < findings.length) {
       await new Promise((r) => setTimeout(r, 1000))
     }
   }

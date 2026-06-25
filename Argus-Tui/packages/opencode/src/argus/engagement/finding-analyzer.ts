@@ -133,6 +133,10 @@ Provide a JSON response with:
     }
   }
 
+  hasLlmClient(): boolean {
+    return this.llmClient !== undefined
+  }
+
   async getCachedAnalysis(findingId: string): Promise<FindingAnalysis | null> {
     return this.store.getValidAnalysis(findingId)
   }

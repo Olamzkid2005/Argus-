@@ -1,4 +1,4 @@
-import { createSignal, onMount, For, Show } from "solid-js"
+import { createSignal, onMount, onCleanup, For, Show } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useRoute } from "@tui/context/route"
 import { Toast, useToast } from "@tui/ui/toast"
@@ -50,6 +50,7 @@ export function EngagementDetail(props: EngagementDetailProps) {
     try {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
+      onCleanup(() => store.close())
       const detail = store.getEngagementDetail(props.engagementId)
       if (detail) {
         setEngagement({

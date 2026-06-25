@@ -34,6 +34,9 @@ export interface NormalizedFinding {
   negative?: boolean
 }
 
+// Note: This file uses camelCase for in-memory/API transfer.
+// The snake_case equivalents are in evidence/types.ts for disk persistence.
+// See evidence/types.ts for EvidenceManifest and ArtifactEntry.
 export interface ArtifactRef {
   path: string
   type: ArtifactType

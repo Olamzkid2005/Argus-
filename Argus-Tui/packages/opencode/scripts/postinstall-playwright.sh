@@ -11,6 +11,12 @@ set -u
 PLAYWRIGHT_DIR="${HOME}/.cache/ms-playwright"
 SCRIPT_NAME="$(basename "$0")"
 
+if ! command -v npx &> /dev/null; then
+  echo "⚠️  npx not found — skipping Playwright browser install."
+  echo "   Install it manually later with: npx playwright install chromium"
+  exit 0
+fi
+
 echo "[${SCRIPT_NAME}] Installing Playwright Chromium browser..."
 
 # Run playwright install, capturing exit code

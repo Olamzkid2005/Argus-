@@ -1,3 +1,6 @@
+// Note: This file uses snake_case for SQLite/disk persistence.
+// The camelCase equivalents are in shared/types.ts for in-memory/API transfer.
+// See shared/types.ts for EvidencePackage and ArtifactRef.
 export type ArtifactType = "screenshot" | "request" | "response" | "har" | "log"
 
 export interface ArtifactEntry {

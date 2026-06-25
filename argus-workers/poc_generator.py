@@ -193,6 +193,15 @@ class PoCGenerator:
         import re as _redact_re
 
         def _redact(t: str) -> str:
+            # Strip common prompt injection patterns
+            _INJECTION_PATTERNS = [
+                r"ignore\s+(all\s+)?(previous|prior)\s+(instructions|directions|prompts)",
+                r"forget\s+(all\s+)?(your\s+)?(instructions|directions|prompts|rules)",
+                r"you\s+(are\s+)?(now|must)\s+",
+                r"new\s+(instruction|prompt|rule|direction)",
+            ]
+            for pattern in _INJECTION_PATTERNS:
+                t = _redact_re.sub(pattern, "[REDACTED]", t, flags=_redact_re.IGNORECASE)
             # Redact key=value or key:value patterns (supports Unicode whitespace and JSON escaping)
             t = _redact_re.sub(
                 r"(?i)(api[_-]?key|secret|token|password|auth|credential|private_key|access_key|session_id)"
@@ -219,9 +228,9 @@ class PoCGenerator:
                 "endpoint": finding.get("endpoint", ""),
                 "severity": finding.get("severity", ""),
                 "evidence": {
-                    "request": _redact(str(evidence.get("request", ""))[:400]),
-                    "response": _redact(str(evidence.get("response", ""))[:300]),
-                    "payload": _redact(str(evidence.get("payload", ""))[:200]),
+                    "request": f"---BEGIN EVIDENCE---\n{_redact(str(evidence.get('request', ''))[:400])}\n---END EVIDENCE---",
+                    "response": f"---BEGIN EVIDENCE---\n{_redact(str(evidence.get('response', ''))[:300])}\n---END EVIDENCE---",
+                    "payload": f"---BEGIN EVIDENCE---\n{_redact(str(evidence.get('payload', ''))[:200])}\n---END EVIDENCE---",
                 },
                 "instruction": template["instruction"],
                 "required_fields": template["fields"],

@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createMemo, createSignal, onMount, For, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount, onCleanup, For, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
 import { Toast, useToast } from "../ui/toast"
@@ -46,6 +46,7 @@ export function Home() {
     try {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
+      onCleanup(() => store.close())
       const all = store.listEngagements()
       const recent = all.slice(0, 5)
       const enriched = recent.map((e: any) => {

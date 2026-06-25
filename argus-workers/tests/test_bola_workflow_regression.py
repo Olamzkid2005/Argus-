@@ -7,6 +7,9 @@ logic" design goal.
 
 These tests are excluded from default CI. Run manually:
     python -m pytest tests/test_bola_workflow_regression.py -v
+# To run manually: pytest tests/test_bola_workflow_regression.py -v
+# This suite tests BolaWorkflow-vs-DualAuthScanner parity and is excluded
+# from default CI because it requires full integration setup.
 """
 
 from __future__ import annotations
