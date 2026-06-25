@@ -97,11 +97,19 @@ class MCPTransport:
             self._send_response(request, result=result)
         except Exception as e:
             logger.error("Handler error for %s: %s", method, traceback.format_exc())
+            err_msg = str(e)
+            err_lower = err_msg.lower()
+            # Classify errors so the TS side can use structured codes instead
+            # of fragile string matching on the error message.
+            error_type = "internal_error"
+            if any(kw in err_lower for kw in ("llm", "openai", "anthropic", "ai provider", "ai model")):
+                error_type = "llm_error"
             self._send_response(
                 request,
                 error={
                     "code": -32603,
-                    "message": str(e),
+                    "message": err_msg,
+                    "data": {"error_type": error_type},
                 },
             )
 

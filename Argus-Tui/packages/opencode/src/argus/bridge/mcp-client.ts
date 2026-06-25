@@ -347,13 +347,18 @@ export class WorkersBridge {
       }
       return result
     } catch (error) {
-      // Python mcp_transport wraps ALL exceptions with code -32603 (Internal error).
-      // We cannot use code-based detection. Use narrow keyword matching instead.
-      // WARNING: keep this list tight — callTool() is called for ALL tools (incl.
-      // nuclei, nmap, etc.), not just LLM tools. Broad terms like "model" or
-      // "api key" would cause cross-contamination from non-LLM tool errors.
+      // Python mcp_transport now includes structured error_type in error.data
+      // (e.g. "llm_error") for known error categories. When available, use it
+      // for detection instead of fragile string matching. Fall back to keyword
+      // regex for older transport versions that don't send error_type.
+      // WARNING: keep the regex list tight — callTool() is called for ALL tools
+      // (incl. nuclei, nmap, etc.), not just LLM tools. Broad terms like "model"
+      // or "api key" would cause cross-contamination from non-LLM tool errors.
+      const errData = (error as any)?.data as { error_type?: string } | undefined
+      const errType = errData?.error_type
       const errMsg = ((error as any)?.message ?? "").toLowerCase()
-      const isLLMError = /\b(llm|openai|anthropic)\b/i.test(errMsg)
+      const isLLMError = errType === "llm_error"
+        || /\b(llm|openai|anthropic)\b/i.test(errMsg)
         || /\bai (provider|model)\b/i.test(errMsg)
         || errMsg.includes("llm is not available")
 
