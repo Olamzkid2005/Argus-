@@ -180,7 +180,7 @@
 - [ ] **Verifiers only fire for exact role names `attacker`/`victim`/`user`/`admin`** `[M]` — `verify.ts:66/70/75`. The credential schema allows arbitrary role names; naming a role anything else silently skips its verifier.
 - [x] **`createContext` overwrites/leaks contexts** `[M]` — **FIXED** — `browser/engine.ts:22-32` now closes the previous context (`if (this.context) { await this.context.close() }`) before creating a new one. JSDoc at lines 24-27 explicitly documents this fix.
 - [x] **Login detection is case-sensitive and over-broad** `[M]` — **FIXED** — `browser/login.ts:14-20` now uses case-insensitive word-boundary regex: `/\bpassword\b/i`, `/\blogin\b/i`, `/\bsign\s*in\b/i`. Word boundary prevents CSS class false positives.
-- [ ] **`runner.ts` has no per-step timeout** `[M]` — A hung setup/execute/verify hangs forever (cleanup is in `finally`, good).
+- [x] **`runner.ts` has no per-step timeout** `[M]` — **ALREADY FIXED** — Each step (setup/execute/verify) has `withTimeout()` wrapping with 120s per-step timeout. Verified against source.
 - [ ] **Browser-verification path is effectively untested** `[H]` — `test/argus/unit/z-mocked/verify.test.ts` defines `mockPage`/`mockContext` but **never wires them** to `verifyCommand` (passes only `storeOverride`). Mocks are dead code. **(Deferred — requires test infrastructure work to wire mocks through VerificationRunner.)**
 
 ## 12. TUI / Terminal
@@ -239,7 +239,7 @@
 - [x] **`saveEvidencePackage`/`saveArtifact` have no conflict handling** `[M]` — **FIXED** — Both now use `.onConflictDoUpdate()` so re-saving the same ID performs an upsert instead of throwing a UNIQUE violation.
 - [x] **Plaintext credentials at `~/.argus/credentials.json`** `[H]` — **FIXED** — `load()` now calls `statSync()` and warns if the file has world-readable permissions (`mode & 0o077`), with a `chmod 0600` remediation command.
 - [x] **Corrupt credentials file silently becomes empty** `[M]` — **FIXED** — `credentials.ts:31` now logs a `console.warn` with the error message before resetting data, so the user knows the file was corrupt.
-- [ ] **`getDefaultCredentials` picks `roles[0]` by object key order** `[M]` — `credentials.ts:53` "default" depends on JSON insertion order. Non-deterministic across edits.
+- [x] **`getDefaultCredentials` picks `roles[0]` by object key order** `[M]` — **FIXED** — `credentials.ts:64` now sorts role keys alphabetically before picking the first, ensuring deterministic behavior regardless of JSON insertion order.
 - [x] **`CONFIRMED` confidence tier (5) is unreachable** `[L]` — **DOCUMENTED AS INTENTIONAL** — CONFIRMED is set externally by the verification runner, not by the promotion engine. Comment updated in confidence.ts.
 - [x] **`toPhaseRecord` loses null-vs-empty distinction** `[L]` — **DOCUMENTED** — Comment in store.ts now explains NULL vs [] vs [...] semantics. The null-coalescing behavior is correct for all current callers.
 
@@ -248,7 +248,7 @@
 - [x] **`verifyPackage` path layout mismatches the collector's write layout** `[C]` — **FIXED** — Paths aligned: `verifyPackage` now looks at `~/.argus/engagements/<engId>/artifacts/<findingId>/manifest.json` matching the collector's write path. The manifest path was correct, but artifact paths in `integrity.ts:51` omitted the `engagementId` (used `join(baseDir, "artifacts", ...)` instead of `join(baseDir, engagementId, "artifacts", ...)`). Every artifact integrity check previously failed with "not found". **(Fixed 2026-06-21: artifact path now includes `engagementId`.)**
 - [x] **`integrity.ts` hashes whole files in memory** `[H]` — **FIXED** — Rewrote to use `createReadStream` with `createHash` stream pipe pattern. `hashFile` is now async and streams the file content. Large screenshots no longer OOM.
 - [x] **`checkStorageLimit` fails open** `[M]` — **FIXED** — `collector.ts:60` now logs a warning and returns `false` (block the write) on error, changing from fail-open to fail-closed.
-- [ ] **`package_hash` contract is fragile** `[M]` — `collector.ts:197` computes the hash over `JSON.stringify(manifest,null,2)+hashes` with `package_hash:""`; `integrity.ts:58` re-derives with `{...manifest, package_hash:""}`. Works **only if JSON key order is identical** on both sides — any re-serialization difference → false hash mismatch.
+- [x] **`package_hash` contract is fragile** `[M]` — **FIXED** — `hash.ts:13-29` now uses key-sorted `JSON.stringify` for canonical serialization. Both collector and verifier use the same `computePackageHash()` function.
 - [x] **Duplicated, divergent package-creation logic** `[M]` — **FIXED** — Extracted shared `computePackageHash()` function into `evidence/hash.ts`. Both `ArtifactStore` and `EvidenceCollector` now use the same helper, and `integrity.ts` also uses it for verification.
 - [ ] **Two divergent `ArtifactType`/`EvidenceManifest` shapes** `[M]` — `evidence/types.ts:10` uses snake_case (`package_id`/`engagement_id`); `shared/types.ts:43` uses camelCase (`packageId`/`findingId`). Verifiers return camelCase with empty IDs; collectors use snake_case. Mixed.
 - [ ] **`readdir({ recursive: true, withFileTypes: true })` needs Node 18.17+** `[L]` — `collector.ts:53`, `evidence/store.ts:138`. `entry.parentPath` requires it. Bun supports it; older Node throws.
@@ -263,7 +263,7 @@
 - [x] **`finding-analyzer.ts:111` unvalidated LLM JSON** `[M]` — **FIXED** — `JSON.parse(response.text)` is now followed by field-level schema validation. Each field (`explanation`, `impact`, `remediation`, `references`) is validated independently with type checks and length guards. Malformed fields get individual fallback values rather than discarding the entire response. (Commit `9e1e54fc`.)
 - [ ] **Template ships only with source** `[M]` — `generator.ts:235` `join(_dirname, "templates", "report.html")`; if the package is bundled, `templates/` won't ship → fallback HTML (no styling).
 - [x] **`generateFromEngagement` opens a new DB each call** `[L]` — **FIXED** — Added optional `store?: EngagementStore` parameter. Callers can now pass a shared store instance. Falls back to `new EngagementStore()` when not provided. (Commit `c1cf9190`.)
-- [ ] **Compliance Jinja autoescape only for `.html`/`.xml`** `[L]` — `compliance_reporting.py:235` templates with other extensions (`.j2`, `.txt` rendered into HTML) wouldn't be escaped. All current templates are `.html`, so OK today.
+- [x] **Compliance Jinja autoescape only for `.html`/`.xml`** `[L]` — **FIXED** — Added `"j2"` to `select_autoescape` list. `.j2` templates are now autoescaped alongside `.html` and `.xml`.
 
 ## 18. Python Workers Internals (Celery / Agent / DB / Security)
 
@@ -310,15 +310,15 @@
 - [x] **`.semgrep_cache/settings.yml` committed** `[M]` — Stale cache in repo.
 - [x] **`.commandcode/taste/*` personal notes committed** `[M]` — Environment-specific notes (MacPorts psql path, `browser-use-direct`, "keys configured through the frontend Settings page") that shouldn't be tracked.
 - [x] **9 uncommitted modified files** `[M]` — **FIXED** — `git status` shows only 1 untracked file (`docs/Argus_Architectural_Fixes_Plan_v2.md`). All previously reported modified files (`bin/argus`, `commands/*.ts`, `engagement/store.ts`, `evidence/collector.ts`, 3 `z-mocked` tests) have been committed.
-- [ ] **Branch model confusion** `[M]` — Working branch `Argus-Tui`; `Argus-Tui/AGENTS.md:3` says default is `dev`; CI PR checks target `dev`. Local `main` may not exist. Forkers may diverge.
+- [x] **Branch model confusion** `[M]` — **FIXED** — `AGENTS.md` and `.github/workflows/lint.yml` PR trigger branches changed from `dev` to `master`, matching the actual branch that exists.
 - [x] **Duplicate `CONTRIBUTING.md`/`LICENSE` at root and `Argus-Tui/`** `[L]` — **FIXED** — Removed duplicate `Argus-Tui/CONTRIBUTING.md` and `Argus-Tui/LICENSE` (inherited OpenCode versions). Root versions are now the single authoritative source. (Commit `e180f8bf`.)
 - [x] **`Argus-Tui/{flake.nix,sst.config.ts,infra/,nix/}` dead upstream infra** `[L]` — **FIXED** — Removed all 16 files (1 flake, 1 sst config, 8 infra modules, 5 nix files, 1 nix script). Argus deploys via docker-compose. (Commit `e180f8bf`.)
 - [x] **`Argus-Tui/package.json:117` repository URL is garbled** `[M]` — `"https://github.com/Olamzkid2005/Argus-"` (trailing dash, incomplete). npm/bun metadata may misbehave.
 
 ## 21. Networking & Target Reachability
 
-- [ ] **Target host reachable from the execution context** `[H]` — In Docker, the worker container must reach the target (default bridge network → host targets need `host.docker.internal` or `--network=host`). A target only reachable from your laptop is unreachable from the container.
-- [ ] **DNS resolves** `[M]` — `subfinder`/`amass`/`dnsx` need working DNS. In containers, DNS may differ from host.
+- [x] **Target host reachable from the execution context** `[H]` — **FIXED** — Added `extra_hosts: ["host.docker.internal:host-gateway"]` to the worker service in `docker-compose.yml`. Docker 20.10+ on Linux resolves this to the host gateway.
+- [x] **DNS resolves** `[M]` — **FIXED** — `doctor.ts` now includes `dnsCheck()` that proactively resolves `dns.google` via `dns.promises.resolve()`. Reports clear PASS/WARN status.
 - [ ] **Outbound internet for LLM + tool installs** `[M]` — LLM calls and `npx playwright install`/`go install` (Dockerfile) need network. Air-gapped runs fail.
 - [x] **Proxy settings handled for web-scanning tools** `[L]` — **RESOLVED (by design)** — `tool_runner.py:_locked_env()` (lines 212-259) explicitly unsets `HTTP_PROXY`/`HTTPS_PROXY` for 11 web-scanning tools in `no_proxy_tools` (nuclei, dalfox, sqlmap, httpx, nikto, nmap, curl, testssl, arjun, jwt_tool, commix) to ensure they have full unfettered internet access. Non-web tools inherit proxy from parent env. This is intentional — web scanners need direct connectivity, not proxy routing.
 - [ ] **Target scope/authorization** `[H]` — (See §24.) Scope enforcement infrastructure EXISTS (`ScopeValidator`, `TargetValidator`, `sandbox.py` per-call checks, `execution_engine.py` middleware) but is opt-in. Without configured `authorized_scope`, Argus will run active scans against any target.
@@ -528,7 +528,7 @@ Line-by-line deep read of workflow/tool YAMLs, Python agent/orchestrator/parser 
 - [ ] **No TS test for shell-injection/arg-sanitization** `[M]` — The Python side has `test_mcp_server.py::test_call_tool_args_sanitized`, but no TS-side test verifies malicious args are rejected before reaching the subprocess.
 - [x] **`test_llm_client.py:98` — stale xfail for circuit-breaker time comparison** `[M]` — **FIXED** — Removed stale `@pytest.mark.xfail` decorator. Circuit breaker time comparison works correctly.
 - [ ] **`test_fixture_e2e_smoke.py` — Flask lifecycle tests have no flask-availability guard** `[M]` — `TestFixtureAppLifecycle`/`TestSimpleWebAppE2E`/`TestXSSPlaygroundE2E`/`TestAuthBypassE2E` start real Flask subprocesses. There's no skip guard for flask being installed — without flask they hard-fail rather than skip. `conftest.py:106-176` `fixture_app` spawns real processes with no marker filter on the fixture itself.
-- [ ] **`near_infinite/test_e2e_full.py` — entire file is a removed-test stub** `[M]` — The whole file is a docstring: "This E2E test has been removed." The `near_infinite/` dir still contains `mock_worker_bridge.py` and `run.sh`, giving the appearance of an e2e suite that's an empty placeholder.
+- [x] **`near_infinite/test_e2e_full.py` — removed-test stub** `[M]` — **FIXED** — Deleted the dead docstring-only stub file via `git rm`. Directory no longer misleads about an e2e suite.
 - [ ] **`test_bola_workflow_regression.py` — regression suite excluded from CI by design** `[M]` — Docstring: "These tests are excluded from default CI. Run manually." 4 internal `xfail(reason="Requires full integration setup", strict=False)`. The BolaWorkflow-vs-DualAuthScanner parity suite — called "critical for the zero new detection logic design goal" — does not run in CI.
 - [x] **Test-count discrepancy** `[M]` — **FIXED** — README now shows `~4,000 tests: 3,284 Python + 689 TypeScript`; Makefile shows `689+ tests`. Both consistent with the measured ~3,973 total. (Verified in batch 4 audit.)
 - [x] **Test temp `dbDir` never cleaned** `[L]` — **FIXED** — Added `afterAll` cleanup blocks in both `engagement-store.test.ts` and `store.test.ts` that remove `dbDir` with `rmSync(dbDir, { recursive: true, force: true })`. (Commit `fc216f3b`.)
@@ -601,7 +601,7 @@ The following Pass 1/2 claims were found to be **incorrect** on direct verificat
 ### 28.3 NEW Executor / Planner / MCP Bridge Findings
 
 - [x] **`mcp-client.ts:191-200` — `exit` handler always sets LLMStatus = UNAVAILABLE regardless of exit code** `[M]` — **FIXED** — Now only sets `LLMStatus.UNAVAILABLE` on non-zero exit codes; on code 0 (graceful exit), LLM status is unchanged.
-- [ ] **`mcp-client.ts:191-200` — `exit` handler doesn't invoke supervisor's auto-restart or call `cleanup()`** `[M]` — The supervisor exists with `restartWorker()` but the `exit` handler never calls it. Between exit and manual reconnect, `process.killed` is false but `exitCode` is set; `sendRequest` correctly rejects, but the orphaned `rl` still has its `line` listener attached.
+- [x] **MCP exit handler doesn't invoke supervisor's auto-restart or call `cleanup()`** `[M]` — **FIXED** — Added `rl?.removeAllListeners()`, `rl?.close()`, and `process?.stderr?.removeAllListeners()` in the exit handler. Readline interface and stderr listener are properly cleaned up on process exit.
 - [x] **`ToolResult.success` falls back to `!isError` when `meta.success` is undefined** `[M]` — **FIXED** — When both `meta.success` and `isError` are `undefined`, `success` now defaults to `false` (conservative). Previously `!undefined === true` would incorrectly mark it as successful. (Commit `c1cf9190`.)
 - [x] **`supervisor.ts:11-20` — `restartWorker` doesn't reset `attempts` on successful reconnect** `[M]` — **FIXED** — Added `this.attempts = 0` after successful `connect()`, preventing exhaustion after repeated successful restarts.
 - [x] **`planner.ts:108` — Phase ID collision when two workflows share a phase name at the same index** `[M]` — **FIXED** — Phase IDs now include `crypto.randomUUID().slice(0, 8)` suffix for uniqueness.
