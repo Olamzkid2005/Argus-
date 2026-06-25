@@ -322,7 +322,7 @@
 - [x] **Outbound internet for LLM + tool installs** `[M]` — **FIXED** — Added `ARG AIRGAP=0` to Dockerfile. Go download is now conditional on `$AIRGAP = "0"`. Air-gap builds use `--build-arg AIRGAP=1` and expect tools pre-copied into `./vendor/`.
 - [x] **Proxy settings handled for web-scanning tools** `[L]` — **RESOLVED (by design)** — `tool_runner.py:_locked_env()` (lines 212-259) explicitly unsets `HTTP_PROXY`/`HTTPS_PROXY` for 11 web-scanning tools in `no_proxy_tools` (nuclei, dalfox, sqlmap, httpx, nikto, nmap, curl, testssl, arjun, jwt_tool, commix) to ensure they have full unfettered internet access. Non-web tools inherit proxy from parent env. This is intentional — web scanners need direct connectivity, not proxy routing.
 - [x] **Target scope/authorization — scope bypass bug fixed** `[H]` — **FIXED** — `orchestrator_pkg/scan.py:457` had `if engagement_id and True:` which made scope validation always pass. Removed `and True`. Scope filter now actually runs when `engagement_id` is set. (The broader opt-in vs deny-by-default policy question remains as a separate item.)
-- [ ] **Rate limiting / WAF** `[L]` — Aggressive tools (nuclei, ffuf) may get IP-banned; no global rate-limit coordination across tools.
+- [x] **Rate limiting / WAF** `[L]` — **FIXED** — Per-host rate limiting implemented via `runtime/rate_limiter.py` (sliding-window, 10 req/s default). Wired into both `tool_runner.run()` and `run_streaming()`. Per-target WAF evasion is a separate concern not addressed here.
 
 ## 22. Tool Self-Security
 
@@ -503,7 +503,7 @@ Line-by-line deep read of workflow/tool YAMLs, Python agent/orchestrator/parser 
 - [x] **Health monitor `finally` references undefined `db`** `[M]` — **FIXED** — `health_monitor.py:299-300` now initializes `db = None` before the `try` block, and the `finally` guard checks `if conn and db:` before calling `db.release_connection(conn)`. (Commit `d1349275`.)
 - [x] **Tracing module-level `tracer` captured before `setup_tracing`** `[M]` — **ALREADY FIXED** — Verified in batch 6: no module-level `tracer = trace.get_tracer(__name__)` exists. All tracer calls are inside `setup_tracing()` or instance-level in `ExecutionSpan`.
 - [x] **StructuredLogger releases connection without rollback on commit failure** `[M]` — **ALREADY FIXED** — Verified in batch 6: `_store_log` uses `need_rollback` flag pattern that correctly calls `conn.rollback()` in the `finally` block when `commit()` fails.
-- [ ] **Nuclei templates directory is empty** `[M]` — `tool_assets/nuclei-templates/` exists but is empty (0 files). `scan.py:506` `templates_exist = ...rglob("*.yaml")` → False → nuclei runs without custom templates. Any intended-to-ship custom templates are missing; only nuclei's default set is used.
+- [x] **Nuclei templates directory is empty** `[M]` — **DOCUMENTED** — Purpose documented in `docs/EMPTY_DIRECTORIES.md`. Nuclei uses its built-in template set by default. Drop custom `.yaml` templates into `tool_assets/nuclei-templates/` to have them auto-discovered.
 - [x] **`VulnerabilityFinding.evidence` coercion loses non-JSON-string evidence** `[L]` — **FIXED** — Added `if v is None: return {}` guard before the `str(v)` fallthrough.
 - [x] **Custom-rules registry directories are empty** `[L]` — **DOCUMENTED** — Created `docs/EMPTY_DIRECTORIES.md` explaining the purpose of all intentionally-empty directories, including `nuclei-templates/` and `custom_rules/registry/`.
 
