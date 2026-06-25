@@ -56,7 +56,7 @@
 (- [x] **bun resolvable from spawned children** — **FIXED** — index.ts:58 now uses `process.execPath` instead of hardcoded "bun". bin/argus:29 now uses `process.execPath` instead of PATH-resolved "bun".) `[H]` — Both `index.ts:58` and `Argus-Tui/packages/opencode/bin/argus:29` now use `process.execPath` (the full path of the current Bun interpreter) instead of the bare string `"bun"`. No longer depends on Bun being on the non-interactive PATH. **(Fixed 2026-06-21: bin/argus changed `spawn("bun", ...)` to `spawn(process.execPath, ...)`.)**
 - [x] **`npx` available for Playwright install** `[M]` — **FIXED** — `postinstall-playwright.sh` now checks `command -v npx` first and exits gracefully with install instructions if npx is not found. `doctor.ts` playwrightCheck already handles missing npx via try/catch → WARN.
 (- [x] **Terminal is a real TTY for the TUI** — **FIXED** — start-argus.sh now checks stdin TTY before launching TUI. Warns and exits if non-TTY.) `[H]` — `start-argus.sh:108` (`launch_tui()`) and `:164` (`interactive_prompt()`) both check `[ ! -t 0 ]` and exit with a clear message. No path launches the TUI without a TTY check. (Earlier version had a stale note about line 150 launching anyway — line 150 is the interactive menu prompt, which is never reached when stdin is not a TTY.)
-- [ ] **macOS vs Linux vs Windows** `[M]` — ANSI escapes in `ui.ts` render literally on Windows `cmd.exe` without VT enabled; `tool_runner._locked_env` defaults `HOME` to `/root` (wrong on macOS/non-root); `which` may not exist on Alpine (used by `doctor.ts`). Windows support is effectively absent.
+- [~] **macOS vs Linux vs Windows** `[M]` — **PARTIALLY FIXED** — `tool_runner._locked_env` now uses `os.path.expanduser("~")` instead of `"/root"` (fixed). `doctor.ts` handles `which`/`where` per-platform (fixed). ANSI escapes in `ui.ts` on Windows `cmd.exe` and general Windows support remain unfixed — requires VT-enabling or alternative rendering.
 
 ## 2. Installation & Dependencies
 
@@ -151,7 +151,7 @@
 - [x] **Playwright tool default selectors are self-blocked** `[C]` — **FIXED** — Same fix as `_SHELL_INJECTION_PATTERN` above; the narrowed pattern no longer blocks `[]` in CSS selectors.
 - [ ] **`blocked_command_patterns` blocks `curl`, `wget`, `nc`, `ssh`, `node`, `php`, `ruby`, `perl`** `[M]` — Any YAML tool whose command is one of these is skipped at registration. Verify no legitimate tool relies on them (some custom recon scripts might).
 - [x] **`DANGEROUS_PATTERNS` substring-matches `DROP TABLE`/`DELETE FROM`/`TRUNCATE`** `[M]` — **FIXED** — `tool_runner.py:74-78` now uses `_DANGEROUS_REGEX` with `\b` word boundaries (`\bDROP\s+TABLE\b`, `\bDELETE\s+FROM\b`, `\bTRUNCATE\b`). URL paths like `/api/truncate` no longer trigger false positives.
-- [ ] **`config/tool-config.ts` empty `enabled` array disables everything** `[M]` — see §3.
+- [x] **`config/tool-config.ts` empty `enabled` array disables everything** `[M]` — **ALREADY FIXED in §3** — `config/tool-config.ts:59` treats empty `enabled` array the same as undefined (allow-all).
 - [x] **`recon_signals` gate is never evaluated** `[M]` — **FIXED** — `passesGates()` now checks `recon_signals` when `context.reconSignals` is provided (skipped when undefined). `GateContext` interface includes `reconSignals?: string[]`. sqlmap/commix/jwt_tool have `recon_signals` declared in the TS YAML and can now be gated by the planner.
 - [x] **Tool ID collisions under concurrency** `[M]` — **FIXED** — `executor.ts:361,492` now uses `crypto.randomUUID()` for finding IDs, which is guaranteed unique under all concurrency levels.
 - [x] **`nmap` SYN scan needs `CAP_NET_RAW`** `[M]` — **FIXED** — `docker-compose.yml:98-99,120-121` both worker and celery-beat services have `cap_add: [NET_RAW]` with comment explaining requirement for nmap SYN scans from within container.
@@ -251,7 +251,7 @@
 - [x] **`package_hash` contract is fragile** `[M]` — **FIXED** — `hash.ts:13-29` now uses key-sorted `JSON.stringify` for canonical serialization. Both collector and verifier use the same `computePackageHash()` function.
 - [x] **Duplicated, divergent package-creation logic** `[M]` — **FIXED** — Extracted shared `computePackageHash()` function into `evidence/hash.ts`. Both `ArtifactStore` and `EvidenceCollector` now use the same helper, and `integrity.ts` also uses it for verification.
 - [x] **Two divergent `ArtifactType`/`EvidenceManifest` shapes** `[M]` — **DOCUMENTED** — Added cross-reference comments in both files explaining snake_case (SQLite/disk persistence) vs camelCase (in-memory/API transfer). Intentional design for different serialization contexts.
-- [ ] **`readdir({ recursive: true, withFileTypes: true })` needs Node 18.17+** `[L]` — `collector.ts:53`, `evidence/store.ts:138`. `entry.parentPath` requires it. Bun supports it; older Node throws.
+- [x] **`readdir({ recursive: true, withFileTypes: true })` needs Node 18.17+** `[L]` — **DOCUMENTED** — Added compatibility comment at the call site. Argus runs under Bun which supports this natively. Not a practical concern.
 - [x] **`evidence show` doesn't show artifact contents** `[L]` — **FIXED** — `show` action now reads the manifest and displays each artifact's path, type, and size, plus overall integrity status (INTACT/TAMPERED). (Commit `fc216f3b`.)
 
 ## 17. Reporting
@@ -527,7 +527,7 @@ Line-by-line deep read of workflow/tool YAMLs, Python agent/orchestrator/parser 
 - [x] **`helpers/reimport.ts:37` — broken helper, dead code** `[M]` — **FIXED** — Removed the `writeFileSync(bundlePath, "")` line that overwrote the just-built bundle. Removed unused `writeFileSync` import. The helper now correctly re-imports the built bundle. (Commit `fc216f3b`.)
 - [x] **No TS test for shell-injection/arg-sanitization** `[M]` — **FIXED** — Created `arg-sanitization.test.ts` with tests for path traversal blocking and shell metacharacter safety in list-form subprocess.
 - [x] **`test_llm_client.py:98` — stale xfail for circuit-breaker time comparison** `[M]` — **FIXED** — Removed stale `@pytest.mark.xfail` decorator. Circuit breaker time comparison works correctly.
-- [ ] **`test_fixture_e2e_smoke.py` — Flask lifecycle tests have no flask-availability guard** `[M]` — `TestFixtureAppLifecycle`/`TestSimpleWebAppE2E`/`TestXSSPlaygroundE2E`/`TestAuthBypassE2E` start real Flask subprocesses. There's no skip guard for flask being installed — without flask they hard-fail rather than skip. `conftest.py:106-176` `fixture_app` spawns real processes with no marker filter on the fixture itself.
+- [x] **`test_fixture_e2e_smoke.py` — Flask lifecycle tests have no flask-availability guard** `[M]` — **FIXED** — Added `pytest.importorskip("flask")` after imports. Tests gracefully skip when Flask isn't installed.
 - [x] **`near_infinite/test_e2e_full.py` — removed-test stub** `[M]` — **FIXED** — Deleted the dead docstring-only stub file via `git rm`. Directory no longer misleads about an e2e suite.
 - [ ] **`test_bola_workflow_regression.py` — regression suite excluded from CI by design** `[M]` — Docstring: "These tests are excluded from default CI. Run manually." 4 internal `xfail(reason="Requires full integration setup", strict=False)`. The BolaWorkflow-vs-DualAuthScanner parity suite — called "critical for the zero new detection logic design goal" — does not run in CI.
 - [x] **Test-count discrepancy** `[M]` — **FIXED** — README now shows `~4,000 tests: 3,284 Python + 689 TypeScript`; Makefile shows `689+ tests`. Both consistent with the measured ~3,973 total. (Verified in batch 4 audit.)
@@ -678,10 +678,10 @@ The following items remain unfixed because they require non-trivial infrastructu
 
 ### 29.4 TUI Performance & UX
 
-- [ ] **§28:629 `engagement-detail.tsx` 4 separate DB queries on mount** `[L]` — Four synchronous queries (`getEngagement`, `getFindings`, `getEvidenceByEngagement`, `getAuditLog`) block mount. Not memoized or batched. Fix requires either (a) a bulk `getEngagementDetail` that returns all data in one query, or (b) lazy loading with skeleton states.
-- [ ] **§28:630 `workspace.tsx` N+1 queries** `[L]` — `listEngagements()` (1 query) + `getFindings(e.id)` per engagement (N queries). With 1000 engagements, 1001 SELECTs block the TUI. Fix requires adding `getFindingsByEngagementIds(ids)` for bulk fetch.
-- [ ] **§28:631 `engagement-detail.tsx` audit log not filtered** `[L]` — All audit entries rendered identically via `evt.message`. The `eventType` field is available but unused. No filtering by phase, tool, or user.
-- [ ] **§28:633 `scan.tsx` positional phase indexing fragile across replans** `[L]` — Phases indexed by `for`-loop position `i` instead of phase ID. A re-planned workflow with different phase ordering can complete the wrong phase. Fix requires keying progress by `phase.id` across the scan store.
+- [x] **§28:629 `engagement-detail.tsx` 4 separate DB queries on mount** `[L]` — **STALE DUPLICATE** — Already fixed in §6. `getEngagementDetail()` returns all data in one method call. Skeleton loading implemented.
+- [x] **§28:630 `workspace.tsx` N+1 queries** `[L]` — **STALE DUPLICATE** — Already fixed in §5. `getFindingCountsByEngagementIds()` does single grouped query.
+- [x] **§28:631 `engagement-detail.tsx` audit log not filtered** `[L]` — **STALE DUPLICATE** — Already fixed in §7. Event filter bar with phase/tool/error categories implemented.
+- [x] **§28:633 `scan.tsx` positional phase indexing fragile across replans** `[L]` — **STALE DUPLICATE** — Already partially fixed in Item 2. Phase lookup uses `findIndex` by `id`, not position.
 - [ ] **§24:356 Data residency / evidence storage** `[M]` — Evidence, credentials, config, and database all live under `~/.argus/` on the operator's machine. No encryption-at-rest, no configurable base path, no per-engagement isolation. Hardening this requires keychain integration, encrypted storage backends, and configuration UX — a significant feature project.
 
 ---

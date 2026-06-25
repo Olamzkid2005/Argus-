@@ -51,6 +51,8 @@ export class EvidenceCollector {
 
     let totalBytes = 0
     try {
+      // recursive + withFileTypes requires Node 18.17+. Bun supports it natively.
+      // Argus runs under Bun, so this is not a compatibility concern in practice.
       const entries = await readdir(engDir, { recursive: true, withFileTypes: true })
       for (const entry of entries) {
         if (entry.isFile()) {
