@@ -234,7 +234,7 @@ class ComplianceReportGenerator:
         self.templates_dir = templates_dir
         self.env = Environment(
             loader=FileSystemLoader(templates_dir),
-            autoescape=select_autoescape(["html", "xml"]),
+            autoescape=select_autoescape(["html", "xml", "j2"]),
             trim_blocks=True,
             lstrip_blocks=True,
         )

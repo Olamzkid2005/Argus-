@@ -2,9 +2,9 @@ name: lint
 
 on:
   push:
-    branches: [dev, Argus-Tui]
+    branches: [master, Argus-Tui]
   pull_request:
-    branches: [dev, Argus-Tui]
+    branches: [master, Argus-Tui]
   schedule:
     - cron: '0 6 * * *'   # Nightly at 06:00 UTC — full fixture matrix
   workflow_dispatch:
@@ -145,6 +145,8 @@ jobs:
     name: unit (windows)
     needs: [typecheck]
     runs-on: windows-latest
+    # Note: JUnit XML from bun test on Windows may have path-separator issues.
+    # If failures appear related to path format, check bun's --reporter=junit output.
     defaults:
       run:
         shell: bash

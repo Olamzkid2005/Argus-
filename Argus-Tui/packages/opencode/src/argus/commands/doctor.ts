@@ -1,3 +1,4 @@
+import { promises as dns } from "dns"
 import { existsSync, readFileSync, readdirSync } from "fs"
 import { join, resolve } from "path"
 import { homedir } from "os"
@@ -69,6 +70,7 @@ export async function doctorCommand(options?: {
   results.push(dbCheck())
   results.push(credCheck())
   results.push(envCheck())
+  results.push(await dnsCheck())
   results.push(configValidationCheck())
   results.push(toolchainCheck())
 
@@ -280,6 +282,23 @@ function dbCheck(): CheckResult {
       name: "Database",
       status: "FAIL",
       message: `Database error: ${(error as Error).message}`,
+    }
+  }
+}
+
+async function dnsCheck(): Promise<CheckResult> {
+  try {
+    await dns.resolve("dns.google")
+    return {
+      name: "DNS Resolution",
+      status: "PASS",
+      message: "DNS resolution working (dns.google resolved)",
+    }
+  } catch {
+    return {
+      name: "DNS Resolution",
+      status: "WARN",
+      message: "DNS resolution failed — DNS-reliant tools (subfinder, amass, dnsx) may not work. Check container DNS config.",
     }
   }
 }

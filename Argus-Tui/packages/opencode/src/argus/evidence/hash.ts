@@ -14,8 +14,15 @@ export function computePackageHash(
   manifest: EvidenceManifest,
   artifacts: ArtifactEntry[],
 ): string {
+  const sortedManifest = Object.keys({ ...manifest, package_hash: "" })
+    .sort()
+    .reduce<Record<string, unknown>>((acc, key) => {
+      acc[key] = (manifest as Record<string, unknown>)[key] ?? ""
+      return acc
+    }, {})
+  sortedManifest.package_hash = ""
   const manifestStr =
-    JSON.stringify({ ...manifest, package_hash: "" }, null, 2) +
+    JSON.stringify(sortedManifest, null, 2) +
     artifacts.map((a) => a.hash).join("")
   return createHash("sha256").update(manifestStr).digest("hex")
 }

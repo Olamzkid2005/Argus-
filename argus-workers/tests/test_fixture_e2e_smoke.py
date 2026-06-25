@@ -22,6 +22,8 @@ Usage:
 
 import pytest
 
+pytest.importorskip("flask", reason="Flask is required for lifecycle tests")
+
 pytestmark = [
     pytest.mark.smoke,
     pytest.mark.timeout(120),

@@ -209,6 +209,9 @@ export class WorkersBridge {
       }
       this.pending.clear()
       this.pendingCount = 0
+      this.rl?.removeAllListeners()
+      this.rl?.close()
+      this.process?.stderr?.removeAllListeners()
       if (code !== 0) {
         if (stderrBuffer.length > 0) {
           console.error(`[MCP Worker stderr]:\n${stderrBuffer.join("")}`)

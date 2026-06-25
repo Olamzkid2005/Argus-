@@ -97,6 +97,8 @@ services:
       - ALL
     cap_add:
       - NET_RAW       # Required for nmap SYN scans from within container
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # Celery Beat (scheduled tasks)
   celery-beat:

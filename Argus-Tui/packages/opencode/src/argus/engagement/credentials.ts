@@ -61,7 +61,7 @@ export class CredentialStore {
     const defaultRole = this.data.default_role
     if (defaultRole) return this.getCredentials(defaultRole)
     const roles = this.listRoles()
-    if (roles.length > 0) return this.getCredentials(roles[0])
+    if (roles.length > 0) return this.getCredentials(roles.sort()[0])
     return null
   }
 
