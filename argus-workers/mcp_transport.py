@@ -45,7 +45,7 @@ class MCPTransport:
 
     def _read_request(self) -> dict | None:
         """Read and parse one JSON-RPC request from stdin.
-        
+
         Returns:
             dict: Parsed request on success.
             None: EOF (stdin closed) — caller should exit the run loop.

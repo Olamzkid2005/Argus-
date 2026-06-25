@@ -5,6 +5,7 @@ import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
 import { Severity, Confidence } from "../shared/types"
 import type { Report, ReportFormat, ReportSummary } from "./types"
 import { EngagementStore } from "../engagement/store"
+import type { IEngagementStore } from "../engagement/types"
 
 /** Resolve the current file's directory, compatible with both Bun and Node ESM.
  *  Uses decodeURIComponent to handle percent-encoded spaces in file:// paths on macOS. */
@@ -46,8 +47,8 @@ export class ReportGenerator {
    * Generate a report directly from the SQLite store — re-queries findings
    * and evidence on every call so the report always reflects the latest state.
    */
-  generateFromEngagement(engagementId: string, format: ReportFormat = "markdown", store?: EngagementStore): string {
-    const store = store ?? new EngagementStore()
+  generateFromEngagement(engagementId: string, format: ReportFormat = "markdown", storeArg?: IEngagementStore): string {
+    const store = storeArg ?? new EngagementStore()
     const engagement = store.getEngagement(engagementId)
     if (!engagement) return `Engagement not found: ${engagementId}`
 

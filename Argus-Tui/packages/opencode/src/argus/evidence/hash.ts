@@ -17,7 +17,7 @@ export function computePackageHash(
   const sortedManifest = Object.keys({ ...manifest, package_hash: "" })
     .sort()
     .reduce<Record<string, unknown>>((acc, key) => {
-      acc[key] = (manifest as Record<string, unknown>)[key] ?? ""
+      acc[key] = (manifest as unknown as Record<string, unknown>)[key] ?? ""
       return acc
     }, {})
   sortedManifest.package_hash = ""

@@ -5,7 +5,7 @@ Verifies that:
 - finally block guards with `if conn and db:` before release_connection
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -17,7 +17,7 @@ class TestToolHealthTrackerDbInit:
 
     def test_db_initialized_before_try_by_default(self):
         """db and conn are set to None before the try block (not NameError risk)."""
-        tracker = ToolHealthTracker()
+        ToolHealthTracker()
 
         conn = None
         db = None
@@ -36,7 +36,7 @@ class TestToolHealthTrackerDbInit:
 
     def test_db_none_does_not_crash_nameerror(self):
         """Confirm that db being undefined (NameError) is impossible — it's initialized."""
-        tracker = ToolHealthTracker()
+        ToolHealthTracker()
 
         conn = None
         db = None
@@ -64,7 +64,7 @@ class TestToolHealthTrackerDbInit:
 
     def test_finally_does_not_release_when_db_none(self):
         """release_connection is not called when db or conn is None."""
-        tracker = ToolHealthTracker()
+        ToolHealthTracker()
         mock_db = MagicMock()
 
         conn = None
@@ -85,7 +85,7 @@ class TestToolHealthTrackerDbInit:
 
     def test_finally_releases_when_both_valid(self):
         """release_connection is called only when both conn and db are truthy."""
-        tracker = ToolHealthTracker()
+        ToolHealthTracker()
         mock_db = MagicMock()
         mock_conn = MagicMock()
 

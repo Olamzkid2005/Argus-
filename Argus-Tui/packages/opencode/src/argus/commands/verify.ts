@@ -4,6 +4,7 @@ import { StoredXSSVerifier } from "../browser/verifiers/xss"
 import { PrivilegeEscalationVerifier } from "../browser/verifiers/priv-esc"
 import { VerificationRunner } from "../browser/verifiers/runner"
 import { EngagementStore } from "../engagement/store"
+import type { IEngagementStore } from "../engagement/types"
 import { CredentialStore } from "../engagement/credentials"
 import { EvidenceCollector } from "../evidence/collector"
 import { ConfidenceEngine } from "../engagement/confidence"
@@ -16,7 +17,7 @@ export async function verifyCommand(
   options?: {
     targetUrl?: string
     credsPath?: string
-    storeOverride?: EngagementStore
+    storeOverride?: IEngagementStore
     engineOverride?: PlaywrightEngine
     credStoreOverride?: CredentialStore
     collectorOverride?: EvidenceCollector

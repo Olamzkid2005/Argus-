@@ -14,6 +14,7 @@ import { WorkflowPlanner } from "./planner/planner"
 import { InProcessExecutor } from "./planner/executor"
 import { WorkersBridge } from "./bridge/mcp-client"
 import { EngagementStore } from "./engagement/store"
+import type { IEngagementStore } from "./engagement/types"
 import { CredentialStore } from "./engagement/credentials"
 import { ConfidenceEngine } from "./engagement/confidence"
 import { FeatureFlags, Feature } from "./config/feature-flags"
@@ -132,7 +133,7 @@ export function formatFindingsSummary(
 export class WorkflowRunner {
   constructor(
     private deps?: {
-      store?: EngagementStore
+      store?: IEngagementStore
       workflowRegistry?: WorkflowRegistry
       toolRegistry?: ToolRegistry
       planner?: WorkflowPlanner

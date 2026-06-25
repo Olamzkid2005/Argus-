@@ -3,8 +3,6 @@
 import os
 from unittest.mock import patch
 
-import pytest
-
 from llm_client import (
     LLMClient,
     LLMResponse,

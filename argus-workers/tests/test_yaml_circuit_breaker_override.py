@@ -103,9 +103,9 @@ class TestYAMLCircuitBreakerOverride:
 
         # Verify ToolRunner __init__ uses these constants (skip if deps missing)
         try:
-            from tools.tool_runner import ToolRunner
-
             import inspect
+
+            from tools.tool_runner import ToolRunner
 
             sig = inspect.signature(ToolRunner.__init__)
             failure_threshold_default = sig.parameters["failure_threshold"].default

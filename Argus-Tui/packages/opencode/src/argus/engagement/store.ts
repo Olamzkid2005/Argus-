@@ -36,10 +36,10 @@ function _loadDrizzle(): DrizzleFunction {
   }
   return _drizzle
 }
-import { eq, desc, asc, sql, SQL, AnyColumn, inArray } from "drizzle-orm"
+import { eq, desc, asc, sql, SQL, type AnyColumn, type SQLWrapper, inArray } from "drizzle-orm"
 import { join, dirname } from "path"
 import { homedir } from "os"
-import { mkdirSync, existsSync, readFileSync } from "fs"
+import { mkdirSync, existsSync, readFileSync, writeFileSync } from "fs"
 import { StoragePaths } from "../storage/paths"
 // Monotonic counter for engagement ID generation. Ensures deterministic
 // sort-order tiebreaking when multiple engagements share the same
@@ -61,8 +61,10 @@ import {
   artifacts,
   workflow_snapshots,
   finding_analysis,
+  STORAGE_VERSION_LEGACY,
+  STORAGE_VERSION_PER_ENGAGEMENT,
 } from "./schema.sql"
-import type { EngagementState, PhaseRecord, EngagementStatus, PhaseStatus } from "./types"
+import type { EngagementState, PhaseRecord, EngagementStatus, PhaseStatus, IEngagementStore } from "./types"
 import type { ExecutionMode } from "../shared/types"
 import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
 
@@ -70,66 +72,74 @@ function defaultDbPath(): string {
   return StoragePaths.db
 }
 
-const TABLE_SQL = [
-  sql`CREATE TABLE IF NOT EXISTS engagements (
+/** Root DB schema — only the engagements table (metadata + index). */
+const ROOT_TABLE_SQL = `CREATE TABLE IF NOT EXISTS engagements (
     id TEXT PRIMARY KEY, target TEXT NOT NULL, workflow TEXT NOT NULL,
     workflow_version INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'CREATED',
-    schema_version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
-  )`,
-  sql`CREATE TABLE IF NOT EXISTS findings (
-    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL REFERENCES engagements(id),
+    schema_version INTEGER NOT NULL DEFAULT 1, storage_version INTEGER NOT NULL DEFAULT ${STORAGE_VERSION_LEGACY},
+    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  )`
+
+/**
+ * Per-engagement DB schema — all tables except engagements.
+ * These are plain SQL strings passed directly to bun:sqlite's exec()
+ * because drizzle's parameterized `sql` tag creates ? placeholders
+ * that SQLite rejects in CREATE TABLE DEFAULT clauses.
+ */
+const PER_ENGAGEMENT_TABLE_SQL = [
+  `CREATE TABLE IF NOT EXISTS findings (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL,
     title TEXT NOT NULL, severity INTEGER NOT NULL, confidence INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'PENDING', description TEXT, subtype TEXT, cve TEXT, cwe TEXT,
     owasp TEXT, remediation TEXT, tool TEXT, phase TEXT, created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL, finalized_at INTEGER, negative INTEGER NOT NULL DEFAULT 0
   )`,
-  sql`CREATE INDEX IF NOT EXISTS idx_findings_engagement ON findings(engagement_id)`,
-  sql`CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status)`,
-  sql`CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity)`,
-  sql`CREATE TABLE IF NOT EXISTS phases (
-    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL REFERENCES engagements(id),
+  `CREATE INDEX IF NOT EXISTS idx_findings_engagement ON findings(engagement_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity)`,
+  `CREATE TABLE IF NOT EXISTS phases (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL,
     name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING', capabilities TEXT DEFAULT '[]',
     execution_mode TEXT, started_at INTEGER, completed_at INTEGER, error TEXT,
     replan_cycle INTEGER NOT NULL DEFAULT 0
   )`,
-  sql`CREATE INDEX IF NOT EXISTS idx_phases_engagement ON phases(engagement_id)`,
-  sql`CREATE INDEX IF NOT EXISTS idx_phases_engagement_replan ON phases(engagement_id, replan_cycle)`,
-  sql`CREATE TABLE IF NOT EXISTS audit_log (
-    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL REFERENCES engagements(id),
+  `CREATE INDEX IF NOT EXISTS idx_phases_engagement ON phases(engagement_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_phases_engagement_replan ON phases(engagement_id, replan_cycle)`,
+  `CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL,
     event_type TEXT NOT NULL, message TEXT NOT NULL, metadata TEXT DEFAULT '{}',
     created_at INTEGER NOT NULL
   )`,
-  sql`CREATE INDEX IF NOT EXISTS idx_audit_log_engagement ON audit_log(engagement_id)`,
-  sql`CREATE TABLE IF NOT EXISTS tool_execution_log (
-    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL REFERENCES engagements(id),
+  `CREATE INDEX IF NOT EXISTS idx_audit_log_engagement ON audit_log(engagement_id)`,
+  `CREATE TABLE IF NOT EXISTS tool_execution_log (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL,
     tool_name TEXT NOT NULL, target_type TEXT NOT NULL, capability TEXT NOT NULL,
     succeeded INTEGER NOT NULL, duration_ms INTEGER NOT NULL, created_at INTEGER NOT NULL
   )`,
-  sql`CREATE INDEX IF NOT EXISTS idx_tool_exec_engagement ON tool_execution_log(engagement_id)`,
-  sql`CREATE INDEX IF NOT EXISTS idx_tool_exec_tool ON tool_execution_log(tool_name)`,
-  sql`CREATE INDEX IF NOT EXISTS idx_tool_exec_capability ON tool_execution_log(capability)`,
-  sql`CREATE TABLE IF NOT EXISTS evidence_packages (
-    id TEXT PRIMARY KEY, finding_id TEXT NOT NULL REFERENCES findings(id),
+  `CREATE INDEX IF NOT EXISTS idx_tool_exec_engagement ON tool_execution_log(engagement_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_tool_exec_tool ON tool_execution_log(tool_name)`,
+  `CREATE INDEX IF NOT EXISTS idx_tool_exec_capability ON tool_execution_log(capability)`,
+  `CREATE TABLE IF NOT EXISTS evidence_packages (
+    id TEXT PRIMARY KEY, finding_id TEXT NOT NULL,
     package_hash TEXT NOT NULL, created_at INTEGER NOT NULL
   )`,
-  sql`CREATE INDEX IF NOT EXISTS idx_evidence_packages_finding ON evidence_packages(finding_id)`,
-  sql`CREATE TABLE IF NOT EXISTS artifacts (
-    id TEXT PRIMARY KEY, package_id TEXT NOT NULL REFERENCES evidence_packages(id),
+  `CREATE INDEX IF NOT EXISTS idx_evidence_packages_finding ON evidence_packages(finding_id)`,
+  `CREATE TABLE IF NOT EXISTS artifacts (
+    id TEXT PRIMARY KEY, package_id TEXT NOT NULL,
     path TEXT NOT NULL, sha256 TEXT NOT NULL, size_bytes INTEGER NOT NULL, type TEXT NOT NULL
   )`,
-  sql`CREATE INDEX IF NOT EXISTS idx_artifacts_package ON artifacts(package_id)`,
-  sql`CREATE TABLE IF NOT EXISTS workflow_snapshots (
-    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL REFERENCES engagements(id),
+  `CREATE INDEX IF NOT EXISTS idx_artifacts_package ON artifacts(package_id)`,
+  `CREATE TABLE IF NOT EXISTS workflow_snapshots (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL,
     workflow_name TEXT NOT NULL, workflow_version INTEGER NOT NULL,
     workflow_yaml TEXT NOT NULL, created_at INTEGER NOT NULL
   )`,
-  sql`CREATE INDEX IF NOT EXISTS idx_workflow_snapshots_engagement ON workflow_snapshots(engagement_id)`,
-  sql`CREATE TABLE IF NOT EXISTS finding_analysis (
+  `CREATE INDEX IF NOT EXISTS idx_workflow_snapshots_engagement ON workflow_snapshots(engagement_id)`,
+  `CREATE TABLE IF NOT EXISTS finding_analysis (
     finding_id TEXT PRIMARY KEY,
     explanation TEXT NOT NULL, impact TEXT NOT NULL, remediation TEXT NOT NULL,
     refs TEXT, model TEXT NOT NULL,
-    generated_at INTEGER NOT NULL, finding_updated_at INTEGER NOT NULL,
-    FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
+    generated_at INTEGER NOT NULL, finding_updated_at INTEGER NOT NULL
   )`,
 ]
 
@@ -141,6 +151,7 @@ function toEngagementState(row: typeof engagements.$inferSelect): EngagementStat
     workflowVersion: row.workflow_version,
     status: row.status as EngagementStatus,
     schemaVersion: row.schema_version,
+    storageVersion: row.storage_version ?? STORAGE_VERSION_LEGACY,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   }
@@ -152,10 +163,6 @@ function toPhaseRecord(row: typeof phasesTable.$inferSelect): PhaseRecord {
     engagementId: row.engagement_id,
     name: row.name,
     status: row.status as PhaseStatus,
-    // NOTE: null coalesces to [] — original DB distinction is lost.
-    //   NULL  = phase not yet evaluated (capabilities unknown)
-    //   []    = phase evaluated, zero capabilities
-    //   [...] = phase evaluated with specific capabilities
     capabilities: row.capabilities ?? [],
     executionMode: (row.execution_mode ?? "sequential") as ExecutionMode,
     startedAt: row.started_at ? new Date(row.started_at).toISOString() : undefined,
@@ -210,10 +217,17 @@ function toNormalizedFinding(row: typeof findingsTable.$inferSelect): Normalized
   }
 }
 
-export class EngagementStore {
-  private db: ReturnType<DrizzleFunction>
-  private _sqlite: InstanceType<BunSqliteDatabaseConstructor>
+export class EngagementStore implements IEngagementStore {
+  private rootDb: ReturnType<DrizzleFunction>
+  private _rootSqlite: InstanceType<BunSqliteDatabaseConstructor>
   readonly dbPath: string
+
+  /** Cached per-engagement DB handles (engagementId → { db, lastAccessed }). */
+  private engagementDbs = new Map<string, { db: InstanceType<BunSqliteDatabaseConstructor>; drizzle: ReturnType<DrizzleFunction>; lastAccessed: number }>()
+  /** Auto-close idle engagement DB handles after 5 minutes. */
+  private static readonly ENGAGEMENT_DB_TIMEOUT_MS = 5 * 60 * 1000
+  /** Interval handle for periodic cleanup of stale engagement handles. */
+  private _cleanupTimer: ReturnType<typeof setInterval> | null = null
 
   private static finalizer = new FinalizationRegistry((sqlite: { close(): void }) => {
     try { sqlite.close() } catch { /* finalizer best-effort */ }
@@ -227,33 +241,239 @@ export class EngagementStore {
     }
     // Lazy-load bun:sqlite — gives a clear "Bun required" error under Node
     const BunSqliteDatabase = _loadBunSqlite()
-    this._sqlite = new BunSqliteDatabase(this.dbPath)
-    this._sqlite.exec("PRAGMA journal_mode = WAL")
-    this._sqlite.exec("PRAGMA foreign_keys = ON")
-    this._sqlite.exec("PRAGMA busy_timeout = 5000")
+    this._rootSqlite = new BunSqliteDatabase(this.dbPath)
+    this._rootSqlite.exec("PRAGMA journal_mode = WAL")
+    this._rootSqlite.exec("PRAGMA foreign_keys = ON")
+    this._rootSqlite.exec("PRAGMA busy_timeout = 5000")
     // Lazy-load drizzle-orm/bun-sqlite — same reason as bun:sqlite, its
     // driver.cjs eagerly requires bun:sqlite at module level
     const drizzle = _loadDrizzle()
-    this.db = drizzle({ client: this._sqlite })
-    this.ensureTables()
+    this.rootDb = drizzle({ client: this._rootSqlite })
+    this._ensureRootTables()
     // Seed sequence counters from existing data so they persist across restarts
     this._seedCounters()
-    EngagementStore.finalizer.register(this, this._sqlite)
+    EngagementStore.finalizer.register(this, this._rootSqlite)
+
+    // Periodic cleanup of stale per-engagement DB handles (every 2 minutes).
+    // Use unref() so the timer doesn't keep the process alive.
+    this._cleanupTimer = setInterval(() => this._closeStaleEngagementDbs(), 120_000)
+    this._cleanupTimer.unref()
   }
 
   close(): void {
     EngagementStore.finalizer.unregister(this)
-    try { this._sqlite.close() } catch { /* already closed */ }
+    this._closeAllEngagementDbs()
+    if (this._cleanupTimer) {
+      clearInterval(this._cleanupTimer)
+      this._cleanupTimer = null
+    }
+    try { this._rootSqlite.close() } catch { /* already closed */ }
+  }
+
+  // ── Per-engagement DB handle management ──
+
+  /**
+   * Get or create a drizzle-wrapped per-engagement DB handle.
+   * Opens the per-engagement DB file on first access, creating it
+   * with the full schema (foreign keys disabled — the engagements
+   * table lives in the root DB).
+   *
+   * **Hybrid lazy migration:** If the per-engagement DB file doesn't
+   * exist but the engagement exists in the root DB with
+   * `storage_version = 1` (legacy), the engagement's data is still
+   * readable from the root DB. On first WRITE to a legacy engagement,
+   * the per-engagement DB is created and data is migrated.
+   */
+  private _getEngagementDb(engagementId: string): { db: InstanceType<BunSqliteDatabaseConstructor>; drizzle: ReturnType<DrizzleFunction> } | null {
+    const cached = this.engagementDbs.get(engagementId)
+    if (cached) {
+      cached.lastAccessed = Date.now()
+      return cached
+    }
+
+    const engPath = StoragePaths.engagementDbPath(engagementId)
+    const eng = this.getEngagement(engagementId)
+    if (!eng) return null
+
+    // If per-engagement DB doesn't exist yet, don't auto-create for reads
+    // from legacy engagements — the caller will fall back to root DB reads.
+    if (!existsSync(engPath)) {
+      return null
+    }
+
+    const BunSqliteDatabase = _loadBunSqlite()
+    const sqlite = new BunSqliteDatabase(engPath)
+    sqlite.exec("PRAGMA journal_mode = WAL")
+    sqlite.exec("PRAGMA foreign_keys = OFF")  // FK targets are in the root DB
+    sqlite.exec("PRAGMA busy_timeout = 5000")
+
+    const drizzle = _loadDrizzle()
+    const wrapped = drizzle({ client: sqlite })
+    this._ensurePerEngagementTables(sqlite)
+
+    const entry = { db: sqlite, drizzle: wrapped, lastAccessed: Date.now() }
+    this.engagementDbs.set(engagementId, entry)
+    return entry
+  }
+
+  /**
+   * Ensure a per-engagement DB exists for the given engagement.
+   * Creates the file and tables if missing. Marks the engagement
+   * as `storage_version = 2` in the root DB.
+   */
+  private _ensureEngagementDb(engagementId: string): { db: InstanceType<BunSqliteDatabaseConstructor>; drizzle: ReturnType<DrizzleFunction> } {
+    const cached = this._getEngagementDb(engagementId)
+    if (cached) return cached
+
+    const engPath = StoragePaths.engagementDbPath(engagementId)
+    const engDir = dirname(engPath)
+    if (!existsSync(engDir)) {
+      mkdirSync(engDir, { recursive: true })
+    }
+
+    const BunSqliteDatabase = _loadBunSqlite()
+    const sqlite = new BunSqliteDatabase(engPath)
+    sqlite.exec("PRAGMA journal_mode = WAL")
+    sqlite.exec("PRAGMA foreign_keys = OFF")
+    sqlite.exec("PRAGMA busy_timeout = 5000")
+
+    const drizzle = _loadDrizzle()
+    const wrapped = drizzle({ client: sqlite })
+    this._ensurePerEngagementTables(sqlite)
+
+    const entry = { db: sqlite, drizzle: wrapped, lastAccessed: Date.now() }
+    this.engagementDbs.set(engagementId, entry)
+
+    // Read the engagement's current storage_version before upgrading it
+    const eng = this.getEngagement(engagementId)
+    const wasLegacy = eng?.storageVersion === STORAGE_VERSION_LEGACY
+
+    // Mark the engagement as migrated to per-engagement storage
+    this.rootDb.update(engagements)
+      .set({ storage_version: STORAGE_VERSION_PER_ENGAGEMENT, updated_at: Date.now() })
+      .where(eq(engagements.id, engagementId))
+      .run()
+
+    // If this was a legacy engagement, migrate existing data from the root DB
+    if (wasLegacy) {
+      this._migrateLegacyEngagement(engagementId)
+    }
+
+    return entry
+  }
+
+  /**
+   * Migrate a legacy engagement's data from the root DB to its per-engagement DB.
+   * Called automatically on the first write to a legacy engagement.
+   */
+  private _migrateLegacyEngagement(engagementId: string): void {
+    const eng = this.getEngagement(engagementId)
+    if (!eng || eng.storageVersion !== STORAGE_VERSION_LEGACY) return
+
+    const pe = this._ensureEngagementDb(engagementId)
+
+    // Migrate phases — use raw SQL to avoid type issues with cross-DB drizzle instances
+    const phaseRows = this.rootDb.select().from(phasesTable)
+      .where(eq(phasesTable.engagement_id, engagementId))
+      .all()
+    for (const row of phaseRows) {
+      try {
+        pe.drizzle.insert(phasesTable).values(row as any).onConflictDoNothing().run()
+      } catch {}
+    }
+
+    // Migrate findings
+    const findingRows = this.rootDb.select().from(findingsTable)
+      .where(eq(findingsTable.engagement_id, engagementId))
+      .all()
+    for (const row of findingRows) {
+      try {
+        pe.drizzle.insert(findingsTable).values(row as any).onConflictDoNothing().run()
+      } catch {}
+    }
+
+    // Migrate audit_log
+    const auditRows = this.rootDb.select().from(audit_log)
+      .where(eq(audit_log.engagement_id, engagementId))
+      .all()
+    for (const row of auditRows) {
+      try {
+        pe.drizzle.insert(audit_log).values(row as any).onConflictDoNothing().run()
+      } catch {}
+    }
+
+    // Migrate evidence_packages → artifacts
+    for (const f of findingRows) {
+      const pkgRows = this.rootDb.select().from(evidence_packages)
+        .where(eq(evidence_packages.finding_id, f.id))
+        .all()
+      for (const pkg of pkgRows) {
+        try {
+          pe.drizzle.insert(evidence_packages).values(pkg as any).onConflictDoNothing().run()
+        } catch {}
+        const artRows = this.rootDb.select().from(artifacts)
+          .where(eq(artifacts.package_id, pkg.id))
+          .all()
+        for (const art of artRows) {
+          try {
+            pe.drizzle.insert(artifacts).values(art as any).onConflictDoNothing().run()
+          } catch {}
+        }
+      }
+    }
+
+    // Migrate workflow_snapshots
+    const snapRows = this.rootDb.select().from(workflow_snapshots)
+      .where(eq(workflow_snapshots.engagement_id, engagementId))
+      .all()
+    for (const row of snapRows) {
+      try {
+        pe.drizzle.insert(workflow_snapshots).values(row as any).onConflictDoNothing().run()
+      } catch {}
+    }
+  }
+
+  /**
+   * Close per-engagement DB handles that haven't been accessed recently.
+   */
+  private _closeStaleEngagementDbs(): void {
+    const now = Date.now()
+    for (const [id, entry] of this.engagementDbs) {
+      if (now - entry.lastAccessed > EngagementStore.ENGAGEMENT_DB_TIMEOUT_MS) {
+        try { entry.db.close() } catch { /* already closed */ }
+        this.engagementDbs.delete(id)
+      }
+    }
+  }
+
+  private _closeAllEngagementDbs(): void {
+    for (const [, entry] of this.engagementDbs) {
+      try { entry.db.close() } catch { /* already closed */ }
+    }
+    this.engagementDbs.clear()
+  }
+
+  // ── Table creation ──
+
+  private  _ensureRootTables(): void {
+    this._rootSqlite.exec(ROOT_TABLE_SQL)
+  }
+
+  private _ensurePerEngagementTables(sqlite: InstanceType<BunSqliteDatabaseConstructor>): void {
+    for (const stmt of PER_ENGAGEMENT_TABLE_SQL) {
+      sqlite.exec(stmt)
+    }
   }
 
   private _seedCounters(): void {
     try {
-      const engRows = this.db.select({ id: engagements.id }).from(engagements).orderBy(desc(engagements.id)).limit(1).all()
+      const engRows = this.rootDb.select({ id: engagements.id }).from(engagements).orderBy(desc(engagements.id)).limit(1).all()
       if (engRows.length > 0) {
         const parts = engRows[0].id.split("-")
         _engagementSeq = parseInt(parts[parts.length - 1], 36) + 1
       }
-      const audRows = this.db.select({ id: audit_log.id }).from(audit_log).orderBy(desc(audit_log.id)).limit(1).all()
+      // Seed counters from legacy audit_log (root DB)
+      const audRows = this.rootDb.select({ id: audit_log.id }).from(audit_log).orderBy(desc(audit_log.id)).limit(1).all()
       if (audRows.length > 0) {
         const parts = audRows[0].id.split("-")
         _auditSeq = parseInt(parts[parts.length - 1], 36) + 1
@@ -263,30 +483,16 @@ export class EngagementStore {
     }
   }
 
-  private ensureTables(): void {
-    for (const stmt of TABLE_SQL) {
-      this.db.run(stmt)
-    }
-    // Migration: add negative column to findings for existing databases
-    // (databases created before the column was added to the CREATE TABLE).
-    // Use PRAGMA table_info to check if the column already exists first.
-    // This avoids brittle error-message matching across different SQLite versions
-    // (bun:sqlite may say "duplicate column name: negative" not "duplicate column").
-    const columns = this._sqlite
-      .query<{ name: string }, []>("SELECT name FROM pragma_table_info('findings') WHERE name = 'negative'")
-      .all()
-    if (columns.length === 0) {
-      this.db.run(sql`ALTER TABLE findings ADD COLUMN negative INTEGER NOT NULL DEFAULT 0`)
-    }
-  }
+  // ── Engagement CRUD (all root DB) ──
 
   createEngagement(target: string, workflow: string): EngagementState {
     const id = `ENG-${Date.now().toString(36)}-${(_engagementSeq++).toString(36)}`
     const now = Date.now()
 
-    this.db.insert(engagements).values({
+    this.rootDb.insert(engagements).values({
       id, target, workflow,
       workflow_version: 1, status: "CREATED", schema_version: 1,
+      storage_version: STORAGE_VERSION_PER_ENGAGEMENT,
       created_at: now, updated_at: now,
     }).run()
 
@@ -296,19 +502,20 @@ export class EngagementStore {
   }
 
   getEngagement(id: string): EngagementState | null {
-    const rows = this.db.select().from(engagements).where(eq(engagements.id, id)).all()
+    const rows = this.rootDb.select().from(engagements).where(eq(engagements.id, id)).all()
     if (rows.length === 0) return null
     return toEngagementState(rows[0])
   }
 
   saveEngagement(engagement: EngagementState): void {
-    this.db.update(engagements)
+    this.rootDb.update(engagements)
       .set({
         target: engagement.target,
         workflow: engagement.workflow,
         workflow_version: engagement.workflowVersion,
         status: engagement.status,
         schema_version: engagement.schemaVersion,
+        storage_version: engagement.storageVersion,
         updated_at: Date.now(),
       })
       .where(eq(engagements.id, engagement.id))
@@ -316,19 +523,22 @@ export class EngagementStore {
   }
 
   updateStatus(id: string, status: EngagementStatus): void {
-    this.db.update(engagements)
+    this.rootDb.update(engagements)
       .set({ status, updated_at: Date.now() })
       .where(eq(engagements.id, id))
       .run()
   }
 
   listEngagements(): EngagementState[] {
-    const rows = this.db.select().from(engagements).orderBy(desc(engagements.created_at), desc(engagements.id)).all()
+    const rows = this.rootDb.select().from(engagements).orderBy(desc(engagements.created_at), desc(engagements.id)).all()
     return rows.map(toEngagementState)
   }
 
+  // ── Phases (per-engagement DB with fallback) ──
+
   savePhases(id: string, records: PhaseRecord[]): void {
-    this.db.transaction((tx) => {
+    const pe = this._ensureEngagementDb(id)
+    pe.drizzle.transaction((tx) => {
       for (const record of records) {
         tx.insert(phasesTable).values({
           id: record.id, engagement_id: id, name: record.name, status: record.status,
@@ -354,7 +564,8 @@ export class EngagementStore {
   }
 
   savePhase(engagementId: string, record: PhaseRecord): void {
-    this.db.insert(phasesTable).values({
+    const pe = this._ensureEngagementDb(engagementId)
+    pe.drizzle.insert(phasesTable).values({
       id: record.id, engagement_id: engagementId, name: record.name, status: record.status,
       capabilities: record.capabilities, execution_mode: record.executionMode,
       started_at: record.startedAt ? new Date(record.startedAt).getTime() : null,
@@ -376,18 +587,33 @@ export class EngagementStore {
   }
 
   getPhases(id: string): PhaseRecord[] {
-    const rows = this.db.select().from(phasesTable)
-      .where(eq(phasesTable.engagement_id, id))
-      .orderBy(asc(phasesTable.id))
-      .all()
-    return rows.map(toPhaseRecord)
+    // Try per-engagement DB first
+    const pe = this._getEngagementDb(id)
+    if (pe) {
+      const rows = pe.drizzle.select().from(phasesTable)
+        .where(eq(phasesTable.engagement_id, id))
+        .orderBy(asc(phasesTable.id))
+        .all()
+      return rows.map(toPhaseRecord)
+    }
+
+    // Fallback to root DB (legacy data). May not have phases table.
+    try {
+      const rows = this.rootDb.select().from(phasesTable)
+        .where(eq(phasesTable.engagement_id, id))
+        .orderBy(asc(phasesTable.id))
+        .all()
+      return rows.map(toPhaseRecord)
+    } catch { return [] }
   }
 
+  // ── Findings (per-engagement DB with fallback) ──
+
   saveFindings(engagementId: string, records: NormalizedFinding[]): void {
-    this.db.transaction((tx) => {
+    const pe = this._ensureEngagementDb(engagementId)
+    pe.drizzle.transaction((tx) => {
       for (const record of records) {
         const row = toFindingRow(record, engagementId)
-        // Destructure out PK and FK — no need to SET them on conflict update
         const { id, engagement_id, ...updateFields } = row
         tx.insert(findingsTable).values(row).onConflictDoUpdate({
           target: findingsTable.id,
@@ -398,36 +624,151 @@ export class EngagementStore {
   }
 
   getFinding(id: string): NormalizedFinding | null {
-    const rows = this.db.select().from(findingsTable).where(eq(findingsTable.id, id)).all()
-    if (rows.length === 0) return null
-    return toNormalizedFinding(rows[0])
+    // 1. Search cached per-engagement DBs (fast path)
+    for (const [, entry] of this.engagementDbs) {
+      const rows = entry.drizzle.select().from(findingsTable).where(eq(findingsTable.id, id)).all()
+      if (rows.length > 0) return toNormalizedFinding(rows[0])
+    }
+
+    // 2. Fallback to root DB (legacy data). Wrap in try-catch because the
+    //    root DB may not have a findings table (per-engagement storage only).
+    try {
+      const rootRows = this.rootDb.select().from(findingsTable).where(eq(findingsTable.id, id)).all()
+      if (rootRows.length > 0) return toNormalizedFinding(rootRows[0])
+    } catch { /* table may not exist — not a legacy engagement */ }
+
+    // 3. Scan uncached per-engagement DBs (storage_version >= 2)
+    const allEngs = this.listEngagements()
+    for (const eng of allEngs) {
+      if (eng.storageVersion >= STORAGE_VERSION_PER_ENGAGEMENT) {
+        const pe = this._getEngagementDb(eng.id)
+        if (pe) {
+          const rows = pe.drizzle.select().from(findingsTable).where(eq(findingsTable.id, id)).all()
+          if (rows.length > 0) return toNormalizedFinding(rows[0])
+        }
+      }
+    }
+
+    return null
   }
 
-  /**
-   * Look up which engagement a finding belongs to using a single direct query.
-   * Replaces the O(N×M) pattern where callers iterated all engagements × all findings.
-   * Returns the engagement ID or null if the finding doesn't exist.
-   */
   getFindingEngagementId(findingId: string): string | null {
-    const rows = this.db
-      .select({ engagement_id: findingsTable.engagement_id })
-      .from(findingsTable)
-      .where(eq(findingsTable.id, findingId))
-      .all()
-    return rows.length > 0 ? rows[0].engagement_id : null
+    // 1. Search cached per-engagement DBs first (fast path)
+    for (const [, entry] of this.engagementDbs) {
+      const rows = entry.drizzle
+        .select({ engagement_id: findingsTable.engagement_id })
+        .from(findingsTable)
+        .where(eq(findingsTable.id, findingId))
+        .all()
+      if (rows.length > 0) return rows[0].engagement_id
+    }
+
+    // 2. Search root DB (legacy data). Wrap in try-catch because the
+    //    root DB may not have a findings table (per-engagement storage only).
+    try {
+      const rootRows = this.rootDb
+        .select({ engagement_id: findingsTable.engagement_id })
+        .from(findingsTable)
+        .where(eq(findingsTable.id, findingId))
+        .all()
+      if (rootRows.length > 0) return rootRows[0].engagement_id
+    } catch { /* table may not exist — not a legacy engagement */ }
+
+    // 3. Scan all per-engagement DBs for uncached findings
+    //    (engagement has storage_version >= 2 but DB not yet opened)
+    const allEngs = this.listEngagements()
+    for (const eng of allEngs) {
+      if (eng.storageVersion >= STORAGE_VERSION_PER_ENGAGEMENT) {
+        const pe = this._getEngagementDb(eng.id)
+        if (pe) {
+          const rows = pe.drizzle
+            .select({ engagement_id: findingsTable.engagement_id })
+            .from(findingsTable)
+            .where(eq(findingsTable.id, findingId))
+            .all()
+          if (rows.length > 0) return rows[0].engagement_id
+        }
+      }
+    }
+
+    return null
   }
 
   getFindings(engagementId: string): NormalizedFinding[] {
-    const rows = this.db.select().from(findingsTable)
-      .where(eq(findingsTable.engagement_id, engagementId))
-      .orderBy(desc(findingsTable.severity))
-      .all()
-    return rows.map(toNormalizedFinding)
+    // Try per-engagement DB first
+    const pe = this._getEngagementDb(engagementId)
+    if (pe) {
+      const rows = pe.drizzle.select().from(findingsTable)
+        .where(eq(findingsTable.engagement_id, engagementId))
+        .orderBy(desc(findingsTable.severity))
+        .all()
+      return rows.map(toNormalizedFinding)
+    }
+
+    // Fallback to root DB (legacy data). May not have findings table.
+    try {
+      const rows = this.rootDb.select().from(findingsTable)
+        .where(eq(findingsTable.engagement_id, engagementId))
+        .orderBy(desc(findingsTable.severity))
+        .all()
+      return rows.map(toNormalizedFinding)
+    } catch { return [] }
   }
 
+  getFindingCountsByEngagementIds(ids: string[]): Map<string, { total: number; critical: number; confirmed: number }> {
+    if (ids.length === 0) return new Map()
+
+    const result = new Map<string, { total: number; critical: number; confirmed: number }>()
+
+    // For each engagement, try per-engagement DB first, then root DB
+    for (const id of ids) {
+      let rows: Array<{ engagementId: string; total: number; critical: number; confirmed: number }> = []
+
+      // Try per-engagement DB
+      const pe = this._getEngagementDb(id)
+      if (pe) {
+        rows = pe.drizzle
+          .select({
+            engagementId: sql<string>`${id}`.as("engagementId"),
+            total: sql<number>`count(*)`.as("total"),
+            critical: sql<number>`sum(case when ${findingsTable.severity} >= 4 then 1 else 0 end)`.as("critical"),
+            confirmed: sql<number>`sum(case when ${findingsTable.status} in ('CONFIRMED', 'FINALIZED') then 1 else 0 end)`.as("confirmed"),
+          })
+          .from(findingsTable)
+          .where(eq(findingsTable.engagement_id, id))
+          .groupBy(findingsTable.engagement_id)
+          .all()
+      } else {
+        // Root DB fallback — may not have findings table
+        try {
+          rows = this.rootDb
+            .select({
+              engagementId: findingsTable.engagement_id,
+              total: sql<number>`count(*)`.as("total"),
+              critical: sql<number>`sum(case when ${findingsTable.severity} >= 4 then 1 else 0 end)`.as("critical"),
+              confirmed: sql<number>`sum(case when ${findingsTable.status} in ('CONFIRMED', 'FINALIZED') then 1 else 0 end)`.as("confirmed"),
+            })
+            .from(findingsTable)
+            .where(eq(findingsTable.engagement_id, id))
+            .groupBy(findingsTable.engagement_id)
+            .all()
+        } catch { /* root DB may not have findings table */ }
+      }
+
+      if (rows.length > 0) {
+        result.set(id, { total: rows[0].total, critical: rows[0].critical, confirmed: rows[0].confirmed })
+      }
+    }
+
+    return result
+  }
+
+  // ── Audit log (per-engagement DB with fallback) ──
+
   appendAuditLog(engagementId: string, eventType: string, message: string, metadata?: Record<string, unknown>): void {
+    const pe = this._ensureEngagementDb(engagementId)
     const now = Date.now()
-    this.db.insert(audit_log).values({
+    pe.drizzle.insert(audit_log).values({
       id: `aud-${now.toString(36)}-${(_auditSeq++).toString(36)}`,
       engagement_id: engagementId,
       event_type: eventType,
@@ -438,21 +779,45 @@ export class EngagementStore {
   }
 
   getAuditLog(engagementId: string): Array<{ id: string; eventType: string; message: string; metadata: Record<string, unknown>; createdAt: number }> {
-    const rows = this.db.select().from(audit_log)
-      .where(eq(audit_log.engagement_id, engagementId))
-      .orderBy(desc(audit_log.created_at), desc(audit_log.id))
-      .all()
-    return rows.map((r) => ({
-      id: r.id,
-      eventType: r.event_type,
-      message: r.message,
-      metadata: (r.metadata ?? {}) as Record<string, unknown>,
-      createdAt: r.created_at,
-    }))
+    const pe = this._getEngagementDb(engagementId)
+    if (pe) {
+      const rows = pe.drizzle.select().from(audit_log)
+        .where(eq(audit_log.engagement_id, engagementId))
+        .orderBy(desc(audit_log.created_at), desc(audit_log.id))
+        .all()
+      return rows.map((r) => ({
+        id: r.id,
+        eventType: r.event_type,
+        message: r.message,
+        metadata: (r.metadata ?? {}) as Record<string, unknown>,
+        createdAt: r.created_at,
+      }))
+    }
+
+    // Fallback to root DB (legacy data). May not have audit_log table.
+    try {
+      const rows = this.rootDb.select().from(audit_log)
+        .where(eq(audit_log.engagement_id, engagementId))
+        .orderBy(desc(audit_log.created_at), desc(audit_log.id))
+        .all()
+      return rows.map((r) => ({
+        id: r.id,
+        eventType: r.event_type,
+        message: r.message,
+        metadata: (r.metadata ?? {}) as Record<string, unknown>,
+        createdAt: r.created_at,
+      }))
+    } catch { return [] }
   }
 
+  // ── Evidence (per-engagement DB with fallback) ──
+
   saveEvidencePackage(id: string, findingId: string, packageHash: string): void {
-    this.db.insert(evidence_packages).values({
+    // Find which engagement this finding belongs to
+    const engId = this.getFindingEngagementId(findingId)
+    if (!engId) throw new Error(`Cannot save evidence: finding ${findingId} not found`)
+    const pe = this._ensureEngagementDb(engId)
+    pe.drizzle.insert(evidence_packages).values({
       id,
       finding_id: findingId,
       package_hash: packageHash,
@@ -468,10 +833,23 @@ export class EngagementStore {
   }
 
   getEvidencePackages(findingId: string): Array<{ id: string; packageHash: string; createdAt: number }> {
-    const rows = this.db.select().from(evidence_packages)
-      .where(eq(evidence_packages.finding_id, findingId))
-      .all()
-    return rows.map((r) => ({ id: r.id, packageHash: r.package_hash, createdAt: r.created_at }))
+    // Search per-engagement DBs first
+    for (const [, entry] of this.engagementDbs) {
+      const rows = entry.drizzle.select().from(evidence_packages)
+        .where(eq(evidence_packages.finding_id, findingId))
+        .all()
+      if (rows.length > 0) {
+        return rows.map((r) => ({ id: r.id, packageHash: r.package_hash, createdAt: r.created_at }))
+      }
+    }
+
+    // Fallback to root DB. May not have evidence_packages table.
+    try {
+      const rows = this.rootDb.select().from(evidence_packages)
+        .where(eq(evidence_packages.finding_id, findingId))
+        .all()
+      return rows.map((r) => ({ id: r.id, packageHash: r.package_hash, createdAt: r.created_at }))
+    } catch { return [] }
   }
 
   getEvidenceByEngagement(engagementId: string): Array<{
@@ -484,144 +862,192 @@ export class EngagementStore {
       artifacts: Array<{ id: string; path: string; type: string; sizeBytes: number }>
     }>
   }> {
-    // 3 bulk queries instead of N+1 nested loops
-    const findings = this.db.select({
-      id: findingsTable.id,
-      title: findingsTable.title,
-    }).from(findingsTable)
-      .where(eq(findingsTable.engagement_id, engagementId))
-      .all()
+    const pe = this._getEngagementDb(engagementId)
+    const db = pe?.drizzle ?? this.rootDb
 
-    if (findings.length === 0) return []
-
-    const findingIds = findings.map((f) => f.id)
-
-    // Bulk query 2: all evidence packages for all findings
-    const allPackages = this.db.select()
-      .from(evidence_packages)
-      .where(EngagementStore._inClause(evidence_packages.finding_id, findingIds))
-      .all()
-
-    const packageIds = allPackages.map((p) => p.id)
-
-    // Bulk query 3: all artifacts for all packages
-    const allArtifacts = packageIds.length > 0
-      ? this.db.select()
-        .from(artifacts)
-        .where(EngagementStore._inClause(artifacts.package_id, packageIds))
+    // Wrap in try-catch — root DB may not have these tables
+    try {
+      const findings = db.select({
+        id: findingsTable.id,
+        title: findingsTable.title,
+      }).from(findingsTable)
+        .where(eq(findingsTable.engagement_id, engagementId))
         .all()
-      : []
 
-    // Index artifacts by package_id for O(1) lookup
-    const artifactsByPackageId = new Map<string, Array<{ id: string; path: string; type: string; sizeBytes: number }>>()
-    for (const art of allArtifacts) {
-      const list = artifactsByPackageId.get(art.package_id) ?? []
-      list.push({ id: art.id, path: art.path, type: art.type, sizeBytes: art.size_bytes })
-      artifactsByPackageId.set(art.package_id, list)
+      if (findings.length === 0) return []
+
+      const findingIds = findings.map((f) => f.id)
+      const allPackages = db.select()
+        .from(evidence_packages)
+        .where(EngagementStore._inClause(evidence_packages.finding_id, findingIds))
+        .all()
+
+      const packageIds = allPackages.map((p) => p.id)
+      const allArtifacts = packageIds.length > 0
+        ? db.select()
+          .from(artifacts)
+          .where(EngagementStore._inClause(artifacts.package_id, packageIds))
+          .all()
+        : []
+
+      const artifactsByPackageId = new Map<string, Array<{ id: string; path: string; type: string; sizeBytes: number }>>()
+      for (const art of allArtifacts) {
+        const list = artifactsByPackageId.get(art.package_id) ?? []
+        list.push({ id: art.id, path: art.path, type: art.type, sizeBytes: art.size_bytes })
+        artifactsByPackageId.set(art.package_id, list)
+      }
+
+      const packagesByFindingId = new Map<string, Array<{
+        id: string; packageHash: string; createdAt: number
+        artifacts: Array<{ id: string; path: string; type: string; sizeBytes: number }>
+      }>>()
+      for (const pkg of allPackages) {
+        const list = packagesByFindingId.get(pkg.finding_id) ?? []
+        list.push({
+          id: pkg.id,
+          packageHash: pkg.package_hash,
+          createdAt: pkg.created_at,
+          artifacts: artifactsByPackageId.get(pkg.id) ?? [],
+        })
+        packagesByFindingId.set(pkg.finding_id, list)
+      }
+
+      return findings.map((f) => ({
+        findingId: f.id,
+        findingTitle: f.title,
+        packages: packagesByFindingId.get(f.id) ?? [],
+      }))
+    } catch { return [] }
+  }
+
+  private static _inClause(column: SQL | AnyColumn, values: string[]): SQL {
+    if (values.length === 0) return sql`1 = 0`
+    return inArray(column as SQLWrapper, values)
+  }
+
+  // ── Artifacts (per-engagement DB) ──
+
+  saveArtifact(id: string, packageId: string, path: string, sha256: string, sizeBytes: number, type: string): void {
+    // Find which engagement via the evidence package by checking all DBs
+    const engId = this._findEngagementByPackage(packageId)
+    if (engId) {
+      // Ensure we write to the per-engagement DB (creates it if needed)
+      const pe = this._ensureEngagementDb(engId)
+      pe.drizzle.insert(artifacts).values({
+        id, package_id: packageId, path, sha256,
+        size_bytes: sizeBytes, type,
+      }).onConflictDoUpdate({
+        target: artifacts.id,
+        set: { package_id: packageId, path, sha256, size_bytes: sizeBytes, type },
+      }).run()
+      return
     }
 
-    // Index packages by finding_id for O(1) lookup
-    const packagesByFindingId = new Map<string, Array<{
-      id: string; packageHash: string; createdAt: number
-      artifacts: Array<{ id: string; path: string; type: string; sizeBytes: number }>
-    }>>()
-    for (const pkg of allPackages) {
-      const list = packagesByFindingId.get(pkg.finding_id) ?? []
-      list.push({
-        id: pkg.id,
-        packageHash: pkg.package_hash,
-        createdAt: pkg.created_at,
-        artifacts: artifactsByPackageId.get(pkg.id) ?? [],
-      })
-      packagesByFindingId.set(pkg.finding_id, list)
-    }
-
-    // Assemble result using indexed Maps (O(F) instead of O(F*P*A))
-    const result = findings.map((f) => ({
-      findingId: f.id,
-      findingTitle: f.title,
-      packages: packagesByFindingId.get(f.id) ?? [],
-    }))
-    return result
+    // Fallback to root DB (legacy data). May not have artifacts table.
+    try {
+      this.rootDb.insert(artifacts).values({
+        id, package_id: packageId, path, sha256,
+        size_bytes: sizeBytes, type,
+      }).onConflictDoUpdate({
+        target: artifacts.id,
+        set: { package_id: packageId, path, sha256, size_bytes: sizeBytes, type },
+      }).run()
+    } catch { /* root DB may not have artifacts table */ }
   }
 
   /**
-   * Build a parameterized SQL `IN (...)` clause from a list of string values.
-   * Used to replace N+1 nested loops with bulk queries across multiple methods.
-   * Example: `_inClause(evidence_packages.finding_id, ["id1", "id2"])` → `finding_id IN ($1, $2)`
+   * Find which engagement a package belongs to by searching all DBs.
+   * Checks cached per-engagement DBs first, then root DB, then uncached
+   * per-engagement DBs.
    */
-  private static _inClause(column: SQL | AnyColumn, values: string[]): SQL {
-    if (values.length === 0) {
-      // Return a clause that is always false — no values to match
-      return sql`1 = 0`
+  private  _findEngagementByPackage(packageId: string): string | null {
+    // 1. Check cached per-engagement DBs
+    for (const [engId, entry] of this.engagementDbs) {
+      const pkgRows = entry.drizzle
+        .select({ finding_id: evidence_packages.finding_id })
+        .from(evidence_packages)
+        .where(eq(evidence_packages.id, packageId))
+        .all()
+      if (pkgRows.length > 0) return engId
     }
-    return inArray(column, values)
-  }
 
-  saveArtifact(id: string, packageId: string, path: string, sha256: string, sizeBytes: number, type: string): void {
-    this.db.insert(artifacts).values({
-      id,
-      package_id: packageId,
-      path,
-      sha256,
-      size_bytes: sizeBytes,
-      type,
-    }).onConflictDoUpdate({
-      target: artifacts.id,
-      set: {
-        package_id: packageId,
-        path,
-        sha256,
-        size_bytes: sizeBytes,
-        type,
-      },
-    }).run()
+    // 2. Check root DB (legacy data). Wrap in try-catch because the
+    //    root DB may not have evidence_packages/findings tables.
+    try {
+      const rootPkgRows = this.rootDb
+        .select({ finding_id: evidence_packages.finding_id })
+        .from(evidence_packages)
+        .where(eq(evidence_packages.id, packageId))
+        .all()
+      if (rootPkgRows.length > 0) {
+        const finding = this.rootDb
+          .select({ engagement_id: findingsTable.engagement_id })
+          .from(findingsTable)
+          .where(eq(findingsTable.id, rootPkgRows[0].finding_id))
+          .all()
+        if (finding.length > 0) return finding[0].engagement_id
+      }
+    } catch { /* tables may not exist — not a legacy engagement */ }
+
+    // 3. Check uncached per-engagement DBs
+    const allEngs = this.listEngagements()
+    for (const eng of allEngs) {
+      if (eng.storageVersion >= STORAGE_VERSION_PER_ENGAGEMENT) {
+        const pe = this._getEngagementDb(eng.id)
+        if (pe) {
+          const pkgRows = pe.drizzle
+            .select({ finding_id: evidence_packages.finding_id })
+            .from(evidence_packages)
+            .where(eq(evidence_packages.id, packageId))
+            .all()
+          if (pkgRows.length > 0) {
+            this.engagementDbs.get(eng.id)!.lastAccessed = Date.now()
+            return eng.id
+          }
+        }
+      }
+    }
+
+    return null
   }
 
   getArtifacts(packageId: string): Array<{ id: string; path: string; sha256: string; sizeBytes: number; type: string }> {
-    const rows = this.db.select().from(artifacts)
-      .where(eq(artifacts.package_id, packageId))
-      .all()
-    return rows.map((r) => ({ id: r.id, path: r.path, sha256: r.sha256, sizeBytes: r.size_bytes, type: r.type }))
-  }
-
-  /**
-   * Get finding counts grouped by engagement IDs in a single query.
-   * Returns a Map of engagement_id → { total, critical, confirmed }.
-   * Replaces the N+1 pattern where callers looped `getFindings(e.id)` for each engagement.
-   */
-  getFindingCountsByEngagementIds(ids: string[]): Map<string, { total: number; critical: number; confirmed: number }> {
-    if (ids.length === 0) return new Map()
-    const rows = this.db
-      .select({
-        engagementId: findingsTable.engagement_id,
-        total: sql<number>`count(*)`.as("total"),
-        critical: sql<number>`sum(case when ${findingsTable.severity} >= 4 then 1 else 0 end)`.as("critical"),
-        confirmed: sql<number>`sum(case when ${findingsTable.status} in ('CONFIRMED', 'FINALIZED') then 1 else 0 end)`.as("confirmed"),
-      })
-      .from(findingsTable)
-      .where(EngagementStore._inClause(findingsTable.engagement_id, ids))
-      .groupBy(findingsTable.engagement_id)
-      .all()
-    const result = new Map<string, { total: number; critical: number; confirmed: number }>()
-    for (const row of rows) {
-      result.set(row.engagementId, { total: row.total, critical: row.critical, confirmed: row.confirmed })
+    for (const [, entry] of this.engagementDbs) {
+      const rows = entry.drizzle.select().from(artifacts)
+        .where(eq(artifacts.package_id, packageId))
+        .all()
+      if (rows.length > 0) {
+        return rows.map((r) => ({ id: r.id, path: r.path, sha256: r.sha256, sizeBytes: r.size_bytes, type: r.type }))
+      }
     }
-    return result
+
+    // Fallback to root DB. May not have artifacts table.
+    try {
+      const rows = this.rootDb.select().from(artifacts)
+        .where(eq(artifacts.package_id, packageId))
+        .all()
+      return rows.map((r) => ({ id: r.id, path: r.path, sha256: r.sha256, sizeBytes: r.size_bytes, type: r.type }))
+    } catch { return [] }
   }
 
   getEvidenceCountsByEngagement(engagementId: string): Record<string, number> {
-    const rows = this.db
-      .select({
-        findingId: findingsTable.id,
-        count: sql<number>`count(${artifacts.id})`.as("artifact_count"),
-      })
-      .from(findingsTable)
-      .leftJoin(evidence_packages, eq(evidence_packages.finding_id, findingsTable.id))
-      .leftJoin(artifacts, eq(artifacts.package_id, evidence_packages.id))
-      .where(eq(findingsTable.engagement_id, engagementId))
-      .groupBy(findingsTable.id)
-      .all()
+    const pe = this._getEngagementDb(engagementId)
+    const db = pe?.drizzle ?? this.rootDb
+
+    let rows: Array<{ findingId: string; count: number }>
+    try {
+      rows = db
+        .select({
+          findingId: findingsTable.id,
+          count: sql<number>`count(${artifacts.id})`.as("artifact_count"),
+        })
+        .from(findingsTable)
+        .leftJoin(evidence_packages, eq(evidence_packages.finding_id, findingsTable.id))
+        .leftJoin(artifacts, eq(artifacts.package_id, evidence_packages.id))
+        .where(eq(findingsTable.engagement_id, engagementId))
+        .groupBy(findingsTable.id)
+        .all()
+    } catch { return {} }
     const result: Record<string, number> = {}
     for (const row of rows) {
       result[row.findingId] = row.count
@@ -629,16 +1055,13 @@ export class EngagementStore {
     return result
   }
 
-  /**
-   * Fetch all engagement detail data in a single method call — avoids the 4 separate
-   * sequential store calls that engagement-detail.tsx was making on mount.
-   * Returns null if the engagement doesn't exist.
-   */
+  // ── Engagement detail ──
+
   getEngagementDetail(engagementId: string): {
     engagement: EngagementState
     findings: NormalizedFinding[]
-    evidence: ReturnType<EngagementStore["getEvidenceByEngagement"]>
-    auditLog: ReturnType<EngagementStore["getAuditLog"]>
+    evidence: ReturnType<IEngagementStore["getEvidenceByEngagement"]>
+    auditLog: ReturnType<IEngagementStore["getAuditLog"]>
   } | null {
     const eng = this.getEngagement(engagementId)
     if (!eng) return null
@@ -650,8 +1073,11 @@ export class EngagementStore {
     }
   }
 
+  // ── Workflow snapshots (per-engagement DB with fallback) ──
+
   saveWorkflowSnapshot(id: string, engagementId: string, workflowName: string, workflowVersion: number, workflowYaml: string): void {
-    this.db.insert(workflow_snapshots).values({
+    const pe = this._ensureEngagementDb(engagementId)
+    pe.drizzle.insert(workflow_snapshots).values({
       id,
       engagement_id: engagementId,
       workflow_name: workflowName,
@@ -662,20 +1088,31 @@ export class EngagementStore {
   }
 
   getWorkflowSnapshots(engagementId: string): Array<{ id: string; workflowName: string; workflowVersion: number; workflowYaml: string; createdAt: number }> {
-    const rows = this.db.select().from(workflow_snapshots)
-      .where(eq(workflow_snapshots.engagement_id, engagementId))
-      .all()
-    return rows.map((r) => ({
-      id: r.id,
-      workflowName: r.workflow_name,
-      workflowVersion: r.workflow_version,
-      workflowYaml: r.workflow_yaml,
-      createdAt: r.created_at,
-    }))
+    const pe = this._getEngagementDb(engagementId)
+    const db = pe?.drizzle ?? this.rootDb
+    try {
+      const rows = db.select().from(workflow_snapshots)
+        .where(eq(workflow_snapshots.engagement_id, engagementId))
+        .all()
+      return rows.map((r) => ({
+        id: r.id,
+        workflowName: r.workflow_name,
+        workflowVersion: r.workflow_version,
+        workflowYaml: r.workflow_yaml,
+        createdAt: r.created_at,
+      }))
+    } catch { return [] }
   }
 
+  // ── Finding analysis (per-engagement DB with fallback) ──
+
   saveFindingAnalysis(analysis: FindingAnalysis): void {
-    this.db.insert(finding_analysis).values({
+    const finding = this.getFinding(analysis.findingId)
+    if (!finding) throw new Error(`Cannot save analysis: finding ${analysis.findingId} not found`)
+    const engId = this.getFindingEngagementId(analysis.findingId)
+    if (!engId) throw new Error(`Cannot save analysis: finding ${analysis.findingId} has no engagement`)
+    const pe = this._ensureEngagementDb(engId)
+    pe.drizzle.insert(finding_analysis).values({
       finding_id: analysis.findingId,
       explanation: analysis.explanation,
       impact: JSON.stringify(analysis.impact),
@@ -699,11 +1136,24 @@ export class EngagementStore {
   }
 
   getFindingAnalysis(findingId: string): FindingAnalysis | null {
-    const rows = this.db.select().from(finding_analysis)
-      .where(eq(finding_analysis.finding_id, findingId))
-      .all()
-    if (rows.length === 0) return null
-    const row = rows[0]
+    for (const [, entry] of this.engagementDbs) {
+      const rows = entry.drizzle.select().from(finding_analysis)
+        .where(eq(finding_analysis.finding_id, findingId))
+        .all()
+      if (rows.length > 0) return this._parseAnalysisRow(rows[0])
+    }
+
+    // Fallback to root DB (legacy data). May not have finding_analysis table.
+    try {
+      const rows = this.rootDb.select().from(finding_analysis)
+        .where(eq(finding_analysis.finding_id, findingId))
+        .all()
+      if (rows.length === 0) return null
+      return this._parseAnalysisRow(rows[0])
+    } catch { return null }
+  }
+
+  private _parseAnalysisRow(row: typeof finding_analysis.$inferSelect): FindingAnalysis | null {
     try {
       return {
         findingId: row.finding_id,
@@ -721,9 +1171,22 @@ export class EngagementStore {
   }
 
   deleteFindingAnalysis(findingId: string): void {
-    this.db.delete(finding_analysis)
-      .where(eq(finding_analysis.finding_id, findingId))
-      .run()
+    // Try per-engagement DBs first
+    for (const [, entry] of this.engagementDbs) {
+      try {
+        entry.drizzle.delete(finding_analysis)
+          .where(eq(finding_analysis.finding_id, findingId))
+          .run()
+        return
+      } catch { /* not in this DB */ }
+    }
+
+    // Fallback to root DB. May not have finding_analysis table.
+    try {
+      this.rootDb.delete(finding_analysis)
+        .where(eq(finding_analysis.finding_id, findingId))
+        .run()
+    } catch { /* root DB may not have finding_analysis table */ }
   }
 
   getValidAnalysis(findingId: string): FindingAnalysis | null {

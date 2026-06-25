@@ -1197,13 +1197,15 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
-      // Check for Argus slash commands first
-      const firstLine = inputText.split("\n")[0]
-      const firstWord = firstLine.split(" ")[0]
-      const isArgusSlash = inputText.startsWith("/") && firstWord.length > 1
+      // Check for Argus slash commands first (only in Argus mode)
       let argusHandled = false
 
-      if (isArgusSlash) {
+      if (process.env.ARGUS_MODE === "1") {
+        const firstLine = inputText.split("\n")[0]
+        const firstWord = firstLine.split(" ")[0]
+        const isArgusSlash = inputText.startsWith("/") && firstWord.length > 1
+
+        if (isArgusSlash) {
         const cmdName = firstWord.slice(1).toLowerCase()
         const { findArgusTuiCommand } = await import("@/argus/tui-commands")
         const argusCmd = findArgusTuiCommand(cmdName)
@@ -1311,9 +1313,10 @@ export function Prompt(props: PromptProps) {
           })()
         }
       }
+      }
 
-      // Check for natural language assessment intent
-      if (!argusHandled) {
+      // Check for natural language assessment intent (only in Argus mode)
+      if (!argusHandled && process.env.ARGUS_MODE === "1") {
         const { classify } = await import("@/argus/intent-classifier")
         const intent = classify(inputText)
         if (intent.type === "assessment") {

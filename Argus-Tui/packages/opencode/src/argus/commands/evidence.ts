@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "fs"
 import { join } from "path"
 import { EngagementStore } from "../engagement/store"
+import type { IEngagementStore } from "../engagement/types"
 import { EvidenceCollector } from "../evidence/collector"
 import { verifyPackage } from "../evidence/integrity"
 import { StoragePaths } from "../storage/paths"
@@ -9,7 +10,7 @@ export async function evidenceCommand(
   action: "list" | "show" | "prune" | "verify-package",
   args: string[],
   overrides?: {
-    store?: EngagementStore
+    store?: IEngagementStore
     collector?: EvidenceCollector
     evidenceBaseDir?: string
   },

@@ -4,6 +4,7 @@ import { join } from "path"
 import { tmpdir } from "os"
 import { createHash } from "crypto"
 import { verifyPackage } from "../../../../src/argus/evidence/integrity"
+import { computePackageHash } from "../../../../src/argus/evidence/hash"
 import type { EvidenceManifest, ArtifactEntry } from "../../../../src/argus/evidence/types"
 
 const baseDir = mkdtempSync(join(tmpdir(), "integrity-test-"))
@@ -43,10 +44,7 @@ function setupPackage(
     package_hash: "",
   }
 
-  const hashStr =
-    JSON.stringify({ ...manifest, package_hash: "" }, null, 2) +
-    entries.map((e) => e.hash).join("")
-  manifest.package_hash = sha256(hashStr)
+  manifest.package_hash = computePackageHash(manifest, entries)
 
   writeFileSync(
     join(artifactDir, "manifest.json"),
@@ -223,10 +221,7 @@ describe("verifyPackage", () => {
       package_hash: "",
     }
 
-    const hashStr =
-      JSON.stringify({ ...manifest, package_hash: "" }, null, 2) +
-      ""  // no artifact hashes
-    manifest.package_hash = sha256(hashStr)
+    manifest.package_hash = computePackageHash(manifest, [])
 
     writeFileSync(
       join(artifactDir, "manifest.json"),

@@ -13,11 +13,17 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../context/tui-config"
 import { useTheme } from "@tui/context/theme"
 import { logo as argusLogo } from "@/argus/logo"
+import { logo as opencodeLogo } from "@/cli/logo"
 
-const placeholder = {
-  normal: ["/assess https://example.com", "/recon https://testphp.vulnweb.com", "/doctor - run health checks"],
-  shell: ["argus doctor", "argus status", "argus --help"],
-}
+const placeholder = process.env.ARGUS_MODE === "1"
+  ? {
+      normal: ["/assess https://example.com", "/recon https://testphp.vulnweb.com", "/doctor - run health checks"],
+      shell: ["argus doctor", "argus status", "argus --help"],
+    }
+  : {
+      normal: ["explain this code", "help me refactor this function", "/new — start fresh"],
+      shell: ["ls -la", "git status", "npm test"],
+    }
 
 export function Home() {
   const [once, setOnce] = createSignal(false)
@@ -43,6 +49,7 @@ export function Home() {
   const toast = useToast()
 
   onMount(async () => {
+    if (process.env.ARGUS_MODE !== "1") return
     try {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
@@ -68,17 +75,19 @@ export function Home() {
       }
       setStats({ targets: totalTargets, active: openEngagements, findings: totalF, critical, high, medium })
     } catch (e) { toast.error(e) }
-    Promise.resolve().then(async () => {
-      try {
-        const { existsSync } = await import("fs")
-        const { join, dirname } = await import("path")
-        const { fileURLToPath } = await import("url")
-        const _dirname = dirname(fileURLToPath(import.meta.url))
-        const wp = join(_dirname, "../../../../../../../../argus-workers/mcp_server.py")
-        const mcpOk = existsSync(wp)
-        setServices({ planner: true, workflow: true, mcp: mcpOk, evidence: true, report: true, verify: true })
-      } catch (e) { toast.error(e) }
-    })
+    if (process.env.ARGUS_MODE === "1") {
+      Promise.resolve().then(async () => {
+        try {
+          const { existsSync } = await import("fs")
+          const { join, dirname } = await import("path")
+          const { fileURLToPath } = await import("url")
+          const _dirname = dirname(fileURLToPath(import.meta.url))
+          const wp = join(_dirname, "../../../../../../../../argus-workers/mcp_server.py")
+          const mcpOk = existsSync(wp)
+          setServices({ planner: true, workflow: true, mcp: mcpOk, evidence: true, report: true, verify: true })
+        } catch (e) { toast.error(e) }
+      })
+    }
   })
 
   let sent = false
@@ -117,19 +126,21 @@ export function Home() {
       <box flexGrow={1} flexDirection="column" paddingLeft={2} paddingRight={2}>
         {/* Logo */}
         <box alignItems="center" paddingTop={2}>
-          <Logo shape={argusLogo} idle />
+          <Logo shape={process.env.ARGUS_MODE === "1" ? argusLogo : opencodeLogo} idle />
         </box>
-        <box alignItems="center" paddingTop={1}>
-          <text fg={theme.text}>Autonomous Security Assessment Platform</text>
-        </box>
-        <box alignItems="center">
-          <text fg={theme.success}>● Operational</text>
-        </box>
+        <Show when={process.env.ARGUS_MODE === "1"}>
+          <box alignItems="center" paddingTop={1}>
+            <text fg={theme.text}>Autonomous Security Assessment Platform</text>
+          </box>
+          <box alignItems="center">
+            <text fg={theme.success}>● Operational</text>
+          </box>
+        </Show>
 
         <box height={1} />
 
-        {/* Stats bar */}
-        <Show when={stats()}>
+        {/* Stats bar — Argus-specific */}
+        <Show when={process.env.ARGUS_MODE === "1" && stats()}>
           <box flexDirection="row" gap={2} paddingTop={1} paddingBottom={1}>
             <box flexDirection="column" alignItems="center" minWidth={8}>
               <text fg={theme.text}><b>{stats()!.targets.toString()}</b></text>
@@ -161,62 +172,68 @@ export function Home() {
           </box>
         </Show>
 
-        <text fg={theme.textMuted}>Quick Actions</text>
-        <box flexDirection="row" gap={1} paddingTop={1}>
-          <text fg={theme.primary}>/assess {"<target>"}</text>
-          <text fg={theme.textMuted}>|</text>
-          <text fg={theme.primary}>/recon {"<target>"}</text>
-          <text fg={theme.textMuted}>|</text>
-          <text fg={theme.warning}>/report {"<id>"}</text>
-          <text fg={theme.textMuted}>|</text>
-          <text fg={theme.info}>/verify {"<finding>"}</text>
-          <text fg={theme.textMuted}>|</text>
-          <text fg={theme.textMuted}>/status</text>
-          <text fg={theme.textMuted}>|</text>
-          <text fg={theme.error}>/doctor</text>
-        </box>
-
-        <box height={1} />
-
-        {/* Recent engagements */}
-        <text fg={theme.textMuted}>Recent Activity</text>
-        <Show when={engagements().length > 0}
-          fallback={<text fg={theme.textMuted}>No engagements yet. Run /assess to get started.</text>}
-        >
-          <For each={engagements()}>
-            {(eng) => (
-              <box flexDirection="row" gap={1} paddingTop={1}>
-                <text fg={statusColor(eng.status)}>{statusIcon(eng.status)}</text>
-                <text fg={theme.textMuted}>{eng.id}</text>
-                <text fg={theme.text}>{eng.target}</text>
-                <text fg={statusColor(eng.status)}>{eng.status.toLowerCase()}</text>
-                <text fg={theme.textMuted}>({eng.findings} findings)</text>
-              </box>
-            )}
-          </For>
+        <Show when={process.env.ARGUS_MODE === "1"}>
+          <text fg={theme.textMuted}>Quick Actions</text>
+          <box flexDirection="row" gap={1} paddingTop={1}>
+            <text fg={theme.primary}>/assess {"<target>"}</text>
+            <text fg={theme.textMuted}>|</text>
+            <text fg={theme.primary}>/recon {"<target>"}</text>
+            <text fg={theme.textMuted}>|</text>
+            <text fg={theme.warning}>/report {"<id>"}</text>
+            <text fg={theme.textMuted}>|</text>
+            <text fg={theme.info}>/verify {"<finding>"}</text>
+            <text fg={theme.textMuted}>|</text>
+            <text fg={theme.textMuted}>/status</text>
+            <text fg={theme.textMuted}>|</text>
+            <text fg={theme.error}>/doctor</text>
+          </box>
         </Show>
 
         <box height={1} />
 
-        {/* System Health */}
-        <text fg={theme.textMuted}>System Status</text>
-        <box flexDirection="row" gap={2} paddingTop={1}>
-          <For each={[
-            { label: "Planner", key: "planner" },
-            { label: "Workflow", key: "workflow" },
-            { label: "MCP Bridge", key: "mcp" },
-            { label: "Evidence Store", key: "evidence" },
-            { label: "Report Gen", key: "report" },
-            { label: "Browser Verify", key: "verify" },
-          ]}>
-            {(svc) => (
-              <box flexDirection="row" gap={1}>
-                <text fg={sec(svc.key) ? theme.success : theme.error}>●</text>
-                <text fg={sec(svc.key) ? theme.text : theme.textMuted}>{svc.label}</text>
-              </box>
-            )}
-          </For>
-        </box>
+        {/* Recent engagements — Argus-specific */}
+        <Show when={process.env.ARGUS_MODE === "1"}>
+          <text fg={theme.textMuted}>Recent Activity</text>
+          <Show when={engagements().length > 0}
+            fallback={<text fg={theme.textMuted}>No engagements yet. Run /assess to get started.</text>}
+          >
+            <For each={engagements()}>
+              {(eng) => (
+                <box flexDirection="row" gap={1} paddingTop={1}>
+                  <text fg={statusColor(eng.status)}>{statusIcon(eng.status)}</text>
+                  <text fg={theme.textMuted}>{eng.id}</text>
+                  <text fg={theme.text}>{eng.target}</text>
+                  <text fg={statusColor(eng.status)}>{eng.status.toLowerCase()}</text>
+                  <text fg={theme.textMuted}>({eng.findings} findings)</text>
+                </box>
+              )}
+            </For>
+          </Show>
+        </Show>
+
+        <box height={1} />
+
+        {/* System Health — Argus-specific */}
+        <Show when={process.env.ARGUS_MODE === "1"}>
+          <text fg={theme.textMuted}>System Status</text>
+          <box flexDirection="row" gap={2} paddingTop={1}>
+            <For each={[
+              { label: "Planner", key: "planner" },
+              { label: "Workflow", key: "workflow" },
+              { label: "MCP Bridge", key: "mcp" },
+              { label: "Evidence Store", key: "evidence" },
+              { label: "Report Gen", key: "report" },
+              { label: "Browser Verify", key: "verify" },
+            ]}>
+              {(svc) => (
+                <box flexDirection="row" gap={1}>
+                  <text fg={sec(svc.key) ? theme.success : theme.error}>●</text>
+                  <text fg={sec(svc.key) ? theme.text : theme.textMuted}>{svc.label}</text>
+                </box>
+              )}
+            </For>
+          </box>
+        </Show>
 
         <box paddingTop={2} width="100%" maxWidth={promptMaxWidth()}>
           <TuiPluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
@@ -227,8 +244,13 @@ export function Home() {
         <Toast />
       </box>
       <box width="100%" flexShrink={0} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} justifyContent="space-between" flexDirection="row">
-        <text fg={theme.primary}>ARGUS v5</text>
-        <text fg={theme.textMuted}>Security Assessment Platform</text>
+        <Show when={process.env.ARGUS_MODE === "1"}>
+          <text fg={theme.primary}>ARGUS v5</text>
+          <text fg={theme.textMuted}>Security Assessment Platform</text>
+        </Show>
+        <Show when={process.env.ARGUS_MODE !== "1"}>
+          <text fg={theme.textMuted}>OpenCode</text>
+        </Show>
         <TuiPluginRuntime.Slot name="home_footer" mode="single_winner" />
       </box>
     </>

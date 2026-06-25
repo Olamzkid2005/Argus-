@@ -1,5 +1,5 @@
 import type { FindingAnalysis } from "../shared/types"
-import type { EngagementStore } from "./store"
+import type { IEngagementStore } from "./types"
 import { Feature, getFeatureFlags } from "../config/feature-flags"
 
 export interface LlmClient {
@@ -8,7 +8,7 @@ export interface LlmClient {
 
 export class FindingAnalyzer {
   constructor(
-    private store: EngagementStore,
+    private store: IEngagementStore,
     private llmClient?: LlmClient,
   ) {}
 

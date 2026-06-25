@@ -10,6 +10,7 @@ function makeEngagement(overrides?: Partial<EngagementState>): EngagementState {
     workflowVersion: 1,
     status: "CREATED",
     schemaVersion: 1,
+    storageVersion: 2,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,

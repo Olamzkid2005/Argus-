@@ -4,6 +4,7 @@ import { WorkflowPlanner } from "../planner/planner"
 import { InProcessExecutor } from "../planner/executor"
 import { WorkersBridge } from "../bridge/mcp-client"
 import { EngagementStore } from "../engagement/store"
+import type { IEngagementStore } from "../engagement/types"
 import { CredentialStore } from "../engagement/credentials"
 import { ConfidenceEngine } from "../engagement/confidence"
 import { ReportGenerator } from "../reporting/generator"
@@ -25,7 +26,7 @@ export async function resumeCommand(
     workflowsPath?: string
     useLLM?: boolean
     onProgress?: (event: ProgressEvent | string) => void
-    storeOverride?: EngagementStore
+    storeOverride?: IEngagementStore
   },
 ): Promise<string> {
   const store = options?.storeOverride ?? new EngagementStore()

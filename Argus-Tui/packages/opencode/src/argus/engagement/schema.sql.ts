@@ -1,5 +1,16 @@
 import { sqliteTable, text, integer, index, foreignKey } from "drizzle-orm/sqlite-core"
 
+/** Storage version flags for per-engagement DB migration (Item 14b).
+ *  1 = legacy single-DB mode (all tables in argus.db)
+ *  2 = per-engagement DB exists (ENG-xxx/engagement.db)
+ *  3 = per-engagement DB, encrypted (future — Item 14c)
+ */
+export const STORAGE_VERSION_LEGACY = 1
+/** Per-engagement DB exists (ENG-xxx/engagement.db) */
+export const STORAGE_VERSION_PER_ENGAGEMENT = 2
+/** Per-engagement DB, encrypted (future — Item 14c) */
+export const STORAGE_VERSION_ENCRYPTED = 3
+
 export const engagements = sqliteTable("engagements", {
   id: text().primaryKey(),
   target: text().notNull(),
@@ -7,6 +18,13 @@ export const engagements = sqliteTable("engagements", {
   workflow_version: integer().notNull().default(1),
   status: text().notNull().default("CREATED"),
   schema_version: integer().notNull().default(1),
+  /**
+   * Storage version for the engagement data.
+   * 1 = legacy single-DB (all tables in argus.db)
+   * 2 = per-engagement DB exists at StoragePaths.engagementDbPath(id)
+   * 3 = per-engagement DB, encrypted
+   */
+  storage_version: integer().notNull().default(STORAGE_VERSION_LEGACY),
   created_at: integer().notNull().$default(() => Date.now()),
   updated_at: integer().notNull().$onUpdate(() => Date.now()),
 })

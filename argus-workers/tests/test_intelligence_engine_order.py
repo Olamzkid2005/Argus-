@@ -6,9 +6,6 @@ as_completed (completion order).
 """
 
 from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import MagicMock
-
-import pytest
 
 
 def test_sync_enrichment_preserves_input_order():

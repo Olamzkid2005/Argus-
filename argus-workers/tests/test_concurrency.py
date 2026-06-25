@@ -50,7 +50,7 @@ class TestHighCostSemaphore:
 class TestHighCostTools:
     def test_contains_expected_tools(self):
         expected = {"sqlmap", "dalfox", "commix", "nuclei", "masscan", "sn1per"}
-        assert HIGH_COST_TOOLS == expected
+        assert expected == HIGH_COST_TOOLS
 
     def test_is_case_sensitive_set(self):
         assert "SQLMAP" not in HIGH_COST_TOOLS

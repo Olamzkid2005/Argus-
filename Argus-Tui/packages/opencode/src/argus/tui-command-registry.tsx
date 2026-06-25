@@ -8,6 +8,11 @@ import { usePromptRef } from "@tui/context/prompt"
 import { onMount } from "solid-js"
 
 export function ArgusCommandRegistry() {
+  // Self-guard: only register Argus commands when running in Argus mode.
+  // This prevents Argus-specific slash commands from bleeding into the
+  // global OpenCode TUI regardless of where this component is rendered.
+  if (process.env.ARGUS_MODE !== "1") return null
+
   const promptRef = usePromptRef()
   const keymap = useKeymap()
 

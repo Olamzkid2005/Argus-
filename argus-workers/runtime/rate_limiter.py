@@ -12,8 +12,8 @@ Usage at the call site:
 
 import logging
 import re
-import time
 import threading
+import time
 from collections import defaultdict
 from urllib.parse import urlparse
 
@@ -44,29 +44,29 @@ def extract_host(text: str) -> str | None:
 
 class PerHostRateLimiter:
     """Sliding-window rate limiter keyed by target hostname."""
-    
+
     def __init__(self, requests_per_second: int = 10):
         self.rps = requests_per_second
         self._enabled = requests_per_second > 0
         self._host_timestamps: dict[str, list[float]] = defaultdict(list)
         self._lock = threading.Lock()
-    
+
     def acquire(self, host: str | None) -> bool:
         """
         Block until a rate slot is available for the given host.
-        
+
         Returns True if rate limited, False if no host provided or rate limiting disabled.
         """
         if not self._enabled or not host:
             return False
-        
+
         with self._lock:
             now = time.time()
             window_start = now - 1.0  # 1-second sliding window
-            
+
             # Prune timestamps outside the window
             self._host_timestamps[host] = [t for t in self._host_timestamps[host] if t > window_start]
-            
+
             if len(self._host_timestamps[host]) >= self.rps:
                 # Need to wait — calculate sleep time
                 sleep_time = self._host_timestamps[host][0] + 1.0 - now
@@ -79,10 +79,10 @@ class PerHostRateLimiter:
                     # After sleeping, update window
                     now = time.time()
                     self._host_timestamps[host] = [t for t in self._host_timestamps[host] if t > now - 1.0]
-            
+
             self._host_timestamps[host].append(time.time())
             return True
-    
+
     def set_rate(self, requests_per_second: int):
         """Update the rate limit. 0 disables limiting."""
         self._enabled = requests_per_second > 0

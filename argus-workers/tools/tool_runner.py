@@ -20,7 +20,11 @@ from cache import CacheMode, cache
 from config.constants import CIRCUIT_BREAKER_COOLDOWN, CIRCUIT_BREAKER_THRESHOLD
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
 from error_classifier import ErrorCode
-from runtime.concurrency import HIGH_COST_SEMAPHORE, HIGH_COST_TOOLS, SUBPROCESS_SEMAPHORE
+from runtime.concurrency import (
+    HIGH_COST_SEMAPHORE,
+    HIGH_COST_TOOLS,
+    SUBPROCESS_SEMAPHORE,
+)
 from runtime.rate_limiter import PER_HOST_LIMITER, extract_host
 from streaming import emit_error_hint
 from tool_core.result import ToolStatus, UnifiedToolResult
@@ -682,23 +686,22 @@ class ToolRunner:
 
         # Acquire global concurrency semaphore — same pattern as run()
         _sem = HIGH_COST_SEMAPHORE if tool in HIGH_COST_TOOLS else SUBPROCESS_SEMAPHORE
-        _sem.acquire()
-        try:
-            proc = subprocess.Popen(  # noqa: S603 — safe: list form, tool_path resolved internally, args validated by is_dangerous()
-                [tool_path] + args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                cwd=str(self.sandbox_dir),
-                env=env,
-            )
-
         stdout_lines = []
         max_streaming_bytes = 50 * 1024 * 1024  # 50MB — stop reading after this
         total_bytes = 0
         start = time.time()
         timed_out = False
         process_killed = False
+
+        _sem.acquire()
+        proc = subprocess.Popen(  # noqa: S603 — safe: list form, tool_path resolved internally, args validated by is_dangerous()
+            [tool_path] + args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=str(self.sandbox_dir),
+            env=env,
+        )
 
         try:
             while proc.poll() is None:

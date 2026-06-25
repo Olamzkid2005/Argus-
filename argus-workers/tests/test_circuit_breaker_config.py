@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from config.constants import CircuitBreakerConfig
 from tools.circuit_breaker import CircuitBreaker, ToolCircuitBreakerManager
 
@@ -27,7 +25,7 @@ class TestCircuitBreakerConfigFromConfig:
     def test_fallback_defaults_when_missing_keys(self):
         """Missing YAML keys fall back to dataclass defaults."""
         mock_cm = MagicMock()
-        mock_cm.get.side_effect = lambda key, default: default
+        mock_cm.get.side_effect = lambda _key, default: default
 
         cfg = CircuitBreakerConfig.from_config(config_manager=mock_cm)
 

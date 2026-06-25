@@ -142,15 +142,16 @@ describe("evidenceCommand", () => {
 
       const { createHash } = await import("crypto")
       const fileHash = createHash("sha256").update("request body").digest("hex")
+      const artifactEntries = [{ path: "req.txt", hash: fileHash, type: "request" as const, size_bytes: 12 }]
       const manifest = {
         package_id: findingId,
         engagement_id: eng.id,
         created_at: new Date().toISOString(),
-        artifacts: [{ path: "req.txt", hash: fileHash, type: "request", size_bytes: 12 }],
+        artifacts: artifactEntries,
         package_hash: "",
       }
-      const manifestStr = JSON.stringify({ ...manifest, package_hash: "" }, null, 2) + fileHash
-      manifest.package_hash = createHash("sha256").update(manifestStr).digest("hex")
+      const { computePackageHash } = await import("../../../../src/argus/evidence/hash")
+      manifest.package_hash = computePackageHash(manifest, artifactEntries)
       writeFileSync(join(artifactDir, "manifest.json"), JSON.stringify(manifest))
 
       const { evidenceCommand } = await import("../../../../src/argus/commands/evidence")

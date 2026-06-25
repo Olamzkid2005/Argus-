@@ -845,7 +845,7 @@ class IntelligenceEngine:
         Returns:
             Enriched findings with threat intel metadata
         """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import ThreadPoolExecutor
 
         def _enrich_one(finding: dict) -> dict:
             enriched_finding = finding.copy()

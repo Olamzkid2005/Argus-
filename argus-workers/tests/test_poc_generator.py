@@ -1,7 +1,6 @@
 """Tests for poc_generator template matching and redaction fixes."""
 
 import re
-import pytest
 
 POC_TEMPLATES = {
     "XSS": {"name": "xss_template", "fields": ["curl_command", "browser_poc"]},

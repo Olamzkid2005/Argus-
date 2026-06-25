@@ -59,18 +59,16 @@ describe("ArtifactStore", () => {
       ]
       const manifest = await store.createPackage("eng-1", "find-2", artifacts)
 
+      // computePackageHash sorts keys alphabetically, so we must match that order
+      const sortedManifest = {
+        artifacts,
+        created_at: manifest.created_at,
+        engagement_id: "eng-1",
+        package_hash: "",
+        package_id: "find-2",
+      }
       const expectedStr =
-        JSON.stringify(
-          {
-            package_id: "find-2",
-            engagement_id: "eng-1",
-            created_at: manifest.created_at,
-            artifacts,
-            package_hash: "",
-          },
-          null,
-          2,
-        ) + "abcdef"
+        JSON.stringify(sortedManifest, null, 2) + "abcdef"
       const expectedHash = createHash("sha256").update(expectedStr).digest("hex")
 
       expect(manifest.package_hash).toBe(expectedHash)

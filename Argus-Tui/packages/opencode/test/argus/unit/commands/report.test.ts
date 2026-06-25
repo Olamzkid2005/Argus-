@@ -157,6 +157,7 @@ describe("enhanceReportWithAnalysis", () => {
     try {
       // Create mock analyzer to inject directly
       const mockAnalyzer = {
+        hasLlmClient: () => true,
         async analyze(finding: any, _evidence: any[]) {
           currentConcurrent++
           if (currentConcurrent > maxConcurrent) maxConcurrent = currentConcurrent
@@ -274,6 +275,7 @@ describe("enhanceReportWithAnalysis", () => {
 
       // Create mock analyzer that returns null (simulating no LLM client)
       const nullAnalyzer = {
+        hasLlmClient: () => true,
         async analyze(_finding: any, _evidence: any[]) {
           return null // Simulates LLM not configured
         },
@@ -316,6 +318,7 @@ describe("enhanceReportWithAnalysis", () => {
       const { enhanceReportWithAnalysis } = await import("../../../../src/argus/commands/report")
 
       const fastAnalyzer = {
+        hasLlmClient: () => true,
         async analyze(finding: any, _evidence: any[]) {
           await new Promise((r) => setTimeout(r, 5))
           return {

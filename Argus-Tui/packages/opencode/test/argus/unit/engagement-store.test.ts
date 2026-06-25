@@ -101,8 +101,11 @@ describe("EngagementStore — analysis methods", () => {
     const futureDate = new Date(Date.now() + 100000).toISOString()
     seedFinding(store, "find-4", eng.id)
     // Manually update the finding's updated_at to be in the future
+    // In dual-DB mode, findings live in the per-engagement DB, not the root DB.
+    const { StoragePaths } = require("../../../src/argus/storage/paths")
+    const engDbPath = StoragePaths.engagementDbPath(eng.id)
     const { Database } = require("bun:sqlite")
-    const sqlite = new Database(store.dbPath)
+    const sqlite = new Database(engDbPath)
     sqlite.exec(`UPDATE findings SET updated_at = ${Date.now() + 100000} WHERE id = 'find-4'`)
     sqlite.close()
     const analysis = makeAnalysis("find-4", { findingUpdatedAt: Date.now() - 50000 })
@@ -123,8 +126,11 @@ describe("EngagementStore — analysis methods", () => {
     const { store, cleanup } = makeStore()
     const eng = store.createEngagement("https://test.com", "assessment")
     seedFinding(store, "corrupt-id", eng.id)
+    // In dual-DB mode, finding_analysis lives in the per-engagement DB, not the root DB.
+    const { StoragePaths } = require("../../../src/argus/storage/paths")
+    const engDbPath = StoragePaths.engagementDbPath(eng.id)
     const { Database } = require("bun:sqlite")
-    const sqlite = new Database(store.dbPath)
+    const sqlite = new Database(engDbPath)
     sqlite.exec(`
       INSERT OR REPLACE INTO finding_analysis (finding_id, explanation, impact, remediation, model, generated_at, finding_updated_at)
       VALUES ('corrupt-id', 'explanation', 'not-valid-json', '["fix1"]', 'test', ${Date.now()}, ${Date.now()})
@@ -140,7 +146,7 @@ describe("EngagementStore — connection pragmas", () => {
   test("sets PRAGMA busy_timeout = 5000 on initialization", () => {
     const { store, cleanup } = makeStore()
     // Access the store's own connection (PRAGMA busy_timeout is per-connection)
-    const sqlite = (store as any)._sqlite
+    const sqlite = (store as any)._rootSqlite
     const row = sqlite.query("PRAGMA busy_timeout").get() as Record<string, unknown>
     // The column name may vary by SQLite version; use Object.values to get the value
     const value = Object.values(row!)[0]
@@ -163,7 +169,7 @@ describe("EngagementStore — connection pragmas", () => {
   test("sets PRAGMA foreign_keys = ON on initialization", () => {
     const { store, cleanup } = makeStore()
     // foreign_keys is per-connection; use the store's own connection
-    const sqlite = (store as any)._sqlite
+    const sqlite = (store as any)._rootSqlite
     const row = sqlite.query("PRAGMA foreign_keys").get() as Record<string, unknown>
     const value = Object.values(row!)[0]
     expect(value).toBe(1)
@@ -694,9 +700,9 @@ describe("EngagementStore — getFindingCountsByEngagementIds", () => {
     store.saveFindings(eng.id, [
       { id: "f-low-1", title: "Low1", severity: 2, confidence: 2, status: "PENDING", description: "low 1", tool: "nuclei", phase: "p1", created_at: now, updated_at: now },
       { id: "f-low-2", title: "Low2", severity: 1, confidence: 2, status: "PENDING", description: "low 2", tool: "nuclei", phase: "p1", created_at: now, updated_at: now },
-      { id: "f-crit", title: "Critical", severity: 8, confidence: 3, status: "PENDING", description: "critical", tool: "nuclei", phase: "p1", created_at: now, updated_at: now },
+      { id: "f-crit", title: "Critical", severity: 4 as any, confidence: 3, status: "PENDING", description: "critical", tool: "nuclei", phase: "p1", created_at: now, updated_at: now },
       { id: "f-conf", title: "Confirmed", severity: 3, confidence: 2, status: "CONFIRMED", description: "confirmed", tool: "nuclei", phase: "p1", created_at: now, updated_at: now },
-      { id: "f-final", title: "Finalized", severity: 7, confidence: 3, status: "FINALIZED", description: "finalized", tool: "nuclei", phase: "p1", created_at: now, updated_at: now },
+      { id: "f-final", title: "Finalized", severity: 4 as any, confidence: 3, status: "FINALIZED", description: "finalized", tool: "nuclei", phase: "p1", created_at: now, updated_at: now },
     ])
     const result = store.getFindingCountsByEngagementIds([eng.id])
     expect(result.size).toBe(1)
@@ -765,8 +771,8 @@ describe("EngagementStore — getFindingCountsByEngagementIds", () => {
     store.saveFindings(eng.id, [
       { id: "s-3", title: "S3", severity: 3, confidence: 1, status: "PENDING", description: "s3", tool: "t", phase: "p1", created_at: now, updated_at: now },
       { id: "s-4", title: "S4", severity: 4, confidence: 1, status: "PENDING", description: "s4", tool: "t", phase: "p1", created_at: now, updated_at: now },
-      { id: "s-5", title: "S5", severity: 5, confidence: 1, status: "PENDING", description: "s5", tool: "t", phase: "p1", created_at: now, updated_at: now },
-      { id: "s-10", title: "S10", severity: 10, confidence: 1, status: "PENDING", description: "s10", tool: "t", phase: "p1", created_at: now, updated_at: now },
+      { id: "s-5", title: "S5", severity: 4 as any, confidence: 1, status: "PENDING", description: "s5", tool: "t", phase: "p1", created_at: now, updated_at: now },
+      { id: "s-10", title: "S10", severity: 4 as any, confidence: 1, status: "PENDING", description: "s10", tool: "t", phase: "p1", created_at: now, updated_at: now },
     ])
     const result = store.getFindingCountsByEngagementIds([eng.id])
     const counts = result.get(eng.id)!

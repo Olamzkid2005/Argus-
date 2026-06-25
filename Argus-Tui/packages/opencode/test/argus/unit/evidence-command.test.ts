@@ -29,7 +29,7 @@ describe("evidenceCommand show action", () => {
   }
 
   function buildShowOutput(
-    integrity: typeof fakeIntegrityPass,
+    integrity: { valid: boolean; packageId: string; manifestHash: string; computedHash: string; errors: string[] },
     manifest: typeof fakeManifest | null,
   ): string {
     const lines: string[] = []

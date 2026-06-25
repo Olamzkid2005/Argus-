@@ -11,13 +11,13 @@ import { describe, expect, test } from "bun:test"
 const TIMEOUT_MS = 30000
 
 describe("doctor full-pipeline integration", () => {
-  test("doctorCommand returns exactly 10 checks by default", async () => {
+  test("doctorCommand returns exactly 12 checks by default", async () => {
     const { doctorCommand } = await import("../../../src/argus/commands/doctor")
     const results = await doctorCommand()
-    expect(results.length).toBe(10)
+    expect(results.length).toBe(12)
   }, { timeout: TIMEOUT_MS })
 
-  test("all 10 checks have valid name, status, and message", async () => {
+  test("all 12 checks have valid name, status, and message", async () => {
     const { doctorCommand } = await import("../../../src/argus/commands/doctor")
     const results = await doctorCommand()
 
@@ -30,6 +30,8 @@ describe("doctor full-pipeline integration", () => {
       "Database",
       "Credentials",
       "Configuration",
+      "Scope Protection",
+      "DNS Resolution",
       "Config Validation",
       "Toolchain",
     ]
@@ -119,10 +121,10 @@ describe("doctor full-pipeline integration", () => {
     expect(toolchain!.message).toMatch(/tools on PATH|0 tools found/)
   }, { timeout: TIMEOUT_MS })
 
-  test("--online flag adds LLM Provider check (total 11)", async () => {
+  test("--online flag adds LLM Provider check (total 13)", async () => {
     const { doctorCommand } = await import("../../../src/argus/commands/doctor")
     const results = await doctorCommand({ online: true })
-    expect(results.length).toBe(11)
+    expect(results.length).toBe(13)
     const llm = results.find((r: any) => r.name === "LLM Provider")!
     expect(llm).toBeDefined()
     expect(["PASS", "WARN"]).toContain(llm!.status)
@@ -140,8 +142,10 @@ describe("doctor full-pipeline integration", () => {
     expect(names[5]).toBe("Database")
     expect(names[6]).toBe("Credentials")
     expect(names[7]).toBe("Configuration")
-    expect(names[8]).toBe("Config Validation")
-    expect(names[9]).toBe("Toolchain")
+    expect(names[8]).toBe("Scope Protection")
+    expect(names[9]).toBe("DNS Resolution")
+    expect(names[10]).toBe("Config Validation")
+    expect(names[11]).toBe("Toolchain")
   }, { timeout: TIMEOUT_MS })
 
   test("status strings are never empty", async () => {

@@ -7,8 +7,6 @@ are wrapped in {"raw": str(v)}.
 
 import json
 
-import pytest
-
 
 def validate_evidence(v):
     """Inline replica of VulnerabilityFinding.validate_evidence."""

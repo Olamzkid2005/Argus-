@@ -2,6 +2,8 @@
 
 import os
 
+import pytest
+
 
 class TestDockerfileAirgap:
     """Dockerfile defines ARG AIRGAP=0 and wraps Go download in a conditional."""
@@ -76,11 +78,10 @@ class TestDockerfileAirgap:
 
     def test_no_old_key_format(self):
         """Ensure old Go download pattern (unconditional curl) is not present."""
-        unconditional_curl = 'curl -fsSL "https://go.dev/dl/go' in self.content
         # Should only appear inside the AIRGAP conditional
         airgap_lines = [
-            l for l in self.lines
-            if 'curl -fsSL "https://go.dev/dl/go' in l
+            line for line in self.lines
+            if 'curl -fsSL "https://go.dev/dl/go' in line
         ]
         for line in airgap_lines:
             # Each curl line should be after the if and before the fi

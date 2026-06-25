@@ -1,5 +1,6 @@
 import { ReportGenerator } from "../reporting/generator"
 import { EngagementStore } from "../engagement/store"
+import type { IEngagementStore } from "../engagement/types"
 import { FindingAnalyzer } from "../engagement/finding-analyzer"
 import { getLlmClient } from "../engagement/llm-client"
 import { Feature, getFeatureFlags } from "../config/feature-flags"
@@ -10,7 +11,7 @@ export async function enhanceReportWithAnalysis(
   engagementId: string,
   onProgress?: ProgressCallback,
   injectedAnalyzer?: FindingAnalyzer,
-  store?: EngagementStore,
+  store?: IEngagementStore,
 ): Promise<FindingAnalysis[]> {
   const db = store ?? new EngagementStore()
   const findings = db.getFindings(engagementId)
@@ -64,7 +65,7 @@ export async function enhanceReportWithAnalysis(
 export async function reportCommand(
   engagementId: string,
   format: "markdown" | "json" | "sarif" | "html" = "markdown",
-  store?: EngagementStore,
+  store?: IEngagementStore,
   onProgress?: ProgressCallback,
   useLLM?: boolean,
 ): Promise<string> {

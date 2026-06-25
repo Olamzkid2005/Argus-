@@ -226,7 +226,7 @@ export function EngagementDetail(props: EngagementDetailProps) {
  * Uses block characters (▓/░) in the muted text color to show the page structure
  * while data is loading — header bars, tab row, and 5 finding list placeholders.
  */
-function SkeletonLoading(props: { theme: Record<string, string> }) {
+function SkeletonLoading(props: { theme: ReturnType<typeof useTheme>["theme"] }) {
   const { theme } = props
   return (
     <box flexDirection="column" padding={1}>

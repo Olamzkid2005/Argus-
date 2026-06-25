@@ -4,9 +4,7 @@ import json
 from io import StringIO
 from unittest.mock import patch
 
-import pytest
-
-from mcp_transport import MCPTransport, _SKIP_LINE
+from mcp_transport import _SKIP_LINE, MCPTransport
 
 
 class TestReadRequestSentinel:
@@ -75,7 +73,7 @@ class TestRunLoopRecovery:
         mock_stdin.write('{"id": 1, "method": "ping"}\n')
         mock_stdin.seek(0)
         transport = MCPTransport()
-        transport.register("ping", lambda params: "pong")
+        transport.register("ping", lambda _params: "pong")
 
         transport.run()
 
@@ -92,7 +90,7 @@ class TestRunLoopRecovery:
         mock_stdin.write('{"id": 2, "method": "ping"}\n')
         mock_stdin.seek(0)
         transport = MCPTransport()
-        transport.register("ping", lambda params: "pong")
+        transport.register("ping", lambda _params: "pong")
 
         transport.run()
 
@@ -118,7 +116,7 @@ class TestRunLoopRecovery:
         mock_stdin.write('{"id": 2, "method": "ping"}\n')
         mock_stdin.seek(0)
         transport = MCPTransport()
-        transport.register("ping", lambda params: "pong")
+        transport.register("ping", lambda _params: "pong")
 
         transport.run()
 
