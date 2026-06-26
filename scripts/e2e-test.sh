@@ -19,7 +19,7 @@ echo ""
 # ── Phase 1: Docker Setup ──
 echo "--- Spinning up test targets ---"
 cd "$PROJECT_DIR"
-docker compose --profile e2e up -d juice-shop dvwa 2>/dev/null || true
+docker compose --profile e2e up -d juice-shop dvwa
 
 # Wait for services
 echo "Waiting for Juice Shop..."
@@ -57,15 +57,18 @@ echo ""
 echo "--- Running assessment smoke test ---"
 
 # Run doctor first
-bun run src/argus/main.ts doctor 2>&1 | head -10 || true
+bun run src/argus/main.ts doctor 2>&1 | head -10
 
 # Quick assessment against Juice Shop (deterministic mode, no LLM)
-timeout 60 bun run src/argus/main.ts assess http://127.0.0.1:3001 --deterministic 2>&1 && pass "Juice Shop assessment completed" || echo "Assessment ran (may have warnings)"
+if ! timeout 60 bun run src/argus/main.ts assess http://127.0.0.1:3001 --deterministic 2>&1; then
+  fail "Juice Shop assessment failed"
+fi
+pass "Juice Shop assessment completed"
 
 # ── Phase 4: Cleanup ──
 echo ""
 echo "--- Cleanup ---"
-docker compose --profile e2e down 2>/dev/null || true
+docker compose --profile e2e down
 pass "Test targets stopped"
 
 echo ""

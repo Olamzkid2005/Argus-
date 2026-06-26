@@ -13,6 +13,7 @@ parameters:
 capabilities:
   - jwt_analysis
 signal_quality: PROBABLE
+risk_level: medium
 requires:
   recon_signals:
     - has_api

@@ -138,8 +138,8 @@ export class ArtifactStore {
       if (entry.isFile()) {
         try {
           totalBytes += (await stat(join(entry.parentPath, entry.name))).size
-        } catch {
-          // skip unreadable
+        } catch (err) {
+          console.warn(`[evidence-store] Failed to stat file ${entry.name}:`, (err as Error).message)
         }
       }
     }

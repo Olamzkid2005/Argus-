@@ -16,6 +16,7 @@ parameters:
 capabilities:
   - web_recon
 signal_quality: CONFIRMED
+risk_level: low
 priority: 45
 cost: low
 enabled: true

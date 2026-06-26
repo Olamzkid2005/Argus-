@@ -18,6 +18,7 @@ capabilities:
   - web_recon
   - vulnerability_scanning
 signal_quality: CANDIDATE
+risk_level: medium
 priority: 60
 cost: medium
 enabled: true

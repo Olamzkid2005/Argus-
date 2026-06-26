@@ -19,6 +19,7 @@ parameters:
 capabilities:
   - vulnerability_scanning
 signal_quality: CONFIRMED
+risk_level: low
 priority: 85
 cost: medium
 enabled: true

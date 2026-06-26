@@ -54,8 +54,7 @@ const [scanState, setScanState] = createStore<ScanState>({ ...initialState })
 const savedStates = new Map<string, ScanState>()
 
 let activeEngagementId: string | null = null
-let _processingLock: string | null = null
-const _pendingQueue: Array<{ event: ProgressEvent; engagementId?: string }> = []
+const _eventQueues = new Map<string, Promise<void>>()
 
 function snapshot(): ScanState {
   return {
@@ -111,6 +110,10 @@ export function initScan(target: string, engagementId: string) {
 }
 
 export function addPhase(phase: { id: string; name: string; index: number; total: number }) {
+  // Don't add a phase that already exists — replan phases share names with
+  // existing phases and must not create duplicates in the scan state.
+  const idx = scanState.phases.findIndex((p) => p.id === phase.id)
+  if (idx >= 0) return
   persistActive()
   setScanState("phases", (prev) => [
     ...prev,
@@ -161,23 +164,6 @@ export function resetScan() {
   persistActive()
   setScanState({ ...initialState })
   activeEngagementId = null
-}
-
-function drainQueue() {
-  while (_pendingQueue.length > 0) {
-    const next = _pendingQueue.shift()!
-    const prevActive = activeEngagementId
-    if (next.engagementId && next.engagementId !== activeEngagementId) {
-      persistActive()
-      restore(next.engagementId)
-    }
-    processEventInner(next.event, next.engagementId)
-    if (next.engagementId && next.engagementId !== prevActive) {
-      persistActive()
-      if (prevActive) restore(prevActive)
-    }
-  }
-  _processingLock = null
 }
 
 function processEventInner(event: ProgressEvent, engagementId?: string) {
@@ -231,29 +217,24 @@ function processEventInner(event: ProgressEvent, engagementId?: string) {
   }
 }
 
-export function handleProgressEvent(event: ProgressEvent, engagementId?: string) {
+export async function handleProgressEvent(event: ProgressEvent, engagementId?: string) {
   const targetId = engagementId ?? activeEngagementId ?? ""
 
-  if (_processingLock && _processingLock !== targetId) {
-    _pendingQueue.push({ event, engagementId })
-    return
-  }
+  // Chain events per engagement so they process in order without races
+  const prev = _eventQueues.get(targetId) ?? Promise.resolve()
+  const next = prev.then(async () => {
+    const prevActive = activeEngagementId
+    if (engagementId && engagementId !== activeEngagementId) {
+      persistActive()
+      restore(engagementId)
+    }
 
-  const isNewLock = !_processingLock
-  if (isNewLock) _processingLock = targetId
+    processEventInner(event, engagementId)
 
-  const prevActive = activeEngagementId
-  if (engagementId && engagementId !== activeEngagementId) {
-    persistActive()
-    restore(engagementId)
-  }
-
-  processEventInner(event, engagementId)
-
-  if (engagementId && engagementId !== prevActive) {
-    persistActive()
-    if (prevActive) restore(prevActive)
-  }
-
-  if (isNewLock) drainQueue()
+    if (engagementId && engagementId !== prevActive) {
+      persistActive()
+      if (prevActive) restore(prevActive)
+    }
+  }).catch(() => {})
+  _eventQueues.set(targetId, next)
 }

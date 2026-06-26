@@ -22,6 +22,7 @@ capabilities:
   - vulnerability_scanning
   - xss_detection
 signal_quality: PROBABLE
+risk_level: medium
 priority: 75
 cost: medium
 enabled: true

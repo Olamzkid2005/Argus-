@@ -14,6 +14,7 @@ capabilities:
   - http_probe
   - web_recon
 signal_quality: CANDIDATE
+risk_level: low
 priority: 80
 cost: low
 enabled: true

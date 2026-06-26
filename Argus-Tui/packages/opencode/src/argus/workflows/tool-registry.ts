@@ -11,6 +11,8 @@ export interface RequiresGate {
   recon_signals?: string[]
   /** Tool only runs if the target URL scheme matches one of these */
   target_scheme?: string[]
+  /** Tool only runs if credentials are configured (requires credential context) */
+  credentials?: boolean
 }
 
 export interface ToolDef {
@@ -48,6 +50,9 @@ interface ToolDefsFile {
   tools: ToolDef[]
 }
 
+/** CostFilter — controls which tools are considered based on their cost tier. */
+export type CostFilter = "all" | "low_only" | "no_high"
+
 /** Cost ranking for tool selection tiebreaker (lower = cheaper, more preferred). */
 const COST_RANK: Record<string, number> = { low: 1, medium: 2, high: 3 }
 
@@ -59,6 +64,10 @@ export interface GateContext {
   targetScheme?: string
   /** Recon signals published by earlier phases (e.g. "parameterized_forms", "has_api") */
   reconSignals?: string[]
+  /** Credential role names available in the credential store (e.g. ["attacker", "victim"]) */
+  availableCredentialRoles?: string[]
+  /** Whether any credentials at all are configured */
+  hasAnyCredentials?: boolean
 }
 
 export class ToolRegistry {
@@ -130,12 +139,16 @@ export class ToolRegistry {
 
   /**
    * Select the best tools for the given capabilities, optionally filtered
-   * by requires gates (tech_contains, target_scheme).
+   * by requires gates (tech_contains, target_scheme) and cost filter.
    *
    * Tools with unmet requires gates are filtered out. Remaining tools are
    * ranked by scoring (confidence + coverage), then by priority.
+   *
+   * When a costFilter is active, a safety net ensures capabilities are never
+   * left uncovered: if every tool for a given capability would be removed,
+   * the unfiltered set is kept for that capability.
    */
-  selectBest(capabilities: Capability[], targetType?: string, gateContext?: GateContext): ToolDef[] {
+  selectBest(capabilities: Capability[], targetType?: string, gateContext?: GateContext, costFilter?: CostFilter): ToolDef[] {
     const candidates = new Map<string, { tool: ToolDef; score: number }>()
 
     for (const cap of capabilities) {
@@ -164,6 +177,32 @@ export class ToolRegistry {
       }
     }
 
+    // Apply cost filter with safety net: never leave a capability uncovered
+    if (costFilter && costFilter !== "all") {
+      const survivingCaps = new Set<Capability>()
+      for (const { tool } of candidates.values()) {
+        if (this._passesCostFilter(tool, costFilter)) {
+          for (const cap of tool.capabilities) {
+            if (capabilities.includes(cap as Capability)) {
+              survivingCaps.add(cap as Capability)
+            }
+          }
+        }
+      }
+
+      // Remove tools that fail the cost filter, unless they serve a capability
+      // that would be left with zero tools (safety net)
+      for (const [name, { tool, score }] of candidates) {
+        const passes = this._passesCostFilter(tool, costFilter)
+        const servesEmptyCap = tool.capabilities.some((c) =>
+          capabilities.includes(c as Capability) && !survivingCaps.has(c as Capability),
+        )
+        if (!passes && !servesEmptyCap) {
+          candidates.delete(name)
+        }
+      }
+    }
+
     return Array.from(candidates.values())
       .sort((a, b) => {
         // Sort by score desc, then by priority desc, then by cost asc (prefer cheaper)
@@ -173,6 +212,14 @@ export class ToolRegistry {
         return (COST_RANK[a.tool.cost ?? "medium"]) - (COST_RANK[b.tool.cost ?? "medium"])
       })
       .map((c) => c.tool)
+  }
+
+  /** Check whether a tool passes the given cost filter. Low-cost tools pass all filters. */
+  private _passesCostFilter(tool: ToolDef, costFilter: CostFilter): boolean {
+    const cost = tool.cost ?? "medium"
+    if (costFilter === "low_only") return cost === "low"
+    if (costFilter === "no_high") return cost !== "high"
+    return true
   }
 
   /**
@@ -213,6 +260,16 @@ export class ToolRegistry {
         )
         if (!hasAllSignals) return false
       }
+    }
+
+    // credentials: tool only runs if credentials are configured.
+    // When requires.credentials is true, the planner must provide credential context.
+    // If no credential context is available, skip the gate (don't block tools during
+    // planning when credential info hasn't been gathered yet).
+    // But if context explicitly says no credentials, block the tool.
+    if (requires.credentials === true) {
+      if (context.hasAnyCredentials === false) return false
+      // If context.hasAnyCredentials is undefined, we haven't checked yet — pass through
     }
 
     return true

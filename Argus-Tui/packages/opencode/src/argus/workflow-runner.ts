@@ -237,16 +237,20 @@ export class WorkflowRunner {
     }
 
     // ── 5. Create phase records ──
-    const phaseRecords: PhaseRecord[] = plan.phases.map((p, i) => ({
-      id: p.phaseId,
-      engagementId,
-      name: p.name,
-      status: "PENDING" as const,
-      capabilities: p.requiredCapabilities,
-      executionMode: p.toolExecution ?? "sequential",
-      replanCycle: p.replanCycle ?? false,
-    })) as unknown as PhaseRecord[]
-    store.savePhases(engagementId, phaseRecords)
+    const phaseRecords = new Map<string, PhaseRecord>()
+    for (const p of plan.phases) {
+      const record: PhaseRecord = {
+        id: p.phaseId,
+        engagementId,
+        name: p.name,
+        status: "PENDING",
+        capabilities: p.requiredCapabilities,
+        executionMode: p.toolExecution ?? "sequential",
+        replanCycle: p.replanCycle ?? false,
+      }
+      phaseRecords.set(p.phaseId, record)
+    }
+    store.savePhases(engagementId, Array.from(phaseRecords.values()))
 
     // ── 5. Connect bridge & execute ──
     const allFindings: NormalizedFinding[] = []
@@ -289,9 +293,10 @@ export class WorkflowRunner {
         emit({ type: "phase_start", phaseId: phase.phaseId, name: phaseName, total: plan.phases.length, phaseIndex: i })
         emit(`⠋ Running phase ${i + 1}/${plan.phases.length}: ${phaseName}`)
 
-        phaseRecords[i].status = "RUNNING"
-        phaseRecords[i].startedAt = new Date().toISOString()
-        store.savePhase(engagementId, phaseRecords[i])
+        const record = phaseRecords.get(phase.phaseId)!
+        record.status = "RUNNING"
+        record.startedAt = new Date().toISOString()
+        store.savePhase(engagementId, record)
 
         const result = await executor.execute(phase)
 
@@ -302,10 +307,11 @@ export class WorkflowRunner {
         }
 
         const phaseStatus = result.status === "failed" ? "FAILED" : result.status === "partial" ? "PARTIAL" : result.status === "skipped" ? "SKIPPED" : "COMPLETED"
-        phaseRecords[i].status = phaseStatus
-        phaseRecords[i].completedAt = new Date().toISOString()
-        if (result.errors.length > 0) phaseRecords[i].error = result.errors.join("; ")
-        store.savePhase(engagementId, phaseRecords[i])
+        const finalRecord = phaseRecords.get(phase.phaseId)!
+        finalRecord.status = phaseStatus
+        finalRecord.completedAt = new Date().toISOString()
+        if (result.errors.length > 0) finalRecord.error = result.errors.join("; ")
+        store.savePhase(engagementId, finalRecord)
 
         const findingCount = result.findings.length
         const errorCount = result.errors.length
@@ -354,17 +360,17 @@ export class WorkflowRunner {
               }
               plan.phases.push(rp)
               plan.errorRecovery[rp.phaseId] = "retry_once_then_skip"
-              phaseRecords.push({
+              phaseRecords.set(rp.phaseId, {
                 id: rp.phaseId,
                 engagementId,
                 name: rp.name,
-                status: "PENDING" as const,
+                status: "PENDING",
                 capabilities: rp.requiredCapabilities,
                 executionMode: rp.toolExecution ?? "sequential",
                 replanCycle: true,
               })
             }
-            store.savePhases(engagementId, phaseRecords)
+            store.savePhases(engagementId, Array.from(phaseRecords.values()))
             emit({ type: "phase_replan", count: replanPhases.length })
           }
         }
@@ -378,7 +384,7 @@ export class WorkflowRunner {
       store.appendAuditLog(engagementId, "RUNNER_ERROR",
         `Workflow error: ${executionError.message}`)
     } finally {
-      const allCompleted = phaseRecords.every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")
+      const allCompleted = Array.from(phaseRecords.values()).every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")
       store.updateStatus(engagementId, executionError ? "FAILED" : allCompleted ? "COMPLETED" : "PAUSED")
       store.saveFindings(engagementId, allFindings)
       await bridge.disconnect()

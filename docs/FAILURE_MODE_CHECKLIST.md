@@ -232,7 +232,16 @@
 ## 15. Engagement Store & State
 
 - [x] **Hard `bun:sqlite` dependency, no Node fallback** `[C]` — **FIXED** — Lazy dynamic import via `createRequire` provides a clear "Bun required" error under Node instead of module-level crash. Also fixed `drizzle-orm/bun-sqlite` which eagerly requires `bun:sqlite` at module level in its `driver.cjs`. The static `import { drizzle } from "drizzle-orm/bun-sqlite"` was replaced with a lazy `_loadDrizzle()` function using `createRequire`, same pattern as `_loadBunSqlite()`. **(Fixed 2026-06-21: `drizzle-orm/bun-sqlite` now dynamically imported.)**
-- [ ] **Single global DB `~/.argus/argus.db`, no per-project isolation** `[M]` — Tracked as **Item 14b** in ARCHITECTURAL_FIXES_PLAN.md. Per-engagement DB isolation with dual-mode queries, migration strategy, and encryption seam. Estimated 2-3 weeks of work. Not started.
+- [~] **Per-engagement DB isolation partially implemented; full per-project isolation pending** `[M]` — **PARTIALLY IMPLEMENTED** — `EngagementStore` (`store.ts`) has full per-engagement DB infrastructure:
+  - `StoragePaths.engagementDbPath(id)` → unique .db file per engagement
+  - `_ensureEngagementDb()` creates per-engagement DB with full schema (findings, phases, audit_log, evidence, artifacts, workflow_snapshots, finding_analysis) on first write
+  - `_getEngagementDb()` reads from per-engagement DB with automatic root DB fallback for legacy data
+  - `_migrateLegacyEngagement()` auto-migrates all data from root DB to per-engagement DB on first write to a legacy engagement (phases, findings, audit_log, evidence_packages, artifacts, workflow_snapshots)
+  - New engagements created with `storage_version: STORAGE_VERSION_PER_ENGAGEMENT` from creation
+  - Idle per-engagement DB handles auto-closed after 5 minutes (`ENGAGEMENT_DB_TIMEOUT_MS`)
+  - Hybrid lazy migration: legacy data stays readable from root DB; migration triggers lazily on write
+
+  Tracked as **Item 14b** in ARCHITECTURAL_FIXES_PLAN.md. Still pending: (a) per-project isolation (separate `~/.argus/projects/<name>/` base paths), (b) encryption provider seam (`EncryptionProvider` / `wrapConnection`), (c) dual-mode queries that respect project boundaries. Estimated 1-2 weeks remaining.
 - [x] **DB connection never closed** `[M]` — **FIXED** — Added `close()` method to `EngagementStore` that closes the database connection, plus a `FinalizationRegistry` as GC safety net.
 - [x] **Migration errors swallowed** `[M]` — **FIXED** — `store.ts:195` now only swallows the specific "duplicate column" error; all other migration errors are rethrown.
 - [x] **Sequence counters not persisted** `[M]` — **FIXED** — Added `_seedCounters()` that queries `ORDER BY ... DESC LIMIT 1` (functionally equivalent to `MAX(id)`) from `engagements` and `audit_log` tables on construction, seeding counters from the last-used values.

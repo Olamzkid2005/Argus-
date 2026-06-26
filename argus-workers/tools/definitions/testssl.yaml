@@ -9,9 +9,9 @@ parameters:
 capabilities:
   - vulnerability_scanning
 signal_quality: CANDIDATE
+risk_level: medium
 requires:
-  target_scheme:
-    - https
+  target_scheme: "https"
 priority: 60
 cost: medium
 enabled: true

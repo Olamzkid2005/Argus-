@@ -39,6 +39,7 @@ capabilities:
   - graphql_assessment
   - api_docs_analysis
 signal_quality: CONFIRMED
+risk_level: medium
 priority: 95
 cost: medium
 enabled: true

@@ -14,7 +14,7 @@ import threading
 from collections.abc import Callable
 from enum import Enum
 from functools import wraps
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -265,6 +265,8 @@ class WorkerCache:
         Returns:
             Number of keys removed
         """
+        # TODO: Replace pattern-based clearing with tag-based invalidation
+        # to avoid matching unintended keys. See Redis tags pattern.
         return self.clear_pattern(f"query:*{query_pattern}*")
 
     def invalidate_table(self, table_name: str) -> int:
@@ -280,9 +282,16 @@ class WorkerCache:
         # Use a tag-based invalidation approach
         return self.clear_pattern(f"*table:{table_name}*")
 
-    def _query_key(self, query: str, params: tuple | None) -> str:
-        """Generate cache key for a query"""
-        key_data = f"{query}:{json.dumps(params) if params else ''}"
+    def _query_key(self, query: str, params: Optional[dict] = None) -> str:
+        """Generate a cache key from the SQL query template and params.
+        
+        Uses the query template (with placeholders, not expanded values)
+        to prevent cache key collisions from user-controlled data.
+        """
+        # Normalize the query template by stripping whitespace
+        normalized_query = ' '.join(query.split())
+        # Hash the template + param structure (not param values)
+        key_data = f"{normalized_query}"
         hash_value = hashlib.sha256(key_data.encode()).hexdigest()[:16]
         return f"query:{hash_value}"
 

@@ -631,6 +631,21 @@ function toolchainCheck(): CheckResult {
   }
 }
 
+/** Mask an API key for safe display — shows only the first 4 chars + type hint */
+function maskKey(key: string): string {
+  if (key.length <= 8) return "<configured>"
+  const prefix = key.slice(0, 4)
+  const hash = key.length.toString(16)
+  return `${prefix}-<${hash}>`
+}
+
+/** Match an API key to its likely provider based on known prefixes */
+function matchKeyToProvider(key: string): string | null {
+  if (key.startsWith("sk-ant-")) return "anthropic"
+  if (key.startsWith("sk-") && !key.startsWith("sk-ant-")) return "openai"
+  return null
+}
+
 /** Known endpoint URLs for common providers used in connectivity pings */
 const PROVIDER_ENDPOINTS: Record<string, string> = {
   openai: "https://api.openai.com/v1/models",
@@ -679,8 +694,15 @@ async function llmProviderCheck(): Promise<CheckResult> {
 
   // Try each discovered key against the configured/default endpoint
   for (const { key, source } of envKeys) {
+    // Determine which providers this key is suitable for based on key prefix
+    const matchedProvider = matchKeyToProvider(key)
+
     // Try the explicitly configured provider first
     if (configuredProvider && PROVIDER_ENDPOINTS[configuredProvider]) {
+      // Skip if the key doesn't match the configured provider's key pattern
+      if (matchedProvider && matchedProvider !== configuredProvider) {
+        continue
+      }
       const [header, value] = buildAuthHeader(configuredProvider, key)
       const result = await tryPing(configuredProvider, PROVIDER_ENDPOINTS[configuredProvider], header, value)
       if (result) return result
@@ -689,6 +711,10 @@ async function llmProviderCheck(): Promise<CheckResult> {
 
     // Try each known provider endpoint with this key
     for (const [providerID, url] of Object.entries(PROVIDER_ENDPOINTS)) {
+      // Skip providers that don't match this key's prefix pattern
+      if (matchedProvider && matchedProvider !== providerID) {
+        continue
+      }
       const [header, value] = buildAuthHeader(providerID, key)
       const result = await tryPing(providerID, url, header, value)
       if (result) return result

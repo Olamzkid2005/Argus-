@@ -379,7 +379,7 @@ export class InProcessExecutor implements PhaseExecutor {
 
           // Parse findings from structured data
           if (result.data) {
-            const data = result.data as any
+            const data = result.data
             if (Array.isArray(data)) {
               for (const finding of data) {
                 const promoted = this.confidenceEngine.promote(finding)
@@ -514,6 +514,8 @@ export class InProcessExecutor implements PhaseExecutor {
           console.log(`[executor]    Args:`, JSON.stringify(safeArgs))
         }
         const result = await this.bridge.callTool(tool.name, toolArgs, toolTimeout, execOptions.cacheMode)
+        // Clear credential data from args after the call
+        delete toolArgs.extra
 
         if (execOptions.verbose) console.log(`[executor]    Result: success=${result.success}, duration=${result.durationMs}ms`)
 
@@ -547,23 +549,6 @@ export class InProcessExecutor implements PhaseExecutor {
             success = true
             break
           }
-        }
-
-        if (result.success) {
-          this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
-          success = true
-          break
-        }
-
-        // When result.success is true, the RPC call succeeded — the tool ran without crashing.
-        // Even if it returned error findings (MCP isError), the tool is functioning correctly.
-        // Only actual RPC failures (timeouts, connection errors, crashes) should trip the
-        // circuit breaker. A tool that successfully finds vulnerabilities and reports them
-        // as "errors" is working as designed.
-        if (result.success) {
-          this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
-          success = true
-          break
         }
         lastError = new Error(result.error ?? "Tool returned unsuccessful result")
         this.toolHealth.recordFailure(tool.name, lastError.message)
@@ -626,11 +611,16 @@ export class InProcessExecutor implements PhaseExecutor {
     return JSON.stringify({ email, password })
   }
 
-  private cleanupCreds(): void {
+  private async cleanupCreds(): Promise<void> {
     if (this.tempCredFiles.length === 0) return
-    import("fs/promises").then(({ unlink }) => {
-      for (const f of this.tempCredFiles) unlink(f).catch(() => {})
-    }).catch(() => {})
+    const { unlink } = await import("fs/promises")
+    for (const f of this.tempCredFiles) {
+      try {
+        await unlink(f)
+      } catch (err) {
+        console.warn(`[executor] Failed to clean up temp creds file ${f}:`, (err as Error).message)
+      }
+    }
     this.tempCredFiles = []
   }
 

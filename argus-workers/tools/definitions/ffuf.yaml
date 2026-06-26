@@ -23,6 +23,7 @@ parameters:
 capabilities:
   - content_discovery
 signal_quality: CANDIDATE
+risk_level: medium
 priority: 70
 cost: medium
 enabled: true

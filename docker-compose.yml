@@ -15,6 +15,21 @@ services:
     restart: unless-stopped
 
   # PostgreSQL 16 with pgvector for similarity search
+  #
+  # ╔══════════════════════════════════════════════════════════════╗
+  # ║  PRODUCTION NOTE: TLS should be enabled for production.     ║
+  # ║  Uncomment the volumes and options below to configure TLS   ║
+  # ║  certificates and enforce encrypted connections.            ║
+  # ╚══════════════════════════════════════════════════════════════╝
+  # Optional TLS configuration (uncomment for production):
+  # volumes:
+  #   - postgres_data:/var/lib/postgresql/data
+  #   - /path/to/server.crt:/etc/ssl/certs/server.crt:ro
+  #   - /path/to/server.key:/etc/ssl/private/server.key:ro
+  # environment:
+  #   POSTGRES_SSL_CERT_FILE: /etc/ssl/certs/server.crt
+  #   POSTGRES_SSL_KEY_FILE: /etc/ssl/private/server.key
+  #   POSTGRES_SSL_CA_FILE: /etc/ssl/certs/ca.crt
   postgres:
     image: pgvector/pgvector:0.7.4-pg16
     environment:
@@ -39,19 +54,18 @@ services:
       - ALL
     cap_add:
       - CHOWN
-      - DAC_OVERRIDE
-      - SETUID
-      - SETGID
 
   # Redis 7 for Celery broker, caching, and rate limiting
   redis:
     image: redis:7-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-change_me_in_production}
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD:-change_me_in_production}\" ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -61,8 +75,6 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      - SETUID
-      - SETGID
       - CHOWN
 
   # Next.js platform (frontend + API)
@@ -83,7 +95,7 @@ services:
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required}"
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-change_me_in_production}@redis:6379}
       CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-4}
     depends_on:
       postgres:
@@ -108,7 +120,7 @@ services:
     command: celery -A celery_app beat --loglevel=info
     environment:
       DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required}"
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-change_me_in_production}@redis:6379}
     depends_on:
       postgres:
         condition: service_healthy

@@ -379,7 +379,9 @@ export class EngagementStore implements IEngagementStore {
     for (const row of phaseRows) {
       try {
         pe.drizzle.insert(phasesTable).values(row as any).onConflictDoNothing().run()
-      } catch {}
+      } catch (err) {
+        console.warn(`[store] Migration: failed to insert phase ${row.id}:`, (err as Error).message)
+      }
     }
 
     // Migrate findings
@@ -389,7 +391,9 @@ export class EngagementStore implements IEngagementStore {
     for (const row of findingRows) {
       try {
         pe.drizzle.insert(findingsTable).values(row as any).onConflictDoNothing().run()
-      } catch {}
+      } catch (err) {
+        console.warn(`[store] Migration: failed to insert finding ${row.id}:`, (err as Error).message)
+      }
     }
 
     // Migrate audit_log
@@ -399,7 +403,9 @@ export class EngagementStore implements IEngagementStore {
     for (const row of auditRows) {
       try {
         pe.drizzle.insert(audit_log).values(row as any).onConflictDoNothing().run()
-      } catch {}
+      } catch (err) {
+        console.warn(`[store] Migration: failed to insert audit_log ${row.id}:`, (err as Error).message)
+      }
     }
 
     // Migrate evidence_packages → artifacts
@@ -410,14 +416,18 @@ export class EngagementStore implements IEngagementStore {
       for (const pkg of pkgRows) {
         try {
           pe.drizzle.insert(evidence_packages).values(pkg as any).onConflictDoNothing().run()
-        } catch {}
+        } catch (err) {
+          console.warn(`[store] Migration: failed to insert evidence_package ${pkg.id}:`, (err as Error).message)
+        }
         const artRows = this.rootDb.select().from(artifacts)
           .where(eq(artifacts.package_id, pkg.id))
           .all()
         for (const art of artRows) {
           try {
             pe.drizzle.insert(artifacts).values(art as any).onConflictDoNothing().run()
-          } catch {}
+          } catch (err) {
+            console.warn(`[store] Migration: failed to insert artifact ${art.id}:`, (err as Error).message)
+          }
         }
       }
     }
@@ -429,7 +439,9 @@ export class EngagementStore implements IEngagementStore {
     for (const row of snapRows) {
       try {
         pe.drizzle.insert(workflow_snapshots).values(row as any).onConflictDoNothing().run()
-      } catch {}
+      } catch (err) {
+        console.warn(`[store] Migration: failed to insert workflow_snapshot ${row.id}:`, (err as Error).message)
+      }
     }
   }
 

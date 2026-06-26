@@ -10,6 +10,7 @@ capabilities:
   - vulnerability_scanning
   - s3_scanning
 signal_quality: PROBABLE
+risk_level: medium
 priority: 50
 cost: low
 enabled: true

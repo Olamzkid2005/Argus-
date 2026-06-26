@@ -932,6 +932,30 @@ class Orchestrator:
             "trace_id": get_trace_id(),
         }
 
+    def _validate_repo_url(self, repo_url: str) -> None:
+        """Validate repo URL against SSRF attacks."""
+        from urllib.parse import urlparse
+        import ipaddress
+
+        parsed = urlparse(repo_url)
+
+        # Only allow git, https, ssh, or http schemes
+        if parsed.scheme not in ("git", "https", "ssh", "http"):
+            raise ValueError(f"Unsupported repo URL scheme: {parsed.scheme}")
+
+        # Reject file:// URLs
+        if parsed.scheme == "file":
+            raise ValueError("file:// URLs are not allowed for repo scanning")
+
+        # Reject private IP ranges
+        hostname = parsed.hostname or ""
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local:
+                raise ValueError(f"Private IP ranges are not allowed for repo scanning: {hostname}")
+        except ValueError:
+            pass  # Not an IP address, proceed with hostname validation
+
     def run_repo_scan(self, job: dict) -> dict:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.tool_start(
@@ -939,6 +963,7 @@ class Orchestrator:
         )
         self._check_timeout()
         repo_url = job.get("repo_url")
+        self._validate_repo_url(repo_url)
         self.ws_publisher.publish_job_started(
             engagement_id=self.engagement_id, job_type="repo_scan", target=repo_url
         )

@@ -14,6 +14,7 @@ capabilities:
   - vulnerability_scanning
   - sca
 signal_quality: CONFIRMED
+risk_level: low
 priority: 70
 cost: medium
 enabled: true

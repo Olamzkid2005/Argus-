@@ -18,6 +18,7 @@ capabilities:
   - security_analysis
   - report_generation
 signal_quality: CONFIRMED
+risk_level: low
 priority: 90
 cost: low
 enabled: true

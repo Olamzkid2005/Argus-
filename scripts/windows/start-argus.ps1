@@ -91,11 +91,14 @@ if (Test-Path "requirements.txt") {
 $Env:PYTHONPATH = "$pwd;$Env:PYTHONPATH"
 
 if (Test-Path ".env") {
+    $allowedVars = @("DATABASE_URL", "REDIS_URL", "CELERY_CONCURRENCY", "CELERY_BROKER_URL", "CELERY_RESULT_BACKEND")
     Get-Content ".env" | ForEach-Object {
         if ($_ -match "^\s*([^#].*?)\s*=\s*(.*)" -and $_ -notmatch "^\s*#") {
             $name = $matches[1].Trim()
             $value = $matches[2].Trim()
-            Set-Item -Path "Env:$name" -Value $value
+            if ($allowedVars -contains $name) {
+                Set-Item -Path "Env:$name" -Value $value
+            }
         }
     }
 }

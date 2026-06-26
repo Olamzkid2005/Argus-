@@ -165,6 +165,65 @@ bun test test/argus/unit/commands/doctor.test.ts
 cd argus-workers && ruff check .
 ```
 
+## Docker Networking
+
+When running Argus in Docker, the `worker` container runs on a bridge network.
+`localhost` inside the container refers to the container itself, not the host
+machine. For macOS and Windows, Docker automatically resolves
+`host.docker.internal` to the host. For Linux, the `docker-compose.yml`
+includes:
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+This requires Docker 20.10+. When testing against localhost targets, use
+`host.docker.internal` as the hostname instead of `localhost`:
+
+```bash
+argus assess http://host.docker.internal:3000
+```
+
+For scenarios where host networking is preferred (e.g. testing services on
+ephemeral ports), a compose override is provided:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
+```
+
+This switches the worker to `network_mode: host`, giving it direct access to
+the host network interface.
+
+## Air-Gap / Offline Build
+
+The `argus-workers/Dockerfile` supports air-gapped (offline) builds via the `AIRGAP` build argument.
+When `AIRGAP=1`, all internet fetch steps are skipped — Go downloads, Go tool installs,
+pip dependencies, and apt-get package installs.
+
+### Standard Build
+
+```bash
+docker build -t argus .
+```
+
+### Air-Gap Build
+
+1. Pre-populate the `argus-workers/vendor/` directory with the required tool binaries
+   (these would normally be fetched during the standard build).
+2. Build with the `AIRGAP` flag:
+
+```bash
+# Pre-populate vendor/ first, then build:
+cp -r /path/to/pre-fetched/binaries argus-workers/vendor/
+docker build --build-arg AIRGAP=1 -t argus-airgap argus-workers/
+```
+
+The `vendor/` directory is `COPY`ed into the image and its contents should include:
+- Go tool binaries (nuclei, httpx, subfinder, katana, etc.) on `PATH`
+- Python wheels for `requirements.txt` dependencies
+- Any other pre-fetched security tool binaries
+
 ## Requirements
 
 - **Bun** 1.x — TypeScript runtime

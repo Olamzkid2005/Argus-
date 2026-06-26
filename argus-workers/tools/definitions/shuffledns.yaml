@@ -18,6 +18,7 @@ parameters:
 capabilities:
   - web_recon
 signal_quality: CANDIDATE
+risk_level: low
 priority: 45
 cost: medium
 enabled: true

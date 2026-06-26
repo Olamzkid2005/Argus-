@@ -256,4 +256,178 @@ describe("ToolRegistry", () => {
       }
     })
   })
+
+  describe("selectBest() — costFilter", () => {
+    const costToolsYaml = `tools:
+  - name: cheap_scanner
+    label: Cheap Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    cost: low
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+
+  - name: medium_scanner
+    label: Medium Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    cost: medium
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+
+  - name: expensive_scanner
+    label: Expensive Scanner
+    capabilities:
+      - vulnerability_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    cost: high
+    scoring:
+      confidence_score: 95
+      coverage_score: 90
+
+  - name: exclusive_high
+    label: Exclusive High Cost Tool
+    capabilities:
+      - port_scanning
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    cost: high
+    scoring:
+      confidence_score: 70
+      coverage_score: 65
+`
+
+    test("returns all tools when costFilter is undefined (backward compat)", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "cost-tools.yaml")
+        writeFileSync(filePath, costToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+        const tools = registry.selectBest([Capability.VULNERABILITY_SCANNING], "web_app")
+        expect(tools).toHaveLength(3)
+        const names = tools.map((t) => t.name)
+        expect(names).toContain("cheap_scanner")
+        expect(names).toContain("medium_scanner")
+        expect(names).toContain("expensive_scanner")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("returns all tools when costFilter is \"all\"", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "cost-tools.yaml")
+        writeFileSync(filePath, costToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+        const tools = registry.selectBest([Capability.VULNERABILITY_SCANNING], "web_app", undefined, "all")
+        expect(tools).toHaveLength(3)
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("filters out high-cost tools when costFilter is \"no_high\"", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "cost-tools.yaml")
+        writeFileSync(filePath, costToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+        const tools = registry.selectBest([Capability.VULNERABILITY_SCANNING], "web_app", undefined, "no_high")
+        expect(tools).toHaveLength(2)
+        const names = tools.map((t) => t.name)
+        expect(names).toContain("cheap_scanner")
+        expect(names).toContain("medium_scanner")
+        expect(names).not.toContain("expensive_scanner")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("filters to only low-cost tools when costFilter is \"low_only\"", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "cost-tools.yaml")
+        writeFileSync(filePath, costToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+        const tools = registry.selectBest([Capability.VULNERABILITY_SCANNING], "web_app", undefined, "low_only")
+        expect(tools).toHaveLength(1)
+        expect(tools[0].name).toBe("cheap_scanner")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("safety net: keeps high-cost tool when it's the only tool for a capability", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "cost-tools.yaml")
+        writeFileSync(filePath, costToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+        // port_scanning only has exclusive_high (high cost) — should be kept despite "no_high"
+        const tools = registry.selectBest([Capability.PORT_SCANNING], "web_app", undefined, "no_high")
+        expect(tools).toHaveLength(1)
+        expect(tools[0].name).toBe("exclusive_high")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("safety net: keeps high-cost tool when capability would be left empty (low_only)", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "cost-tools.yaml")
+        writeFileSync(filePath, costToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+        // port_scanning only has exclusive_high (high cost) — must be kept despite "low_only"
+        const tools = registry.selectBest([Capability.PORT_SCANNING], "web_app", undefined, "low_only")
+        expect(tools).toHaveLength(1)
+        expect(tools[0].name).toBe("exclusive_high")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("safety net does not activate when other tools cover the capability", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "cost-tools.yaml")
+        writeFileSync(filePath, costToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+        // vulnerability_scanning has low, medium, and high tools
+        // "no_high" should remove expensive_scanner since cheap/medium still cover it
+        const tools = registry.selectBest([Capability.VULNERABILITY_SCANNING], "web_app", undefined, "no_high")
+        expect(tools).toHaveLength(2)
+        expect(tools.map((t) => t.name)).not.toContain("expensive_scanner")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+  })
 })

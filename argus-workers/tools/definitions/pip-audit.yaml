@@ -13,6 +13,7 @@ parameters:
 capabilities:
   - vulnerability_scanning
 signal_quality: CANDIDATE
+risk_level: low
 requires:
   tech_contains:
     - python

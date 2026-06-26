@@ -70,3 +70,7 @@ celerybeat-schedule-wal
 # but should not be tracked in git (22MB+ of binary bloat).
 redis/*.exe
 redis/*.dll
+
+# Windows reserved device names — accidental artifacts from piped output
+nul
+NUL

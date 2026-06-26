@@ -17,6 +17,7 @@ parameters:
 capabilities:
   - auth_detection
 signal_quality: CONFIRMED
+risk_level: low
 priority: 95
 cost: low
 enabled: true

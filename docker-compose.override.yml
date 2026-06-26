@@ -1,0 +1,26 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  SECURITY WARNING: Host network mode bypasses Docker network isolation.    ║
+# ║                                                                             ║
+# ║  This configuration gives the container full host network access,           ║
+# ║  including the ability to sniff traffic, bind to any port, and              ║
+# ║  access all host-localhost services.                                        ║
+# ║                                                                             ║
+# ║  THIS SHOULD NEVER BE USED IN PRODUCTION.                                   ║
+# ║  Only use in controlled, isolated test environments where host-network      ║
+# ║  access is explicitly required (e.g., scanning services on host localhost).  ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+#
+# Docker Compose override for host-network mode.
+#
+# Use when the worker container needs direct access to host-localhost
+# targets (e.g. services running on localhost:port outside Docker).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
+#
+# Or set COMPOSE_FILE in your environment:
+#   export COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml
+services:
+  worker:
+    profiles: ["host-network"]
+    network_mode: host

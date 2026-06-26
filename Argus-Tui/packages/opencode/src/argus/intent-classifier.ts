@@ -121,6 +121,8 @@ const SECURITY_KEYWORDS = [
  * Check if text contains a domain name (for catch-all assessment detection).
  */
 function containsDomain(text: string): boolean {
+  // ReDoS protection
+  if (text.length > 10000) return false
   return /(?:\w[\w-]*\.)+[a-zA-Z]{2,}(?::\d+)?(?:\/[\w\-./]*)?/.test(text)
 }
 

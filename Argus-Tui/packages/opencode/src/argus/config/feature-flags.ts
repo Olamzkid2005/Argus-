@@ -96,7 +96,9 @@ export class FeatureFlags implements IFeatureFlags {
           if (feature) this.sources.set(feature, "user_config")
         }
       }
-    } catch { /* config file missing or invalid — use defaults */ }
+    } catch {
+      console.warn("[feature-flags] User config file missing or invalid — using defaults")
+    }
   }
 
   /** Returns true when ALL feature flags are disabled (degraded mode) */
@@ -148,7 +150,9 @@ export function getFeatureFlags(): FeatureFlags {
       if (parsed?.features) {
         _instance.loadFromConfig(parsed.features)
       }
-    } catch { /* config file missing or invalid — use env/defaults */ }
+    } catch {
+      console.warn("[feature-flags] Project config file missing or invalid — using env/defaults")
+    }
     // Then load from user config (~/.argus/config.yaml)
     _instance.loadFromUserConfig()
   }

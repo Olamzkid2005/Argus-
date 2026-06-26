@@ -27,6 +27,11 @@ from typing import Any
 
 from dead_letter_queue import get_dlq
 
+try:
+    import redis
+except ImportError:
+    redis = None  # type: ignore
+
 # Celery's SoftTimeLimitExceeded is raised when a task exceeds its soft time limit.
 # We catch it here to transition the engagement to 'failed' with a clear message,
 # rather than leaving it stuck in an intermediate state.
@@ -227,11 +232,8 @@ def task_context(
                         raise OperatorCanceled("Engagement cancelled by operator")
                 except OperatorCanceled:
                     raise
-                except Exception:
-                    logger.warning(
-                        "Redis unavailable during cancel check — proceeding normally",
-                        exc_info=True,
-                    )
+                except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError, OSError):
+                    logger.warning("Redis unavailable during cancel check — proceeding normally", exc_info=True)
 
                 yield ctx
         except SoftTimeLimitExceeded:

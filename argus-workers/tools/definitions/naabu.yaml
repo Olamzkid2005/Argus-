@@ -22,6 +22,7 @@ parameters:
 capabilities:
   - port_scanning
 signal_quality: CANDIDATE
+risk_level: medium
 priority: 75
 cost: medium
 enabled: true

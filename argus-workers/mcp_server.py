@@ -6,6 +6,7 @@ Implements Model Context Protocol for standardized tool calling
 import logging
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -81,15 +82,13 @@ class ToolDefinition:
     """
     A tool definition loaded from YAML or registered programmatically.
     Mirrors CyberStrikeAI's YAML tool definitions pattern.
-
-    NOTE: Keep in sync with tool_definitions.py ToolDefinition.
+    NOTE: Must stay in sync with tool_definitions.py ToolDefinition.
     Key fields shared by both:
         name, description, capabilities, signal_quality, requires, priority, cost
     This class has additional execution fields (command, args, timeout, env, binary)
     that tool_definitions.py does not have. The two classes have diverged
     intentionally — this one is the runtime MCP server representation,
     tool_definitions.py is the declarative registry representation.
-
     Extended with planner intelligence fields:
         capabilities   — capabilities this tool satisfies (e.g. sqli_detection)
         signal_quality — reliability tier for confidence baseline
@@ -114,6 +113,7 @@ class ToolDefinition:
         requires: dict = None,
         priority: int = None,
         cost: str = None,
+        credential_roles: list[str] = None,
     ):
         self.name = name
         self.command = command
@@ -132,6 +132,7 @@ class ToolDefinition:
         self.requires = requires or {}
         self.priority = priority
         self.cost = cost
+        self.credential_roles = credential_roles or []
 
     def to_dict(self) -> dict:
         """Serialize to MCP tool schema format (includes planner metadata)."""
@@ -156,6 +157,7 @@ class ToolDefinition:
             "requires": self.requires,
             "priority": self.priority,
             "cost": self.cost,
+            "credential_roles": self.credential_roles,
         }
         # Strip None values for cleaner output
         return {k: v for k, v in result.items() if v is not None and v != []}
@@ -214,6 +216,16 @@ class MCPServer:
     """
 
     def __init__(self, tools_dir: str | None = None):
+        from config.startup_guard import check_placeholder_credentials
+
+        credential_issues = check_placeholder_credentials()
+        if credential_issues:
+            logger.warning(
+                "STARTUP GUARD: Found %d credential issue(s):\n  %s",
+                len(credential_issues),
+                "\n  ".join(credential_issues),
+            )
+
         self._tools: dict[str, ToolDefinition] = {}
         self._execution_stats: dict[str, dict] = {}
         self._tools_dir = tools_dir or os.path.join(
@@ -221,6 +233,17 @@ class MCPServer:
         )
         self._load_yaml_tools()
         self.session_store = AgentSessionStore()
+        # Proactive DNS check — warn at startup if DNS is broken.
+        # DNS-reliant tools (subfinder, amass, dnsx, etc.) silently fail
+        # without producing useful error messages when DNS is unavailable
+        # inside a container or restricted network environment.
+        try:
+            socket.getaddrinfo("dns.google", 53)
+        except socket.gaierror:
+            logger.warning(
+                "DNS resolution failed — DNS-reliant tools (subfinder, amass, dnsx) may not work. "
+                "Check container DNS config or set --dns-servers 8.8.8.8"
+            )
 
     def _load_yaml_tools(self):
         """Load tool definitions from YAML files in tools/definitions/."""

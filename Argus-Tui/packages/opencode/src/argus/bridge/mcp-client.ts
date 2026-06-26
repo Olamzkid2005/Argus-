@@ -53,6 +53,8 @@ export class WorkersBridge {
   // Signal forwarding state
   private signalHandlers: Array<{ signal: NodeJS.Signals; handler: () => void }> = []
   private forwardingEnabled = false
+  /** Flag to prevent restart races when disconnect is intentional */
+  private _disconnecting = false
 
   constructor(
     private workersPath: string,
@@ -218,9 +220,11 @@ export class WorkersBridge {
         }
         console.warn(`[MCP] Worker exited with code ${code} — setting UNAVAILABLE`)
         this.setLLMStatus("UNAVAILABLE")
-        this.restartWorker().catch((err) => {
-          console.error(`[MCP] Worker restart failed after exit code ${code}:`, err)
-        })
+        if (!this._disconnecting) {
+          this.restartWorker().catch((err) => {
+            console.error(`[MCP] Worker restart failed after exit code ${code}:`, err)
+          })
+        }
       }
     })
 
@@ -490,6 +494,7 @@ export class WorkersBridge {
   }
 
   async disconnect(): Promise<void> {
+    this._disconnecting = true
     this.killChild()
     this.cleanup()
   }

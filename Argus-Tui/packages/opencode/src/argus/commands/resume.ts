@@ -103,32 +103,37 @@ export async function resumeCommand(
   // shifted indices). Without name fallback, a reordered workflow would assign
   // PENDING status to all phases, causing the inner loop to re-execute
   // already-completed work.
-  const allPhaseRecords: PhaseRecord[] = plan.phases.map((p) => {
+  const allPhaseRecords = new Map<string, PhaseRecord>()
+  for (const p of plan.phases) {
+    let record: PhaseRecord | undefined
+
     // Exact ID match — same phase from the same workflow position
     const byId = existingPhases.find((ep) => ep.id === p.phaseId)
-    if (byId) return byId
-
-    // Name fallback — same phase name but possibly shifted index.
-    // Only reuse completed/partial status; a PENDING stored phase at a
-    // different index is a genuinely new variant of that phase.
-    const byName = existingPhases.find(
-      (ep) => ep.name === p.name && (ep.status === "COMPLETED" || ep.status === "PARTIAL"),
-    )
-    if (byName) return byName
-
-    return {
-      id: p.phaseId,
-      engagementId,
-      name: p.name,
-      status: "PENDING" as const,
-      capabilities: p.requiredCapabilities,
-      executionMode: p.toolExecution ?? "sequential",
-      replanCycle: p.replanCycle ?? false,
+    if (byId) {
+      record = byId
+    } else {
+      // Name fallback — same phase name but possibly shifted index.
+      // Only reuse completed/partial status; a PENDING stored phase at a
+      // different index is a genuinely new variant of that phase.
+      const byName = existingPhases.find(
+        (ep) => ep.name === p.name && (ep.status === "COMPLETED" || ep.status === "PARTIAL"),
+      )
+      record = byName ?? {
+        id: p.phaseId,
+        engagementId,
+        name: p.name,
+        status: "PENDING",
+        capabilities: p.requiredCapabilities,
+        executionMode: p.toolExecution ?? "sequential",
+        replanCycle: p.replanCycle ?? false,
+      }
     }
-  })
+
+    allPhaseRecords.set(p.phaseId, record)
+  }
 
   // Ensure phases are saved
-  store.savePhases(engagementId, allPhaseRecords)
+  store.savePhases(engagementId, Array.from(allPhaseRecords.values()))
 
   // Reconstruct PlannerContext from stored phases
   const targetType = detectTargetType(engagement.target)
@@ -157,7 +162,7 @@ export async function resumeCommand(
       const phase = plan.phases[i]
 
       // Check if phase was already completed
-      const phaseRecord = allPhaseRecords[i]
+      const phaseRecord = allPhaseRecords.get(phase.phaseId)!
       if (phaseRecord.status === "COMPLETED" || phaseRecord.status === "PARTIAL") {
         i++
         continue
@@ -224,17 +229,17 @@ export async function resumeCommand(
             }
             plan.phases.push(rp)
             plan.errorRecovery[rp.phaseId] = "retry_once_then_skip"
-            allPhaseRecords.push({
+            allPhaseRecords.set(rp.phaseId, {
               id: rp.phaseId,
               engagementId,
               name: rp.name,
-              status: "PENDING" as const,
+              status: "PENDING",
               capabilities: rp.requiredCapabilities,
               executionMode: rp.toolExecution ?? "sequential",
               replanCycle: true,
             })
           }
-          store.savePhases(engagementId, allPhaseRecords)
+          store.savePhases(engagementId, Array.from(allPhaseRecords.values()))
         }
       }
 
@@ -245,7 +250,7 @@ export async function resumeCommand(
     store.appendAuditLog(engagementId, "RESUME_ERROR",
       `Resume error: ${(error as Error).message}`)
   } finally {
-    const allPhasesCompleted = allPhaseRecords.every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")
+    const allPhasesCompleted = Array.from(allPhaseRecords.values()).every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")
     store.updateStatus(engagementId, executionError ? "FAILED" : allPhasesCompleted ? "COMPLETED" : "PAUSED")
     store.saveFindings(engagementId, allFindings)
     store.appendAuditLog(engagementId, "RESUME_COMPLETE",

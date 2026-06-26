@@ -12,6 +12,7 @@ capabilities:
   - web_recon
   - s3_scanning
 signal_quality: CANDIDATE
+risk_level: low
 priority: 35
 cost: low
 enabled: true

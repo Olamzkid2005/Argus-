@@ -96,6 +96,9 @@ export class WorkflowPlanner {
       return planDeterministic(target)
     }
 
+    // quick_scan workflow uses cost-aware tool selection to prefer lightweight tools
+    const workflowCostFilter = workflow.name === "quick_scan" ? "no_high" : undefined
+
     const phases: PhaseExecutionRequest[] = []
     for (let i = 0; i < workflow.phases.length; i++) {
       const def = workflow.phases[i]
@@ -103,7 +106,7 @@ export class WorkflowPlanner {
       const tools = this.toolRegistry.selectBest(def.required_capabilities, targetType, {
         techStack: plannerContext.techStack,
         targetScheme: target.startsWith("https") ? "https" : "http",
-      })
+      }, workflowCostFilter)
 
       if (tools.length === 0) {
         if (def.error_recovery !== "fail_fast") {

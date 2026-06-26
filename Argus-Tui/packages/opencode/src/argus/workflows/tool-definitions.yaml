@@ -92,7 +92,7 @@ tools:
     scoring:
       confidence_score: 80
       coverage_score: 85
-      cost: medium
+    cost: medium
 
   - name: httpx
     label: HTTPX Probe
@@ -287,7 +287,7 @@ tools:
     scoring:
       confidence_score: 95
       coverage_score: 90
-      cost: high
+    cost: high
 
   - name: arjun
     label: Arjun HTTP Parameter Discovery

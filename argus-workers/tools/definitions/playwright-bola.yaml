@@ -38,8 +38,13 @@ signal_quality: CONFIRMED
 timeout: 120
 enabled: true
 requires:
-  target_scheme: any
+  target_scheme:
+    - http
+    - https
   credentials: true
+credential_roles:
+  - attacker
+  - victim
 priority: 80
 cost: medium
 risk_level: low

@@ -20,6 +20,7 @@ capabilities:
   - content_discovery
   - web_recon
 signal_quality: CANDIDATE
+risk_level: low
 priority: 60
 cost: medium
 enabled: true

@@ -20,6 +20,7 @@ capabilities:
   - api_probing
   - api_docs_analysis
 signal_quality: CANDIDATE
+risk_level: low
 priority: 50
 cost: medium
 enabled: true

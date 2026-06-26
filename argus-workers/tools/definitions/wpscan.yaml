@@ -19,6 +19,7 @@ parameters:
 capabilities:
   - vulnerability_scanning
 signal_quality: CANDIDATE
+risk_level: medium
 requires:
   tech_contains:
     - wordpress

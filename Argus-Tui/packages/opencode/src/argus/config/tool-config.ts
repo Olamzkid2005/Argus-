@@ -48,9 +48,9 @@ export class ToolConfig implements ResolvedToolConfig {
           if (parsed?.tools) {
             return new ToolConfig(parsed.tools)
           }
-        } catch { /* file not found or invalid */ }
+        } catch (e) { console.warn(`[tool-config] Could not read ${configPath}:`, (e as Error).message) }
       }
-    } catch { /* imports failed */ }
+    } catch (e) { console.warn(`[tool-config] Dynamic imports failed:`, (e as Error).message) }
 
     return new ToolConfig({})
   }

@@ -83,7 +83,7 @@ if [ -f "requirements.txt" ]; then
         log_ok "Python dependencies already satisfied"
     else
         log_warn "Missing dependencies — installing..."
-        pip install -q -r requirements.txt 2>/dev/null || pip install -q celery redis psycopg2-binary requests httpx jinja2 pyyaml 2>/dev/null || true
+        pip install -q -r requirements.txt || pip install -q celery redis psycopg2-binary requests httpx jinja2 pyyaml
     fi
 fi
 
@@ -93,7 +93,11 @@ if [ -f ".env" ]; then
         case "$line" in
             \#*|'') continue ;;
         esac
-        export "$line"
+        var_name="${line%%=*}"
+        case "$var_name" in
+            DATABASE_URL|REDIS_URL|CELERY_CONCURRENCY|CELERY_BROKER_URL|CELERY_RESULT_BACKEND)
+                export "$line" ;;
+        esac
     done < ".env"
 fi
 

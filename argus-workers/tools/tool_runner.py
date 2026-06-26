@@ -1042,5 +1042,8 @@ class ToolRunner:
             # Safety successes should not count as failures
             raise
         except Exception:
+            logger.warning(
+                "Circuit breaker recording failure for tool '%s'", tool, exc_info=True
+            )
             breaker.record_failure()
             raise

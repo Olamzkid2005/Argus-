@@ -13,6 +13,7 @@ capabilities:
   - vulnerability_scanning
   - sast
 signal_quality: PROBABLE
+risk_level: low
 requires:
   tech_contains:
     - go
