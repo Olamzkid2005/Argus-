@@ -52,6 +52,19 @@ def run_analysis(
         trace_id=trace_id,
         current_state="analyzing",
     ) as ctx:
+        # Idempotency check: if engagement has already progressed past analyzing
+        # (e.g. Celery retry delivered duplicate task), skip immediately.
+        from tasks.utils import get_engagement_state
+
+        _db_state = get_engagement_state(engagement_id, ctx.db_conn_string)
+        if _db_state in ("reporting", "complete", "failed"):
+            logger.info(
+                "Engagement %s already past 'analyzing' (state=%s) — skipping duplicate analysis task",
+                engagement_id,
+                _db_state,
+            )
+            return {"phase": "analyze", "status": "skipped", "reason": f"already_{_db_state}"}
+
         result = ctx.orchestrator.run_analysis(ctx.job)
 
         analysis = result.get("analysis", {})

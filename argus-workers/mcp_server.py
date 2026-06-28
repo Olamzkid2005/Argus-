@@ -16,6 +16,7 @@ from typing import Any
 
 from agent.session_store import AgentSessionStore, ToolExecution
 from tool_core.parser import dispatch
+from tools.scope_validator import ScopeViolationError
 
 # ── Signal quality tiers for planner intelligence ──
 
@@ -451,12 +452,29 @@ class MCPServer:
                     f"Argument at position {i} contains shell metacharacters: {arg!r}"
                 )
 
+    # Findings-bearing exit codes per tool (mirrors ToolRunner.FINDINGS_EXIT_CODES).
+    # Many security tools exit non-zero when vulnerabilities are found. These
+    # exit codes mean "findings present, not an error." The MCP server must
+    # treat them as successes and still parse/dispatch the output.
+    FINDINGS_EXIT_CODES: dict[str, set[int]] = {
+        "semgrep": {1},
+        "bandit": {1},
+        "gitleaks": {1},
+        "dalfox": {1},
+        "trivy": {1},
+        "pip-audit": {1},
+        "dependency_check": {1},
+        "nuclei": {1},
+    }
+
     def call_tool(
         self,
         name: str,
         arguments: dict = None,
         timeout: int = None,
         cache_mode: str | None = None,
+        engagement_id: str | None = None,
+        scope_validator: Any = None,
     ) -> dict:
         """
         Execute a tool by name with arguments (mcp.tools/call equivalent).
@@ -470,12 +488,19 @@ class MCPServer:
                         router path. For direct subprocess calls, cache_mode is
                         accepted but not enforced (the cache lives in ToolRunner,
                         which is used by the orchestrator path).
+            engagement_id: Optional engagement UUID for scope validation and audit.
+            scope_validator: Optional ``ScopeValidator`` instance. When provided,
+                             the tool's ``target`` argument is validated against the
+                             authorized scope before execution. An out-of-scope
+                             target is rejected with ``ScopeViolationError``.
 
         Returns:
             MCP-formatted result dict
 
         Security:
             - Validates all arguments against shell injection patterns
+            - Validates target against engagement scope when scope_validator is provided
+            - Handles findings-bearing non-zero exit codes (semgrep, bandit, etc.)
             - Uses subprocess.run WITHOUT shell=True (safe by design)
             - Commands are vetted at registration time against a dangerous-command blocklist
         """
@@ -492,6 +517,37 @@ class MCPServer:
         tool_signal_quality = (
             tool.signal_quality if hasattr(tool, "signal_quality") else None
         )
+
+        # ── Scope validation: reject out-of-scope targets before any I/O ──
+        # Extract the target URL/domain from the raw arguments before argument
+        # mapping (which may strip the scheme). Use the original value for
+        # scope validation.
+        if scope_validator is not None:
+            arguments = arguments or {}
+            _scope_violations: list[str] = []
+            for _scope_param in ("target", "url", "host", "domain"):
+                _raw_target = arguments.get(_scope_param)
+                if _raw_target and isinstance(_raw_target, str):
+                    try:
+                        scope_validator.validate_target(_raw_target)
+                    except ScopeViolationError as _e:
+                        _scope_violations.append(str(_e))
+            if _scope_violations:
+                _error_msg = "; ".join(_scope_violations)
+                self._execution_stats[name]["calls"] += 1
+                self._execution_stats[name]["failures"] += 1
+                logger.warning(
+                    "Scope violation for tool '%s' on engagement %s: %s",
+                    name,
+                    engagement_id,
+                    _error_msg,
+                )
+                return MCPToolResult(
+                    success=False,
+                    error=f"Scope violation: {_error_msg}",
+                    tool=name,
+                    signal_quality=tool_signal_quality,
+                ).to_dict()
 
         # Build command line from tool definition + arguments
         cmd = [tool.command]
@@ -630,7 +686,12 @@ class MCPServer:
             )
             duration_ms = int((time.time() - start) * 1000)
 
-            success = result.returncode == 0
+            # Determine success: exit code 0 = success. Some security tools
+            # exit non-zero when they FIND vulnerabilities (semgrep, bandit,
+            # gitleaks, trivy, etc.) — treat those as successes too.
+            findings_exit = self.FINDINGS_EXIT_CODES.get(name, set())
+            success = result.returncode == 0 or result.returncode in findings_exit
+
             if success:
                 self._execution_stats[name]["successes"] += 1
             else:
@@ -639,13 +700,22 @@ class MCPServer:
 
             mcp_result = MCPToolResult(
                 success=success,
+                # On findings-bearing exit codes, include stderr as part of
+                # the output so downstream parsers can extract all content.
                 output=result.stdout,
                 error=result.stderr,
                 duration_ms=duration_ms,
                 tool=name,
                 signal_quality=tool_signal_quality,
             )
-            structured = dispatch(name, result.stdout if success else "")
+            # Always dispatch findings parsing — even on non-zero exit if
+            # the exit code indicates findings were found. This ensures
+            # tools like semgrep, bandit, gitleaks produce structured findings
+            # on the MCP path.
+            output_to_parse = result.stdout
+            if not output_to_parse and result.stderr:
+                output_to_parse = result.stderr
+            structured = dispatch(name, output_to_parse)
             if structured:
                 mcp_result.data["structured"] = [f.__dict__ for f in structured]
             return mcp_result.to_dict()

@@ -101,6 +101,20 @@ def run_scan(
     with task_context(
         self, engagement_id, "scan", job_extra=job_extra, trace_id=trace_id
     ) as ctx:
+        # Idempotency check: if engagement has already progressed past scanning
+        # (e.g. Celery retry delivered duplicate task), skip immediately.
+        # Query the actual DB state rather than relying on client-side current_state.
+        from tasks.utils import get_engagement_state
+
+        _db_state = get_engagement_state(engagement_id, ctx.db_conn_string)
+        if _db_state in ("analyzing", "reporting", "complete", "failed"):
+            logger.info(
+                "Engagement %s already past 'scanning' (state=%s) — skipping duplicate scan task",
+                engagement_id,
+                _db_state,
+            )
+            return {"phase": "scan", "status": "skipped", "reason": f"already_{_db_state}"}
+
         if ctx.state.current_state != "scanning":
             ctx.state.transition("scanning", "Starting scan")
         result = ctx.orchestrator.run_scan(ctx.job)
@@ -169,6 +183,18 @@ def deep_scan(
         },
         trace_id=trace_id,
     ) as ctx:
+        # Idempotency check
+        from tasks.utils import get_engagement_state
+
+        _db_state = get_engagement_state(engagement_id, ctx.db_conn_string)
+        if _db_state in ("analyzing", "reporting", "complete", "failed"):
+            logger.info(
+                "Engagement %s already past 'scanning' (state=%s) — skipping duplicate deep_scan task",
+                engagement_id,
+                _db_state,
+            )
+            return {"phase": "deep_scan", "status": "skipped", "reason": f"already_{_db_state}"}
+
         from tasks.utils import fetch_engagement_scan_options
 
         try:
@@ -260,6 +286,18 @@ def auth_focused_scan(
         },
         trace_id=trace_id,
     ) as ctx:
+        # Idempotency check
+        from tasks.utils import get_engagement_state
+
+        _db_state = get_engagement_state(engagement_id, ctx.db_conn_string)
+        if _db_state in ("analyzing", "reporting", "complete", "failed"):
+            logger.info(
+                "Engagement %s already past 'scanning' (state=%s) — skipping duplicate auth_focused_scan task",
+                engagement_id,
+                _db_state,
+            )
+            return {"phase": "auth_focused_scan", "status": "skipped", "reason": f"already_{_db_state}"}
+
         from tasks.utils import fetch_engagement_scan_options
 
         try:
@@ -284,9 +322,7 @@ def auth_focused_scan(
 
         # Ensure we record the scanning state (caller may have left us in 'recon')
         ctx.state.safe_transition("scanning", "Starting auth-focused scan")
-        slog.phase_header(
-            "AUTH FOCUSED SCAN", endpoints=f"{len(endpoints)} endpoint(s)"
-        )
+        slog.phase_header("AUTH FOCUSED SCAN", endpoints=f"{len(endpoints)} endpoint(s)")
         result = ctx.orchestrator.run_scan(ctx.job)
         try:
             ctx.state.transition("analyzing", "Auth-focused scan complete")

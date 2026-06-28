@@ -65,6 +65,42 @@ class EngagementService:
             return "failed"
 
     @staticmethod
+    def load_authorized_scope(engagement_id: str) -> dict | None:
+        """Load the authorized scope from the engagement record.
+
+        The scope is stored inside the ``metadata`` JSONB column as
+        ``metadata->>'authorized_scope'`` (a JSON string of the form
+        ``{"domains": [...], "ipRanges": [...]}``).
+
+        Returns the parsed scope dict or ``None`` if the engagement
+        has no explicit scope configured.
+        """
+        from database.connection import db_cursor
+
+        try:
+            with db_cursor() as cursor:
+                cursor.execute(
+                    "SELECT metadata->>'authorized_scope' FROM engagements WHERE id = %s",
+                    (engagement_id,),
+                )
+                row = cursor.fetchone()
+                if row and row[0]:
+                    import json
+
+                    scope_str = row[0]
+                    if isinstance(scope_str, str):
+                        return json.loads(scope_str)
+                    return dict(scope_str)
+                return None
+        except Exception as e:
+            logger.warning(
+                "Failed to load authorized_scope for %s: %s",
+                engagement_id,
+                e,
+            )
+            return None
+
+    @staticmethod
     def log_timeout_event(engagement_id: str, elapsed_seconds: float) -> None:
         """Log a hard timeout event for the engagement."""
         logger.warning(

@@ -78,6 +78,19 @@ def run_recon(
         trace_id=trace_id,
         current_state="created",
     ) as ctx:
+        # Idempotency check: if engagement has already progressed past recon
+        # (e.g. Celery retry delivered duplicate task), skip immediately.
+        from tasks.utils import get_engagement_state
+
+        _db_state = get_engagement_state(engagement_id, ctx.db_conn_string)
+        if _db_state in ("scanning", "analyzing", "reporting", "complete", "failed"):
+            logger.info(
+                "Engagement %s already past 'recon' (state=%s) — skipping duplicate recon task",
+                engagement_id,
+                _db_state,
+            )
+            return {"phase": "recon", "status": "skipped", "reason": f"already_{_db_state}"}
+
         ctx.state.transition("recon", "Starting reconnaissance")
         result = ctx.orchestrator.run_recon(ctx.job)
 

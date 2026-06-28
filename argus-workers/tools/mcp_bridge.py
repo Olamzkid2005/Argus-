@@ -75,10 +75,41 @@ class MCPToolBridge:
         )
 
     def call_via_mcp(self, tool: str, arguments: dict = None) -> dict:
-        """Call a tool via MCP."""
+        """Call a tool via MCP with scope validation.
+
+        When ``engagement_id`` is set, this method creates a
+        ``ScopeValidator`` and passes it to ``call_tool`` so the
+        target is validated against the engagement's authorized scope
+        before the tool subprocess is launched.
+        """
+        scope_validator = None
+        if self.engagement_id:
+            try:
+                from tools.scope_validator import ScopeValidator
+                from orchestrator_pkg.engagement import EngagementService
+
+                authorized_scope = EngagementService.load_authorized_scope(
+                    self.engagement_id
+                )
+                if authorized_scope:
+                    scope_validator = ScopeValidator(
+                        self.engagement_id, authorized_scope
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Could not create scope validator for engagement %s: %s",
+                    self.engagement_id,
+                    e,
+                )
+
         slog = ScanLogger("mcp_bridge", engagement_id=self.engagement_id)
         slog.tool_start(f"mcp_call:{tool}")
-        result = self.mcp.call_tool(tool, arguments or {})
+        result = self.mcp.call_tool(
+            tool,
+            arguments or {},
+            engagement_id=self.engagement_id,
+            scope_validator=scope_validator,
+        )
         slog.tool_complete(f"mcp_call:{tool}")
         return result
 

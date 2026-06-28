@@ -68,6 +68,13 @@ def generate_report(
                 db_state,
             )
             return {"status": "already_complete"}
+        if db_state not in ("reporting",):
+            logger.info(
+                "Engagement %s is in state '%s' (not 'reporting') — skipping stale report task",
+                engagement_id,
+                db_state,
+            )
+            return {"status": "skipped", "reason": f"state_is_{db_state}"}
 
         result = ctx.orchestrator.run_reporting(ctx.job)
 
