@@ -15,6 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from agent.session_store import AgentSessionStore, ToolExecution
+from agent.react_agent import ReActAgent
+from agent.tool_registry import ToolRegistry
+from llm_client import LLMClient
 from tool_core.parser import dispatch
 from tools.scope_validator import ScopeViolationError
 
@@ -855,9 +858,68 @@ class MCPServer:
     def _replan(self, session) -> dict:
         """Re-plan based on current session state.
 
-        For now, returns done if plan exhausted. LLM integration later.
+        Uses the ReActAgent to reason over accumulated observations,
+        executions, and findings, then returns the next tool(s) to run.
+        Falls back to done when no LLM is available or the agent decides
+        to stop.
         """
-        return {"done": True, "reasoning": "Plan complete"}
+        try:
+            llm_client = LLMClient()
+        except Exception as e:
+            logger.debug("Failed to create LLMClient for replan: %s", e)
+            return {"done": True, "reasoning": "No LLM available for replan"}
+
+        if not llm_client.is_available():
+            return {"done": True, "reasoning": "LLM not available for replan"}
+
+        # Build a concise context from the session's accumulated state
+        context_parts = []
+        if session.observations:
+            context_parts.append("=== OBSERVATIONS ===")
+            context_parts.extend(session.observations[-10:])
+        if session.tool_history:
+            context_parts.append("=== EXECUTED TOOLS ===")
+            for ex in session.tool_history[-10:]:
+                context_parts.append(
+                    f"- {ex.tool}: success={ex.success}, findings={ex.finding_count}, summary={ex.summary[:200]}"
+                )
+        if session.findings:
+            context_parts.append("=== FINDINGS ===")
+            for f in session.findings[-10:]:
+                title = f.get("title", "unknown")
+                subtype = f.get("subtype", "")
+                severity = f.get("severity", "")
+                context_parts.append(f"- {title} ({subtype or 'no subtype'}, severity={severity})")
+
+        context = "\n".join(context_parts)
+        task = f"{session.phase}: {session.target}"
+
+        registry = ToolRegistry()
+        agent = ReActAgent(
+            registry,
+            llm_client=llm_client,
+            engagement_id=getattr(session, "engagement_id", None),
+            phase=session.phase,
+        )
+
+        try:
+            action = agent.plan_next_action(
+                task=task,
+                context=context,
+                tried_tools={ex.tool for ex in session.tool_history},
+            )
+        except Exception as e:
+            logger.warning("ReActAgent replan failed: %s", e)
+            return {"done": True, "reasoning": f"Replan failed: {e}"}
+
+        if action is None:
+            return {"done": True, "reasoning": "Agent decided to stop"}
+
+        logger.info("Replan selected tool: %s (%s)", action.tool, action.reasoning)
+        return {
+            "tool_order": [action.tool],
+            "reasoning": action.reasoning or f"ReActAgent selected {action.tool}",
+        }
 
     def handle_agent_observe(self, params: dict) -> dict:
         """Record tool execution result and decide next action."""

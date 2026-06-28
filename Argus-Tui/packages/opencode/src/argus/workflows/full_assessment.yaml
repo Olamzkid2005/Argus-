@@ -34,6 +34,28 @@ phases:
     error_recovery: retry_once_then_skip
     approval_gate: destructive_tools
 
+  - name: web_exploitation
+    required_capabilities:
+      - browser_verification
+      - xss_detection
+      - sqli_detection
+      - command_injection
+    toolExecution: llm_driven
+    execution: sequential
+    error_recovery: retry_once_then_skip
+    approval_gate: destructive_tools
+
+  - name: api_exploitation
+    required_capabilities:
+      - api_probing
+      - jwt_analysis
+      - ssrf_check
+      - sqli_detection
+    toolExecution: llm_driven
+    execution: sequential
+    error_recovery: retry_once_then_skip
+    approval_gate: destructive_tools
+
   - name: code_analysis
     required_capabilities:
       - sast

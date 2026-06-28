@@ -4,10 +4,10 @@
 # Feature flags all default to false — enable explicitly.
 
 features:
-  workflow_registry: false
-  engagement_store: false
-  approval_gates: false
-  llm_finding_analysis: false
+  workflow_registry: true
+  engagement_store: true
+  approval_gates: true
+  llm_finding_analysis: true
 
 evidence:
   retention_days: 30

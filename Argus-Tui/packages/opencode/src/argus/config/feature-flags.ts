@@ -28,11 +28,11 @@ export enum Feature {
 }
 
 const DEFAULT_FEATURES: Record<Feature, boolean> = {
-  [Feature.WORKFLOW_REGISTRY]: false,
-  [Feature.ENGAGEMENT_STORE]: false,
+  [Feature.WORKFLOW_REGISTRY]: true,
+  [Feature.ENGAGEMENT_STORE]: true,
   [Feature.DETERMINISTIC_FALLBACK]: false,       // Opt-in (was true pre-v5)
-  [Feature.APPROVAL_GATES]: false,
-  [Feature.LLM_FINDING_ANALYSIS]: false,
+  [Feature.APPROVAL_GATES]: true,
+  [Feature.LLM_FINDING_ANALYSIS]: true,
   [Feature.ENCRYPTION_AT_REST]: false,
 }
 

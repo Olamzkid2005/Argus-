@@ -12,6 +12,14 @@ export const REPLAN_INSERTABLE: Record<string, Capability> = {
   ssrf_parameters: Capability.SSRF_CHECK,
   sqli_reflective: Capability.SQLI_DETECTION,
   sqli_blind: Capability.SQLI_DETECTION,
+
+  // Confirmed-vulnerability chains that turn scanner output into red team actions.
+  sqli_confirmed: Capability.POST_EXPLOITATION,
+  ssrf_confirmed: Capability.CLOUD_METADATA_PROBE,
+  xss_confirmed: Capability.SESSION_HIJACK_ATTEMPT,
+  rce_confirmed: Capability.LATERAL_MOVEMENT,
+  open_redirect: Capability.PHISHING_CHAIN,
+  exposed_secret: Capability.CREDENTIAL_REPLAY,
 }
 
 export function determineNewCapabilities(context: PlannerContext): Set<Capability> {

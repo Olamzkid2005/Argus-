@@ -223,11 +223,13 @@ export async function resumeCommand(
           store.appendAuditLog(engagementId, "REPLAN_INSERT",
             `Inserting ${replanPhases.length} replan phase(s) at position ${i + 1}`)
 
+          let insertOffset = 0
           for (const rp of replanPhases) {
             for (const cap of rp.requiredCapabilities) {
               executedCapabilities.add(cap)
             }
-            plan.phases.push(rp)
+            plan.phases.splice(i + 1 + insertOffset, 0, rp)
+            insertOffset++
             plan.errorRecovery[rp.phaseId] = "retry_once_then_skip"
             allPhaseRecords.set(rp.phaseId, {
               id: rp.phaseId,

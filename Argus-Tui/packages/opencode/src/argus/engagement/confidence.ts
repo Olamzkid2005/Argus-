@@ -26,10 +26,10 @@ const PROMOTION_RULES: Array<{ from: Confidence; to: Confidence; condition: (fin
     condition: (f) => f.evidence !== undefined && f.evidence.length > 0,
   },
   {
-    // CONFIRMED is set externally by the verification runner, not by the promotion engine.
+    // CONFIRMED is promoted when an independent verification run has passed.
     from: Confidence.VERIFIED,
     to: Confidence.CONFIRMED,
-    condition: () => false,
+    condition: (f) => f.verificationResult?.passed === true,
   },
 ]
 

@@ -15,14 +15,20 @@ import { InProcessExecutor } from "./planner/executor"
 import { WorkersBridge } from "./bridge/mcp-client"
 import { EngagementStore } from "./engagement/store"
 import type { IEngagementStore } from "./engagement/types"
-import { CredentialStore } from "./engagement/credentials"
+import { CredentialStore, type CredentialEntry } from "./engagement/credentials"
 import { ConfidenceEngine } from "./engagement/confidence"
 import { FeatureFlags, Feature } from "./config/feature-flags"
 import { detectTargetType, detectAuthState } from "./planner/strategy"
 import { join, resolve } from "path"
 import { Capability } from "./planner/capabilities"
-import type { NormalizedFinding } from "./shared/types"
+import type { NormalizedFinding, VerificationResult } from "./shared/types"
+import { Severity } from "./shared/types"
 import type { PhaseRecord } from "./engagement/types"
+import { VerificationRunner } from "./browser/verifiers/runner"
+import { PlaywrightEngine } from "./browser/engine"
+import { StoredXSSVerifier } from "./browser/verifiers/xss"
+import { BOLAVerifier } from "./browser/verifiers/bola"
+import { PrivilegeEscalationVerifier } from "./browser/verifiers/priv-esc"
 import type { ProgressEvent } from "./shared/progress"
 import type { PlannerContext } from "./planner/types"
 import { handleProgressEvent } from "./tui/scan-store"
@@ -143,6 +149,111 @@ export class WorkflowRunner {
       credStore?: CredentialStore
     },
   ) {}
+
+  /**
+   * Autonomously verify HIGH/CRITICAL findings using browser-based verifiers.
+   * Returns findings annotated with verificationResult for any that passed.
+   */
+  private async verifyFindings(
+    findings: NormalizedFinding[],
+    target: string,
+    creds: CredentialEntry | null | undefined,
+    engagementId: string,
+    emit: (event: ProgressEvent | string) => void,
+  ): Promise<NormalizedFinding[]> {
+    if (!creds) return findings
+
+    const toVerify = findings.filter(
+      (f) => (f.severity === Severity.HIGH || f.severity === Severity.CRITICAL) && !f.verificationResult,
+    )
+    if (toVerify.length === 0) return findings
+
+    const runner = new VerificationRunner()
+    const engine = new PlaywrightEngine()
+    const updated: NormalizedFinding[] = []
+
+    for (const finding of findings) {
+      if (!toVerify.includes(finding)) {
+        updated.push(finding)
+        continue
+      }
+
+      let scenario
+      try {
+        switch (finding.subtype) {
+          case "xss":
+          case "xss_stored":
+          case "xss_reflected": {
+            const injectUrl = finding.statusCode ? target : `${target}/contact`
+            scenario = new StoredXSSVerifier(
+              engine,
+              injectUrl,
+              injectUrl,
+              finding.description.includes("<script>") ? finding.description : "<img src=x onerror=alert(1)>",
+              undefined,
+              engagementId,
+              finding.id,
+            )
+            break
+          }
+          case "bola":
+          case "idor": {
+            const resourcePath = finding.description.match(/(\/[^\s]+)/)?.[1] ?? "profile"
+            scenario = new BOLAVerifier(
+              engine,
+              target,
+              resourcePath,
+              creds,
+              { username: `${creds.username}_b`, password: creds.password },
+              undefined,
+              engagementId,
+              finding.id,
+            )
+            break
+          }
+          case "privilege_escalation":
+          case "privesc": {
+            const endpoints = finding.description.match(/(\/[^\s,]+)/g) ?? ["/admin"]
+            scenario = new PrivilegeEscalationVerifier(
+              engine,
+              target,
+              endpoints.slice(0, 5),
+              creds,
+              undefined,
+              engagementId,
+              finding.id,
+            )
+            break
+          }
+          default:
+            updated.push(finding)
+            continue
+        }
+
+        emit(`⠋ Verifying ${finding.subtype} finding: ${finding.title}`)
+        const result = await runner.run(scenario)
+        const verificationResult: VerificationResult = {
+          passed: result.passed,
+          summary: result.summary,
+          verifier: scenario.name,
+          verifiedAt: new Date().toISOString(),
+        }
+        updated.push({ ...finding, verificationResult })
+        emit(`✓ Verification ${result.passed ? "passed" : "failed"} for ${finding.title}`)
+      } catch (error) {
+        updated.push(finding)
+        emit(`⚠ Verification error for ${finding.title}: ${(error as Error).message}`)
+      }
+    }
+
+    try {
+      await engine.close()
+    } catch {
+      // best-effort cleanup
+    }
+
+    return updated
+  }
 
   /**
    * Run an assessment workflow against a target.
@@ -300,7 +411,12 @@ export class WorkflowRunner {
 
         const result = await executor.execute(phase)
 
-        for (const finding of result.findings) {
+        let phaseFindings = result.findings
+        if (phaseFindings.length > 0) {
+          phaseFindings = await this.verifyFindings(phaseFindings, target, defaultCreds, engagementId, emit)
+        }
+
+        for (const finding of phaseFindings) {
           emit({ type: "finding", phaseId: phase.phaseId, severity: String(finding.severity), title: finding.title })
           const promoted = confidenceEngine.promote(finding)
           allFindings.push({ ...finding, confidence: promoted })
@@ -313,7 +429,7 @@ export class WorkflowRunner {
         if (result.errors.length > 0) finalRecord.error = result.errors.join("; ")
         store.savePhase(engagementId, finalRecord)
 
-        const findingCount = result.findings.length
+        const findingCount = phaseFindings.length
         const errorCount = result.errors.length
         if (phaseStatus === "FAILED") {
           emit({ type: "phase_error", phaseId: phase.phaseId, name: phaseName, error: result.errors.join("; ") })
@@ -351,6 +467,7 @@ export class WorkflowRunner {
             store.appendAuditLog(engagementId, "REPLAN_INSERT",
               `Inserting ${replanPhases.length} replan phase(s) at position ${i + 1}`)
 
+            let insertOffset = 0
             for (const rp of replanPhases) {
               if (defaultCreds) {
                 rp.config.credentials = defaultCreds
@@ -358,7 +475,8 @@ export class WorkflowRunner {
               for (const cap of rp.requiredCapabilities) {
                 executedCapabilities.add(cap)
               }
-              plan.phases.push(rp)
+              plan.phases.splice(i + 1 + insertOffset, 0, rp)
+              insertOffset++
               plan.errorRecovery[rp.phaseId] = "retry_once_then_skip"
               phaseRecords.set(rp.phaseId, {
                 id: rp.phaseId,

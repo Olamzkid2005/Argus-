@@ -21,6 +21,14 @@ export enum Capability {
   SSRF_CHECK = "ssrf_check",
   COMMAND_INJECTION = "command_injection",
 
+  // Autonomous red-team / post-exploitation capabilities
+  POST_EXPLOITATION = "post_exploitation",
+  CLOUD_METADATA_PROBE = "cloud_metadata_probe",
+  SESSION_HIJACK_ATTEMPT = "session_hijack_attempt",
+  LATERAL_MOVEMENT = "lateral_movement",
+  PHISHING_CHAIN = "phishing_chain",
+  CREDENTIAL_REPLAY = "credential_replay",
+
   SECURITY_ANALYSIS = "security_analysis",
   SECRET_DETECTION = "secret_detection",
   SAST = "sast",

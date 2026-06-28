@@ -9,10 +9,11 @@ describe("FeatureFlags", () => {
     flags = new FeatureFlags()
   })
 
-  test("all features default to false (opt-in)", () => {
-    expect(flags.isEnabled(Feature.WORKFLOW_REGISTRY)).toBe(false)
-    expect(flags.isEnabled(Feature.ENGAGEMENT_STORE)).toBe(false)
-    expect(flags.isEnabled(Feature.APPROVAL_GATES)).toBe(false)
+  test("autonomy features default to true", () => {
+    expect(flags.isEnabled(Feature.WORKFLOW_REGISTRY)).toBe(true)
+    expect(flags.isEnabled(Feature.ENGAGEMENT_STORE)).toBe(true)
+    expect(flags.isEnabled(Feature.APPROVAL_GATES)).toBe(true)
+    expect(flags.isEnabled(Feature.LLM_FINDING_ANALYSIS)).toBe(true)
     expect(flags.isEnabled(Feature.ENCRYPTION_AT_REST)).toBe(false)
   })
 
@@ -21,9 +22,9 @@ describe("FeatureFlags", () => {
   })
 
   test("constructor overrides enable features", () => {
-    const f = new FeatureFlags({ [Feature.WORKFLOW_REGISTRY]: true })
-    expect(f.isEnabled(Feature.WORKFLOW_REGISTRY)).toBe(true)
-    expect(f.isEnabled(Feature.ENGAGEMENT_STORE)).toBe(false)
+    const f = new FeatureFlags({ [Feature.WORKFLOW_REGISTRY]: false })
+    expect(f.isEnabled(Feature.WORKFLOW_REGISTRY)).toBe(false)
+    expect(f.isEnabled(Feature.ENGAGEMENT_STORE)).toBe(true)
   })
 
   test("applyOverrides updates features and records source", () => {
@@ -37,23 +38,24 @@ describe("FeatureFlags", () => {
     const f = new FeatureFlags({
       [Feature.WORKFLOW_REGISTRY]: true,
       [Feature.ENGAGEMENT_STORE]: true,
+      [Feature.APPROVAL_GATES]: true,
     })
     expect(f.allEnabled(Feature.WORKFLOW_REGISTRY, Feature.ENGAGEMENT_STORE)).toBe(true)
-    expect(f.allEnabled(Feature.WORKFLOW_REGISTRY, Feature.APPROVAL_GATES)).toBe(false)
+    expect(f.allEnabled(Feature.WORKFLOW_REGISTRY, Feature.ENCRYPTION_AT_REST)).toBe(false)
   })
 
   test("anyEnabled returns true when any feature is enabled", () => {
-    const f = new FeatureFlags({ [Feature.WORKFLOW_REGISTRY]: true })
-    expect(f.anyEnabled(Feature.WORKFLOW_REGISTRY, Feature.ENGAGEMENT_STORE)).toBe(true)
-    expect(f.anyEnabled(Feature.ENGAGEMENT_STORE, Feature.APPROVAL_GATES)).toBe(false)
+    const f = new FeatureFlags({ [Feature.WORKFLOW_REGISTRY]: false, [Feature.ENGAGEMENT_STORE]: false })
+    expect(f.anyEnabled(Feature.WORKFLOW_REGISTRY, Feature.ENGAGEMENT_STORE)).toBe(false)
+    expect(f.anyEnabled(Feature.ENGAGEMENT_STORE, Feature.APPROVAL_GATES)).toBe(true)
   })
 
   test("loadFromEnv reads ARGUS_FEATURE_* environment variables", () => {
-    process.env["ARGUS_FEATURE_WORKFLOW_REGISTRY"] = "1"
+    process.env["ARGUS_FEATURE_ENCRYPTION_AT_REST"] = "1"
     flags.loadFromEnv()
-    expect(flags.isEnabled(Feature.WORKFLOW_REGISTRY)).toBe(true)
-    expect(flags.isEnabled(Feature.ENGAGEMENT_STORE)).toBe(false)
-    delete process.env["ARGUS_FEATURE_WORKFLOW_REGISTRY"]
+    expect(flags.isEnabled(Feature.ENCRYPTION_AT_REST)).toBe(true)
+    expect(flags.isEnabled(Feature.ENGAGEMENT_STORE)).toBe(true)
+    delete process.env["ARGUS_FEATURE_ENCRYPTION_AT_REST"]
   })
 
   test("loadFromConfig reads feature config object", () => {

@@ -71,6 +71,14 @@ export class ApprovalService {
     process.stderr.write(`   This operation may be destructive or modify the target state.\n`)
     process.stderr.write(`   Proceed? [y/N] `)
 
+    // Headless automation: explicit auto-approve via environment variable.
+    // Logs an auditable timestamp instead of waiting for human input.
+    if (process.env.ARGUS_AUTO_APPROVE === "1") {
+      const timestamp = new Date().toISOString()
+      process.stderr.write(` (ARGUS_AUTO_APPROVE=1 — auto-approved at ${timestamp})\n\n`)
+      return { approved: true, reason: `Auto-approved at ${timestamp}` }
+    }
+
     // Non-TTY stdout (TUI mode): auto-approve non-destructive, auto-skip destructive
     if (!process.stdout.isTTY) {
       if (gate.destructive) {

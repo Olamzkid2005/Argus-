@@ -45,6 +45,7 @@ class ToolStatus(StrEnum):
     NONZERO_EXIT = "nonzero_exit"  # Ran but returned non-zero (tool-level error)
     EXCEPTION = "exception"  # Python exception inside ToolRunner itself
     SKIPPED = "skipped"  # Deliberately not run (wrong language, etc.)
+    SCOPE_ERROR = "scope_error"  # Blocked because target is outside authorized scope
 
     @property
     def is_fatal(self) -> bool:

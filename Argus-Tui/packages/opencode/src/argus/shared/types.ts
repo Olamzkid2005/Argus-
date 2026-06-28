@@ -32,6 +32,15 @@ export interface NormalizedFinding {
    *  Used by replan to trigger capability insertion on scan misses.
    *  Negative findings are exempt from MAX_REPLANS on first consideration. */
   negative?: boolean
+  /** Result from an autonomous browser verification run. */
+  verificationResult?: VerificationResult
+}
+
+export interface VerificationResult {
+  passed: boolean
+  summary: string
+  verifier: string
+  verifiedAt: string
 }
 
 // Note: This file uses camelCase for in-memory/API transfer.

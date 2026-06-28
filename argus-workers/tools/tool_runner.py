@@ -18,6 +18,7 @@ from pathlib import Path
 
 from cache import CacheMode, cache
 from config.constants import CIRCUIT_BREAKER_COOLDOWN, CIRCUIT_BREAKER_THRESHOLD
+from database.repositories.engagement_repository import EngagementRepository
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
 from error_classifier import ErrorCode
 from runtime.concurrency import (
@@ -136,6 +137,39 @@ class ToolRunner:
             failure_threshold=self._failure_threshold,
             cooldown_seconds=self._cooldown_seconds,
         )
+
+    def _load_authorized_scope(self) -> dict | None:
+        """Load authorized scope for the current engagement, if known."""
+        if not self.engagement_id or not self.connection_string:
+            return None
+        try:
+            repo = EngagementRepository(db_connection=self.connection_string)
+            engagement = repo.find_by_id(self.engagement_id)
+            if not engagement:
+                return None
+            metadata = engagement.get("metadata") or {}
+            scope = metadata.get("_authorized_scope")
+            if isinstance(scope, str):
+                import json
+
+                try:
+                    scope = json.loads(scope)
+                except json.JSONDecodeError:
+                    scope = None
+            return scope
+        except Exception:
+            return None
+
+    def _extract_target(self, args: list[str]) -> str | None:
+        """Extract a target URL/hostname from tool arguments."""
+        for arg in args:
+            lowered = arg.lower()
+            if lowered.startswith(("http://", "https://")):
+                return arg
+            if "." in arg and not arg.startswith("-"):
+                # Likely a hostname/domain; prefer ones with a slash or known TLD
+                return arg
+        return None
 
     def is_dangerous(self, tool: str, args: list[str]) -> bool:
         """
@@ -423,6 +457,26 @@ class ToolRunner:
                 tool,
                 cache_mode.value,
             )
+
+        # Scope validation — keep LLM-selected tools within authorized boundaries
+        target = self._extract_target(args)
+        if target:
+            from tools.scope_validator import ScopeValidator, ScopeViolationError
+
+            scope = self._load_authorized_scope()
+            validator = ScopeValidator(self.engagement_id or "", scope)
+            try:
+                validator.validate_target(target)
+            except ScopeViolationError as e:
+                result = UnifiedToolResult(
+                    tool_name=tool,
+                    stdout="",
+                    stderr=str(e),
+                    exit_code=1,
+                    status=ToolStatus.SCOPE_ERROR,
+                )
+                result.mark_finished()
+                return result
 
         # Safety check
         if self.is_dangerous(tool, args):
