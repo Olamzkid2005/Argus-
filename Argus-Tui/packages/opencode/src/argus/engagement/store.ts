@@ -39,8 +39,9 @@ function _loadDrizzle(): DrizzleFunction {
 import { eq, desc, asc, sql, SQL, type AnyColumn, type SQLWrapper, inArray } from "drizzle-orm"
 import { join, dirname } from "path"
 import { homedir } from "os"
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from "fs"
+import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "fs"
 import { StoragePaths } from "../storage/paths"
+import { ConfigLoader } from "../config/loader"
 // Monotonic counter for engagement ID generation. Ensures deterministic
 // sort-order tiebreaking when multiple engagements share the same
 // millisecond-precision `created_at` timestamp. The secondary sort by
@@ -63,7 +64,10 @@ import {
   finding_analysis,
   STORAGE_VERSION_LEGACY,
   STORAGE_VERSION_PER_ENGAGEMENT,
+  STORAGE_VERSION_ENCRYPTED,
 } from "./schema.sql"
+import { EncryptedDbHandle } from "../storage/encrypted-db"
+import { EncryptionManager } from "../storage/encryption"
 import type { EngagementState, PhaseRecord, EngagementStatus, PhaseStatus, IEngagementStore } from "./types"
 import type { ExecutionMode } from "../shared/types"
 import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
@@ -222,12 +226,52 @@ export class EngagementStore implements IEngagementStore {
   private _rootSqlite: InstanceType<BunSqliteDatabaseConstructor>
   readonly dbPath: string
 
-  /** Cached per-engagement DB handles (engagementId → { db, lastAccessed }). */
-  private engagementDbs = new Map<string, { db: InstanceType<BunSqliteDatabaseConstructor>; drizzle: ReturnType<DrizzleFunction>; lastAccessed: number }>()
+  /** Cached per-engagement DB handles (engagementId → { db, lastAccessed, encryptedHandle? }). */
+  private engagementDbs = new Map<string, { db: InstanceType<BunSqliteDatabaseConstructor>; drizzle: ReturnType<DrizzleFunction>; lastAccessed: number; encryptedHandle?: EncryptedDbHandle }>()
   /** Auto-close idle engagement DB handles after 5 minutes. */
   private static readonly ENGAGEMENT_DB_TIMEOUT_MS = 5 * 60 * 1000
   /** Interval handle for periodic cleanup of stale engagement handles. */
   private _cleanupTimer: ReturnType<typeof setInterval> | null = null
+
+  /**
+   * When set to true, all per-engagement databases will be encrypted at rest
+   * using AES-256-GCM. Existing plaintext DBs are migrated on first access.
+   *
+   * Set this from the CLI handler after checking `storage.encryption.enabled`
+   * in config and confirming the master key is loaded.
+   *
+   * This is automatically synced from config on construction (project + user
+   * config). You can also call syncEncryptionFromConfig() manually.
+   */
+  static encryptionEnabled = false
+
+  /**
+   * Sync the encryptionEnabled flag from user and project config files.
+   *
+   * Checks both `~/.argus/config.yaml` (user config) and `./argus.config.yaml`
+   * (project config) for `storage.encryption.enabled: true`. Project config
+   * takes precedence over user config.
+   *
+   * Can be called at any time, including before any EngagementStore is created.
+   * The constructor calls this automatically.
+   */
+  static syncEncryptionFromConfig(): void {
+    // Check user config first
+    const userConfig = ConfigLoader.loadUserConfig()
+    const userEnabled = userConfig.storage?.encryption?.enabled
+
+    // Check project config (takes precedence)
+    const projectConfig = ConfigLoader.loadProjectConfig()
+    const projectEnabled = projectConfig.storage?.encryption?.enabled
+
+    // Project config overrides user config
+    if (projectEnabled !== undefined) {
+      EngagementStore.encryptionEnabled = projectEnabled
+    } else if (userEnabled !== undefined) {
+      EngagementStore.encryptionEnabled = userEnabled
+    }
+    // If neither is set, remains at default (false)
+  }
 
   private static finalizer = new FinalizationRegistry((sqlite: { close(): void }) => {
     try { sqlite.close() } catch { /* finalizer best-effort */ }
@@ -252,6 +296,9 @@ export class EngagementStore implements IEngagementStore {
     this._ensureRootTables()
     // Seed sequence counters from existing data so they persist across restarts
     this._seedCounters()
+    // Sync the encryption-enabled flag from config
+    EngagementStore.syncEncryptionFromConfig()
+
     EngagementStore.finalizer.register(this, this._rootSqlite)
 
     // Periodic cleanup of stale per-engagement DB handles (every 2 minutes).
@@ -273,10 +320,24 @@ export class EngagementStore implements IEngagementStore {
   // ── Per-engagement DB handle management ──
 
   /**
+   * Determine whether an engagement is already encrypted.
+   * Only checks storage_version >= 3. The 2→3 migration is handled
+   * in _ensureEngagementDb before any DB handle is opened.
+   */
+  private static _isEncrypted(eng: EngagementState): boolean {
+    return eng.storageVersion >= STORAGE_VERSION_ENCRYPTED
+  }
+
+  /**
    * Get or create a drizzle-wrapped per-engagement DB handle.
    * Opens the per-engagement DB file on first access, creating it
    * with the full schema (foreign keys disabled — the engagements
    * table lives in the root DB).
+   *
+   * For storage_version >= 3 (encrypted), uses EncryptedDbHandle to
+   * transparently decrypt the database on open and encrypt on close.
+   * The master key must be preloaded via EncryptionManager.getMasterKey();
+   * if not cached, a clear error is thrown.
    *
    * **Hybrid lazy migration:** If the per-engagement DB file doesn't
    * exist but the engagement exists in the root DB with
@@ -297,9 +358,35 @@ export class EngagementStore implements IEngagementStore {
 
     // If per-engagement DB doesn't exist yet, don't auto-create for reads
     // from legacy engagements — the caller will fall back to root DB reads.
-    if (!existsSync(engPath)) {
+    if (!existsSync(engPath) && !EngagementStore._isEncrypted(eng)) {
       return null
     }
+
+    // ── Encrypted DB path (storage_version >= 3) ──
+    if (EngagementStore._isEncrypted(eng)) {
+      const masterKey = EncryptionManager.getCachedMasterKey()
+      if (!masterKey) {
+        throw new Error(
+          `Cannot open encrypted engagement ${engagementId}: master key not loaded. ` +
+          "Call EncryptionManager.getMasterKey() before using encrypted engagements. " +
+          "Run `argus encryption init` if no key exists."
+        )
+      }
+
+      const handle = EncryptedDbHandle.openSync(engPath, masterKey, engagementId)
+      const sqlite = handle.getDatabase()
+
+      const drizzle = _loadDrizzle()
+      const wrapped = drizzle({ client: sqlite })
+      this._ensurePerEngagementTables(sqlite)
+
+      const entry = { db: sqlite, drizzle: wrapped, lastAccessed: Date.now(), encryptedHandle: handle }
+      this.engagementDbs.set(engagementId, entry)
+      return entry
+    }
+
+    // ── Plaintext DB path (storage_version === 2) ──
+    if (!existsSync(engPath)) return null
 
     const BunSqliteDatabase = _loadBunSqlite()
     const sqlite = new BunSqliteDatabase(engPath)
@@ -319,18 +406,64 @@ export class EngagementStore implements IEngagementStore {
   /**
    * Ensure a per-engagement DB exists for the given engagement.
    * Creates the file and tables if missing. Marks the engagement
-   * as `storage_version = 2` in the root DB.
+   * as `storage_version = 2` (or 3 if encrypted) in the root DB.
+   *
+   * For encrypted engagements (storage_version >= 3), uses
+   * EncryptedDbHandle which manages transparent encrypt/decrypt
+   * and temp file lifecycle.
+   *
+   * Plaintext → encrypted migration (2 → 3):
+   * When encryptionEnabled is true and the engagement's storage_version
+   * is 2, the existing plaintext DB file is encrypted in-place on first
+   * access. The migration happens BEFORE _getEngagementDb is called,
+   * so that _getEngagementDb sees the updated storage_version=3 and
+   * opens via the encrypted path.
    */
   private _ensureEngagementDb(engagementId: string): { db: InstanceType<BunSqliteDatabaseConstructor>; drizzle: ReturnType<DrizzleFunction> } {
-    const cached = this._getEngagementDb(engagementId)
-    if (cached) return cached
-
     const engPath = StoragePaths.engagementDbPath(engagementId)
     const engDir = dirname(engPath)
     if (!existsSync(engDir)) {
       mkdirSync(engDir, { recursive: true })
     }
 
+    // Read the engagement's current storage_version BEFORE _getEngagementDb
+    // caches any handle, so we can perform 2→3 migration first.
+    const eng = this.getEngagement(engagementId)
+    const wasLegacy = eng?.storageVersion === STORAGE_VERSION_LEGACY
+
+    // ── Encryption migration: 2 → 3 (must happen before _getEngagementDb) ──
+    // When encryption is enabled and the engagement is at version 2, encrypt
+    // the existing plaintext DB in-place and bump storage_version to 3.
+    // Then _getEngagementDb will correctly open via the encrypted path.
+    if (EngagementStore.encryptionEnabled && eng?.storageVersion === STORAGE_VERSION_PER_ENGAGEMENT) {
+      const masterKey = EncryptionManager.getCachedMasterKey()
+      if (!masterKey) {
+        throw new Error(
+          `Cannot encrypt engagement ${engagementId}: master key not loaded. ` +
+          "Call EncryptionManager.getMasterKey() before opening encrypted engagements."
+        )
+      }
+
+      if (existsSync(engPath)) {
+        this._migratePlaintextToEncrypted(engPath, masterKey, engagementId)
+      }
+
+      // Bump storage_version to 3 before calling _getEngagementDb
+      this.rootDb.update(engagements)
+        .set({ storage_version: STORAGE_VERSION_ENCRYPTED, updated_at: Date.now() })
+        .where(eq(engagements.id, engagementId))
+        .run()
+
+      // Now _getEngagementDb will see version 3 → encrypted path
+      const pe = this._getEngagementDb(engagementId)
+      if (pe) return pe
+    }
+
+    // Try cached or existing plaintext DB
+    const cached = this._getEngagementDb(engagementId)
+    if (cached) return cached
+
+    // ── Create new per-engagement DB ──
     const BunSqliteDatabase = _loadBunSqlite()
     const sqlite = new BunSqliteDatabase(engPath)
     sqlite.exec("PRAGMA journal_mode = WAL")
@@ -344,10 +477,6 @@ export class EngagementStore implements IEngagementStore {
     const entry = { db: sqlite, drizzle: wrapped, lastAccessed: Date.now() }
     this.engagementDbs.set(engagementId, entry)
 
-    // Read the engagement's current storage_version before upgrading it
-    const eng = this.getEngagement(engagementId)
-    const wasLegacy = eng?.storageVersion === STORAGE_VERSION_LEGACY
-
     // Mark the engagement as migrated to per-engagement storage
     this.rootDb.update(engagements)
       .set({ storage_version: STORAGE_VERSION_PER_ENGAGEMENT, updated_at: Date.now() })
@@ -360,6 +489,47 @@ export class EngagementStore implements IEngagementStore {
     }
 
     return entry
+  }
+
+  /**
+   * Convert a plaintext per-engagement database (storage_version=2) to
+   * encrypted format (storage_version=3) by encrypting the raw file
+   * in-place with AES-256-GCM using the engagement's derived key.
+   *
+   * Called automatically on first access to a version-2 engagement
+   * when EngageStore.encryptionEnabled is true. The original plaintext
+   * file is read, encrypted, and atomically replaced.
+   */
+  private _migratePlaintextToEncrypted(engPath: string, masterKey: Buffer, engagementId: string): void {
+    // First, checkpoint any WAL data into the main DB file so we capture ALL data
+    // (not just what happens to be checkpointed). We open, checkpoint, then close.
+    const BunSqliteDatabase = _loadBunSqlite()
+    let tmpDb: InstanceType<BunSqliteDatabaseConstructor> | null = null
+    try {
+      tmpDb = new BunSqliteDatabase(engPath)
+      tmpDb.exec("PRAGMA wal_checkpoint(TRUNCATE)")
+    } catch { /* best-effort — file may be in use; proceed with readFileSync */ }
+    if (tmpDb) {
+      try { tmpDb.close() } catch { /* best-effort */ }
+    }
+
+    // Read the full plaintext SQLite file (now with WAL checkpointed)
+    const plaintext = readFileSync(engPath)
+
+    // Encrypt the raw file bytes using the engagement's derived key.
+    // This produces the standard encrypted format:
+    // [version:1][salt:16][iv:12][ciphertext...][authTag:16]
+    const encrypted = EncryptionManager.encryptEngagementDb(plaintext, masterKey, engagementId)
+
+    // Atomic write: write to temp, then rename over the original
+    const tmpPath = engPath + ".encrypt-migrate"
+    writeFileSync(tmpPath, encrypted, { mode: 0o600 })
+    renameSync(tmpPath, engPath)
+
+    // Clean up any SQLite WAL/SHM companion files left by the plaintext DB
+    for (const suffix of ["-wal", "-shm"]) {
+      try { rmSync(engPath + suffix, { force: true }) } catch { /* best-effort */ }
+    }
   }
 
   /**
@@ -447,12 +617,17 @@ export class EngagementStore implements IEngagementStore {
 
   /**
    * Close per-engagement DB handles that haven't been accessed recently.
+   * For encrypted handles, calls handle.close() which saves + encrypts
+   * the database before closing.
    */
   private _closeStaleEngagementDbs(): void {
     const now = Date.now()
     for (const [id, entry] of this.engagementDbs) {
-      if (now - entry.lastAccessed > EngagementStore.ENGAGEMENT_DB_TIMEOUT_MS) {
+      if (now - entry.lastAccessed > EngagementStore.ENGAGEMENT_DB_TIMEOUT_MS) {      if (entry.encryptedHandle) {
+        try { entry.encryptedHandle.close() } catch { /* best-effort */ }
+      } else {
         try { entry.db.close() } catch { /* already closed */ }
+      }
         this.engagementDbs.delete(id)
       }
     }
@@ -460,7 +635,11 @@ export class EngagementStore implements IEngagementStore {
 
   private _closeAllEngagementDbs(): void {
     for (const [, entry] of this.engagementDbs) {
-      try { entry.db.close() } catch { /* already closed */ }
+      if (entry.encryptedHandle) {
+        try { entry.encryptedHandle.close() } catch { /* best-effort */ }
+      } else {
+        try { entry.db.close() } catch { /* already closed */ }
+      }
     }
     this.engagementDbs.clear()
   }

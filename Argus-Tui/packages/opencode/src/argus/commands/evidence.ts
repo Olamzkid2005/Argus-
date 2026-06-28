@@ -5,6 +5,7 @@ import type { IEngagementStore } from "../engagement/types"
 import { EvidenceCollector } from "../evidence/collector"
 import { verifyPackage } from "../evidence/integrity"
 import { StoragePaths } from "../storage/paths"
+import { EncryptionManager } from "../storage/encryption"
 
 export async function evidenceCommand(
   action: "list" | "show" | "prune" | "verify-package",
@@ -62,7 +63,9 @@ export async function evidenceCommand(
       if (!engagementId || !packageId) {
         return "Usage: evidence show <engagement-id> <package-id>"
       }
-      const result = await verifyPackage(evidenceBaseDir, engagementId, packageId)
+      // Pass encryption context if master key is cached
+      const masterKey = EncryptionManager.getCachedMasterKey() ?? undefined
+      const result = await verifyPackage(evidenceBaseDir, engagementId, packageId, { masterKey })
       lines.push(`Package ID: ${result.packageId}`)
       lines.push(`Valid: ${result.valid}`)
       const manifestPath = join(evidenceBaseDir, engagementId, "artifacts", packageId, "manifest.json")
@@ -109,7 +112,9 @@ export async function evidenceCommand(
       if (!engagementId || !packageId) {
         return "Usage: evidence verify-package <engagement-id> <package-id>"
       }
-      const result = await verifyPackage(evidenceBaseDir, engagementId, packageId)
+      // Pass encryption context if master key is cached
+      const masterKey = EncryptionManager.getCachedMasterKey() ?? undefined
+      const result = await verifyPackage(evidenceBaseDir, engagementId, packageId, { masterKey })
       if (result.valid) {
         lines.push(`Package ${packageId}: OK (${result.manifestHash})`)
       } else {

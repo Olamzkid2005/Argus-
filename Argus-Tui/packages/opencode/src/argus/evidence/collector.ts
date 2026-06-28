@@ -5,6 +5,8 @@ import { createHash, randomBytes } from "crypto"
 import type { EvidenceManifest, ArtifactEntry } from "./types"
 import { computePackageHash } from "./hash"
 import { Confidence } from "../shared/types"
+import { EncryptedFileHandle } from "../storage/encrypted-file"
+import { EncryptionManager } from "../storage/encryption"
 
 interface CollectorConfig {
   retention_days: number
@@ -24,12 +26,40 @@ const DEFAULT_CONFIG: CollectorConfig = {
 
 export class EvidenceCollector {
   private config: CollectorConfig
+  /** When set, binary evidence files are encrypted at rest using this engagement's derived key. */
+  private encryptionEngagementId: string | null = null
 
   constructor(
     private baseDir: string,
     config?: Partial<CollectorConfig>,
+    encryptionEngagementId?: string,
   ) {
     this.config = { ...DEFAULT_CONFIG, ...config }
+    this.encryptionEngagementId = encryptionEngagementId ?? null
+  }
+
+  /**
+   * Enable or disable encryption for this collector.
+   * When set, binary files (screenshots, request/response text) are encrypted
+   * at rest using AES-256-GCM with per-file derived keys.
+   * Requires the master key to be loaded via EncryptionManager.getMasterKey().
+   */
+  setEncryption(engagementId: string): void {
+    this.encryptionEngagementId = engagementId
+  }
+
+  /**
+   * Check if encryption is active (engagement ID set + master key cached).
+   */
+  private _isEncrypted(): boolean {
+    return this.encryptionEngagementId !== null && EncryptionManager.getCachedMasterKey() !== null
+  }
+
+  /**
+   * Get the master key for encryption. Returns null if not available.
+   */
+  private _getMasterKey(): Buffer | null {
+    return EncryptionManager.getCachedMasterKey()
   }
 
   private async ensureDir(path: string): Promise<void> {
@@ -142,13 +172,22 @@ export class EvidenceCollector {
     await this.ensureDir(dir)
     const fileName = `request-${Date.now()}-${randomBytes(4).toString("hex")}.txt`
     const filePath = join(dir, fileName)
-    await writeFile(filePath, request)
+    const plaintext = Buffer.from(request, "utf-8")
+    const relativePath = join("requests", fileName)
+
+    if (this._isEncrypted()) {
+      const masterKey = this._getMasterKey()!
+      const fileId = EncryptedFileHandle.fileIdFromPath(relativePath)
+      EncryptedFileHandle.writeEncrypted(filePath, plaintext, masterKey, this.encryptionEngagementId!, fileId)
+    } else {
+      await writeFile(filePath, plaintext)
+    }
 
     return {
-      path: join("requests", fileName),
-      hash: createHash("sha256").update(request).digest("hex"),
+      path: relativePath,
+      hash: createHash("sha256").update(plaintext).digest("hex"),
       type: "request" as const,
-      size_bytes: Buffer.byteLength(request),
+      size_bytes: plaintext.length,
     }
   }
 
@@ -160,13 +199,22 @@ export class EvidenceCollector {
     await this.ensureDir(dir)
     const fileName = `response-${Date.now()}-${randomBytes(4).toString("hex")}.txt`
     const filePath = join(dir, fileName)
-    await writeFile(filePath, response)
+    const plaintext = Buffer.from(response, "utf-8")
+    const relativePath = join("responses", fileName)
+
+    if (this._isEncrypted()) {
+      const masterKey = this._getMasterKey()!
+      const fileId = EncryptedFileHandle.fileIdFromPath(relativePath)
+      EncryptedFileHandle.writeEncrypted(filePath, plaintext, masterKey, this.encryptionEngagementId!, fileId)
+    } else {
+      await writeFile(filePath, plaintext)
+    }
 
     return {
-      path: join("responses", fileName),
-      hash: createHash("sha256").update(response).digest("hex"),
+      path: relativePath,
+      hash: createHash("sha256").update(plaintext).digest("hex"),
       type: "response" as const,
-      size_bytes: Buffer.byteLength(response),
+      size_bytes: plaintext.length,
     }
   }
 
@@ -178,10 +226,18 @@ export class EvidenceCollector {
     await this.ensureDir(dir)
     const fileName = `screenshot-${Date.now()}-${randomBytes(4).toString("hex")}.png`
     const filePath = join(dir, fileName)
-    await writeFile(filePath, screenshotBuffer)
+    const relativePath = join("screenshots", fileName)
+
+    if (this._isEncrypted()) {
+      const masterKey = this._getMasterKey()!
+      const fileId = EncryptedFileHandle.fileIdFromPath(relativePath)
+      EncryptedFileHandle.writeEncrypted(filePath, screenshotBuffer, masterKey, this.encryptionEngagementId!, fileId)
+    } else {
+      await writeFile(filePath, screenshotBuffer)
+    }
 
     return {
-      path: join("screenshots", fileName),
+      path: relativePath,
       hash: createHash("sha256").update(screenshotBuffer).digest("hex"),
       type: "screenshot" as const,
       size_bytes: screenshotBuffer.length,

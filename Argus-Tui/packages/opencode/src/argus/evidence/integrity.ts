@@ -3,6 +3,7 @@ import { createHash } from "crypto"
 import { join } from "path"
 import type { EvidenceManifest, IntegrityReport } from "./types"
 import { computePackageHash } from "./hash"
+import { EncryptedFileHandle } from "../storage/encrypted-file"
 
 function hashFile(filePath: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -14,7 +15,22 @@ function hashFile(filePath: string): Promise<string> {
   })
 }
 
-export async function verifyPackage(baseDir: string, engagementId: string, packageId: string): Promise<IntegrityReport> {
+export interface VerifyPackageOptions {
+  /**
+   * Master key for decrypting encrypted evidence files.
+   * If provided, artifact files are decrypted before hash verification.
+   * The SHA-256 hash in the manifest is computed on the PLAINTEXT,
+   * so files must be decrypted before hashing for correct integrity check.
+   */
+  masterKey?: Buffer
+}
+
+export async function verifyPackage(
+  baseDir: string,
+  engagementId: string,
+  packageId: string,
+  options?: VerifyPackageOptions,
+): Promise<IntegrityReport> {
   if (!/^[\w-]+$/.test(packageId)) {
     return { valid: false, packageId, manifestHash: "", computedHash: "", errors: ["Invalid package ID"] }
   }
@@ -53,7 +69,27 @@ export async function verifyPackage(baseDir: string, engagementId: string, packa
       errors.push(`Artifact missing: ${artifact.path}`)
       continue
     }
-    const actualHash = await hashFile(artifactPath)
+
+    let actualHash: string
+    if (options?.masterKey) {
+      // Encrypted file: decrypt first, then hash the plaintext
+      const fileId = EncryptedFileHandle.fileIdFromPath(artifact.path)
+      try {
+        const plaintext = EncryptedFileHandle.readEncrypted(
+          artifactPath,
+          options.masterKey,
+          engagementId,
+          fileId,
+        )
+        actualHash = createHash("sha256").update(plaintext).digest("hex")
+      } catch {
+        errors.push(`Failed to decrypt ${artifact.path} — file may be corrupted or key may be wrong`)
+        continue
+      }
+    } else {
+      actualHash = await hashFile(artifactPath)
+    }
+
     if (actualHash !== artifact.hash) {
       errors.push(`Hash mismatch for ${artifact.path}: expected ${artifact.hash}, got ${actualHash}`)
     }
