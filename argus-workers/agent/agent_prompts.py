@@ -859,13 +859,80 @@ _PROMPT_INJECTION_PATTERNS = [
     r"(?i)system\s+prompt\s*(=|\s+is\s*)",
 ]
 
+# Secret/credential patterns that must be redacted before any data enters LLM context.
+# These prevent exfiltration of session tokens, API keys, passwords, and other
+# sensitive data recovered during scanning to third-party LLM providers.
+_SECRET_REDACTION_PATTERNS: list[tuple[str, str]] = [
+    # Bearer tokens and Authorization headers
+    (r"(?i)(Authorization|Proxy-Authorization)\s*:\s*Bearer\s+\S+",
+     r"\g<1>: Bearer __REDACTED_BEARER_TOKEN__"),
+    (r"(?i)(Authorization|Proxy-Authorization)\s*:\s*Basic\s+\S+",
+     r"\g<1>: Basic __REDACTED_BASIC_AUTH__"),
+    # Cookie / Set-Cookie headers (redact full cookie value, keep name=REDACTED)
+    (r"(?i)(Set-Cookie|Cookie)\s*:\s*[^\r\n]+",
+     r"\g<1>: __REDACTED_COOKIE__"),
+    # JWT tokens (eyJ... format with two or three dot-separated base64 segments)
+    (r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",
+     r"__REDACTED_JWT_TOKEN__"),
+    (r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",
+     r"__REDACTED_JWT_TOKEN__"),
+    # API keys: sk-... (OpenAI), sk-proj-... (OpenAI project-scoped),
+    # sk-ant-... (Anthropic), AIza... (Gemini)
+    (r"(?i)sk-[A-Za-z0-9]{20,}", r"__REDACTED_API_KEY__"),
+    (r"(?i)sk-proj-[A-Za-z0-9_-]{20,}", r"__REDACTED_API_KEY__"),
+    (r"(?i)sk-ant-[A-Za-z0-9]{20,}", r"__REDACTED_API_KEY__"),
+    (r"(?i)AIza[0-9A-Za-z_-]{35}", r"__REDACTED_API_KEY__"),
+    # AWS access keys (AKIA... + secret key)
+    (r"AKIA[0-9A-Z]{16}", r"__REDACTED_AWS_KEY__"),
+    (r"(?i)aws[_-]secret[_-]access[_-]key\s*[:=]\s*\S+",
+     r"aws_secret_access_key=__REDACTED__"),
+    (r"(?i)aws[_-]access[_-]key[_-]id\s*[:=]\s*\S+",
+     r"aws_access_key_id=__REDACTED__"),
+    # GitHub tokens
+    (r"ghp_[A-Za-z0-9]{36}", r"__REDACTED_GITHUB_TOKEN__"),
+    (r"gho_[A-Za-z0-9]{36}", r"__REDACTED_GITHUB_OAUTH__"),
+    (r"ghu_[A-Za-z0-9]{36}", r"__REDACTED_GITHUB_TOKEN__"),
+    (r"ghs_[A-Za-z0-9]{36}", r"__REDACTED_GITHUB_TOKEN__"),
+    (r"ghr_[A-Za-z0-9]{36}", r"__REDACTED_GITHUB_TOKEN__"),
+    # Slack tokens
+    (r"xox[baprs]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-z0-9]{32}",
+     r"__REDACTED_SLACK_TOKEN__"),
+    # Generic password / secret / token patterns in key=value form
+    (r"(?i)(password|passwd|pwd)\s*[:=]\s*[\"']?[^\s\"'&,;){]+[\"']?",
+     r"\g<1>=__REDACTED_PASSWORD__"),
+    (r"(?i)(secret|api[_-]?key|api[_-]?token|access[_-]?token)\s*[:=]\s*[\"']?[^\s\"'&,;){]+[\"']?",
+     r"\g<1>=__REDACTED_SECRET__"),
+    # Private keys (RSA, EC, DSA, OPENSSH, PGP) — must use (?s) dotall
+    # flag so .+? matches across newlines in the PEM-encoded key body.
+    (r"(?s)-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----.+?-----END\s+(RSA\s+)?PRIVATE\s+KEY-----",
+     r"__REDACTED_PRIVATE_KEY__"),
+    (r"(?s)-----BEGIN\s+OPENSSH\s+PRIVATE\s+KEY-----.+?-----END\s+OPENSSH\s+PRIVATE\s+KEY-----",
+     r"__REDACTED_PRIVATE_KEY__"),
+    (r"(?s)-----BEGIN\s+PGP\s+PRIVATE\s+KEY\s+BLOCK-----.+?-----END\s+PGP\s+PRIVATE\s+KEY\s+BLOCK-----",
+     r"__REDACTED_PRIVATE_KEY__"),
+    # Database connection strings (contains credentials in URL userinfo)
+    (r"(postgresql|postgres|mysql|mongodb|mongodb\+srv|redis|rediss)://[^\s@]+@",
+     r"\g<1>://__REDACTED_CREDS__@"),
+    # Generic URL-embedded credentials: http://user:pass@host
+    (r"https?://[^\s/:]+:[^\s@]+@", r"https://__REDACTED_CREDS__@"),
+]
+
 
 def _sanitize_for_llm(text: str) -> str:
-    """Remove prompt injection patterns from tool output before feeding to LLM.
+    """Remove prompt injection patterns AND redact secrets from tool output
+    before feeding to LLM.
 
     Truncates to 3000 chars, strips control characters, replaces backtick
     fences, and redacts known injection patterns to prevent prompt injection
     from attacker-controlled target servers.
+
+    Also redacts credentials, tokens, passwords, API keys, private keys,
+    database URLs, and other secrets to prevent exfiltration of recovered
+    data to third-party LLM providers (C-v3-20).
+
+    This is the SINGLE entry point for all external data entering LLM context.
+    Every caller (observation history, recon context, synthesis prompts,
+    report prompts) goes through this function.
     """
     import re as _re
 
@@ -878,6 +945,11 @@ def _sanitize_for_llm(text: str) -> str:
     # Replace injection patterns with redacted markers
     for pattern in _PROMPT_INJECTION_PATTERNS:
         text = _re.sub(pattern, "[REDACTED_INJECTION]", text)
+    # ── Secret/credential redaction (C-v3-20) ──
+    # Run AFTER prompt injection patterns so redacted markers are not
+    # themselves matched by injection patterns.
+    for pattern, replacement in _SECRET_REDACTION_PATTERNS:
+        text = _re.sub(pattern, replacement, text)
     return text
 
 
