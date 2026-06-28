@@ -78,6 +78,35 @@ def setup_logging():
 
 logger = setup_logging()
 
+# ── Startup guard: AUTH_CHECKPOINT_KEY ──
+# Auth checkpoints store session tokens (cookies, Bearer tokens, CSRF tokens)
+# that MUST be encrypted at rest. The key must be set before any task runs.
+# A loud warning is emitted at import time so missing config is obvious.
+# (C-v4-02: mandatory encryption for all persisted auth state)
+_AUTH_CHECKPOINT_KEY = os.environ.get("AUTH_CHECKPOINT_KEY")
+if not _AUTH_CHECKPOINT_KEY:
+    logger.warning(
+        "AUTH_CHECKPOINT_KEY is not set. Auth checkpoints contain session "
+        "tokens that MUST be encrypted at rest. Without this key, the agent "
+        "cannot save authentication state across worker restarts. "
+        "Generate a key with: python3 -c \"from cryptography.fernet import Fernet; "
+        "print(Fernet.generate_key().decode())\""
+    )
+else:
+    # Validate the key is a valid Fernet key so the failure is loud at startup
+    # rather than silently failing when the first checkpoint is saved.
+    try:
+        from cryptography.fernet import Fernet
+        Fernet(_AUTH_CHECKPOINT_KEY.encode())
+        logger.info("AUTH_CHECKPOINT_KEY is present and valid")
+    except Exception as e:
+        logger.error(
+            "AUTH_CHECKPOINT_KEY is invalid: %s. Generate a valid Fernet key with: "
+            "python3 -c \"from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())\"",
+            e,
+        )
+
 # Get configuration from shared config (single source of truth)
 from config.redis import REDIS_URL  # noqa: E402
 
