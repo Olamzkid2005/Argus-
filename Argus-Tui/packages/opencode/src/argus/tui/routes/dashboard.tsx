@@ -4,7 +4,7 @@
  * Shows key metrics, recent engagements, and quick actions.
  * This replaces the chat-based Home route as the primary landing page.
  */
-import { createSignal, onMount, For, Show } from "solid-js"
+import { createSignal, onMount, For, Show, createResource } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useRoute } from "@tui/context/route"
 import { Toast, useToast } from "@tui/ui/toast"
@@ -30,6 +30,26 @@ export function ArgusDashboard() {
   const [data, setData] = createSignal<DashboardData | null>(null)
   const [loading, setLoading] = createSignal(true)
   const toast = useToast()
+
+  const [encryptionStatus] = createResource(async () => {
+    try {
+      const { EncryptionManager } = await import("@/argus/storage/encryption")
+      // Use isInitialized() only — it checks whether a key *exists* without
+      // retrieving it from the OS keychain, avoiding an auth prompt on mount.
+      // Full detail (fingerprint, keychain vs file) is available via the
+      // /encryption status slash command when the user explicitly asks for it.
+      const initialized = await EncryptionManager.isInitialized()
+      if (!initialized) {
+        return { ready: false, fileBased: false }
+      }
+      return {
+        ready: true,
+        fileBased: EncryptionManager.isFileBased(),
+      }
+    } catch {
+      return { ready: false, fileBased: false }
+    }
+  })
 
   onMount(async () => {
     try {
@@ -138,7 +158,18 @@ export function ArgusDashboard() {
         <box flexGrow={1} />
         <box flexDirection="row" justifyContent="space-between" border={["top"]} borderColor={theme.textMuted} paddingTop={1}>
           <text fg={theme.textMuted}>ARGUS v5</text>
-          <text fg={theme.success}>● Ready</text>
+          <box flexDirection="row" gap={2}>
+            {/* Encryption indicator — uses isInitialized() only, avoids OS keychain auth prompt */}
+            <Show when={encryptionStatus() !== undefined}>
+              <Show
+                when={encryptionStatus()?.ready}
+                fallback={<text fg={theme.textMuted}>○ No encryption key</text>}
+              >
+                <text fg={theme.success}>🔒 Key present</text>
+              </Show>
+            </Show>
+            <text fg={theme.success}>● Ready</text>
+          </box>
         </box>
       </Show>
       <Toast />

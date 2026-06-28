@@ -14,6 +14,10 @@ evidence:
   max_engagement_size_mb: 500
   capture_threshold: HIGH
 
+storage:
+  encryption:
+    enabled: false  # Encrypt engagement databases at rest (requires: argus encryption init)
+
 security:
   allowed_git_hosts: []
   # Target scope enforcement — hard technical guardrails preventing scans

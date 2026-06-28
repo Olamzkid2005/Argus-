@@ -4,7 +4,7 @@
  * Shows key metrics and quick links to all assessment resources.
  * The primary navigation hub for the Argus platform.
  */
-import { createSignal, onMount, Show } from "solid-js"
+import { createSignal, onMount, Show, createResource } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useRoute } from "@tui/context/route"
 import { Toast, useToast } from "@tui/ui/toast"
@@ -18,6 +18,16 @@ export function Workspace() {
   const [criticalCount, setCriticalCount] = createSignal(0)
   const [loading, setLoading] = createSignal(true)
   const toast = useToast()
+
+  const [encryptionStatus] = createResource(async () => {
+    try {
+      const { EncryptionManager } = await import("@/argus/storage/encryption")
+      const initialized = await EncryptionManager.isInitialized()
+      return initialized ? { ready: true, fileBased: EncryptionManager.isFileBased() } : { ready: false, fileBased: false }
+    } catch {
+      return { ready: false, fileBased: false }
+    }
+  })
 
   onMount(async () => {
     try {
@@ -114,7 +124,22 @@ export function Workspace() {
         </box>
       </box>
 
-      <box flexGrow={1} />
+      {/* Status bar */}
+      <box flexDirection="row" justifyContent="space-between" border={["top"]} borderColor={theme.textMuted} paddingTop={1}>
+        <text fg={theme.textMuted}>ARGUS v5</text>
+        <box flexDirection="row" gap={2}>
+          <Show when={encryptionStatus() !== undefined}>
+            <Show
+              when={encryptionStatus()?.ready}
+              fallback={<text fg={theme.textMuted}>○ No encryption key</text>}
+            >
+              <text fg={theme.success}>🔒 Key present</text>
+            </Show>
+          </Show>
+          <text fg={theme.success}>● Ready</text>
+        </box>
+      </box>
+
       <Toast />
     </box>
   )
