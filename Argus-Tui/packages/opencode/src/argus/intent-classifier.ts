@@ -41,6 +41,7 @@ export const SLASH_COMMANDS = new Set([
   "config", "status",
   "help",
   "quit", "exit",
+  "encryption", "encrypt",
 ])
 
 export function detectSlashCommand(input: string): ClassifiedIntent | null {

@@ -7,6 +7,7 @@ import type { ProgressCallback } from "./shared/progress"
 import { verifyCommand } from "./commands/verify"
 import { evidenceCommand } from "./commands/evidence"
 import { configCommand } from "./commands/config"
+import { encryptionCommand } from "./commands/encryption"
 import { Feature, getFeatureFlags } from "./config/feature-flags"
 import { MCP_WORKER_PATH } from "./shared/path"
 
@@ -175,6 +176,70 @@ export const ArgusConfigCommand = {
     const output = await configCommand(filter)
       .catch((e: Error) => `[Argus] config error: ${e.message}`)
     process.stdout.write(output + "\n")
+  },
+}
+
+export const ArgusEncryptionCommand = {
+  command: "encryption <action>",
+  describe: "Manage encryption-at-rest (master key lifecycle)",
+  builder: (yargs: Argv) =>
+    yargs
+      .positional("action", {
+        describe: "Action: init, status, on, off, export, import, decrypt",
+        type: "string", demandOption: true,
+        choices: ["init", "status", "on", "off", "export", "import", "decrypt"] as const,
+      })
+      .option("passphrase", {
+        describe: "Passphrase for key export/import",
+        type: "string",
+      })
+      .option("output", {
+        describe: "Output file path for key export, or output directory for decrypt",
+        type: "string",
+      })
+      .option("input", {
+        describe: "Input file path for key import",
+        type: "string",
+      })
+      .option("engagement", {
+        describe: "Engagement ID to decrypt (required for decrypt action)",
+        type: "string",
+      }),
+  handler: async (argv: Record<string, unknown>) => {
+    const action = argv.action as "init" | "status" | "on" | "off" | "export" | "import" | "decrypt"
+    const passphrase = argv.passphrase as string | undefined
+    const output = argv.output as string | undefined
+    const input = argv.input as string | undefined
+    const engagement = argv.engagement as string | undefined
+    const result = await encryptionCommand(action, { passphrase, output, input, engagement })
+      .catch((e: Error) => `[Argus] encryption error: ${e.message}`)
+    process.stdout.write(result + "\n")
+  },
+}
+
+export const ArgusDecryptCommand = {
+  command: "decrypt",
+  describe: "Emergency plaintext export of an encrypted engagement database",
+  builder: (yargs: Argv) =>
+    yargs
+      .option("engagement", {
+        alias: "e",
+        describe: "Engagement ID to decrypt",
+        type: "string",
+        demandOption: true,
+      })
+      .option("output", {
+        alias: "o",
+        describe: "Output directory for the decrypted SQLite file",
+        type: "string",
+        demandOption: true,
+      }),
+  handler: async (argv: Record<string, unknown>) => {
+    const engagement = argv.engagement as string
+    const output = argv.output as string
+    const result = await encryptionCommand("decrypt", { engagement, output })
+      .catch((e: Error) => `[Argus] decrypt error: ${e.message}`)
+    process.stdout.write(result + "\n")
   },
 }
 

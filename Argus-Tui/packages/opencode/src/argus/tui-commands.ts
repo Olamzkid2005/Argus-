@@ -311,6 +311,7 @@ const commands: ArgusTuiCommand[] = [
         "**System**",
         `  /doctor            ${all.find((c) => c.name === "doctor")?.description ?? "Health checks"}`,
         `  /status            ${all.find((c) => c.name === "status")?.description ?? "System status"}`,
+        `  /encryption        ${all.find((c) => c.name === "encryption")?.description ?? "Manage encryption at rest"}`,
         `  /config            ${all.find((c) => c.name === "config")?.description ?? "Configuration"}`,
         "",
         // Data
@@ -424,6 +425,70 @@ const commands: ArgusTuiCommand[] = [
       const tokens = args.trim().split(/\s+/).filter(Boolean)
       const action = (tokens[0] ?? "list") as "list" | "show" | "prune" | "verify-package"
       return await evidenceCommand(action, tokens.slice(1))
+    },
+  },
+  {
+    name: "encryption",
+    title: "Manage encryption at rest",
+    description: "Show encryption status, enable, or disable encryption at rest",
+    slashes: ["encryption", "encrypt"],
+    needsTarget: false,
+    handler: async (args: string) => {
+      const { EncryptionManager, EncryptionError } = await import("./storage/encryption")
+      const tokens = args.trim().split(/\s+/).filter(Boolean)
+      const action = tokens[0] ?? "status"
+
+      switch (action) {
+        case "status": {
+          try {
+            const { EngagementStore } = await import("./engagement/store")
+            const key = await EncryptionManager.getMasterKey()
+            if (!key) {
+              return [
+                "✗ Encryption is NOT initialized.",
+                "",
+                "  No master key found.",
+                "  Run `argus encryption init` from the CLI to set up encryption.",
+              ].join("\n")
+            }
+            const storeEnabled = EngagementStore.encryptionEnabled
+            const keyCached = EncryptionManager.isCached()
+            return [
+              `✓ Encryption-at-rest: ${storeEnabled ? "ENABLED" : "DISABLED"}`,
+              `  Key: ${key.subarray(0, 4).toString("hex")}... (256-bit AES-GCM)`,
+              `  Cache: ${keyCached ? "loaded" : "expired (re-quired on next access)"}`,
+              `  Storage: ${EncryptionManager.isFileBased() ? "File-based (~/.argus/.master-key.enc)" : "macOS Keychain"}`,
+              "",
+              `  To ${storeEnabled ? "disable" : "enable"}, type /encryption ${storeEnabled ? "off" : "on"}`,
+            ].join("\n")
+          } catch (err) {
+            const msg = err instanceof EncryptionError ? err.message : String(err)
+            return `✗ ${msg}`
+          }
+        }
+        case "on": {
+          try {
+            const initialized = await EncryptionManager.isInitialized()
+            if (!initialized) {
+              return "✗ Cannot enable encryption: no master key found. Run `argus encryption init` from the CLI first."
+            }
+            await EncryptionManager.requireMasterKey()
+            const { EngagementStore } = await import("./engagement/store")
+            EngagementStore.encryptionEnabled = true
+            return "✓ Encryption-at-rest is now ENABLED. New engagements will be encrypted."
+          } catch (err) {
+            const msg = err instanceof EncryptionError ? err.message : String(err)
+            return `✗ ${msg}`
+          }
+        }
+        case "off": {
+          const { EngagementStore } = await import("./engagement/store")
+          EngagementStore.encryptionEnabled = false
+          return "✗ Encryption-at-rest is now DISABLED. Existing encrypted engagements remain encrypted."
+        }
+        default:
+          return `Unknown action: "${action}". Usage: /encryption [status|on|off]`
+      }
     },
   },
 ]

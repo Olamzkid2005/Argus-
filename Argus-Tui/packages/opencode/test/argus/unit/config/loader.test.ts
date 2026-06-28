@@ -70,6 +70,20 @@ describe("ConfigLoader", () => {
     expect(result.evidence?.capture_threshold).toBe(Confidence.HIGH)
   })
 
+  it("loadFrom() parses storage.encryption.enabled", () => {
+    const dir = makeDir()
+    const filePath = makeFile(dir, 'storage:\n  encryption:\n    enabled: true')
+    const result = ConfigLoader.loadFrom(filePath)
+    expect(result.storage?.encryption?.enabled).toBe(true)
+  })
+
+  it("loadFrom() defaults storage.encryption.enabled to false", () => {
+    const dir = makeDir()
+    const filePath = makeFile(dir, 'features:\n  x: true')
+    const result = ConfigLoader.loadFrom(filePath)
+    expect(result.storage).toBeUndefined()
+  })
+
   it("loadProjectConfig() returns valid config matching loadFrom result", () => {
     const result = ConfigLoader.loadProjectConfig()
     const expected = ConfigLoader.loadFrom(ConfigLoader.PROJECT_CONFIG_PATH)

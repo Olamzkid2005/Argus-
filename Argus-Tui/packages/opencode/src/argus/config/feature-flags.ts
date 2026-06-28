@@ -24,6 +24,7 @@ export enum Feature {
   DETERMINISTIC_FALLBACK = "deterministic_fallback",
   APPROVAL_GATES = "approval_gates",
   LLM_FINDING_ANALYSIS = "llm_finding_analysis",
+  ENCRYPTION_AT_REST = "encryption_at_rest",
 }
 
 const DEFAULT_FEATURES: Record<Feature, boolean> = {
@@ -32,6 +33,7 @@ const DEFAULT_FEATURES: Record<Feature, boolean> = {
   [Feature.DETERMINISTIC_FALLBACK]: false,       // Opt-in (was true pre-v5)
   [Feature.APPROVAL_GATES]: false,
   [Feature.LLM_FINDING_ANALYSIS]: false,
+  [Feature.ENCRYPTION_AT_REST]: false,
 }
 
 export class FeatureFlags implements IFeatureFlags {

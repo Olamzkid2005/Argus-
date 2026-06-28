@@ -197,6 +197,7 @@ describe("tui-commands", () => {
       expect(result).toContain("/doctor")
       expect(result).toContain("/recon")
       expect(result).toContain("/status")
+      expect(result).toContain("/encryption")
       expect(result).toContain("/findings")
       expect(result).toContain("/engagements")
       expect(result).toContain("/tools")

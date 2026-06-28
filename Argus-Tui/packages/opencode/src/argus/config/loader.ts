@@ -34,6 +34,14 @@ const EvidenceConfigSchema = z.object({
 
 const FeaturesConfigSchema = z.record(z.string(), z.boolean())
 
+const EncryptionConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+})
+
+const StorageConfigSchema = z.object({
+  encryption: EncryptionConfigSchema.default({}),
+})
+
 const ScopeConfigSchema = z.object({
   mode: z.enum(["warn", "allowlist", "open"]).default("warn"),
   allowed_targets: z.array(z.string()).default([]),
@@ -45,6 +53,7 @@ const ScopeConfigSchema = z.object({
 const ArgusConfigSchema = z.object({
   features: FeaturesConfigSchema.optional(),
   evidence: EvidenceConfigSchema.optional(),
+  storage: StorageConfigSchema.optional(),
   security: z.object({
     scope: ScopeConfigSchema.optional(),
   }).optional(),

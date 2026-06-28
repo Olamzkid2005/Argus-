@@ -19,6 +19,7 @@ beforeEach(async () => {
     verify: cli.ArgusVerifyCommand,
     evidence: cli.ArgusEvidenceCommand,
     config: cli.ArgusConfigCommand,
+    encryption: cli.ArgusEncryptionCommand,
     findings: cli.ArgusFindingsCommand,
     engagements: cli.ArgusEngagementsCommand,
     workflows: cli.ArgusWorkflowsCommand,
@@ -57,6 +58,10 @@ describe("command definition strings", () => {
 
   test("config [filter]", () => {
     expect(cmdDefs.config.command).toBe("config [filter]")
+  })
+
+  test("encryption <action>", () => {
+    expect(cmdDefs.encryption.command).toBe("encryption <action>")
   })
 
   test("findings [engagement-id]", () => {
@@ -100,7 +105,9 @@ describe("assess handler", () => {
 })
 
 describe("doctor handler", () => {
-  test("writes results to stdout without crashing", async () => {
+  test(
+    "writes results to stdout without crashing",
+    async () => {
     const spy = mock(() => {}) as any
     const orig = process.stdout.write
     process.stdout.write = spy

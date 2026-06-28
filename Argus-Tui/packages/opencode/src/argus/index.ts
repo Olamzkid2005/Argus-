@@ -28,6 +28,7 @@ import {
   ArgusVerifyCommand,
   ArgusEvidenceCommand,
   ArgusConfigCommand,
+  ArgusEncryptionCommand,
   ArgusToolsCommand,
   ArgusFindingsCommand,
   ArgusEngagementsCommand,
@@ -100,6 +101,7 @@ async function main() {
       .command(ArgusEvidenceCommand)
       .command(ArgusFindingsCommand)
       .command(ArgusConfigCommand)
+      .command(ArgusEncryptionCommand)
       .command(ArgusToolsCommand)
       .command(ArgusEngagementsCommand)
       .command(ArgusWorkflowsCommand)

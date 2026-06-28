@@ -13,6 +13,7 @@ describe("FeatureFlags", () => {
     expect(flags.isEnabled(Feature.WORKFLOW_REGISTRY)).toBe(false)
     expect(flags.isEnabled(Feature.ENGAGEMENT_STORE)).toBe(false)
     expect(flags.isEnabled(Feature.APPROVAL_GATES)).toBe(false)
+    expect(flags.isEnabled(Feature.ENCRYPTION_AT_REST)).toBe(false)
   })
 
   test("DETERMINISTIC_FALLBACK defaults to false (opt-in)", () => {
