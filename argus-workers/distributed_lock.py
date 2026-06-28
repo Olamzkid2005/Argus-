@@ -103,7 +103,7 @@ class DistributedLock:
 
         # Try to acquire lock with NX flag and expiration
         acquired = self._with_reconnect(
-            self.redis_client.set,
+            "set",
             lock_key,
             self.worker_id,
             nx=True,  # Only set if not exists
@@ -119,7 +119,7 @@ class DistributedLock:
             return True
 
         # Check if we already hold this lock
-        current_holder = self._with_reconnect(self.redis_client.get, lock_key)
+        current_holder = self._with_reconnect("get", lock_key)
         if current_holder and current_holder.decode("utf-8") == self.worker_id:
             # We already hold this lock — extend it to prevent expiry during long operations
             self.extend(engagement_id)
@@ -168,7 +168,7 @@ class DistributedLock:
         # Execute Lua script with auto-reconnect (M6)
         try:
             result = self._with_reconnect(
-                self.redis_client.eval, lua_script, 1, lock_key, self.worker_id
+                "eval", lua_script, 1, lock_key, self.worker_id
             )
         except Exception:
             # Redis unavailable — don't touch held_locks, attempt to close cleanly
@@ -212,7 +212,7 @@ class DistributedLock:
         # Use SET with XX (update only if exists) to refresh TTL atomically
         # This is simpler and safer than the Lua script approach
         result = self._with_reconnect(
-            self.redis_client.set,
+            "set",
             lock_key,
             self.worker_id,
             xx=True,  # Only update if key exists
@@ -242,7 +242,7 @@ class DistributedLock:
         """
         lock_key = f"engagement_lock:{engagement_id}"
         try:
-            return self._with_reconnect(self.redis_client.exists, lock_key) > 0
+            return self._with_reconnect("exists", lock_key) > 0
         except Exception:
             logger.debug("Failed to check lock for %s", engagement_id)
             return False
@@ -259,7 +259,7 @@ class DistributedLock:
         """
         lock_key = f"engagement_lock:{engagement_id}"
         try:
-            holder = self._with_reconnect(self.redis_client.get, lock_key)
+            holder = self._with_reconnect("get", lock_key)
         except Exception:
             logger.debug("Failed to get lock holder for %s", engagement_id)
             return None

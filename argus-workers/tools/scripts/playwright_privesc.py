@@ -73,8 +73,14 @@ if __name__ == "__main__":
     parser.add_argument("--target", required=True)
     parser.add_argument(
         "--creds-file",
-        required=True,
+        default=None,
         help="Path to JSON file with low-privilege credentials",
+    )
+    parser.add_argument(
+        "--low-priv-username", default=None, help="Low-privilege user username"
+    )
+    parser.add_argument(
+        "--low-priv-password", default=None, help="Low-privilege user password"
     )
     parser.add_argument("--admin-paths", default=",".join(DEFAULT_ADMIN_PATHS))
     parser.add_argument(
@@ -94,8 +100,15 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    with open(args.creds_file) as f:
-        creds = json.load(f)
+    if args.creds_file:
+        with open(args.creds_file) as f:
+            creds = json.load(f)
+    elif args.low_priv_username and args.low_priv_password:
+        creds = {"username": args.low_priv_username, "password": args.low_priv_password}
+    else:
+        parser.error(
+            "Either --creds-file or --low-priv-username/--low-priv-password must be provided"
+        )
 
     admin_paths = [p.strip() for p in args.admin_paths.split(",") if p.strip()]
 

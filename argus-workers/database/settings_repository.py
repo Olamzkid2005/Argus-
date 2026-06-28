@@ -64,9 +64,10 @@ class SettingsRepository:
         """
         try:
             with db_cursor() as cursor:
+                # user_settings has user_id (TEXT UNIQUE) and settings (JSONB)
                 cursor.execute(
-                    "SELECT value FROM user_settings WHERE user_email = %s AND key = %s",
-                    (user_email, key),
+                    "SELECT settings->>%s FROM user_settings WHERE user_id = %s",
+                    (key, user_email),
                 )
                 row = cursor.fetchone()
                 value = row[0] if row else None
@@ -87,12 +88,21 @@ class SettingsRepository:
         """
         try:
             with db_cursor() as cursor:
+                # user_settings has user_id (TEXT UNIQUE) and settings (JSONB)
                 cursor.execute(
-                    "SELECT key, value FROM user_settings WHERE user_email = %s",
+                    "SELECT settings FROM user_settings WHERE user_id = %s",
                     (user_email,),
                 )
-                rows = cursor.fetchall()
-                return {row[0]: _decrypt(row[1]) for row in rows if row[1]}
+                row = cursor.fetchone()
+                settings_json = row[0] if row else {}
+                # Return decrypted values for known keys
+                result = {}
+                for k, v in settings_json.items():
+                    if isinstance(v, str):
+                        result[k] = _decrypt(v)
+                    else:
+                        result[k] = str(v)
+                return result
         except Exception as e:
             logger.error("Failed to get user settings: %s", e)
             return {}
@@ -111,14 +121,16 @@ class SettingsRepository:
         """
         try:
             with db_cursor(commit=True) as cursor:
+                # user_settings has user_id (TEXT UNIQUE) and settings (JSONB)
                 cursor.execute(
                     """
-                    INSERT INTO user_settings (user_email, key, value)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (user_email, key)
-                    DO UPDATE SET value = %s, updated_at = CURRENT_TIMESTAMP
+                    INSERT INTO user_settings (user_id, settings)
+                    VALUES (%s, jsonb_build_object(%s, to_jsonb(%s)))
+                    ON CONFLICT (user_id)
+                    DO UPDATE SET settings = user_settings.settings || jsonb_build_object(%s, to_jsonb(%s)),
+                        updated_at = CURRENT_TIMESTAMP
                 """,
-                    (user_email, key, _encrypt(value), _encrypt(value)),
+                    (user_email, key, _encrypt(value), key, _encrypt(value)),
                 )
                 return True
         except Exception as e:
@@ -138,9 +150,10 @@ class SettingsRepository:
         """
         try:
             with db_cursor(commit=True) as cursor:
+                # user_settings has user_id (TEXT UNIQUE) and settings (JSONB)
                 cursor.execute(
-                    "DELETE FROM user_settings WHERE user_email = %s AND key = %s",
-                    (user_email, key),
+                    "UPDATE user_settings SET settings = settings - %s WHERE user_id = %s",
+                    (key, user_email),
                 )
                 return True
         except Exception as e:

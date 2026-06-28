@@ -105,6 +105,25 @@ class FindingBuilder:
             "API_RATE_LIMITED",
             "API_NO_RATE_LIMIT",
             "API_RATE_LIMIT_INCONCLUSIVE",
+            # Scanner-emitted types added for autonomous compatibility
+            "EXPOSED_SECRET",
+            "MISSING_API_SECURITY_HEADERS",
+            "WILDCARD_CORS_API",
+            "GRAPHQL_INTROSPECTION_ENABLED",
+            "GRAPHQL_DEPTH_LIMIT_MISSING",
+            "EXPOSED_OPENAPI_SPEC",
+            "VERBOSE_API_ERROR",
+            "MISSING_AUTHENTICATION",
+            "JWT_ALG_NONE",
+            "JWT_HMAC_ALGORITHM",
+            "JWT_PRIVILEGE_ESCALATION",
+            "JWT_LLM_DETECTED_WEAKNESS",
+            "WEAK_API_KEY",
+            "CONFIRMED_BOLA",
+            "POTENTIAL_BOLA",
+            "BOPLA_SENSITIVE_FIELDS",
+            "ATTACK_SURFACE",
+            "SUBDOMAIN",
         }
     )
 

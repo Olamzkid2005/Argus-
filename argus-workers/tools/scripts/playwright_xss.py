@@ -71,8 +71,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True)
     parser.add_argument(
-        "--creds-file", required=True, help="Path to JSON file with login credentials"
+        "--creds-file",
+        default=None,
+        help="Path to JSON file with login credentials",
     )
+    parser.add_argument("--username", default=None, help="Login username")
+    parser.add_argument("--password", default=None, help="Login password")
     parser.add_argument("--form-page", default="/feedback")
     parser.add_argument("--payload", default=XSS_PAYLOAD)
     parser.add_argument(
@@ -92,8 +96,13 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    with open(args.creds_file) as f:
-        creds = json.load(f)
+    if args.creds_file:
+        with open(args.creds_file) as f:
+            creds = json.load(f)
+    elif args.username and args.password:
+        creds = {"username": args.username, "password": args.password}
+    else:
+        parser.error("Either --creds-file or --username/--password must be provided")
 
     findings = check_stored_xss(
         args.target,

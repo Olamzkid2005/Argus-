@@ -430,7 +430,7 @@ class FindingNormalizer:
             if cwe:
                 # Handle formats like "CWE-78", "CWE:78", "78"
                 if not cwe.startswith("CWE-"):
-                    cwe = "CWE-%s", cwe
+                    cwe = f"CWE-{cwe}"
 
                 if cwe in self.CWE_TYPE_MAPPINGS:
                     return self.CWE_TYPE_MAPPINGS[cwe]

@@ -14,6 +14,8 @@ capabilities:
   - vulnerability_scanning
 signal_quality: CANDIDATE
 risk_level: low
+phases:
+  - repo_scan
 requires:
   tech_contains:
     - python

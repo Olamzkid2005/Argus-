@@ -213,37 +213,31 @@ Both sides contain blockers. This document provides a consolidated, severity-ran
 - **Issue:** Many security tools return non-zero on findings or down hosts.
 - **Fix:** Let tool definitions declare expected return codes or parse findings regardless of exit code.
 
-### 30. Engagement store migration bug: `rmSync` not imported
-
-- **Files:** `src/argus/engagement/store.ts:42,531`
-- **Issue:** `_migratePlaintextToEncrypted` uses `rmSync` but only imports `mkdirSync, existsSync, readFileSync, writeFileSync, renameSync`.
-- **Fix:** Add `rmSync` to the fs import.
-
-### 31. Engagement store dual-DB architecture risks inconsistent state
+### 30. Engagement store dual-DB architecture risks inconsistent state
 
 - **Files:** `src/argus/engagement/store.ts`
 - **Issue:** Reads fall back to root DB; writes create/migrate per-engagement DB. A crash between writes can leave split state.
 - **Fix:** Enforce a single storage path per engagement and remove runtime fallback.
 
-### 32. Evidence manifests lack chain-of-custody metadata
+### 31. Evidence manifests lack chain-of-custody metadata
 
 - **Files:** `src/argus/evidence/types.ts`, `evidence/collector.ts`, `evidence/store.ts`
 - **Issue:** Manifests lack operator identity, source tool, phase, target URL, parent finding, and previous package reference.
 - **Fix:** Extend manifest schema and add signed audit log references.
 
-### 33. `EvidenceCollector` silently discards failures
+### 32. `EvidenceCollector` silently discards failures
 
 - **Files:** `src/argus/evidence/collector.ts`
 - **Issue:** Evidence operations are wrapped in `.catch(() => null)`; failures are invisible.
 - **Fix:** Log failures to the engagement audit log and surface them in verifier results.
 
-### 34. Credential store plaintext JSON with no rotation
+### 33. Credential store plaintext JSON with no rotation
 
 - **Files:** `src/argus/engagement/credentials.ts`
 - **Issue:** Plaintext JSON credentials; no validation, expiration, or rotation; `clear()` does not wipe the file.
 - **Fix:** Integrate with OS keychain/secret service and support rotation hints.
 
-### 35. CWE formatting bug in normalizer
+### 34. CWE formatting bug in normalizer
 
 - **Files:** `argus-workers/parsers/normalizer.py:432-433`
 - **Issue:** `cwe = "CWE-%s", cwe` creates a tuple and will crash.
@@ -270,7 +264,7 @@ Both sides contain blockers. This document provides a consolidated, severity-ran
 
 ### Phase 1 — Stabilize the Foundation (0–4 weeks)
 
-1. Fix concrete bugs: `rmSync` import, CWE tuple, feature-flag DB wiring.
+1. Fix concrete bugs: CWE tuple, feature-flag DB wiring.
 2. Implement full config precedence (CLI > env > project > user > defaults).
 3. Enable an `ARGUS_AUTONOMOUS=1` profile that flips required flags.
 4. Add KMS/Vault-backed key provider and remove 5-minute TTL for daemon mode.
@@ -844,12 +838,6 @@ This section records the most severe issues uncovered during a third, line-by-li
 - **Files:** `argus-workers/database/migrations/010_add_tool_metrics_engagement.sql:4`; `argus-workers/database/repositories/tool_metrics_repository.py:43-49`
 - **Issue:** Migration 010 alters `tool_metrics` to add `engagement_id`, but no migration creates the table.
 - **Fix:** Add migration `00x_add_tool_metrics_table.sql` before migration 010.
-
-### HIGH — Two conflicting base schemas are shipped
-
-- **Files:** `argus-workers/database/init/01-schema.sql`; `argus-workers/database/migrations/001_base_schema.sql`
-- **Issue:** `01-schema.sql` includes an `organizations` table and differs from `001_base_schema.sql`. Code assumes columns from both.
-- **Fix:** Delete the duplicate and maintain a single schema source of truth.
 
 ### HIGH — Row-level security is not enforced by most repositories
 

@@ -72,9 +72,17 @@ if __name__ == "__main__":
     parser.add_argument("--target", required=True)
     parser.add_argument(
         "--creds-file",
-        required=True,
+        default=None,
         help="Path to JSON file with attacker/victim credentials",
     )
+    parser.add_argument(
+        "--attacker-username", default=None, help="Attacker username"
+    )
+    parser.add_argument(
+        "--attacker-password", default=None, help="Attacker password"
+    )
+    parser.add_argument("--victim-username", default=None, help="Victim username")
+    parser.add_argument("--victim-password", default=None, help="Victim password")
     parser.add_argument(
         "--resource-pattern",
         default="/api/users/{username}/details",
@@ -97,8 +105,30 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    with open(args.creds_file) as f:
-        creds = json.load(f)
+    if args.creds_file:
+        with open(args.creds_file) as f:
+            creds = json.load(f)
+    elif (
+        args.attacker_username
+        and args.attacker_password
+        and args.victim_username
+        and args.victim_password
+    ):
+        creds = {
+            "attacker": {
+                "username": args.attacker_username,
+                "password": args.attacker_password,
+            },
+            "victim": {
+                "username": args.victim_username,
+                "password": args.victim_password,
+            },
+        }
+    else:
+        parser.error(
+            "Either --creds-file or --attacker-username/--attacker-password"
+            " and --victim-username/--victim-password must be provided"
+        )
 
     findings = check_bola(
         args.target,

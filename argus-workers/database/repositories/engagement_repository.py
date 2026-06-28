@@ -35,25 +35,36 @@ class EngagementRepository(BaseRepository):
         ):
             engagement_id = str(uuid.uuid4())
 
+            # Store extra fields (target_url, authorization_proof, etc.)
+            # in the metadata JSONB column to match the engagements schema.
+            metadata = dict(engagement_data.get("metadata", {}) or {})
+            if engagement_data.get("target_url"):
+                metadata["_target_url"] = engagement_data["target_url"]
+            if engagement_data.get("authorization_proof") or engagement_data.get("authorization"):
+                metadata["_authorization_proof"] = (
+                    engagement_data.get("authorization_proof")
+                    or engagement_data.get("authorization")
+                )
+            if engagement_data.get("authorized_scope"):
+                metadata["_authorized_scope"] = engagement_data["authorized_scope"]
+            if engagement_data.get("created_by"):
+                metadata["_created_by"] = engagement_data["created_by"]
+
             cursor.execute(
                 """
                 INSERT INTO engagements (
-                    id, org_id, target_url, authorization_proof,
-                    authorized_scope, status, created_by, created_at
+                    id, org_id, target, status, metadata, created_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, NOW()
+                    %s, %s, %s, %s, %s, NOW()
                 )
                 RETURNING *
                 """,
                 (
                     engagement_id,
                     engagement_data.get("org_id"),
-                    engagement_data.get("target_url"),
-                    engagement_data.get("authorization_proof")
-                    or engagement_data.get("authorization"),
-                    Json(engagement_data.get("authorized_scope", {})),
+                    engagement_data.get("target_url") or engagement_data.get("target", ""),
                     engagement_data.get("status", "created"),
-                    engagement_data.get("created_by"),
+                    Json(metadata),
                 ),
             )
             row = cursor.fetchone()
@@ -72,15 +83,12 @@ class EngagementRepository(BaseRepository):
             List of engagement dictionaries
         """
         with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
-            # Use JOINs instead of subqueries to avoid N+1 queries
             cursor.execute(
                 """
                 SELECT
                     e.*,
-                    u.email as created_by_email,
                     COALESCE(f.findings_count, 0) as findings_count
                 FROM engagements e
-                LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN (
                     SELECT engagement_id, COUNT(*) as findings_count
                     FROM findings
@@ -110,15 +118,12 @@ class EngagementRepository(BaseRepository):
             List of active engagement dictionaries
         """
         with self.db_operation(cursor_factory=RealDictCursor) as (conn, cursor):
-            # Use JOINs instead of subqueries to avoid N+1 queries
             cursor.execute(
                 """
                 SELECT
                     e.*,
-                    u.email as created_by_email,
                     COALESCE(f.findings_count, 0) as findings_count
                 FROM engagements e
-                LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN (
                     SELECT engagement_id, COUNT(*) as findings_count
                     FROM findings

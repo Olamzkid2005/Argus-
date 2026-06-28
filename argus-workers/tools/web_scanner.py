@@ -59,6 +59,55 @@ from utils.logging_utils import ScanLogger
 logger = logging.getLogger(__name__)
 
 
+def _is_private_ip(hostname: str) -> bool:
+    """Check if a hostname resolves to a private/loopback/link-local IP.
+
+    Performs a DNS lookup and checks if any resolved address falls within
+    private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16),
+    loopback (127.0.0.0/8, ::1), or link-local (169.254.0.0/16).
+
+    Returns True if the hostname resolves to a private address, or if
+    resolution fails (fail-closed for safety).
+    """
+    import socket as _socket
+    import ipaddress as _ipaddress
+
+    try:
+        addrs = _socket.getaddrinfo(hostname, None)
+        for family, _, _, _, sockaddr in addrs:
+            ip_str = sockaddr[0]
+            try:
+                addr = _ipaddress.ip_address(ip_str)
+                if addr.is_private or addr.is_loopback or addr.is_link_local:
+                    return True
+            except ValueError:
+                continue
+        return False
+    except Exception:
+        # Fail-closed: if we can't resolve, treat as unsafe
+        return True
+
+
+def _validate_redirect_chain(url: str, target_url: str) -> bool:
+    """Validate a redirect target against scope and private IP checks.
+
+    Returns True if the redirect is safe (in scope and not a private IP),
+    False otherwise.
+    """
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+        if not hostname:
+            return False
+        # Check private IP first (fail-closed)
+        if _is_private_ip(hostname):
+            return False
+        # Check scope
+        return _is_in_scope(url, target_url)
+    except Exception:
+        return False
+
+
 def _is_in_scope(url: str, target_url: str) -> bool:
     """Check if a URL is within the scan scope using proper host matching.
 
@@ -619,10 +668,14 @@ class WebScanner(AbstractTool):
         # Pre-flight: test SSL/TLS connectivity. If a cert error occurs,
         # report it as a finding and retry with verification disabled so
         # the rest of the scan can proceed against self-signed/internal certs.
+        #
+        # Redirects are followed manually with scope validation to prevent SSRF
+        # via open redirect chains (H-v3-24).
         try:
             resp = self.session.get(
-                self.target_url, timeout=self.timeout, allow_redirects=True
+                self.target_url, timeout=self.timeout, allow_redirects=False
             )
+            resp = self._follow_redirects_safe(resp)
             self._base_response = resp
         except requests.exceptions.SSLError as e:
             logger.warning(
@@ -637,8 +690,9 @@ class WebScanner(AbstractTool):
             unverified_session.verify = False
             try:
                 resp = unverified_session.get(
-                    self.target_url, timeout=self.timeout, allow_redirects=True
+                    self.target_url, timeout=self.timeout, allow_redirects=False
                 )
+                resp = self._follow_redirects_safe(resp, session=unverified_session)
                 self._base_response = resp
             except Exception as retry_err:
                 logger.error(
@@ -769,6 +823,68 @@ class WebScanner(AbstractTool):
             confidence=0.85,
         )
 
+    def _follow_redirects_safe(
+        self,
+        resp: requests.Response | None,
+        session: requests.Session | None = None,
+        max_redirects: int = 5,
+    ) -> requests.Response | None:
+        """Manually follow HTTP redirects with scope and private-IP validation.
+
+        After the initial request is made (with ``allow_redirects=False``),
+        this method walks the ``Location`` header chain, validating each
+        redirect target against ``_validate_redirect_chain``.
+
+        If a redirect target is out of scope or resolves to a private IP,
+        the chain is aborted and a warning is logged. The last valid
+        response is returned.
+
+        Args:
+            resp: The initial response (may have a redirect status code).
+            session: The session to use for follow-up requests (default:
+                     ``self.session``).
+            max_redirects: Maximum number of redirects to follow.
+
+        Returns:
+            The final ``Response`` after the redirect chain (or the initial
+            response if no redirects or validation fails).
+        """
+        if resp is None:
+            return None
+
+        session = session or self.session
+        current = resp
+        redirect_count = 0
+
+        while current.status_code in (301, 302, 303, 307, 308) and redirect_count < max_redirects:
+            location = current.headers.get("Location", "")
+            if not location:
+                break
+            # Resolve relative redirects
+            redirect_url = urljoin(current.url, location)
+
+            if not _validate_redirect_chain(redirect_url, self.target_url):
+                logger.warning(
+                    "Redirect blocked — target %s is out of scope or resolves to private IP "
+                    "(original target: %s)",
+                    redirect_url,
+                    self.target_url,
+                )
+                break
+
+            try:
+                current = session.get(
+                    redirect_url,
+                    timeout=self.timeout,
+                    allow_redirects=False,  # We handle each hop manually
+                )
+                redirect_count += 1
+            except Exception as e:
+                logger.debug("Redirect follow failed for %s: %s", redirect_url, e)
+                break
+
+        return current
+
     def _safe_request(
         self, method: str, url: str, session: requests.Session | None = None, **kwargs
     ) -> requests.Response | None:
@@ -777,6 +893,12 @@ class WebScanner(AbstractTool):
         By default checks out a session from the thread-safe pool (C-06).
         Pass an explicit session only when a different auth context is needed
         (e.g., the one-off unverified SSL retry session).
+
+        When ``allow_redirects`` is True (default), the final URL after
+        redirects is validated against the scan scope. An out-of-scope
+        redirect produces a warning rather than an error, since individual
+        scan checks may legitimately follow redirects within the same
+        origin.
 
         Args:
             session: Optional explicit session. If provided, the pool is bypassed.
@@ -865,6 +987,23 @@ class WebScanner(AbstractTool):
                 self._last_request_time = time.time()
             logger.debug("WebScanner session=%s %s %s", session_id, method, url)
             resp = req_session.request(method, url, **kwargs)
+
+            # Post-request scope validation: if redirects were followed,
+            # check the final URL is still in scope (H-v3-24).
+            if (
+                resp is not None
+                and resp.url != url
+                and hasattr(self, "target_url")
+            ):
+                final_url = resp.url
+                if not _is_in_scope(final_url, self.target_url):
+                    logger.warning(
+                        "Request to %s redirected out of scope to %s "
+                        "(target scope: %s)",
+                        url,
+                        final_url,
+                        self.target_url,
+                    )
             return resp
         except (
             TimeoutError,
