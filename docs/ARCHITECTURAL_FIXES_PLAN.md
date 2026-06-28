@@ -492,25 +492,58 @@ The per-engagement storage architecture is fully implemented:
 
 ### Subproject 14(c): Encryption at rest
 
-**Status:** Deferred — requires security review
-**Files:** TBD
+**Status:** ✅ **Fixed** — 3-layer encryption-at-rest fully implemented
+**Files:** `Argus-Tui/packages/opencode/src/argus/storage/encryption.ts`,
+`Argus-Tui/packages/opencode/src/argus/storage/encrypted-db.ts`,
+`Argus-Tui/packages/opencode/src/argus/storage/encrypted-file.ts`,
+`Argus-Tui/packages/opencode/src/argus/commands/encryption.ts`,
+`Argus-Tui/packages/opencode/src/argus/cli.ts`,
+`Argus-Tui/packages/opencode/src/argus/evidence/collector.ts`,
+`Argus-Tui/packages/opencode/src/argus/evidence/integrity.ts`,
+`Argus-Tui/packages/opencode/src/argus/commands/evidence.ts`,
+`argus.config.yaml`,
+`README.md`
 
-**Problem:**
-Everything under `~/.argus/` is unencrypted, single-path, with no confidentiality
-protection.
+**Completed across multiple sessions (2026-06-26/27):**
 
-**Fix:**
-Three approaches to evaluate:
-1. **OS keychain** (libsecret on Linux, Keychain on macOS) for storing encryption key
-2. **SQLCipher** for transparent SQLite encryption
-3. **File-level encryption** (AES-256-GCM per evidence file)
+**Layer 1: Key Management (`encryption.ts`):**
+- `EncryptionManager` class with key generation (crypto.randomBytes 32), HKDF-SHA256 key derivation, AES-256-GCM encrypt/decrypt
+- macOS Keychain backend via Bun FFI (Security Framework)
+- File-based fallback for Linux: scrypt + AES-256-GCM encrypted `~/.argus/.master-key.enc` with `0o600` permissions
+- Key export/import with scrypt KDF (``argus encryption export`` / ``argus encryption import``)
+- In-memory key cache with 5-minute TTL, zeroization via `Buffer.fill(0)`
+- Passphrase support via `--passphrase` flag and `ARGUS_KEY_PASSPHRASE` env var
 
-**Requires:**
-- Security review of key derivation and storage
-- Decision on key rotation policy
-- Migration path for existing unencrypted databases
+**Layer 2: Per-Engagement DB Encryption (`encrypted-db.ts`):**
+- `EncryptedDbHandle` class with open/close lifecycle
+- Encrypted file format: [VERSION (1 byte)][SALT (16)][IV (12)][CIPHERTEXT...][AUTH TAG (16)]
+- Decrypt → temp file in engagement dir (not /tmp/) → bun:sqlite open
+- Serialize → encrypt → atomic write (`.tmp` + rename) on close
+- WAL file cleanup (-wal, -shm) on close
 
-**Effort:** Weeks + security review. Do not start until 14(b) is stable.
+**Layer 3: Evidence File Encryption (`encrypted-file.ts`):**
+- `EncryptedFileHandle` with per-file unique derived keys (master + engagement ID + file path via HKDF)
+- Atomic write pattern (.encrypting temp + renameSync)
+- Wired into `EvidenceCollector` (saveRequest, saveResponse, captureScreenshot)
+- SHA-256 hash computed on plaintext before encryption for integrity verification
+- `verifyPackage` decrypts files before hash comparison
+
+**CLI Commands (`commands/encryption.ts`, `cli.ts`):**
+- `argus encryption init` — generate and store master key
+- `argus encryption status` — show key present/info
+- `argus encryption on` / `argus encryption off` — toggle encryption (persists to config)
+- `argus encryption export` / `argus encryption import` — key backup/recovery
+- `argus encryption decrypt` / `argus decrypt` — emergency plaintext export
+
+**Configuration:**
+- `storage.encryption.enabled: false` in `argus.config.yaml` (opt-in)
+- Encryption status indicator in `argus encryption status` CLI output
+
+**Documentation:**
+- Risk 6 (cloud sync/backup) documented in README with 5 actionable recommendations
+- See `docs/PLAN_14C_ENCRYPTION_AT_REST.md` for full implementation plan
+
+**Test coverage:** ~140 tests across encryption, encrypted-db, encrypted-file, CLI, engagement-store
 
 ---
 
@@ -545,7 +578,7 @@ Ongoing ────────────────────────
   Item 12 (Air-gap)             ─ 1.5 hrs       ✅ Fixed
   Item 13 (Git host policy)     ─ 1 hr          ✅ Fixed
   14(b)   (Engagement isolation) ─ few days     ✅ Fixed
-  14(c)   (Encryption)          ─ weeks + review
+  14(c)   (Encryption)          ─ weeks + review    ✅ Fixed (3 layers)
 ```
 
 ---

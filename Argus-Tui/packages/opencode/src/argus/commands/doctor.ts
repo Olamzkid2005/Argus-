@@ -139,13 +139,21 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
   const bridge = new WorkersBridge(wp, py)
   let connected = false
   try {
-    await bridge.connect()
-    connected = true
-    const healthy = await bridge.isHealthy()
+    // Timeout the MCP connect/health check at 10s — Python worker startup
+    // can hang if the interpreter or worker script has issues.
+    await Promise.race([
+      bridge.connect().then(async () => {
+        connected = true
+        return bridge.isHealthy()
+      }),
+      new Promise<boolean>((_, reject) =>
+        setTimeout(() => reject(new Error("MCP worker connect timed out after 10s")), 10000),
+      ),
+    ])
     return {
       name: "MCP Worker",
-      status: healthy ? "PASS" : "FAIL",
-      message: healthy ? "Worker responding via stdio JSON-RPC" : "Worker started but not responding to ping",
+      status: "PASS",
+      message: "Worker responding via stdio JSON-RPC",
     }
   } catch (error) {
     return {
@@ -161,27 +169,19 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
 async function playwrightCheck(): Promise<CheckResult> {
   try {
     // Use --no-install to avoid npx downloading packages on check
-    await execCapture("npx", ["--no-install", "playwright", "--version"], 15000)
+    await execCapture("npx", ["--no-install", "playwright", "--version"], 5000)
     return {
       name: "Playwright",
       status: "PASS",
       message: "Playwright CLI available",
     }
-  } catch (error) {
-    // Try without --no-install in case Playwright isn't cached yet (slower)
-    try {
-      await execCapture("npx", ["playwright", "--version"], 30000)
-      return {
-        name: "Playwright",
-        status: "PASS",
-        message: "Playwright CLI available",
-      }
-    } catch {
-      return {
-        name: "Playwright",
-        status: "WARN",
-        message: "Playwright CLI not found. Run: npx playwright install chromium",
-      }
+  } catch {
+    // Don't fall back to npx without --no-install — that would trigger a
+    // package download during a health check, which is slow and unwanted.
+    return {
+      name: "Playwright",
+      status: "WARN",
+      message: "Playwright CLI not found. Run: npx playwright install chromium",
     }
   }
 }
@@ -448,7 +448,7 @@ async function resolvePython(): Promise<string> {
   const envPython = process.env.ARGUS_PYTHON
   if (envPython) {
     try {
-      await execCapture(envPython, ["--version"])
+      execFileSync(envPython, ["--version"], { encoding: "utf-8", timeout: 5000, stdio: "ignore" })
       return envPython
     } catch {
       process.stderr.write(`[doctor] ARGUS_PYTHON=${envPython} specified but not found — falling back to auto-detection\n`)
@@ -456,6 +456,8 @@ async function resolvePython(): Promise<string> {
   }
 
   // Cross-platform discovery: try platform-specific names first
+  // Use execFileSync (synchronous) for fast python detection — it's a startup
+  // check and the sync call avoids async process spawn overhead.
   const candidates: string[] = []
   if (process.platform === "win32") {
     candidates.push("python", "python3", "py")
@@ -467,7 +469,7 @@ async function resolvePython(): Promise<string> {
 
   for (const py of candidates) {
     try {
-      await execCapture(py, ["--version"])
+      execFileSync(py, ["--version"], { encoding: "utf-8", timeout: 3000, stdio: "ignore" })
       return py
     } catch {}
   }

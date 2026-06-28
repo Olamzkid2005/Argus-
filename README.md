@@ -55,6 +55,8 @@ make test-v5
 | `argus resume <id>` | Resume a paused engagement |
 | `argus verify <finding-id>` | Re-run browser verification |
 | `argus evidence <action>` | Browse and manage evidence |
+| `argus encryption <action>` | Manage encryption at rest (init, status, on, off, export, import, decrypt) |
+| `argus decrypt --engagement <id> --output <dir>` | Emergency plaintext export of an encrypted engagement database |
 | `argus config` | Show configuration |
 
 ### TUI Slash Commands
@@ -239,7 +241,29 @@ The `vendor/` directory is `COPY`ed into the image and its contents should inclu
 
 MIT
 
-## Security Notice
+## Encryption & Data Security
+
+Argus supports **encryption at rest** for per-engagement data. When enabled (`argus encryption init`), engagement databases and evidence files are encrypted with AES-256-GCM before being written to disk. Only the root engagement index (`~/.argus/argus.db`) — a minimal directory of engagement IDs and statuses — remains plaintext.
+
+### Cloud Sync & Backup Warnings
+
+> **⚠️ Do not place `~/.argus/` in a cloud-synced directory** (iCloud Drive, Dropbox, OneDrive, Google Drive, etc.) for high-security environments. While the encrypted data at rest is safe, the following edge cases create risk:
+
+| Risk | Details |
+|------|---------|
+| **Temp file exposure during active sessions** | When an encrypted engagement is open, a decrypted temp file exists in `~/.argus/engagements/ENG-xxx/.tmp-*.db`. If a cloud sync or backup runs during an active session, this temp file (plaintext SQLite) could be uploaded. |
+| **Migration snapshots** | When migrating existing plaintext engagements to encrypted format, the old plaintext `.db` file is deleted after the encrypted file is written atomically. However, filesystem snapshots (APFS, ZFS, Time Machine, Windows Volume Shadow Copy) may retain the plaintext version indefinitely. |
+| **SSD ghost data** | Standard file deletion does not guarantee erasure on SSDs. Wear-leveling and over-provisioned blocks may retain plaintext copies even after deletion. |
+| **Key stored separately** | The master encryption key lives in the OS keychain (macOS) or in `~/.argus/.master-key.enc` (Linux). Syncing `~/.argus/` does **not** sync the key, but if both the data directory **and** the key file end up on the same cloud service, the encryption is bypassed. |
+
+**Recommendations:**
+- For high-security environments, **start fresh** with encryption enabled rather than migrating existing data
+- Exclude `~/.argus/` from cloud sync services (see your provider's settings for folder exclusion)
+- Exclude `~/.argus/` from automatic backup tools if plaintext exposure during active sessions is unacceptable
+- Store the exported master key backup (`argus encryption export-key`) **offline** — never in the same cloud as `~/.argus/`
+- Enable filesystem-level encryption (FileVault on macOS, LUKS on Linux, BitLocker on Windows) for additional protection
+
+### Security Notice
 
 This platform is designed for authorized penetration testing only. Users must:
 - Obtain written authorization before testing any target

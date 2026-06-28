@@ -89,7 +89,7 @@ To understand the encryption plan, you first need to understand how Argus curren
     │   │       - finding_analysis (AI-generated explanations)
     │   │
     │   └── artifacts/             ← Actual binary files on disk
-    │       └── pkg-xyz789/
+    │       └── fnd-abc456/        ← One folder per finding ID
     │           ├── screenshot.png
     │           ├── network-log.har
     │           └── manifest.json
@@ -154,9 +154,10 @@ We propose a **three-layer hybrid approach**. Each layer builds on the previous 
 │   │  using AES-256-GCM. Key is derived from master key +       │  │
 │   │  engagement ID via HKDF (a key derivation function).       │  │
 │   │                                                            │  │
-│   │  On open:  decrypt file → in-memory SQLite (bun:sqlite     │  │
-│   │            :memory:)                                        │  │
-│   │  On close: serialize in-memory DB → encrypt → save         │  │
+│   │  On open:  decrypt file → write plaintext to temp DB in    │  │
+│  │            engagement directory → open with bun:sqlite      │  │
+│  │  On close: serialize DB → encrypt → atomic save to         │  │
+│  │            engagement.db, delete temp file                  │  │
 │   └───────────────────────────────────────────────────────────┘  │
 │                              │                                    │
 │                              ▼                                    │
@@ -185,7 +186,7 @@ You use your house key to unlock a derived key for the safety deposit box, which
 
 ### What we're building
 
-A module called `EncryptionManager` in a new file `storage/encryption.ts`.
+A module called `EncryptionManager` in a new file `packages/opencode/src/argus/storage/encryption.ts`.
 
 ### How it works
 
@@ -216,13 +217,6 @@ We need an OS keychain library. Two options:
 | Windows | Credential Manager (DPAPI) |
 | Linux | libsecret (D-Bus Secret Service) |
 
-**Evaluation required before committing:**
-- How many downloads / weekly npm installs does it have?
-- Is it maintained by a reputable entity or individual?
-- Has it undergone any security audit?
-- What is its fallback behavior when the OS keychain is unavailable (headless Linux)?
-- Does it support requesting user presence verification (biometric/password prompt)?
-
 #### Option B: Bun FFI (direct OS API calls, no third-party dependency)
 
 Bun's FFI (`Bun.ffi`) can call OS keychain APIs directly:
@@ -230,7 +224,7 @@ Bun's FFI (`Bun.ffi`) can call OS keychain APIs directly:
 - **Windows:** Credential Manager (`advapi32.dll`) — `CredWriteW`, `CredReadW`
 - **Linux:** `libsecret` (`libsecret-1.so`) — `secret_password_store_sync`, `secret_password_lookup_sync`
 
-**Recommendation:** Start with `cross-keychain` for development velocity. Have a documented Bun FFI fallback plan if `cross-keychain` proves insufficient (especially for headless Linux environments). Both should be benchmarked for user-presence verification support.
+**🎯 Recommendation: Start with Bun FFI.** This is a security tool's encryption key management — avoiding a third-party npm dependency (maintained by a single individual, no security audit) in the critical security path is the safer choice. Bun's FFI is well-maintained by the Bun team. If Bun FFI proves insufficient (especially for headless Linux), `cross-keychain` serves as a documented fallback.
 
 ### User presence verification
 
@@ -244,7 +238,9 @@ When Argus requests the master key from the OS keychain, it **must explicitly re
 
 **Recommendation:** Require OS authentication on first keychain access per session. Cache the master key in process memory (with zeroization on close) so subsequent accesses within the same session don't re-prompt.
 
-### Pseudocode
+### Pseudocode (illustrative — using cross-keychain API for clarity)
+
+> **Note:** The actual implementation will use Bun FFI instead of `cross-keychain`. The pseudocode below uses `cross-keychain`'s API because Bun FFI calls are platform-specific and verbose. The logic is identical — only the keychain access layer differs.
 
 ```typescript
 import { setPassword, getPassword, deletePassword } from "cross-keychain"
@@ -257,11 +253,13 @@ export class EncryptionManager {
   /** Generate and store a new master key. Called once on setup. */
   static async initialize(): Promise<void> {
     const masterKey = crypto.randomBytes(32)  // 256 bits
+    // Actual implementation: Bun.ffi → SecKeychainAddGenericPassword / CredWriteW / secret_password_store_sync
     await setPassword(SERVICE_NAME, ACCOUNT_NAME, masterKey.toString("hex"))
   }
 
   /** Retrieve the master key from the OS keychain. */
   static async getMasterKey(): Promise<Buffer | null> {
+    // Actual implementation: Bun.ffi → SecKeychainFindGenericPassword / CredReadW / secret_password_lookup_sync
     const hex = await getPassword(SERVICE_NAME, ACCOUNT_NAME)
     if (!hex) return null
     return Buffer.from(hex, "hex")
@@ -321,7 +319,7 @@ The master key and all derived keys exist in process memory as JavaScript `Buffe
 
 ### What we're building
 
-A module called `EncryptedDbHandle` in a new file `storage/encrypted-db.ts`.
+A module called `EncryptedDbHandle` in a new file `packages/opencode/src/argus/storage/encrypted-db.ts`.
 
 ### The encrypted file format
 
@@ -379,9 +377,9 @@ When an engagement DB file is encrypted, it has this structure on disk:
                                 │
                                 ▼
                 ┌───────────────────────────────┐
-                │  Load decrypted SQLite into   │
-                │  bun:sqlite :memory: — NO     │
-                │  temp file is ever written    │
+                │  Load decrypted into temp DB  │
+                │  via bun:sqlite (in engagement │
+                │  directory, not /tmp/)         │
                 └───────────────────────────────┘
                                 │
                         ... time passes ...
@@ -395,8 +393,13 @@ When an engagement DB file is encrypted, it has this structure on disk:
                                 │
                                 ▼
                 ┌───────────────────────────────┐
-                │  Serialize in-memory DB via    │
-                │  Database.serialize()          │
+                │  Serialize temp DB via         │
+                │  Database.serialize() → Buffer  │
+                └───────────────────────────────┘
+                                │
+                                ▼
+                ┌───────────────────────────────┐
+                │  Delete temp plaintext DB file │
                 └───────────────────────────────┘
                                 │
                                 ▼
@@ -408,41 +411,50 @@ When an engagement DB file is encrypted, it has this structure on disk:
                                 │
                                 ▼
                 ┌───────────────────────────────┐
-                │  Overwrite original encrypted │
-                │  file on disk                 │
+                │  Write encrypted blob to       │
+                │  .tmp file, then fs.rename()   │
+                │  to engagement.db (atomic)     │
                 └───────────────────────────────┘
                                 │
                                 ▼
                           Done ✓
 ```
+**Why a temp file in the engagement directory instead of `/tmp/`?**
 
-**Why in-memory instead of temp files?**
+Ideally we'd load directly into an in-memory SQLite database without any temp file. However, `bun:sqlite`'s `Database.serialize()` returns a **binary Buffer** (SQLite's native serialization format), not a SQL text dump — and `bun:sqlite` has no `deserialize()` or Buffer-based constructor. The only way to load serialized data is to write it to a file first.
 
-| Concern | Temp file approach | In-memory approach |
-|---------|-------------------|-------------------|
-| **Same-user attacks** | Any process as same user can read `/tmp/` | No file on disk to steal |
-| **Secure deletion** | Unreliable on SSDs (wear-leveling) + journaling filesystems | Not needed — nothing to delete |
-| **Swap exposure** | Decrypted data on disk may be paged | Still in RAM (see Risk 1) |
-| **Crash safety** | Stale temp file left behind | Nothing left behind |
-| **Idle timeout complexity** | Must re-encrypt on idle, race conditions | No re-encryption needed — held in memory for session |
+The key insight: the temp file lives in the **engagement's own directory** (`~/.argus/engagements/ENG-abc123/.tmp-*.db`) with `0o600` permissions, not in a shared system temp location. The engagement directory is precisely what we're protecting. During an active session the data must be readable anyway — encrypting on close is what matters.
 
-The only downside is RAM usage. Engagement databases contain only metadata (findings, phases, audit logs) — screenshots and HAR files are stored separately. Typical engagement DBs are under 10 MB. If a DB exceeds 50 MB, Bun's `Database.serialize()` may briefly double memory usage during save, but this is acceptable for the threat model.
+| Concern | `/tmp/` approach (rejected) | Engagement directory temp file (chosen) |
+|---------|---------------------------|----------------------------------------|
+| **Same-user attacks** | Any process can read `/tmp/` | Temp file is in engagement dir with `0o600` |
+| **Secure deletion** | Unreliable on SSDs | Same concern — but decrypted data already existed as plaintext engagement.db before encryption was enabled |
+| **Crash safety** | Stale temp file left behind | Temp file is deleted on close; stale temp is harmless (reflects last clean state) |
+| **Idle timeout complexity** | Must re-encrypt on idle | No re-encryption needed — temp file persists for session, encrypted on close |
+
+The only downside is that a decrypted copy of the DB is on disk during an active session. This is an accepted risk: the engagement directory is the thing being encrypted at rest, and during an active session the data must be readable. If the system has filesystem-level encryption (FileVault, LUKS), the temp file inherits that protection.
+
+Engagement databases contain only metadata (findings, phases, audit logs) — screenshots and HAR files are stored separately. Typical engagement DBs are under 10 MB.
 
 ### Handling WAL files
 
-SQLite's WAL mode creates `-wal` and `-shm` journal files that may contain plaintext fragments. Since we use in-memory databases, WAL mode is irrelevant during the session. On close, `Database.serialize()` produces a single consistent snapshot regardless of journal mode.
+The temp DB uses WAL mode (matching the existing `EngagementStore` pattern with `PRAGMA journal_mode = WAL`). This creates `-wal` and `-shm` journal files alongside the temp file. On close, before encrypting:
+1. `Database.serialize()` captures a consistent snapshot regardless of journal mode
+2. The temp file and its `-wal`/`-shm` companions are deleted
+3. Only the encrypted blob remains
 
 Important: When migrating a plaintext per-engagement DB to encrypted format, delete any existing `-wal` and `-shm` files after the migration is complete. These may contain residual plaintext data.
 
 ### Crash resilience
 
 If Argus crashes while an encrypted engagement is open:
-1. The in-memory DB is lost — no temp file cleanup needed
+1. The temp plaintext DB file may be left behind
 2. The encrypted DB on disk is **stale** (reflects last clean close)
 3. On next startup, the stale encrypted DB is detected and loaded normally
-4. Any writes that were buffered in memory are lost — this is no different from any other crash scenario
+4. The stale temp file is harmless — it can be deleted; it reflects the same last-clean-close state
+5. Any writes that were buffered in the temp DB are lost — no different from any other crash scenario
 
-No special crash recovery is needed beyond what SQLite's own integrity checks provide (`PRAGMA integrity_check` on the decrypted data after loading).
+No special crash recovery is needed beyond SQLite's own integrity checks (`PRAGMA integrity_check` on the decrypted data after loading).
 
 ### Integration with EngagementStore
 
@@ -464,25 +476,61 @@ private _getEngagementDb(engagementId: string) {
 The new `_openEncryptedDb()` method:
 1. Gets the master key from OS keychain
 2. Derives the engagement key via HKDF
-3. Reads the encrypted `.db` file, parses version byte, decrypts in memory
-4. Opens decrypted SQLite data as an in-memory database with `new Database(":memory:")` and loads the serialized data
-5. Registers a cleanup handler for when the store closes (serializes in-memory DB → encrypts → writes to disk)
+3. Reads the encrypted `.db` file, parses version byte, decrypts to Buffer
+4. Writes the decrypted Buffer to a temp file in the engagement directory
+5. Opens the temp file with `new Database(tmpPath)`
+6. Registers a cleanup handler for when the store closes (serializes DB → encrypts → atomic write to engagement.db → delete temp file)
 
 Key implementation detail — loading serialized data into `bun:sqlite`:
 
 ```typescript
 import { Database } from "bun:sqlite"
+import { randomUUID } from "node:crypto"
+import { join, dirname } from "path"
+import { unlinkSync, renameSync } from "fs"
 
-function loadEncryptedDb(encryptedBuffer: Buffer, masterKey: Buffer, engagementId: string): Database {
+function loadEncryptedDb(
+  encryptedBuffer: Buffer,
+  masterKey: Buffer,
+  engagementId: string,
+): { db: Database; tmpPath: string } {
   const engagementKey = EncryptionManager.deriveEngagementKey(masterKey, engagementId)
   const decrypted = decryptAesGcm(encryptedBuffer, engagementKey)  // returns Buffer
-  const db = new Database(":memory:")
-  db.exec(decrypted.toString("utf-8"))  // Load SQL dump into in-memory DB
-  return db
+
+  // Write decrypted buffer to a temp file in the engagement directory
+  const engDir = StoragePaths.engagementDir(engagementId)
+  const tmpPath = join(engDir, `.tmp-${randomUUID()}.db`)
+  Bun.writeSync(tmpPath, decrypted)
+
+  const db = new Database(tmpPath)
+  return { db, tmpPath }
+}
+
+function saveEncryptedDb(
+  db: Database,
+  tmpPath: string,
+  masterKey: Buffer,
+  engagementId: string,
+  targetPath: string,
+): void {
+  // 1. Serialize the DB to a binary Buffer
+  const serialized = db.serialize()  // returns Buffer (binary, NOT a SQL dump)
+  db.close()
+
+  // 2. Delete the temp plaintext file
+  try { unlinkSync(tmpPath) } catch { /* best-effort cleanup */ }
+  try { unlinkSync(tmpPath + "-wal") } catch { }
+  try { unlinkSync(tmpPath + "-shm") } catch { }
+
+  // 3. Encrypt and write atomically
+  const encrypted = encryptAesGcm(serialized, masterKey, engagementId)
+  const tmpEncPath = targetPath + ".tmp"
+  Bun.writeSync(tmpEncPath, encrypted)
+  renameSync(tmpEncPath, targetPath)
 }
 ```
 
-Note: `bun:sqlite`'s `Database.serialize()` outputs a full SQL dump that can be replayed with `db.exec()`. Alternative: use `db.backup("/tmp/...")` to a temp file and read it back, but that recreates the temp file problem. The `serialize()/exec()` approach keeps everything in memory.
+**Why `Bun.writeSync()` instead of `Bun.write()`?** The synchronous write ensures the file is fully written before `new Database()` opens it, avoiding race conditions. The write is to a local file in the engagement directory — performance impact is negligible (< 1ms for a 10 MB DB on an NVMe SSD).
 
 ### Why not use SQLCipher (transparent database encryption)?
 
@@ -498,7 +546,7 @@ Our file-level approach achieves the same security property (data at rest is enc
 
 ### What we're building
 
-A module called `EncryptedFileStore` in a new file `storage/encrypted-file.ts`.
+A module called `EncryptedFileStore` in a new file `packages/opencode/src/argus/storage/encrypted-file.ts`.
 
 ### How it works
 
@@ -643,22 +691,22 @@ The per-engagement DB schema stays the same — we encrypt the **entire file**, 
 
 | File | Description | Estimated lines |
 |------|-------------|-----------------|
-| `src/argus/storage/encryption.ts` | `EncryptionManager` — key generation, OS keychain interaction, HKDF key derivation, key export/import | ~80 lines |
-| `src/argus/storage/encrypted-db.ts` | `EncryptedDbHandle` — decrypt encrypted blob → in-memory SQLite, serialize → encrypt on close | ~150 lines |
-| `src/argus/storage/encrypted-file.ts` | `EncryptedFileStore` — per-file encrypt/decrypt for evidence artifacts | ~100 lines |
-| `src/argus/commands/encryption.ts` | `argus encryption export-key` and `argus encryption import-key` CLI commands | ~60 lines |
-| `test/argus/unit/encryption.test.ts` | Unit tests for all modules | ~150 lines |
+| `packages/opencode/src/argus/storage/encryption.ts` | `EncryptionManager` — key generation, OS keychain interaction, HKDF key derivation, key export/import | ~80 lines |
+| `packages/opencode/src/argus/storage/encrypted-db.ts` | `EncryptedDbHandle` — decrypt encrypted blob → temp file, serialize → encrypt on close | ~150 lines |
+| `packages/opencode/src/argus/storage/encrypted-file.ts` | `EncryptedFileStore` — per-file encrypt/decrypt for evidence artifacts | ~100 lines |
+| `packages/opencode/src/argus/commands/encryption.ts` | `argus encryption export-key` and `argus encryption import-key` CLI commands | ~60 lines |
+| `packages/opencode/test/argus/unit/encryption.test.ts` | Unit tests for all modules | ~150 lines |
 
 ### Modified files
 
 | File | What changes | Estimated lines |
 |------|-------------|-----------------|
-| `src/argus/engagement/store.ts` | Add `storage_version === 3` path in `_getEngagementDb()`, `_ensureEngagementDb()`, in-memory DB lifecycle | ~40 lines |
-| `src/argus/config/loader.ts` | Add `storage.encryption` to Zod config schema | ~10 lines |
-| `src/argus/config/feature-flags.ts` | Add encryption feature flag | ~5 lines |
-| `src/argus/commands/config.ts` | Register encryption subcommands | ~5 lines |
-| `src/argus/cli.ts` | Add encryption command to CLI parser | ~5 lines |
-| `package.json` | Add `cross-keychain` dependency (or implement Bun FFI keychain module) | 1 line |
+| `packages/opencode/src/argus/engagement/store.ts` | Add `storage_version === 3` path in `_getEngagementDb()`, `_ensureEngagementDb()`, temp DB lifecycle | ~50 lines |
+| `packages/opencode/src/argus/config/loader.ts` | Add `storage.encryption` section to Zod config schema | ~15 lines |
+| `packages/opencode/src/argus/config/feature-flags.ts` | Add `ENCRYPTION_AT_REST` feature flag (default: false) | ~5 lines |
+| `packages/opencode/src/argus/commands/config.ts` | Register encryption subcommands | ~5 lines |
+| `packages/opencode/src/argus/cli.ts` | Add encryption command to CLI parser | ~5 lines |
+| `package.json` | No new dependency — use Bun FFI instead of `cross-keychain` | 0 lines |
 | `argus.config.yaml` | Add `storage.encryption.enabled: false` (disabled by default) | 2 lines |
 | `docs/ARCHITECTURAL_FIXES_PLAN.md` | Mark Item 14(c) completed | 5 lines |
 
@@ -666,9 +714,9 @@ The per-engagement DB schema stays the same — we encrypt the **entire file**, 
 
 | File | Why no change |
 |------|---------------|
-| `src/argus/engagement/schema.sql.ts` | Already has `STORAGE_VERSION_ENCRYPTED = 3` defined (defined in advance during Item 14b) |
-| `src/argus/storage/paths.ts` | Paths don't change — only the content of files at those paths changes |
-| `src/argus/commands/evidence.ts` | Evidence command works the same way; the encryption layer is transparent (decryption happens in the evidence store before hashing) |
+| `packages/opencode/src/argus/engagement/schema.sql.ts` | Already has `STORAGE_VERSION_ENCRYPTED = 3` defined (defined in advance during Item 14b) |
+| `packages/opencode/src/argus/storage/paths.ts` | Paths don't change — only the content of files at those paths changes |
+| `packages/opencode/src/argus/evidence/store.ts` | `ArtifactStore` works the same way; the encryption layer is transparent |
 
 ---
 
@@ -740,21 +788,23 @@ No security system is perfect. Here are the trade-offs we're making:
 - `Buffer.fill(0)` only zeroizes the current reference — old copies may persist
 - The key must remain in memory during active engagement sessions
 
-**Mitigation:** We call `Buffer.fill(0)` on key buffers when they are no longer needed (even though this is imperfect). Decrypted data lives in `bun:sqlite`'s in-memory database, which is managed by SQLite's own allocator — outside of V8's heap but still in process memory.
+**Mitigation:** We call `Buffer.fill(0)` on key buffers when they are no longer needed (even though this is imperfect). Decrypted data lives in `bun:sqlite`'s database, which uses its own allocator — outside of V8's heap but still in process memory.
 
 **Severity:** Low/Medium. Reading process memory requires a serious compromise — at that point, the attacker likely has worse things they could do. This is an accepted limitation of using a managed runtime. Native key handling (NAPI addon) could improve this but is deferred.
 
-### Risk 2: In-memory database (was: temp file exposure)
+### Risk 2: Temp file exposure (revised approach)
 
-**Problem:** Previously this plan called for writing decrypted databases to `/tmp/`. This was **unacceptable** — any process running as the same user could read temp files, and "secure deletion" is unreliable on modern SSDs and journaling filesystems.
+**Problem:** `bun:sqlite` has no `deserialize()` API — you cannot load a serialized Buffer directly into a `:memory:` database. The only way to load data is to write it to a file first.
 
-**Resolution:** We now use **in-memory SQLite databases** exclusively. No decrypted data is ever written to disk during a session. This eliminates the entire temp file threat vector.
+**Resolution:** We write a temp file in the **engagement's own directory** (`~/.argus/engagements/ENG-abc123/.tmp-*.db`), **not** in a shared system temp location like `/tmp/`. This is a significant improvement:
+- The temp file lives in the directory we're protecting (the engagement directory)
+- Created with `0o600` permissions — only the owning user can read it
+- If the filesystem has full-disk encryption (FileVault, LUKS), the temp file inherits that protection
+- The temp file is deleted on close and cleaned up on crash
 
-**Remaining concern:** The in-memory database may be swapped to disk by the operating system's virtual memory manager. This is a system-level concern beyond Argus's control.
+**Remaining concern:** The temp plaintext file is on disk during the session. This mirrors the original pre-encryption state (engagement.db was plaintext). The encryption-at-rest benefit is that data is encrypted when the engagement is **not** open.
 
-**Mitigation:** On Linux, document that users can `mlock()` the process via `ulimit -l`. On macOS, memory is not swapped to a swapfile by default on modern SSDs (APFS compression handles memory pressure). Accept the residual risk for other platforms.
-
-**Severity:** Low (down from Medium).
+**Severity:** Low. The temp file is in the protected engagement directory, deleted on close, and the exposure window is limited to the session duration.
 
 ### Risk 3: Lost key = lost data
 
@@ -788,21 +838,23 @@ No security system is perfect. Here are the trade-offs we're making:
 
 **Problem:** If `~/.argus/` is included in system backups (Time Machine, Windows File History) or cloud syncing (iCloud Drive, Dropbox, OneDrive), encrypted blobs are safely backed up — but there are edge cases:
 
-- **Temp file exposure (legacy):** Eliminated by the in-memory approach
+- **Temp file exposure:** Temp files in the engagement directory may be captured if backup runs during an active session. Mitigated by `0o600` permissions.
 - **Cloud sync of `~/.argus/`:** Encrypted files are safe to sync. However, if an attacker gains access to the cloud account, they could steal encrypted blobs for offline brute-forcing
 - **Backup during migration:** If a backup runs during migration, it may capture both the plaintext and encrypted versions of an engagement DB
 
-**Mitigation:** Document that `~/.argus/` should not be placed in cloud-synced directories for high-security environments. The migration is designed to be atomic (delete plaintext after encrypted write succeeds), but snapshotted backups may still capture the plaintext version.
+**Mitigation:** Documented in README — see the "Cloud Sync & Backup Warnings" subsection under "Encryption & Data Security". Covers: temp file exposure during active sessions, migration snapshot retention, SSD ghost data, key co-location risk, and 5 actionable recommendations (exclude from sync, start fresh, use FS-level encryption, store key backups offline, exclude from auto-backup).
 
-**Severity:** Low. Documented in README.
+**Severity:** Low. Documentation added to README.
+
+**Status:** ✅ **RESOLVED.** Cloud sync and backup warnings documented in `README.md`.
 
 ### Risk 7: SQLite WAL file residue
 
 **Problem:** When using plaintext `bun:sqlite` databases with WAL mode, `-wal` and `-shm` journal files may contain plaintext fragments even after the main DB is encrypted and replaced.
 
-**Mitigation:** During migration (plaintext → encrypted), explicitly delete any `-wal` and `-shm` files. For the in-memory approach, WAL mode is never used, so no WAL files are created during encrypted sessions.
+**Mitigation:** During migration (plaintext → encrypted), explicitly delete any `-wal` and `-shm` files. During encrypted sessions, the `saveEncryptedDb()` function explicitly deletes `-wal` and `-shm` files alongside the temp file.
 
-**Severity:** Low. Handled by the migration code.
+**Severity:** Low. Handled by the migration and save code.
 
 ### Risk 8: Crash during save
 
@@ -821,14 +873,14 @@ No security system is perfect. Here are the trade-offs we're making:
 
 | Component | Lines of code | Estimated time |
 |-----------|---------------|----------------|
-| `encryption.ts` — key management, export/import | ~80 | 45 minutes |
-| `encrypted-db.ts` — DB encrypt/decrypt, in-memory lifecycle | ~150 | 1.5 hours |
+| `encryption.ts` — key management, Bun FFI keychain, export/import | ~100 | 1 hour |
+| `encrypted-db.ts` — DB encrypt/decrypt, temp file lifecycle, atomic write | ~180 | 2 hours |
 | `encrypted-file.ts` — file encrypt/decrypt with version byte | ~100 | 1 hour |
 | `commands/encryption.ts` — CLI commands for key management | ~60 | 30 minutes |
-| `store.ts` — integration with encrypted path | ~40 | 45 minutes |
+| `store.ts` — integration with encrypted path | ~50 | 45 minutes |
 | `config/loader.ts`, `feature-flags.ts`, `cli.ts` — wiring | ~30 | 30 minutes |
-| Tests | ~150 | 1 hour |
-| **Total** | **~610** | **~5-6 hours** |
+| Tests | ~200 | 1.5 hours |
+| **Total** | **~720** | **~7-8 hours** |
 
 ---
 
@@ -840,8 +892,8 @@ The following decisions need to be made before implementation begins:
 
 Three options, each building on the previous:
 
-1. **Full three-layer plan** (5-6 hours) — Keychain + DB encryption + file encryption. Complete solution.
-2. **DB encryption only — MVP** (3-4 hours) — Keychain + per-engagement DB encryption. File-level encryption deferred. Most sensitive data (findings, credentials, audit logs) is in the DB.
+1. **Full three-layer plan** (7-8 hours) — Keychain + DB encryption + file encryption. Complete solution.
+2. **DB encryption only — MVP** (5-6 hours) — Keychain + per-engagement DB encryption. File-level encryption deferred. Most sensitive data (findings, credentials, audit logs) is in the DB.
 3. **Application-level column encryption** (1.5-2 hours) — Encrypt individual database columns inside SQLite (finding titles, descriptions) rather than the entire file. Leaves evidence files unprotected.
 
 **🎯 Recommended: Option 2 (DB encryption MVP).**
@@ -853,14 +905,14 @@ Three options, each building on the previous:
 
 1. **On close only** — Decrypted DB stays in `/tmp` while engagement is open. ❌ **Discarded** — temp files on disk are unacceptable for a security tool.
 2. **On close + idle timeout** — Re-encrypt after 5 minutes of inactivity. ❌ **Discarded** — race conditions and temp file churn create more problems than they solve.
-3. **In-memory only (no temp file)** — Load the entire decrypted DB into a Bun in-memory SQLite database (`:memory:`). No temp file at all.
+3. **Temp file in engagement directory** — Write decrypted buffer to temp file in `~/.argus/engagements/ENG-xxx/.tmp-*.db`, open with bun:sqlite, delete on close. Temp file inherits the engagement directory's protection.
 
-**🎯 Recommended: Option 3 (in-memory only).**
-- Eliminates the entire temp file threat vector
-- No secure deletion concerns
+**🎯 Recommended: Option 3 (temp file in engagement directory).**
+- `bun:sqlite`'s `Database.serialize()` returns a binary Buffer, not a SQL dump — there is no way to load it without a file
+- Temp file lives in the protected engagement directory (not `/tmp/`), with `0o600` permissions
 - No idle timeout complexity or race conditions
-- Engagement DBs are metadata-only (< 10 MB typical) — RAM usage is negligible
-- Bun's `Database.serialize()` produces a full SQL dump for persist-on-close
+- Engagement DBs are metadata-only (< 10 MB typical)
+- Temp file deleted on close; stale temp is harmless on crash
 
 ### Q3: Encryption default — opt-in or opt-out?
 
@@ -937,14 +989,13 @@ User runs: argus scan --encrypt https://example.com
                          ┌──────────────────────────┐
                          │  encrypted-db.ts          │
                          │  Decrypt .db file →       │
-                         │  in-memory Buffer          │
+                         │  write to temp file        │
                          └──────────┬───────────────┘
                                   │
                                   ▼
                          ┌──────────────────────────┐
-                         │  Open :memory: SQLite    │
-                         │  with bun:sqlite          │
-                         │  Load decrypted data      │
+                         │  Open temp file with      │
+                         │  bun:sqlite               │
                          └──────────────────────────┘
                                   │
                      ... assessment runs ...
@@ -959,8 +1010,9 @@ User runs: argus scan --encrypt https://example.com
                          ┌──────────────────────────┐
                          │  encrypted-db.ts          │
                          │  Database.serialize() →   │
-                         │  Encrypt → write .db file │
-                         │  (atomic: .tmp + rename)  │
+                         │  Buffer → encrypt →       │
+                         │  atomic write to .db file │
+                         │  Delete temp file + WAL   │
                          └──────────────────────────┘
 ```
 
