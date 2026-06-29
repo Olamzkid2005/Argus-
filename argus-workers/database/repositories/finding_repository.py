@@ -489,7 +489,7 @@ class FindingRepository(BaseRepository):
                 """
                 SELECT
                     f.*,
-                    e.target_url as engagement_target,
+                    e.target as engagement_target,
                     e.status as engagement_status
                 FROM findings f
                 INNER JOIN engagements e ON f.engagement_id = e.id

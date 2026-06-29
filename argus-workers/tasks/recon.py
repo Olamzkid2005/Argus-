@@ -250,6 +250,20 @@ def expand_recon(
             "next_state": "analyzing",
         }
 
+    # Idempotency check: if engagement has already progressed past recon
+    # (e.g. Celery retry delivered duplicate task), skip immediately.
+    from tasks.utils import get_engagement_state
+    import os
+
+    _db_state = get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
+    if _db_state in ("scanning", "analyzing", "reporting", "complete", "failed"):
+        logger.info(
+            "Engagement %s already past 'recon' (state=%s) — skipping duplicate expand_recon task",
+            engagement_id,
+            _db_state,
+        )
+        return {"phase": "recon_expand", "status": "skipped", "reason": f"already_{_db_state}"}
+
     slog.phase_header("EXPAND RECON", targets=f"{len(valid_targets)} targets")
 
     # NOTE: chain_transition() below uses SELECT ... FOR UPDATE on the

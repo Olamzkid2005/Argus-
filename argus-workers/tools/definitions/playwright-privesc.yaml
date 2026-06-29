@@ -9,16 +9,21 @@ parameters:
     type: string
     required: true
     description: Target URL
+  - name: creds_file
+    flag: --creds-file
+    type: string
+    required: false
+    description: Path to JSON credentials file with low-privilege credentials (alternative to --low-priv-username/--low-priv-password)
   - name: low-priv-username
     flag: --low-priv-username
     type: string
-    required: true
-    description: Low-privilege user username
+    required: false
+    description: Low-privilege user username (not required when --creds-file is provided)
   - name: low-priv-password
     flag: --low-priv-password
     type: string
-    required: true
-    description: Low-privilege user password
+    required: false
+    description: Low-privilege user password (not required when --creds-file is provided)
   - name: admin-paths
     flag: --admin-paths
     type: string

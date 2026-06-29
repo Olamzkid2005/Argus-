@@ -9,20 +9,26 @@ parameters:
     type: string
     required: true
     description: Target URL
+  - name: creds_file
+    flag: --creds-file
+    type: string
+    required: false
+    description: Path to JSON credentials file with login credentials (alternative to --username/--password)
   - name: username
     flag: --username
     type: string
-    required: true
-    description: Login username
+    required: false
+    description: Login username (not required when --creds-file is provided)
   - name: password
     flag: --password
     type: string
-    required: true
-    description: Login password
+    required: false
+    description: Login password (not required when --creds-file is provided)
   - name: form-page
     flag: --form-page
     type: string
     required: false
+    default: /feedback
     description: Path to the form page (default /feedback)
   - name: payload
     flag: --payload

@@ -59,7 +59,14 @@ export class FeatureFlags implements IFeatureFlags {
     }
   }
 
-  /** Load from environment variables (ARGUS_FEATURE_*) */
+  /**
+   * Load from environment variables (ARGUS_FEATURE_*).
+   *
+   * Also checks ARGUS_AUTONOMOUS=1 — when set, autonomy-related features
+   * are enabled by default as an autonomous profile. Individual
+   * ARGUS_FEATURE_* env vars take precedence over the profile, allowing
+   * explicit overrides to disable specific features.
+   */
   loadFromEnv(): void {
     for (const feature of Object.values(Feature)) {
       const envKey = `ARGUS_FEATURE_${feature.toUpperCase().replace(/-/g, "_")}`
@@ -69,6 +76,58 @@ export class FeatureFlags implements IFeatureFlags {
         this.flags.set(feature, value)
         this.sources.set(feature, "env")
       }
+    }
+
+    // ARGUS_AUTONOMOUS profile: enables autonomy features unless already
+    // overridden by individual ARGUS_FEATURE_* env vars (processed above).
+    const autonomous = process.env["ARGUS_AUTONOMOUS"]
+    const isAutonomous = autonomous?.toLowerCase() === "true" || autonomous === "1"
+    if (isAutonomous) {
+      const autonomousFeatures: Feature[] = [
+        Feature.WORKFLOW_REGISTRY,
+        Feature.ENGAGEMENT_STORE,
+        Feature.APPROVAL_GATES,
+        Feature.LLM_FINDING_ANALYSIS,
+      ]
+      for (const feature of autonomousFeatures) {
+        // Only set if not already explicitly set via ARGUS_FEATURE_* env var
+        if (this.sources.get(feature) !== "env") {
+          this.flags.set(feature, true)
+          this.sources.set(feature, "autonomous_profile")
+        }
+      }
+      // ARGUS_AUTO_APPROVE is NOT set here — the CLI handler (cli.ts) sets
+      // it before getFeatureFlags() is called, making this redundant
+    }
+  }
+
+  /** Returns true when running in autonomous mode (ARGUS_AUTONOMOUS=1) */
+  isAutonomousMode(): boolean {
+    const autonomous = process.env["ARGUS_AUTONOMOUS"]
+    return autonomous?.toLowerCase() === "true" || autonomous === "1"
+  }
+
+  /**
+   * In autonomous mode, fail hard if required features are disabled.
+   * Throws an error listing which features must be enabled.
+   */
+  failIfAutonomousFeaturesDisabled(): void {
+    if (!this.isAutonomousMode()) return
+
+    const required: { feature: Feature; label: string }[] = [
+      { feature: Feature.WORKFLOW_REGISTRY, label: "workflow_registry" },
+      { feature: Feature.ENGAGEMENT_STORE, label: "engagement_store" },
+      { feature: Feature.APPROVAL_GATES, label: "approval_gates" },
+      { feature: Feature.LLM_FINDING_ANALYSIS, label: "llm_finding_analysis" },
+    ]
+
+    const disabled = required.filter((r) => !this.isEnabled(r.feature))
+    if (disabled.length > 0) {
+      const names = disabled.map((d) => d.label).join(", ")
+      throw new Error(
+        `[Argus] ARGUS_AUTONOMOUS=1 requires these features: ${names}. ` +
+        `Enable them in argus.config.yaml under features: or set ARGUS_FEATURE_${disabled.map((d) => d.feature.toUpperCase().replace(/-/g, "_")).join("=1, ARGUS_FEATURE_")}=1.`
+      )
     }
   }
 
@@ -107,6 +166,8 @@ export class FeatureFlags implements IFeatureFlags {
   isDegradedMode(): boolean {
     return Object.values(Feature).every((f) => !this.isEnabled(f))
   }
+
+
 
   /** Check if a feature is enabled */
   isEnabled(feature: Feature): boolean {

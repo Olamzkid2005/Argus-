@@ -179,7 +179,7 @@ _register(ToolDefinition(
     signal_quality=SignalQuality.PROBABLE,
     priority=50,
     cost="low",
-    risk_level="low",
+    risk_level="medium",
 ))
 
 # ── chaos (from chaos.yaml) ──
@@ -246,7 +246,7 @@ _register(ToolDefinition(
     signal_quality=SignalQuality.PROBABLE,
     priority=75,
     cost="medium",
-    risk_level="low",
+    risk_level="medium",
 ))
 
 # ── dependency_check (from dependency_check.yaml) ──
@@ -254,7 +254,7 @@ _register(ToolDefinition(
     name="dependency_check",
     description="OWASP Dependency-Check for known vulnerability scanning in dependencies",
     binary="dependency-check",
-    phases=["repo_scan"],
+    phases=["scan", "deep_scan", "repo_scan"],
     default_args=["--format", "JSON"],
     parameters=[
     ToolParameter(name="target", description="Target project directory", required=True, flag="--scan"),
@@ -369,7 +369,7 @@ _register(ToolDefinition(
     signal_quality=SignalQuality.CANDIDATE,
     priority=70,
     cost="medium",
-    risk_level="low",
+    risk_level="medium",
 ))
 
 # ── finding_correlation_engine (from finding_correlation_engine.yaml) ──
@@ -538,7 +538,7 @@ _register(ToolDefinition(
     requires=ToolRequires(recon_signals=["has_api", "has_login_page"]),
     priority=70,
     cost="low",
-    risk_level="low",
+    risk_level="medium",
 ))
 
 # ── katana (from katana.yaml) ──
@@ -608,7 +608,7 @@ _register(ToolDefinition(
     signal_quality=SignalQuality.CANDIDATE,
     priority=75,
     cost="medium",
-    risk_level="low",
+    risk_level="medium",
 ))
 
 # ── nikto (from nikto.yaml) ──
@@ -624,7 +624,7 @@ _register(ToolDefinition(
     signal_quality=SignalQuality.CANDIDATE,
     priority=60,
     cost="medium",
-    risk_level="low",
+    risk_level="medium",
 ))
 
 # ── nmap (from nmap.yaml) ──
@@ -641,7 +641,7 @@ _register(ToolDefinition(
     signal_quality=SignalQuality.CONFIRMED,
     priority=85,
     cost="medium",
-    risk_level="low",
+    risk_level="medium",
 ))
 
 # ── npm-audit (from npm-audit.yaml) ──
@@ -652,7 +652,7 @@ _register(ToolDefinition(
     phases=["scan", "deep_scan", "repo_scan"],
     default_args=["audit", "--json"],
     parameters=[
-    ToolParameter(name="target", description="Target project directory (must contain package.json)"),
+    ToolParameter(name="target", description="Target project directory (must contain package.json)", required=True),
 ],
     timeout=300,
     signal_quality=SignalQuality.CANDIDATE,
@@ -678,7 +678,7 @@ _register(ToolDefinition(
     signal_quality=SignalQuality.CONFIRMED,
     priority=95,
     cost="medium",
-    risk_level="low",
+    risk_level="medium",
 ))
 
 # ── phpcs (from phpcs.yaml) ──
@@ -702,10 +702,10 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="pip-audit",
     description="Python dependency vulnerability scanner",
-    phases=["repo_scan"],
+    phases=["scan", "deep_scan"],
     default_args=["--format", "json", "--quiet"],
     parameters=[
-    ToolParameter(name="target", description="Audit target path (project dir or requirements file)"),
+    ToolParameter(name="target", description="Audit target path (project dir or requirements file)", required=True),
 ],
     timeout=300,
     signal_quality=SignalQuality.CANDIDATE,
@@ -724,17 +724,14 @@ _register(ToolDefinition(
     default_args=["argus-workers/tools/scripts/playwright_bola.py"],
     parameters=[
     ToolParameter(name="target", description="Target URL", required=True, flag="--target"),
-    ToolParameter(name="attacker-username", description="Attacker username", required=True, flag="--attacker-username"),
-    ToolParameter(name="attacker-password", description="Attacker password", required=True, flag="--attacker-password"),
-    ToolParameter(name="victim-username", description="Victim username", required=True, flag="--victim-username"),
-    ToolParameter(name="victim-password", description="Victim password", required=True, flag="--victim-password"),
+    ToolParameter(name="creds_file", description="Path to JSON credentials file with attacker/victim credentials", required=True, flag="--creds-file"),
     ToolParameter(name="username-selector", description="CSS selector for username input field", flag="--username-selector", default="input[name=username]"),
     ToolParameter(name="password-selector", description="CSS selector for password input field", flag="--password-selector", default="input[name=password]"),
     ToolParameter(name="submit-selector", description="CSS selector for submit button", flag="--submit-selector", default="button[type=submit]"),
 ],
     timeout=120,
     signal_quality=SignalQuality.CONFIRMED,
-    requires=ToolRequires(target_scheme="any"),
+    requires=ToolRequires(target_scheme="['http', 'https']"),
     priority=80,
     cost="medium",
     risk_level="low",
@@ -749,8 +746,9 @@ _register(ToolDefinition(
     default_args=["argus-workers/tools/scripts/playwright_privesc.py"],
     parameters=[
     ToolParameter(name="target", description="Target URL", required=True, flag="--target"),
-    ToolParameter(name="low-priv-username", description="Low-privilege user username", required=True, flag="--low-priv-username"),
-    ToolParameter(name="low-priv-password", description="Low-privilege user password", required=True, flag="--low-priv-password"),
+    ToolParameter(name="creds_file", description="Path to JSON credentials file with low-privilege credentials (alternative to --low-priv-username/--low-priv-password)", flag="--creds-file"),
+    ToolParameter(name="low-priv-username", description="Low-privilege user username (not required when --creds-file is provided)", flag="--low-priv-username"),
+    ToolParameter(name="low-priv-password", description="Low-privilege user password (not required when --creds-file is provided)", flag="--low-priv-password"),
     ToolParameter(name="admin-paths", description="Comma-separated admin endpoints to probe", flag="--admin-paths"),
     ToolParameter(name="username-selector", description="CSS selector for username input field", flag="--username-selector", default="input[name=username]"),
     ToolParameter(name="password-selector", description="CSS selector for password input field", flag="--password-selector", default="input[name=password]"),
@@ -758,7 +756,7 @@ _register(ToolDefinition(
 ],
     timeout=120,
     signal_quality=SignalQuality.CONFIRMED,
-    requires=ToolRequires(target_scheme="any"),
+    requires=ToolRequires(target_scheme="['http', 'https']"),
     priority=80,
     cost="medium",
     risk_level="low",
@@ -773,9 +771,10 @@ _register(ToolDefinition(
     default_args=["argus-workers/tools/scripts/playwright_xss.py"],
     parameters=[
     ToolParameter(name="target", description="Target URL", required=True, flag="--target"),
-    ToolParameter(name="username", description="Login username", required=True, flag="--username"),
-    ToolParameter(name="password", description="Login password", required=True, flag="--password"),
-    ToolParameter(name="form-page", description="Path to the form page (default /feedback)", flag="--form-page"),
+    ToolParameter(name="creds_file", description="Path to JSON credentials file with login credentials (alternative to --username/--password)", flag="--creds-file"),
+    ToolParameter(name="username", description="Login username (not required when --creds-file is provided)", flag="--username"),
+    ToolParameter(name="password", description="Login password (not required when --creds-file is provided)", flag="--password"),
+    ToolParameter(name="form-page", description="Path to the form page (default /feedback)", flag="--form-page", default="/feedback"),
     ToolParameter(name="payload", description="XSS payload to inject", flag="--payload"),
     ToolParameter(name="username-selector", description="CSS selector for username input field", flag="--username-selector", default="input[name=username]"),
     ToolParameter(name="password-selector", description="CSS selector for password input field", flag="--password-selector", default="input[name=password]"),
@@ -783,7 +782,7 @@ _register(ToolDefinition(
 ],
     timeout=120,
     signal_quality=SignalQuality.CONFIRMED,
-    requires=ToolRequires(target_scheme="any"),
+    requires=ToolRequires(target_scheme="['http', 'https']"),
     priority=80,
     cost="medium",
     risk_level="low",
@@ -956,7 +955,7 @@ _register(ToolDefinition(
     requires=ToolRequires(target_scheme="https"),
     priority=60,
     cost="medium",
-    risk_level="low",
+    risk_level="medium",
 ))
 
 # ── threat_intelligence_aggregator (from threat_intelligence_aggregator.yaml) ──
@@ -991,7 +990,7 @@ _register(ToolDefinition(
     signal_quality=SignalQuality.PROBABLE,
     priority=75,
     cost="medium",
-    risk_level="low",
+    risk_level="medium",
 ))
 
 # ── trufflehog (from trufflehog.yaml) ──
@@ -1145,5 +1144,5 @@ _register(ToolDefinition(
     requires=ToolRequires(tech_contains=["wordpress", "wp-"]),
     priority=55,
     cost="medium",
-    risk_level="low",
+    risk_level="medium",
 ))

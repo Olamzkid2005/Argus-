@@ -110,7 +110,8 @@ class FeatureFlags:
             # TTL expired — fall through to re-fetch
             del self._cache[flag_name]
 
-        # 1. Check environment variable
+        # 1. Check environment variable (individual ARGUS_FF_* override runs FIRST
+        #    so it takes precedence over the ARGUS_AUTONOMOUS profile)
         env_name = f"ARGUS_FF_{flag_name.upper()}"
         env_value = os.environ.get(env_name)
         if env_value is not None:
@@ -119,7 +120,24 @@ class FeatureFlags:
             logger.debug("Feature flag %s=%s from env", flag_name, parsed)
             return (parsed, FlagSource.ENV)
 
-        # 2. Check database
+        # 2. Check ARGUS_AUTONOMOUS profile — enables autonomous features unless
+        #    explicitly overridden by ARGUS_FF_* env var (checked above).
+        autonomous = os.environ.get("ARGUS_AUTONOMOUS", "")
+        is_autonomous = autonomous.lower() in ("1", "true", "yes")
+        if is_autonomous and flag_name.upper() in AUTONOMOUS_FEATURES:
+            self._cache[flag_name] = (True, FlagSource.ENV, now)
+            logger.debug("Feature flag %s=True from ARGUS_AUTONOMOUS profile", flag_name)
+            return (True, FlagSource.ENV)
+
+        # 3. Check database
+        env_value = os.environ.get(env_name)
+        if env_value is not None:
+            parsed = self._parse_value(env_value)
+            self._cache[flag_name] = (parsed, FlagSource.ENV, now)
+            logger.debug("Feature flag %s=%s from env", flag_name, parsed)
+            return (parsed, FlagSource.ENV)
+
+        # 3. Check database
         if self.db:
             try:
                 db_value = self._load_flag_from_db(flag_name)
@@ -196,6 +214,25 @@ class FeatureFlags:
                     "enabled": bool(parsed),
                 }
         return flags
+
+
+# ── Autonomous mode flag names ──
+# These are force-enabled when ARGUS_AUTONOMOUS=1 is set.
+AUTONOMOUS_FEATURES = frozenset({
+    "ENGAGEMENT_STATE",
+    "TRUE_REACT_LOOP",
+    "CLEAN_ORCHESTRATOR",
+    "ATTACK_GRAPH_V2",
+    "MEMORY_RETRIEVAL",
+    "GOVERNANCE_V2",
+    "TRANSACTIONAL_EVENTS",
+    "FEEDBACK_LOOP",
+    "FINDING_VERIFICATION",
+    "WS_SCANNER",
+    "PORT_SCANNER",
+    "API_SCANNER",
+    "NUCLEI_TEMPLATES_AUTO_UPDATE",
+})
 
 
 # ── Phase-specific feature flag names ──

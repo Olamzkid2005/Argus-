@@ -90,6 +90,24 @@ class AssessmentOrchestrator(AbstractTool):
             session_id = session_result.get("session_id", "")
             tool_order = session_result.get("plan", [])
 
+            # Create scope validator once per phase (reused for all tools)
+            _scope_validator = None
+            if getattr(ctx, "authorized_scope", None):
+                try:
+                    from tools.scope_validator import ScopeValidator
+
+                    _scope_validator = ScopeValidator(
+                        ctx.engagement_id, ctx.authorized_scope
+                    )
+                except Exception as _scope_err:
+                    logger.warning(
+                        "Failed to create scope validator for phase %s (engagement %s): %s — "
+                        "scope enforcement disabled for this phase",
+                        phase,
+                        ctx.engagement_id,
+                        _scope_err,
+                    )
+
             phase_tool_results = []
             for tool_name in tool_order:
                 try:
@@ -97,6 +115,8 @@ class AssessmentOrchestrator(AbstractTool):
                         tool_name,
                         arguments={"target": ctx.target},
                         timeout=getattr(ctx, "timeout", 120),
+                        engagement_id=ctx.engagement_id,
+                        scope_validator=_scope_validator,
                     )
                     phase_tool_results.append(tool_result)
 

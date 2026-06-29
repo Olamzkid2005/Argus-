@@ -174,13 +174,41 @@ class Orchestrator:
 
         When MCPToolBridge is initialized, calls route through ToolRunner
         for sandboxing, circuit breakers, and metrics. Otherwise falls back
-        to the direct MCP server call_tool().
+        to the direct MCP server call_tool() with scope validation.
+
+        Scope validation is ALWAYS enforced — even in the fallback path —
+        to prevent out-of-scope targets from reaching tool subprocesses.
         """
         emit_tool_start(self.engagement_id, tool, list((arguments or {}).keys()))
         if hasattr(self, "mcp_bridge") and self.mcp_bridge is not None:
             result = self.mcp_bridge.call_via_mcp(tool, arguments or {})
         else:
-            result = self.mcp.call_tool(tool, arguments)
+            # Fallback path: create scope validator to ensure out-of-scope
+            # targets are rejected even when MCPToolBridge is unavailable.
+            _scope_validator = None
+            try:
+                from tools.scope_validator import ScopeValidator
+                from orchestrator_pkg.engagement import EngagementService
+
+                _authorized_scope = EngagementService.load_authorized_scope(
+                    self.engagement_id
+                )
+                if _authorized_scope:
+                    _scope_validator = ScopeValidator(
+                        self.engagement_id, _authorized_scope
+                    )
+            except Exception as _e:
+                logger.warning(
+                    "Could not create scope validator for fallback path (engagement %s): %s",
+                    self.engagement_id,
+                    _e,
+                )
+            result = self.mcp.call_tool(
+                tool,
+                arguments,
+                engagement_id=self.engagement_id,
+                scope_validator=_scope_validator,
+            )
         success = not result.get("isError", False)
         emit_tool_complete(
             self.engagement_id,

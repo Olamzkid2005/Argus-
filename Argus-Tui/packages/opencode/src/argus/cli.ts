@@ -23,6 +23,8 @@ export const ArgusAssessCommand = {
       .option("no-cache", { describe: "Skip cache reads and writes (fresh scan)", type: "boolean", default: false })
       .option("refresh-cache", { describe: "Skip cache reads but still write results (refresh stale data)", type: "boolean", default: false })
       .option("verbose", { describe: "Enable verbose executor logging with detailed tool execution info", type: "boolean", default: false })
+      // Autonomous mode: single flag to enable all autonomy features
+      .option("autonomous", { describe: "Enable full autonomous mode (implies --enable-approval-gates, --enable-workflow-registry, --enable-engagement-store, ARGUS_AUTO_APPROVE=1)", type: "boolean", default: undefined })
       // Task 4.1: Feature flags — all opt-in
       .option("enable-workflow-registry", { describe: "Enable workflow registry for capability-based planning", type: "boolean", default: undefined })
       .option("enable-engagement-store", { describe: "Enable SQLite engagement persistence", type: "boolean", default: undefined })
@@ -31,10 +33,28 @@ export const ArgusAssessCommand = {
     const target = argv.target as string
     process.stderr.write(`[Argus] Starting assessment against: ${target}\n`)
 
-    // Warn if all feature flags are disabled (degraded mode)
+    // Autonomous mode: set env vars so downstream services (approval, feature flags) pick them up
+    if (argv.autonomous === true) {
+      process.env["ARGUS_AUTONOMOUS"] = "1"
+      process.env["ARGUS_AUTO_APPROVE"] = "1"
+      process.stderr.write("[Argus] Autonomous mode enabled (ARGUS_AUTONOMOUS=1)\n")
+    }
+
     const flags = getFeatureFlags()
+
+    // In autonomous mode, fail hard if required features are disabled
+    try {
+      flags.failIfAutonomousFeaturesDisabled()
+    } catch (e) {
+      process.stderr.write(`${(e as Error).message}\n`)
+      process.exitCode = 1
+      return
+    }
+
+    // Warn if all feature flags are disabled (degraded mode)
     if (flags.isDegradedMode()) {
       process.stderr.write("[Argus] WARNING: All feature flags are disabled — running in degraded mode.\n")
+      process.stderr.write("[Argus] Pass --autonomous or set ARGUS_AUTONOMOUS=1 for full autonomous mode.\n")
     }
 
     // Build feature flag overrides from CLI
@@ -43,6 +63,7 @@ export const ArgusAssessCommand = {
       "enable-workflow-registry": Feature.WORKFLOW_REGISTRY,
       "enable-engagement-store": Feature.ENGAGEMENT_STORE,
       "enable-approval-gates": Feature.APPROVAL_GATES,
+      // --autonomous handled above via env vars — not a feature flag itself
     }
     for (const [cliKey, feature] of Object.entries(cliFeatureMap)) {
       const val = argv[cliKey]

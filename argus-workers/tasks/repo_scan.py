@@ -238,6 +238,19 @@ def expand_repo_scan(
     """
     from tasks.base import task_context
 
+    # Idempotency check: if engagement has already progressed past recon
+    # (e.g. Celery retry delivered duplicate task), skip immediately.
+    from tasks.utils import get_engagement_state
+
+    _expand_db_state = get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
+    if _expand_db_state in ("scanning", "analyzing", "reporting", "complete", "failed"):
+        logger.info(
+            "Engagement %s already past 'recon' (state=%s) — skipping duplicate expand_repo_scan task",
+            engagement_id,
+            _expand_db_state,
+        )
+        return {"phase": "repo_scan_expand", "status": "skipped", "reason": f"already_{_expand_db_state}"}
+
     job_extra = {
         "type": "repo_scan_expand",
         "repo_url": repo_url,
