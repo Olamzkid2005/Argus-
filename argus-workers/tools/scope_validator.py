@@ -8,14 +8,9 @@ import logging
 from urllib.parse import urlparse
 
 from utils.logging_utils import ScanLogger
+from exceptions import ScopeViolationError
 
 logger = logging.getLogger(__name__)
-
-
-class ScopeViolationError(Exception):
-    """Raised when a tool is requested for an out-of-scope target."""
-
-    pass
 
 
 class ScopeValidator:

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 from config.constants import LLM_AGENT_COST_PER_1K_INPUT, LLM_AGENT_COST_PER_1K_OUTPUT
 from utils.logging_utils import ScanLogger
+from exceptions import LLMUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -868,12 +869,6 @@ class LLMClient:
     async def is_available_async(self) -> bool:
         """Async version of is_available. Same logic, awaitable."""
         return self.is_available()
-
-
-class LLMUnavailableError(Exception):
-    """Raised when LLM is not configured or all retries fail."""
-
-    pass
 
 
 def load_llm_setting(key: str, default: str = "", user_email: str | None = None) -> str:

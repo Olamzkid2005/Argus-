@@ -15,6 +15,7 @@ import hashlib
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from exceptions import ArtifactMissingError
 
 
 @dataclass
@@ -33,10 +34,6 @@ class ArtifactRef:
     size: int
     mime: str
     stored_externally: bool = True
-
-
-class ArtifactMissingError(Exception):
-    pass
 
 
 class ArtifactStorage:

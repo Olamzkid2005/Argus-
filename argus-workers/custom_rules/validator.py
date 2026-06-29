@@ -5,12 +5,7 @@ Requirements: 27.3
 """
 
 import re
-
-
-class RuleValidationError(Exception):
-    """Raised when rule validation fails"""
-
-    pass
+from exceptions import RuleValidationError
 
 
 class RuleValidator:

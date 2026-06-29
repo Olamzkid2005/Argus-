@@ -36,14 +36,9 @@ from tools.circuit_breaker import (
 from tracing import ExecutionSpan, StructuredLogger
 from utils.error_hints import build_error_hint
 from utils.logging_utils import ScanLogger
+from exceptions import SecurityError
 
 logger = logging.getLogger(__name__)
-
-
-class SecurityError(Exception):
-    """Raised when dangerous payload is detected"""
-
-    pass
 
 
 class ToolRunner:

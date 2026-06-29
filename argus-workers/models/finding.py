@@ -6,6 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from exceptions import FindingValidationError
 
 
 class Severity(StrEnum):
@@ -96,7 +97,3 @@ class VulnerabilityFinding(BaseModel):
         return str(v).strip()
 
 
-class FindingValidationError(Exception):
-    """Raised when finding validation fails"""
-
-    pass

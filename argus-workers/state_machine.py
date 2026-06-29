@@ -12,28 +12,9 @@ import psycopg2
 
 from database.connection import DatabaseConnectionError, get_db
 from utils.validation import validate_uuid
+from exceptions import InvalidStateTransitionError
 
 logger = logging.getLogger(__name__)
-
-
-class InvalidStateTransitionError(Exception):
-    """Raised when invalid state transition is attempted"""
-
-    pass
-
-
-# Maps agent/phase naming conventions to canonical state machine state names.
-# The ReActAgent uses "scan", "analyze", "report" for tool selection and phase
-# management; the state machine uses "scanning", "analyzing", "reporting" for
-# DB persistence. This mapping is the single source of truth for translation.
-PHASE_TO_STATE_MAP: dict[str, str] = {
-    "recon": "recon",
-    "scan": "scanning",
-    "deep_scan": "scanning",
-    "repo_scan": "scanning",
-    "analyze": "analyzing",
-    "report": "reporting",
-}
 
 
 def resolve_state_for_phase(phase_name: str) -> str:

@@ -15,12 +15,9 @@ import requests
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
 from utils.logging_utils import ScanLogger
+from exceptions import AuthError
 
 logger = logging.getLogger(__name__)
-
-
-class AuthError(Exception):
-    """Raised when authentication fails for any reason."""
 
 
 @dataclass

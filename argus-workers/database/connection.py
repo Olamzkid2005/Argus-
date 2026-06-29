@@ -19,10 +19,9 @@ from psycopg2 import pool
 logger = logging.getLogger(__name__)
 
 
-class DatabaseConnectionError(Exception):
-    """Raised when database connection fails"""
+from exceptions import DatabaseConnectionError as _DbErr
 
-    pass
+DatabaseConnectionError = _DbErr
 
 
 class ConnectionManager:

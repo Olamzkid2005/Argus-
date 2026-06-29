@@ -18,6 +18,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
 from utils.validation import validate_uuid
+from exceptions import TracingError
 
 logger = logging.getLogger(__name__)
 
@@ -67,12 +68,6 @@ def setup_tracing(service_name: str = "argus-workers"):
         trace.set_tracer_provider(provider)
         _tracing_initialized = True
         return trace.get_tracer(__name__)
-
-
-class TracingError(Exception):
-    """Raised when tracing operations fail"""
-
-    pass
 
 
 @dataclass

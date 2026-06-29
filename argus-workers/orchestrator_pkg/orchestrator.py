@@ -45,14 +45,9 @@ from utils.logging_utils import ScanLogger
 from websocket_events import get_websocket_publisher
 
 from .repo_scan import execute_repo_scan
+from exceptions import EngagementTimeoutError
 
 logger = logging.getLogger(__name__)
-
-
-class EngagementTimeoutError(Exception):
-    """Raised when engagement exceeds hard timeout"""
-
-    pass
 
 
 class Orchestrator:

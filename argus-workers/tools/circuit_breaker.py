@@ -13,6 +13,7 @@ from enum import Enum
 from functools import wraps
 
 from utils.logging_utils import ScanLogger
+from exceptions import CircuitOpenError
 
 
 class CircuitState(Enum):
@@ -160,12 +161,6 @@ class CircuitBreaker:
             elapsed = time.time() - self._last_failure_time
             return max(0, self.cooldown_seconds - elapsed)
         return 0
-
-
-class CircuitOpenError(Exception):
-    """Raised when circuit breaker is open and call is attempted."""
-
-    pass
 
 
 class ToolCircuitBreakerManager:

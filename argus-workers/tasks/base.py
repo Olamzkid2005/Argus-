@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from dead_letter_queue import get_dlq
+from exceptions import OperatorCanceled
 
 try:
     import redis
@@ -51,12 +52,6 @@ except ImportError:
 # Public alias for use in except clauses throughout this module.
 # We also check by class name as a final fallback (see _is_soft_timeout).
 SoftTimeLimitExceeded = _SoftTimeLimitExceeded
-
-
-class OperatorCanceled(Exception):
-    """Raised when an engagement is cancelled by the operator via Redis flag."""
-
-    pass
 
 
 def _is_soft_timeout(exc: BaseException) -> bool:

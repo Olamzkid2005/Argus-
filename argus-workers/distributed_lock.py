@@ -7,14 +7,9 @@ import time
 import uuid
 
 import redis
+from exceptions import LockAcquisitionError
 
 logger = logging.getLogger(__name__)
-
-
-class LockAcquisitionError(Exception):
-    """Raised when a distributed lock cannot be acquired (transient, retryable)."""
-
-    pass
 
 
 class DistributedLock:

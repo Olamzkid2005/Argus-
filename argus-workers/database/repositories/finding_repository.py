@@ -14,18 +14,13 @@ from psycopg2.sql import SQL, Identifier
 # M-02: Cache invalidation for findings data
 from cache import WorkerCache
 from database.repositories.base import BaseRepository
+from exceptions import FindingCapExceededError
 
 cache = WorkerCache()
 
 logger = logging.getLogger(__name__)
 
 MAX_FINDINGS_PER_ENGAGEMENT = int(os.getenv("MAX_FINDINGS_PER_ENGAGEMENT", "50000"))
-
-
-class FindingCapExceededError(Exception):
-    """Raised when the maximum number of findings per engagement is reached."""
-
-    pass
 
 
 class FindingRepository(BaseRepository):

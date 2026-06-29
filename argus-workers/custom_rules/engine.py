@@ -8,12 +8,7 @@ import re
 from pathlib import Path
 
 import yaml
-
-
-class CustomRuleError(Exception):
-    """Raised when a custom rule is invalid or fails execution"""
-
-    pass
+from exceptions import CustomRuleError
 
 
 class CustomRuleEngine:
