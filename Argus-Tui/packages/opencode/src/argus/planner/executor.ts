@@ -354,6 +354,29 @@ export class InProcessExecutor implements PhaseExecutor {
         continue
       }
 
+      // 4b. Per-tool destructive confirmation (Task 4.1)
+      if (this.isFeatureEnabled(Feature.APPROVAL_GATES)) {
+        const toolDef = this.toolRegistry.getTool(next.tool)
+        if (toolDef?.destructive) {
+          const toolApproval = await this.approvalService.confirmDestructiveTool(
+            next.tool,
+            toolDef.label,
+            phase.target,
+          )
+          if (!toolApproval.approved) {
+            const reason = toolApproval.reason ?? "Skipped by user"
+            errors.push(`Destructive tool ${next.tool} skipped: ${reason}`)
+            await this.bridge.agentObserve({
+              session_id: session.session_id,
+              tool: next.tool,
+              success: false,
+              summary: reason,
+            })
+            continue
+          }
+        }
+      }
+
       // 5. Execute tool
       const toolStartTime = Date.now()
       try {
@@ -513,6 +536,29 @@ export class InProcessExecutor implements PhaseExecutor {
           const safeArgs = { target: toolArgs.target, capability: toolArgs.capability }
           console.log(`[executor]    Args:`, JSON.stringify(safeArgs))
         }
+
+        // Per-tool destructive confirmation (Task 4.1)
+        // Runs AFTER phase-level approval, giving users a second safety prompt
+        // before individual destructive tools execute. In TTY mode, the user
+        // can approve/reject each destructive tool independently.
+        if (tool.destructive && this.isFeatureEnabled(Feature.APPROVAL_GATES)) {
+          const toolApproval = await this.approvalService.confirmDestructiveTool(
+            tool.name,
+            tool.label,
+            phase.target,
+          )
+          if (!toolApproval.approved) {
+            const reason = toolApproval.reason ?? "Skipped by user"
+            if (execOptions.verbose) {
+              console.log(`[executor]  ⛔ Destructive tool ${tool.name} skipped: ${reason}`)
+            }
+            return { findings: [], errors: [`Destructive tool ${tool.name} skipped: ${reason}`], failFast: false }
+          }
+          if (execOptions.verbose) {
+            console.log(`[executor]  ✓ Destructive tool ${tool.name} confirmed`)
+          }
+        }
+
         const result = await this.bridge.callTool(tool.name, toolArgs, toolTimeout, execOptions.cacheMode)
         // Clear credential data from args after the call
         delete toolArgs.extra

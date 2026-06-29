@@ -129,6 +129,20 @@ EXPECTED_DEFAULT_CODE: dict[type[ArgusError], ErrorCode] = {
 }
 
 
+def _opentelemetry_available() -> bool:
+    """Check if opentelemetry can be fully imported (required by tracing module).
+
+    The tracing module does ``from opentelemetry import trace`` at module level,
+    so a bare ``import opentelemetry`` is insufficient — we need to verify that
+    the ``trace`` submodule is actually resolvable.
+    """
+    try:
+        from opentelemetry import trace  # noqa: F401
+        return True
+    except (ImportError, ModuleNotFoundError):
+        return False
+
+
 class TestHierarchy:
     """Verify the inheritance tree is structurally correct."""
 
@@ -405,7 +419,7 @@ class TestCrossModuleReimport:
         assert issubclass(cls, InfrastructureError)
 
     @pytest.mark.skipif(
-        True,
+        not _opentelemetry_available(),
         reason="opentelemetry not installed — tracing module cannot import",
     )
     def test_tracing_error(self):
@@ -424,7 +438,7 @@ class TestCrossModuleReimport:
         assert issubclass(cls, ToolError)
 
     @pytest.mark.skipif(
-        True,
+        not _opentelemetry_available(),
         reason="opentelemetry not installed — tool_runner imports tracing",
     )
     def test_security_error(self):
@@ -495,7 +509,7 @@ class TestCrossModuleReimport:
         assert issubclass(cls, ValidationError)
 
     @pytest.mark.skipif(
-        True,
+        not _opentelemetry_available(),
         reason="opentelemetry not installed — orchestrator imports tracing",
     )
     def test_engagement_timeout_error(self):

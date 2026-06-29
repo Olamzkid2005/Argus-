@@ -180,4 +180,98 @@ describe("ApprovalService", () => {
       expect(service.getGate("privilege_escalation")).toBeDefined()
     })
   })
+
+  describe("confirmDestructiveTool", () => {
+    test("auto-approves when ARGUS_AUTO_APPROVE=1", async () => {
+      const orig = process.env.ARGUS_AUTO_APPROVE
+      process.env.ARGUS_AUTO_APPROVE = "1"
+      const service = new ApprovalService()
+      try {
+        const result = await service.confirmDestructiveTool("sqlmap", "SQLMap SQL Injection Scanner", "https://example.com")
+        expect(result.approved).toBe(true)
+        expect(result.reason).toMatch(/Auto-approved/)
+      } finally {
+        process.env.ARGUS_AUTO_APPROVE = orig
+      }
+    })
+
+    test("auto-approves when stdout is not a TTY", async () => {
+      const origIsTTY = (process.stdout as any).isTTY
+      ;(process.stdout as any).isTTY = false
+      const service = new ApprovalService()
+      try {
+        const result = await service.confirmDestructiveTool("sqlmap", "SQLMap SQL Injection Scanner", "https://example.com")
+        expect(result.approved).toBe(true)
+      } finally {
+        ;(process.stdout as any).isTTY = origIsTTY
+      }
+    })
+
+    test("returns approved=false when user types 'n'", async () => {
+      const origIsTTY = (process.stdout as any).isTTY
+      const origStdin = process.stdin
+      const origWrite = process.stderr.write
+      process.stderr.write = () => true
+      ;(process.stdout as any).isTTY = true
+
+      const dataCallbacks: Array<(data: Buffer) => void> = []
+      const mockStdin = {
+        resume: () => {},
+        pause: () => {},
+        isTTY: true,
+        removeAllListeners: () => {},
+        once: (event: string, cb: (data: Buffer) => void) => {
+          if (event === "data") dataCallbacks.push(cb)
+        },
+      } as any
+
+      process.stdin = mockStdin
+
+      try {
+        const service = new ApprovalService()
+        const promise = service.confirmDestructiveTool("sqlmap", "SQLMap SQL Injection Scanner", "https://example.com")
+        dataCallbacks[0]?.(Buffer.from("n\n"))
+        const result = await promise
+        expect(result.approved).toBe(false)
+        expect(result.reason).toBe("User declined confirmation")
+      } finally {
+        process.stdin = origStdin
+        process.stderr.write = origWrite
+        ;(process.stdout as any).isTTY = origIsTTY
+      }
+    })
+
+    test("returns approved=true when user types 'y'", async () => {
+      const origIsTTY = (process.stdout as any).isTTY
+      const origStdin = process.stdin
+      const origWrite = process.stderr.write
+      process.stderr.write = () => true
+      ;(process.stdout as any).isTTY = true
+
+      const dataCallbacks: Array<(data: Buffer) => void> = []
+      const mockStdin = {
+        resume: () => {},
+        pause: () => {},
+        isTTY: true,
+        removeAllListeners: () => {},
+        once: (event: string, cb: (data: Buffer) => void) => {
+          if (event === "data") dataCallbacks.push(cb)
+        },
+      } as any
+
+      process.stdin = mockStdin
+
+      try {
+        const service = new ApprovalService()
+        const promise = service.confirmDestructiveTool("sqlmap", "SQLMap SQL Injection Scanner", "https://example.com")
+        dataCallbacks[0]?.(Buffer.from("y\n"))
+        const result = await promise
+        expect(result.approved).toBe(true)
+      } finally {
+        process.stdin = origStdin
+        process.stderr.write = origWrite
+        ;(process.stdout as any).isTTY = origIsTTY
+      }
+    })
+  })
 })

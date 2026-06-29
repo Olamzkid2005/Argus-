@@ -19,9 +19,7 @@ from psycopg2 import pool
 logger = logging.getLogger(__name__)
 
 
-from exceptions import DatabaseConnectionError as _DbErr
-
-DatabaseConnectionError = _DbErr
+from exceptions import DatabaseConnectionError
 
 
 class ConnectionManager:

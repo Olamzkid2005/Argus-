@@ -51,8 +51,14 @@ e2e-up: ## Start E2E test targets (Juice Shop, DVWA)
 e2e-down: ## Stop E2E test targets
 	docker compose --profile e2e down
 
-e2e: ## Run full E2E test suite
+e2e: ## Run full E2E test suite (shell script)
 	./scripts/e2e-test.sh
+
+e2e-v5: ## Run V5 E2E tests via bun (requires targets up)
+	cd Argus-Tui/packages/opencode && bun test test/argus/e2e/ --timeout 300000
+
+e2e-typecheck: ## Type-check E2E test code
+	cd Argus-Tui/packages/opencode && bun typecheck
 
 docker-up: ## Start all services with Docker Compose
 	docker compose up -d --build

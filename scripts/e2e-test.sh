@@ -50,20 +50,17 @@ bun typecheck || fail "TypeScript typecheck failed"
 pass "TypeScript typecheck"
 
 bun test test/argus/ --timeout 30000 2>&1 | tail -3 || fail "Argus unit tests failed"
-pass "Argus unit tests (335 tests)"
+pass "Argus unit tests passed"
 
-# ── Phase 3: Assessment Smoke Test ──
+# ── Phase 3: E2E Tests ──
 echo ""
-echo "--- Running assessment smoke test ---"
+echo "--- Running E2E tests (typecheck + E2E suite) ---"
 
-# Run doctor first
-bun run src/argus/main.ts doctor 2>&1 | head -10
+bun typecheck || fail "TypeScript typecheck failed"
 
-# Quick assessment against Juice Shop (deterministic mode, no LLM)
-if ! timeout 60 bun run src/argus/main.ts assess http://127.0.0.1:3001 --deterministic 2>&1; then
-  fail "Juice Shop assessment failed"
-fi
-pass "Juice Shop assessment completed"
+echo "Running E2E tests against vulnerable targets..."
+bun test test/argus/e2e/ --timeout 300000 2>&1 || fail "E2E tests failed"
+pass "E2E tests passed"
 
 # ── Phase 4: Cleanup ──
 echo ""
