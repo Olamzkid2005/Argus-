@@ -7,6 +7,7 @@ import { computePackageHash } from "./hash"
 import { Confidence } from "../shared/types"
 import { EncryptedFileHandle } from "../storage/encrypted-file"
 import { EncryptionManager } from "../storage/encryption"
+import { parseHarDirectory, formatRequest, formatResponse } from "./har-parser"
 
 interface CollectorConfig {
   retention_days: number
@@ -242,6 +243,61 @@ export class EvidenceCollector {
       type: "screenshot" as const,
       size_bytes: screenshotBuffer.length,
     }
+  }
+
+  /**
+   * Ingest HAR files from a directory, saving each request/response pair
+   * through the EvidenceCollector and returning all created artifact entries.
+   *
+   * Uses the har-parser module to read and parse Playwright HAR files,
+   * then saves the request and response data as text artifacts. The resulting
+   * artifacts can be passed directly to createPackage().
+   *
+   * @param engagementId - The engagement these artifacts belong to.
+   * @param findingId - The finding these artifacts are evidence for.
+   * @param harDir - Directory containing .har files from Playwright's recordHar.
+   * @returns Array of ArtifactEntry created (empty if no HAR files found or on error).
+   */
+  async ingestHarFiles(engagementId: string, findingId: string, harDir: string): Promise<ArtifactEntry[]> {
+    this.validateId(engagementId, "engagementId")
+    this.validateId(findingId, "findingId")
+
+    if (!existsSync(harDir)) {
+      return []
+    }
+
+    if (!(await this.checkStorageLimit(engagementId))) {
+      console.warn(`[Evidence] Storage limit exceeded for ${engagementId} — skipping HAR ingestion`)
+      return []
+    }
+
+    const entries = parseHarDirectory(harDir)
+    if (entries.length === 0) {
+      return []
+    }
+
+    const artifacts: ArtifactEntry[] = []
+    let saved = 0
+
+    for (const entry of entries) {
+      try {
+        const reqText = formatRequest(entry)
+        const resText = formatResponse(entry)
+
+        const reqArtifact = await this.saveRequest(engagementId, findingId, reqText)
+        artifacts.push(reqArtifact)
+
+        const resArtifact = await this.saveResponse(engagementId, findingId, resText)
+        artifacts.push(resArtifact)
+
+        saved++
+      } catch (e) {
+        console.warn(`[Evidence] Failed to save HAR entry for ${entry.url}: ${(e as Error).message}`)
+      }
+    }
+
+    console.log(`[Evidence] Ingested ${saved} HAR entries from ${harDir} for finding ${findingId}`)
+    return artifacts
   }
 
   async createPackage(engagementId: string, findingId: string, artifacts: ArtifactEntry[]): Promise<EvidenceManifest> {

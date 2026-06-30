@@ -3,6 +3,9 @@ import type { VerificationScenario, VerifierResult, EvidencePackage } from "../t
 import { Confidence } from "../../shared/types"
 import { loginIfFormPresent, isAccessDenied } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
+import { tmpdir } from "os"
+import { join } from "path"
+import { existsSync, mkdirSync, rmSync } from "fs"
 
 export class PrivilegeEscalationVerifier implements VerificationScenario {
   name = "privilege-escalation"
@@ -13,6 +16,7 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
   private capturedScreenshots: { data: Buffer; label: string }[] = []
   private capturedResponses: string[] = []
   private capturedRequests: string[] = []
+  private harDir: string | null = null
 
   constructor(
     private engine: BrowserEngine,
@@ -29,17 +33,26 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
       this.logs.push("WARNING: Low-privilege credentials are empty — authentication may fail")
     }
     await this.engine.launch()
-    await this.engine.createContext()
+    // Create a temp directory for HAR capture
+    this.harDir = join(tmpdir(), `argus-har-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
+    mkdirSync(this.harDir, { recursive: true })
+    await this.engine.createContext({ harDir: this.harDir } as any)
     this.logs.push("Privilege escalation verifier setup complete")
   }
 
   async cleanup(): Promise<void> {
     await this.engine.close()
+    // Clean up temp HAR directory
+    if (this.harDir && existsSync(this.harDir)) {
+      try {
+        rmSync(this.harDir, { recursive: true, force: true })
+      } catch { /* best-effort cleanup */ }
+    }
   }
 
   /** Check endpoint access without auth as a baseline */
   private async checkBaseline(endpointUrl: string): Promise<boolean> {
-    const context = await this.engine.createContext()
+    const context = await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
     const page = await context.newPage()
     try {
       const response = await page.goto(endpointUrl, { waitUntil: "networkidle", timeout: 30000 })
@@ -122,6 +135,7 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
         const entry = await this.collector.captureScreenshot(this.engagementId, this.findingId, shot.data).catch(() => null)
         if (entry) collectedArtifacts.push(entry)
       }
+      // Save manually captured request/response stubs
       for (const req of this.capturedRequests) {
         const entry = await this.collector.saveRequest(this.engagementId, this.findingId, req).catch(() => null)
         if (entry) collectedArtifacts.push(entry)
@@ -129,6 +143,11 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
       for (const res of this.capturedResponses) {
         const entry = await this.collector.saveResponse(this.engagementId, this.findingId, res).catch(() => null)
         if (entry) collectedArtifacts.push(entry)
+      }
+      // Ingest HAR data for full request/response details with actual headers and bodies
+      if (this.harDir) {
+        const harArtifacts = await this.collector.ingestHarFiles(this.engagementId, this.findingId, this.harDir).catch(() => [])
+        collectedArtifacts.push(...harArtifacts)
       }
       await this.collector.createPackage(this.engagementId, this.findingId, collectedArtifacts).catch(() => {})
     }

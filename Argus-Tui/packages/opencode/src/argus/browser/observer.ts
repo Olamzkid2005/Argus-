@@ -1,5 +1,22 @@
-import type { Page } from "playwright"
+import type { Page, Response } from "playwright"
 import type { Observation, DiffResult } from "./types"
+
+/**
+ * Extract response headers from a Playwright Response object.
+ * Converts all header names to lowercase for consistent access.
+ */
+function extractHeaders(response: Response): Record<string, string> {
+  const headers: Record<string, string> = {}
+  try {
+    const rawHeaders = response.headers()
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      headers[key.toLowerCase()] = String(value)
+    }
+  } catch {
+    // Headers may not be available in all contexts
+  }
+  return headers
+}
 
 export async function observeUrl(page: Page, url: string): Promise<Observation> {
   const response = await page.goto(url, { waitUntil: "networkidle", timeout: 30000 })
@@ -8,7 +25,7 @@ export async function observeUrl(page: Page, url: string): Promise<Observation> 
   return {
     url,
     domSnapshot,
-    responseHeaders: {},
+    responseHeaders: response ? extractHeaders(response) : {},
     statusCode: response?.status() ?? 0,
     timestamp: new Date().toISOString(),
   }

@@ -1,11 +1,20 @@
 name: testssl
 command: testssl
 description: "TLS/SSL security testing tool"
+args:
+  - "--quiet"
+  - "--mode"
+  - "parallel"
 parameters:
   - name: target
     type: string
     description: "Target host:port"
     required: true
+  - name: jsonfile
+    type: string
+    description: "Write JSON findings to file (use '-'' for stdout)"
+    required: false
+    flag: "--jsonfile"
 capabilities:
   - vulnerability_scanning
 signal_quality: CANDIDATE

@@ -2,6 +2,8 @@ name: nmap
 command: nmap
 description: "Nmap port scanner for port discovery and service identification"
 args:
+  - "-oX"
+  - "-"
   - "-Pn"
   - "-T4"
   - "--top-ports"

@@ -632,7 +632,7 @@ _register(ToolDefinition(
     name="nmap",
     description="Nmap port scanner for port discovery and service identification",
     phases=["recon"],
-    default_args=["-Pn", "-T4", "--top-ports", "200"],
+    default_args=["-oX", "-", "-Pn", "-T4", "--top-ports", "200"],
     parameters=[
     ToolParameter(name="target", description="Target hostname or IP address", required=True),
     ToolParameter(name="ports", description="Port range (e.g. 80,443 or 1-1000)", flag="-p"),
@@ -947,8 +947,10 @@ _register(ToolDefinition(
     name="testssl",
     description="TLS/SSL security testing tool",
     phases=["scan", "deep_scan"],
+    default_args=["--quiet", "--mode", "parallel"],
     parameters=[
     ToolParameter(name="target", description="Target host:port", required=True),
+    ToolParameter(name="jsonfile", description="Write JSON findings to file (use '-'' for stdout)", flag="--jsonfile"),
 ],
     timeout=300,
     signal_quality=SignalQuality.CANDIDATE,

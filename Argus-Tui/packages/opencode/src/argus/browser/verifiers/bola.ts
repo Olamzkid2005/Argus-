@@ -3,6 +3,9 @@ import type { VerificationScenario, VerifierResult, EvidencePackage } from "../t
 import { Confidence } from "../../shared/types"
 import { loginIfFormPresent, isAccessDenied } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
+import { tmpdir } from "os"
+import { join } from "path"
+import { existsSync, mkdirSync, rmSync } from "fs"
 
 export class BOLAVerifier implements VerificationScenario {
   name = "bola"
@@ -16,6 +19,7 @@ export class BOLAVerifier implements VerificationScenario {
   private capturedResponses: string[] = []
   private capturedRequests: string[] = []
   private resourceUrl = ""
+  private harDir: string | null = null
 
   constructor(
     private engine: BrowserEngine,
@@ -40,11 +44,20 @@ export class BOLAVerifier implements VerificationScenario {
     }
     this.resourceUrl = `${this.targetUrl.replace(/\/+$/, "")}/${this.resourcePath.replace(/^\//, "")}`
     await this.engine.launch()
-    this.logs.push("BOLA verifier setup complete")
+    // Create a temp directory for HAR capture
+    this.harDir = join(tmpdir(), `argus-har-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
+    mkdirSync(this.harDir, { recursive: true })
+    this.logs.push(`BOLA verifier setup complete — HAR dir: ${this.harDir}`)
   }
 
   async cleanup(): Promise<void> {
     await this.engine.close()
+    // Clean up temp HAR directory
+    if (this.harDir && existsSync(this.harDir)) {
+      try {
+        rmSync(this.harDir, { recursive: true, force: true })
+      } catch { /* best-effort cleanup */ }
+    }
   }
 
   async execute(): Promise<void> {
@@ -89,6 +102,11 @@ export class BOLAVerifier implements VerificationScenario {
         const entry = await this.collector.saveResponse(this.engagementId, this.findingId, res).catch(() => null)
         if (entry) collectedArtifacts.push(entry)
       }
+      // Ingest HAR data for full request/response details with actual headers and bodies
+      if (this.harDir) {
+        const harArtifacts = await this.collector.ingestHarFiles(this.engagementId, this.findingId, this.harDir).catch(() => [])
+        collectedArtifacts.push(...harArtifacts)
+      }
       await this.collector.createPackage(this.engagementId, this.findingId, collectedArtifacts).catch(() => {})
     }
 
@@ -112,7 +130,7 @@ export class BOLAVerifier implements VerificationScenario {
 
   /** Check resource access without authentication as a baseline */
   private async checkAccessUnauthenticated(resourceUrl: string): Promise<boolean> {
-    const context = await this.engine.createContext()
+    const context = await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
     const page = await context.newPage()
     try {
       const response = await page.goto(resourceUrl, { waitUntil: "networkidle", timeout: 30000 })
@@ -131,7 +149,7 @@ export class BOLAVerifier implements VerificationScenario {
 
   private async checkAccess(resourceUrl: string, creds: { username: string; password: string }, label: string): Promise<boolean> {
     this.logs.push(`Attempting to access ${resourceUrl} as ${label} (${creds.username})`)
-    const context = await this.engine.createContext()
+    const context = await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
     const page = await context.newPage()
     try {
       await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30000 })

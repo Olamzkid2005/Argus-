@@ -280,6 +280,48 @@ export class WorkflowRunner {
     }
     emit(`✓ Target validated: ${target}`)
 
+    // ── Target confirmation (soft guardrail, Task 4.1) ──
+    // When security.scope.require_confirmation is true and the target is not
+    // in the allowed list, prompt the user for confirmation before proceeding.
+    // Respects ARGUS_AUTO_APPROVE=1 (auto-approves). Non-TTY auto-approves.
+    if (validator.requiresConfirmation(target)) {
+      if (process.env.ARGUS_AUTO_APPROVE === "1") {
+        emit(`✓ Target confirmation auto-approved (ARGUS_AUTO_APPROVE=1)`)
+      } else if (!process.stdout.isTTY) {
+        emit(`✓ Target auto-confirmed (non-TTY)`)
+      } else {
+        process.stderr.write(`\n⚠  Target Confirmation Required\n`)
+        process.stderr.write(`   Target: ${target}\n`)
+        process.stderr.write(`   This target is not in the allowed targets list.\n`)
+        process.stderr.write(`   Proceed? [y/N] `)
+
+        const confirmed = await new Promise<boolean>((resolve) => {
+          const stdin = process.stdin
+          stdin.resume()
+          const done = (result: boolean) => {
+            stdin.pause()
+            stdin.removeAllListeners("data")
+            clearTimeout(timer)
+            resolve(result)
+          }
+          stdin.once("data", (data: Buffer) => {
+            const input = data.toString().trim().toLowerCase()
+            process.stderr.write("\n")
+            done(input === "y" || input === "yes")
+          })
+          const timer = setTimeout(() => {
+            process.stderr.write("\n   Confirmation timed out.\n\n")
+            done(false)
+          }, 30000)
+        })
+
+        if (!confirmed) {
+          throw new Error(`Target "${target}" not confirmed by user.`)
+        }
+        emit(`✓ Target confirmed by user`)
+      }
+    }
+
     // Paths resolved from the central project-root helper (shared/path.ts)
     const workersPath = options.workersPath ?? MCP_WORKER_PATH
     const workflowsDir = options.workflowsDir ?? resolve(PROJECT_ROOT, "Argus-Tui/packages/opencode/src/argus/workflows")
@@ -339,7 +381,13 @@ export class WorkflowRunner {
     // ── 4. Plan ──
     emit(`⠋ Planning assessment...`)
     const planner = this.deps?.planner ?? new WorkflowPlanner(workflowRegistry, toolRegistry)
-    const plan = await planner.plan(target, defaultCreds ? { authState: "basic" } : undefined, { useLLM: options.useLLM ?? true })
+    // Determine whether to use LLM: explicit option > DETERMINISTIC_FALLBACK flag > default (true)
+    // When DETERMINISTIC_FALLBACK is enabled, default to deterministic mode (no LLM),
+    // but an explicit useLLM option still takes precedence.
+    const useLLM = options.useLLM !== undefined
+      ? options.useLLM
+      : !featureFlags.isEnabled(Feature.DETERMINISTIC_FALLBACK)
+    const plan = await planner.plan(target, defaultCreds ? { authState: "basic" } : undefined, { useLLM })
     emit(`✓ Plan created: ${plan.phases.length} phase(s)`)
     if (defaultCreds) {
       for (const phase of plan.phases) {
