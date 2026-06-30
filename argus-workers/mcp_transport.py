@@ -23,6 +23,8 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
+from exceptions import MCPTransportError as MCPTransportError  # re-exported
+
 logger = logging.getLogger(__name__)
 
 

@@ -6,6 +6,8 @@ Requirements: 27.3
 
 import re
 
+from exceptions import RuleValidationError as RuleValidationError  # re-exported
+
 
 class RuleValidator:
     """
