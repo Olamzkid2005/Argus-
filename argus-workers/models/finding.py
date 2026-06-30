@@ -7,6 +7,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from exceptions import FindingValidationError as FindingValidationError  # re-exported
+
 
 class Severity(StrEnum):
     """Severity levels for findings"""
