@@ -12,8 +12,8 @@ from collections.abc import Callable
 from enum import Enum
 from functools import wraps
 
-from utils.logging_utils import ScanLogger
 from exceptions import CircuitOpenError
+from utils.logging_utils import ScanLogger
 
 
 class CircuitState(Enum):

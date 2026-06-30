@@ -10,7 +10,6 @@ Tests cover:
 - Cross-module re-exports (importing from original modules)
 """
 
-from typing import Any
 
 import pytest
 
@@ -43,7 +42,6 @@ from exceptions import (
     TracingError,
     ValidationError,
 )
-
 
 # ── All exception classes listed for parameterized tests ──────────────
 

@@ -19,7 +19,6 @@ import pytest
 # Module under test
 from post_finding_hooks import _validate_webhook_url
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────
 
 @pytest.fixture(autouse=True)

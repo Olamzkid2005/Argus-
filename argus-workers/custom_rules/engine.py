@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 import yaml
+
 from exceptions import CustomRuleError
 
 

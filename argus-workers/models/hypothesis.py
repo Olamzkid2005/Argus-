@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, NotRequired, TypedDict
+from typing import NotRequired, TypedDict
 
 
 class HypothesisStatus(StrEnum):
@@ -111,8 +110,7 @@ def validate_hypothesis_update(u: dict, *, source: str = "unknown") -> dict:
     if status not in ("UNVERIFIED", "CONFIRMED", "REJECTED"):
         errors.append(f"invalid status: {status!r}")
     confidence = u.get("confidence", -1)
-    if confidence != -1:
-        if not isinstance(confidence, (int, float)) or not (0.0 <= confidence <= 1.0):
+    if confidence != -1 and (not isinstance(confidence, (int, float)) or not (0.0 <= confidence <= 1.0)):
             errors.append("confidence must be a float in [0.0, 1.0]")
 
     if errors:

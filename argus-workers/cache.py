@@ -14,7 +14,7 @@ import threading
 from collections.abc import Callable
 from enum import Enum
 from functools import wraps
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -282,9 +282,9 @@ class WorkerCache:
         # Use a tag-based invalidation approach
         return self.clear_pattern(f"*table:{table_name}*")
 
-    def _query_key(self, query: str, params: Optional[dict] = None) -> str:
+    def _query_key(self, query: str, params: dict | None = None) -> str:
         """Generate a cache key from the SQL query template and params.
-        
+
         Uses the query template (with placeholders, not expanded values)
         to prevent cache key collisions from user-controlled data.
         """

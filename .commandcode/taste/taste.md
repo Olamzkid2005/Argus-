@@ -19,6 +19,8 @@
 - When renaming public API methods, add backward-compatible wrapper functions so existing consumers don't break. Confidence: 1.0
 
 # workflow
+- Report progress and request review after every significant step/phase before proceeding to the next. Confidence: 0.70
+
 See [workflow/taste.md](workflow/taste.md)
 # testing
 - When performing browser-based QA testing, also check browser console logs and Celery worker logs for errors, not just the UI. Confidence: 0.70

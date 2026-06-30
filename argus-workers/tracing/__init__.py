@@ -17,8 +17,8 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
+from exceptions import TracingError as TracingError
 from utils.validation import validate_uuid
-from exceptions import TracingError
 
 logger = logging.getLogger(__name__)
 

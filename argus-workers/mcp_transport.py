@@ -26,7 +26,6 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-from exceptions import MCPTransportError
 
 # Sentinel used by _read_request to signal a malformed JSON line that should
 # be skipped (continue) rather than treated as EOF (break).

@@ -252,8 +252,9 @@ def expand_recon(
 
     # Idempotency check: if engagement has already progressed past recon
     # (e.g. Celery retry delivered duplicate task), skip immediately.
-    from tasks.utils import get_engagement_state
     import os
+
+    from tasks.utils import get_engagement_state
 
     _db_state = get_engagement_state(engagement_id, os.getenv("DATABASE_URL"))
     if _db_state in ("scanning", "analyzing", "reporting", "complete", "failed"):

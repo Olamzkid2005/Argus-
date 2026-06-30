@@ -11,10 +11,25 @@ import uuid
 import psycopg2
 
 from database.connection import DatabaseConnectionError, get_db
-from utils.validation import validate_uuid
 from exceptions import InvalidStateTransitionError
+from utils.validation import validate_uuid
 
 logger = logging.getLogger(__name__)
+
+# Agent phase → state machine state mapping
+PHASE_TO_STATE_MAP: dict[str, str] = {
+    "reconnaissance": "recon",
+    "recon": "recon",
+    "scan": "scanning",
+    "vulnerability_scanning": "scanning",
+    "deep_scan": "scanning",
+    "repo_scan": "scanning",
+    "analyze": "analyzing",
+    "analysis": "analyzing",
+    "post_exploitation": "post_exploitation",
+    "report": "reporting",
+    "reporting": "reporting",
+}
 
 
 def resolve_state_for_phase(phase_name: str) -> str:

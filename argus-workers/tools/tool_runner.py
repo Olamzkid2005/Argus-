@@ -21,6 +21,7 @@ from config.constants import CIRCUIT_BREAKER_COOLDOWN, CIRCUIT_BREAKER_THRESHOLD
 from database.repositories.engagement_repository import EngagementRepository
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
 from error_classifier import ErrorCode
+from exceptions import SecurityError
 from runtime.concurrency import (
     HIGH_COST_SEMAPHORE,
     HIGH_COST_TOOLS,
@@ -36,7 +37,6 @@ from tools.circuit_breaker import (
 from tracing import ExecutionSpan, StructuredLogger
 from utils.error_hints import build_error_hint
 from utils.logging_utils import ScanLogger
-from exceptions import SecurityError
 
 logger = logging.getLogger(__name__)
 

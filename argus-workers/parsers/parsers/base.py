@@ -1,7 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Generator
-from exceptions import ParserError
 
 logger = logging.getLogger(__name__)
 

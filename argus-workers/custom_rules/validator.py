@@ -5,7 +5,6 @@ Requirements: 27.3
 """
 
 import re
-from exceptions import RuleValidationError
 
 
 class RuleValidator:

@@ -85,8 +85,8 @@ class MCPToolBridge:
         scope_validator = None
         if self.engagement_id:
             try:
-                from tools.scope_validator import ScopeValidator
                 from orchestrator_pkg.engagement import EngagementService
+                from tools.scope_validator import ScopeValidator
 
                 authorized_scope = EngagementService.load_authorized_scope(
                     self.engagement_id

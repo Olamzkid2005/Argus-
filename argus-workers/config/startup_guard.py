@@ -1,6 +1,5 @@
 import os
 
-
 PLACEHOLDER_PATTERNS = {
     "change_me_in_production",
     "changeme",
@@ -69,8 +68,7 @@ def check_placeholder_credentials() -> list[str]:
         )
 
     for key, value in os.environ.items():
-        if key.endswith(("_SECRET", "_SECRET_KEY", "_PASSWORD", "_API_KEY", "_TOKEN")):
-            if value in PLACEHOLDER_PATTERNS:
+        if key.endswith(("_SECRET", "_SECRET_KEY", "_PASSWORD", "_API_KEY", "_TOKEN")) and value in PLACEHOLDER_PATTERNS:
                 issues.append(
                     f"{key} is set to a placeholder value. "
                     "Set a real credential in your .env file."

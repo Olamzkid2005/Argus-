@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 import logging
 
+from cryptography.fernet import Fernet
+
 from agent.auth_context import AuthContext
 
 logger = logging.getLogger(__name__)
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 AUTH_CHECKPOINT_ACTION_ID = "auth_context"
 
 
-def _get_fernet() -> "Fernet":
+def _get_fernet() -> Fernet:
     """Get a Fernet cipher from the AUTH_CHECKPOINT_KEY env var.
 
     The key MUST be set and must be a valid Fernet key (44 URL-safe base64 chars).

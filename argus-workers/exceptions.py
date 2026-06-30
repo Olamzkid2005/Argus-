@@ -11,7 +11,6 @@ Each error can carry an optional ``ErrorCode`` (from
 by the error_classifier subsystem.
 """
 
-from typing import Any
 
 from error_classifier import ErrorCode
 

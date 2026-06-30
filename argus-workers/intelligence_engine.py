@@ -155,7 +155,7 @@ class IntelligenceEngine:
             # Use analyze_state() for agent-loop consumption.
             # Pass enriched_findings to avoid redundant scoring/enrichment.
             # Pass hypotheses from the snapshot to the analysis dict.
-            _hypotheses = snapshot.get("hypotheses", None)
+            _hypotheses = snapshot.get("hypotheses")
             analysis = self.analyze_state(
                 snapshot,
                 enriched_findings=enriched_findings,

@@ -11,7 +11,6 @@ The distributed Redis semaphore uses SETNX with TTL for atomic acquire/release.
 import os
 import threading
 import time
-from typing import Optional
 
 from config.constants import MAX_CONCURRENT_REQUESTS
 
@@ -45,7 +44,7 @@ class DistributedSemaphore:
         self._redis_key = redis_key
         self._max_count = max_count
         self._local = local_semaphore
-        self._r: Optional[object] = None
+        self._r: object | None = None
 
     def _ensure_redis(self):
         if self._r is None:

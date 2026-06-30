@@ -7,6 +7,7 @@ import time
 import uuid
 
 import redis
+
 from exceptions import LockAcquisitionError
 
 logger = logging.getLogger(__name__)

@@ -11,7 +11,7 @@ Tests the end-to-end flow:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -20,7 +20,6 @@ from agent.react_agent import ReActAgent
 from agent.tool_registry import ToolRegistry
 from runtime.engagement_state import EngagementState
 from tools.hypothesis_engine import HypothesisEngine
-
 
 # ── Sample findings ──────────────────────────────────────────────────
 

@@ -12,12 +12,12 @@ Tests cover:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
-from tools.hypothesis_engine import HypothesisEngine, _extract_cwe, _extract_parameters, _group_findings_for_hypotheses
-
+from tools.hypothesis_engine import (
+    HypothesisEngine,
+    _extract_cwe,
+    _extract_parameters,
+    _group_findings_for_hypotheses,
+)
 
 # ── Fixtures ──────────────────────────────────────────────────────────
 
@@ -99,7 +99,7 @@ class TestHypothesisEngineGenerate:
     def test_empty_findings(self, monkeypatch):
         """Empty findings produce no hypotheses."""
         monkeypatch.setattr(
-            "feature_flags.is_enabled", lambda flag, default=False: True
+            "feature_flags.is_enabled", lambda *_a, **_kw: True
         )
         engine = HypothesisEngine()
         hypotheses = engine.generate([], "eng-1")
@@ -108,7 +108,7 @@ class TestHypothesisEngineGenerate:
     def test_feature_flag_disabled(self, monkeypatch):
         """When feature flag is off, return empty list."""
         monkeypatch.setattr(
-            "feature_flags.is_enabled", lambda flag, default=False: False
+            "feature_flags.is_enabled", lambda *_a, **_kw: False
         )
         engine = HypothesisEngine()
         hypotheses = engine.generate(
@@ -119,7 +119,7 @@ class TestHypothesisEngineGenerate:
     def test_generates_grouped_hypothesis(self, monkeypatch):
         """Two XSS findings on same host produce a grouped hypothesis."""
         monkeypatch.setattr(
-            "feature_flags.is_enabled", lambda flag, default=False: True
+            "feature_flags.is_enabled", lambda *_a, **_kw: True
         )
         engine = HypothesisEngine()
         # Both XSS findings share the same host
@@ -141,7 +141,7 @@ class TestHypothesisEngineGenerate:
     def test_single_critical_generates_hypothesis(self, monkeypatch):
         """A lone CRITICAL SSRF finding produces a single-finding hypothesis."""
         monkeypatch.setattr(
-            "feature_flags.is_enabled", lambda flag, default=False: True
+            "feature_flags.is_enabled", lambda *_a, **_kw: True
         )
         engine = HypothesisEngine()
         hypotheses = engine.generate([SAMPLE_LONE_CRITICAL], "eng-1")
@@ -155,7 +155,7 @@ class TestHypothesisEngineGenerate:
     def test_suggested_tools_mapping(self, monkeypatch):
         """XSS hypothesis suggests finding_verifier/verification_agent."""
         monkeypatch.setattr(
-            "feature_flags.is_enabled", lambda flag, default=False: True
+            "feature_flags.is_enabled", lambda *_a, **_kw: True
         )
         engine = HypothesisEngine()
         findings = [
@@ -172,7 +172,7 @@ class TestHypothesisEngineGenerate:
     def test_hypothesis_has_required_fields(self, monkeypatch):
         """Each hypothesis has all required TypedDict fields."""
         monkeypatch.setattr(
-            "feature_flags.is_enabled", lambda flag, default=False: True
+            "feature_flags.is_enabled", lambda *_a, **_kw: True
         )
         engine = HypothesisEngine()
         findings = [

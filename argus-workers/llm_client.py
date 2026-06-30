@@ -17,8 +17,8 @@ import time
 from dataclasses import dataclass
 
 from config.constants import LLM_AGENT_COST_PER_1K_INPUT, LLM_AGENT_COST_PER_1K_OUTPUT
-from utils.logging_utils import ScanLogger
 from exceptions import LLMUnavailableError
+from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 

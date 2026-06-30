@@ -69,8 +69,8 @@ def _is_private_ip(hostname: str) -> bool:
     Returns True if the hostname resolves to a private address, or if
     resolution fails (fail-closed for safety).
     """
-    import socket as _socket
     import ipaddress as _ipaddress
+    import socket as _socket
 
     try:
         addrs = _socket.getaddrinfo(hostname, None)

@@ -20,6 +20,7 @@ from database.repositories.finding_repository import (
     FindingRepository,
 )
 from database.repositories.rate_limit_repository import RateLimitRepository
+from exceptions import EngagementTimeoutError
 from llm_client import LLMClient
 from mcp_server import get_mcp_server
 from parsers.normalizer import FindingNormalizer
@@ -45,7 +46,6 @@ from utils.logging_utils import ScanLogger
 from websocket_events import get_websocket_publisher
 
 from .repo_scan import execute_repo_scan
-from exceptions import EngagementTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -182,8 +182,8 @@ class Orchestrator:
             # targets are rejected even when MCPToolBridge is unavailable.
             _scope_validator = None
             try:
-                from tools.scope_validator import ScopeValidator
                 from orchestrator_pkg.engagement import EngagementService
+                from tools.scope_validator import ScopeValidator
 
                 _authorized_scope = EngagementService.load_authorized_scope(
                     self.engagement_id
@@ -1084,7 +1084,10 @@ class Orchestrator:
         Returns:
             Dict with post-exploitation results
         """
-        from tools.post_exploitation import PostExploitationConfig, PostExploitationOrchestrator
+        from tools.post_exploitation import (
+            PostExploitationConfig,
+            PostExploitationOrchestrator,
+        )
         from tools.scope_validator import ScopeValidator
 
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
@@ -1150,8 +1153,8 @@ class Orchestrator:
 
     def _validate_repo_url(self, repo_url: str) -> None:
         """Validate repo URL against SSRF attacks."""
-        from urllib.parse import urlparse
         import ipaddress
+        from urllib.parse import urlparse
 
         parsed = urlparse(repo_url)
 

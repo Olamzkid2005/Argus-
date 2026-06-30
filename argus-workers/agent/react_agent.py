@@ -538,12 +538,12 @@ class ReActAgent:
 
         # ── Load active hypotheses from EngagementState ──
         _hypotheses = hypotheses
-        if _hypotheses is None:
-            if (
-                _ff_enabled("ENGAGEMENT_STATE", default=False)
-                and self.engagement_state is not None
-                and hasattr(self.engagement_state, "get_active_hypotheses")
-            ):
+        if (
+            _hypotheses is None
+            and _ff_enabled("ENGAGEMENT_STATE", default=False)
+            and self.engagement_state is not None
+            and hasattr(self.engagement_state, "get_active_hypotheses")
+        ):
                 try:
                     _hypotheses = self.engagement_state.get_active_hypotheses(
                         max_count=10
@@ -770,6 +770,7 @@ class ReActAgent:
         on Postgres failure (snapshot-before-mutation pattern).
         """
         from copy import deepcopy
+
         from exceptions import HypothesisPersistenceError
 
         if not self.engagement_state:
