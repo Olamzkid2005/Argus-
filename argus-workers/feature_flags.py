@@ -130,14 +130,6 @@ class FeatureFlags:
             return (True, FlagSource.ENV)
 
         # 3. Check database
-        env_value = os.environ.get(env_name)
-        if env_value is not None:
-            parsed = self._parse_value(env_value)
-            self._cache[flag_name] = (parsed, FlagSource.ENV, now)
-            logger.debug("Feature flag %s=%s from env", flag_name, parsed)
-            return (parsed, FlagSource.ENV)
-
-        # 3. Check database
         if self.db:
             try:
                 db_value = self._load_flag_from_db(flag_name)
