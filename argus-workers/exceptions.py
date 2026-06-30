@@ -203,3 +203,20 @@ class ConcurrencyError(ArgusError):
 
 class OperatorCanceled(ConcurrencyError):
     """Operation was canceled by the user or supervisor."""
+
+
+# ── Hypothesis engine errors ─────────────────────────────────────────
+
+
+class HypothesisError(ArgusError):
+    """Base for hypothesis engine failures."""
+
+
+class HypothesisGenerationError(HypothesisError):
+    """generate() failed to produce hypotheses from findings."""
+    default_code = ErrorCode.DATABASE_ERROR  # triggers TRANSIENT retry path
+
+
+class HypothesisPersistenceError(HypothesisError):
+    """Postgres write for hypothesis create/update failed."""
+    default_code = ErrorCode.DATABASE_ERROR

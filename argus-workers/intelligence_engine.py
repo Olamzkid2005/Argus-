@@ -154,7 +154,13 @@ class IntelligenceEngine:
 
             # Use analyze_state() for agent-loop consumption.
             # Pass enriched_findings to avoid redundant scoring/enrichment.
-            analysis = self.analyze_state(snapshot, enriched_findings=enriched_findings)
+            # Pass hypotheses from the snapshot to the analysis dict.
+            _hypotheses = snapshot.get("hypotheses", None)
+            analysis = self.analyze_state(
+                snapshot,
+                enriched_findings=enriched_findings,
+                hypotheses=_hypotheses,
+            )
             reasoning = self._generate_reasoning(enriched_findings, [])
 
             duration_ms = int((_time.time() - start) * 1000)
@@ -578,7 +584,10 @@ class IntelligenceEngine:
         return snapshot_dict, graph
 
     def analyze_state(
-        self, state: Any, enriched_findings: list[dict] | None = None
+        self,
+        state: Any,
+        enriched_findings: list[dict] | None = None,
+        hypotheses: list[dict] | None = None,
     ) -> dict:
         """
         Analyze engagement state and return analysis for the agent loop.
@@ -590,6 +599,7 @@ class IntelligenceEngine:
         Args:
             state: EngagementState or snapshot dict
             enriched_findings: Optional pre-enriched findings (from evaluate())
+            hypotheses: Optional pre-generated hypotheses (passed through)
 
         Returns:
             Analysis dict with:
@@ -598,6 +608,7 @@ class IntelligenceEngine:
                 - high_value_targets: Endpoints warranting deeper inspection
                 - weak_auth_signals: Authentication-related signals
                 - threat_intel_summary: Threat intelligence overview
+                - hypotheses: Passed-through hypotheses
                 - reasoning: Analysis reasoning text
         """
         from utils.logging_utils import ScanLogger
@@ -641,6 +652,7 @@ class IntelligenceEngine:
             "high_value_targets": high_value_targets,
             "weak_auth_signals": weak_auth_signals,
             "threat_intel_summary": self.get_threat_summary(enriched_findings),
+            "hypotheses": hypotheses or [],
             "reasoning": self._generate_reasoning(enriched_findings, []),
         }
 

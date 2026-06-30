@@ -163,6 +163,7 @@ _ALLOWED_TABLE_NAMES = set(ALLOWED_COLUMNS.keys()) | {
     "engagement_states",
     "job_states",
     "assets",
+    "hypotheses",
     "agent_decisions",
     "compliance_reports",
     "reports",

@@ -4,16 +4,60 @@ LLM Synthesizer - Uses LLM to preside over scored findings and produce structure
 Separate from IntelligenceEngine (rule-based scoring). The LLM adds narrative
 reasoning, attack chain identification, false positive analysis, and prioritization
 on top of already-scored data.
+
+Also provides a dedicated ``update_hypotheses()`` call — separate from
+``synthesize()`` — so hypothesis updates can timeout independently and
+fail without blocking the rest of the pipeline.
 """
 
+import json
 import logging
 import time as _time
 from typing import Any
 
-from agent.agent_prompts import SYNTHESIS_SYSTEM_PROMPT, build_synthesis_prompt
+from agent.agent_prompts import (
+    SYNTHESIS_SYSTEM_PROMPT,
+    build_synthesis_prompt,
+)
 from config.constants import LLM_AGENT_MAX_TOKENS_SYNTH
+from models.hypothesis import validate_hypothesis_update
 
 logger = logging.getLogger(__name__)
+
+
+_HYPOTHESIS_UPDATE_SYSTEM_PROMPT = """
+You are an automated penetration testing analyst evaluating hypotheses.
+
+You receive:
+  - A list of current hypotheses with descriptions, confidence, and status
+  - Recent observations (tool results, new findings, synthesis summary)
+
+For each hypothesis, decide:
+  1. Status: CONFIRMED, REJECTED, or UNVERIFIED (keep as is)
+  2. Confidence: Adjust based on new evidence (0.0 - 1.0)
+  3. Reasoning: Brief justification
+
+Rules:
+  - CONFIRMED if strong evidence supports the hypothesis (e.g., tool produced
+    findings matching the expected vulnerability type)
+  - REJECTED if strong evidence contradicts it (e.g., tool ran cleanly with
+    no findings, and it was a capable verifier)
+  - UNVERIFIED if insufficient evidence either way
+  - Raise confidence when evidence supports, lower when evidence contradicts
+  - Be conservative — prefer UNVERIFIED over premature CONFIRM/REJECT
+
+Return a JSON array of update objects, one per hypothesis:
+[
+  {
+    "hypothesis_id": "<uuid>",
+    "status": "UNVERIFIED|CONFIRMED|REJECTED",
+    "confidence": 0.85,
+    "reasoning": "<brief justification>"
+  }
+]
+
+Return an empty array if no updates are needed.
+"""
 
 
 class LLMSynthesizer:
@@ -22,6 +66,9 @@ class LLMSynthesizer:
 
     Produces: executive summary, priority findings, attack chains,
     false positive candidates, risk level, and analyst notes.
+
+    Also provides a dedicated ``update_hypotheses()`` call for
+    hypothesis status transitions.
     """
 
     def __init__(self, llm_service):

@@ -477,10 +477,14 @@ class ReActAgent:
         tried_tools: set,
         recon_context: Any,
         llm_service: LLMService | None = None,
+        hypotheses: list[dict] | None = None,
     ) -> AgentAction | None:
         """
         Call LLM to decide next tool via LLMService.
         Returns _DONE, AgentAction, or None on failure.
+
+        Args:
+            hypotheses: Optional list of active hypotheses to guide tool selection
         """
         if not llm_service or not llm_service.is_available():
             return None
@@ -532,6 +536,21 @@ class ReActAgent:
             except Exception as e:
                 logger.debug("Memory retrieval failed: %s", e)
 
+        # ── Load active hypotheses from EngagementState ──
+        _hypotheses = hypotheses
+        if _hypotheses is None:
+            if (
+                _ff_enabled("ENGAGEMENT_STATE", default=False)
+                and self.engagement_state is not None
+                and hasattr(self.engagement_state, "get_active_hypotheses")
+            ):
+                try:
+                    _hypotheses = self.engagement_state.get_active_hypotheses(
+                        max_count=10
+                    )
+                except Exception as e:
+                    logger.debug("Failed to load hypotheses from state: %s", e)
+
         user_prompt = build_tool_selection_prompt(
             recon_section,
             self.registry.list_tools(),
@@ -541,6 +560,7 @@ class ReActAgent:
             bugbounty_context=bugbounty_context,
             candidate_list=self._candidate_list,
             memory_context=_memory_context,
+            hypotheses=_hypotheses,
         )
 
         system_prompt = self._get_system_prompt(recon_context)
@@ -697,11 +717,20 @@ class ReActAgent:
         tried_tools: set = None,
         recon_context: Any = None,
         llm_client: Any = None,
+        hypotheses: list[dict] | None = None,
     ) -> AgentAction | None:
         """
         Decide the next action.
         LLM branch: uses rich tool descriptions + recon context to select intelligently.
         Fallback: deterministic phase-based iteration (zero regression).
+
+        Args:
+            task: Task description
+            context: Observation context string
+            tried_tools: Set of tool names already tried
+            recon_context: ReconContext for LLM tool selection
+            llm_client: Optional LLM client override
+            hypotheses: Optional list of active hypotheses to guide tool selection
         """
         tried_tools = tried_tools or set()
         llm_client = llm_client or self.llm_client
@@ -714,7 +743,12 @@ class ReActAgent:
         ):
             llm_service = LLMService(llm_client=llm_client)
             action = self._call_llm_for_action(
-                task, context, tried_tools, recon_context, llm_service=llm_service
+                task,
+                context,
+                tried_tools,
+                recon_context,
+                llm_service=llm_service,
+                hypotheses=hypotheses,
             )
             if action is _DONE:
                 return None
@@ -722,6 +756,122 @@ class ReActAgent:
                 return action
 
         return self._deterministic_plan(task, tried_tools)
+
+    def _update_hypotheses_from_result(
+        self, tool_name: str, result: AgentResult
+    ) -> None:
+        """Update hypothesis state after a tool result.
+
+        Called after each tool execution in run(). Evaluates whether the
+        tool result confirms or refutes active hypotheses and updates
+        their confidence and status accordingly.
+
+        Writes to Postgres first, then in-memory cache. Skips cache update
+        on Postgres failure (snapshot-before-mutation pattern).
+        """
+        from copy import deepcopy
+        from exceptions import HypothesisPersistenceError
+
+        if not self.engagement_state:
+            return
+
+        hypotheses = getattr(self.engagement_state, "hypotheses", [])
+        if not hypotheses:
+            return
+
+        snapshot = deepcopy(hypotheses)
+        try:
+            for h in hypotheses:
+                if h.get("status") != "UNVERIFIED":
+                    continue
+                suggested = h.get("suggested_tools", [])
+                if tool_name not in suggested:
+                    continue
+                hyp_id = h.get("id")
+                if not hyp_id:
+                    continue
+
+                if result.success and getattr(result, "findings", None):
+                    updates = {
+                        "confidence": min(
+                            1.0, h.get("confidence", 0.5) + 0.1
+                        ),
+                        "supporting_finding_ids": h.get(
+                            "supporting_finding_ids", []
+                        )
+                        + [
+                            f.get("id")
+                            for f in (getattr(result, "findings", []) or [])
+                            if isinstance(f, dict) and f.get("id")
+                        ],
+                    }
+                    if updates["confidence"] >= 0.85:
+                        updates["status"] = "CONFIRMED"
+                elif result.success is False:
+                    updates = {
+                        "confidence": max(
+                            0.0, h.get("confidence", 0.5) - 0.1
+                        ),
+                        "refuting_finding_ids": h.get(
+                            "refuting_finding_ids", []
+                        ) + [tool_name],
+                    }
+                    if updates["confidence"] <= 0.2:
+                        updates["status"] = "REJECTED"
+                else:
+                    # Tool succeeded but no findings — neutral evidence
+                    if hasattr(result, "output") and (
+                        not result.output
+                        or len(str(result.output).strip()) < 30
+                    ):
+                        # Empty output = slight negative signal
+                        updates = {
+                            "confidence": max(
+                                0.0, h.get("confidence", 0.5) - 0.05
+                            ),
+                        }
+                    else:
+                        continue
+
+                try:
+                    from database.repositories.hypothesis_repository import (
+                        HypothesisRepository,
+                    )
+
+                    HypothesisRepository().update(hyp_id, updates)
+                except Exception as e:
+                    raise HypothesisPersistenceError(
+                        f"Postgres update failed for {hyp_id}",
+                    ) from e
+
+                self.engagement_state.update_hypothesis(hyp_id, updates)
+
+                # Emit metrics
+                try:
+                    from metrics import increment_counter
+
+                    if updates.get("status") == "CONFIRMED":
+                        increment_counter("hypothesis.confirmed")
+                    elif updates.get("status") == "REJECTED":
+                        increment_counter("hypothesis.rejected")
+                except Exception:
+                    pass
+
+        except HypothesisPersistenceError as e:
+            # Revert in-memory cache on Postgres write failure
+            self.engagement_state.hypotheses = snapshot
+            logger.warning(
+                "Hypothesis update failed — reverted to last-known-good state",
+                extra={"tool": tool_name},
+                exc_info=True,
+            )
+        except Exception as e:
+            self.engagement_state.hypotheses = snapshot
+            logger.error(
+                "Unexpected error in _update_hypotheses_from_result — reverted: %s",
+                e,
+                exc_info=True,
+            )
 
     def _persist_decision_checkpoint(
         self, action: AgentAction, observation_context: str, reasoning: str
@@ -867,6 +1017,22 @@ class ReActAgent:
                 plan_kwargs["recon_context"] = recon_context
             if self.llm_client is not None:
                 plan_kwargs["llm_client"] = self.llm_client
+
+            # Load active hypotheses from EngagementState for tool selection
+            _active_hypotheses = None
+            if (
+                _ff_enabled("ENGAGEMENT_STATE", default=False)
+                and self.engagement_state is not None
+                and hasattr(self.engagement_state, "get_active_hypotheses")
+            ):
+                try:
+                    _active_hypotheses = (
+                        self.engagement_state.get_active_hypotheses(max_count=10)
+                    )
+                except Exception as e:
+                    logger.debug("Failed to load hypotheses: %s", e)
+
+            plan_kwargs["hypotheses"] = _active_hypotheses
 
             action = self.plan_next_action(
                 task,
@@ -1095,6 +1261,10 @@ class ReActAgent:
             # FIX: build meaningful observation from actual output content
             observation = build_observation_summary(action.tool, result)
             self.add_to_history("observation", observation)
+
+            # ── Update hypothesis state after tool result ──
+            if _ff_enabled("HYPOTHESIS_ENGINE", default=False):
+                self._update_hypotheses_from_result(action.tool, result)
 
             # Track execution iteration in EngagementState
             if (

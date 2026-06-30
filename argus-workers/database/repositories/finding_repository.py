@@ -16,9 +16,9 @@ from cache import WorkerCache
 from database.repositories.base import BaseRepository
 from exceptions import FindingCapExceededError
 
-cache = WorkerCache()
-
 logger = logging.getLogger(__name__)
+
+cache = WorkerCache()
 
 MAX_FINDINGS_PER_ENGAGEMENT = int(os.getenv("MAX_FINDINGS_PER_ENGAGEMENT", "50000"))
 
@@ -533,6 +533,47 @@ class FindingRepository(BaseRepository):
                 """,
                 (Json(llm_result), finding_id),
             )
+
+    def get_top_findings_for_hypothesis(
+        self,
+        engagement_id: str,
+        limit: int = 5000,
+    ) -> list[dict]:
+        """Get severity-ranked findings capped for hypothesis generation.
+
+        Uses a dedicated query that ranks by severity and caps in SQL,
+        avoiding loading 100K findings just to slice 5K.
+
+        Args:
+            engagement_id: Engagement UUID
+            limit: Maximum findings to return (default 5000)
+
+        Returns:
+            List of finding dicts ordered by severity (CRITICAL first)
+        """
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT * FROM findings
+                WHERE engagement_id = %s
+                ORDER BY
+                    CASE severity
+                        WHEN 'CRITICAL' THEN 0
+                        WHEN 'HIGH' THEN 1
+                        WHEN 'MEDIUM' THEN 2
+                        WHEN 'LOW' THEN 3
+                        WHEN 'INFO' THEN 4
+                        ELSE 5
+                    END,
+                    confidence DESC
+                LIMIT %s
+                """,
+                (engagement_id, limit),
+            )
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
 
     def get_findings_by_engagement(
         self,

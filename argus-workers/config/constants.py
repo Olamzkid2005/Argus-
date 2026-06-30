@@ -159,6 +159,15 @@ class GitSSRFConfig:
 
 
 # ──────────────────────────────────────────────
+# Hypothesis Engine
+# ──────────────────────────────────────────────
+@dataclass(frozen=True)
+class HypothesisConfig:
+    max_input_findings: int = 5000  # Cap findings fed to generate()
+    max_output: int = 20  # Max hypotheses per engagement
+
+
+# ──────────────────────────────────────────────
 # Circuit breaker
 # ──────────────────────────────────────────────
 @dataclass(frozen=True)
@@ -314,6 +323,7 @@ class ArgusConfig:
     scan: ScanConfig = field(default_factory=ScanConfig)
     git_ssrf: GitSSRFConfig = field(default_factory=GitSSRFConfig.from_config)
     circuit_breaker: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig.from_config)
+    hypothesis: HypothesisConfig = field(default_factory=HypothesisConfig)
     tls: TLSConfig = field(default_factory=TLSConfig)
     llm: LLMGeneralConfig = field(default_factory=LLMGeneralConfig)
     llm_review: LLMReviewConfig = field(default_factory=LLMReviewConfig)
@@ -347,6 +357,8 @@ GIT_HOST_ALLOWLIST = CONFIG.git_ssrf.host_allowlist
 MAX_TOOL_OUTPUT_BYTES = CONFIG.content.max_tool_output_bytes
 CIRCUIT_BREAKER_THRESHOLD = CONFIG.circuit_breaker.failure_threshold
 CIRCUIT_BREAKER_COOLDOWN = CONFIG.circuit_breaker.cooldown_seconds
+HYPOTHESIS_MAX_INPUT_FINDINGS = CONFIG.hypothesis.max_input_findings
+HYPOTHESIS_MAX_OUTPUT = CONFIG.hypothesis.max_output
 SSL_TIMEOUT = CONFIG.timeouts.ssl_timeout
 TLS_MINIMUM_VERSION = CONFIG.tls.minimum_version
 LLM_MAX_RETRIES = CONFIG.llm.max_retries

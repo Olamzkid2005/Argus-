@@ -113,8 +113,20 @@ class ToolRegistry:
             if isinstance(result, AgentResult):
                 result.duration_ms = duration
                 return result
+            # Preserve findings and success from non-AgentResult returns
+            # (e.g., UnifiedToolResult from tool_runner.run()).
+            # Previously these were hardcoded to success=True with empty findings.
+            _findings = getattr(result, "findings", None) or []
+            _success = getattr(result, "success", True)
+            _error = getattr(result, "error", "") or getattr(result, "error_message", "")
+            _output = getattr(result, "output", "")
             return AgentResult(
-                tool=name, success=True, output=str(result), duration_ms=duration
+                tool=name,
+                success=bool(_success),
+                output=str(_output) if _output else str(result),
+                error=str(_error),
+                findings=_findings,
+                duration_ms=duration,
             )
         except Exception as e:
             duration = int((time.time() - start) * 1000)

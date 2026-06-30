@@ -93,7 +93,8 @@ class EngagementState:
         self.recon_context: dict = {}
         self.findings: list[dict] = []
         self.observations: list[dict] = []
-        self.hypotheses: list[str] = []
+        self.hypotheses: list[dict] = []
+        self._hypothesis_write_failures: int = 0
         self.tool_history: list[ToolExecutionRecord] = []
         self.failed_actions: list[dict] = []
         self.attack_graph: dict = {}
@@ -275,6 +276,10 @@ class EngagementState:
         attached via set_attack_graph_instance(), attack_graph_paths contains
         live-computed attack paths with risk scores, prerequisites, and impacts.
         Otherwise, falls back to the static attack_graph dict placeholder.
+
+        Note: Hypotheses are explicitly excluded from this dict to avoid a third
+        copy of hypothesis data. Postgres is the authoritative store. Consumers
+        that need hypotheses call get_active_hypotheses() explicitly.
         """
         from feature_flags import is_enabled as _ff_enabled
 
@@ -302,11 +307,69 @@ class EngagementState:
             "budget_status": self.budget_manager.get_status(),
             "tried_tools": list(self._last_agent_tried_tools),
             "memory_summary": self.memory_summary[:1000] if self.memory_summary else "",
+            "hypothesis_write_failures": self._hypothesis_write_failures,
         }
 
     def is_complete(self) -> bool:
         """Check if the engagement is in a terminal state."""
         return self.current_state in ("complete", "failed")
+
+    # ── Hypothesis management ──
+
+    def add_hypothesis(self, hypothesis: dict) -> None:
+        """Populate in-memory cache. Caller must have written to Postgres first."""
+        self.hypotheses.append(hypothesis)
+
+    def update_hypothesis(self, hypothesis_id: str, updates: dict) -> bool:
+        """Update in-memory cache. Caller must have written to Postgres first.
+
+        Returns True if the hypothesis was found and updated, False otherwise.
+        """
+        from datetime import datetime, timezone
+
+        for h in self.hypotheses:
+            if h.get("id") == hypothesis_id:
+                h.update(updates)
+                h["updated_at"] = datetime.now(timezone.utc).isoformat()
+                return True
+        return False
+
+    def get_active_hypotheses(self, max_count: int = 10) -> list[dict]:
+        """Get top unverified hypotheses by confidence.
+
+        Checks in-memory cache first. If cold (worker restart / no writes yet),
+        falls back to Postgres. Redis is never consulted for hypotheses directly.
+
+        Returns empty list on any failure — agent continues without hypothesis context.
+        """
+        unverified = [
+            h for h in self.hypotheses if h.get("status") == "UNVERIFIED"
+        ]
+        if not unverified:
+            try:
+                from database.repositories.hypothesis_repository import (
+                    HypothesisRepository,
+                )
+
+                repo = HypothesisRepository()
+                unverified = repo.get_by_engagement(
+                    self.engagement_id, status="UNVERIFIED"
+                )
+                # Re-populate in-memory cache for next call
+                self.hypotheses = unverified
+            except Exception as e:
+                logger.warning(
+                    "Could not recover hypotheses from Postgres — "
+                    "agent runs without them",
+                    extra={
+                        "engagement_id": self.engagement_id,
+                        "error": str(e),
+                    },
+                    exc_info=True,
+                )
+                return []
+        unverified.sort(key=lambda h: h.get("confidence", 0), reverse=True)
+        return unverified[:max_count]
 
     # ── Serialization ──
 

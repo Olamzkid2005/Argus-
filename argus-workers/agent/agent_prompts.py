@@ -746,6 +746,33 @@ def _build_target_context_paragraph(profile: dict) -> str:
     return "=== WHAT WE KNOW ABOUT THIS TARGET ===\n" + " ".join(parts)  # noqa: S608
 
 
+def _build_hypotheses_section(hypotheses: list[dict] | None) -> str:
+    """Build the ACTIVE HYPOTHESES section for tool selection prompts.
+
+    Renders the top unverified hypotheses so the LLM can prioritize tools
+    that confirm or refute them. Sorted by descending confidence so the
+    highest-confidence hypotheses appear first.
+    """
+    if not hypotheses:
+        return ""
+    lines = ["=== ACTIVE HYPOTHESES ==="]
+    for h in sorted(hypotheses, key=lambda x: x.get("confidence", 0), reverse=True):
+        conf = h.get("confidence", 0)
+        desc = _sanitize_for_llm(str(h.get("description", "")))
+        status = h.get("status", "UNVERIFIED")
+        steps = h.get("verification_steps", [])
+        tool_names = [s.get("tool", "?") for s in steps if isinstance(s, dict)]
+        lines.append(
+            f"  - [{conf:.2f}] {desc} "
+            f"(status={status}, verify_with={', '.join(tool_names)})"
+        )
+    lines.append(
+        "Prefer tools that confirm or refute the highest-confidence "
+        "unverified hypotheses."
+    )
+    return "\n".join(lines)
+
+
 def build_tool_selection_prompt(
     recon_context: str,
     available_tools: list[dict],
@@ -757,6 +784,7 @@ def build_tool_selection_prompt(
     priority_classes: list[str] | None = None,
     candidate_list=None,
     memory_context: str = "",
+    hypotheses: list[dict] | None = None,
 ) -> str:
     """
     Build the user prompt for tool selection.
@@ -776,6 +804,7 @@ def build_tool_selection_prompt(
         priority_classes: Optional list of analyst-prioritized vulnerability classes
         candidate_list: Optional CandidateList for structured scan targets
         memory_context: Optional 3-tier memory summary from MemoryRetriever
+        hypotheses: Optional list of active hypotheses to guide tool selection
     """
     prompt_parts = []
 
@@ -813,6 +842,12 @@ def build_tool_selection_prompt(
 
     # ── Section 3: Recon findings ──────────────────────────────────
     prompt_parts.append(f"=== RECON FINDINGS ===\n{recon_context}")
+
+    # ── Section 3.5: Active Hypotheses (from Hypothesis Engine) ──
+    if hypotheses:
+        hyp_section = _build_hypotheses_section(hypotheses)
+        if hyp_section:
+            prompt_parts.append(hyp_section)
 
     # ── Section 4: Observation history ─────────────────────────────
     obs = observation_history or "No tools have run yet."

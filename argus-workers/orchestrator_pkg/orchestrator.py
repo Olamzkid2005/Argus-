@@ -839,6 +839,65 @@ class Orchestrator:
         )
         snapshot, budget_mgr, _findings, org_id = snapshot_svc.load_and_build(job)
 
+        # ── 1b. Hypothesis Engine — generate hypotheses from findings ──
+        from config.constants import HYPOTHESIS_MAX_INPUT_FINDINGS
+        from feature_flags import is_enabled as _hyp_ff_enabled
+
+        hypotheses: list[dict] = []
+        if _hyp_ff_enabled("HYPOTHESIS_ENGINE", default=False):
+            try:
+                top_findings = self.finding_repo.get_top_findings_for_hypothesis(
+                    self.engagement_id, limit=HYPOTHESIS_MAX_INPUT_FINDINGS,
+                )
+                if top_findings:
+                    from tools.hypothesis_engine import HypothesisEngine
+
+                    hypothesis_engine = HypothesisEngine()
+                    generated = hypothesis_engine.generate(
+                        top_findings, self.engagement_id,
+                    )
+                    if generated:
+                        from database.repositories.hypothesis_repository import (
+                            HypothesisRepository,
+                        )
+
+                        repo = HypothesisRepository()
+                        for h in generated:
+                            try:
+                                created = repo.create(h)
+                            except Exception as e:
+                                logger.warning(
+                                    "Hypothesis not persisted — will regenerate next cycle: %s",
+                                    e,
+                                )
+                                created = None
+                            # Always add to local list so snapshot has them
+                            hypotheses.append(h)
+                            # Also populate EngagementState in-memory cache
+                            if (
+                                created
+                                and _hyp_ff_enabled("ENGAGEMENT_STATE", default=False)
+                            ):
+                                _state = getattr(self, "state", None)
+                                if _state is not None and hasattr(
+                                    _state, "add_hypothesis"
+                                ):
+                                    _state.add_hypothesis(h)
+                        logger.info(
+                            "Generated %d hypotheses for engagement %s",
+                            len(hypotheses),
+                            self.engagement_id,
+                        )
+            except Exception as e:
+                logger.warning(
+                    "Hypothesis generation failed — pipeline continues without: %s",
+                    e,
+                    exc_info=True,
+                )
+
+        # Attach hypotheses to snapshot so IntelligenceEngine can pass them through
+        snapshot["hypotheses"] = hypotheses
+
         # ── 2. IntelligenceService — evaluate + synthesize ──
         intelligence_svc = IntelligenceService(
             db_conn=db_conn,
@@ -849,6 +908,58 @@ class Orchestrator:
         synthesis, llm_svc, engagement_cost_tracker, recon_ctx, scored = (
             intelligence_svc.run_synthesis(evaluation, snapshot)
         )
+
+        # ── 2b. Hypothesis update via dedicated LLM call ──
+        if hypotheses and llm_svc is not None and synthesis:
+            try:
+                from llm_synthesizer import LLMSynthesizer
+
+                synth_text = synthesis.get("executive_summary", "")[:2000]
+                context = f"Synthesis summary: {synth_text}"
+                synthesizer = LLMSynthesizer(llm_svc)
+                updates = synthesizer.update_hypotheses(hypotheses, context)
+                if updates:
+                    from database.repositories.hypothesis_repository import (
+                        HypothesisRepository,
+                    )
+
+                    repo = HypothesisRepository()
+                    for u in updates:
+                        try:
+                            repo.update(u["hypothesis_id"], {
+                                "status": u.get("status"),
+                                "confidence": u.get("confidence"),
+                            })
+                            _state = getattr(self, "state", None)
+                            if _state is not None and hasattr(
+                                _state, "update_hypothesis"
+                            ):
+                                _state.update_hypothesis(
+                                    u["hypothesis_id"], {
+                                        "status": u.get("status"),
+                                        "confidence": u.get("confidence"),
+                                    }
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to persist hypothesis update: %s", e,
+                            )
+                    # Update local hypotheses list for analysis result
+                    _updated_ids = {u["hypothesis_id"] for u in updates}
+                    for h in hypotheses:
+                        if h.get("id") in _updated_ids:
+                            for u in updates:
+                                if u["hypothesis_id"] == h.get("id"):
+                                    h.update({
+                                        "status": u.get("status"),
+                                        "confidence": u.get("confidence"),
+                                    })
+            except Exception as e:
+                logger.warning(
+                    "Hypothesis update via LLM failed — "
+                    "hypotheses retain current state: %s",
+                    e,
+                )
         if synthesis.get("risk_level") or synthesis.get("executive_summary"):
             emit_thinking(
                 self.engagement_id,
@@ -891,10 +1002,11 @@ class Orchestrator:
             findings=len(evaluation.get("scored_findings", [])),
         )
         slog.info(
-            "Analysis complete — risk=%s, coverage_gaps=%d, high_value_targets=%d",
+            "Analysis complete — risk=%s, coverage_gaps=%d, high_value_targets=%d, hypotheses=%d",
             analysis.get("risk_level", "unknown"),
             len(analysis.get("coverage_gaps", [])),
             len(analysis.get("high_value_targets", [])),
+            len(hypotheses),
         )
         return {
             "phase": "analyze",
@@ -904,6 +1016,7 @@ class Orchestrator:
             "scored_findings": evaluation.get("scored_findings", []),
             "reasoning": evaluation.get("reasoning", ""),
             "synthesis": synthesis,
+            "hypotheses": hypotheses,
             "next_state": "reporting",
             "trace_id": get_trace_id(),
         }
