@@ -83,6 +83,14 @@ PHASES: list[Phase] = [
         tool_phases=("analyze",),
     ),
     Phase(
+        id="post_exploitation",
+        display_name="Post-Exploitation",
+        order=4,
+        estimated_minutes=8,
+        step_id="post_exploitation",
+        tool_phases=("post_exploit",),
+    ),
+    Phase(
         id="reporting",
         display_name="Report Generation",
         order=4,
@@ -123,9 +131,10 @@ TRANSITIONS: dict[str, list[str]] = {
     "created": ["recon", "failed", "paused"],
     "recon": ["scanning", "failed", "paused"],
     "scanning": ["analyzing", "failed", "paused"],
-    "analyzing": ["reporting", "recon", "scanning", "failed", "paused"],
+    "analyzing": ["post_exploitation", "reporting", "recon", "scanning", "failed", "paused"],
+    "post_exploitation": ["scanning", "reporting", "failed", "paused"],
     "reporting": ["complete", "failed", "paused"],
-    "paused": ["recon", "scanning", "analyzing", "reporting", "failed"],
+    "paused": ["recon", "scanning", "analyzing", "post_exploitation", "reporting", "failed"],
     "failed": [],
     "complete": [],
 }

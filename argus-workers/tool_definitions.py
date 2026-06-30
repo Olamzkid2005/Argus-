@@ -62,6 +62,7 @@ ALL_PHASES = (
     "deep_scan",
     "repo_scan",
     "analyze",
+    "post_exploit",
     "report",
 )
 PhaseName = str  # One of ALL_PHASES: "recon" | "scan" | ...
@@ -852,11 +853,90 @@ _register(
     )
 )
 
+# ── Post-exploitation phase ──
+
+_register(
+    ToolDefinition(
+        name="post_exploitation",
+        description="Orchestrate post-exploitation: extract credentials from findings, replay against other endpoints, "
+        "and probe internal network ranges for lateral movement opportunities. "
+        "Only runs when findings indicate a foothold (HIGH/CRITICAL findings with confidence >= 0.75).",
+        phases=["post_exploit"],
+        parameters=[
+            ToolParameter(
+                name="target",
+                description="Engagement ID or target scope",
+                required=True,
+            ),
+        ],
+        timeout=1800,
+        parallel_safe=False,
+        signal_quality=SignalQuality.CONFIRMED,
+        exploit_categories=["post_exploitation", "lateral_movement", "credential_replay"],
+        estimated_cost=0.0,
+        estimated_runtime=0,
+        risk_level="high",
+    )
+)
+
+_register(
+    ToolDefinition(
+        name="credential_replay",
+        description="Extract credentials (passwords, API keys, JWT tokens, session cookies) from finding evidence "
+        "and replay them against other discovered endpoints to test credential reuse. "
+        "Replays via Bearer tokens, cookies, form login, and API key headers. "
+        "Successful replays are reported as HIGH-severity findings.",
+        phases=["post_exploit"],
+        parameters=[
+            ToolParameter(
+                name="target",
+                description="Target endpoint URL to replay credentials against",
+                required=True,
+            ),
+        ],
+        timeout=300,
+        parallel_safe=False,
+        signal_quality=SignalQuality.CONFIRMED,
+        exploit_categories=["credential_replay", "privilege_escalation"],
+        estimated_cost=0.0,
+        estimated_runtime=0,
+        risk_level="high",
+    )
+)
+
+_register(
+    ToolDefinition(
+        name="internal_probe",
+        description="Probe internal network ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) for "
+        "additional services after a foothold is established. "
+        "Checks common ports (SSH, HTTP, HTTPS, MySQL, PostgreSQL, Redis, Elasticsearch, MongoDB) "
+        "and reports discovered services as findings for lateral movement planning. "
+        "All probes are validated against authorized scope before execution.",
+        phases=["post_exploit"],
+        parameters=[
+            ToolParameter(
+                name="target",
+                description="Known host IP to start probing from",
+                required=True,
+            ),
+        ],
+        timeout=600,
+        parallel_safe=False,
+        signal_quality=SignalQuality.PROBABLE,
+        exploit_categories=["lateral_movement", "internal_discovery"],
+        estimated_cost=0.0,
+        estimated_runtime=0,
+        risk_level="high",
+    )
+)
+
+
 # ── Reporting phase ──
 
 _register(
     ToolDefinition(
         name="report-generator",
+
         description="Generate executive security report",
         phases=["report"],
         default_args=[],
@@ -1146,6 +1226,9 @@ _AGENT_INTERNAL_TOOLS = frozenset(
     {
         "register",
         "login",
+        "post_exploitation",
+        "credential_replay",
+        "internal_probe",
         "finding_correlation_engine",
         "attack_path_generator",
         "verification_agent",

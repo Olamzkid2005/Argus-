@@ -496,6 +496,7 @@ const BACKUP_FILE_NAME = "argus-master-key.enc"
 const BACKUP_SALT = Buffer.from("argus-backup-v1", "utf-8")
 const ENGAGEMENT_KEY_SALT = Buffer.from("argus-engagement-v1", "utf-8")
 const FILE_KEY_SALT = Buffer.from("argus-file-v1", "utf-8")
+const CREDENTIAL_SALT = Buffer.from("argus-credentials-v1", "utf-8")
 
 // ── File-based keychain (cross-platform fallback) ──
 
@@ -835,6 +836,41 @@ export class EncryptionManager {
       masterKey,
       FILE_KEY_SALT,
       Buffer.from(`${engagementId}:${fileId}`, "utf-8"),
+    )
+  }
+
+  /**
+   * Encrypt credentials data with AES-256-GCM.
+   *
+   * Uses a fixed domain salt ("argus-credentials-v1") for key derivation,
+   * independent of any specific engagement. Each encryption still uses a
+   * fresh random salt and IV, so encrypting the same data twice produces
+   * different ciphertext.
+   */
+  static encryptCredentials(
+    plaintext: Buffer,
+    masterKey: Buffer,
+  ): Buffer {
+    return aesGcmEncrypt(
+      plaintext,
+      masterKey,
+      CREDENTIAL_SALT,
+      CREDENTIAL_SALT,
+    )
+  }
+
+  /**
+   * Decrypt credentials data previously encrypted with encryptCredentials.
+   */
+  static decryptCredentials(
+    encrypted: Buffer,
+    masterKey: Buffer,
+  ): Buffer {
+    return aesGcmDecrypt(
+      encrypted,
+      masterKey,
+      CREDENTIAL_SALT,
+      CREDENTIAL_SALT,
     )
   }
 

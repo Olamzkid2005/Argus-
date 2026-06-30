@@ -156,20 +156,44 @@ def _validate_webhook_url(url: str) -> bool:
         logger.warning("SSRF block: webhook URL points to blocked host: %s", url)
         return False
 
-    # If hostname is already an IP literal, check it directly
+    # Resolve hostname to IP(s) and verify all are public addresses.
+    # Uses AF_UNSPEC to handle both IPv4 and IPv6 — is_private_ip()
+    # handles both families correctly (loopback, ULA, link-local, etc.).
     try:
-        ip = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)[0][4][0]
-        if is_private_ip(ip):
+        addrs = socket.getaddrinfo(
+            hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+        )
+        if not addrs:
+            # No addresses resolved — fail closed to prevent SSRF
+            # via DNS rebinding with hosts that temporarily resolve empty.
             logger.warning(
-                "SSRF block: webhook URL resolves to private/internal IP '%s': %s",
-                ip, url,
+                "SSRF block: webhook URL hostname '%s' returned no addresses "
+                "— blocked to prevent SSRF via DNS rebinding: %s",
+                hostname, url,
             )
             return False
+        for family, _, _, _, sockaddr in addrs:
+            ip = sockaddr[0]
+            if is_private_ip(ip):
+                logger.warning(
+                    "SSRF block: webhook URL resolves to private/internal IP "
+                    "'%s': %s",
+                    ip, url,
+                )
+                return False
+        # All resolved IPs are public — safe to proceed.
         return True
-    except (socket.gaierror, OSError, IndexError):
-        # Hostname that didn't resolve — still allow it (may be transient).
-        # The static blocklist already caught known-bad names above.
-        return True
+    except (socket.gaierror, socket.herror, OSError, IndexError):
+        # Fail closed: if DNS resolution fails, block the URL to prevent
+        # SSRF via DNS rebinding. A hostname that can't be resolved at
+        # validation time might resolve to an internal address later when
+        # the actual HTTP request is made.
+        logger.warning(
+            "SSRF block: webhook URL hostname '%s' failed DNS resolution "
+            "— blocked to prevent SSRF via DNS rebinding: %s",
+            hostname, url,
+        )
+        return False
 
 
 def _dispatch(url: str, payload: dict, webhook_id: str) -> None:

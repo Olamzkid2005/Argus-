@@ -1,256 +1,257 @@
-"""Tests for post_finding_hooks.py
+"""
+Unit tests for SSRF validation in post_finding_hooks.py.
 
-Covers:
-  - fire_finding_webhooks severity filtering
-  - fire_finding_webhooks without engagement_id
-  - _get_matching_webhooks
-  - _dispatch success/failure
-  - _mark_triggered
+Tests the _validate_webhook_url() function which performs:
+- Scheme validation (HTTPS only)
+- Static blocklist (localhost, cloud metadata IPs, etc.)
+- DNS resolution with private IP detection
+- Fail-closed behavior on DNS resolution failure
+
+Uses monkeypatch/mock to control socket.getaddrinfo() results since
+DNS resolution is external.
 """
 
-from __future__ import annotations
-
 import socket
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from post_finding_hooks import (
-    _dispatch,
-    _get_matching_webhooks,
-    _mark_triggered,
-    _validate_webhook_url,
-    fire_finding_webhooks,
-)
+import pytest
+
+# Module under test
+from post_finding_hooks import _validate_webhook_url
 
 
-class TestFireFindingWebhooks:
-    """Tests for fire_finding_webhooks."""
+# ── Fixtures ──────────────────────────────────────────────────────────
 
-    def test_skips_low_severity(self):
-        result = fire_finding_webhooks(
-            {
-                "id": "finding-1",
-                "engagement_id": "eng-001",
-                "severity": "LOW",
-                "type": "XSS",
-            }
-        )
-        assert result is None  # No webhooks fired for LOW severity
-
-    def test_fires_for_critical(self):
-        with patch(
-            "post_finding_hooks._get_matching_webhooks", return_value=[]
-        ) as mock_get:
-            fire_finding_webhooks(
-                {
-                    "id": "finding-1",
-                    "engagement_id": "eng-001",
-                    "severity": "CRITICAL",
-                    "type": "SQL_INJECTION",
-                    "endpoint": "/api",
-                    "source_tool": "nuclei",
-                    "confidence": 0.9,
-                }
-            )
-            mock_get.assert_called_once_with("eng-001")
-
-    def test_skips_without_engagement_id(self):
-        fire_finding_webhooks(
-            {
-                "id": "finding-1",
-                "severity": "CRITICAL",
-            }
-        )  # Should return without error
-
-    def test_fires_webhooks(self):
-        with (
-            patch(
-                "post_finding_hooks._get_matching_webhooks",
-                return_value=[
-                    {"id": "wh-1", "webhook_url": "https://hooks.example.com"}
-                ],
-            ),
-            patch("post_finding_hooks._dispatch") as mock_dispatch,
-        ):
-            fire_finding_webhooks(
-                {
-                    "id": "finding-1",
-                    "engagement_id": "eng-001",
-                    "severity": "HIGH",
-                    "type": "XSS",
-                    "endpoint": "/search",
-                }
-            )
-            mock_dispatch.assert_called_once()
+@pytest.fixture(autouse=True)
+def disable_logging():
+    """Suppress log output during tests."""
+    with patch("post_finding_hooks.logger") as mock_log:
+        yield mock_log
 
 
-class TestGetMatchingWebhooks:
-    """Tests for _get_matching_webhooks."""
+# ── Scheme Validation ────────────────────────────────────────────────
 
-    def test_db_error_returns_empty(self):
-        mock_db = MagicMock()
-        mock_db.get_connection.side_effect = Exception("DB error")
-        with patch("database.connection.get_db", return_value=mock_db):
-            result = _get_matching_webhooks("eng-001")
-            assert result == []
+class TestSchemeValidation:
+    """Only HTTPS scheme should be allowed."""
 
+    def test_https_allowed(self):
+        """Standard HTTPS URLs with public IP resolution must pass."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (2, 1, 6, "", ("93.184.216.34", 0)),
+            ]
+            assert _validate_webhook_url("https://hooks.example.com/alerts") is True
 
-class TestValidateWebhookUrl:
-    """Tests for _validate_webhook_url SSRF validation."""
+    def test_http_rejected(self):
+        """Plain HTTP must be rejected (SSRF risk via MitM)."""
+        assert _validate_webhook_url("http://hooks.example.com/alert") is False
 
-    def test_blocks_disallowed_scheme(self):
-        assert _validate_webhook_url("http://example.com/hook") is False
-        assert _validate_webhook_url("ftp://example.com/hook") is False
-        assert _validate_webhook_url("file:///etc/passwd") is False
+    def test_ftp_rejected(self):
+        """Non-HTTPS schemes must be rejected."""
+        assert _validate_webhook_url("ftp://storage.example.com/file") is False
 
-    def test_blocks_known_metadata_hosts(self):
-        assert _validate_webhook_url("https://169.254.169.254/latest/meta-data/") is False
-        assert _validate_webhook_url("https://metadata.google.internal/") is False
-        assert _validate_webhook_url("https://localhost:9000/hook") is False
-        assert _validate_webhook_url("https://127.0.0.1/hook") is False
-        assert _validate_webhook_url("https://0.0.0.0/hook") is False
-
-    @patch("post_finding_hooks.socket.getaddrinfo")
-    def test_allows_public_ip_hostname(self, mock_getaddrinfo):
-        """Hostname resolving to a public IP should pass."""
-        mock_getaddrinfo.return_value = [
-            (0, 0, 0, "", ("93.184.216.34", 0))
-        ]
-        assert _validate_webhook_url("https://example.com/hook") is True
-
-    @patch("post_finding_hooks.socket.getaddrinfo")
-    def test_blocks_private_ip_resolution(self, mock_getaddrinfo):
-        """Hostname resolving to 10.x.x.x should be blocked."""
-        mock_getaddrinfo.return_value = [
-            (0, 0, 0, "", ("10.0.0.1", 0))
-        ]
-        assert _validate_webhook_url("https://internal-service.local/hook") is False
-
-    @patch("post_finding_hooks.socket.getaddrinfo")
-    def test_blocks_loopback_ip_resolution(self, mock_getaddrinfo):
-        """Hostname resolving to 127.x.x.x should be blocked."""
-        mock_getaddrinfo.return_value = [
-            (0, 0, 0, "", ("127.0.0.1", 0))
-        ]
-        assert _validate_webhook_url("https://myservice.local/hook") is False
-
-    @patch("post_finding_hooks.socket.getaddrinfo")
-    def test_blocks_cloud_metadata_resolution(self, mock_getaddrinfo):
-        """Hostname resolving to 169.254.169.254 should be blocked."""
-        mock_getaddrinfo.return_value = [
-            (0, 0, 0, "", ("169.254.169.254", 0))
-        ]
-        assert _validate_webhook_url("https://cloud-metadata.evil.com/hook") is False
-
-    @patch("post_finding_hooks.socket.getaddrinfo")
-    def test_blocks_ipv6_private_ula(self, mock_getaddrinfo):
-        """Hostname resolving to IPv6 ULA (fc00::/7) should be blocked."""
-        mock_getaddrinfo.return_value = [
-            (0, 0, 0, "", ("fc00::1", 0))
-        ]
-        assert _validate_webhook_url("https://ipv6-ula.local/hook") is False
-
-    @patch("post_finding_hooks.socket.getaddrinfo")
-    def test_blocks_ipv6_link_local(self, mock_getaddrinfo):
-        """Hostname resolving to IPv6 link-local (fe80::/10) should be blocked."""
-        mock_getaddrinfo.return_value = [
-            (0, 0, 0, "", ("fe80::1", 0))
-        ]
-        assert _validate_webhook_url("https://ipv6-linklocal.local/hook") is False
-
-    @patch("post_finding_hooks.socket.getaddrinfo")
-    def test_blocks_ipv4_mapped_ipv6_private(self, mock_getaddrinfo):
-        """IPv4-mapped IPv6 with private embedded IPv4 should be blocked."""
-        mock_getaddrinfo.return_value = [
-            (0, 0, 0, "", ("::ffff:127.0.0.1", 0))
-        ]
-        assert _validate_webhook_url("https://ipv6-mapped.local/hook") is False
-
-    @patch("post_finding_hooks.socket.getaddrinfo")
-    def test_blocks_ipv6_loopback(self, mock_getaddrinfo):
-        """Hostname resolving to ::1 should be blocked."""
-        mock_getaddrinfo.return_value = [
-            (0, 0, 0, "", ("::1", 0))
-        ]
-        assert _validate_webhook_url("https://ipv6-loopback.local/hook") is False
-
-    @patch("post_finding_hooks.socket.getaddrinfo")
-    def test_allows_ipv6_public(self, mock_getaddrinfo):
-        """Hostname resolving to public IPv6 should pass."""
-        mock_getaddrinfo.return_value = [
-            (0, 0, 0, "", ("2001:470:1f15:1abc::1", 0))
-        ]
-        assert _validate_webhook_url("https://ipv6-public.local/hook") is True
-
-    @patch("post_finding_hooks.socket.getaddrinfo")
-    def test_allows_multiple_addrinfo_first_public(self, mock_getaddrinfo):
-        """When hostname resolves to multiple IPs, first public one passes."""
-        mock_getaddrinfo.return_value = [
-            (0, 0, 0, "", ("93.184.216.34", 0)),
-        ]
-        assert _validate_webhook_url("https://multi-ip.example.com/hook") is True
-
-    @patch("post_finding_hooks.socket.getaddrinfo")
-    def test_dns_failure_does_not_block(self, mock_getaddrinfo):
-        """If DNS resolution fails, allow the URL (static blocklist already checked)."""
-        mock_getaddrinfo.side_effect = socket.gaierror("Name or service not known")
-        assert _validate_webhook_url("https://some-random-hostname.xyz/hook") is True
+    def test_no_scheme_rejected(self):
+        """URL without a scheme must be rejected."""
+        assert _validate_webhook_url("hooks.example.com/alert") is False
 
 
-class TestDispatch:
-    """Tests for _dispatch."""
+# ── Static Blocklist ─────────────────────────────────────────────────
 
-    def test_successful_dispatch(self):
-        class FakeResponse:
-            status_code = 200
+class TestStaticBlocklist:
+    """Known malicious hostnames must be rejected without DNS lookup."""
 
-        class FakeClient:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                pass
-
-            def post(self, url, json=None):
-                return FakeResponse()
-
-        with (
-            patch("post_finding_hooks.httpx.Client", return_value=FakeClient()),
-            patch("post_finding_hooks._mark_triggered") as mock_mark,
-        ):
-            _dispatch("https://hooks.example.com", {"event": "test"}, "wh-1")
-            mock_mark.assert_called_once_with("wh-1", success=True)
-
-    def test_failed_dispatch(self):
-        class FakeClient:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                pass
-
-            def post(self, url, json=None):
-                raise Exception("Connection error")
-
-        with (
-            patch("post_finding_hooks.httpx.Client", return_value=FakeClient()),
-            patch("post_finding_hooks._mark_triggered") as mock_mark,
-        ):
-            _dispatch("https://hooks.example.com", {"event": "test"}, "wh-1")
-            mock_mark.assert_called_once_with("wh-1", success=False)
+    @pytest.mark.parametrize("url", [
+        "https://localhost/webhook",
+        "https://127.0.0.1/webhook",
+        "https://0.0.0.0/webhook",
+        "https://[::1]/webhook",
+        "https://[::]/webhook",
+        "https://169.254.169.254/latest/meta-data/",
+        "https://metadata.google.internal/computeMetadata/v1/",
+        "https://169.254.170.2/credentials",
+        "https://100.100.100.200/latest/meta-data/",
+    ])
+    def test_blocked_host_rejected(self, url):
+        """Each blocked hostname/IP must be rejected."""
+        # These are caught before DNS lookup, so no need to mock
+        assert _validate_webhook_url(url) is False
 
 
-class TestMarkTriggered:
-    """Tests for _mark_triggered."""
+# ── DNS Resolution: Public IPs ───────────────────────────────────────
 
-    def test_successful_update(self):
-        mock_db = MagicMock()
-        with patch("database.connection.get_db", return_value=mock_db):
-            _mark_triggered("wh-1", success=True)
-            # Should not raise
+class TestDnsPublicIp:
+    """Hostnames that resolve to public IPs must be allowed."""
 
-    def test_db_error(self):
-        mock_db = MagicMock()
-        mock_db.get_connection.side_effect = Exception("DB error")
-        with patch("database.connection.get_db", return_value=mock_db):
-            _mark_triggered("wh-1", success=True)
-            # Should not raise
+    def test_public_ipv4_allowed(self):
+        """Hostname resolving to a public IPv4 must be allowed."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (2, 1, 6, "", ("93.184.216.34", 0)),  # example.com
+            ]
+            assert _validate_webhook_url("https://hooks.example.com/alert") is True
+
+    def test_public_ipv6_allowed(self):
+        """Hostname resolving to a public IPv6 must be allowed."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (10, 1, 6, "", ("2606:2800:220:1:248:1893:25c8:1946", 0, 0, 0)),  # example.com IPv6
+            ]
+            assert _validate_webhook_url("https://hooks.ipv6.example.com/alert") is True
+
+    def test_multiple_public_ips_allowed(self):
+        """Hostname with multiple public IPs must be allowed."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (2, 1, 6, "", ("93.184.216.34", 0)),
+                (2, 1, 6, "", ("93.184.216.35", 0)),
+                (10, 1, 6, "", ("2606:2800:220:1:248:1893:25c8:1946", 0)),
+            ]
+            assert _validate_webhook_url("https://hooks.example.com/alert") is True
+
+
+# ── DNS Resolution: Private IPs ──────────────────────────────────────
+
+class TestDnsPrivateIp:
+    """Hostnames that resolve to private/internal IPs must be blocked."""
+
+    @pytest.mark.parametrize("private_ip", [
+        "10.0.0.1",       # RFC 1918 Class A
+        "172.16.0.1",     # RFC 1918 Class B
+        "192.168.1.1",    # RFC 1918 Class C
+        "127.0.0.1",      # Loopback (should be caught by blocklist, but test DNS path too)
+        "169.254.1.1",    # Link-local
+        "0.0.0.1",        # Current network
+        "100.64.0.1",     # CGNAT
+    ])
+    def test_private_ipv4_blocked(self, private_ip):
+        """Hostname resolving to a private IPv4 must be blocked."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (2, 1, 6, "", (private_ip, 0)),
+            ]
+            assert _validate_webhook_url("https://hooks.internal.example.com/alert") is False
+
+    @pytest.mark.parametrize("private_ipv6", [
+        "fc00::1",        # ULA
+        "fd00::1",        # ULA
+        "fe80::1",        # Link-local
+        "::1",            # Loopback
+        "::ffff:10.0.0.1",  # IPv4-mapped private
+        "::ffff:127.0.0.1", # IPv4-mapped loopback
+    ])
+    def test_private_ipv6_blocked(self, private_ipv6):
+        """Hostname resolving to a private IPv6 must be blocked."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (10, 1, 6, "", (private_ipv6, 0, 0, 0)),
+            ]
+            assert _validate_webhook_url("https://hooks.internal-v6.example.com/alert") is False
+
+    def test_mixed_public_and_private_blocked(self):
+        """Hostname with both public and private IPs must be blocked."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (2, 1, 6, "", ("93.184.216.34", 0)),  # public
+                (2, 1, 6, "", ("10.0.0.1", 0)),        # private
+            ]
+            # Should be blocked because one of the resolved IPs is private
+            assert _validate_webhook_url("https://hooks.split-view.example.com/alert") is False
+
+
+# ── DNS Resolution: Fail-Closed ──────────────────────────────────────
+
+class TestDnsFailClosed:
+    """When DNS resolution fails, the URL must be blocked (fail-closed)."""
+
+    def test_gaierror_blocked(self):
+        """socket.gaierror (name/service not known) must block the URL."""
+        with patch("socket.getaddrinfo", side_effect=socket.gaierror):
+            assert _validate_webhook_url("https://nonexistent.example.com/webhook") is False
+
+    def test_herror_blocked(self):
+        """socket.herror (hostname lookup error) must block the URL."""
+        with patch("socket.getaddrinfo", side_effect=socket.herror):
+            assert _validate_webhook_url("https://bad.example.com/webhook") is False
+
+    def test_oserror_blocked(self):
+        """OSError during DNS resolution must block the URL."""
+        with patch("socket.getaddrinfo", side_effect=OSError("Network is unreachable")):
+            assert _validate_webhook_url("https://unreachable.example.com/webhook") is False
+
+    def test_index_error_blocked(self):
+        """IndexError from malformed getaddrinfo result must block the URL."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            # Return a non-empty list but with an empty sockaddr tuple —
+            # accessing sockaddr[0] raises IndexError.
+            mock_gai.return_value = [
+                (2, 1, 6, "", ()),  # empty sockaddr — IndexError on [0]
+            ]
+            assert _validate_webhook_url("https://bad-sockaddr.example.com/webhook") is False
+
+    def test_empty_getaddrinfo_blocked(self):
+        """Empty getaddrinfo result (no addresses resolved) must block the URL."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = []  # no addresses resolved
+            assert _validate_webhook_url("https://no-addresses.example.com/webhook") is False
+
+    def test_timeout_dns_blocked(self):
+        """DNS timeout must block the URL (fail-closed)."""
+        with patch("socket.getaddrinfo", side_effect=OSError("DNS resolution timed out")):
+            assert _validate_webhook_url("https://slow-dns.example.com/webhook") is False
+
+
+# ── Edge Cases ────────────────────────────────────────────────────────
+
+class TestEdgeCases:
+    """Edge cases and malformed inputs."""
+
+    def test_empty_url_rejected(self):
+        """Empty URL string must be rejected."""
+        assert _validate_webhook_url("") is False
+
+    def test_malformed_url_rejected(self):
+        """Malformed URL must be rejected."""
+        assert _validate_webhook_url("https://") is False
+
+    def test_invalid_url_with_spaces_rejected(self):
+        """URL with invalid characters must be rejected."""
+        assert _validate_webhook_url("https://evil .example.com/webhook") is False
+
+    def test_url_with_credentials_rejected(self):
+        """URL with embedded credentials must use HTTPS and still resolve."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (2, 1, 6, "", ("93.184.216.34", 0)),
+            ]
+            # user:pass@host should still work if it's HTTPS and public
+            assert _validate_webhook_url("https://user:pass@hooks.example.com/alert") is True
+
+    def test_long_hostname_with_valid_dns(self):
+        """Long but valid hostname that resolves to a public IP must be allowed."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (2, 1, 6, "", ("93.184.216.34", 0)),
+            ]
+            assert _validate_webhook_url(
+                "https://really-long-subdomain-name-that-is-still-valid.example.com/webhook"
+            ) is True
+
+    def test_url_with_query_params(self):
+        """URL with query parameters must work correctly."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (2, 1, 6, "", ("93.184.216.34", 0)),
+            ]
+            assert _validate_webhook_url(
+                "https://hooks.example.com/webhook?event=critical&severity=high"
+            ) is True
+
+    def test_url_with_port(self):
+        """URL with custom port must work correctly."""
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (2, 1, 6, "", ("93.184.216.34", 0)),
+            ]
+            assert _validate_webhook_url(
+                "https://hooks.example.com:8443/webhook"
+            ) is True

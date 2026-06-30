@@ -241,6 +241,8 @@ class Orchestrator:
                 return self.run_reporting(job)
             elif job_type == "repo_scan":
                 return self.run_repo_scan(job)
+            elif job_type == "post_exploit":
+                return self.run_post_exploitation(job)
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
 
@@ -954,6 +956,84 @@ class Orchestrator:
             "report": report_data,
             "trace_id": get_trace_id(),
         }
+
+    def run_post_exploitation(self, job: dict) -> dict:
+        """Execute the post-exploitation phase.
+
+        After scanning and analysis confirm a foothold, this phase:
+        1. Extracts credentials from findings
+        2. Replays credentials against other endpoints
+        3. Probes internal network ranges for lateral movement
+
+        Args:
+            job: Job dict with findings, target_endpoints, known_hosts
+
+        Returns:
+            Dict with post-exploitation results
+        """
+        from tools.post_exploitation import PostExploitationConfig, PostExploitationOrchestrator
+        from tools.scope_validator import ScopeValidator
+
+        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
+        slog.tool_start("orchestrator.run_post_exploitation", [])
+        self._check_timeout()
+        self.ws_publisher.publish_job_started(
+            engagement_id=self.engagement_id,
+            job_type="post_exploit",
+        )
+
+        # Load scope validator if authorized scope is available
+        scope_validator = None
+        try:
+            from orchestrator_pkg.engagement import EngagementService
+
+            authorized_scope = EngagementService.load_authorized_scope(self.engagement_id)
+            if authorized_scope:
+                scope_validator = ScopeValidator(self.engagement_id, authorized_scope)
+        except Exception as e:
+            logger.warning(
+                "Could not load authorized scope for post-exploitation (engagement %s): %s",
+                self.engagement_id,
+                e,
+            )
+
+        config = PostExploitationConfig()
+        orchestrator = PostExploitationOrchestrator(
+            engagement_id=self.engagement_id,
+            scope_validator=scope_validator,
+            config=config,
+        )
+
+        result = orchestrator.run(
+            findings=job.get("findings", []),
+            target_endpoints=job.get("target_endpoints", []),
+            known_hosts=job.get("known_hosts"),
+        )
+
+        # Save any new findings from post-exploitation
+        new_findings = result.get("new_findings", [])
+        if new_findings:
+            from orchestrator_pkg.persistence import FindingPersistenceService
+
+            fps = FindingPersistenceService(
+                engagement_id=self.engagement_id,
+                finding_repo=self.finding_repo,
+                bug_bounty_mode=self.bug_bounty_mode,
+                classify_finding_type_fn=self._classify_finding_type,
+                get_org_id_fn=self._get_org_id,
+            )
+            for finding in new_findings:
+                finding["engagement_id"] = self.engagement_id
+                fps.save_finding(finding)
+
+        slog.tool_complete(
+            "orchestrator.run_post_exploitation",
+            success=True,
+            findings=len(new_findings),
+        )
+
+        result["trace_id"] = get_trace_id()
+        return result
 
     def _validate_repo_url(self, repo_url: str) -> None:
         """Validate repo URL against SSRF attacks."""
