@@ -65,6 +65,7 @@ export interface PhaseExecutionResult {
   artifacts: ArtifactRef[]
   errors: string[]
   durationMs: number
+  hypotheses?: Hypothesis[]
 }
 
 export interface AssessmentPlan {
@@ -72,6 +73,13 @@ export interface AssessmentPlan {
   phases: PhaseExecutionRequest[]
   errorRecovery: Record<string, ErrorRecovery>
   planCreatedAt: string
+}
+
+export interface Hypothesis {
+  id: string
+  description: string
+  confidence: number
+  status: string
 }
 
 export interface PlannerContext {
@@ -84,4 +92,5 @@ export interface PlannerContext {
   insertedPhases: Set<string>
   replanCount: number
   maxReplans?: number
+  hypotheses?: Hypothesis[]
 }

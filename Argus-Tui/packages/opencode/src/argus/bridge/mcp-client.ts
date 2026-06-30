@@ -469,8 +469,9 @@ export class WorkersBridge {
     techStack?: string[]
     pipeline?: any[]
     context?: Record<string, any>
-  }): Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string }> {
-    return this.sendRequest("agent_init", params) as Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string }>
+    engagementId?: string
+  }): Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string; hypotheses?: Array<{ id: string; description: string; confidence: number; status: string }> }> {
+    return this.sendRequest("agent_init", params) as Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string; hypotheses?: Array<{ id: string; description: string; confidence: number; status: string }> }>
   }
 
   async agentNext(params: {

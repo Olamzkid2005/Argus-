@@ -440,6 +440,7 @@ export class WorkflowRunner {
       })
       const executedCapabilities = new Set<Capability>()
       const insertedPhaseIds = new Set<string>()
+      const allHypotheses: Array<{ id: string; description: string; confidence: number; status: string }> = []
       let replanCount = 0
       const targetType = detectTargetType(target)
       const authState = detectAuthState(target)
@@ -496,6 +497,15 @@ export class WorkflowRunner {
         }
         insertedPhaseIds.add(phase.phaseId)
 
+        // Accumulate hypotheses from hybrid phases for replan decisions
+        if (result.hypotheses && result.hypotheses.length > 0) {
+          for (const h of result.hypotheses) {
+            if (!allHypotheses.some((existing) => existing.id === h.id)) {
+              allHypotheses.push(h)
+            }
+          }
+        }
+
         if (!phase.replanCycle) {
           const replanCtx: PlannerContext = {
             target,
@@ -506,6 +516,7 @@ export class WorkflowRunner {
             insertedPhases: insertedPhaseIds,
             replanCount,
             maxReplans: configMaxReplans,
+            hypotheses: allHypotheses.length > 0 ? allHypotheses : undefined,
           }
           const replanPhases = planner.replan(replanCtx)
           replanCount = replanCtx.replanCount

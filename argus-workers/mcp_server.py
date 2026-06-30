@@ -766,11 +766,36 @@ class MCPServer:
 
         self.session_store.set_plan(session_id, plan["tool_order"])
 
+        # Attach active hypotheses from Postgres so the TypeScript
+        # planner can use them for replan decisions.
+        hypotheses = []
+        engagement_id = params.get("engagementId")
+        if engagement_id:
+            try:
+                from database.repositories.hypothesis_repository import (
+                    HypothesisRepository,
+                )
+                repo = HypothesisRepository()
+                hypotheses = repo.get_by_engagement(
+                    engagement_id, status="UNVERIFIED"
+                )
+            except Exception as e:
+                logger.debug("Could not load hypotheses for agent_init: %s", e)
+
         return {
             "session_id": session_id,
             "plan": plan["tool_order"],
             "reasoning": plan["reasoning"],
             "phase": params.get("phase", ""),
+            "hypotheses": [
+                {
+                    "id": h.get("id", ""),
+                    "description": h.get("description", ""),
+                    "confidence": h.get("confidence", 0),
+                    "status": h.get("status", "UNVERIFIED"),
+                }
+                for h in hypotheses
+            ],
         }
 
     def _generate_plan(self, session_id: str, pipeline: list, context: dict) -> dict:

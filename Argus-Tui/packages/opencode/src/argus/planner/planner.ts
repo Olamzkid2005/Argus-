@@ -55,6 +55,7 @@ export class WorkflowPlanner {
       insertedPhases: context?.insertedPhases ?? new Set(),
       replanCount: context?.replanCount ?? 0,
       techStack: context?.techStack,
+      hypotheses: context?.hypotheses,
     }
 
     const techFromFindings = plannerContext.findings

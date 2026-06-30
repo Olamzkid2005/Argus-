@@ -315,7 +315,9 @@ export class InProcessExecutor implements PhaseExecutor {
       techStack: phase.config?.techStack as string[] | undefined,
       pipeline,
       context: { previousFindings: phase.previousPhaseResults },
+      engagementId: phase.config?.engagementId as string | undefined,
     })
+    const hypotheses = session.hypotheses ?? []
 
     let done = false
     let iterations = 0
@@ -477,6 +479,7 @@ export class InProcessExecutor implements PhaseExecutor {
       artifacts: [],
       errors,
       durationMs: Date.now() - startTime,
+      hypotheses,
     }
   }
 
