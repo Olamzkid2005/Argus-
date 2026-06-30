@@ -857,7 +857,7 @@ class ReActAgent:
                 except Exception:
                     pass
 
-        except HypothesisPersistenceError as e:
+        except HypothesisPersistenceError:
             # Revert in-memory cache on Postgres write failure
             self.engagement_state.hypotheses = snapshot
             self.engagement_state._hypothesis_write_failures += 1
@@ -869,10 +869,9 @@ class ReActAgent:
         except Exception as e:
             self.engagement_state.hypotheses = snapshot
             self.engagement_state._hypothesis_write_failures += 1
-            logger.error(
+            logger.exception(
                 "Unexpected error in _update_hypotheses_from_result — reverted: %s",
                 e,
-                exc_info=True,
             )
 
     def _persist_decision_checkpoint(

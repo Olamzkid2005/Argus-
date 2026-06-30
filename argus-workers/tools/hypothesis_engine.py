@@ -14,7 +14,7 @@ Design:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from models.finding_types import TYPE_TO_FAMILY, VERIFICATION_TOOL_MAP
@@ -39,7 +39,6 @@ class HypothesisEngine:
         Returns an empty list on any failure — the orchestrator degrades
         gracefully without hypotheses rather than crashing the engagement.
         """
-        from config.constants import HYPOTHESIS_MAX_OUTPUT
         from feature_flags import is_enabled as _ff_enabled
 
         if not _ff_enabled("HYPOTHESIS_ENGINE", default=False):
@@ -50,10 +49,9 @@ class HypothesisEngine:
             self._emit_hypothesis_summary(hypotheses, engagement_id)
             return hypotheses
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "HypothesisEngine.generate() failed — returning empty list",
                 extra={"engagement_id": engagement_id, "error": str(e)},
-                exc_info=True,
             )
             return []
 
@@ -71,7 +69,7 @@ class HypothesisEngine:
             verification_steps = self._build_verification_steps(
                 group, suggested_tools)
 
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             hypotheses.append({
                 "id": str(uuid4()),
                 "engagement_id": engagement_id,
@@ -138,7 +136,7 @@ class HypothesisEngine:
         family = TYPE_TO_FAMILY.get(f_type.upper(), f_type.upper())
         tools = VERIFICATION_TOOL_MAP.get(family, ["verification_agent"])
         confidence = min(1.0, f.get("confidence", 0.5) * 1.2)
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         return {
             "id": str(uuid4()),
@@ -218,7 +216,6 @@ class HypothesisEngine:
 
     def _suggest_tools_from_group(self, group: dict) -> list[str]:
         """Suggest verification tools based on group metadata."""
-        category = group.get("category")
         common_cwe = group.get("common_cwe")
 
         # Try CWE-based first

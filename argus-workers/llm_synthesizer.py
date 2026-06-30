@@ -10,7 +10,6 @@ Also provides a dedicated ``update_hypotheses()`` call — separate from
 fail without blocking the rest of the pipeline.
 """
 
-import json
 import logging
 import time as _time
 from typing import Any
