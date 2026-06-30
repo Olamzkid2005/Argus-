@@ -284,7 +284,8 @@ describe("PlaywrightEngine", () => {
     const { PlaywrightEngine } = await import("../../../../src/argus/browser/engine")
     const engine = new PlaywrightEngine()
     
-    await engine.launch()    await engine.createContext({ harDir: tempHarDir })
+    await engine.launch()
+    await engine.createContext({ harDir: tempHarDir })
 
     // HAR path should be set
     expect(engine.getHarPath()).toContain(tempHarDir)

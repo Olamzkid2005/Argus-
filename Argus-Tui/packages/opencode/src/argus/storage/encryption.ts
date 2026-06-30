@@ -193,7 +193,7 @@ function getMacKeychain(): MacKeychain {
 
       // Read the password data at the returned pointer (null-terminated)
       // CString(ptr) reads until null terminator — safe because we stored a hex string
-      const password = new CString(pwPtr)
+      const password = new CString(pwPtr as unknown as Pointer).toString()
 
       // Free the allocated memory (pass raw pointer as bigint)
       ;(sym.SecKeychainItemFreeContent as any)(null, pwPtr)

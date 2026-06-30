@@ -90,7 +90,7 @@ describe("Browser Observer", () => {
     expect(observation.statusCode).toBe(0)
   })
 
-  test("compareObservations detects no changes for identical snapshots", () => {
+  test("compareObservations detects no changes for identical snapshots", async () => {
     const { compareObservations } = await import("../../../../src/argus/browser/observer")
 
     const a = {
@@ -108,7 +108,7 @@ describe("Browser Observer", () => {
     expect(result.removals).toHaveLength(0)
   })
 
-  test("compareObservations detects additions in DOM", () => {
+  test("compareObservations detects additions in DOM", async () => {
     const { compareObservations } = await import("../../../../src/argus/browser/observer")
 
     const a = {
@@ -132,7 +132,7 @@ describe("Browser Observer", () => {
     expect(result.removals).toHaveLength(0)
   })
 
-  test("compareObservations detects removals in DOM", () => {
+  test("compareObservations detects removals in DOM", async () => {
     const { compareObservations } = await import("../../../../src/argus/browser/observer")
 
     const a = {
@@ -156,7 +156,7 @@ describe("Browser Observer", () => {
     expect(result.additions).toHaveLength(0)
   })
 
-  test("compareObservations detects both additions and removals", () => {
+  test("compareObservations detects both additions and removals", async () => {
     const { compareObservations } = await import("../../../../src/argus/browser/observer")
 
     const a = {
@@ -180,7 +180,7 @@ describe("Browser Observer", () => {
     expect(result.removals).toContain("OldLine")
   })
 
-  test("compareObservations handles empty DOM snapshots", () => {
+  test("compareObservations handles empty DOM snapshots", async () => {
     const { compareObservations } = await import("../../../../src/argus/browser/observer")
 
     const a = {

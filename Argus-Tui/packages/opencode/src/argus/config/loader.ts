@@ -39,7 +39,7 @@ const EncryptionConfigSchema = z.object({
 })
 
 const StorageConfigSchema = z.object({
-  encryption: EncryptionConfigSchema.default({}),
+  encryption: EncryptionConfigSchema.default({ enabled: false }),
 })
 
 const ScopeConfigSchema = z.object({

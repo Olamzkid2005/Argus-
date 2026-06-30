@@ -207,15 +207,23 @@ class CircuitBreakerConfig:
             else:
                 cm = config_manager
 
+            # Support both naming conventions:
+            #   YAML: max_failures / cooldown_ms  (legacy)
+            #   YAML: failure_threshold / cooldown_seconds  (direct)
+            threshold = cm.get(
+                "tools.circuit_breaker.failure_threshold",
+                cm.get("tools.circuit_breaker.max_failures",
+                       cls.failure_threshold),
+            )
+            cooldown = cm.get(
+                "tools.circuit_breaker.cooldown_seconds",
+                cm.get("tools.circuit_breaker.cooldown_ms",
+                       cls.cooldown_seconds),
+            )
+
             return cls(
-                failure_threshold=int(
-                    cm.get("tools.circuit_breaker.max_failures",
-                           cls.failure_threshold)
-                ),
-                cooldown_seconds=int(
-                    cm.get("tools.circuit_breaker.cooldown_ms",
-                           cls.cooldown_seconds)
-                ),
+                failure_threshold=int(threshold),
+                cooldown_seconds=int(cooldown),
             )
         except (ImportError, RuntimeError, ValueError):
             # If the config_manager isn't set up, fall through to defaults

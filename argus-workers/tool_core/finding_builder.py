@@ -124,6 +124,17 @@ class FindingBuilder:
             "BOPLA_SENSITIVE_FIELDS",
             "ATTACK_SURFACE",
             "SUBDOMAIN",
+            "MISSING_RATE_LIMITING",
+            "BOLA",
+            "STORED_XSS",
+            "BLIND_XSS",
+            "DOM_XSS",
+            "BLIND_SQLI",
+            "TIME_BASED_SQLI",
+            "ERROR_SQLI",
+            "PATH_TRAVERSAL",
+            "DIRECTORY_TRAVERSAL",
+            "COMMITTED_SECRET",
         }
     )
 

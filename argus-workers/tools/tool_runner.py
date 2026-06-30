@@ -69,6 +69,9 @@ class ToolRunner:
         # Redirection to devices
         ">/dev/",
         ">/dev/null",
+        # Database destruction
+        "DROP TABLE",
+        "DROP DATABASE",
     ]
 
     # Database destruction patterns (regex with word boundaries to avoid URL
@@ -79,6 +82,7 @@ class ToolRunner:
         r"\bDROP\s+DATABASE\b",
         r"\bDELETE\s+FROM\b",
         r"\bTRUNCATE\b",
+        r"\$\(",  # subshell pattern $()
     ]
 
     # Short tool names that are dangerous when used standalone.

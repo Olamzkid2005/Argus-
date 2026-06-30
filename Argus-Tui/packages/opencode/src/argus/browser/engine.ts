@@ -6,7 +6,7 @@ import { tmpdir } from "os"
 
 export interface BrowserEngine {
   launch(headless?: boolean, userAgent?: string): Promise<void>
-  createContext(harPath?: string): Promise<BrowserContext>
+  createContext(options?: BrowserEngineOptions): Promise<BrowserContext>
   navigate(url: string): Promise<Page>
   observe(page: Page, statusCode?: number): Promise<Observation>
   captureScreenshot(page: Page): Promise<Buffer>
