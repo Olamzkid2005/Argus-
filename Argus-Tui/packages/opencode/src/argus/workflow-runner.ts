@@ -394,6 +394,11 @@ export class WorkflowRunner {
         phase.config.credentials = defaultCreds
       }
     }
+    // Inject engagementId into all phase configs so the executor can
+    // forward it to agentInit for hypothesis loading.
+    for (const phase of plan.phases) {
+      phase.config.engagementId = engagementId
+    }
 
     // ── 5. Create phase records ──
     const phaseRecords = new Map<string, PhaseRecord>()
@@ -531,6 +536,7 @@ export class WorkflowRunner {
               if (defaultCreds) {
                 rp.config.credentials = defaultCreds
               }
+              rp.config.engagementId = engagementId
               for (const cap of rp.requiredCapabilities) {
                 executedCapabilities.add(cap)
               }

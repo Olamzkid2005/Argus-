@@ -47,13 +47,6 @@ class HypothesisEngine:
 
         try:
             hypotheses = self._generate_inner(findings, engagement_id)
-            logger.info(
-                "HYPOTHESIS_SUMMARY",
-                extra={
-                    "engagement_id": engagement_id,
-                    "total": len(hypotheses),
-                },
-            )
             self._emit_hypothesis_summary(hypotheses, engagement_id)
             return hypotheses
         except Exception as e:
@@ -72,7 +65,8 @@ class HypothesisEngine:
         groups = _group_findings_for_hypotheses(findings, min_group_size=2)
 
         for group in groups:
-            description = self._describe_group(group)
+            confidence = self._initial_confidence(group)
+            description = self._describe_group(group, confidence)
             suggested_tools = self._suggest_tools_from_group(group)
             verification_steps = self._build_verification_steps(
                 group, suggested_tools)
@@ -84,7 +78,7 @@ class HypothesisEngine:
                 "description": description,
                 "root_cause_key": group["root_cause_key"],
                 "source_finding_id": None,
-                "confidence": self._initial_confidence(group),
+                "confidence": confidence,
                 "status": "UNVERIFIED",
                 "verification_steps": verification_steps,
                 "finding_ids": group["finding_ids"],
@@ -175,38 +169,30 @@ class HypothesisEngine:
             "updated_at": now,
         }
 
-    def _describe_group(self, group: dict) -> str:
+    def _describe_group(self, group: dict, confidence: float) -> str:
         """Build a human-readable description for a grouped hypothesis."""
         category = group.get("category", "type_host")
         count = group.get("finding_count", 0)
-        severity = group.get("max_severity", "INFO")
         host = group.get("affected_endpoints", ["unknown"])[0]
         cwe = group.get("common_cwe")
         params = group.get("common_parameters", [])
 
-        # Map severity to descriptive text
-        _severity_conf = {
-            "CRITICAL": 0.85, "HIGH": 0.7, "MEDIUM": 0.5,
-            "LOW": 0.3, "INFO": 0.2,
-        }
-        conf = _severity_conf.get(severity, 0.5)
-
         if category == "cwe" and cwe:
             return (f"Findings with CWE-{cwe} cluster on {host}, "
                     f"indicating a common vulnerable component "
-                    f"({conf:.0%} confidence).")
+                    f"({confidence:.0%} confidence).")
         if category == "shared_parameter" and params:
             return (f"Vulnerability on parameter '{params[0]}' across "
                     f"{count} endpoints, suggesting a shared unparameterized "
-                    f"query pattern ({conf:.0%} confidence).")
+                    f"query pattern ({confidence:.0%} confidence).")
         if category == "shared_endpoint":
             return (f"Multiple vulnerability types on {host} endpoints, "
                     f"suggesting systemic security issues "
-                    f"({conf:.0%} confidence).")
+                    f"({confidence:.0%} confidence).")
 
         # Generic fallback
         return (f"{count} findings of type {group.get('root_cause_key', 'unknown')} "
-                f"on {host} ({conf:.0%} confidence).")
+                f"on {host} ({confidence:.0%} confidence).")
 
     def _initial_confidence(self, group: dict) -> float:
         """Deterministic confidence based on group strength.

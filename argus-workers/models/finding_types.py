@@ -28,9 +28,10 @@ TYPE_TO_FAMILY: dict[str, str] = {
     # Local File Inclusion
     "PATH_TRAVERSAL": "LFI",
     "DIRECTORY_TRAVERSAL": "LFI",
-    # SSRF / Open Redirect
+    # SSRF
     "SSRF": "SSRF",
-    "OPEN_REDIRECT": "SSRF",
+    # Open Redirect
+    "OPEN_REDIRECT": "OPEN_REDIRECT",
     # JWT
     "JWT": "JWT",
     "JWT_WEAKNESS": "JWT",
@@ -51,6 +52,7 @@ VERIFICATION_TOOL_MAP: dict[str, list[str]] = {
     "SSRF": ["finding_verifier", "verification_agent"],
     "RCE": ["finding_verifier", "verification_agent"],
     "OPEN_REDIRECT": ["finding_verifier", "verification_agent"],
+    "LFI": ["finding_verifier", "verification_agent"],
     "JWT": ["jwt_tool", "verification_agent"],
     "BOLA": ["dual_auth_scanner", "verification_agent"],
     "IDOR": ["dual_auth_scanner", "verification_agent"],

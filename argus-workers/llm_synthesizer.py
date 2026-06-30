@@ -117,3 +117,68 @@ class LLMSynthesizer:
             slog.llm_result("Risk level: %s", result.get("risk_level", "unknown"))
 
         return result
+
+    def update_hypotheses(
+        self,
+        hypotheses: list[dict],
+        context: str,
+    ) -> list[dict]:
+        """Evaluate and update hypotheses via a dedicated LLM call.
+
+        Each returned dict:
+          {"hypothesis_id": "...", "status": "UNVERIFIED|CONFIRMED|REJECTED",
+           "confidence": 0.85, "reasoning": "..."}
+
+        Returns empty list on failure (fail open — hypotheses retain current state).
+        """
+        if not hypotheses:
+            return []
+
+        hypothesis_lines = []
+        for h in hypotheses:
+            hypothesis_lines.append(
+                f"- [{h.get('id', '?')}] {h.get('description', '')} "
+                f"(confidence={h.get('confidence', 0)}, "
+                f"status={h.get('status', 'UNVERIFIED')})"
+            )
+
+        user_prompt = (
+            "Current hypotheses:\n"
+            + "\n".join(hypothesis_lines)
+            + "\n\nRecent context:\n"
+            + (context[:3000] if context else "No context available.")
+        )
+
+        try:
+            result = self._llm.chat_json(
+                _HYPOTHESIS_UPDATE_SYSTEM_PROMPT,
+                user_prompt,
+                max_tokens=2000,
+            )
+        except Exception as e:
+            logger.warning("LLM call failed in update_hypotheses: %s", e)
+            return []
+
+        if result is None:
+            return []
+
+        # chat_json may return a dict with a fallback key, or a list
+        if isinstance(result, dict):
+            if result.get("_fallback"):
+                return []
+            return []
+
+        if not isinstance(result, list):
+            return []
+
+        updates = []
+        for raw_update in result:
+            if not isinstance(raw_update, dict):
+                continue
+            try:
+                validated = validate_hypothesis_update(raw_update, source="llm")
+                updates.append(validated)
+            except ValueError as e:
+                logger.debug("Skipping invalid hypothesis update: %s", e)
+
+        return updates

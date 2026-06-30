@@ -860,6 +860,7 @@ class ReActAgent:
         except HypothesisPersistenceError as e:
             # Revert in-memory cache on Postgres write failure
             self.engagement_state.hypotheses = snapshot
+            self.engagement_state._hypothesis_write_failures += 1
             logger.warning(
                 "Hypothesis update failed — reverted to last-known-good state",
                 extra={"tool": tool_name},
@@ -867,6 +868,7 @@ class ReActAgent:
             )
         except Exception as e:
             self.engagement_state.hypotheses = snapshot
+            self.engagement_state._hypothesis_write_failures += 1
             logger.error(
                 "Unexpected error in _update_hypotheses_from_result — reverted: %s",
                 e,
