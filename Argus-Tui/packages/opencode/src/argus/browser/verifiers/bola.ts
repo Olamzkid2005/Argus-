@@ -3,6 +3,7 @@ import type { VerificationScenario, VerifierResult, EvidencePackage } from "../t
 import { Confidence } from "../../shared/types"
 import { loginIfFormPresent, isAccessDenied } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
+import { randomUUID, createHash } from "crypto"
 import { tmpdir } from "os"
 import { join } from "path"
 import { existsSync, mkdirSync, rmSync } from "fs"
@@ -89,6 +90,7 @@ export class BOLAVerifier implements VerificationScenario {
   async collectEvidence(): Promise<EvidencePackage> {
     // Persist screenshots and requests/responses through the EvidenceCollector if available
     const collectedArtifacts: import("../../evidence/types").ArtifactEntry[] = []
+    let computedHash = ""
     if (this.collector && this.engagementId && this.findingId) {
       for (const shot of this.capturedScreenshots) {
         const entry = await this.collector.captureScreenshot(this.engagementId, this.findingId, shot.data).catch(() => null)
@@ -107,18 +109,32 @@ export class BOLAVerifier implements VerificationScenario {
         const harArtifacts = await this.collector.ingestHarFiles(this.engagementId, this.findingId, this.harDir).catch(() => [])
         collectedArtifacts.push(...harArtifacts)
       }
-      await this.collector.createPackage(this.engagementId, this.findingId, collectedArtifacts).catch(() => {})
+      // Capture the real package_hash from the persisted manifest
+      const manifest = await this.collector.createPackage(this.engagementId, this.findingId, collectedArtifacts).catch(() => null)
+      if (manifest) computedHash = manifest.package_hash
+    }
+
+    // Compute an inline hash when no collector was available
+    if (!computedHash && collectedArtifacts.length > 0) {
+      const hashInput = collectedArtifacts.map((a) => a.hash || a.path).join("")
+      computedHash = createHash("sha256").update(hashInput).digest("hex")
     }
 
     return {
-      packageId: this.findingId ?? "",
+      packageId: randomUUID(),
       findingId: this.findingId ?? "",
-      artifacts: [
-        ...this.capturedScreenshots.map((s) => ({ path: s.label, type: "screenshot" as const })),
-        ...this.capturedRequests.map((r) => ({ path: r, type: "request" as const })),
-        ...this.capturedResponses.map((r) => ({ path: r, type: "response" as const })),
-      ],
-      packageHash: "",
+      artifacts: collectedArtifacts.length > 0
+        ? collectedArtifacts.map((a) => ({
+            path: a.path,
+            type: a.type,
+            hash: a.hash,
+          }))
+        : [
+            ...this.capturedScreenshots.map((s) => ({ path: s.label, type: "screenshot" as const })),
+            ...this.capturedRequests.map((r) => ({ path: r, type: "request" as const })),
+            ...this.capturedResponses.map((r) => ({ path: r, type: "response" as const })),
+          ],
+      packageHash: computedHash,
       createdAt: new Date().toISOString(),
     }
   }
@@ -133,8 +149,14 @@ export class BOLAVerifier implements VerificationScenario {
     const context = await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
     const page = await context.newPage()
     try {
+      this.capturedRequests.push(`GET ${resourceUrl} [unauthenticated baseline]`)
       const response = await page.goto(resourceUrl, { waitUntil: "networkidle", timeout: 30000 })
       const httpStatus = response?.status() ?? 0
+      this.capturedResponses.push(`[unauthenticated baseline] ${resourceUrl}: HTTP ${httpStatus}`)
+      try {
+        const shot = await this.engine.captureScreenshot(page)
+        this.capturedScreenshots.push({ data: shot, label: "unauthenticated-baseline" })
+      } catch { /* screenshot best-effort */ }
       if (httpStatus === 401 || httpStatus === 403) return false
       const bodyText = await page.locator("body").innerText().catch(() => "")
       if (isAccessDenied(bodyText)) return false
@@ -157,9 +179,9 @@ export class BOLAVerifier implements VerificationScenario {
 
       await loginIfFormPresent(page, creds)
 
-      const loginResponse = await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30000 })
-      this.capturedResponses.push(`[${label}] Login page status: ${loginResponse?.status() ?? "unknown"}`)
-
+      // Navigate directly to the resource page after login.
+      // Do NOT re-navigate to targetUrl first — that would reload the login page
+      // and potentially invalidate the freshly-set session.
       const resourceResponse = await page.goto(resourceUrl, { waitUntil: "networkidle", timeout: 30000 })
       this.capturedRequests.push(`GET ${resourceUrl} [${label}]`)
       this.capturedResponses.push(`[${label}] Resource page status: ${resourceResponse?.status() ?? "unknown"}`)

@@ -115,11 +115,22 @@ export class ChainedScenario implements VerificationScenario {
     }
 
     const allArtifacts = this.stageEvidence.flatMap((p) => p.artifacts)
+
+    // Compute an aggregated package hash from all stage evidence hashes
+    let computedHash = ""
+    const hashes = this.stageEvidence
+      .filter((p) => p.packageHash)
+      .map((p) => p.packageHash)
+    if (hashes.length > 0) {
+      const { createHash } = await import("crypto")
+      computedHash = createHash("sha256").update(hashes.join("")).digest("hex")
+    }
+
     return {
       packageId: "",
       findingId: "",
       artifacts: allArtifacts,
-      packageHash: "",
+      packageHash: computedHash,
       createdAt: new Date().toISOString(),
     }
   }

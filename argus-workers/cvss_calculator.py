@@ -12,64 +12,170 @@ They should be labeled "Estimated CVSS" in the UI.
 # CVSS v3.1 Base Score lookup — approximate, for findings without a CVE
 # Based on typical CVSS v3.1 vector strings for each vulnerability type
 TYPE_BASE_SCORES = {
-    # Critical injection types
+    # ── Critical injection types ──────────────────────────────────
     "SQL_INJECTION": 9.8,  # AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
     "COMMAND_INJECTION": 9.8,
+    "SSTI": 9.8,
+    "SSRF": 9.3,
+    "XXE": 8.2,
     "LDAP_INJECTION": 8.8,
     "XPATH_INJECTION": 8.8,
-    # XSS variants
+    "NOSQL_INJECTION": 8.8,
+    "HEADER_INJECTION": 7.5,
+    "HOST_HEADER_INJECTION": 7.5,
+
+    # ── SQLi aliases (scanner-emitted variants) ───────────────────
+    "SQLI": 9.8,
+    "BLIND_SQLI": 8.0,
+    "TIME_BASED_SQLI": 8.0,
+    "ERROR_SQLI": 8.0,
+
+    # ── XSS variants ─────────────────────────────────────────────
     "XSS": 6.1,  # AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N
     "STORED_XSS": 8.8,  # S:C (stored = no UI:R required)
     "DOM_XSS": 6.1,
     "REFLECTED_XSS": 6.1,
-    # Authentication / access
+    "BLIND_XSS": 6.1,
+    "DOM_BASED_XSS": 6.1,
+    "POST_REFLECTED_XSS": 6.1,
+
+    # ── Authentication / access ──────────────────────────────────
     "BROKEN_AUTHENTICATION": 8.1,
     "BROKEN_ACCESS_CONTROL": 6.5,
+    "AUTH_BYPASS": 8.1,
+    "MISSING_AUTH": 8.1,
+    "MISSING_AUTHENTICATION": 8.1,
     "IDOR": 6.5,
+    "BOLA": 6.5,
+    "API_BOLA": 6.5,
+    "CONFIRMED_BOLA": 8.1,
+    "POTENTIAL_BOLA": 6.5,
+    "BOPLA_SENSITIVE_FIELDS": 6.5,
     "PRIVILEGE_ESCALATION": 8.8,
+    "DEFAULT_CREDENTIALS": 7.5,
+    "SESSION_FIXATION": 6.5,
+
+    # ── JWT ──────────────────────────────────────────────────────
     "JWT_WEAKNESS": 7.5,
     "JWT_NONE_ALGORITHM": 8.1,
+    "JWT_ALGORITHM_CONFUSION": 8.1,
+    "JWT_ALG_NONE": 8.1,
+    "JWT_HMAC_ALGORITHM": 8.1,
+    "JWT_PRIVILEGE_ESCALATION": 8.8,
+    "JWT_LLM_DETECTED_WEAKNESS": 7.5,
     "WEAK_PASSWORD_POLICY": 5.3,
-    # Injection (non-SQL)
-    "SSRF": 9.3,
-    "XXE": 8.2,
-    "SSTI": 9.8,
+    "WEAK_API_KEY": 5.3,
+
+    # ── Web / transport ──────────────────────────────────────────
     "OPEN_REDIRECT": 6.1,
-    "HEADER_INJECTION": 7.5,
-    # Info disclosure
+    "UNVALIDATED_REDIRECT": 6.1,
+    "CACHE_POISONING": 7.5,
+    "HTTP_REQUEST_SMUGGLING": 8.8,
+    "PROTOTYPE_POLLUTION": 8.8,
+    "SSL_CERTIFICATE_ERROR": 5.9,
+    "WEAK_SSL": 5.9,
+    "WEAK_TLS": 5.9,
+    "DEPRECATED_TLS": 5.9,
+    "MISSING_HSTS": 3.7,
+
+    # ── Info disclosure ──────────────────────────────────────────
     "SENSITIVE_DATA_EXPOSURE": 7.5,
     "DIRECTORY_LISTING": 5.3,
     "ERROR_DISCLOSURE": 5.3,
     "PATH_DISCLOSURE": 5.3,
     "SOURCE_CODE_DISCLOSURE": 6.5,
-    # Config / headers
+    "INFO_DISCLOSURE": 4.5,
+    "INFO_LEAKAGE": 4.5,
+    "VERBOSE_API_ERROR": 5.3,
+
+    # ── Config / headers / CORS ──────────────────────────────────
     "MISSING_SECURITY_HEADERS": 3.7,
+    "MISSING_API_SECURITY_HEADERS": 3.7,
+    "MISSING_CSP": 3.7,
+    "WEAK_CSP": 3.7,
     "INSECURE_CORS": 6.5,
+    "CORS_MISCONFIGURATION": 6.5,
+    "WILDCARD_CORS": 6.5,
+    "WILDCARD_CORS_API": 6.5,
+    "REFLECTED_ORIGIN_CORS": 6.5,
+    "NULL_ORIGIN_CORS": 6.5,
     "CSRF": 6.5,
     "CLICKJACKING": 4.7,
-    # File / upload
+    "HTTP_VERB_TAMPERING": 5.3,
+    "INSECURE_COOKIE": 4.7,
+
+    # ── File / upload ────────────────────────────────────────────
     "FILE_UPLOAD": 8.8,
+    "UNRESTRICTED_FILE_UPLOAD": 7.5,
     "PATH_TRAVERSAL": 7.5,
+    "DIRECTORY_TRAVERSAL": 7.5,
+    "PATH_TRAVERSAL_IN_FILENAME": 6.5,
     "LOCAL_FILE_INCLUSION": 7.5,
+    "LFI": 7.5,
     "REMOTE_FILE_INCLUSION": 8.8,
-    # Infra
+    "EXPOSED_SENSITIVE_FILE": 6.5,
+
+    # ── Infra ────────────────────────────────────────────────────
     "EXPOSED_ADMIN": 7.2,
-    "WEAK_SSL": 5.9,
+    "EXPOSED_DEBUG_ENDPOINT": 5.3,
+    "EXPOSED_OPENAPI_SPEC": 4.7,
     "OPEN_PORT": 5.3,
     "SERVICE_DETECTED": 3.7,
-    # Technology detection
+    "UNENCRYPTED_SERVICE": 5.3,
+    "HIDDEN_ENDPOINT": 2.5,
+    "ATTACK_SURFACE": 2.5,
+    "SUBDOMAIN": 2.5,
+
+    # ── Technology detection ─────────────────────────────────────
     "TECHNOLOGY_DETECTION": 2.5,
     "TECH_DETECTED": 2.5,
-    # Secrets
+
+    # ── Secrets ──────────────────────────────────────────────────
     "EXPOSED_SECRET": 8.8,
     "COMMITTED_SECRET": 8.2,
     "HARDCODED_SECRET": 7.5,
-    # Dependency
+    "TOKEN_IN_LOCALSTORAGE": 4.7,
+
+    # ── Dependency ───────────────────────────────────────────────
     "DEPENDENCY_VULNERABILITY": 7.5,
     "OUTDATED_DEPENDENCY": 5.9,
-    # Generic
+
+    # ── Rate limiting ────────────────────────────────────────────
+    "RATE_LIMIT_BYPASS": 5.3,
+    "MISSING_RATE_LIMITING": 5.3,
+    "API_NO_RATE_LIMIT": 5.3,
+    "API_RATE_LIMITED": 2.5,
+    "API_RATE_LIMIT_INCONCLUSIVE": 2.5,
+
+    # ── Mass assignment ──────────────────────────────────────────
+    "MASS_ASSIGNMENT": 6.5,
+    "API_MASS_ASSIGNMENT": 6.5,
+
+    # ── API auth ─────────────────────────────────────────────────
+    "API_AUTH_BYPASS": 8.1,
+
+    # ── GraphQL ──────────────────────────────────────────────────
+    "GRAPHQL_INTROSPECTION_ENABLED": 4.7,
+    "GRAPHQL_DEEP_INTROSPECTION": 4.7,
+    "GRAPHQL_DEPTH_LIMIT_MISSING": 5.3,
+    "GRAPHQL_SQLI_RESOLVER": 8.8,
+
+    # ── Parameter fuzzing ────────────────────────────────────────
+    "PARAMETER_DISCOVERY": 2.5,
+    "PARAM_DISCOVERY": 2.5,
+    "PARAMETER_FUZZ_500": 2.5,
+    "PARAMETER_REFLECTION": 2.5,
+    "POST_FUZZ_500": 2.5,
+    "POST_PARAMETER_REFLECTION": 2.5,
+
+    # ── Business logic ───────────────────────────────────────────
+    "NEGATIVE_AMOUNT_ACCEPTED": 6.5,
+    "ZERO_AMOUNT_ACCEPTED": 5.3,
+    "NO_TRANSACTION_LIMIT": 6.5,
+    "REPLAY_VULNERABLE": 5.3,
+
+    # ── Generic ──────────────────────────────────────────────────
     "ENDPOINT_DISCOVERY": 2.5,
-    "INFO_DISCLOSURE": 4.5,
 }
 
 SEVERITY_MULTIPLIERS = {

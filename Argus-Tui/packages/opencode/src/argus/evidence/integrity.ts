@@ -15,6 +15,20 @@ function hashFile(filePath: string): Promise<string> {
   })
 }
 
+/**
+ * Validate that an artifact path is safe — does not escape the package directory.
+ * Rejects paths containing "..", absolute paths, and paths with null bytes.
+ */
+function isValidArtifactPath(artifactPath: string): boolean {
+  if (!artifactPath || typeof artifactPath !== "string") return false
+  if (artifactPath.includes("..")) return false
+  if (artifactPath.startsWith("/")) return false
+  if (artifactPath.includes("\\")) return false
+  if (artifactPath.includes("\0")) return false
+  if (/[<>"|?*]/.test(artifactPath)) return false
+  return true
+}
+
 export interface VerifyPackageOptions {
   /**
    * Master key for decrypting encrypted evidence files.
@@ -23,6 +37,12 @@ export interface VerifyPackageOptions {
    * so files must be decrypted before hashing for correct integrity check.
    */
   masterKey?: Buffer
+  /**
+   * HMAC key for verifying tamper-evident package hashes.
+   * If provided, computePackageHash uses HMAC-SHA256 instead of plain SHA-256.
+   * Must match the key used when the evidence package was created.
+   */
+  hmacKey?: string | Buffer
 }
 
 export async function verifyPackage(
@@ -64,6 +84,11 @@ export async function verifyPackage(
 
   // Stream-based hash for large files to avoid loading entire artifact into memory
   for (const artifact of manifest.artifacts) {
+    // Reject path traversal — artifact.path must not escape the package directory
+    if (!isValidArtifactPath(artifact.path)) {
+      errors.push(`Invalid artifact path: ${artifact.path} — path traversal blocked`)
+      continue
+    }
     const artifactPath = join(baseDir, engagementId, "artifacts", packageId, artifact.path)
     if (!existsSync(artifactPath)) {
       errors.push(`Artifact missing: ${artifact.path}`)
@@ -95,7 +120,7 @@ export async function verifyPackage(
     }
   }
 
-  const computedHash = computePackageHash(manifest, manifest.artifacts)
+  const computedHash = computePackageHash(manifest, manifest.artifacts, options?.hmacKey)
   const hashValid = computedHash === manifest.package_hash
 
   if (!hashValid) {

@@ -130,6 +130,7 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
   async collectEvidence(): Promise<EvidencePackage> {
     // Persist screenshots and requests/responses through the EvidenceCollector if available
     const collectedArtifacts: import("../../evidence/types").ArtifactEntry[] = []
+    let computedHash = ""
     if (this.collector && this.engagementId && this.findingId) {
       for (const shot of this.capturedScreenshots) {
         const entry = await this.collector.captureScreenshot(this.engagementId, this.findingId, shot.data).catch(() => null)
@@ -149,7 +150,16 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
         const harArtifacts = await this.collector.ingestHarFiles(this.engagementId, this.findingId, this.harDir).catch(() => [])
         collectedArtifacts.push(...harArtifacts)
       }
-      await this.collector.createPackage(this.engagementId, this.findingId, collectedArtifacts).catch(() => {})
+      // Capture the real package_hash from the persisted manifest
+      const manifest = await this.collector.createPackage(this.engagementId, this.findingId, collectedArtifacts).catch(() => null)
+      if (manifest) computedHash = manifest.package_hash
+    }
+
+    // Compute an inline hash when no collector was available
+    if (!computedHash && collectedArtifacts.length > 0) {
+      const { createHash } = await import("crypto")
+      const hashInput = collectedArtifacts.map((a) => a.hash || a.path).join("")
+      computedHash = createHash("sha256").update(hashInput).digest("hex")
     }
 
     const artifacts: import("../../shared/types").ArtifactRef[] = []
@@ -167,7 +177,7 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
       packageId: this.findingId ?? "",
       findingId: this.findingId ?? "",
       artifacts,
-      packageHash: "",
+      packageHash: computedHash,
       createdAt: new Date().toISOString(),
     }
   }

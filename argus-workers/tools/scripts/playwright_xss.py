@@ -10,9 +10,53 @@ XSS_PAYLOAD = "<script>alert('XSS')</script>"
 
 
 def _check_auth_success(page, target: str) -> bool:
-    """Verify authentication succeeded by checking we're not redirected to login."""
-    current = page.url
-    return "/login" not in current.lower()
+    """Verify authentication succeeded by checking multiple signals.
+
+    Checks:
+    1. URL no longer points to a login/signin/auth page
+    2. No login form elements (password field) on the current page
+    3. No auth error messages in the page body
+    """
+    current = page.url.lower()
+
+    # Signal 1: URL check — if we're still on a login page, auth likely failed
+    still_on_login = any(
+        p in current for p in ["/login", "/signin", "/auth/login", "/auth"]
+    )
+    if not still_on_login:
+        return True
+
+    # Signal 2: Check for auth error messages in the page
+    try:
+        body_text = page.text_content("body") or ""
+        body_lower = body_text.lower()
+        auth_errors = [
+            "invalid credentials",
+            "invalid username",
+            "invalid password",
+            "invalid email",
+            "login failed",
+            "incorrect",
+            "wrong password",
+            "authentication failed",
+            "access denied",
+        ]
+        if any(e in body_lower for e in auth_errors):
+            return False
+    except Exception:
+        pass
+
+    # Signal 3: Check if there's still a password field visible (still on login form)
+    try:
+        password_count = page.locator("input[type=password]").count()
+        if password_count > 0:
+            return False  # Still on a login form
+    except Exception:
+        pass
+
+    # If URL suggests login but no error or form found, it might be a redirect
+    # or SPA — proceed anyway
+    return True
 
 
 def check_stored_xss(

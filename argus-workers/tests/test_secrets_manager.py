@@ -58,6 +58,7 @@ class TestSecretsManager:
             url="http://vault:8200",
             token="token123",
             verify=True,
+            timeout=None,
         )
 
     def test_get_vault_client_import_error(self, manager):
@@ -70,27 +71,41 @@ class TestSecretsManager:
 
     def test_get_aws_client(self, manager):
         """Test lazy initialization of AWS Secrets Manager client"""
+        import builtins as _builtins
+
         mock_boto3 = Mock()
+        mock_botocore = Mock()
         mock_client = MagicMock()
         mock_boto3.client.return_value = mock_client
 
+        # Set up mock_botocore.config module so that the import from botocore.config
+        # returns a stable mock rather than auto-creating a new one each access
+        mock_botocore_config_module = MagicMock(name="botocore.config")
+        mock_botocore.config = mock_botocore_config_module
+        mock_botocore_config_result = MagicMock(name="Config")
+        mock_botocore_config_module.Config.return_value = mock_botocore_config_result
+
+        _real_import = _builtins.__import__
+
+        def _mock_import(name, *args, **kwargs):
+            if name == "boto3":
+                return mock_boto3
+            if name == "botocore" or name == "botocore.config":
+                return mock_botocore
+            return _real_import(name, *args, **kwargs)
+
         with (
             patch.dict(os.environ, {"AWS_REGION": "us-west-2"}, clear=False),
-            patch(
-                "builtins.__import__",
-                side_effect=lambda name, *args, **kwargs: (
-                    mock_boto3
-                    if name == "boto3"
-                    else __builtins__.__import__(name, *args, **kwargs)
-                ),
-            ),
+            patch("builtins.__import__", side_effect=_mock_import),
         ):
             client = manager._get_aws_client()
 
         assert client is mock_client
-        mock_boto3.client.assert_called_once_with(
-            "secretsmanager", region_name="us-west-2"
-        )
+        mock_boto3.client.assert_called_once()
+        args, kwargs = mock_boto3.client.call_args
+        assert args[0] == "secretsmanager"
+        assert kwargs["region_name"] == "us-west-2"
+        assert kwargs["config"] is mock_botocore_config_result
 
     def test_get_aws_client_import_error(self, manager):
         """Test AWS client handles missing boto3 gracefully"""

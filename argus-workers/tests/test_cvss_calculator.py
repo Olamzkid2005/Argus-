@@ -56,6 +56,14 @@ class TestTypeBaseScores:
             "PATH_TRAVERSAL",
             "EXPOSED_SECRET",
             "DEPENDENCY_VULNERABILITY",
+            # Aliases and scanner-emitted types
+            "SQLI",
+            "BLIND_SQLI",
+            "LFI",
+            "BOLA",
+            "API_BOLA",
+            "AUTH_BYPASS",
+            "GRAPHQL_INTROSPECTION_ENABLED",
         ]
         for key in required_keys:
             assert key in TYPE_BASE_SCORES, f"Missing base score for {key}"

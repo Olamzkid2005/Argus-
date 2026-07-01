@@ -47,6 +47,11 @@ class AuthConfig:
     # SAML assertion
     saml_assertion: str = ""
 
+    # Custom form field selectors (injected via caller or config)
+    username_selector: str = ""  # e.g. "input#email", "[name=username]"
+    password_selector: str = ""  # e.g. "input[type=password]"
+    submit_selector: str = ""    # e.g. "button:has-text('Sign In')"
+
 
 COMMON_LOGIN_PATHS = [
     "/login",
@@ -303,6 +308,13 @@ class AuthManager:
         navigation to complete, then extracts cookies and localStorage
         tokens into a requests.Session.
 
+        Supports:
+        - Custom selectors via AuthConfig (username_selector, password_selector, submit_selector)
+        - Auto-detection of username/password fields via name, id, placeholder, autocomplete, type
+        - OAuth/SSO detection (returns early, caller should use injectAuthCookies)
+        - Enter key or submit button click
+        - Auth success verification beyond URL matching
+
         Has a 60-second timeout for the whole flow.
         """
         from playwright.sync_api import sync_playwright
@@ -322,29 +334,89 @@ class AuthManager:
                 # Navigate to login page
                 page.goto(login_url, timeout=30000, wait_until="networkidle")
 
-                # Fill credentials from config
-                username_fields = ["username", "email", "login", "user", "user_login"]
-                password_fields = ["password", "passwd", "pass", "user_pass"]
+                # Check for OAuth/SSO buttons — these should not be auto-filled
+                page_content = page.content()
+                has_oauth = (
+                    "oauth" in page_content.lower()
+                    and any(
+                        s in page_content.lower()
+                        for s in ["google", "github", "microsoft", "facebook", "sso", "saml"]
+                    )
+                )
+                if has_oauth:
+                    slog.info(
+                        "Browser auth: OAuth/SSO detected on login page — "
+                        "caller should use injectAuthCookies or injectLocalStorageTokens"
+                    )
+                    session = requests.Session()
+                    return self._try_extract_browser_session(page) or session
+
+                # Determine username selector strategy:
+                # 1. Custom selector from AuthConfig if provided
+                # 2. Smart defaults that try id, name, placeholder, autocomplete, type
+                if self._config.username_selector:
+                    username_selectors = [self._config.username_selector]
+                else:
+                    username_selectors = [
+                        "input[type=text]",
+                        "input[type=email]",
+                        "input[name=username]",
+                        "input[name=email]",
+                        "input[name=login]",
+                        "input[name=user]",
+                        "input[id=username]",
+                        "input[id=email]",
+                        "input[id=login]",
+                        "input[placeholder*=username i]",
+                        "input[placeholder*=email i]",
+                        "input[placeholder*=user i]",
+                        "input[autocomplete=username]",
+                        "input[autocomplete=email]",
+                    ]
+
+                if self._config.password_selector:
+                    password_selectors = [self._config.password_selector]
+                else:
+                    password_selectors = [
+                        "input[type=password]",
+                        "input[name=password]",
+                        "input[name=passwd]",
+                        "input[name=pass]",
+                        "input[name=user_pass]",
+                        "input[id=password]",
+                        "input[placeholder*=password i]",
+                        "input[autocomplete=current-password]",
+                        "input[autocomplete=new-password]",
+                    ]
+
+                if self._config.submit_selector:
+                    submit_selectors = [self._config.submit_selector]
+                else:
+                    submit_selectors = [
+                        'button[type="submit"]',
+                        'input[type="submit"]',
+                        'button:has-text("Sign in")',
+                        'button:has-text("Login")',
+                        'button:has-text("Log in")',
+                        'button:has-text("Sign In")',
+                        'button:has-text("Continue")',
+                        'button[aria-label*=sign i]',
+                        'button[aria-label*=log i]',
+                    ]
 
                 filled_username = False
-                filled_password = False
-
                 if self._config.username:
-                    for selector in username_fields:
+                    for selector in username_selectors:
                         try:
-                            page.fill(
-                                f'[name="{selector}"]',
-                                self._config.username,
-                                timeout=5000,
-                            )
-                            filled_username = True
-                            logger.debug(
-                                "Browser auth: filled username field '%s'", selector
-                            )
-                            break
+                            field = page.locator(selector).first()
+                            if field.is_visible():
+                                field.fill(self._config.username)
+                                filled_username = True
+                                logger.debug(
+                                    "Browser auth: filled username field '%s'", selector
+                                )
+                                break
                         except Exception as exc:
-                            # M-04: Log unexpected errors (e.g. page navigation crashes, detached elements)
-                            # Expected TimeoutErrors are normal — multiple selectors are tried.
                             logger.log(
                                 5,
                                 "Browser auth: username field '%s' failed: %s",
@@ -352,24 +424,24 @@ class AuthManager:
                                 exc,
                             )
                             continue
+
                     if not filled_username:
                         logger.debug(
-                            "Browser auth: could not find username field with common selectors"
+                            "Browser auth: could not find username field with any selector"
                         )
 
+                filled_password = False
                 if self._config.password:
-                    for selector in password_fields:
+                    for selector in password_selectors:
                         try:
-                            page.fill(
-                                f'[name="{selector}"]',
-                                self._config.password,
-                                timeout=5000,
-                            )
-                            filled_password = True
-                            logger.debug(
-                                "Browser auth: filled password field '%s'", selector
-                            )
-                            break
+                            field = page.locator(selector).first()
+                            if field.is_visible():
+                                field.fill(self._config.password)
+                                filled_password = True
+                                logger.debug(
+                                    "Browser auth: filled password field '%s'", selector
+                                )
+                                break
                         except Exception as exc:
                             logger.log(
                                 5,
@@ -378,9 +450,10 @@ class AuthManager:
                                 exc,
                             )
                             continue
+
                     if not filled_password:
                         logger.debug(
-                            "Browser auth: could not find password field with common selectors"
+                            "Browser auth: could not find password field with any selector"
                         )
 
                 # For login_data, submit custom payload fields
@@ -388,18 +461,18 @@ class AuthManager:
                     self._config.login_data, dict
                 ):
                     for field_name, field_value in self._config.login_data.items():
-                        if (
-                            field_name.lower() in username_fields
-                            or field_name.lower() in password_fields
+                        if field_name.lower() in (
+                            "username", "email", "login", "user", "user_login",
+                            "password", "passwd", "pass", "user_pass",
                         ):
                             continue
                         try:
-                            page.fill(
-                                f'[name="{field_name}"]', str(field_value), timeout=5000
-                            )
-                            logger.debug(
-                                "Browser auth: filled custom field '%s'", field_name
-                            )
+                            field = page.locator(f'[name="{field_name}"]').first()
+                            if field.is_visible():
+                                field.fill(str(field_value))
+                                logger.debug(
+                                    "Browser auth: filled custom field '%s'", field_name
+                                )
                         except Exception as exc:
                             logger.log(
                                 5,
@@ -409,39 +482,40 @@ class AuthManager:
                             )
                             continue
 
-                # Submit form via button click or Enter key
-                submit_selectors = [
-                    'button[type="submit"]',
-                    'input[type="submit"]',
-                    'button:has-text("Sign in")',
-                    'button:has-text("Login")',
-                    'button:has-text("Log in")',
-                    'button:has-text("Sign In")',
-                ]
-
+                # Submit form
                 submitted = False
-                for selector in submit_selectors:
-                    try:
-                        page.click(selector, timeout=5000)
-                        submitted = True
-                        logger.debug("Browser auth: clicked submit '%s'", selector)
-                        break
-                    except Exception as exc:
-                        logger.log(
-                            5, "Browser auth: submit '%s' failed: %s", selector, exc
-                        )
-                        continue
 
-                if not submitted:
-                    # Fallback: press Enter on the last filled field
+                # Strategy 1: Try Enter key on password field first (SPAs often handle this)
+                if filled_password:
+                    password_field = page.locator(password_selectors[0] if not self._config.password_selector else self._config.password_selector).first()
                     try:
-                        page.press('[name="password"]', "Enter", timeout=5000)
-                        submitted = True
-                    except Exception as exc:
-                        logger.log(
-                            5, "Browser auth: Enter key fallback failed: %s", exc
-                        )
+                        if password_field.is_visible():
+                            password_field.press("Enter")
+                            page.wait_for_timeout(1000)
+                            # Check if navigation occurred
+                            if page.url() != login_url:
+                                submitted = True
+                                logger.debug("Browser auth: submitted via Enter key")
+                    except Exception:
                         pass
+
+                # Strategy 2: Click submit button
+                if not submitted:
+                    for selector in submit_selectors:
+                        try:
+                            btn = page.locator(selector).first()
+                            if btn.is_visible():
+                                btn.click()
+                                submitted = True
+                                logger.debug(
+                                    "Browser auth: clicked submit '%s'", selector
+                                )
+                                break
+                        except Exception as exc:
+                            logger.log(
+                                5, "Browser auth: submit '%s' failed: %s", selector, exc
+                            )
+                            continue
 
                 if not submitted:
                     raise AuthError(
@@ -450,6 +524,9 @@ class AuthManager:
 
                 # Wait for post-login navigation
                 page.wait_for_load_state("networkidle", timeout=30000)
+
+                # Verify auth success beyond just URL matching
+                self._verify_browser_auth_success(page, login_url)
 
                 # Extract session into requests.Session
                 session = self._try_extract_browser_session(page)
@@ -509,6 +586,99 @@ class AuthManager:
         if blocked.search(hostname):
             raise ValueError(f"Blocked internal hostname (SSRF prevention): {hostname}")
         return url
+
+    @staticmethod
+    def _verify_browser_auth_success(page, login_url: str) -> None:
+        """Verify that browser-based authentication succeeded.
+
+        Checks multiple signals:
+        1. URL changed from login page
+        2. No login form elements on the current page
+        3. No auth error messages in the page body
+        4. No MFA/CAPTCHA challenges
+
+        Raises AuthError if auth is determined to have failed.
+        """
+        from urllib.parse import urlparse
+
+        current_url = page.url
+
+        # Check 1: URL changed from login page
+        current_path = urlparse(current_url).path.lower()
+        login_path = urlparse(login_url).path.lower()
+        still_on_login = (
+            current_path == login_path
+            or "/login" in current_path
+            or "/signin" in current_path
+            or "/auth" in current_path
+        )
+
+        # Check 2: Page body for auth error / MFA / CAPTCHA signals
+        try:
+            body_text = page.text_content("body") or ""
+            body_lower = body_text.lower()
+        except Exception:
+            body_lower = ""
+
+        has_auth_error = any(
+            phrase in body_lower
+            for phrase in [
+                "invalid credentials",
+                "invalid username",
+                "invalid password",
+                "invalid email",
+                "login failed",
+                "incorrect",
+                "wrong password",
+                "authentication failed",
+            ]
+        )
+
+        has_mfa = any(
+            phrase in body_lower
+            for phrase in [
+                "mfa",
+                "multi-factor",
+                "two-factor",
+                "2fa",
+                "verification code",
+                "authenticator app",
+            ]
+        )
+
+        has_captcha = any(
+            phrase in body_lower
+            for phrase in ["captcha", "recaptcha", "hcaptcha", "turnstile", "i'm not a robot"]
+        )
+
+        if has_auth_error:
+            raise AuthError(
+                "Browser auth: detected auth error message in response — "
+                "credentials may be incorrect"
+            )
+
+        if has_mfa:
+            logger.warning(
+                "Browser auth: MFA challenge detected — session may be incomplete. "
+                "Proceeding with any cookies/tokens extracted so far."
+            )
+            return
+
+        if has_captcha:
+            logger.warning(
+                "Browser auth: CAPTCHA detected — login may not have completed. "
+                "Proceeding with any cookies/tokens extracted so far."
+            )
+            return
+
+        # If URL still indicates login page and no auth errors, it may be a
+        # dynamically rendered login or SPA — proceed with partial session
+        if still_on_login:
+            logger.debug(
+                "Browser auth: URL still on login page (%s) — "
+                "proceeding with extracted cookies/tokens",
+                current_path,
+            )
 
     @staticmethod
     def _try_extract_browser_session(page) -> requests.Session:

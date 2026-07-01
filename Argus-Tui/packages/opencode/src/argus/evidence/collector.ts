@@ -29,6 +29,8 @@ export class EvidenceCollector {
   private config: CollectorConfig
   /** When set, binary evidence files are encrypted at rest using this engagement's derived key. */
   private encryptionEngagementId: string | null = null
+  /** Track engagements for which we've already warned about missing encryption key. */
+  private _encryptionWarned: Set<string> = new Set()
 
   constructor(
     private baseDir: string,
@@ -51,9 +53,25 @@ export class EvidenceCollector {
 
   /**
    * Check if encryption is active (engagement ID set + master key cached).
+   * Logs a warning when encryption was requested (engagement ID set) but
+   * the master key is not cached — this means data will be written as plaintext.
    */
   private _isEncrypted(): boolean {
-    return this.encryptionEngagementId !== null && EncryptionManager.getCachedMasterKey() !== null
+    if (this.encryptionEngagementId === null) return false
+    const key = EncryptionManager.getCachedMasterKey()
+    if (key === null) {
+      // Warn only once per engagement to avoid log spam
+      if (!this._encryptionWarned.has(this.encryptionEngagementId)) {
+        this._encryptionWarned.add(this.encryptionEngagementId)
+        console.warn(
+          `[Evidence] Encryption requested for engagement ${this.encryptionEngagementId} ` +
+          "but master key is not cached — writing evidence as plaintext. " +
+          "Set ARGUS_KEY_PASSPHRASE or call EncryptionManager.loadKey() before collecting evidence."
+        )
+      }
+      return false
+    }
+    return true
   }
 
   /**

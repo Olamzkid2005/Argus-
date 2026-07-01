@@ -67,6 +67,11 @@ class SecretsManager:
                     url=vault_addr,
                     token=vault_token,
                     verify=verify,
+                    timeout=tuple(
+                        int(x) for x in os.getenv("VAULT_TIMEOUT", "10,30").split(",")
+                    )
+                    if os.getenv("VAULT_TIMEOUT")
+                    else None,
                 )
             except ImportError:
                 logger.warning("hvac not installed, Vault unavailable")
@@ -78,8 +83,17 @@ class SecretsManager:
             try:
                 import boto3
 
+                from botocore.config import Config as BotoConfig
+
+                aws_timeout = float(os.getenv("AWS_TIMEOUT", "10"))
                 self._aws_client = boto3.client(
-                    "secretsmanager", region_name=os.getenv("AWS_REGION", "us-east-1")
+                    "secretsmanager",
+                    region_name=os.getenv("AWS_REGION", "us-east-1"),
+                    config=BotoConfig(
+                        connect_timeout=aws_timeout,
+                        read_timeout=aws_timeout,
+                        retries={"max_attempts": 2},
+                    ),
                 )
             except ImportError:
                 logger.warning("boto3 not installed, AWS Secrets Manager unavailable")
@@ -105,14 +119,18 @@ class SecretsManager:
         if vault and vault.is_authenticated():
             try:
                 path = os.getenv("VAULT_SECRET_PATH", "secret/argus")
+                # Normalize key for Vault path — replace special chars with underscore
+                # to support keys with dots, spaces, or other characters that are
+                # uncommon in Vault paths while keeping the path readable.
                 import re
 
-                safe_key = re.sub(r"[^a-zA-Z0-9_\-]", "", key)
+                vault_path_key = re.sub(r"[^a-zA-Z0-9_\-]", "_", key)
                 response = vault.secrets.kv.v2.read_secret_version(
-                    path=f"{path}/{safe_key}"
+                    path=f"{path}/{vault_path_key}"
                 )
                 data = response.get("data", {}).get("data", {})
-                value = data.get(key) or data.get("value") or ""
+                # Try the original key first, then the vault_path_key, then 'value'
+                value = data.get(key) or data.get(vault_path_key) or data.get("value") or ""
                 self._cache[key] = value
                 return value
             except Exception as e:

@@ -58,6 +58,90 @@ export class FindingAnalyzer {
     return result
   }
 
+  /**
+   * Redact credentials, secrets, tokens, and other sensitive data from text
+   * before it enters LLM context. Prevents exfiltration of passwords, API keys,
+   * session tokens, cookies, JWTs, private keys, and database connection strings
+   * recovered during scanning to third-party LLM providers.
+   */
+  private _redactSecrets(text: string): string {
+    // Redact Authorization headers (Bearer and Basic)
+    text = text.replace(
+      /(Authorization|Proxy-Authorization)\s*:\s*Bearer\s+\S+/gi,
+      "$1: Bearer __REDACTED__"
+    )
+    text = text.replace(
+      /(Authorization|Proxy-Authorization)\s*:\s*Basic\s+\S+/gi,
+      "$1: Basic __REDACTED__"
+    )
+    // Redact Cookie / Set-Cookie headers
+    text = text.replace(
+      /(Set-Cookie|Cookie)\s*:\s*[^\r\n]+/gi,
+      "$1: __REDACTED__"
+    )
+    // Redact JWT tokens (eyJ... base64url format)
+    text = text.replace(
+      /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+      "__REDACTED_JWT__"
+    )
+    text = text.replace(
+      /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+      "__REDACTED_JWT__"
+    )
+    // Redact API keys (sk-... OpenAI, sk-ant-... Anthropic, AIza... Gemini)
+    text = text.replace(
+      /sk-[A-Za-z0-9]{20,}/gi,
+      "__REDACTED_API_KEY__"
+    )
+    text = text.replace(
+      /sk-proj-[A-Za-z0-9_-]{20,}/gi,
+      "__REDACTED_API_KEY__"
+    )
+    text = text.replace(
+      /AIza[0-9A-Za-z_-]{35}/g,
+      "__REDACTED_API_KEY__"
+    )
+    // Redact AWS access keys
+    text = text.replace(
+      /AKIA[0-9A-Z]{16}/g,
+      "__REDACTED_AWS_KEY__"
+    )
+    // Redact GitHub tokens
+    text = text.replace(
+      /gh[psuor]_[A-Za-z0-9]{36}/g,
+      "__REDACTED_GITHUB_TOKEN__"
+    )
+    // Redact common credential patterns: password=, secret=, api_key=, token=
+    text = text.replace(
+      /(?i)(password|passwd|pwd)\s*[:=]\s*["']?[^\s"'&,;){]+["']?/g,
+      "$1=__REDACTED__"
+    )
+    text = text.replace(
+      /(?i)(secret|api[_-]?key|api[_-]?token|access[_-]?token)\s*[:=]\s*["']?[^\s"'&,;){]+["']?/g,
+      "$1=__REDACTED__"
+    )
+    // Redact private keys (RSA, EC, OPENSSH, PGP)
+    text = text.replace(
+      /-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----.[\s\S]*?-----END\s+(RSA\s+)?PRIVATE\s+KEY-----/gi,
+      "__REDACTED_PRIVATE_KEY__"
+    )
+    text = text.replace(
+      /-----BEGIN\s+OPENSSH\s+PRIVATE\s+KEY-----.[\s\S]*?-----END\s+OPENSSH\s+PRIVATE\s+KEY-----/gi,
+      "__REDACTED_PRIVATE_KEY__"
+    )
+    // Redact database connection strings with embedded credentials
+    text = text.replace(
+      /(postgresql|postgres|mysql|mongodb|mongodb\+srv|redis|rediss):\/\/[^\s@]+@/gi,
+      "$1://__REDACTED_CREDS__@"
+    )
+    // Redact URL-embedded credentials (http://user:pass@host)
+    text = text.replace(
+      /https?:\/\/[^\s/:]+:[^\s@]+@/gi,
+      "https://__REDACTED_CREDS__@"
+    )
+    return text
+  }
+
   private buildAnalysisPrompt(finding: {
     title: string; severity: number; confidence: number; description: string
     cwe?: string; owasp?: string; tool: string; phase: string
@@ -65,12 +149,16 @@ export class FindingAnalyzer {
     const sevLabels = ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
     const confLabels = ["INFORMATIONAL", "LOW", "MEDIUM", "HIGH", "VERIFIED", "CONFIRMED"]
     const evidenceStr = evidence.length > 0
-      ? evidence.map((e) => `[${e.type}] ${e.path || e.content?.slice(0, 500) || ""}`).join("\n")
+      ? evidence.map((e) => `[${e.type}] ${e.path || this._redactSecrets(e.content?.slice(0, 500) || "")}`).join("\n")
       : "No evidence artifacts available."
+
+    // Redact secrets from the finding description and evidence before sending to LLM
+    const redactedDescription = this._redactSecrets(finding.description)
+    const redactedTitle = this._redactSecrets(finding.title)
 
     return `Analyze this security finding:
 
-Title: ${finding.title}
+Title: ${redactedTitle}
 Severity: ${sevLabels[finding.severity] ?? "UNKNOWN"}
 Confidence: ${confLabels[finding.confidence] ?? "UNKNOWN"}
 CWE: ${finding.cwe ?? "N/A"}
@@ -79,7 +167,7 @@ Tool: ${finding.tool}
 Phase: ${finding.phase}
 
 Description:
-${finding.description}
+${redactedDescription}
 
 Evidence:
 ${evidenceStr}

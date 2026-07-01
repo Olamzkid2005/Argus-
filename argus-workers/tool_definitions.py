@@ -795,9 +795,9 @@ _register(
 
 _register(
     ToolDefinition(
-        name="pip_audit",
-        description="Python dependency vulnerability scanner",
-        phases=["repo_scan", "scan"],
+        name="pip-audit",
+        description="Python dependency vulnerability scanner (overrides _generated_tools.py)",
+        phases=["repo_scan"],
         binary="pip-audit",
         default_args=["--format", "json", "--quiet"],
         parameters=[
@@ -806,6 +806,21 @@ _register(
         timeout=300,
         signal_quality=SignalQuality.CANDIDATE,
         requires=ToolRequires(tech_contains=["python"]),
+    )
+)
+
+_register(
+    ToolDefinition(
+        name="dependency_check",
+        description="OWASP Dependency-Check for known vulnerability scanning in dependencies (overrides _generated_tools.py)",
+        phases=["repo_scan"],
+        binary="dependency-check",
+        default_args=["--format", "JSON"],
+        parameters=[
+            ToolParameter("target", "Target project directory", flag="--scan", required=True),
+        ],
+        timeout=600,
+        signal_quality=SignalQuality.CONFIRMED,
     )
 )
 

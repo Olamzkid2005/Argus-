@@ -50,10 +50,20 @@ export class ApprovalService {
 
   getRequiredGates(workflowApprovalRequired: Record<string, boolean> | undefined): ApprovalGate[] {
     if (!workflowApprovalRequired) return []
-    return Object.entries(workflowApprovalRequired)
-      .filter(([_, required]) => required)
-      .map(([name]) => this.gates.get(name))
-      .filter((g): g is ApprovalGate => g !== undefined)
+    const gates: ApprovalGate[] = []
+    for (const [name, required] of Object.entries(workflowApprovalRequired)) {
+      if (!required) continue
+      const gate = this.gates.get(name)
+      if (gate) {
+        gates.push(gate)
+      } else {
+        // Log a warning — an unknown gate name means the workflow references
+        // a gate that was never registered. Without this warning, the phase
+        // would silently proceed without the required approval.
+        console.warn(`[approval] Unknown gate "${name}" in workflow approval_required — no gate registered for this name`)
+      }
+    }
+    return gates
   }
 
   needsApproval(phase: PhaseExecutionRequest, requiredGates: ApprovalGate[]): ApprovalGate | null {

@@ -3,6 +3,7 @@ import type { VerificationScenario, VerifierResult, EvidencePackage } from "../t
 import { Confidence } from "../../shared/types"
 import { loginIfFormPresent } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
+import { randomUUID, createHash } from "crypto"
 import { tmpdir } from "os"
 import { join } from "path"
 import { existsSync, mkdirSync, rmSync } from "fs"
@@ -65,7 +66,8 @@ export class StoredXSSVerifier implements VerificationScenario {
 
     this.capturedRequests.push(`GET ${this.injectUrl} [injection page]`)
 
-    // Scope injection to fields inside <form> elements only
+    // Inject payload into all visible input fields:
+    // 1. Fields inside <form> elements (traditional HTML forms)
     const forms = await injectPage.locator("form").all()
     for (const form of forms) {
       const inputFields = await form.locator(
@@ -78,11 +80,50 @@ export class StoredXSSVerifier implements VerificationScenario {
         }
       }
     }
-    const submitBtn = injectPage.locator("button[type=submit], input[type=submit]").first()
-    if (await submitBtn.isVisible()) {
-      await submitBtn.click()
-      await injectPage.waitForTimeout(1500)
-      this.logs.push("Submitted form with XSS payload")
+    // 2. Fields outside <form> (modern SPAs, dynamic UIs)
+    const standaloneInputs = await injectPage.locator(
+      "input[type=text]:not(form input), textarea:not(form textarea), " +
+      "input:not([type]):not(form input), [contenteditable=true]:not(form [contenteditable=true])",
+    ).all()
+    for (const field of standaloneInputs) {
+      if (await field.isVisible()) {
+        await field.fill(this.payload)
+        this.logs.push("Injected payload into field outside <form>")
+      }
+    }
+    // Submit the injection: try multiple strategies
+    // 1. Try Press Enter on the last filled field
+    const lastField = await injectPage.locator(
+      "input[type=text], textarea, input:not([type]), [contenteditable=true]",
+    ).last()
+    if (await lastField.isVisible().catch(() => false)) {
+      await lastField.press("Enter")
+      await injectPage.waitForTimeout(1000)
+      // Check if navigation occurred
+      if (injectPage.url() !== this.injectUrl) {
+        this.logs.push("Submitted via Enter key on input field")
+      } else {
+        // 2. Try standard submit buttons
+        const submitBtn = injectPage.locator(
+          "button[type=submit], input[type=submit], " +
+          "button:has-text('Submit'), button:has-text('Save'), " +
+          "button:has-text('Post'), button:has-text('Send'), " +
+          "button:has-text('Comment'), button:has-text('Reply')"
+        ).first()
+        if (await submitBtn.isVisible()) {
+          await submitBtn.click()
+          await injectPage.waitForTimeout(1500)
+          this.logs.push("Submitted form with XSS payload via submit button")
+        } else {
+          // 3. Fallback: try any visible button near the inputs
+          const anyBtn = injectPage.locator("button:visible, input[type=button]:visible").first()
+          if (await anyBtn.isVisible()) {
+            await anyBtn.click()
+            await injectPage.waitForTimeout(1500)
+            this.logs.push("Submitted via fallback button click")
+          }
+        }
+      }
     }
 
     try {
@@ -145,6 +186,7 @@ export class StoredXSSVerifier implements VerificationScenario {
   async collectEvidence(): Promise<EvidencePackage> {
     // Persist screenshots and requests/responses through the EvidenceCollector if available
     const collectedArtifacts: import("../../evidence/types").ArtifactEntry[] = []
+    let computedHash = ""
     if (this.collector && this.engagementId && this.findingId) {
       for (const shot of this.capturedScreenshots) {
         const entry = await this.collector.captureScreenshot(this.engagementId, this.findingId, shot.data).catch(() => null)
@@ -164,25 +206,32 @@ export class StoredXSSVerifier implements VerificationScenario {
         const harArtifacts = await this.collector.ingestHarFiles(this.engagementId, this.findingId, this.harDir).catch(() => [])
         collectedArtifacts.push(...harArtifacts)
       }
-      await this.collector.createPackage(this.engagementId, this.findingId, collectedArtifacts).catch(() => {})
+      // Capture the real package_hash from the persisted manifest
+      const manifest = await this.collector.createPackage(this.engagementId, this.findingId, collectedArtifacts).catch(() => null)
+      if (manifest) computedHash = manifest.package_hash
     }
 
-    const artifacts: import("../../shared/types").ArtifactRef[] = []
-    for (const shot of this.capturedScreenshots) {
-      const filename = `xss-${shot.label}.png`
-      artifacts.push({ path: filename, type: "screenshot" })
+    // Compute an inline hash when no collector was available
+    if (!computedHash && collectedArtifacts.length > 0) {
+      const hashInput = collectedArtifacts.map((a) => a.hash || a.path).join("")
+      computedHash = createHash("sha256").update(hashInput).digest("hex")
     }
-    for (const req of this.capturedRequests) {
-      artifacts.push({ path: req, type: "request" })
-    }
-    for (const res of this.capturedResponses) {
-      artifacts.push({ path: res, type: "response" })
-    }
+
     return {
-      packageId: this.findingId ?? "",
+      packageId: randomUUID(),
       findingId: this.findingId ?? "",
-      artifacts,
-      packageHash: "",
+      artifacts: collectedArtifacts.length > 0
+        ? collectedArtifacts.map((a) => ({
+            path: a.path,
+            type: a.type,
+            hash: a.hash,
+          }))
+        : [
+            ...this.capturedScreenshots.map((s) => ({ path: `xss-${s.label}.png`, type: "screenshot" as const })),
+            ...this.capturedRequests.map((r) => ({ path: r, type: "request" as const })),
+            ...this.capturedResponses.map((r) => ({ path: r, type: "response" as const })),
+          ],
+      packageHash: computedHash,
       createdAt: new Date().toISOString(),
     }
   }
