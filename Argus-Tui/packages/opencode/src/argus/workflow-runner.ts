@@ -511,6 +511,49 @@ export class WorkflowRunner {
           }
         }
 
+        // ── Phase 1.2: LLM-Driven Replanning — feed findings back ──
+        // After each phase completes, signal completion to the Python MCP worker
+        // so the LLM can analyze accumulated findings and suggest next capabilities.
+        // This is best-effort — failures don't block the assessment.
+        try {
+          const phaseCompleteResult = await bridge.phaseComplete({
+            engagement_id: engagementId,
+            phase: phaseName,
+            target,
+            findings: allFindings.map((f) => ({
+              type: f.subtype?.toUpperCase() ?? "UNKNOWN",
+              subtype: f.subtype,
+              severity: f.severity >= 4 ? "CRITICAL" : f.severity === 3 ? "HIGH" : f.severity === 2 ? "MEDIUM" : f.severity === 1 ? "LOW" : "INFO",
+              title: f.title,
+              endpoint: f.url ?? f.description?.match(/(https?:\/\/[^\s]+)/)?.[1] ?? "",
+              confidence: f.confidence,
+            })),
+          })
+
+          if (!phaseCompleteResult.stop && phaseCompleteResult.next_capabilities.length > 0) {
+            store.appendAuditLog(engagementId, "PHASE_COMPLETE_LLM",
+              `Phase ${phaseName} complete — LLM suggests ${phaseCompleteResult.next_capabilities.join(", ")}: ${phaseCompleteResult.reasoning.slice(0, 200)}`)
+            emit(`⠋ LLM analysis: phase ${phaseName} complete — suggested next: ${phaseCompleteResult.next_capabilities.join(", ")}`)
+          }
+
+          // If the next phase is llm_driven, wire accumulated findings as previousPhaseResults
+          // so the hybrid executor's agentInit call receives context about past findings.
+          const nextPhase = plan.phases[i + 1]
+          if (nextPhase && nextPhase.toolExecution === "llm_driven") {
+            nextPhase.previousPhaseResults = (nextPhase.previousPhaseResults ?? []).concat([{
+              phaseId: phase.phaseId,
+              status: phaseStatus === "FAILED" ? "failed" : phaseStatus === "PARTIAL" ? "partial" : "completed",
+              findings: allFindings.filter(f => !f.verificationResult || f.verificationResult.passed),
+              artifacts: [],
+              errors: result.errors,
+              durationMs: Date.now() - startTime,
+            }])
+          }
+        } catch (err) {
+          // Phase complete feedback is best-effort — don't block the assessment
+          emit(`⚠ Phase complete feedback failed (non-blocking): ${(err as Error).message}`)
+        }
+
         if (!phase.replanCycle) {
           // ── Fetch attack graph chains from Python worker ──
           // Build the attack graph from accumulated findings to detect

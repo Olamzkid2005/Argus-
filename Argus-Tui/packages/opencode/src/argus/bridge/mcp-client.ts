@@ -526,6 +526,36 @@ export class WorkersBridge {
     return this.sendRequest("get_attack_graph", params) as Promise<any>
   }
 
+  /**
+   * Signal phase completion to the Python MCP worker (Phase 1.2 — LLM-Driven Replanning).
+   *
+   * After each phase completes, the workflow-runner sends all accumulated findings
+   * so the LLM can analyze them and suggest the next capabilities to run. This
+   * closes the feedback loop from findings to tool selection.
+   *
+   * @param params.engagement_id - The engagement UUID.
+   * @param params.phase - The phase that just completed.
+   * @param params.target - The assessment target.
+   * @param params.findings - All findings accumulated so far.
+   * @returns Suggested next capabilities and whether to stop the assessment.
+   */
+  async phaseComplete(params: {
+    engagement_id: string
+    phase: string
+    target: string
+    findings: any[]
+  }): Promise<{
+    next_capabilities: string[]
+    reasoning: string
+    stop: boolean
+  }> {
+    return this.sendRequest("phase_complete", params) as Promise<{
+      next_capabilities: string[]
+      reasoning: string
+      stop: boolean
+    }>
+  }
+
   async disconnect(): Promise<void> {
     this._disconnecting = true
     this.killChild()

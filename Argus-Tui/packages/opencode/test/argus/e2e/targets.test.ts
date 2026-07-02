@@ -364,7 +364,7 @@ describe("E2E: Report generation", () => {
     const result = await runAssessmentWithMock("http://127.0.0.1:3001", createMockBridge())
     const gen = new ReportGenerator()
 
-    const sarif = gen.generateSarif(
+    const sarif = gen.generateSARIF(
       result.allFindings,
       result.engagementId,
       "http://127.0.0.1:3001",
@@ -381,7 +381,7 @@ describe("E2E: Report generation", () => {
     const result = await runAssessmentWithMock("http://127.0.0.1:3001", createMockBridge())
     const gen = new ReportGenerator()
 
-    const json = gen.generateJson(
+    const json = gen.generateJSON(
       result.allFindings,
       result.engagementId,
       "http://127.0.0.1:3001",
@@ -403,11 +403,8 @@ describe("E2E: Evidence collection", () => {
 
     const baseDir = mkdtempSync(join(tmpdir(), "argus-evidence-"))
     try {
-      const collector = new EvidenceCollector(baseDir, "ENG-e2e-test-001")
-      const artifact = collector.storeArtifact("test-artifact", {
-        content: "e2e test evidence data",
-        format: "text",
-      })
+      const collector = new EvidenceCollector(baseDir, {}, "ENG-e2e-test-001")
+      const artifact = await collector.saveRequest("ENG-e2e-test-001", "test-finding", "GET /test HTTP/1.1")
       expect(artifact.id).toBeTruthy()
       expect(artifact.hash).toBeTruthy()
       expect(existsSync(artifact.path)).toBe(true)

@@ -268,7 +268,7 @@ describe("verifyPackage with encrypted files", () => {
       package_hash: "",
     }
     manifest.package_hash = computePackageHash(
-      manifest as EvidenceManifest,
+      manifest as unknown as EvidenceManifest,
       artifacts,
     )
     writeFileSync(join(artifactDir, "manifest.json"), JSON.stringify(manifest, null, 2))

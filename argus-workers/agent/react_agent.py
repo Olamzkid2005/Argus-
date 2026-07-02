@@ -710,6 +710,195 @@ class ReActAgent:
 
         return True
 
+    def plan_next_phase(
+        self,
+        findings: list[dict],
+        phase: str = "",
+        target: str = "",
+        llm_client: Any = None,
+    ) -> dict:
+        """
+        Given all findings from completed phases, determine the next capabilities
+        that should be applied. This is the Phase 1.2 LLM-driven replanning hook
+        that closes the feedback loop from findings to tool selection.
+
+        Uses the LLM to analyze accumulated findings and suggest a ranked list of
+        capabilities for the next phase. Falls back to deterministic phase ordering
+        when no LLM is available.
+
+        Args:
+            findings: All findings accumulated so far (list of finding dicts)
+            phase: The phase that just completed (e.g. "recon", "scan")
+            target: The target URL or hostname
+            llm_client: Optional LLM client override
+
+        Returns:
+            dict with:
+                - next_capabilities: list[str] — suggested capabilities for next phase
+                - reasoning: str — LLM reasoning or fallback explanation
+                - stop: bool — whether the LLM suggests stopping assessment
+        """
+        llm_client = llm_client or self.llm_client
+
+        # If no LLM, use deterministic phase progression
+        if (
+            not llm_client
+            or not hasattr(llm_client, "is_available")
+            or not llm_client.is_available()
+        ):
+            return self._deterministic_next_phase(findings, phase)
+
+        try:
+            from llm_service import LLMService
+
+            llm_service = LLMService(llm_client=llm_client)
+
+            # Build a concise summary of findings for the LLM
+            finding_summaries = []
+            severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
+            finding_types = set()
+
+            for f in findings:
+                f_type = f.get("type", f.get("subtype", "UNKNOWN"))
+                f_sev = str(f.get("severity", "INFO")).upper()
+                f_endpoint = f.get("endpoint", f.get("url", ""))
+
+                finding_types.add(f_type)
+                if f_sev in severity_counts:
+                    severity_counts[f_sev] += 1
+
+                if f_sev in ("CRITICAL", "HIGH"):
+                    finding_summaries.append(
+                        f"- [{f_sev}] {f_type} at {f_endpoint}"
+                    )
+
+            # Cap finding summaries to prevent token overflow
+            if len(finding_summaries) > 20:
+                finding_summaries = finding_summaries[:20]
+                finding_summaries.append(f"- ... and {len(findings) - 20} more")
+
+            severities = ", ".join(f"{k}={v}" for k, v in severity_counts.items() if v > 0)
+            unique_types = ", ".join(sorted(finding_types)[:15])
+
+            system_prompt = """You are an autonomous red-team assessment planner. Your job is to analyze
+accumulated findings and decide what capabilities the next phase of the assessment
+should use. Available capability categories include:
+
+- WEB_RECON: Subdomain discovery, endpoint enumeration, tech fingerprinting
+- VULN_SCAN: General vulnerability scanning (nuclei, nikto)
+- DEEP_SCAN: Deep/aggressive scanning (sqlmap, testssl, commix)
+- AUTH_TEST: Authentication/authorization testing
+- XSS_DETECTION: Cross-site scripting detection
+- SQLI_DETECTION: SQL injection detection
+- SSRF_DETECTION: Server-side request forgery detection
+- LFI_DETECTION: Local file inclusion detection
+- PRIVESC_DETECTION: Privilege escalation detection
+- POST_EXPLOIT: Post-exploitation (credential replay, lateral movement)
+- EXPLOIT_CHAIN: Attack chain exploitation
+- REPORT: Report generation
+- SCAN_DIFF: Differential scan analysis
+
+Respond with JSON: {"next_capabilities": ["CAPABILITY_1", ...], "reasoning": "...", "stop": false}
+Set stop=true only if the assessment is complete (all findings gathered, no further probing needed).
+"""
+
+            user_prompt = f"""=== COMPLETED PHASE ===
+{phase or 'unknown'}
+
+=== TARGET ===
+{target or 'unknown'}
+
+=== FINDING SUMMARY ===
+{_sanitize_for_llm(str(severities))}
+Unique finding types: {_sanitize_for_llm(unique_types)}
+Total findings: {len(findings)}
+
+Top findings:
+{_sanitize_for_llm(chr(10).join(finding_summaries) if finding_summaries else 'No HIGH/CRITICAL findings')}
+
+Based on these findings, what capabilities should the next phase use?
+"""
+
+            result = llm_service.chat_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=400,
+                temperature=0.3,
+            )
+
+            if result.get("_fallback"):
+                logger.warning(
+                    "LLM phase planning fallback: %s", result.get("_reason")
+                )
+                return self._deterministic_next_phase(findings, phase)
+
+            next_caps = result.get("next_capabilities", [])
+            reasoning = result.get("reasoning", "LLM-determined next capabilities")
+            stop = result.get("stop", False)
+
+            logger.info(
+                "plan_next_phase: suggested capabilities=%s, stop=%s, reasoning=%s",
+                next_caps,
+                stop,
+                reasoning[:100],
+            )
+
+            return {
+                "next_capabilities": next_caps,
+                "reasoning": reasoning,
+                "stop": stop,
+            }
+
+        except Exception as e:
+            logger.warning("LLM phase planning failed: %s. Using deterministic fallback.", e)
+            return self._deterministic_next_phase(findings, phase)
+
+    def _deterministic_next_phase(
+        self,
+        findings: list[dict],
+        phase: str = "",
+    ) -> dict:
+        """Fallback: deterministic phase progression when LLM is unavailable.
+
+        Maps the completed phase to the standard next capabilities based on
+        the canonical assessment pipeline, respecting any HIGH/CRITICAL findings
+        that warrant deeper investigation.
+        """
+        # Default phase progression map
+        phase_to_next_capabilities = {
+            "recon": ["VULN_SCAN", "AUTH_TEST"],
+            "scan": ["DEEP_SCAN", "XSS_DETECTION", "SQLI_DETECTION"],
+            "deep_scan": ["POST_EXPLOIT", "EXPLOIT_CHAIN"],
+            "repo_scan": ["VULN_SCAN"],
+            "analyze": ["REPORT"],
+            "report": [],
+        }
+
+        phase_lower = phase.lower().strip() if phase else ""
+
+        # Check for HIGH/CRITICAL findings — suggest deeper inspection
+        has_critical = any(
+            str(f.get("severity", "")).upper() in ("CRITICAL", "HIGH")
+            for f in findings
+        )
+
+        next_caps = list(phase_to_next_capabilities.get(phase_lower, ["VULN_SCAN"]))
+
+        if has_critical and phase_lower in ("recon", "scan"):
+            # Add exploit/post-exploit capabilities when critical findings exist
+            if "EXPLOIT_CHAIN" not in next_caps:
+                next_caps.append("EXPLOIT_CHAIN")
+            if "POST_EXPLOIT" not in next_caps:
+                next_caps.append("POST_EXPLOIT")
+
+        stop = phase_lower in ("report",) or not next_caps
+
+        return {
+            "next_capabilities": next_caps,
+            "reasoning": f"Deterministic phase progression from '{phase_lower}': {len(next_caps)} next capability(ies)",
+            "stop": stop,
+        }
+
     def plan_next_action(
         self,
         task: str,

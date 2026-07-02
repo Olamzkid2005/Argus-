@@ -761,8 +761,27 @@ class MCPServer:
 
         pipeline = params.get("pipeline", [])
 
+        # ── Phase 1.3.3: Store previous findings from context into session ──
+        # The TypeScript workflow-runner sets previousPhaseResults on llm_driven
+        # phases after each completed phase. The executor passes them as
+        # context.previousFindings to agentInit. We store them in the session
+        # so the LLM replanning can access accumulated findings.
+        context = params.get("context", {})
+        previous_findings = context.get("previousFindings", [])
+        if previous_findings:
+            for phase_result in previous_findings:
+                if isinstance(phase_result, dict):
+                    for finding in phase_result.get("findings", []):
+                        if isinstance(finding, dict):
+                            self.session_store.add_finding(session_id, finding)
+            logger.info(
+                "Stored %d previous phase result(s) with findings in session %s",
+                len(previous_findings),
+                session_id,
+            )
+
         # Generate ordered plan (deterministic for now — LLM integration later)
-        plan = self._generate_plan(session_id, pipeline, params.get("context", {}))
+        plan = self._generate_plan(session_id, pipeline, context)
 
         self.session_store.set_plan(session_id, plan["tool_order"])
 
@@ -976,6 +995,142 @@ class MCPServer:
 
         return self.handle_agent_next({"session_id": session_id, "trigger": trigger})
 
+    def handle_phase_complete(self, params: dict) -> dict:
+        """Receive all findings from a completed phase and determine next capabilities.
+
+        This closes the LLM-driven replanning feedback loop (Phase 1.2). After each
+        phase finishes executing, the TypeScript workflow-runner calls this method
+        with all accumulated findings. The LLM analyzes them and returns suggested
+        capabilities for the next phase.
+
+        Args:
+            params: dict with:
+                - engagement_id: str — engagement UUID
+                - phase: str — the phase that just completed
+                - target: str — the assessment target
+                - findings: list[dict] — all findings accumulated so far
+
+        Returns:
+            dict with:
+                - next_capabilities: list[str] — suggested capabilities
+                - reasoning: str — LLM reasoning
+                - stop: bool — whether to stop the assessment
+        """
+        engagement_id = params.get("engagement_id", "")
+        phase = params.get("phase", "")
+        target = params.get("target", "")
+        findings = params.get("findings", [])
+
+        if not engagement_id:
+            return {
+                "next_capabilities": [],
+                "reasoning": "No engagement_id provided",
+                "stop": True,
+            }
+
+        try:
+            llm_client = LLMClient()
+        except Exception as e:
+            logger.debug("Failed to create LLMClient for phase_complete: %s", e)
+            return self._fallback_phase_complete(phase, findings)
+
+        if not llm_client.is_available():
+            logger.debug("LLM not available for phase_complete — using fallback")
+            return self._fallback_phase_complete(phase, findings)
+
+        try:
+            from agent.react_agent import ReActAgent
+
+            registry = ToolRegistry()
+            agent = ReActAgent(
+                registry,
+                llm_client=llm_client,
+                engagement_id=engagement_id,
+                phase=phase,
+            )
+
+            result = agent.plan_next_phase(
+                findings=findings,
+                phase=phase,
+                target=target,
+            )
+
+            logger.info(
+                "handle_phase_complete for engagement=%s phase=%s: "
+                "next_capabilities=%s, stop=%s",
+                engagement_id,
+                phase,
+                result.get("next_capabilities", []),
+                result.get("stop", False),
+            )
+
+            return result
+
+        except Exception as e:
+            logger.warning(
+                "handle_phase_complete failed for engagement=%s: %s. Using fallback.",
+                engagement_id,
+                e,
+            )
+            return self._fallback_phase_complete(phase, findings)
+
+    @staticmethod
+    def _fallback_phase_complete(phase: str, findings: list | None = None) -> dict:
+        """Fallback phase progression when LLM is unavailable.
+
+        Uses deterministic phase-to-capability mapping with awareness of
+        HIGH/CRITICAL findings to suggest deeper inspection capabilities.
+
+        Args:
+            phase: The phase that just completed.
+            findings: Accumulated findings (used to detect critical results).
+
+        Returns:
+            dict with next_capabilities, reasoning, and stop flag.
+        """
+        findings = findings or []
+        from agent.react_agent import ReActAgent
+
+        # Phase-to-next-capabilities progression map
+        severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0}
+        for f in findings:
+            sev = str(f.get("severity", "")).upper()
+            if sev in severity_counts:
+                severity_counts[sev] += 1
+
+        has_critical = severity_counts["CRITICAL"] > 0 or severity_counts["HIGH"] > 0
+
+        phase_lower = phase.lower().strip() if phase else ""
+
+        phase_map = {
+            "recon": ["VULN_SCAN", "AUTH_TEST"],
+            "scan": ["DEEP_SCAN", "XSS_DETECTION", "SQLI_DETECTION"],
+            "deep_scan": ["POST_EXPLOIT", "EXPLOIT_CHAIN"],
+            "repo_scan": ["VULN_SCAN"],
+            "analyze": ["REPORT"],
+            "report": [],
+        }
+
+        next_caps = list(phase_map.get(phase_lower, ["VULN_SCAN"]))
+
+        if has_critical and phase_lower in ("recon", "scan"):
+            if "EXPLOIT_CHAIN" not in next_caps:
+                next_caps.append("EXPLOIT_CHAIN")
+            if "POST_EXPLOIT" not in next_caps:
+                next_caps.append("POST_EXPLOIT")
+
+        stop = phase_lower in ("report",) or not next_caps
+
+        return {
+            "next_capabilities": next_caps,
+            "reasoning": (
+                f"Fallback phase progression from '{phase_lower}': "
+                f"{severity_counts['CRITICAL']} CRITICAL, {severity_counts['HIGH']} HIGH, "
+                f"{severity_counts['MEDIUM']} MEDIUM findings"
+            ),
+            "stop": stop,
+        }
+
     def handle_get_attack_graph(self, params: dict) -> dict:
         """Return the attack graph chains and highest-risk paths for an engagement.
 
@@ -1129,6 +1284,11 @@ def main():
         return server.handle_get_attack_graph(params)
 
     transport.register("get_attack_graph", handle_get_attack_graph)
+
+    def handle_phase_complete(params):
+        return server.handle_phase_complete(params)
+
+    transport.register("phase_complete", handle_phase_complete)
 
     logger.info("MCP stdio transport starting")
     transport.run()
