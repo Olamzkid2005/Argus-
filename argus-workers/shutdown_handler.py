@@ -25,8 +25,8 @@ class GracefulShutdownHandler:
         self._lock = threading.Lock()
         self.shutdown_deadline = None
         self.force_exit_after = int(
-            os.getenv("WORKER_SHUTDOWN_TIMEOUT", "30")
-        )  # seconds
+            os.getenv("WORKER_SHUTDOWN_TIMEOUT", "120")
+        )  # seconds (Phase 4.5.3: increased default from 30s to 120s)
 
     def setup(self):
         """Setup signal handlers for graceful shutdown"""
@@ -43,6 +43,9 @@ class GracefulShutdownHandler:
         logger.warning("Received signal %s, initiating graceful shutdown...", signum)
         self.shutdown_requested = True
         self.shutdown_deadline = time.time() + self.force_exit_after
+
+        # Phase 4.5.2: Release all distributed locks before force-exit
+        self._release_all_locks()
 
         # Log active tasks (non-blocking acquire to prevent deadlock
         # if signal arrives while lock is held by another thread)
@@ -105,6 +108,44 @@ class GracefulShutdownHandler:
         if self.original_sigint_handler:
             signal.signal(signal.SIGINT, self.original_sigint_handler)
 
+    def _release_all_locks(self):
+        """Release all distributed locks held by this worker (Phase 4.5.2).
+
+        Called during shutdown to ensure no zombie locks remain.
+        Best-effort — failures are logged but don't block shutdown.
+        """
+        try:
+            from distributed_lock import DistributedLock, get_worker_locks
+            # Try to release locks tracked in the global held_locks registry
+            locks = get_worker_locks()
+            if locks:
+                lock = DistributedLock(self.redis_url if hasattr(self, 'redis_url') else os.getenv("REDIS_URL", "redis://localhost:6379"))
+                for eng_id in list(locks.keys()):
+                    try:
+                        lock.release(eng_id)
+                        logger.info("Released lock for engagement %s on shutdown", eng_id)
+                    except Exception as lock_err:
+                        logger.warning("Failed to release lock %s on shutdown: %s", eng_id, lock_err)
+        except Exception as e:
+            logger.debug("Lock release on shutdown skipped (non-fatal): %s", e)
+
+    def _flush_dlq_on_shutdown(self):
+        """Flush pending events to DLQ before force-exit (Phase 4.5.2).
+
+        Ensures no in-flight events are lost when the shutdown deadline
+        is exceeded and the process must force-exit.
+        """
+        try:
+            from dead_letter_queue import get_dlq
+            dlq = get_dlq()
+            # Flush pending Redis buffer to PG (best-effort)
+            if hasattr(dlq, 'flush_to_postgres'):
+                count = dlq.flush_to_postgres()
+                if count > 0:
+                    logger.info("Flushed %d events to PG DLQ before force-exit", count)
+        except Exception as e:
+            logger.debug("DLQ flush on shutdown skipped (non-fatal): %s", e)
+
     def handle_task_failure_on_shutdown(
         self, task_id: str, task_name: str, args: tuple, kwargs: dict, error: Exception
     ):
@@ -138,6 +179,17 @@ class GracefulShutdownHandler:
             )
         except Exception as e:
             logger.error("Failed to send task %s to DLQ: %s", task_id, e)
+
+    def force_exit(self):
+        """Force exit after shutdown deadline — release locks + flush DLQ first.
+
+        Phase 4.5.2: Ensures no zombie locks and no lost events when the
+        shutdown deadline is exceeded.
+        """
+        self._release_all_locks()
+        self._flush_dlq_on_shutdown()
+        logger.warning("Force-exiting after shutdown deadline")
+        os._exit(1)
 
 
 # Global shutdown handler

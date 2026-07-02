@@ -375,6 +375,114 @@ class CheckpointManager:
             "can_resume": next_phase is not None,
         }
 
+    def save_tool_checkpoint(self, engagement_id: str, phase: str, tool_name: str, data: dict) -> str:
+        """Save a checkpoint for an individual tool execution within a phase.
+
+        Phase 4.1.1: Allows mid-phase checkpointing so that on resume,
+        the assessment can skip tools that already completed rather than
+        restarting the entire phase. Each tool execution within a phase
+        saves a separate checkpoint identified by phase + tool_name.
+
+        Args:
+            engagement_id: Engagement ID
+            phase: Phase name (e.g., "recon", "scan")
+            tool_name: Name of the tool that just executed
+            data: Partial results / output from the tool
+
+        Returns:
+            Checkpoint ID
+        """
+        self._ensure_db()
+        conn = None
+        cursor = None
+        try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor()
+            checkpoint_id = str(uuid.uuid4())
+
+            cursor.execute(
+                """
+                INSERT INTO checkpoints (
+                    id, engagement_id, phase, data, created_at
+                ) VALUES (
+                    %s, %s, %s, %s, NOW()
+                )
+                """,
+                (checkpoint_id, engagement_id, f"{phase}:{tool_name}", Json(data)),
+            )
+
+            conn.commit()
+            logger.info(
+                "Saved tool checkpoint for %s/%s/%s: %s",
+                engagement_id, phase, tool_name, checkpoint_id,
+            )
+            return checkpoint_id
+
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.warning(
+                "Failed to save tool checkpoint for %s/%s/%s: %s",
+                engagement_id, phase, tool_name, e,
+            )
+            return ""
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
+
+    def get_completed_tools(self, engagement_id: str, phase: str) -> list[str]:
+        """Get list of tool names that have been checkpointed for a phase.
+
+        Phase 4.1.3: Used by the workflow runner on resume to skip tools
+        that were already completed in a previous run.
+
+        Args:
+            engagement_id: Engagement ID
+            phase: Phase name
+
+        Returns:
+            List of tool names that have checkpoints for this phase
+        """
+        conn = None
+        cursor = None
+        try:
+            conn = get_db().get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT phase FROM checkpoints
+                WHERE engagement_id = %s
+                  AND phase LIKE %s
+                ORDER BY created_at ASC
+                """,
+                (engagement_id, f"{phase}:%"),
+            )
+            rows = cursor.fetchall()
+            # Extract tool name from "phase:tool_name" format
+            completed = []
+            prefix = f"{phase}:"
+            for row in rows:
+                full_phase = row[0]
+                if full_phase.startswith(prefix):
+                    tool_name = full_phase[len(prefix):]
+                    if tool_name and tool_name not in completed:
+                        completed.append(tool_name)
+            return completed
+
+        except Exception as e:
+            logger.debug(
+                "Failed to list completed tools for %s/%s: %s",
+                engagement_id, phase, e,
+            )
+            return []
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                get_db().release_connection(conn)
+
     def cleanup_old_checkpoints(self, max_age_days: int = 7) -> int:
         """
         Delete checkpoints older than specified age.

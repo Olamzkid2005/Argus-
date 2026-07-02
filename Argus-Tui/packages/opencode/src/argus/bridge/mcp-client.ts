@@ -41,6 +41,13 @@ export class WorkersBridge {
   private _llmStatus: LLMStatus = "AVAILABLE"
   private statusListeners: Array<(status: string) => void> = []
 
+  /** Phase 4.2.2: Cache of recent tool results used when the worker is in degraded mode.
+   *  Keyed by tool name, stores the last successful result so non-critical operations
+   *  can return cached data instead of failing when the MCP worker is unavailable. */
+  private degradedToolCache = new Map<string, { result: ToolResult; timestamp: number }>()
+  /** Max age for cached results in degraded mode (5 minutes). */
+  private static readonly DEGRADED_CACHE_TTL_MS = 5 * 60 * 1000
+
   private pendingCount = 0
   private readonly maxPending: number
 
@@ -349,6 +356,8 @@ export class WorkersBridge {
         durationMs: mcpResponse.meta?.duration_ms ?? 0,
         signalQuality: mcpResponse.meta?.signal_quality as ToolResult["signalQuality"],
       }
+      // Phase 4.2.2: Cache successful results for degraded-mode fallback
+      this.cacheToolResult(name, result)
       return result
     } catch (error) {
       // Python mcp_transport now includes structured error_type in error.data
@@ -402,6 +411,31 @@ export class WorkersBridge {
       return this._mcpToolsCache
     }
   }
+  /** Phase 4.2.2: Check if degraded mode is active (worker unavailable). */
+  isDegraded(): boolean {
+    return this.supervisor.degraded
+  }
+
+  /** Phase 4.2.2: Get a cached tool result from the degraded cache.
+   *  Returns undefined if no recent cache entry exists for the tool. */
+  getCachedToolResult(toolName: string): ToolResult | undefined {
+    const entry = this.degradedToolCache.get(toolName)
+    if (!entry) return undefined
+    if (Date.now() - entry.timestamp > WorkersBridge.DEGRADED_CACHE_TTL_MS) {
+      this.degradedToolCache.delete(toolName)
+      return undefined
+    }
+    return entry.result
+  }
+
+  /** Phase 4.2.2: Store a successful tool result in the degraded cache.
+   *  Called automatically by callTool on success. */
+  private cacheToolResult(toolName: string, result: ToolResult): void {
+    if (result.success) {
+      this.degradedToolCache.set(toolName, { result, timestamp: Date.now() })
+    }
+  }
+
   /** Reset circuit breaker — called after cooldown or manual recovery */
   resetCircuitBreaker(): void {
     this.circuitFailures = 0
@@ -524,6 +558,21 @@ export class WorkersBridge {
     }>
   }> {
     return this.sendRequest("get_attack_graph", params) as Promise<any>
+  }
+
+  /** Phase 4.1.4: Get completed tool list for a given phase (for checkpoint resume). */
+  async getCheckpoint(engagementId: string, phase: string): Promise<{ completed_tools: string[] }> {
+    return this.sendRequest("get_checkpoint", { engagement_id: engagementId, phase }) as Promise<{ completed_tools: string[] }>
+  }
+
+  /** Phase 4.4.1: Acquire a distributed lock for an engagement via MCP. */
+  async acquireEngagementLock(engagementId: string): Promise<{ acquired: boolean }> {
+    return this.sendRequest("acquire_lock", { engagement_id: engagementId }) as Promise<{ acquired: boolean }>
+  }
+
+  /** Phase 4.4.1: Release a distributed lock for an engagement via MCP. */
+  async releaseEngagementLock(engagementId: string): Promise<{ released: boolean }> {
+    return this.sendRequest("release_lock", { engagement_id: engagementId }) as Promise<{ released: boolean }>
   }
 
   /**

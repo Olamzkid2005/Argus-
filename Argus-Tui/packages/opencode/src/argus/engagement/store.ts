@@ -82,8 +82,14 @@ const ROOT_TABLE_SQL = `CREATE TABLE IF NOT EXISTS engagements (
     id TEXT PRIMARY KEY, target TEXT NOT NULL, workflow TEXT NOT NULL,
     workflow_version INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'CREATED',
     schema_version INTEGER NOT NULL DEFAULT 1, storage_version INTEGER NOT NULL DEFAULT ${STORAGE_VERSION_LEGACY},
+    version INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
   )`
+
+/** Phase 4.4.3: Add version column to existing engagements table (migration).
+ *  SQLite ignores IF NOT EXISTS for ALTER TABLE ADD COLUMN if the column
+ *  already exists, so this is safe to run on existing databases. */
+const ADD_VERSION_COLUMN_SQL = `ALTER TABLE engagements ADD COLUMN version INTEGER NOT NULL DEFAULT 1`
 
 /**
  * Per-engagement DB schema — all tables except engagements.
@@ -167,6 +173,7 @@ function toEngagementState(row: typeof engagements.$inferSelect): EngagementStat
     status: row.status as EngagementStatus,
     schemaVersion: row.schema_version,
     storageVersion: row.storage_version ?? STORAGE_VERSION_LEGACY,
+    version: (row as any).version ?? 1,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   }
@@ -659,6 +666,12 @@ export class EngagementStore implements IEngagementStore {
 
   private  _ensureRootTables(): void {
     this._rootSqlite.exec(ROOT_TABLE_SQL)
+    // Phase 4.4.3: Add version column migration (safe to run on existing DBs)
+    try {
+      this._rootSqlite.exec(ADD_VERSION_COLUMN_SQL)
+    } catch {
+      // Column already exists — safe to ignore
+    }
   }
 
   private _ensurePerEngagementTables(sqlite: InstanceType<BunSqliteDatabaseConstructor>): void {
@@ -695,6 +708,7 @@ export class EngagementStore implements IEngagementStore {
       id, target, workflow,
       workflow_version: 1, status: "CREATED", schema_version: 1,
       storage_version: STORAGE_VERSION_PER_ENGAGEMENT,
+      version: 1,
       created_at: now, updated_at: now,
     }).run()
 
@@ -709,8 +723,15 @@ export class EngagementStore implements IEngagementStore {
     return toEngagementState(rows[0])
   }
 
+  /** Phase 4.4.3: Engagements with this version require caller to pass the
+   *  expected version. Throws on version mismatch. */
+  private static _optimisticLockEnabled = true
+
   saveEngagement(engagement: EngagementState): void {
-    this.rootDb.update(engagements)
+    const now = Date.now()
+    const newVersion = engagement.version + 1
+
+    const update = this.rootDb.update(engagements)
       .set({
         target: engagement.target,
         workflow: engagement.workflow,
@@ -718,17 +739,49 @@ export class EngagementStore implements IEngagementStore {
         status: engagement.status,
         schema_version: engagement.schemaVersion,
         storage_version: engagement.storageVersion,
-        updated_at: Date.now(),
+        version: newVersion,
+        updated_at: now,
       })
       .where(eq(engagements.id, engagement.id))
-      .run()
+
+    // Phase 4.4.3: Optimistic concurrency — only update if version matches
+    if (EngagementStore._optimisticLockEnabled) {
+      update.where(sql`${engagements.version} = ${engagement.version}`)
+    }
+
+    const result = update.run()
+    if (EngagementStore._optimisticLockEnabled && result.changes === 0) {
+      throw new Error(
+        `Optimistic lock conflict: engagement ${engagement.id} was modified by another process. ` +
+        `Expected version ${engagement.version}. Reload and retry.`
+      )
+    }
   }
 
   updateStatus(id: string, status: EngagementStatus): void {
-    this.rootDb.update(engagements)
-      .set({ status, updated_at: Date.now() })
+    const eng = this.getEngagement(id)
+    if (!eng) {
+      throw new Error(`Engagement ${id} not found`)
+    }
+    const now = Date.now()
+    const newVersion = eng.version + 1
+
+    const update = this.rootDb.update(engagements)
+      .set({ status, version: newVersion, updated_at: now })
       .where(eq(engagements.id, id))
-      .run()
+
+    // Phase 4.4.3: Optimistic concurrency
+    if (EngagementStore._optimisticLockEnabled) {
+      update.where(sql`${engagements.version} = ${eng.version}`)
+    }
+
+    const result = update.run()
+    if (EngagementStore._optimisticLockEnabled && result.changes === 0) {
+      throw new Error(
+        `Optimistic lock conflict: engagement ${id} was modified by another process. ` +
+        `Expected version ${eng.version}. Reload and retry.`
+      )
+    }
   }
 
   listEngagements(): EngagementState[] {

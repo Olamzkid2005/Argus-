@@ -1290,6 +1290,67 @@ def main():
 
     transport.register("phase_complete", handle_phase_complete)
 
+    # ── Phase 4.1.4: Checkpoint MCP handler ──
+    def handle_get_checkpoint(params):
+        """Return completed tool list for a given phase (Phase 4.1.4)."""
+        engagement_id = params.get("engagement_id", "")
+        phase = params.get("phase", "")
+        if not engagement_id or not phase:
+            return {"error": "engagement_id and phase are required"}
+        try:
+            from checkpoint_manager import CheckpointManager
+            mgr = CheckpointManager()
+            completed = mgr.get_completed_tools(engagement_id, phase)
+            return {"completed_tools": completed}
+        except Exception as e:
+            logger.warning("get_checkpoint failed: %s", e)
+            return {"completed_tools": [], "error": str(e)}
+
+    transport.register("get_checkpoint", handle_get_checkpoint)
+
+    # ── Phase 4.4.2: Distributed lock MCP handlers ──
+    # Singleton lock instance so acquire and release share the same worker_id.
+    # Creating separate DistributedLock instances would generate different
+    # worker_ids, causing release() to fail the ownership check.
+    _lock_instance = None
+
+    def _get_lock():
+        nonlocal _lock_instance
+        if _lock_instance is None:
+            from distributed_lock import DistributedLock
+            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+            _lock_instance = DistributedLock(redis_url)
+        return _lock_instance
+
+    def handle_acquire_lock(params):
+        """Acquire a distributed lock for an engagement (Phase 4.4.2)."""
+        engagement_id = params.get("engagement_id", "")
+        if not engagement_id:
+            return {"error": "engagement_id is required"}
+        try:
+            lock = _get_lock()
+            acquired = lock.acquire(engagement_id)
+            return {"acquired": acquired}
+        except Exception as e:
+            logger.warning("acquire_lock failed for %s: %s", engagement_id, e)
+            return {"acquired": False, "error": str(e)}
+
+    def handle_release_lock(params):
+        """Release a distributed lock for an engagement (Phase 4.4.2)."""
+        engagement_id = params.get("engagement_id", "")
+        if not engagement_id:
+            return {"error": "engagement_id is required"}
+        try:
+            lock = _get_lock()
+            released = lock.release(engagement_id)
+            return {"released": released}
+        except Exception as e:
+            logger.warning("release_lock failed for %s: %s", engagement_id, e)
+            return {"released": False, "error": str(e)}
+
+    transport.register("acquire_lock", handle_acquire_lock)
+    transport.register("release_lock", handle_release_lock)
+
     logger.info("MCP stdio transport starting")
     transport.run()
 

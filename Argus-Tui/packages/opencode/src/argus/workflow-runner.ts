@@ -515,6 +515,23 @@ export class WorkflowRunner {
       await bridge.connect()
       emit(`✓ MCP workers connected`)
 
+      // Phase 4.4.1: Acquire distributed lock before phase execution
+      // Best-effort — if Redis is unavailable, continue without locking.
+      const lockedEngagement = await bridge.acquireEngagementLock(engagementId).catch(() => ({ acquired: false }))
+      if (!lockedEngagement.acquired) {
+        emit(`⚠ Could not acquire distributed lock for ${engagementId} — proceeding without lock`)
+      } else {
+        emit(`✓ Distributed lock acquired for engagement`)
+      }
+
+      // Phase 4.1.3: On resume, query checkpoints and skip completed tools
+      // Check if engagement was previously started (has phases)
+      const existingPhases = store.getPhases(engagementId)
+      const isResume = existingPhases.length > 0
+      if (isResume) {
+        emit(`⠋ Engagement has existing phases — checking checkpoints for resume`)
+      }
+
       const confidenceEngine = this.deps?.confidenceEngine ?? new ConfidenceEngine()
       const executor = this.deps?.executor ?? new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
       // Wire up tool config for drift detection, circuit-breaker config, and tool enable/disable
@@ -545,6 +562,16 @@ export class WorkflowRunner {
         const phaseName = phase.name
 
         emit({ type: "phase_start", phaseId: phase.phaseId, name: phaseName, total: plan.phases.length, phaseIndex: i })
+        // Phase 4.2.3: In degraded mode, skip LLM-driven phases but continue
+        // with deterministic phases using cached tool results.
+        if (bridge.supervisor.degraded && phase.toolExecution === "llm_driven") {
+          emit(`⚠ Degraded mode — skipping LLM-driven phase ${phaseName}`)
+          store.appendAuditLog(engagementId, "DEGRADED_SKIP",
+            `Skipped ${phaseName} (LLM-driven) — MCP worker in degraded mode`)
+          i++
+          continue
+        }
+
         emit(`⠋ Running phase ${i + 1}/${plan.phases.length}: ${phaseName}`)
 
         const record = phaseRecords.get(phase.phaseId)!

@@ -13,6 +13,11 @@ export interface EngagementState {
   status: EngagementStatus
   schemaVersion: number
   storageVersion: number
+  /** Phase 4.4.3: Optimistic concurrency version. Incremented on every write.
+   *  Callers should read the current version, make changes, then write with
+   *  the same version. If the version changed between read and write, the
+   *  write fails with a conflict error. */
+  version: number
   createdAt: string
   updatedAt: string
 }

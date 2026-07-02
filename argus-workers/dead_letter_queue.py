@@ -345,6 +345,91 @@ class DeadLetterQueue:
         except Exception:
             logger.debug("Failed to selectively clean TASK_INDEX_KEY", exc_info=True)
 
+    # ── Postgres-backed DLQ fallback (Phase 4.5.1) ──
+    # When Redis is unavailable, tasks are persisted directly to PostgreSQL
+    # in the dead_letter_queue table. This ensures no tasks are lost during
+    # Redis outages or when the shutdown deadline is exceeded.
+
+    def _persist_to_postgres(self, task: FailedTask) -> bool:
+        """Persist a failed task to PostgreSQL.
+
+        Saves to the dead_letter_queue table with full task metadata.
+        Idempotent: uses ON CONFLICT DO NOTHING so retries don't duplicate.
+
+        Returns:
+            True if persisted successfully (or already exists).
+        """
+        try:
+            from database.connection import get_db
+
+            db = get_db()
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO dead_letter_queue (
+                        task_id, task_name, args, kwargs,
+                        error_message, error_class, worker_id,
+                        retry_count, failed_at, engagement_id
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    ) ON CONFLICT (task_id) DO NOTHING
+                    """,
+                    (
+                        task.task_id,
+                        task.task_name,
+                        json.dumps(task.args),
+                        json.dumps(task.kwargs),
+                        task.error_message,
+                        task.error_class,
+                        task.worker_id,
+                        task.retry_count,
+                        task.failed_at,
+                        task.engagement_id,
+                    ),
+                )
+                conn.commit()
+                return True
+            finally:
+                cursor.close()
+                db.release_connection(conn)
+        except Exception as e:
+            logger.error("Failed to persist task %s to PG DLQ: %s", task.task_id, e)
+            return False
+
+    def flush_to_postgres(self, max_tasks: int = 100) -> int:
+        """Flush pending Redis DLQ entries to PostgreSQL.
+
+        Phase 4.5.1 + 4.5.2: Called during shutdown to persist all pending
+        failed tasks before force-exit. Also callable periodically for backup.
+
+        Args:
+            max_tasks: Maximum tasks to flush (default 100).
+
+        Returns:
+            Number of tasks flushed.
+        """
+        try:
+            tasks = self.get_failed_tasks(limit=max_tasks)
+            if not tasks:
+                return 0
+
+            flushed = 0
+            for task_data in tasks:
+                try:
+                    failed_task = FailedTask.from_dict(task_data)
+                    if self._persist_to_postgres(failed_task):
+                        flushed += 1
+                except Exception as e:
+                    logger.warning("Failed to flush DLQ entry: %s", e)
+
+            logger.info("Flushed %d/%d DLQ entries to PostgreSQL", flushed, len(tasks))
+            return flushed
+        except Exception as e:
+            logger.error("Failed to flush DLQ to PG: %s", e)
+            return 0
+
     def purge(
         self, engagement_id: str | None = None, older_than_hours: int | None = None
     ) -> int:

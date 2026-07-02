@@ -108,8 +108,23 @@ class AssessmentOrchestrator(AbstractTool):
                         _scope_err,
                     )
 
+            # Phase 4.1.1: Checkpoint manager for mid-phase tool-level checkpointing
+            try:
+                from checkpoint_manager import CheckpointManager
+                _cp_mgr = CheckpointManager()
+                # Query completed tools for this phase (if resuming)
+                _completed_tools = _cp_mgr.get_completed_tools(ctx.engagement_id, phase) if ctx.engagement_id else []
+            except Exception:
+                _cp_mgr = None
+                _completed_tools = []
+
             phase_tool_results = []
             for tool_name in tool_order:
+                # Phase 4.1.3: Skip tools that already have checkpoints (on resume)
+                if tool_name in _completed_tools:
+                    logger.info("Skipping tool %s — already checkpointed in phase %s (resume)", tool_name, phase)
+                    continue
+
                 try:
                     tool_result = mcp.call_tool(
                         tool_name,
@@ -119,6 +134,15 @@ class AssessmentOrchestrator(AbstractTool):
                         scope_validator=_scope_validator,
                     )
                     phase_tool_results.append(tool_result)
+
+                    # Phase 4.1.2: Save checkpoint after each successful tool execution
+                    if _cp_mgr and ctx.engagement_id and tool_result.get("isError", False) is False:
+                        _cp_mgr.save_tool_checkpoint(
+                            ctx.engagement_id,
+                            phase,
+                            tool_name,
+                            {"status": "completed", "tool": tool_name, "phase": phase},
+                        )
 
                     # Emit via builder
                     if tool_result.get("meta", {}).get("data", {}).get("structured"):
