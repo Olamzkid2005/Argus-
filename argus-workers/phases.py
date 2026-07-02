@@ -91,6 +91,14 @@ PHASES: list[Phase] = [
         tool_phases=("post_exploit",),
     ),
     Phase(
+        id="pivot",
+        display_name="Pivot & Lateral Movement",
+        order=5,
+        estimated_minutes=10,
+        step_id="pivot",
+        tool_phases=("post_exploit",),
+    ),
+    Phase(
         id="reporting",
         display_name="Report Generation",
         order=4,
@@ -132,9 +140,10 @@ TRANSITIONS: dict[str, list[str]] = {
     "recon": ["scanning", "failed", "paused"],
     "scanning": ["analyzing", "failed", "paused"],
     "analyzing": ["post_exploitation", "reporting", "recon", "scanning", "failed", "paused"],
-    "post_exploitation": ["scanning", "reporting", "failed", "paused"],
+    "post_exploitation": ["pivot", "scanning", "reporting", "failed", "paused"],
+    "pivot": ["scanning", "post_exploitation", "failed", "paused"],
     "reporting": ["complete", "failed", "paused"],
-    "paused": ["recon", "scanning", "analyzing", "post_exploitation", "reporting", "failed"],
+    "paused": ["recon", "scanning", "analyzing", "post_exploitation", "pivot", "reporting", "failed"],
     "failed": [],
     "complete": [],
 }

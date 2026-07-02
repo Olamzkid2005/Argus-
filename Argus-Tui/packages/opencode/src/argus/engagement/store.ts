@@ -62,6 +62,7 @@ import {
   artifacts,
   workflow_snapshots,
   finding_analysis,
+  extracted_credentials,
   STORAGE_VERSION_LEGACY,
   STORAGE_VERSION_PER_ENGAGEMENT,
   STORAGE_VERSION_ENCRYPTED,
@@ -145,6 +146,16 @@ const PER_ENGAGEMENT_TABLE_SQL = [
     refs TEXT, model TEXT NOT NULL,
     generated_at INTEGER NOT NULL, finding_updated_at INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS extracted_credentials (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL,
+    credential_type TEXT NOT NULL, value TEXT NOT NULL,
+    source_finding_type TEXT NOT NULL, source_endpoint TEXT NOT NULL,
+    confidence REAL NOT NULL, replayed INTEGER NOT NULL DEFAULT 0,
+    replay_target TEXT, replay_success INTEGER,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_extracted_creds_engagement ON extracted_credentials(engagement_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_extracted_creds_type ON extracted_credentials(credential_type)`,
 ]
 
 function toEngagementState(row: typeof engagements.$inferSelect): EngagementState {
@@ -1244,6 +1255,84 @@ export class EngagementStore implements IEngagementStore {
       result[row.findingId] = row.count
     }
     return result
+  }
+
+  // ── Extracted credentials (per-engagement DB) ──
+
+  saveExtractedCredentials(engagementId: string, credentials: Array<{
+    id: string
+    credentialType: string
+    value: string
+    sourceFindingType: string
+    sourceEndpoint: string
+    confidence: number
+  }>): void {
+    const pe = this._ensureEngagementDb(engagementId)
+    pe.drizzle.transaction((tx) => {
+      for (const cred of credentials) {
+        tx.insert(extracted_credentials).values({
+          id: cred.id,
+          engagement_id: engagementId,
+          credential_type: cred.credentialType,
+          value: cred.value,
+          source_finding_type: cred.sourceFindingType,
+          source_endpoint: cred.sourceEndpoint,
+          confidence: cred.confidence,
+          replayed: false,
+          created_at: Date.now(),
+        }).onConflictDoNothing().run()
+      }
+    })
+  }
+
+  markCredentialReplayed(engagementId: string, credentialId: string, target: string, success: boolean): void {
+    const pe = this._getEngagementDb(engagementId)
+    if (pe) {
+      pe.drizzle.update(extracted_credentials)
+        .set({
+          replayed: true,
+          replay_target: target,
+          replay_success: success,
+        })
+        .where(
+          eq(extracted_credentials.id, credentialId)
+        )
+        .run()
+    }
+  }
+
+  getExtractedCredentials(engagementId: string): Array<{
+    id: string
+    credentialType: string
+    value: string
+    sourceFindingType: string
+    sourceEndpoint: string
+    confidence: number
+    replayed: boolean
+    replayTarget: string | null
+    replaySuccess: boolean | null
+    createdAt: number
+  }> {
+    const pe = this._getEngagementDb(engagementId)
+    if (pe) {
+      const rows = pe.drizzle.select().from(extracted_credentials)
+        .where(eq(extracted_credentials.engagement_id, engagementId))
+        .orderBy(desc(extracted_credentials.confidence))
+        .all()
+      return rows.map((r) => ({
+        id: r.id,
+        credentialType: r.credential_type,
+        value: r.value,
+        sourceFindingType: r.source_finding_type,
+        sourceEndpoint: r.source_endpoint,
+        confidence: r.confidence,
+        replayed: r.replayed,
+        replayTarget: r.replay_target,
+        replaySuccess: r.replay_success,
+        createdAt: r.created_at,
+      }))
+    }
+    return []
   }
 
   // ── Engagement detail ──

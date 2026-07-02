@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, foreignKey } from "drizzle-orm/sqlite-core"
+import { sqliteTable, text, integer, real, index, foreignKey } from "drizzle-orm/sqlite-core"
 
 /** Storage version flags for per-engagement DB migration (Item 14b).
  *  1 = legacy single-DB mode (all tables in argus.db)
@@ -135,6 +135,23 @@ export const finding_analysis = sqliteTable("finding_analysis", {
   finding_updated_at: integer().notNull(),
 }, (table) => [
   foreignKey({ columns: [table.finding_id], foreignColumns: [findings.id], onDelete: "cascade" } as any),
+])
+
+export const extracted_credentials = sqliteTable("extracted_credentials", {
+  id: text().primaryKey(),
+  engagement_id: text().notNull().references(() => engagements.id, { onDelete: "cascade" }),
+  credential_type: text().notNull(),
+  value: text().notNull(),
+  source_finding_type: text().notNull(),
+  source_endpoint: text().notNull(),
+  confidence: real().notNull(),
+  replayed: integer({ mode: "boolean" }).notNull().default(false),
+  replay_target: text(),
+  replay_success: integer({ mode: "boolean" }),
+  created_at: integer().notNull().$default(() => Date.now()),
+}, (table) => [
+  index("idx_extracted_creds_engagement").on(table.engagement_id),
+  index("idx_extracted_creds_type").on(table.credential_type),
 ])
 
 export const audit_log = sqliteTable("audit_log", {

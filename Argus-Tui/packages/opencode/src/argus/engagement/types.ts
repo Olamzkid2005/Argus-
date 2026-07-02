@@ -86,6 +86,29 @@ export interface IEngagementStore {
   saveWorkflowSnapshot(id: string, engagementId: string, workflowName: string, workflowVersion: number, workflowYaml: string): void
   getWorkflowSnapshots(engagementId: string): Array<{ id: string; workflowName: string; workflowVersion: number; workflowYaml: string; createdAt: number }>
 
+  // ── Extracted credentials ──
+  saveExtractedCredentials(engagementId: string, credentials: Array<{
+    id: string
+    credentialType: string
+    value: string
+    sourceFindingType: string
+    sourceEndpoint: string
+    confidence: number
+  }>): void
+  markCredentialReplayed(engagementId: string, credentialId: string, target: string, success: boolean): void
+  getExtractedCredentials(engagementId: string): Array<{
+    id: string
+    credentialType: string
+    value: string
+    sourceFindingType: string
+    sourceEndpoint: string
+    confidence: number
+    replayed: boolean
+    replayTarget: string | null
+    replaySuccess: boolean | null
+    createdAt: number
+  }>
+
   // ── Finding analysis ──
   saveFindingAnalysis(analysis: FindingAnalysis): void
   getFindingAnalysis(findingId: string): FindingAnalysis | null
