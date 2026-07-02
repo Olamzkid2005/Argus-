@@ -19,7 +19,7 @@ parameters:
     flag: "--scanners"
     default: "vuln,misconfig,secret"
 capabilities:
-  - vulnerability_scanning
+  - sca
 signal_quality: PROBABLE
 risk_level: medium
 priority: 75

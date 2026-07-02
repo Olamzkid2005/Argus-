@@ -135,6 +135,48 @@ class FindingBuilder:
             "PATH_TRAVERSAL",
             "DIRECTORY_TRAVERSAL",
             "COMMITTED_SECRET",
+            # Scanner/recon types from parsers and scanners
+            "SCAN_RESULT",
+            "PROMPT_INJECTION",
+            "AI_INFORMATION_DISCLOSURE",
+            "SECRET_EXPOSURE",
+            "SASTFinding",
+            "CREDENTIAL_REPLAY_SUCCESS",
+            "INTERNAL_SERVICE_DISCOVERY",
+            "EXPOSED_DEBUG_ENDPOINT",
+            "PARAMETER_FUZZ_500",
+            "PARAMETER_REFLECTION",
+            "POST_FUZZ_500",
+            "LICENSE_COMPLIANCE",
+            "STATIC_ANALYSIS_FINDING",
+            "SNYK_VULNERABILITY",
+            "EXPOSED_PRIVATE_KEY",
+            "EXPOSED_ENV_FILE",
+            "EXPOSED_CONFIG_SECRET",
+            "DEPENDENCY_LISTING",
+            "WAF_DETECTED",
+            "TECHNOLOGY_DETECTED",
+            "DEPENDENCY_VULNERABILITY",
+            "CODE_VULNERABILITY",
+            "TLS_VULNERABILITY",
+            "WEB_SERVER_VULNERABILITY",
+            "CRAWLED_ENDPOINT",
+            "DISCOVERED_ENDPOINT",
+            "JWT_VULNERABILITY",
+            "HTTP_ENDPOINT",
+            "SECRET_LEAK",
+            "KNOWN_URL",
+            "HISTORICAL_URL",
+            "DIRECTORY_FOUND",
+            "SUBDOMAIN_DISCOVERY",
+            "GENERIC_FINDING",
+            "CVE_REFERENCE",
+            "RAW_OUTPUT",
+            "WP_CORE_VULNERABILITY",
+            "USER_ENUMERATION",
+            "WP_VULNERABILITY_CORE",
+            "WP_VULNERABILITY_PLUGIN",
+            "WP_VULNERABILITY_THEME",
         }
     )
 
@@ -179,10 +221,12 @@ class FindingBuilder:
             )
 
         if finding_type not in self.KNOWN_VULN_TYPES:
-            raise ValueError(
-                f"Unknown finding type: {finding_type!r}. "
-                f"Must be one of known vulnerability types."
+            logger.warning(
+                "Unknown finding type %r — normalizing to GENERIC_FINDING. "
+                "Add %r to KNOWN_VULN_TYPES to suppress this warning.",
+                finding_type, finding_type,
             )
+            finding_type = "GENERIC_FINDING"
 
         finding: dict[str, Any] = {
             "type": finding_type,

@@ -16,7 +16,7 @@ parameters:
     required: false
     flag: "-ll"
 capabilities:
-  - vulnerability_scanning
+  - sast
 signal_quality: PROBABLE
 risk_level: low
 requires:

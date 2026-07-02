@@ -11,7 +11,6 @@ parameters:
     description: "Target path (JAR/WAR/class directory)"
     required: true
 capabilities:
-  - vulnerability_scanning
   - sast
 signal_quality: PROBABLE
 risk_level: low

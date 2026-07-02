@@ -11,7 +11,6 @@ parameters:
     required: true
     flag: "--scan"
 capabilities:
-  - vulnerability_scanning
   - sca
 signal_quality: CONFIRMED
 risk_level: low

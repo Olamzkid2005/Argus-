@@ -11,7 +11,7 @@ parameters:
     description: "Audit target path (project dir or requirements file)"
     required: true
 capabilities:
-  - vulnerability_scanning
+  - sca
 signal_quality: CANDIDATE
 risk_level: low
 phases:

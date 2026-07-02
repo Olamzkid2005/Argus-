@@ -117,7 +117,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="bandit",
     description="Python security linter",
-    phases=["scan", "deep_scan"],
+    phases=["repo_scan"],
     default_args=["-f", "json"],
     parameters=[
     ToolParameter(name="target", description="Target path (directory or file)", required=True, flag="-r"),
@@ -135,7 +135,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="brakeman",
     description="Ruby on Rails security scanner for static analysis",
-    phases=["scan", "deep_scan", "repo_scan"],
+    phases=["repo_scan"],
     default_args=["--format", "json"],
     parameters=[
     ToolParameter(name="target", description="Target Rails application path", required=True),
@@ -254,7 +254,7 @@ _register(ToolDefinition(
     name="dependency_check",
     description="OWASP Dependency-Check for known vulnerability scanning in dependencies",
     binary="dependency-check",
-    phases=["scan", "deep_scan", "repo_scan"],
+    phases=["repo_scan"],
     default_args=["--format", "JSON"],
     parameters=[
     ToolParameter(name="target", description="Target project directory", required=True, flag="--scan"),
@@ -304,7 +304,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="eslint",
     description="JavaScript/TypeScript linter with security plugins",
-    phases=["scan", "deep_scan", "repo_scan"],
+    phases=["repo_scan"],
     default_args=["--format", "json"],
     parameters=[
     ToolParameter(name="target", description="Target path", required=True),
@@ -426,7 +426,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="gitleaks",
     description="Git repository secret scanning for hardcoded credentials",
-    phases=["scan", "deep_scan"],
+    phases=["repo_scan"],
     default_args=["detect", "--verbose", "--no-color"],
     parameters=[
     ToolParameter(name="target", description="Target path", required=True, flag="--source"),
@@ -443,7 +443,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="gosec",
     description="Go security code scanner",
-    phases=["scan", "deep_scan", "repo_scan"],
+    phases=["repo_scan"],
     default_args=["-fmt=json", "-quiet"],
     parameters=[
     ToolParameter(name="target", description="Target Go package path", required=True),
@@ -477,7 +477,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="govulncheck",
     description="Go vulnerability scanner for dependencies",
-    phases=["scan", "deep_scan", "repo_scan"],
+    phases=["repo_scan"],
     default_args=["./...", "-json"],
     parameters=[
     ToolParameter(name="target", description="Target Go module path", required=True),
@@ -649,7 +649,7 @@ _register(ToolDefinition(
     name="npm-audit",
     description="Node.js dependency vulnerability scanner",
     binary="npm",
-    phases=["scan", "deep_scan", "repo_scan"],
+    phases=["repo_scan"],
     default_args=["audit", "--json"],
     parameters=[
     ToolParameter(name="target", description="Target project directory (must contain package.json)", required=True),
@@ -685,7 +685,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="phpcs",
     description="PHP CodeSniffer with security audit rules",
-    phases=["scan", "deep_scan", "repo_scan"],
+    phases=["repo_scan"],
     default_args=["--standard=Security", "--extensions=php", "--report=json"],
     parameters=[
     ToolParameter(name="target", description="Target path", required=True),
@@ -702,7 +702,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="pip-audit",
     description="Python dependency vulnerability scanner",
-    phases=["scan", "deep_scan"],
+    phases=["repo_scan"],
     default_args=["--format", "json", "--quiet"],
     parameters=[
     ToolParameter(name="target", description="Audit target path (project dir or requirements file)", required=True),
@@ -844,7 +844,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="semgrep",
     description="Static code analysis tool for finding security issues and code quality problems",
-    phases=["scan", "deep_scan"],
+    phases=["repo_scan"],
     default_args=["--json"],
     parameters=[
     ToolParameter(name="target", description="Target path", required=True),
@@ -893,7 +893,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="spotbugs",
     description="Java/Kotlin bytecode security scanner with find-sec-bugs plugin",
-    phases=["scan", "deep_scan", "repo_scan"],
+    phases=["repo_scan"],
     default_args=["-textui", "-low", "-effort:max"],
     parameters=[
     ToolParameter(name="target", description="Target path (JAR/WAR/class directory)", required=True),
@@ -982,7 +982,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="trivy",
     description="Container and filesystem vulnerability scanner",
-    phases=["scan", "deep_scan"],
+    phases=["repo_scan"],
     default_args=["fs", "--format", "json", "--skip-dirs", "node_modules,vendor,dist,build,.git,coverage"],
     parameters=[
     ToolParameter(name="target", description="Image name or filesystem path", required=True),
@@ -999,7 +999,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="trufflehog",
     description="High-entropy secret scanner for git history and filesystems",
-    phases=["scan", "deep_scan", "repo_scan"],
+    phases=["repo_scan"],
     default_args=["git", "--json", "--no-update"],
     parameters=[
     ToolParameter(name="target", description="Target path", required=True),

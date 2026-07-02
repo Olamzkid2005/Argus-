@@ -134,6 +134,12 @@ if not os.getenv("DATABASE_URL"):
         except OSError as e:
             logger.warning("Failed to read DATABASE_URL from %s: %s", root_env, e)
 
+# ── Apply pending database migrations ──
+# All *.sql files in database/migrations/ are applied in sorted order on startup.
+# Uses its own direct connection, safe to run before the pool is ready.
+from database.migrations.runner import run_migrations
+run_migrations()
+
 # Create Celery application
 app = Celery(
     "argus_workers",

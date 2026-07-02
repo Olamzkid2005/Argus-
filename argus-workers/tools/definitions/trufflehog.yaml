@@ -21,7 +21,6 @@ parameters:
     required: false
     flag: "--max-depth"
 capabilities:
-  - vulnerability_scanning
   - secret_detection
 signal_quality: PROBABLE
 risk_level: low

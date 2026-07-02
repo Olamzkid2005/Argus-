@@ -10,7 +10,6 @@ parameters:
     description: "Target project directory (must contain package.json)"
     required: true
 capabilities:
-  - vulnerability_scanning
   - sca
 signal_quality: CANDIDATE
 risk_level: low

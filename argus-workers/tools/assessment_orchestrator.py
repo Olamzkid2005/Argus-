@@ -33,7 +33,7 @@ PHASE_PIPELINE_TOOLS: dict[str, list[str]] = {
     "recon": ["subfinder", "httpx", "whatweb", "nmap", "gospider"],
     "scan": ["nuclei", "nikto", "dalfox", "wafw00f"],
     "deep_scan": ["nuclei", "sqlmap", "testssl", "commix"],
-    "repo_scan": ["semgrep", "gitleaks", "trufflehog", "bandit"],
+    "repo_scan": ["semgrep", "bandit", "brakeman", "eslint", "gosec", "phpcs", "spotbugs", "dependency_check", "govulncheck", "npm-audit", "pip-audit", "trivy", "gitleaks", "trufflehog"],
     "analyze": [],
     "report": [],
 }

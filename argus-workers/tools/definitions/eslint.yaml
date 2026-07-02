@@ -16,7 +16,6 @@ parameters:
     flag: "--ext"
     default: ".js,.jsx,.ts,.tsx"
 capabilities:
-  - vulnerability_scanning
   - sast
 signal_quality: PROBABLE
 risk_level: low

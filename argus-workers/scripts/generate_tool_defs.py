@@ -125,14 +125,15 @@ def _build_tool_registration(data: dict) -> str:
     timeout = data.get("timeout", 300)
     requires_obj = _build_requires(data)
 
-    # Map capabilities to phases
-    phases: list[str] = []
-    for cap in capabilities:
-        mapped = CAPABILITY_TO_PHASES.get(cap)
-        if mapped:
-            for p in mapped:
-                if p not in phases:
-                    phases.append(p)
+    # Phases: use explicit YAML phases if provided, otherwise derive from capabilities
+    phases: list[str] = data.get("phases", [])
+    if not phases:
+        for cap in capabilities:
+            mapped = CAPABILITY_TO_PHASES.get(cap)
+            if mapped:
+                for p in mapped:
+                    if p not in phases:
+                        phases.append(p)
     if not phases:
         phases = ["scan"]
 
