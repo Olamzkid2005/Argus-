@@ -10,7 +10,7 @@
 
 | Workstream | Phases | Est. Timeline | Status |
 |------------|--------|---------------|--------|
-| 1. Dynamic Planning & Exploit Chaining | 3 sub-phases | 4–6 weeks | 🟡 Not started |
+| 1. Dynamic Planning & Exploit Chaining | 3 sub-phases | 4–6 weeks | 🟢 1.1 complete (1.2–1.3 remaining) |
 | 2. Post-Exploitation & Lateral Movement | 3 sub-phases | 3–4 weeks | 🟡 Not started |
 | 3. Browser Verification Pipeline | 4 sub-phases | 3–4 weeks | 🟡 Not started |
 | 4. Infrastructure Resilience | 5 sub-phases | 4–5 weeks | 🟡 Not started |
@@ -24,13 +24,13 @@
 
 **Problem:** The planner (`planner.ts`) selects YAML workflows by capability. `replan-rules.ts` maps 18 finding subtypes to capabilities via `REPLAN_INSERTABLE`. The Python side has `attack_graph.py` with chain templates, prerequisite/impact maps, and `find_chains()`. `chain_exploit_generator.py` can generate weaponized scripts. None of this is wired into the planner's `replan()` method.
 
-| Step | Files | Description |
-|------|-------|-------------|
-| 1.1.1 | `planner/planner.ts`, `planner/types.ts` | Add `attackGraph` field to `PlannerContext`. When replan is called, query the Python attack graph via MCP bridge |
-| 1.1.2 | `mcp_server.py` | Expose a `get_attack_graph` MCP handler that returns `find_chains()` results and `get_highest_risk_paths()` |
-| 1.1.3 | `planner/replan-rules.ts` | Add `REPLAN_CHAINS` map — detected chains trigger new phases (e.g., `sqli_confirmed → POST_EXPLOITATION`) |
-| 1.1.4 | `planner/planner.ts` | In `replan()`, if attack chains exist, insert chain-exploitation phases immediately (fix `push` vs `splice` bug) |
-| 1.1.5 | `attack_graph.py` | Add `generate_plan_from_graph()` — produces ordered phase list from chain templates |
+| Step | Files | Description | Status |
+|------|-------|-------------|--------|
+| 1.1.1 | `planner/planner.ts`, `planner/types.ts` | Add `attackGraph`/`chainPlans` fields to `PlannerContext`. Query Python attack graph via MCP bridge | ✅ Done |
+| 1.1.2 | `mcp_server.py` | Expose `get_attack_graph` MCP handler — builds graph from findings, detects chains, returns phase plans | ✅ Done |
+| 1.1.3 | `planner/replan-rules.ts` | Add `REPLAN_CHAINS` reference table mapping chain IDs to capabilities | ✅ Done |
+| 1.1.4 | `planner/planner.ts` | In `replan()`, if attack chains exist, insert exploitation phases via `splice()` | ✅ Done |
+| 1.1.5 | `attack_graph.py` | Add `generate_plan_from_graph()` — converts detected chains into ordered exploitation phase plans | ✅ Done |
 
 ### 1.2 LLM-Driven Replanning
 
@@ -224,8 +224,11 @@ Week 1-2:  DB Schema Alignment (Phase 5)
 Week 3-4:  Phase Task Idempotency (4.3) + Cross-Run Serialization (4.4)
            → prevents duplicate/corrupted work in multi-worker mode
 
-Week 5-7:  Attack-Graph Planning (1.1) + LLM Replan (1.2)
-           → unlocks dynamic, adaptive behavior
+✅ Week 5–6:  Attack-Graph Planning (1.1) ✅
+           → attack graph chains wired into planner replan()
+
+Week 7–8:  LLM Replan (1.2) + ExecuteHybrid YAML (1.3)
+           → LLM-driven adaptive behavior
 
 Week 8-10: Post-Exploitation Pipeline (Phase 2)
            → depends on 1.1 (chains detected → post-exploit triggered)
