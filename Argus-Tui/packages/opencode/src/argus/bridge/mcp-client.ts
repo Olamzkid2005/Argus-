@@ -494,6 +494,38 @@ export class WorkersBridge {
     return this.sendRequest("agent_observe", params) as Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }>
   }
 
+  /**
+   * Fetch the attack graph for an engagement from the Python MCP worker.
+   * Returns detected chains, highest-risk paths, and chain-derived phase plans
+   * that the TypeScript planner can use to insert exploitation phases.
+   */
+  async getAttackGraph(params: {
+    engagement_id: string
+    findings?: any[]
+  }): Promise<{
+    chains: Array<{
+      chain_id: string
+      name: string
+      severity: string
+      correlation_factor: number
+      prerequisite_type: string
+      chain_type: string
+      description: string
+    }>
+    paths: any[]
+    chain_plans: Array<{
+      chain_id: string
+      name: string
+      severity: string
+      risk_score: number
+      prerequisite_finding_types: string[]
+      suggested_capabilities: string[]
+      description: string
+    }>
+  }> {
+    return this.sendRequest("get_attack_graph", params) as Promise<any>
+  }
+
   async disconnect(): Promise<void> {
     this._disconnecting = true
     this.killChild()

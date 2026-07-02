@@ -185,11 +185,48 @@ export class WorkflowPlanner {
       return true
     })
 
-    if (unhandled.length === 0) return null
+    // ── Attack chain phase generation ──
+    // When the attack graph has detected chains, we generate exploitation
+    // phases that turn correlated findings into active exploitation steps.
+    // These are inserted IMMEDIATELY after the current phase using splice().
+    const chainPhases: PhaseExecutionRequest[] = []
+    if (context.chainPlans && context.chainPlans.length > 0) {
+      const nextReplanCount = context.replanCount + 1
+      for (const plan of context.chainPlans) {
+        // Map chain suggested capabilities to actual registered capabilities
+        const caps = plan.suggested_capabilities
+          .map((c) => {
+            // Find the matching Capability enum value
+            const found = Object.values(Capability).find(
+              (cap) => cap.toLowerCase() === c.toLowerCase() ||
+                       cap.replace(/_/g, "").toLowerCase() === c.replace(/_/g, "").toLowerCase()
+            )
+            return found ?? c as Capability
+          })
+          .filter((c) => !context.executedCapabilities.has(c))
 
+        if (caps.length === 0) continue
+
+        chainPhases.push({
+          phaseId: `chain-${nextReplanCount}-${plan.chain_id}-${crypto.randomUUID().slice(0, 8)}`,
+          name: `exploit-${plan.chain_id}`,
+          workflowName: "chain_exploitation",
+          target: context.target,
+          requiredCapabilities: caps,
+          config: {
+            chainPlan: plan,
+            chainDescription: plan.description,
+          },
+          previousPhaseResults: [],
+          toolExecution: "sequential",
+          replanCycle: true,
+        })
+      }
+    }
+
+    // Combine regular replan phases with chain exploitation phases
     const nextReplanCount = context.replanCount + 1
-
-    return unhandled.map((cap) => ({
+    const regularPhases = unhandled.map((cap) => ({
       phaseId: `replan-${nextReplanCount}-${cap}`,
       name: `replan-${cap.toLowerCase()}`,
       workflowName: "replan",
@@ -197,8 +234,13 @@ export class WorkflowPlanner {
       requiredCapabilities: [cap],
       config: {},
       previousPhaseResults: [],
-      toolExecution: "sequential",
+      toolExecution: "sequential" as const,
       replanCycle: true,
     }))
+
+    const allPhases = [...chainPhases, ...regularPhases]
+    if (allPhases.length === 0) return null
+
+    return allPhases
   }
 }

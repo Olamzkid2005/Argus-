@@ -976,6 +976,88 @@ class MCPServer:
 
         return self.handle_agent_next({"session_id": session_id, "trigger": trigger})
 
+    def handle_get_attack_graph(self, params: dict) -> dict:
+        """Return the attack graph chains and highest-risk paths for an engagement.
+
+        Reads findings from the engagement database, builds an AttackGraph,
+        detects vulnerability chains, and returns structured chain data that
+        the TypeScript planner can use to insert exploitation phases.
+
+        Args:
+            params: dict with:
+                - engagement_id: str — engagement UUID
+                - findings: list[dict] — optional pre-loaded findings (if not
+                  provided, reads from database)
+
+        Returns:
+            dict with:
+                - chains: list[dict] — detected attack chains with risk scores
+                - paths: list[dict] — highest-risk attack paths
+                - chain_plans: list[dict] — ordered exploitation phase plans
+        """
+        engagement_id = params.get("engagement_id", "")
+        if not engagement_id:
+            return {"error": "engagement_id is required", "chains": [], "paths": [], "chain_plans": []}
+
+        from attack_graph import AttackGraph
+        from attack_graph_db import AttackGraphRepository
+
+        graph = AttackGraph(engagement_id)
+
+        # Load findings from params or database
+        findings = params.get("findings", [])
+        if not findings:
+            try:
+                from database.repositories.finding_repository import FindingRepository
+                repo = FindingRepository()
+                findings, _ = repo.get_findings_by_engagement(engagement_id, limit=5000)
+            except Exception as e:
+                logger.debug("Could not load findings for attack graph: %s", e)
+
+        # Build the graph from findings
+        for raw_finding in findings:
+            if isinstance(raw_finding, dict):
+                from models.finding import VulnerabilityFinding
+                try:
+                    finding = VulnerabilityFinding(
+                        type=raw_finding.get("type", "UNKNOWN"),
+                        severity=raw_finding.get("severity", "INFO"),
+                        endpoint=raw_finding.get("endpoint", ""),
+                        evidence=raw_finding.get("evidence", {}),
+                        source_tool=raw_finding.get("source_tool", ""),
+                        confidence=raw_finding.get("confidence", 0.5),
+                        cvss_score=raw_finding.get("cvss_score"),
+                    )
+                    graph.add_finding(finding)
+                except Exception as e:
+                    logger.debug("Skipping invalid finding in attack graph: %s", e)
+
+        # Get highest risk paths and chain plans
+        chains = graph.find_chains()
+        high_risk_paths = graph.get_highest_risk_paths(limit=10)
+        chain_plans = graph.generate_plan_from_graph()
+
+        # Serialize chains to JSON-safe format
+        serialized_chains = []
+        for chain in chains:
+            prereq_node = chain.get("prereq_node")
+            chain_node = chain.get("chain_node")
+            serialized_chains.append({
+                "chain_id": chain.get("chain_id", ""),
+                "name": chain.get("name", ""),
+                "severity": chain.get("severity", "MEDIUM"),
+                "correlation_factor": chain.get("correlation_factor", 1.0),
+                "prerequisite_type": prereq_node.data.get("type", "") if prereq_node else "",
+                "chain_type": chain_node.data.get("type", "") if chain_node else "",
+                "description": chain.get("description", ""),
+            })
+
+        return {
+            "chains": serialized_chains,
+            "paths": high_risk_paths,
+            "chain_plans": chain_plans,
+        }
+
 
 # Global MCP server instance
 _mcp_server: MCPServer | None = None
@@ -1042,6 +1124,11 @@ def main():
     transport.register("agent_init", handle_agent_init)
     transport.register("agent_next", handle_agent_next)
     transport.register("agent_observe", handle_agent_observe)
+
+    def handle_get_attack_graph(params):
+        return server.handle_get_attack_graph(params)
+
+    transport.register("get_attack_graph", handle_get_attack_graph)
 
     logger.info("MCP stdio transport starting")
     transport.run()

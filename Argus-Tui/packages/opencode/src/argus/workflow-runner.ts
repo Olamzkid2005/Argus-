@@ -512,6 +512,32 @@ export class WorkflowRunner {
         }
 
         if (!phase.replanCycle) {
+          // ── Fetch attack graph chains from Python worker ──
+          // Build the attack graph from accumulated findings to detect
+          // vulnerability chains that suggest exploitation phases.
+          let chainPlans: import("./planner/types").ChainPhasePlan[] | undefined
+          try {
+            const agResult = await bridge.getAttackGraph({
+              engagement_id: engagementId,
+              findings: allFindings.map((f) => ({
+                type: f.subtype?.toUpperCase() ?? "UNKNOWN",
+                severity: f.severity >= 4 ? "CRITICAL" : f.severity === 3 ? "HIGH" : f.severity === 2 ? "MEDIUM" : f.severity === 1 ? "LOW" : "INFO",
+                endpoint: f.url ?? f.description?.match(/(https?:\/\/[^\s]+)/)?.[1] ?? "",
+                source_tool: f.source ?? "",
+                confidence: f.confidence ? f.confidence / 5 : 0.5,
+              })),
+            })
+            if (agResult.chain_plans && agResult.chain_plans.length > 0) {
+              chainPlans = agResult.chain_plans
+              emit(`⠋ Attack graph: ${agResult.chains.length} chain(s) detected, ${agResult.chain_plans.length} exploitation phase(s) available`)
+              store.appendAuditLog(engagementId, "ATTACK_GRAPH",
+                `Detected ${agResult.chains.length} chain(s), ${agResult.chain_plans.length} exploitation plan(s)`)
+            }
+          } catch (err) {
+            // Attack graph is best-effort — don't block replanning if it fails
+            emit(`⚠ Attack graph fetch failed (non-blocking): ${(err as Error).message}`)
+          }
+
           const replanCtx: PlannerContext = {
             target,
             targetType,
@@ -522,6 +548,7 @@ export class WorkflowRunner {
             replanCount,
             maxReplans: configMaxReplans,
             hypotheses: allHypotheses.length > 0 ? allHypotheses : undefined,
+            chainPlans,
           }
           const replanPhases = planner.replan(replanCtx)
           replanCount = replanCtx.replanCount

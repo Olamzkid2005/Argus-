@@ -82,6 +82,28 @@ export interface Hypothesis {
   status: string
 }
 
+/** An attack chain detected by the Python AttackGraph engine. */
+export interface AttackChain {
+  chain_id: string
+  name: string
+  severity: string
+  correlation_factor: number
+  prerequisite_type: string
+  chain_type: string
+  description: string
+}
+
+/** An exploitation phase plan derived from an attack chain. */
+export interface ChainPhasePlan {
+  chain_id: string
+  name: string
+  severity: string
+  risk_score: number
+  prerequisite_finding_types: string[]
+  suggested_capabilities: string[]
+  description: string
+}
+
 export interface PlannerContext {
   target: string
   targetType: TargetType
@@ -93,4 +115,12 @@ export interface PlannerContext {
   replanCount: number
   maxReplans?: number
   hypotheses?: Hypothesis[]
+  /**
+   * Attack chains detected by the Python attack graph engine.
+   * Reserved for future TUI display of detected chains. Currently
+   * only `chainPlans` is consumed by the planner's replan() method.
+   */
+  attackChains?: AttackChain[]
+  /** Chain-derived phase plans to insert as exploitation steps. */
+  chainPlans?: ChainPhasePlan[]
 }

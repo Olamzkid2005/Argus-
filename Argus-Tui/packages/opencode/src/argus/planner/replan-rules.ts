@@ -1,5 +1,27 @@
-import type { PlannerContext, NormalizedFinding, Hypothesis } from "./types"
+import type { PlannerContext, NormalizedFinding, Hypothesis, AttackChain } from "./types"
 import { Capability } from "./capabilities"
+
+/**
+ * Chain-to-capability reference table — matches attack_graph.py CHAIN_RULES.
+ *
+ * NOTE: The actual chain→capability mapping happens server-side in
+ * attack_graph.py's generate_plan_from_graph() via CHAIN_TO_CAPABILITIES.
+ * This TypeScript map is kept as documentation of the expected chain IDs
+ * and their associated capabilities. It is NOT directly consumed by the
+ * planner — the planner reads `chainPlans` from the Python response.
+ *
+ * Chain IDs from attack_graph.py CHAIN_RULES mapped to exploitation capabilities.
+ */
+export const REPLAN_CHAINS: Record<string, Capability[]> = {
+  chain_1: [Capability.PHISHING_CHAIN],                       // Open Redirect → OAuth Theft → ATO
+  chain_2: [Capability.SESSION_HIJACK_ATTEMPT],               // XSS + CSRF → ATO
+  chain_3: [Capability.CLOUD_METADATA_PROBE, Capability.POST_EXPLOITATION], // SSRF → Cloud Metadata → AWS Compromise
+  chain_4: [Capability.LATERAL_MOVEMENT],                     // LFI + File Upload → RCE
+  chain_5: [Capability.CREDENTIAL_REPLAY],                    // Subdomain Takeover + CORS → Credential Theft
+  chain_6: [Capability.SESSION_HIJACK_ATTEMPT],               // XSS → Session Token Theft → ATO
+  chain_7: [Capability.POST_EXPLOITATION],                    // IDOR + Mass Assignment → PrivEsc
+  chain_8: [Capability.PHISHING_CHAIN],                       // Open Redirect + Phishing
+}
 
 export const REPLAN_INSERTABLE: Record<string, Capability> = {
   graphql: Capability.GRAPHQL_ASSESSMENT,
