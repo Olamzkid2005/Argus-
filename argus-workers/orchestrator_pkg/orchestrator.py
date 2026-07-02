@@ -6,6 +6,7 @@ Requirements: 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 21.1, 21.2, 31.2, 31.3
 """
 
 import atexit
+import json
 import logging
 import os
 import time
@@ -1068,6 +1069,111 @@ class Orchestrator:
             "next_state": "complete",
             "report": report_data,
             "trace_id": get_trace_id(),
+        }
+
+    def run_verification(self, job: dict) -> dict:
+        """Run browser-based verification on HIGH/CRITICAL findings.
+
+        Phase 3.1.2: After tools complete, this method reviews findings
+        and determines whether browser verification is needed. It marks
+        findings that should be verified and emits websocket events so
+        the TypeScript workflow runner can execute Playwright-based verifiers.
+
+        Args:
+            job: Job dict with:
+                - findings: list of finding dicts
+                - threshold: minimum severity threshold (default 3 = HIGH)
+                - max_to_verify: max findings to verify (default 10)
+
+        Returns:
+            Dict with verification recommendations
+        """
+        from streaming import emit_thinking, get_stream_manager
+
+        findings = job.get("findings", [])
+        threshold = job.get("threshold", 3)  # Severity.HIGH
+        max_to_verify = job.get("max_to_verify", 10)
+
+        if not findings:
+            logger.info("run_verification: no findings to evaluate — skipping")
+            return {
+                "phase": "verification",
+                "status": "skipped",
+                "findings_to_verify": 0,
+                "recommendation": "No findings — skipping verification",
+            }
+
+        # Filter findings by severity threshold
+        candidates = [
+            f for f in findings
+            if f.get("severity", 0) >= threshold
+        ]
+
+        if not candidates:
+            emit_thinking(
+                self.engagement_id,
+                "No findings meet the verification threshold — skipping browser verification",
+            )
+            return {
+                "phase": "verification",
+                "status": "no_candidates",
+                "findings_to_verify": 0,
+                "recommendation": (
+                    f"No findings with severity >= {threshold} — "
+                    "browser verification skipped"
+                ),
+            }
+
+        # Limit to max_to_verify most severe findings
+        candidates.sort(key=lambda f: f.get("severity", 0), reverse=True)
+        to_verify = candidates[:max_to_verify]
+
+        # Mark findings for browser verification
+        verified_ids = []
+        for finding in to_verify:
+            finding["_needs_browser_verification"] = True
+            finding["_verification_priority"] = finding.get("severity", 3)
+            verified_ids.append(finding.get("id", ""))
+
+        emit_thinking(
+            self.engagement_id,
+            f"Browser verification recommended for {len(to_verify)} finding(s) "
+            f"(severity >= {threshold})",
+        )
+
+        # Publish scanner activity event for the TypeScript side
+        # (Phase 3.1.2: signals that browser verification is recommended)
+        details = json.dumps({
+            "finding_ids": verified_ids,
+            "count": len(to_verify),
+            "threshold": threshold,
+            "phase": job.get("phase", "unknown"),
+        })
+        self.ws_publisher.publish_scanner_activity(
+            engagement_id=self.engagement_id,
+            tool_name="verification_runner",
+            activity="Browser verification recommended",
+            status="completed",
+            details=details,
+            items_found=len(to_verify),
+        )
+
+        logger.info(
+            "Verification recommended for %d finding(s) (threshold=%d, max=%d)",
+            len(to_verify),
+            threshold,
+            max_to_verify,
+        )
+
+        return {
+            "phase": "verification",
+            "status": "recommended",
+            "findings_to_verify": len(to_verify),
+            "verified_ids": verified_ids,
+            "recommendation": (
+                f"Browser verification recommended for {len(to_verify)} finding(s), "
+                f"severity >= {threshold}"
+            ),
         }
 
     def run_post_exploitation(self, job: dict) -> dict:

@@ -29,6 +29,10 @@ import { PlaywrightEngine } from "./browser/engine"
 import { StoredXSSVerifier } from "./browser/verifiers/xss"
 import { BOLAVerifier } from "./browser/verifiers/bola"
 import { PrivilegeEscalationVerifier } from "./browser/verifiers/priv-esc"
+import { SSRFVerifier } from "./browser/verifiers/ssrf"
+import { LFIVerifier } from "./browser/verifiers/lfi"
+import { JWTVerifier } from "./browser/verifiers/jwt"
+import { SecretsExposureVerifier } from "./browser/verifiers/secrets"
 import type { ProgressEvent } from "./shared/progress"
 import type { PlannerContext } from "./planner/types"
 import { handleProgressEvent } from "./tui/scan-store"
@@ -74,6 +78,18 @@ export interface WorkflowRunOptions {
    * timing, and phase transitions via console.log.
    */
   verbose?: boolean
+  /**
+   * Verification threshold — controls which findings get browser verification.
+   * Only findings with severity >= this value are verified.
+   * Default: 3 (HIGH). Set to 0 to verify ALL findings, 4 for CRITICAL only,
+   * or 5 to disable verification entirely.
+   */
+  verificationSeverityThreshold?: number
+  /**
+   * Custom default XSS payload to use when a finding doesn't specify one.
+   * Overrides the built-in "<img src=x onerror=alert(1)>" default.
+   */
+  xssDefaultPayload?: string
 }
 
 export interface WorkflowRunResult {
@@ -160,11 +176,19 @@ export class WorkflowRunner {
     creds: CredentialEntry | null | undefined,
     engagementId: string,
     emit: (event: ProgressEvent | string) => void,
+    options?: {
+      severityThreshold?: number
+      xssDefaultPayload?: string
+    },
   ): Promise<NormalizedFinding[]> {
     if (!creds) return findings
 
+    const threshold = options?.severityThreshold ?? Severity.HIGH
+    // If threshold is > CRITICAL (5+), disable verification entirely
+    if (threshold > Severity.CRITICAL) return findings
+
     const toVerify = findings.filter(
-      (f) => (f.severity === Severity.HIGH || f.severity === Severity.CRITICAL) && !f.verificationResult,
+      (f) => f.severity >= threshold && !f.verificationResult,
     )
     if (toVerify.length === 0) return findings
 
@@ -185,14 +209,21 @@ export class WorkflowRunner {
           case "xss_stored":
           case "xss_reflected": {
             const injectUrl = finding.statusCode ? target : `${target}/contact`
+            // Use the configured default XSS payload when the finding
+            // doesn't include a script payload. Falls back to the built-in
+            // default if neither finding description nor options provide one.
+            const xssPayload = finding.description.includes("<script>")
+              ? finding.description
+              : options?.xssDefaultPayload ?? "<img src=x onerror=alert(1)>"
             scenario = new StoredXSSVerifier(
               engine,
               injectUrl,
               injectUrl,
-              finding.description.includes("<script>") ? finding.description : "<img src=x onerror=alert(1)>",
+              xssPayload,
               undefined,
               engagementId,
               finding.id,
+              options?.xssDefaultPayload,  // pass as defaultPayloadOverride
             )
             break
           }
@@ -219,6 +250,64 @@ export class WorkflowRunner {
               target,
               endpoints.slice(0, 5),
               creds,
+              undefined,
+              engagementId,
+              finding.id,
+            )
+            break
+          }
+          case "ssrf": {
+            // Extract the SSRF-prone parameter from the finding description or evidence
+            const ssrfEndpoint = finding.description.match(/\/\S+/)?.[0] ?? "/"
+            scenario = new SSRFVerifier(
+              engine,
+              target,
+              ssrfEndpoint,
+              undefined,
+              engagementId,
+              finding.id,
+            )
+            break
+          }
+          case "lfi":
+          case "path_traversal": {
+            // Extract the LFI-prone parameter from the finding
+            const lfiParam = finding.description.match(/(?:file|page|include|path|template|load|read|document|folder|root|preview|view|dir|show|url|lang|cat)\s*[:=]\s*\S+/i)?.[0] ?? finding.description.match(/(\/[^\s,]+)/)?.[1] ?? "file"
+            scenario = new LFIVerifier(
+              engine,
+              target,
+              lfiParam.startsWith("/") ? lfiParam : `?${lfiParam}=`,
+              undefined,
+              engagementId,
+              finding.id,
+            )
+            break
+          }
+          case "jwt":
+          case "jwt_tampering":
+          case "jwt_none_algorithm": {
+            const protectedEndpoint = finding.description.match(/(\/[^\s,]+)/)?.[1] ?? "/admin"
+            // Try to extract an original JWT from finding evidence
+            const jwtMatch = finding.description.match(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/)
+            scenario = new JWTVerifier(
+              engine,
+              target,
+              protectedEndpoint,
+              jwtMatch?.[0],
+              undefined,
+              engagementId,
+              finding.id,
+            )
+            break
+          }
+          case "secrets":
+          case "exposed_secrets":
+          case "exposed_credentials": {
+            const scanEndpoint = finding.description.match(/(\/[^\s,]+)/)?.[1] ?? "/"
+            scenario = new SecretsExposureVerifier(
+              engine,
+              target,
+              scanEndpoint,
               undefined,
               engagementId,
               finding.id,
@@ -467,7 +556,17 @@ export class WorkflowRunner {
 
         let phaseFindings = result.findings
         if (phaseFindings.length > 0) {
-          phaseFindings = await this.verifyFindings(phaseFindings, target, defaultCreds, engagementId, emit)
+          phaseFindings = await this.verifyFindings(
+            phaseFindings,
+            target,
+            defaultCreds,
+            engagementId,
+            emit,
+            {
+              severityThreshold: options.verificationSeverityThreshold,
+              xssDefaultPayload: options.xssDefaultPayload,
+            },
+          )
         }
 
         for (const finding of phaseFindings) {

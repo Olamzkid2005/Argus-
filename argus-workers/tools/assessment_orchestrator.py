@@ -173,6 +173,38 @@ class AssessmentOrchestrator(AbstractTool):
                 },
             )
 
+            # ── Phase 3.1.1: Browser verification recommendation ──
+            # After each phase's tools complete, check if findings exceed a
+            # configurable threshold. If so, emit a VERIFICATION_RECOMMENDED
+            # finding so the TypeScript workflow runner can trigger browser
+            # verification on the most severe findings.
+            _verification_threshold = getattr(ctx, "verification_threshold", 3)
+            _high_crit = [
+                f for f in builder.findings
+                if f.get("severity", 0) >= _verification_threshold
+            ]
+            if len(_high_crit) >= _verification_threshold:
+                builder.info(
+                    "VERIFICATION_RECOMMENDED",
+                    ctx.target,
+                    {
+                        "phase": phase,
+                        "high_severity_count": len(_high_crit),
+                        "threshold": _verification_threshold,
+                        "recommendation": (
+                            f"Browser verification recommended for {len(_high_crit)} "
+                            f"findings in phase '{phase}'"
+                        ),
+                    },
+                )
+                logger.info(
+                    "Phase %s: %d findings exceed threshold %d — "
+                    "browser verification recommended",
+                    phase,
+                    len(_high_crit),
+                    _verification_threshold,
+                )
+
         builder.info(
             "ORCHESTRATION_COMPLETE",
             ctx.target,

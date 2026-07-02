@@ -39,7 +39,20 @@ export class StoredXSSVerifier implements VerificationScenario {
     private collector?: EvidenceCollector,
     private engagementId?: string,
     private findingId?: string,
-  ) {}
+    /**
+     * Optional custom default payload to use when the payload parameter
+     * is empty or is the built-in fallback. Allows workflow runners to
+     * inject findings-driven payloads without modifying the verifier.
+     */
+    private readonly defaultPayloadOverride?: string,
+  ) {
+    // If a defaultPayloadOverride is set and the current payload is
+    // the built-in fallback, replace it with the override.
+    if (this.defaultPayloadOverride && this.payload === "<img src=x onerror=alert(1)>") {
+      this.payload = this.defaultPayloadOverride
+      this.logs.push(`Using custom default payload from config: ${this.payload.slice(0, 80)}`)
+    }
+  }
 
   async setup(): Promise<void> {
     await this.engine.launch()
