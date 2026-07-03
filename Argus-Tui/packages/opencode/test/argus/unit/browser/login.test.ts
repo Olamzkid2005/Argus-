@@ -19,6 +19,40 @@ mock.module("playwright", () => {
   const _setBodyText = (text: string) => { bodyText = text }
   const _setHasPasswordField = (val: boolean) => { hasPasswordField = val }
 
+  // Build a locator mock that returns a consistent locator object.
+  // Used by both .locator() and .getByLabel() / .getByRole().
+  function makeLocator(opts?: {
+    /** Override count for this specific locator instance */
+    countOverride?: () => Promise<number>
+    /** Whether pressing Enter should trigger navigation */
+    navigatesOnEnter?: boolean
+  }) {
+    return {
+      all: async () => [],
+      first: () => ({
+        isVisible: async () => true,
+        click: async () => { currentUrl = "https://example.com/dashboard" },
+        fill: async (_val: string) => {},
+        press: async (key: string) => {
+          if (opts?.navigatesOnEnter !== false && key === "Enter") {
+            currentUrl = "https://example.com/dashboard"
+          }
+        },
+      }),
+      isVisible: async () => true,
+      fill: async (_val: string) => {},
+      press: async (key: string) => {
+        if (key === "Enter") currentUrl = "https://example.com/dashboard"
+      },
+      innerText: async () => "",
+      count: async () => {
+        if (opts?.countOverride) return opts.countOverride()
+        return 1
+      },
+      click: async () => { currentUrl = "https://example.com/dashboard" },
+    }
+  }
+
   const mockPage = {
     goto: async (url: string) => {
       currentUrl = url
@@ -38,28 +72,38 @@ mock.module("playwright", () => {
     waitForLoadState: async () => {},
     waitForTimeout: async () => {},
     waitForSelector: async (_sel: string) => {},
-    locator: (_sel: string) => ({
-      all: async () => [],
-      first: () => ({
-        isVisible: async () => true,
-        click: async () => {},
-        fill: async (_val: string) => {},
-        press: async (key: string) => {
-          if (key === "Enter") currentUrl = "https://example.com/dashboard"
-        },
-      }),
-      isVisible: async () => true,
-      fill: async (_val: string) => {},
-      press: async (key: string) => {
-        if (key === "Enter") currentUrl = "https://example.com/dashboard"
-      },
-      innerText: async () => "",
-      count: async () => {
+    locator: (_sel: string) => makeLocator({
+      countOverride: async () => {
         // Return 0 for password selector when simulating no-password-field page
         if (_sel === "input[type=password]") return hasPasswordField ? 1 : 0
         return 1
       },
     }),
+    // Phase 3.4.1: Mock getByLabel and getByRole
+    getByLabel: (text: string | RegExp) => {
+      const labelText = typeof text === "string" ? text.toLowerCase() : text.source.toLowerCase()
+      const isPasswordLabel = labelText.includes("password")
+      return makeLocator({
+        countOverride: async () => {
+          if (isPasswordLabel) return hasPasswordField ? 1 : 0
+          return 1
+        },
+      })
+    },
+    getByRole: (role: string, options?: { name?: string | RegExp }) => {
+      const roleName = options?.name
+        ? typeof options.name === "string"
+          ? options.name.toLowerCase()
+          : options.name.source.toLowerCase()
+        : ""
+      const isPasswordRole = roleName.includes("password")
+      return makeLocator({
+        countOverride: async () => {
+          if (isPasswordRole) return hasPasswordField ? 1 : 0
+          return 1
+        },
+      })
+    },
     $: async () => null,
   }
 

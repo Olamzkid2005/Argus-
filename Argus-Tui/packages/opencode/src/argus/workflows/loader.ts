@@ -33,7 +33,7 @@ export function loadWorkflowYaml(path: string): WorkflowDefinition {
       }
     }
 
-    if (!phase.execution || !["parallel", "sequential"].includes(phase.execution)) {
+    if (!phase.execution || !["parallel", "sequential", "llm_driven"].includes(phase.execution)) {
       throw new Error(`Invalid execution mode '${phase.execution}' in phase '${phase.name}'`)
     }
 

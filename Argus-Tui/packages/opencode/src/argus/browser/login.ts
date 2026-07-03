@@ -58,12 +58,94 @@ export async function injectLocalStorageTokens(
 }
 
 /**
+ * Try to detect and fill login forms using Playwright accessibility-first locators.
+ *
+ * Phase 3.4.1: Uses getByLabel() and getByRole() for form field detection,
+ * which are more resilient to DOM structure changes than CSS selectors.
+ * Falls back to returning null so the caller can try CSS-based detection.
+ *
+ * @returns True if login was submitted successfully, null if locators didn't match.
+ */
+async function loginWithLocators(
+  page: Page,
+  creds: Credentials,
+): Promise<boolean | null> {
+  try {
+    // 1. Try to find password field via getByLabel (most reliable for form fields)
+    const passwordByLabel = page.getByLabel(/password/i)
+    const hasPasswordByLabel = (await passwordByLabel.count()) > 0
+
+    // 2. Try to find username/email field via getByLabel
+    const usernameByLabel = page.getByLabel(/username|email|user/i)
+    const hasUsernameByLabel = (await usernameByLabel.count()) > 0
+
+    // 3. Try to find the submit button via getByRole
+    const submitByRole = page.getByRole("button", {
+      name: /sign in|log in|signin|login|submit|continue/i,
+    })
+    const hasSubmitByRole = (await submitByRole.count()) > 0
+
+    // 4. Try getByRole("textbox") for username if getByLabel didn't match
+    const usernameByRole = !hasUsernameByLabel
+      ? page.getByRole("textbox", { name: /username|email|user|login/i })
+      : null
+    const hasUsernameByRole = usernameByRole !== null && (await usernameByRole.count()) > 0
+
+    // If no locator found a password field, bail out to CSS fallback
+    if (!hasPasswordByLabel) return null
+
+    // Build the effective username locator
+    const effectiveUsername = hasUsernameByLabel
+      ? usernameByLabel
+      : hasUsernameByRole
+        ? usernameByRole!
+        : null
+
+    // Fill username if we found a matching field
+    if (effectiveUsername !== null && (await effectiveUsername.isVisible())) {
+      await effectiveUsername.fill(creds.username)
+    }
+
+    // Fill password
+    if (await passwordByLabel.isVisible()) {
+      await passwordByLabel.fill(creds.password)
+      await passwordByLabel.press("Enter")
+      await page.waitForTimeout(500)
+    }
+
+    // Click submit button as fallback (Enter may not have triggered navigation)
+    if (hasSubmitByRole && (await submitByRole.isVisible())) {
+      await submitByRole.click()
+    }
+
+    // Wait for navigation or network idle after submission
+    try {
+      await page.waitForLoadState("networkidle", { timeout: 30000 })
+    } catch {
+      // Network may not stabilize — proceed anyway
+    }
+
+    // Verify login success
+    const postLoginUrl = page.url()
+    const stillOnLogin = /\/login\b|\/signin\b|\/auth\b/i.test(postLoginUrl)
+    return !stillOnLogin || detectAuthSuccess(page)
+  } catch {
+    // Locator APIs may not be available on all Playwright versions
+    return null
+  }
+}
+
+
+/**
  * Detect and fill login forms on a page using progressive selector strategies.
  * Supports:
  *  - Standard username+password forms
  *  - Email+password forms
  *  - OAuth/SSO detection (returns false, caller should use injectAuthCookies)
  *  - Modal/dynamically rendered forms (waits for form to become visible)
+ *
+ * Phase 3.4.1: Uses Playwright locator-based form detection (getByLabel, getByRole)
+ * before falling back to CSS selectors for better resilience.
  *
  * @param page - The Playwright page to interact with.
  * @param creds - Username and password credentials.
@@ -84,6 +166,16 @@ export async function loginIfFormPresent(
     return false  // OAuth/SSO detected — caller should use injectAuthCookies or injectLocalStorageTokens
   }
 
+  // ── Phase 3.4.1: Playwright locator-based detection (getByLabel, getByRole) ──
+  // Try accessibility-first locators before CSS selectors for better resilience.
+  if (!selectors) {
+    const locatorResult = await loginWithLocators(page, creds)
+    if (locatorResult !== null) {
+      return locatorResult
+    }
+  }
+
+  // ── Fallback: CSS-selector-based detection ──
   // Detect login form using multiple strategies:
   // 1. Custom selectors (if provided)
   // 2. Input[type=password] existence (most reliable)

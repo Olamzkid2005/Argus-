@@ -40,8 +40,7 @@ phases:
       - xss_detection
       - sqli_detection
       - command_injection
-    toolExecution: llm_driven
-    execution: sequential
+    execution: llm_driven
     error_recovery: retry_once_then_skip
     approval_gate: destructive_tools
 
@@ -51,8 +50,7 @@ phases:
       - jwt_analysis
       - ssrf_check
       - sqli_detection
-    toolExecution: llm_driven
-    execution: sequential
+    execution: llm_driven
     error_recovery: retry_once_then_skip
     approval_gate: destructive_tools
 
