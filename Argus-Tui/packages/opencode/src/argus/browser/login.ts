@@ -16,6 +16,21 @@ export interface LoginSelectors {
 }
 
 /**
+ * Structured information about an auth challenge blocking login.
+ * Phase 3.4.2: Emitted when MFA, CAPTCHA, or other auth blockers are detected.
+ */
+export interface AuthChallenge {
+  type: "mfa" | "captcha" | "auth_error" | "oauth"
+  detail: string
+}
+
+/**
+ * Callback invoked when an auth challenge is detected during login.
+ * Phase 3.4.2: Allows verifiers to observe and log auth challenges.
+ */
+export type AuthChallengeCallback = (challenge: AuthChallenge) => void
+
+/**
  * Inject authentication tokens/cookies into the browser context.
  * Useful for OAuth, SSO, or token-based auth where login forms are not present.
  *
@@ -137,6 +152,61 @@ async function loginWithLocators(
 
 
 /**
+ * Detect what kind of auth challenge is blocking login on the current page.
+ * Phase 3.4.2: Returns structured info about MFA, CAPTCHA, auth errors, or OAuth.
+ *
+ * Callers should use this after loginIfFormPresent() returns false to understand
+ * why login failed and log the challenge as evidence.
+ *
+ * @param page - The page to check for auth challenges.
+ * @returns Detected challenge info, or null if no challenge detected.
+ */
+export async function detectAuthChallenge(page: Page): Promise<AuthChallenge | null> {
+  const bodyText = await page.textContent("body") ?? ""
+  const lower = bodyText.toLowerCase()
+
+  // Check for MFA challenges
+  if (/\bmfa\b|\bmulti-factor\b|\b2fa\b|\btwo-factor\b|\bauthenticator\b|\bverification code\b/i.test(lower)) {
+    return { type: "mfa", detail: "Multi-factor authentication challenge detected — cannot auto-solve" }
+  }
+
+  // Check for CAPTCHA
+  if (/\bcaptcha\b|\brecaptcha\b|\bhcaptcha\b|\bturnstile\b/i.test(lower)) {
+    return { type: "captcha", detail: "CAPTCHA challenge detected — cannot auto-solve" }
+  }
+
+  // Check for auth error messages
+  if (/\binvalid (credentials|username|password|email)\b|\blogin failed\b|\bincorrect\b|\bwrong password\b/i.test(lower)) {
+    return { type: "auth_error", detail: "Invalid credentials — login rejected" }
+  }
+
+  // Check for OAuth/SSO (requires page content check)
+  const content = await page.content().catch(() => "")
+  if (/\boauth\b/i.test(content) &&
+    (/\bgoogle\b/i.test(content) || /\bgithub\b/i.test(content) || /\bmicrosoft\b/i.test(content) || /\bfacebook\b/i.test(content) || /\bsso\b/i.test(content))) {
+    return { type: "oauth", detail: "OAuth/SSO login page detected — requires interactive browser flow" }
+  }
+
+  return null
+}
+
+
+/**
+ * Emit an auth challenge observation to the verifier's log collector.
+ * Phase 3.4.2: Convenience helper for verifiers to log structured auth challenges.
+ *
+ * @param challenge - The detected auth challenge.
+ * @param logFn - Function to append log lines (typically this.logs.push).
+ */
+export function logAuthChallenge(
+  challenge: AuthChallenge,
+  logFn: (line: string) => void,
+): void {
+  logFn(`[AUTH_CHALLENGE] type=${challenge.type}: ${challenge.detail}`)
+}
+
+
+/**
  * Detect and fill login forms on a page using progressive selector strategies.
  * Supports:
  *  - Standard username+password forms
@@ -146,16 +216,19 @@ async function loginWithLocators(
  *
  * Phase 3.4.1: Uses Playwright locator-based form detection (getByLabel, getByRole)
  * before falling back to CSS selectors for better resilience.
+ * Phase 3.4.2: Accepts onChallenge callback for auth challenge signal emission.
  *
  * @param page - The Playwright page to interact with.
  * @param creds - Username and password credentials.
  * @param selectors - Optional custom selectors for non-standard forms.
+ * @param onChallenge - Optional callback invoked when an auth challenge is detected.
  * @returns True if login was submitted successfully, false if no form found.
  */
 export async function loginIfFormPresent(
   page: Page,
   creds: Credentials,
   selectors?: LoginSelectors,
+  onChallenge?: AuthChallengeCallback,
 ): Promise<boolean> {
   const content = await page.content()
 
@@ -163,6 +236,9 @@ export async function loginIfFormPresent(
   const hasOAuth = /\boauth\b/i.test(content) &&
     (/\bgoogle\b/i.test(content) || /\bgithub\b/i.test(content) || /\bmicrosoft\b/i.test(content) || /\bfacebook\b/i.test(content) || /\bsso\b/i.test(content) || /\bsaml\b/i.test(content))
   if (hasOAuth) {
+    // Phase 3.4.2: Emit auth_challenge signal for OAuth detection
+    const challenge: AuthChallenge = { type: "oauth", detail: "OAuth/SSO login page detected — requires interactive browser flow" }
+    onChallenge?.(challenge)
     return false  // OAuth/SSO detected — caller should use injectAuthCookies or injectLocalStorageTokens
   }
 
@@ -171,6 +247,11 @@ export async function loginIfFormPresent(
   if (!selectors) {
     const locatorResult = await loginWithLocators(page, creds)
     if (locatorResult !== null) {
+      // Phase 3.4.2: If login via locators failed, check for auth challenges
+      if (!locatorResult) {
+        const challenge = await detectAuthChallenge(page)
+        if (challenge) onChallenge?.(challenge)
+      }
       return locatorResult
     }
   }
@@ -236,7 +317,15 @@ export async function loginIfFormPresent(
   // Verify login success: check we're not still on the login page
   const postLoginUrl = page.url()
   const stillOnLogin = /\/login\b|\/signin\b|\/auth\b/i.test(postLoginUrl)
-  return !stillOnLogin || detectAuthSuccess(page)
+  const authSuccess = !stillOnLogin || await detectAuthSuccess(page)
+
+  // Phase 3.4.2: If login failed, check for auth challenges
+  if (!authSuccess) {
+    const challenge = await detectAuthChallenge(page)
+    if (challenge) onChallenge?.(challenge)
+  }
+
+  return authSuccess
 }
 
 /**

@@ -315,4 +315,95 @@ describe("Browser Login", () => {
     expect(isAccessDenied("Welcome to the site")).toBe(false)
     expect(isAccessDenied("")).toBe(false)
   })
+
+  // ── Phase 3.4.2: Auth challenge detection tests ──────────────────────
+
+  test("detectAuthChallenge returns null for normal page", async () => {
+    const { detectAuthChallenge } = await import("../../../../src/argus/browser/login")
+    const playwright = await import("playwright") as any
+    playwright.chromium._resetState()
+    playwright.chromium._setBodyText("Welcome user! Here is your dashboard.")
+
+    const page = await playwright.chromium.launch().newContext().newPage()
+    const result = await detectAuthChallenge(page)
+    expect(result).toBeNull()
+  })
+
+  test("detectAuthChallenge detects MFA", async () => {
+    const { detectAuthChallenge } = await import("../../../../src/argus/browser/login")
+    const playwright = await import("playwright") as any
+    playwright.chromium._resetState()
+    playwright.chromium._setBodyText("Enter the verification code sent to your phone (MFA)")
+
+    const page = await playwright.chromium.launch().newContext().newPage()
+    const result = await detectAuthChallenge(page)
+    expect(result).not.toBeNull()
+    expect(result!.type).toBe("mfa")
+    expect(result!.detail).toContain("Multi-factor")
+  })
+
+  test("detectAuthChallenge detects CAPTCHA", async () => {
+    const { detectAuthChallenge } = await import("../../../../src/argus/browser/login")
+    const playwright = await import("playwright") as any
+    playwright.chromium._resetState()
+    playwright.chromium._setBodyText("Please complete the reCAPTCHA verification")
+
+    const page = await playwright.chromium.launch().newContext().newPage()
+    const result = await detectAuthChallenge(page)
+    expect(result).not.toBeNull()
+    expect(result!.type).toBe("captcha")
+  })
+
+  test("detectAuthChallenge detects auth error", async () => {
+    const { detectAuthChallenge } = await import("../../../../src/argus/browser/login")
+    const playwright = await import("playwright") as any
+    playwright.chromium._resetState()
+    playwright.chromium._setBodyText("Invalid username or password. Please try again.")
+
+    const page = await playwright.chromium.launch().newContext().newPage()
+    const result = await detectAuthChallenge(page)
+    expect(result).not.toBeNull()
+    expect(result!.type).toBe("auth_error")
+  })
+
+  test("detectAuthChallenge detects OAuth from page content", async () => {
+    const { detectAuthChallenge } = await import("../../../../src/argus/browser/login")
+    const playwright = await import("playwright") as any
+    playwright.chromium._resetState()
+    playwright.chromium._setBodyText("")
+    playwright.chromium._setPageContent(
+      '<html><body><button>Sign in with Google</button><button>Sign in with GitHub</button></body></html>'
+    )
+
+    const page = await playwright.chromium.launch().newContext().newPage()
+    const result = await detectAuthChallenge(page)
+    expect(result).not.toBeNull()
+    expect(result!.type).toBe("oauth")
+  })
+
+  test("loginIfFormPresent invokes onChallenge callback for OAuth", async () => {
+    const { loginIfFormPresent } = await import("../../../../src/argus/browser/login")
+    const playwright = await import("playwright") as any
+    playwright.chromium._resetState()
+    playwright.chromium._setPageContent(
+      '<html><body><button>Sign in with Microsoft</button><button>Sign in with Google</button></body></html>'
+    )
+    playwright.chromium._setHasPasswordField(false)
+
+    const page = await playwright.chromium.launch().newContext().newPage()
+    const challenges: any[] = []
+    await loginIfFormPresent(page, { username: "u", password: "p" }, undefined, (c) => challenges.push(c))
+    expect(challenges.length).toBeGreaterThan(0)
+    expect(challenges[0].type).toBe("oauth")
+  })
+
+  test("logAuthChallenge formats challenge as structured log", async () => {
+    const { logAuthChallenge } = await import("../../../../src/argus/browser/login")
+    const logs: string[] = []
+    logAuthChallenge({ type: "mfa", detail: "Test challenge" }, (line) => logs.push(line))
+    expect(logs.length).toBe(1)
+    expect(logs[0]).toContain("[AUTH_CHALLENGE]")
+    expect(logs[0]).toContain("type=mfa")
+    expect(logs[0]).toContain("Test challenge")
+  })
 })

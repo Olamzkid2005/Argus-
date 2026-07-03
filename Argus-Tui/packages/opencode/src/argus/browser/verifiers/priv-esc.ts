@@ -1,7 +1,7 @@
 import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
 import { Confidence } from "../../shared/types"
-import { loginIfFormPresent, isAccessDenied } from "../login"
+import { loginIfFormPresent, isAccessDenied, detectAuthChallenge, logAuthChallenge } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
 import { tmpdir } from "os"
 import { join } from "path"
@@ -72,8 +72,20 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
     // Step 1: Baseline checks — each endpoint without auth
     // Step 2: Login once, then check all endpoints with session shared
     const page = await this.engine.navigate(this.targetUrl)
-    await loginIfFormPresent(page, this.lowPrivCreds)
-    if (this.lowPrivCreds.username) this.logs.push(`Logged in as low-priv user ${this.lowPrivCreds.username}`)
+    // Phase 3.4.2: Capture auth challenges during login
+    const loginSuccess = await loginIfFormPresent(page, this.lowPrivCreds, undefined, (challenge) => {
+      logAuthChallenge(challenge, (line) => this.logs.push(line))
+    })
+    if (loginSuccess) {
+      if (this.lowPrivCreds.username) this.logs.push(`Logged in as low-priv user ${this.lowPrivCreds.username}`)
+    } else {
+      const challenge = await detectAuthChallenge(page)
+      if (challenge) {
+        logAuthChallenge(challenge, (line) => this.logs.push(line))
+      } else {
+        this.logs.push(`Login may have failed for ${this.lowPrivCreds.username} — proceeding with unauthenticated checks`)
+      }
+    }
 
     for (const ep of this.highPrivEndpoints) {
       const endpointUrl = `${this.targetUrl.replace(/\/+$/, "")}/${ep.replace(/^\//, "")}`

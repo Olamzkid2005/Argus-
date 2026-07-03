@@ -1,7 +1,7 @@
 import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
 import { Confidence } from "../../shared/types"
-import { loginIfFormPresent, isAccessDenied } from "../login"
+import { loginIfFormPresent, isAccessDenied, detectAuthChallenge, logAuthChallenge } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
 import { randomUUID, createHash } from "crypto"
 import { tmpdir } from "os"
@@ -177,7 +177,18 @@ export class BOLAVerifier implements VerificationScenario {
       await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30000 })
       this.capturedRequests.push(`GET ${this.targetUrl} [${label} login]`)
 
-      await loginIfFormPresent(page, creds)
+      // Phase 3.4.2: Capture auth challenges during login
+      const loginSuccess = await loginIfFormPresent(page, creds, undefined, (challenge) => {
+        logAuthChallenge(challenge, (line) => this.logs.push(line))
+      })
+      if (!loginSuccess) {
+        const challenge = await detectAuthChallenge(page)
+        if (challenge) {
+          logAuthChallenge(challenge, (line) => this.logs.push(line))
+        } else {
+          this.logs.push(`Login may have failed for ${creds.username} — proceeding with resource check`)
+        }
+      }
 
       // Navigate directly to the resource page after login.
       // Do NOT re-navigate to targetUrl first — that would reload the login page
