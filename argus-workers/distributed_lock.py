@@ -36,6 +36,9 @@ class DistributedLock:
         self._redis_client = None
         self.worker_id = worker_id or str(uuid.uuid4())
         self.held_locks = {}  # engagement_id -> lock_key mapping
+        # Phase 4.5.2: Register in global lock registry for shutdown cleanup
+        with _worker_locks_lock:
+            _worker_locks[self.worker_id] = self
 
     @property
     def redis_client(self) -> redis.Redis:
@@ -322,6 +325,24 @@ class DistributedLock:
             else:
                 consecutive_failures = 0
                 interval = interval_seconds or self.HEARTBEAT_INTERVAL_SECONDS
+
+
+# ── Global lock registry (Phase 4.5.2) ──
+# Tracks all DistributedLock instances for shutdown cleanup.
+# Populated by DistributedLock.__init__, used by get_worker_locks().
+_worker_locks: dict[str, DistributedLock] = {}
+_worker_locks_lock = threading.Lock()
+
+
+def get_worker_locks() -> dict[str, DistributedLock]:
+    """Get the global registry of DistributedLock instances.
+
+    Phase 4.5.2: Used by shutdown_handler to release all locks before force-exit.
+    Returns:
+        A copy of the registry mapping worker_id to DistributedLock instances.
+    """
+    with _worker_locks_lock:
+        return dict(_worker_locks)
 
 
 class LockContext:

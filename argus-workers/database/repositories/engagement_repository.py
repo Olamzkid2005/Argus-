@@ -35,35 +35,51 @@ class EngagementRepository(BaseRepository):
         ):
             engagement_id = str(uuid.uuid4())
 
-            # Store extra fields (target_url, authorization_proof, etc.)
-            # in the metadata JSONB column to match the engagements schema.
+            # Phase 5.1.1: Use direct columns for target_url, authorization_proof,
+            # authorized_scope, created_by, scan_type. These columns now exist
+            # on the engagements table (migration 022). Fall back to metadata
+            # for backward compatibility with pre-migration data.
             metadata = dict(engagement_data.get("metadata", {}) or {})
-            if engagement_data.get("target_url"):
-                metadata["_target_url"] = engagement_data["target_url"]
-            if engagement_data.get("authorization_proof") or engagement_data.get("authorization"):
-                metadata["_authorization_proof"] = (
-                    engagement_data.get("authorization_proof")
-                    or engagement_data.get("authorization")
-                )
-            if engagement_data.get("authorized_scope"):
-                metadata["_authorized_scope"] = engagement_data["authorized_scope"]
-            if engagement_data.get("created_by"):
-                metadata["_created_by"] = engagement_data["created_by"]
+            target_url = engagement_data.get("target_url") or engagement_data.get("target", "")
+            authorization_proof = (
+                engagement_data.get("authorization_proof")
+                or engagement_data.get("authorization")
+            )
+            authorized_scope = engagement_data.get("authorized_scope")
+            created_by = engagement_data.get("created_by")
+            scan_type = engagement_data.get("scan_type", "url")
+
+            # Still store in metadata for backward compat with pre-migration code
+            if target_url and not metadata.get("_target_url"):
+                metadata["_target_url"] = target_url
+            if authorization_proof and not metadata.get("_authorization_proof"):
+                metadata["_authorization_proof"] = authorization_proof
+            if authorized_scope and not metadata.get("_authorized_scope"):
+                metadata["_authorized_scope"] = authorized_scope
+            if created_by and not metadata.get("_created_by"):
+                metadata["_created_by"] = created_by
 
             cursor.execute(
                 """
                 INSERT INTO engagements (
-                    id, org_id, target, status, metadata, created_at
+                    id, org_id, target, target_url, status, scan_type,
+                    authorization_proof, authorized_scope, created_by,
+                    metadata, created_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, NOW()
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
                 )
                 RETURNING *
                 """,
                 (
                     engagement_id,
                     engagement_data.get("org_id"),
-                    engagement_data.get("target_url") or engagement_data.get("target", ""),
+                    target_url,
+                    target_url,
                     engagement_data.get("status", "created"),
+                    scan_type,
+                    authorization_proof,
+                    authorized_scope,
+                    created_by,
                     Json(metadata),
                 ),
             )
