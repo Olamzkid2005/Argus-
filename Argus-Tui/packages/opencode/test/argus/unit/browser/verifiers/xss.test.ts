@@ -9,9 +9,10 @@ function makePage(overrides: Record<string, unknown> = {}) {
     close: async () => {},
     waitForLoadState: async () => {},
     waitForTimeout: async () => {},
-    locator: () => ({
+    locator: (sel: string) => ({
       all: async () => [],
       first: () => ({ isVisible: async () => false, click: async () => {}, fill: async () => {} }),
+      last: () => ({ isVisible: async () => false, click: async () => {}, fill: async () => {}, press: async () => {} }),
       isVisible: async () => false,
       fill: async () => {},
       innerText: async () => "",
@@ -58,8 +59,16 @@ function mockEngine() {
       return makePage({
         locator: (sel: string) => {
           if (sel === "form") return { all: async () => [makeFormLocator()] }
-          if (sel === "button[type=submit], input[type=submit]") return { first: () => ({ isVisible: async () => false }) }
-          return { all: async () => [] }
+          if (sel === "button[type=submit], input[type=submit], " +
+              "button:has-text('Submit'), button:has-text('Save'), " +
+              "button:has-text('Post'), button:has-text('Send'), " +
+              "button:has-text('Comment'), button:has-text('Reply')") {
+            return { first: () => ({ isVisible: async () => false }) }
+          }
+          if (sel === "button:visible, input[type=button]:visible") {
+            return { first: () => ({ isVisible: async () => false }) }
+          }
+          return { all: async () => [], first: () => ({ isVisible: async () => false }), last: () => ({ isVisible: async () => false }) }
         },
       })
     },

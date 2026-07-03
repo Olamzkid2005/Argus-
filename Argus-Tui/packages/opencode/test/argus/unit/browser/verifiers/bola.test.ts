@@ -5,10 +5,12 @@ function makePage(overrides = {}) {
   return {
     content: async () => "<html><body>Dashboard — Welcome user</body></html>",
     goto: async () => ({ status: () => 403 } as any),
-    locator: () => ({ innerText: async () => "Dashboard — Welcome user" }),
+    locator: (_sel: string) => ({ innerText: async () => "Dashboard — Welcome user", count: async () => 1 }),
     url: () => "https://example.com/api/resource/123",
     close: async () => {},
     waitForLoadState: async () => {},
+    textContent: async () => "",
+    evaluate: async () => null,
     ...overrides,
   }
 }

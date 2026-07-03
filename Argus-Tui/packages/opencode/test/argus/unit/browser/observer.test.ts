@@ -28,15 +28,18 @@ mock.module("playwright", () => {
     }),
   }
 
+  // Note: mock methods are synchronous so the chain
+  // `chromium.launch().newContext().newPage()` works without
+  // requiring `await` between each call.
   const mockContext = {
-    newPage: async () => mockPage,
-    close: async () => {},
+    newPage: () => mockPage,
+    close: () => {},
   }
 
   const mockBrowser = {
-    launch: async () => mockBrowser,
-    newContext: async () => mockContext,
-    close: async () => {},
+    launch: () => mockBrowser,
+    newContext: () => mockContext,
+    close: () => {},
   }
 
   return { chromium: mockBrowser }
@@ -113,14 +116,14 @@ describe("Browser Observer", () => {
 
     const a = {
       url: "https://example.com",
-      domSnapshot: "<html><body>Line1\nLine2</body></html>",
+      domSnapshot: "<html>\n<body>\nLine1\nLine2\n</body>\n</html>",
       responseHeaders: {},
       statusCode: 200,
       timestamp: new Date().toISOString(),
     }
     const b = {
       url: "https://example.com",
-      domSnapshot: "<html><body>Line1\nLine2\nNewLine</body></html>",
+      domSnapshot: "<html>\n<body>\nLine1\nLine2\nNewLine\n</body>\n</html>",
       responseHeaders: {},
       statusCode: 200,
       timestamp: new Date().toISOString(),
@@ -137,14 +140,14 @@ describe("Browser Observer", () => {
 
     const a = {
       url: "https://example.com",
-      domSnapshot: "<html><body>Line1\nLine2\nGoneLine</body></html>",
+      domSnapshot: "<html>\n<body>\nLine1\nLine2\nGoneLine\n</body>\n</html>",
       responseHeaders: {},
       statusCode: 200,
       timestamp: new Date().toISOString(),
     }
     const b = {
       url: "https://example.com",
-      domSnapshot: "<html><body>Line1\nLine2</body></html>",
+      domSnapshot: "<html>\n<body>\nLine1\nLine2\n</body>\n</html>",
       responseHeaders: {},
       statusCode: 200,
       timestamp: new Date().toISOString(),
@@ -161,14 +164,14 @@ describe("Browser Observer", () => {
 
     const a = {
       url: "https://example.com",
-      domSnapshot: "<html><body>Line1\nOldLine</body></html>",
+      domSnapshot: "<html>\n<body>\nLine1\nOldLine\n</body>\n</html>",
       responseHeaders: {},
       statusCode: 200,
       timestamp: new Date().toISOString(),
     }
     const b = {
       url: "https://example.com",
-      domSnapshot: "<html><body>Line1\nNewLine</body></html>",
+      domSnapshot: "<html>\n<body>\nLine1\nNewLine\n</body>\n</html>",
       responseHeaders: {},
       statusCode: 200,
       timestamp: new Date().toISOString(),

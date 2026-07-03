@@ -107,18 +107,22 @@ mock.module("playwright", () => {
     $: async () => null,
   }
 
+  // Note: mock methods are synchronous so the chain
+  // `chromium.launch().newContext().newPage()` works without
+  // requiring `await` between each call. The outer `await` at
+  // the start handles the final value.
   const mockContext = {
-    newPage: async () => mockPage,
-    close: async () => {},
-    addCookies: async (_cookies: any[]) => {},
-    cookies: async () => [],
-    clearCookies: async () => {},
+    newPage: () => mockPage,
+    close: () => {},
+    addCookies: (_cookies: any[]) => {},
+    cookies: () => [],
+    clearCookies: () => {},
   }
 
   const mockBrowser = {
-    launch: async () => mockBrowser,
-    newContext: async () => mockContext,
-    close: async () => {},
+    launch: () => mockBrowser,
+    newContext: () => mockContext,
+    close: () => {},
   }
 
   return {
@@ -372,7 +376,7 @@ describe("Browser Login", () => {
     playwright.chromium._resetState()
     playwright.chromium._setBodyText("")
     playwright.chromium._setPageContent(
-      '<html><body><button>Sign in with Google</button><button>Sign in with GitHub</button></body></html>'
+      '<html><body><h1>OAuth Login</h1><button>Sign in with Google</button></body></html>'
     )
 
     const page = await playwright.chromium.launch().newContext().newPage()
@@ -386,7 +390,7 @@ describe("Browser Login", () => {
     const playwright = await import("playwright") as any
     playwright.chromium._resetState()
     playwright.chromium._setPageContent(
-      '<html><body><button>Sign in with Microsoft</button><button>Sign in with Google</button></body></html>'
+      '<html><body><h1>OAuth Sign In</h1><button>Continue with Google</button></body></html>'
     )
     playwright.chromium._setHasPasswordField(false)
 

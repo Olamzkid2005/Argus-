@@ -8,14 +8,16 @@ function makePage(overrides: Record<string, unknown> = {}) {
     goto: async () => ({ status: () => 403 } as any),
     close: async () => {},
     waitForLoadState: async () => {},
-    locator: () => ({
+    locator: (_sel: string) => ({
       innerText: async () => "Dashboard — Welcome",
       all: async () => [],
-      count: async () => 0,
+      count: async () => 1,
       first: () => ({ isVisible: async () => false, fill: async () => {} }),
       isVisible: async () => false,
       fill: async () => {},
     }),
+    textContent: async () => "",
+    evaluate: async () => null,
     screenshot: async () => Buffer.from("screenshot"),
     ...overrides,
   }

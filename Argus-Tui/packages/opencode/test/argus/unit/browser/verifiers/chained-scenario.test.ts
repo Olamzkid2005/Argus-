@@ -219,7 +219,7 @@ describe("ChainedScenario", () => {
     expect(pkg.artifacts).toHaveLength(2)
     expect(pkg.artifacts[0].path).toBe("first/a.txt")
     expect(pkg.artifacts[1].path).toBe("second/b.txt")
-    expect(pkg.packageHash).toBe("")
+    expect(pkg.packageHash).toHaveLength(64) // SHA-256 hex hash from stage evidence
   })
 
   it("collectEvidence() skips stages that throw", async () => {

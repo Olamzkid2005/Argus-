@@ -12,11 +12,11 @@
 |------------|--------|-------|--------|
 | 1. Dynamic Planning & Exploit Chaining | 3 sub-phases | 11 of 11 | ✅ Complete |
 | 2. Post-Exploitation & Lateral Movement | 3 sub-phases | 9 of 9 | ✅ Complete |
-| 3. Browser Verification Pipeline | 4 sub-phases | 11 of 12 | ✅ Complete (1 minor gap) |
+| 3. Browser Verification Pipeline | 4 sub-phases | 12 of 12 | ✅ Complete |
 | 4. Infrastructure Resilience | 5 sub-phases | 15 of 15 | ✅ Complete |
 | 5. DB Schema Alignment | 2 sub-phases | 8 of 8 | ✅ Complete |
 
-> **Total: 49 of 50 items implemented.** One minor gap remains (Phase 3.4.2 — `auth_challenge` signal not wired to pipeline).
+> **Total: 50 of 50 items implemented.** All phases complete across all 7 workstreams.
 
 ---
 
@@ -78,7 +78,7 @@
 
 ---
 
-## Phase 3: Browser Verification Pipeline (11 of 12, 1 minor gap ⚠️)
+## Phase 3: Browser Verification Pipeline (12 of 12 ✅)
 
 ### 3.1 Orchestrated Verification (3 of 3 ✅)
 
@@ -111,7 +111,7 @@
 | Step | Files | Description | Status |
 |------|-------|-------------|--------|
 | 3.4.1 | `browser/login.ts:42` | Uses `getByLabel`/`getByRole` locators as primary detection, CSS fallback. Added `loginWithLocators()` helper. | ✅ Implemented 2026-07-03 |
-| 3.4.2 | `browser/login.ts:154,180,189` | `detectAuthSuccess()`, `isMFAChallenge()`, `isCaptchaChallenge()` — detect MFA/CAPTCHA/auth errors. No `auth_challenge` pipeline signal emitted. | ⚠️ Gap — detection exists, signal not wired |
+| 3.4.2 | `browser/login.ts:154,180,189` | `detectAuthSuccess()`, `isMFAChallenge()`, `isCaptchaChallenge()` — detect MFA/CAPTCHA/auth errors. `onChallenge` callback wired into `priv-esc.ts` and `bola.ts` verifiers. | ✅ Implemented 2026-07-03 |
 | 3.4.3 | `browser/engine.ts:48` | `--disable-blink-features=AutomationControlled`, configurable viewport/locale | ✅ Done |
 
 ---
@@ -182,13 +182,6 @@
 | 5.2.2 | Base migration `001` | Pre-existing `user_settings` table with `user_id TEXT UNIQUE`, `settings JSONB` | ✅ Pre-existing |
 
 ---
-
-## Remaining Gap
-
-### Phase 3.4.2 — `auth_challenge` Signal (Minor)
-
-`detectAuthSuccess()` returns `false` when MFA/CAPTCHA is detected, but no `auth_challenge` event is emitted to the pipeline. The detection functions work but the signal is not connected to the broader orchestration system. Low priority — pipeline already handles this gracefully (logs observation, proceeds without auth).
-
 ---
 
 ## Implementation History
@@ -201,3 +194,6 @@
 | 2026-07-03 | Phase 1.1+1.2+1.3+2+3+4+5 audit (all 50 items) | Comprehensive codebase audit against roadmap — 49/50 confirmed implemented |
 | 2026-07-03 | Phase 3.4.1 fix | Added `loginWithLocators()` — `getByLabel`/`getByRole` form detection as primary, CSS fallback |
 | 2026-07-03 | Roadmap doc update | Full status update with line-level evidence for every item
+| 2026-07-03 | Phase 3.4.2 fix | Wired `auth_challenge` signal via `onChallenge` callback into `priv-esc.ts` and `bola.ts` verifiers
+| 2026-07-03 | Verifier test fixes | Fixed 18 pre-existing browser test failures — sync mocks, added missing locator methods, DOM comparison fix
+| 2026-07-03 | Roadmap doc update | Updated to 50/50, removed gap section

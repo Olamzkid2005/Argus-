@@ -369,7 +369,7 @@ export function isMFAChallenge(bodyText: string): boolean {
  */
 export function isCaptchaChallenge(bodyText: string): boolean {
   const lower = bodyText.toLowerCase()
-  return /\bcaptcha\b|\brecaptcha\b|\bhcaptcha\b|\bturnstile\b|\bim not a robot\b/i.test(lower)
+  return /\bcaptcha\b|\brecaptcha\b|\bhcaptcha\b|\bturnstile\b|\b(?:i'?m|i am) not a robot\b/i.test(lower)
 }
 
 export function isAccessDenied(bodyText: string): boolean {
