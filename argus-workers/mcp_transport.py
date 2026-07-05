@@ -23,6 +23,8 @@ Security:
 
 import json
 import logging
+import os
+import select
 import sys
 import time as _time
 import traceback
@@ -49,6 +51,24 @@ _SKIP_LINE: dict = {}
 
 
 class MCPTransport:
+    # Heartbeat timeout: if no data arrives from stdin within this window,
+    # assume the parent process died and shut down gracefully (blocker 62).
+    # Configurable via ARGUS_MCP_HEARTBEAT_TIMEOUT_SECS env var.
+    # Set to 0 to disable heartbeat detection.
+    _HEARTBEAT_FALLBACK_TIMEOUT_SECS = 60
+
+    @staticmethod
+    def _get_heartbeat_timeout() -> int:
+        """Get the heartbeat timeout in seconds, 0 = disabled."""
+        raw = os.environ.get("ARGUS_MCP_HEARTBEAT_TIMEOUT_SECS", "")
+        if raw == "":
+            return MCPTransport._HEARTBEAT_FALLBACK_TIMEOUT_SECS
+        try:
+            val = int(raw)
+            return val if val >= 0 else MCPTransport._HEARTBEAT_FALLBACK_TIMEOUT_SECS
+        except (ValueError, TypeError):
+            return MCPTransport._HEARTBEAT_FALLBACK_TIMEOUT_SECS
+
     def __init__(self):
         self.handlers: dict[str, Callable] = {}
         self._running = False
@@ -57,8 +77,38 @@ class MCPTransport:
     def register(self, method: str, handler: Callable):
         self.handlers[method] = handler
 
+    def _wait_for_stdin(self) -> bool:
+        """Wait for data on stdin with the heartbeat timeout.
+
+        Uses select.select() which is portable across Unix platforms.
+        Returns True if data is available, False if timeout expired
+        (parent process likely dead).
+
+        When heartbeat is disabled (timeout=0), returns True immediately
+        so the caller proceeds to the blocking readline(). Catches and
+        logs select() errors so a transient FD issue doesn't kill the worker.
+        """
+        timeout = self._get_heartbeat_timeout()
+        if timeout == 0:
+            return True  # heartbeat disabled
+
+        try:
+            readable, _, _ = select.select([sys.stdin], [], [], timeout)
+            return len(readable) > 0
+        except (ValueError, TypeError, OSError) as exc:
+            logger.warning(
+                "Heartbeat select() failed on stdin — proceeding to readline: %s",
+                exc,
+            )
+            return True
+
     def _read_request(self) -> dict | None:
         """Read and parse one JSON-RPC request from stdin.
+
+        Before blocking on readline(), checks the stdin heartbeat
+        (blocker 62) with a configurable timeout. If no data arrives
+        within the window, assumes the parent process died and signals
+        graceful shutdown.
 
         Enforces a 10 MB max message size. Lines exceeding this limit are
         logged as errors and skipped — the transport continues to the next
@@ -66,9 +116,22 @@ class MCPTransport:
 
         Returns:
             dict: Parsed request on success.
-            None: EOF (stdin closed) — caller should exit the run loop.
+            None: EOF (stdin closed) or heartbeat timeout — caller should exit.
             _SKIP_LINE: Malformed JSON or oversized — caller should continue.
         """
+        # Check stdin heartbeat before blocking on readline (blocker 62).
+        # If the parent process has stopped sending data, we shut down
+        # gracefully instead of hanging forever.
+        if not self._wait_for_stdin():
+            timeout = self._get_heartbeat_timeout()
+            logger.warning(
+                "Stdin heartbeat timed out after %ds — no requests received. "
+                "Assuming parent process died, shutting down.",
+                timeout,
+            )
+            self.stop()
+            return None
+
         line = sys.stdin.readline()
         if not line:
             return None

@@ -1473,6 +1473,15 @@ def main():
 
     transport.register("cancel", handle_cancel)
 
+    # ── Phase 5.1: Start health/metrics HTTP server (blocker 57) ──
+    # Runs on a daemon thread so it doesn't block stdio transport shutdown.
+    # Configurable via ARGUS_METRICS_PORT (default 9090) and
+    # ARGUS_METRICS_HOST (default 127.0.0.1).
+    # Set ARGUS_METRICS_PORT=0 or empty to disable.
+    from health_server import start_health_server_from_env
+
+    start_health_server_from_env()
+
     logger.info("MCP stdio transport starting")
     transport.run()
 

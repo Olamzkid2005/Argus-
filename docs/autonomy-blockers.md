@@ -100,29 +100,29 @@ Default remains 10s for backward compatibility. Set `ARGUS_MCP_READY_TIMEOUT_MS=
 - **What changed:** `waitForReady()` (line 296) reads `ARGUS_MCP_READY_TIMEOUT_MS` with fallback to the original 10000ms default.
 </details>
 
-### 15. No MCP Worker Health Probe During Assessment 🟡 PARTIAL FIX
+### 15. No MCP Worker Health Probe During Assessment ✅ FIXED
 
-**`Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts`** — `probeHealth()` method was added (line 305) but nothing calls it periodically during an assessment. The worker's health is still checked reactively (on the next `callTool()` request).
+**`Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts:81-83,174,337-354`** — `_startHealthProbes()` is called from `connect()` when the assessment starts. It runs a 30s `setInterval` that calls `probeHealth()` and initiates worker restart when unresponsive. The timer uses `.unref()` so it doesn't keep the process alive on shutdown.
 
 <details>
 <summary>Fix details</summary>
 
 - **File:** `Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts`
-- **What changed:** Added `probeHealth(): Promise<boolean>` method (line 305) that wraps `isHealthy()` in try/catch.
-- **Missing:** Periodic 30s health probe interval during assessment execution.
+- **What changed:** `connect()` calls `this._startHealthProbes()` (line 174). The probe runs every `HEALTH_PROBE_INTERVAL_MS` (30s), logs a warning on failure, sets LLM status to UNAVAILABLE, and triggers worker restart.
+- **Verified:** Wired into assessment lifecycle — `connect()` is called in `workflow-runner.ts` before phase execution.
 </details>
 
-### 16. Phase Complete LLM Feedback Silently Degrades 🟡 PARTIAL FIX
+### 16. Phase Complete LLM Feedback Silently Degrades ✅ FIXED
 
-**`argus-workers/mcp_server.py:1034-1075`** — The `_fallback_phase_complete()` method now returns a `fallback: True` flag (line ~1070) to signal degraded mode.
-
-However, the TypeScript side (`workflow-runner.ts:660-677`) never checks for the `fallback` flag in the response. The degradation signal is emitted but not acted upon.
+**`Argus-Tui/packages/opencode/src/argus/workflow-runner.ts:679-683`** — `phaseCompleteResult.fallback` is checked after each phase completes. When the LLM is unavailable on the Python side, `fallback: True` is returned, and the workflow-runner emits a visible warning and appends an audit log entry.
 
 <details>
 <summary>Fix details</summary>
 
-- **File:** `argus-workers/mcp_server.py` — `_fallback_phase_complete()` now returns `"fallback": True` in its response dict.
-- **Missing:** The workflow-runner's `phaseCompleteResult` handling doesn't check for `fallback` and therefore doesn't adjust executor behavior.
+- **File (TS):** `Argus-Tui/packages/opencode/src/argus/workflow-runner.ts`
+- **What changed:** Added `if (phaseCompleteResult.fallback)` check (line 679) that emits `⚠ LLM unavailable for phase analysis — using fallback phase progression` and logs to the audit trail.
+- **File (Python):** `argus-workers/mcp_server.py` — `_fallback_phase_complete()` returns `"fallback": True`.
+- **Verified:** The flag is consumed immediately after the `phaseComplete()` call in the assessment loop.
 </details>
 
 ### 17. Structured Findings From MCP Path Are Lost ✅ FIXED
@@ -270,18 +270,17 @@ Each phase now has a configurable deadline (default 30 min). The deadline is che
 
 **`argus-workers/orchestrator_pkg/recon.py:274`, `scan.py:868`, `swarm.py:630`, `attack_surface_mapper.py:49`** — Multiple ThreadPoolExecutors still unbounded.
 
-### 38. No Cancellation Propagation From TypeScript To Python Agent 🟡 PARTIAL FIX
+### 38. No Cancellation Propagation From TypeScript To Python Agent ✅ FIXED
 
-**`Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts:612-614`, `argus-workers/mcp_server.py:1368-1412`** — Cancel RPC handler exists but `AgentSessionStore` doesn't implement a `cancel()` method.
-
-The `cancelAgent()` method on the TypeScript side sends an `"cancel"` RPC request. The Python `handle_cancel` handler (line 1368) checks for `server.session_store.cancel()` — which doesn't exist on `AgentSessionStore` — then falls through to try direct session manipulation. This means cancellation works for dict-like sessions but not for the default class-based sessions.
+**`argus-workers/agent/session_store.py:305-318`, `argus-workers/mcp_server.py:1368-1412`** — `AgentSessionStore.cancel()` exists and sets `_cancelled` on the session under lock. `handle_agent_next()` and `handle_agent_observe()` both check `hasattr(session, '_cancelled')` and return `done=True` immediately if set.
 
 <details>
 <summary>Fix details</summary>
 
-- **File (TS):** `Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts` — `cancelAgent()` method added (line 612).
-- **File (Python):** `argus-workers/mcp_server.py` — `handle_cancel` registered (line 1412).
-- **Missing:** `AgentSessionStore.cancel()` method not yet implemented.
+- **File:** `argus-workers/agent/session_store.py` — `cancel(session_id)` method (line 305) sets `session._cancelled = True` under lock. Returns `False` if session not found (no-op).
+- **File:** `argus-workers/mcp_server.py` — `handle_cancel` calls `server.session_store.cancel(session_id)`. `handle_agent_next()` (line ~937) and `handle_agent_observe()` (line ~1017) check `hasattr(session, '_cancelled')` and short-circuit.
+- **File (TS):** `Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts` — `cancelAgent()` sends `"cancel"` RPC.
+- **Verified:** Full propagation chain: TS → RPC → cancel() → _cancelled flag → agent loop termination.
 </details>
 
 ### 39. MCP Transport Has No Message Size Limit ✅ FIXED
@@ -308,18 +307,17 @@ The negative PID sends the signal to the entire process group, ensuring grandchi
 - **What changed:** `killChild()` (lines 121-139) now sends `SIGTERM` to the process group (`-proc.pid`) followed by `SIGKILL` after 3s timeout.
 </details>
 
-### 41. SQLite Finalizer May Never Run 🟡 PARTIAL FIX
+### 41. SQLite Finalizer May Never Run ✅ FIXED
 
-**`Argus-Tui/packages/opencode/src/argus/engagement/store.ts:708-720`** — `registerExitHandler()` method exists but is never called.
-
-The method registers `process.on("exit")`, `SIGINT`, and `SIGTERM` handlers that call `this.close()`. However, nothing in the assessment lifecycle calls `registerExitHandler()` — it's dead code unless explicitly invoked by a caller.
+**`Argus-Tui/packages/opencode/src/argus/workflow-runner.ts:423`** — `store.registerExitHandler()` is called immediately after `new EngagementStore()` at the start of every assessment run. FinalizationRegistry also provides best-effort cleanup via GC.
 
 <details>
 <summary>Fix details</summary>
 
-- **File:** `Argus-Tui/packages/opencode/src/argus/engagement/store.ts`
-- **What changed:** Added `registerExitHandler()` method (line 708).
-- **Missing:** No caller invokes it. The `WorkflowRunner` or CLI entry point should call `store.registerExitHandler()` after construction.
+- **File:** `Argus-Tui/packages/opencode/src/argus/workflow-runner.ts`
+- **What changed:** Added `store.registerExitHandler()` at line 423, right after store construction.
+- **File:** `Argus-Tui/packages/opencode/src/argus/engagement/store.ts` — `registerExitHandler()` registers `process.on("exit")`, `SIGINT`, `SIGTERM` handlers that call `this.close()`.
+- **Verified:** Called at the top of `run()`, so it's active for the entire assessment lifecycle.
 </details>
 
 ### 42. Evidence Pruning Failures Silently Ignored ✅ FIXED
@@ -399,9 +397,23 @@ Each individual LLM analysis now has a `Promise.race` with a 60-second timeout. 
 - **What changed:** Changed `LLM_MODEL` to `LLM_AGENT_MODEL` in the example and added documentation for `ARGUS_AUTO_ANSWER`, `ARGUS_AUTONOMOUS`, and `ARGUS_AUTO_APPROVE` env vars.
 </details>
 
-### 57. No Metrics or Health Endpoint Exposed By Workers ❌ NOT FIXED
+### 57. No Metrics or Health Endpoint Exposed By Workers ✅ FIXED
 
-**`argus-workers/`** — No HTTP metrics endpoint exists.
+**`argus-workers/health_server.py`**, **`argus-workers/mcp_server.py`** — New `health_server.py` module with two HTTP endpoints:
+- `GET /health` — liveness check: status, uptime, LLM availability, tool counts, active sessions
+- `GET /metrics` — detailed metrics: per-tool stats, aggregate success rates, connection pool state, system info
+
+<details>
+<summary>Fix details</summary>
+
+- **File:** `argus-workers/health_server.py` (new)
+- **What changed:** Added lightweight HTTP server using Python's built-in `socketserver.ThreadingHTTPServer`. Two endpoints:
+  - `/health` — returns 200/503 with status, uptime, LLM availability, tool totals, session count
+  - `/metrics` — returns detailed JSON with per-tool execution stats, aggregate success rates, connection pool metrics (best-effort), and system info
+- **File:** `argus-workers/mcp_server.py` — `main()` now calls `start_health_server_from_env()` before `transport.run()`
+- **Config:** `ARGUS_METRICS_PORT` (default 9090), `ARGUS_METRICS_HOST` (default 127.0.0.1). Set port to empty or 0 to disable.
+- **Safety:** Runs on a daemon thread. Uses public `get_tools()` API. Port clamped to 1-65535.
+</details>
 
 ### 58. Governance Uses Wall Clock, Not Active Time ✅ FIXED
 
@@ -445,9 +457,18 @@ Stale connections (idle for hours, network middleboxes, `idle_in_transaction_ses
 - **What changed:** Added `pruneEngagement()` call in the `finally` block (lines 717–727) after assessment completes. Logs the number of pruned files.
 </details>
 
-### 62. MCP Transport Has No Stdin Heartbeat ❌ NOT FIXED
+### 62. MCP Transport Has No Stdin Heartbeat ✅ FIXED
 
-**`argus-workers/mcp_transport.py`** — No stdin timeout or health check for parent process death.
+**`argus-workers/mcp_transport.py:109-132,134-171`** — Added `_wait_for_stdin()` method using `select.select()` with a configurable timeout. When no data arrives within the window, the worker logs a warning and shuts down gracefully via `self.stop()`.
+
+<details>
+<summary>Fix details</summary>
+
+- **File:** `argus-workers/mcp_transport.py`
+- **What changed:** Added `_wait_for_stdin()` method that uses `select.select([sys.stdin], [], [], timeout)` before the blocking `readline()` call. On timeout, logs "Stdin heartbeat timed out after Ns" and calls `self.stop()`.
+- **Config:** `ARGUS_MCP_HEARTBEAT_TIMEOUT_SECS` env var (default 60s). Set to 0 to disable.
+- **Safety:** Catches `(ValueError, TypeError, OSError)` from select() and falls back to proceeding with readline, so a transient FD issue doesn't kill the worker.
+</details>
 
 ### 63. NET_RAW Capability + no-new-privileges Is an Undocumented Security Profile ❌ NOT FIXED (design)
 
@@ -562,14 +583,14 @@ See blocker 43 above.
 | Category | Total | ✅ Fixed | 🟡 Partial | ❌ Unfixed |
 |---|---|---|---|---|
 | P0 — Deadlocks/Stops | 5 | 5 | 0 | 0 |
-| P1 — Reliability | 5 | 4 | 1 | 0 |
-| P2 — Robustness | 6 | 5 | 1 | 0 |
-| P3 — Config/Polish | 5 | 4 | 1 | 0 |
-| P4 — Edge Cases | 5 | 3 | 2 | 0 |
-| Other blockers | 40+ | 17 | 3 | ~6 code-fixable + ~18 operational |
-| **Total** | **66** | **38** | **8** | **~20** |
+| P1 — Reliability | 5 | 5 | 0 | 0 |
+| P2 — Robustness | 6 | 6 | 0 | 0 |
+| P3 — Config/Polish | 5 | 5 | 0 | 0 |
+| P4 — Edge Cases | 5 | 5 | 0 | 0 |
+| Other blockers | 40+ | 18 | 1 | ~6 code-fixable + ~16 operational |
+| **Total** | **66** | **44** | **1** | **~21** |
 
-**Net change:** 16 additional blockers resolved since last audit — 38 total fixed (up from 22), 8 partial (up from 5), ~20 unfixed (down from ~39).
+**Net change:** #57 (health/metrics endpoint) implemented. 44 total fixed, 1 partial (#49), ~21 unfixed.
 
 ### What Must Be True for Autonomous Mode (Updated)
 
@@ -600,8 +621,8 @@ See blocker 43 above.
 | PostgreSQL/Redis | hard fail | No | ❌ Must run infra |
 | **Silent config fallback** | **silent skip** | **No** | **✅ Fail hard in autonomous** |
 | **MCP worker ready timeout** | **hard fail** | **Yes** (`ARGUS_MCP_READY_TIMEOUT_MS`) | **✅ Fixed** |
-| **No health probe** | **silent skip** | **No** | **🟡 Method exists, not wired** |
-| **LLM feedback degrades silently** | **silent skip** | **No** | **🟡 Fallback flag emitted, not consumed** |
+| **No health probe** | **silent skip** | **No** | **✅ 30s interval wired in connect()** |
+| **LLM feedback degrades silently** | **silent skip** | **No** | **✅ Flag consumed, warns + audit log** |
 | **Structured findings lost** | **silent skip** | **No** | **✅ Fixed** |
 | **Phase drop with zero tools** | **silent skip** | **No** | **✅ Fixed** |
 | **Runaway hybrid loop** | **deadlock** | **Yes** (env vars) | **✅ Per-phase + global breakers** |
@@ -615,67 +636,82 @@ See blocker 43 above.
 
 ### Action Items (Updated)
 
-#### ✅ Completed Fixes (22 blockers)
+#### ✅ Completed Fixes (28 blockers)
 
 | # | Blocker | Fix |
 |---|---|---|
 | 1 | Question tool hang | `ARGUS_AUTO_ANSWER` env var |
 | 2 | Destructive gate auto-skip | `ARGUS_AUTO_APPROVE` now applies in non-TTY |
 | 5 | Non-TTY destructive skip | Same as #2 |
+| 6 | Circuit breaker fallback | `findFallbackTool()` in executor.ts |
+| 7 | Degraded cache staleness | Hit-count tracking + stale warning |
 | 13 | Config silent fallback | Fails hard in autonomous mode |
 | 14 | MCP ready timeout | Configurable via `ARGUS_MCP_READY_TIMEOUT_MS` |
+| 15 | Health probes | 30s interval wired in `connect()` |
+| 16 | LLM feedback flag | Consumed in workflow-runner, warns + audit log |
 | 17 | Structured findings lost | Consumed `data.structured` in executor |
+| 18 | Attack graph logging | Skipped finding count reported |
 | 19 | Zero-tools phase | Throws error in autonomous mode |
 | 20 | Runaway hybrid loop | Per-phase + global max-duration circuit breakers |
+| 21 | try/catch masking | 4 silent catches now log errors |
+| 22 | Circuit breaker defaults | Relaxed to 8 failures / 120s cooldown |
 | 23 | Lock skip | Fails hard in autonomous mode |
 | 24 | DB resource leak | 3x retry with exponential backoff |
+| 25 | Exit code sync | Cross-reference comment added |
+| 28 | Credential guard | Hard block in autonomous mode |
 | 29 | Unbounded LLM cost | Cost guard applies in all modes |
 | 30 | History truncation loss | Warning logged on truncation |
+| 31 | LLM fallback silence | Warning logged with recon_context guard |
+| 32 | Max iterations mismatch | TS passes max_iterations to Python |
+| 33 | Thread pool cleanup | `cancel_futures=True` on shutdown |
 | 34 | Destructive gate bypass | Same as #2 |
 | 35 | Per-phase timeout | `ARGUS_MAX_PHASE_DURATION_MS` |
+| 38 | Cancel propagation | `AgentSessionStore.cancel()` + agent loop check |
 | 39 | Message size limit | 10MB input / 50MB output |
 | 40 | Orphaned processes | Process group kill |
+| 41 | SQLite finalizer | `registerExitHandler()` called in workflow-runner |
+| 42 | Evidence prune silence | catch→warn in collector.ts |
 | 43 | Report LLM timeout | 60s hard timeout per analysis |
+| 44 | Cross-tool rate limiting | `CrossToolRateLimiter` sliding window |
+| 45 | Self-throttling 429/503 | `ThrottleTracker` expo backoff |
+| 47 | DB connection recovery | Pool reinit on exhaustion |
+| 48 | Token budget estimates | Actual token counts accepted |
+| 49 | Truncation coordination | Shared constant + cross-ref comments |
+| 50 | Iteration mismatch | TS passes max_iterations to Python |
 | 52 | atexit cleanup | Registered for DB pool |
+| 54 | TOCTOU semaphore | Lua script for atomic acquire |
+| 55 | LLM prefix validation | Known prefixes + unknown-key warning |
 | 56 | Env var name mismatch | `.env.example` updated |
+| 57 | Health/metrics endpoint | HTTP server on daemon thread, port 9090 |
+| 58 | Active time tracking | `start/stop_active_timer()` in governance |
 | 59 | Config schema validation | Unknown key warnings |
 | 60 | Connection pool validation | SELECT 1 ping |
 | 61 | Evidence prune never called | Auto-prune at assessment end |
+| 62 | Stdin heartbeat | `select.select()` with configurable timeout |
+| 64 | Threshold race | Aligned `zero_finding_stop` > `low_signal_threshold` |
 | 66 | Orphaned config key | `backoff_multiplier` removed |
 
-#### 🟡 Partial Fixes (5 blockers)
+#### 🟡 Partial Fixes (1 blocker)
 
 | # | Blocker | What's Done | What's Missing |
 |---|---|---|---|
-| 15 | Health probes | `probeHealth()` method exists | Nothing calls it periodically during assessment |
-| 16 | LLM feedback degradation | `fallback: True` flag emitted | TypeScript executor doesn't consume the flag |
-| 38 | Cancel propagation | Cancel RPC handler registered | `AgentSessionStore.cancel()` method not implemented |
-| 41 | SQLite finalizer | `registerExitHandler()` method exists | No caller invokes it |
 | 49 | State truncation coordination | Warnings added at both layers | No coordination mechanism between layers |
 
-#### ❌ Top Code-Fixable Remaining (15 blockers — 13 fixed, 2 architectural)
+#### ❌ Remaining Unfixed
 
-| # | Blocker | Fix Status |
-|---|---|---|
-| 6 | Circuit breaker fallback tools | ✅ Fixed — `findFallbackTool()` in executor.ts |
-| 7 | Degraded mode cache staleness | ✅ Fixed — hit-count + stale warning |
-| 18 | Attack graph invalid findings | ✅ Fixed — skipped count logged |
-| 21 | Best-effort try/catch masking | ✅ Fixed — 4 silent catches now log |
-| 22 | Circuit breaker defaults | ✅ Fixed — 8 failures / 120s cooldown |
-| 25 | Semgrep/bandit exit code sync | ✅ Fixed — cross-reference comment added |
-| 28 | Startup credential guard | ✅ Fixed — hard block in autonomous mode |
-| 31 | LLM→deterministic fallback silence | ✅ Fixed — warning logged with recon_context guard |
-| 32 | Max iterations mismatch | ✅ Fixed — TS passes max_iterations to Python |
-| 33 | Auth checkpoint thread leak | ✅ Fixed — cancel_futures=True on shutdown |
-| 36 | scope.mode warn | ❌ Config design choice |
-| 42 | Evidence prune failure silence | ✅ Fixed — catch blocks log messages |
-| 44 | Cross-tool rate limiting | ✅ Fixed — CrossToolRateLimiter sliding window |
-| 45 | Self-throttling 429/503 | ✅ Fixed — ThrottleTracker expo backoff |
-| 47 | DB connection loss recovery | ✅ Fixed — pool reinitialization on exhaustion |
-| 48 | Governance token budget estimates | ✅ Fixed — actual token counts accepted |
-| 54 | Distributed semaphore TOCTOU | ✅ Fixed — Lua script for atomic acquire |
-| 55 | LLM provider auto-detect | ✅ Fixed — prefix validation + unknown-key warning |
-| 57 | Metrics/health endpoint | ❌ Architectural — requires HTTP listener |
-| 58 | Active time tracking | ✅ Fixed — start/stop_active_timer() in governance |
-| 62 | MCP transport stdin heartbeat | ❌ Architectural — requires transport changes |
-| 64 | low_signal vs zero_finding race | ✅ Fixed — aligned thresholds with cross-ref comments |
+| # | Blocker | Category | Reason |
+|---|---|---|---|
+| 4 | ~60 external binaries | Operational | Must be installed manually |
+| 8 | LLM API key | Operational | Must be set in `.env` |
+| 9 | Browser MFA/CAPTCHA | Inherent | Cannot be automated |
+| 10 | Sensitive env vars stripped | By design | Security feature |
+| 11 | Credential store | Operational | `credentials.json` manual setup |
+| 12 | PostgreSQL + Redis | Infrastructure | Must be running |
+| 26 | Bun runtime | Inherent | `bun:sqlite` — no Node polyfill |
+| 27 | Playwright browsers | Operational | `npx playwright install` |
+| 36 | `scope.mode: warn` | Config | Design safety default |
+| 37 | Unbounded ThreadPoolExecutor | Code-fixable | Multiple files need fixing |
+| 46 | Docker health checks | Infrastructure | Add to docker-compose.yml |
+| 53 | Host network mode | Design | Required for nmap SYN scans |
+| 63 | NET_RAW capability | Design | Intentional security profile |
+| 65 | Git SSRF allowlist | Code-fixable | Silent catch in `from_config()` |

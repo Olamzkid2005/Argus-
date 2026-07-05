@@ -4,8 +4,11 @@ B.12: Refactored from flat module-level constants into grouped dataclasses
 for discoverability, type safety, and IDE autocompletion.
 """
 
+import logging
 import os
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────
@@ -155,6 +158,12 @@ class GitSSRFConfig:
             merged = tuple(sorted(set(base.host_allowlist) | set(extra_hosts)))
             return cls(host_allowlist=merged)
         except (ImportError, RuntimeError):
+            logger.warning(
+                "GitSSRFConfig.from_config(): ConfigManager unavailable — "
+                "using default host allowlist. Set ARGUS_ALLOWED_GIT_HOSTS or "
+                "configure security.git_host_policy in argus.config.yaml "
+                "to customize allowed git hosts."
+            )
             return cls()
 
 
@@ -226,7 +235,13 @@ class CircuitBreakerConfig:
                 cooldown_seconds=int(cooldown),
             )
         except (ImportError, RuntimeError, ValueError):
-            # If the config_manager isn't set up, fall through to defaults
+            logger.warning(
+                "CircuitBreakerConfig.from_config(): ConfigManager unavailable — "
+                "using default circuit breaker settings (threshold=%d, cooldown=%ds). "
+                "Configure tools.circuit_breaker in argus.config.yaml to customize.",
+                cls.failure_threshold,
+                cls.cooldown_seconds,
+            )
             return cls()
 
 
