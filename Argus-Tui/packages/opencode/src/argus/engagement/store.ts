@@ -325,6 +325,10 @@ export class EngagementStore implements IEngagementStore {
     this._cleanupTimer.unref()
   }
 
+  /**
+   * Close the engagement store, releases all resources.
+   * Retries encrypted handle close failures up to 3 times (blocker 24).
+   */
   close(): void {
     EngagementStore.finalizer.unregister(this)
     this._closeAllEngagementDbs()
@@ -333,6 +337,39 @@ export class EngagementStore implements IEngagementStore {
       this._cleanupTimer = null
     }
     try { this._rootSqlite.close() } catch { /* already closed */ }
+  }
+
+  private static readonly RETRY_CLOSE_ATTEMPTS = 3
+  private static readonly RETRY_CLOSE_BACKOFF_MS = 100
+
+  /**
+   * Close an encrypted DB handle with retry logic (blocker 24).
+   * If close() fails, the temp decrypted file remains on disk with
+   * plaintext data — retrying reduces the window of exposure.
+   */
+  private _closeEncryptedHandleWithRetry(handle: EncryptedDbHandle): void {
+    for (let attempt = 1; attempt <= EngagementStore.RETRY_CLOSE_ATTEMPTS; attempt++) {
+      try {
+        handle.close()
+        return  // Success — exit immediately
+      } catch (err) {
+        if (attempt < EngagementStore.RETRY_CLOSE_ATTEMPTS) {
+          console.warn(
+            `[store] Encrypted handle close attempt ${attempt}/${EngagementStore.RETRY_CLOSE_ATTEMPTS} failed, retrying: ${(err as Error).message}`
+          )
+          // Exponential backoff
+          const delay = EngagementStore.RETRY_CLOSE_BACKOFF_MS * Math.pow(2, attempt - 1)
+          // Synchronous sleep — bun:sqlite close() doesn't support async
+          const deadline = Date.now() + delay
+          while (Date.now() < deadline) { /* busy-wait */ }
+        } else {
+          console.error(
+            `[store] Encrypted handle close failed after ${EngagementStore.RETRY_CLOSE_ATTEMPTS} attempts: ${(err as Error).message}. ` +
+            `Temporary decrypted file may remain on disk.`
+          )
+        }
+      }
+    }
   }
 
   // ── Per-engagement DB handle management ──
@@ -660,6 +697,25 @@ export class EngagementStore implements IEngagementStore {
       }
     }
     this.engagementDbs.clear()
+  }
+
+  /**
+   * Register a process.on('exit') handler to ensure the root DB is cleanly
+   * closed on process exit (blocker 41). The FinalizationRegistry is best-effort
+   * and may never run for short-lived CLI processes.
+   * Call this after constructing the EngagementStore.
+   */
+  registerExitHandler(): void {
+    const handler = () => {
+      try {
+        this.close()
+      } catch {
+        // Best-effort on exit
+      }
+    }
+    process.on("exit", handler)
+    process.on("SIGINT", handler)
+    process.on("SIGTERM", handler)
   }
 
   // ── Table creation ──

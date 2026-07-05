@@ -286,6 +286,12 @@ class ReActAgent:
             )
             # Cap history to last 50 entries to prevent memory growth
             if len(self.history) > 50:
+                logger.warning(
+                    "Agent history truncated: %d entries dropped from engagement %s — "
+                    "LLM may lose context of earlier tool results",
+                    len(self.history) - 50,
+                    self.engagement_id,
+                )
                 self.history = self.history[-50:]
 
     def get_context(self, max_tokens: int = LLM_AGENT_CONTEXT_MAX_TOKENS) -> str:
@@ -482,6 +488,11 @@ class ReActAgent:
         """
         Call LLM to decide next tool via LLMService.
         Returns _DONE, AgentAction, or None on failure.
+
+        When LLMService is used, this method also tracks actual token
+        counts from the LLM response so they can be passed to Governance
+        (blocker 48). The counts are stored on the action if governance
+        is active.
 
         Args:
             hypotheses: Optional list of active hypotheses to guide tool selection
@@ -942,6 +953,15 @@ Based on these findings, what capabilities should the next phase use?
             if action is _DONE:
                 return None
             if action is not None:
+                # Attach actual LLM token counts to the action for governance (blocker 48)
+                # These are read from the LLMService which tracks them from the LLMResponse.
+                if (
+                    _ff_enabled("GOVERNANCE_V2", default=False)
+                    and self.governance is not None
+                    and hasattr(llm_service, 'last_input_tokens')
+                ):
+                    action.input_tokens = llm_service.last_input_tokens
+                    action.output_tokens = llm_service.last_output_tokens
                 return action
 
         return self._deterministic_plan(task, tried_tools)
@@ -1244,6 +1264,8 @@ Based on these findings, what capabilities should the next phase use?
             # ── Governance check (Phase 6) ──
             # When GOVERNANCE_V2 flag is enabled and a Governance instance
             # is provided, use unified safety controls instead of ad-hoc cost guard.
+            # Fix (blocker 29): Always check the REAL cost against max_cost_usd,
+            # even in GOVERNANCE_V2 mode, to prevent unbounded cost accumulation.
             if (
                 _ff_enabled("GOVERNANCE_V2", default=False)
                 and self.governance is not None
@@ -1266,24 +1288,28 @@ Based on these findings, what capabilities should the next phase use?
                             )
                             results.append(result)
                     break
-            else:
-                # Legacy cost guard (backward compatible when governance is absent)
-                if total_cost_usd > LLM_AGENT_MAX_COST_USD:
-                    logger.warning(
-                        "Cost guard: $%.4f exceeds $%.4f. Switching to deterministic for remaining tools.",
-                        total_cost_usd,
-                        LLM_AGENT_MAX_COST_USD,
-                    )
-                    for tool_name in self.PHASE_TOOLS.get(self._phase, []):
-                        if (
-                            tool_name not in tried_tools
-                            and self.registry.get_tool(tool_name) is not None
-                        ):
-                            result = self.registry.call(
-                                tool_name, target=initial_target
-                            )
-                            results.append(result)
-                    break
+
+            # Blocker 29 fix: Cost guard applies in ALL modes, not just legacy.
+            # This prevents unbounded LLM cost accumulation in GOVERNANCE_V2 mode.
+            # (The legacy cost guard block was removed — this single check covers all modes.)
+            if total_cost_usd > LLM_AGENT_MAX_COST_USD:
+                logger.warning(
+                    "Cost guard: $%.4f exceeds $%.4f (engagement %s). "
+                    "Switching to deterministic for remaining tools.",
+                    total_cost_usd,
+                    LLM_AGENT_MAX_COST_USD,
+                    self.engagement_id,
+                )
+                for tool_name in self.PHASE_TOOLS.get(self._phase, []):
+                    if (
+                        tool_name not in tried_tools
+                        and self.registry.get_tool(tool_name) is not None
+                    ):
+                        result = self.registry.call(
+                            tool_name, target=initial_target
+                        )
+                        results.append(result)
+                break
 
             slog.agent_iteration(
                 iteration,
@@ -1390,7 +1416,15 @@ Based on these findings, what capabilities should the next phase use?
                 _ff_enabled("GOVERNANCE_V2", default=False)
                 and self.governance is not None
             ):
-                self.governance.record_result(result, action)
+                # Pass actual token counts when available (blocker 48)
+                actual_input = getattr(result, 'input_tokens', None)
+                actual_output = getattr(result, 'output_tokens', None)
+                self.governance.record_result(
+                    result,
+                    action,
+                    actual_input_tokens=actual_input,
+                    actual_output_tokens=actual_output,
+                )
                 # Check low-signal threshold
                 is_low_signal, signal_reason = self.governance.check_low_signal()
                 if is_low_signal:

@@ -612,6 +612,15 @@ class ToolRunner:
                 )
                 tool_result.mark_finished()
 
+                # Cross-tool backpressure: detect 429/rate-limit responses (blocker 44)
+                if _target_host:
+                    _combined_output = (result.stderr + " " + result.stdout).lower()
+                    if "429" in _combined_output and "rate" in _combined_output:
+                        PER_HOST_LIMITER.record_backpressure(_target_host)
+                    elif result.returncode == 0:
+                        # Non-429 success — clear backpressure if active
+                        PER_HOST_LIMITER.clear_backpressure(_target_host)
+
                 if cache_mode != CacheMode.NO_CACHE:
                     cache.set(cache_key, tool_result.to_legacy_dict(), ttl=300)
                     slog.info("Tool cache set for %s", tool)

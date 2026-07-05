@@ -108,6 +108,23 @@ export class ConfigLoader {
 
     if (typeof parsed !== "object" || parsed === null) return {}
 
+    // Warn about unknown keys in the config to catch typos (blocker 59)
+    if (parsed && typeof parsed === "object") {
+      const knownKeys = new Set([
+        "features", "evidence", "storage", "security",
+        "rate_limiting", "tools", "replan",
+      ])
+      for (const key of Object.keys(parsed as Record<string, unknown>)) {
+        if (!knownKeys.has(key)) {
+          const msg = `[config] Unknown config key "${key}" in ${path} — this key has no effect. Possible typo?`
+          if (process.env.ARGUS_AUTONOMOUS === "1" || process.env.ARGUS_AUTONOMOUS === "true") {
+            throw new Error(msg)
+          }
+          console.warn(msg)
+        }
+      }
+    }
+
     return ArgusConfigSchema.parse(parsed)
   }
 }

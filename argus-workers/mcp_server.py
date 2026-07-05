@@ -871,6 +871,9 @@ class MCPServer:
         except ValueError:
             return {"error": f"Session {session_id} not found", "done": True}
 
+        # Get shared iteration counter (blocker 32)
+        current_iteration = self.session_store.get_iteration(session_id)
+
         # Normal case: advance through the deterministic plan
         next_tool = self.session_store.advance_plan(session_id)
         if next_tool:
@@ -879,6 +882,7 @@ class MCPServer:
                 "session_id": session_id,
                 "reasoning": "Deterministic plan step",
                 "done": False,
+                "iteration": current_iteration,
             }
 
         # Plan exhausted
@@ -986,6 +990,9 @@ class MCPServer:
         self.session_store.add_execution(session_id, execution)
         self.session_store.add_observation(session_id, params.get("summary", ""))
 
+        # Increment shared TS/Python iteration counter (blocker 32)
+        iteration = self.session_store.increment_iteration(session_id)
+
         # Check if we need to involve the LLM
         trigger = None
         if not params.get("success", True):
@@ -993,7 +1000,9 @@ class MCPServer:
         elif params.get("findingCount", 0) > 0:
             trigger = "new_finding"
 
-        return self.handle_agent_next({"session_id": session_id, "trigger": trigger})
+        next_result = self.handle_agent_next({"session_id": session_id, "trigger": trigger})
+        next_result["iteration"] = iteration
+        return next_result
 
     def handle_phase_complete(self, params: dict) -> dict:
         """Receive all findings from a completed phase and determine next capabilities.
@@ -1081,6 +1090,9 @@ class MCPServer:
         Uses deterministic phase-to-capability mapping with awareness of
         HIGH/CRITICAL findings to suggest deeper inspection capabilities.
 
+        NOTE: Returns a ``fallback: true`` flag so the TypeScript executor
+        knows this is a degraded (non-LLM) response and can adjust confidence.
+
         Args:
             phase: The phase that just completed.
             findings: Accumulated findings (used to detect critical results).
@@ -1129,6 +1141,7 @@ class MCPServer:
                 f"{severity_counts['MEDIUM']} MEDIUM findings"
             ),
             "stop": stop,
+            "fallback": True,  # Signal to TypeScript that this is degraded (non-LLM) response
         }
 
     def handle_get_attack_graph(self, params: dict) -> dict:
@@ -1350,6 +1363,53 @@ def main():
 
     transport.register("acquire_lock", handle_acquire_lock)
     transport.register("release_lock", handle_release_lock)
+
+    # ── Phase 4.5.7: Cancel signal for ReActAgent (@opencode → Python) ──
+    def handle_cancel(params):
+        """Signal the ReActAgent to stop for a given engagement/phase.
+
+        Called from TypeScript when the executor decides to halt mid-phase.
+        Without this, the Python agent continues running its current tool
+        execution and only stops on the next iteration check (blocker 38).
+
+        This cancels all active sessions for an engagement by setting
+        their _cancelled flag. Each session type (dict-like or class) has
+        its own cancellation mechanism.
+        """
+        engagement_id = params.get("engagement_id", "")
+        session_id = params.get("session_id", "")
+        if not engagement_id:
+            return {"cancelled": False, "error": "engagement_id is required"}
+        try:
+            # Cancel via the session store. Different session implementations
+            # support different cancellation paths:
+            # 1. AgentSessionStore.cancel(session_id) — if the store exposes it
+            # 2. Direct session object manipulation
+            if hasattr(server.session_store, 'cancel'):
+                server.session_store.cancel(session_id) if session_id else None
+            elif session_id:
+                # Fallback: try to get the session and set _cancelled directly
+                try:
+                    session = server.session_store.get(session_id)
+                    if isinstance(session, dict):
+                        session['_cancelled'] = True
+                    elif hasattr(session, '_cancelled'):
+                        session._cancelled = True
+                    elif hasattr(session, 'cancel'):
+                        session.cancel()
+                except Exception:
+                    logger.debug("Could not cancel session %s via fallback methods", session_id)
+            logger.info(
+                "Cancel signal sent for session %s (engagement %s)",
+                session_id,
+                engagement_id,
+            )
+            return {"cancelled": True}
+        except Exception as e:
+            logger.warning("Cancel failed for %s/%s: %s", engagement_id, session_id, e)
+            return {"cancelled": False, "error": str(e)}
+
+    transport.register("cancel", handle_cancel)
 
     logger.info("MCP stdio transport starting")
     transport.run()

@@ -89,14 +89,17 @@ export class ApprovalService {
       return { approved: true, reason: `Auto-approved at ${timestamp}` }
     }
 
-    // Non-TTY stdout (TUI mode): auto-approve non-destructive, auto-skip destructive
+    // Non-TTY stdout (TUI mode):
+    //   ARGUS_AUTO_APPROVE=1 → auto-approve regardless of destructive flag
+    //   Otherwise → auto-skip destructive gates, auto-approve non-destructive
     if (!process.stdout.isTTY) {
-      if (gate.destructive) {
+      if (gate.destructive && process.env.ARGUS_AUTO_APPROVE !== "1") {
         process.stderr.write(" (non-TTY — auto-skip destructive gate)\n\n")
         return { approved: false, reason: "Non-TTY — destructive gate auto-skipped" }
       }
-      process.stderr.write(" (non-TTY — auto-approved)\n\n")
-      return { approved: true }
+      const timestamp = new Date().toISOString()
+      process.stderr.write(` (non-TTY — ${process.env.ARGUS_AUTO_APPROVE === "1" ? `auto-approved (ARGUS_AUTO_APPROVE=1) at ${timestamp}` : "auto-approved"})\n\n`)
+      return { approved: true, reason: process.env.ARGUS_AUTO_APPROVE === "1" ? `Auto-approved at ${timestamp}` : undefined }
     }
 
     return this.promptConfirmation("Proceed? [y/N] ", "Skipping phase.")

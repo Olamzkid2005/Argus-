@@ -45,6 +45,8 @@ class AgentSession:
     current_plan: list[str] | None = None
     plan_step: int = 0
     trigger: str | None = None
+    # Shared iteration counter for TS/Python coordination (blocker 32)
+    execution_iteration: int = 0
 
 
 class AgentSessionStore:
@@ -262,3 +264,40 @@ class AgentSessionStore:
         with self._lock:
             session = self._get_and_touch(session_id)
             session.findings.append(finding)
+
+    def increment_iteration(self, session_id: str) -> int:
+        """Increment the shared TS/Python iteration counter.
+
+        Returns the new iteration count after incrementing.
+        Allows both TS and Python sides to track shared progress
+        through the assessment phase (blocker 32).
+
+        Args:
+            session_id: The session identifier.
+
+        Returns:
+            The new iteration count.
+
+        Raises:
+            ValueError: If the session does not exist.
+        """
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            session.execution_iteration += 1
+            return session.execution_iteration
+
+    def get_iteration(self, session_id: str) -> int:
+        """Get the current shared iteration count without modifying it.
+
+        Args:
+            session_id: The session identifier.
+
+        Returns:
+            The current iteration count, or 0 if session not found.
+        """
+        session = self._sessions.get(session_id)
+        if session is None:
+            return 0
+        with self._lock:
+            self._touch(session)
+            return session.execution_iteration

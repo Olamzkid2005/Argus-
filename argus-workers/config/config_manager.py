@@ -31,7 +31,6 @@ DEFAULT_CONFIG = {
             "max_attempts": 3,
             "base_delay": 1.0,
             "max_delay": 60.0,
-            "backoff_multiplier": 2.0,
         },
     },
     "scanning": {

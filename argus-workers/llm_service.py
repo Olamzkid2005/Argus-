@@ -88,6 +88,19 @@ class LLMService:
         self._cost_tracker = cost_tracker or CostTracker(
             max_cost_usd=self._config.max_cost_usd
         )
+        # Token tracking for governance integration (blocker 48)
+        self._last_input_tokens: int = 0
+        self._last_output_tokens: int = 0
+
+    @property
+    def last_input_tokens(self) -> int:
+        """Input tokens from the most recent successful LLM call."""
+        return self._last_input_tokens
+
+    @property
+    def last_output_tokens(self) -> int:
+        """Output tokens from the most recent successful LLM call."""
+        return self._last_output_tokens
 
     def is_available(self) -> bool:
         """Check if the underlying LLM client is available for use."""
@@ -103,6 +116,10 @@ class LLMService:
     ) -> dict | list:
         """
         Call LLM and return parsed JSON dict.
+
+        Tracks actual input/output token counts from the LLM response
+        (blocker 48). These are accessible via last_input_tokens and
+        last_output_tokens properties.
 
         Returns a dict (never None, never raises). On error, returns a fallback dict.
         """
@@ -147,6 +164,10 @@ class LLMService:
             try:
                 parsed = json.loads(response_text)
                 duration_ms = int((_time.time() - start) * 1000)
+                # Track actual token counts for governance (blocker 48)
+                if isinstance(raw, LLMResponse):
+                    self._last_input_tokens = raw.input_tokens
+                    self._last_output_tokens = raw.output_tokens
                 tokens = raw.output_tokens if isinstance(raw, LLMResponse) else 0
                 slog.llm_complete(
                     self._client.model if hasattr(self._client, "model") else "unknown",

@@ -84,6 +84,31 @@ export class InProcessExecutor implements PhaseExecutor {
 
   private executionOptions: ExecutionOptions = {}
   private emitProgress: ((event: ProgressEvent) => void) | null = null
+  /** Phase-relative max duration per phase (env ARGUS_MAX_PHASE_DURATION_MS, default 30 min). */
+  private maxPhaseDurationMs: number = (() => {
+    const raw = process.env.ARGUS_MAX_PHASE_DURATION_MS
+    if (raw === undefined || raw === "") return 1_800_000  // 30 min
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? n : 1_800_000
+  })()
+  /** Global max assessment duration (env ARGUS_MAX_ASSESSMENT_DURATION_MS, default 2 hours). */
+  private maxAssessmentDurationMs: number = (() => {
+    const raw = process.env.ARGUS_MAX_ASSESSMENT_DURATION_MS
+    if (raw === undefined || raw === "") return 7_200_000  // 2 hours
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? n : 7_200_000
+  })()
+  private assessmentStartTime: number = 0
+  /** Per-phase deadline (set at phase start). Used in both execute() and executeHybrid(). */
+  private phaseDeadline: number = 0
+
+  /** Check if the current phase has exceeded its timeout (blocker 35). */
+  private checkPhaseTimeout(): string | null {
+    if (this.phaseDeadline > 0 && Date.now() > this.phaseDeadline) {
+      return `Phase exceeded ${this.maxPhaseDurationMs}ms timeout`
+    }
+    return null
+  }
 
   constructor(
     private toolRegistry: ToolRegistry,
@@ -160,6 +185,21 @@ export class InProcessExecutor implements PhaseExecutor {
     if (!this.gatesLoaded) {
       throw new Error("loadGates must be called before execute")
     }
+
+    // Global max-assessment-duration circuit breaker (blocker 20)
+    if (this.assessmentStartTime > 0 && Date.now() - this.assessmentStartTime > this.maxAssessmentDurationMs) {
+      return {
+        phaseId: phase.phaseId,
+        status: "failed",
+        findings: [],
+        artifacts: [],
+        errors: [`Assessment duration exceeded ${this.maxAssessmentDurationMs}ms — global circuit breaker tripped`],
+        durationMs: 0,
+      }
+    }
+
+    // Phase-level timeout (blocker 35) — set deadline for this phase
+    this.phaseDeadline = Date.now() + this.maxPhaseDurationMs
 
     // Approval gate check runs BEFORE phase dispatch (including hybrid)
     const gate = this.isFeatureEnabled(Feature.APPROVAL_GATES)
@@ -340,6 +380,13 @@ export class InProcessExecutor implements PhaseExecutor {
         break
       }
 
+      // 3b. Check phase timeout before executing next tool (blocker 35)
+      const pto = this.checkPhaseTimeout()
+      if (pto) {
+        errors.push(pto)
+        break
+      }
+
       // 4. Check tool health before executing
       if (!this.toolHealth.isHealthy(next.tool)) {
         const status = this.toolHealth.getToolStatus(next.tool)
@@ -404,13 +451,23 @@ export class InProcessExecutor implements PhaseExecutor {
 
           // Parse findings from structured data
           if (result.data) {
-            const data = result.data
-            if (Array.isArray(data)) {
-              for (const finding of data) {
+            // Phase 4.5.5: Consume the "structured" key from MCP responses.
+            // The Python MCP server stores structured findings with proper
+            // severity, CWE, and evidence in mcp_result.data["structured"].
+            // These were previously bypassed because the executor only checked
+            // result.data for raw arrays or strings.
+            const structuredData = (result.data as any).structured as Array<Record<string, unknown>> | undefined
+            if (structuredData && Array.isArray(structuredData) && structuredData.length > 0) {
+              for (const finding of structuredData) {
+                const promoted = this.confidenceEngine.promote(finding as any)
+                findings.push({ ...finding, confidence: promoted } as any)
+              }
+            } else if (Array.isArray(result.data)) {
+              for (const finding of result.data) {
                 const promoted = this.confidenceEngine.promote(finding)
                 findings.push({ ...finding, confidence: promoted })
               }
-            } else if (typeof data === "string" && data.length > 0) {
+            } else if (typeof result.data === "string" && result.data.length > 0) {
               const baseConfidence = baselineConfidence(result.signalQuality)
               findings.push({
                 id: `find-${next.tool}-${crypto.randomUUID()}`,
@@ -418,7 +475,7 @@ export class InProcessExecutor implements PhaseExecutor {
                 severity: 2,
                 confidence: baseConfidence,
                 status: "PENDING",
-                description: data.slice(0, 500),
+                description: (result.data as string).slice(0, 500),
                 tool: next.tool,
                 phase: phase.phaseId,
                 created_at: new Date().toISOString(),
@@ -567,6 +624,13 @@ export class InProcessExecutor implements PhaseExecutor {
         delete toolArgs.extra
 
         if (execOptions.verbose) console.log(`[executor]    Result: success=${result.success}, duration=${result.durationMs}ms`)
+
+        // Check phase timeout before processing results (blocker 35)
+        const timeoutErr = this.checkPhaseTimeout()
+        if (timeoutErr) {
+          if (execOptions.verbose) console.log(`[executor]  ⛔ Phase timeout reached — stopping tool loop`)
+          return { findings, errors: [timeoutErr], failFast: true }
+        }
 
         if (result.success && result.data) {
           const data = result.data

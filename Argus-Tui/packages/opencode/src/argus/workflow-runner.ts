@@ -437,6 +437,7 @@ export class WorkflowRunner {
     // ── 2. Load credentials, feature flags & replan config ──
     const featureFlags = new FeatureFlags(options.features)
     let configMaxReplans: number | undefined
+    const isAutonomous = process.env.ARGUS_AUTONOMOUS === "1" || process.env.ARGUS_AUTONOMOUS === "true"
     try {
       const { readFileSync } = await import("fs")
       const { parse: YAML } = await import("yaml")
@@ -448,6 +449,12 @@ export class WorkflowRunner {
       }
       configMaxReplans = parsed?.replan?.max_cycles
     } catch {
+      if (isAutonomous) {
+        throw new Error(
+          "[Argus] ARGUS_AUTONOMOUS=1: config file 'argus.config.yaml' is missing or malformed. " +
+          "A valid config file is required in autonomous mode. Fix the file or disable autonomous mode."
+        )
+      }
       console.warn("Config file missing or invalid, using defaults")
       /* config file missing or invalid — use defaults */
     }
@@ -516,9 +523,17 @@ export class WorkflowRunner {
       emit(`✓ MCP workers connected`)
 
       // Phase 4.4.1: Acquire distributed lock before phase execution
-      // Best-effort — if Redis is unavailable, continue without locking.
+      // In autonomous mode, fail hard if the lock can't be acquired (blocker 23)
       const lockedEngagement = await bridge.acquireEngagementLock(engagementId).catch(() => ({ acquired: false }))
       if (!lockedEngagement.acquired) {
+        const isAutonomous = process.env.ARGUS_AUTONOMOUS === "1" || process.env.ARGUS_AUTONOMOUS === "true"
+        if (isAutonomous) {
+          throw new Error(
+            `[Argus] ARGUS_AUTONOMOUS=1: Could not acquire distributed lock for engagement ${engagementId}. ` +
+            `Distributed locking is required in autonomous mode to prevent concurrent assessments on the same target. ` +
+            `Ensure Redis is running or disable autonomous mode.`
+          )
+        }
         emit(`⚠ Could not acquire distributed lock for ${engagementId} — proceeding without lock`)
       } else {
         emit(`✓ Distributed lock acquired for engagement`)
@@ -766,6 +781,20 @@ export class WorkflowRunner {
       const allCompleted = Array.from(phaseRecords.values()).every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")
       store.updateStatus(engagementId, executionError ? "FAILED" : allCompleted ? "COMPLETED" : "PAUSED")
       store.saveFindings(engagementId, allFindings)
+
+      // Auto-prune evidence at end of assessment (blocker 61)
+      try {
+        const { EvidenceCollector } = await import("./evidence/collector")
+        const { StoragePaths } = await import("./storage/paths")
+        const collector = new EvidenceCollector(StoragePaths.evidence)
+        const pruned = await collector.pruneEngagement(engagementId)
+        if (pruned > 0) {
+          emit(`✓ Pruned ${pruned} stale evidence file(s)`)
+        }
+      } catch (pruneErr) {
+        emit(`⚠ Evidence prune skipped: ${(pruneErr as Error).message}`)
+      }
+
       await bridge.disconnect()
       if (!executionError) {
         emit({ type: "scan_complete", totalFindings: allFindings.length })

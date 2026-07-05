@@ -193,6 +193,12 @@ class EngagementState:
         )
         # Cap to last 50 entries
         if len(self.observations) > 50:
+            logger.warning(
+                "EngagementState observations truncated: %d entries dropped from %s — "
+                "LLM may lose context of earlier observations",
+                len(self.observations) - 50,
+                self.engagement_id,
+            )
             self.observations = self.observations[-50:]
         self._bump_version()
 

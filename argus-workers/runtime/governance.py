@@ -124,13 +124,25 @@ class Governance:
 
         return True, ""
 
-    def record_result(self, result: Any, action: dict | Any | None = None):
+    def record_result(
+        self,
+        result: Any,
+        action: dict | Any | None = None,
+        actual_input_tokens: int | None = None,
+        actual_output_tokens: int | None = None,
+    ):
         """
         Record a tool result for signal-quality tracking.
+
+        Uses actual LLM token counts when available (blocker 48), falling
+        back to the static estimate when not provided (e.g. for non-LLM
+        deterministic tool execution).
 
         Args:
             result: ToolResult from ToolRunner
             action: Optional AgentAction/dict for cost/token tracking
+            actual_input_tokens: Actual LLM input tokens (from LLMResponse)
+            actual_output_tokens: Actual LLM output tokens (from LLMResponse)
         """
         if self._is_shutdown:
             return
@@ -143,14 +155,27 @@ class Governance:
                 cost = getattr(action, "cost_usd", 0.0) or 0.0
             self._total_cost_usd += float(cost)
 
-        # Track tokens (estimated)
+        # Track tokens — use actual counts when available (blocker 48)
         tool_name = ""
         if action is not None:
             if isinstance(action, dict):
                 tool_name = action.get("tool", "") or ""
             else:
                 tool_name = getattr(action, "tool", "") or ""
-        self._total_tokens_used += self._estimate_token_usage(tool_name)
+
+        if actual_input_tokens is not None and actual_output_tokens is not None:
+            # Use actual LLM token counts from the response
+            self._total_tokens_used += actual_input_tokens + actual_output_tokens
+            logger.debug(
+                "Governance recorded actual token usage for %s: %d input + %d output = %d total",
+                tool_name or "llm_call",
+                actual_input_tokens,
+                actual_output_tokens,
+                actual_input_tokens + actual_output_tokens,
+            )
+        else:
+            # Fallback to static estimate for non-LLM tool calls
+            self._total_tokens_used += self._estimate_token_usage(tool_name)
 
         # Track signal quality
         result_dict = {}

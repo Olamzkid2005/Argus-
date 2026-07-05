@@ -77,6 +77,14 @@ class ConnectionManager:
         self._metrics_lock = threading.Lock()
         # Condition variable for signaling connection availability (B.03 fix)
         self._pool_cond = threading.Condition()
+        
+    def _register_atexit(self):
+        """Register atexit handler for pool cleanup (blocker 52)."""
+        if not self._atexit_registered:
+            import atexit
+            atexit.register(self.close)
+            self._atexit_registered = True
+            logger.debug("Registered atexit handler for database connection pool")
 
     def _get_connection_string(self) -> str:
         """Get database connection string from environment with PgBouncer support"""
@@ -186,6 +194,29 @@ class ConnectionManager:
                         self._pool_cond.wait(timeout=jitter)
                     continue
             wait_time = (time.time() - wait_start) * 1000
+
+            # Validate connection health with SELECT 1 ping (blocker 60)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+            except psycopg2.Error as health_err:
+                # Connection is stale — close it and try a fresh one
+                logger.warning(
+                    "Connection %s failed health check — getting a fresh one: %s",
+                    id(conn),
+                    health_err,
+                )
+                try:
+                    pool_instance.putconn(conn)
+                except Exception:
+                    pass
+                # Try getting a fresh connection (bypass pool for this retry)
+                fresh_conn = pool_instance.getconn()
+                conn = fresh_conn
+                logger.info(
+                    "Got fresh connection %s after health check failure",
+                    id(conn),
+                )
 
             # Enforce statement_timeout on each connection
             # This prevents runaway queries from blocking the pool
@@ -336,6 +367,7 @@ def get_db() -> ConnectionManager:
         with _db_lock:
             if _db is None:
                 _db = ConnectionManager()
+                _db._register_atexit()  # Blocker 52: ensure atexit cleanup
     return _db
 
 

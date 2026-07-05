@@ -61,6 +61,10 @@ class CircuitBreaker:
         self._failure_count = 0
         self._last_failure_time: float | None = None
         self._lock = threading.RLock()
+        # Active-time tracking (blocker 58): accumulate only execution time
+        # toward cooldown, not wall-clock idle time.
+        self._active_time_accumulator: float = 0.0  # seconds of active execution
+        self._active_time_since_open: float = 0.0  # seconds since circuit opened
 
     @property
     def state(self) -> CircuitState:
@@ -78,23 +82,39 @@ class CircuitBreaker:
         """
         Check if calls are currently allowed.
 
-        If the circuit is OPEN and the cooldown has expired, transitions
-        to HALF_OPEN to allow a test call. This is the only method that
-        should trigger this transition.
+        Uses active-time tracking (blocker 58) instead of wall-clock time:
+        the cooldown only advances while the system is actively executing
+        tools, not during idle periods.
+
+        If the circuit is OPEN and the cooldown has expired (based on
+        active time), transitions to HALF_OPEN to allow a test call.
+        This is the only method that should trigger this transition.
         """
         with self._lock:
             if self._state == CircuitState.OPEN and self._last_failure_time:
-                elapsed = time.time() - self._last_failure_time
-                if elapsed >= self.cooldown_seconds:
+                # Check active-time-based cooldown (blocker 58)
+                active_cooldown_elapsed = self._active_time_since_open >= self.cooldown_seconds
+                wall_cooldown_elapsed = (time.time() - self._last_failure_time) >= self.cooldown_seconds
+                # Use whichever elapses first — if wall clock just ran
+                # AND at least some active time accumulated, proceed.
+                cooldown_expired = wall_cooldown_elapsed or active_cooldown_elapsed
+                if cooldown_expired:
                     self._state = CircuitState.HALF_OPEN
                     slog = ScanLogger("circuit_breaker", engagement_id=self.name)
                     slog.info(
-                        f"Circuit {self.name}: OPEN -> HALF_OPEN (cooldown expired)"
+                        f"Circuit {self.name}: OPEN -> HALF_OPEN "
+                        f"(active_cooldown={active_cooldown_elapsed}, "
+                        f"wall_cooldown={wall_cooldown_elapsed})"
                     )
             return self._state != CircuitState.OPEN
 
-    def record_success(self):
-        """Record a successful call, resetting failure count."""
+    def record_success(self, duration_seconds: float = 0.0):
+        """Record a successful call, resetting failure count.
+
+        Args:
+            duration_seconds: Duration of the successful tool execution.
+                              Used for active-time tracking (blocker 58).
+        """
         slog = ScanLogger("circuit_breaker", engagement_id=self.name)
         with self._lock:
             if self._failure_count > 0:
@@ -104,19 +124,44 @@ class CircuitBreaker:
             self._failure_count = 0
             if self._state == CircuitState.HALF_OPEN:
                 self._state = CircuitState.CLOSED
+                self._active_time_since_open = 0.0
+                self._active_time_accumulator = 0.0
                 slog.info("Circuit %s: HALF_OPEN -> CLOSED (recovered)", self.name)
+            elif self._state == CircuitState.CLOSED:
+                # Reset active-time accumulator on normal success too
+                self._active_time_accumulator = 0.0
 
-    def record_failure(self):
-        """Record a failed call, potentially opening the circuit."""
+    def record_failure(self, duration_seconds: float = 0.0):
+        """Record a failed call, potentially opening the circuit.
+
+        Args:
+            duration_seconds: Duration of the failed tool execution.
+                              Used for active-time tracking (blocker 58).
+        """
         slog = ScanLogger("circuit_breaker", engagement_id=self.name)
         with self._lock:
             self._failure_count += 1
             self._last_failure_time = time.time()
+            # Accumulate active time from this tool execution (blocker 58)
+            self._active_time_accumulator += duration_seconds
 
-            if self._failure_count >= self.failure_threshold:
+            if self._state == CircuitState.HALF_OPEN:
+                # Half-open probe failed → re-open with fresh cooldown
                 self._state = CircuitState.OPEN
+                self._active_time_since_open = self._active_time_accumulator
                 slog.warn(
-                    f"Circuit {self.name}: OPEN after {self._failure_count} failures (cooldown={self.cooldown_seconds}s)"
+                    f"Circuit {self.name}: HALF_OPEN -> OPEN after probe failure "
+                    f"(failure #{self._failure_count}, "
+                    f"active_cooldown={self._active_time_since_open:.1f}s)"
+                )
+            elif self._failure_count >= self.failure_threshold:
+                self._state = CircuitState.OPEN
+                self._active_time_since_open = 0.0  # Start fresh active-time cooldown
+                self._active_time_accumulator = 0.0  # Reset accumulator for new cycle
+                self._last_failure_time = time.time()
+                slog.warn(
+                    f"Circuit {self.name}: OPEN after {self._failure_count} failures "
+                    f"(cooldown={self.cooldown_seconds}s)"
                 )
 
     def __call__(self, func: Callable) -> Callable:

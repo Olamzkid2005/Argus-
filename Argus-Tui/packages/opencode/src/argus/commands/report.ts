@@ -36,8 +36,24 @@ export async function enhanceReportWithAnalysis(
       total: findings.length,
     })
 
+    // Phase 4.5.6: Add a hard timeout per analysis call (blocker 43).
+    // Without this, a single LLM hang blocks the entire report indefinitely.
+    const ANALYSIS_TIMEOUT_MS = 60_000  // 60 seconds per finding
     const batchResults = await Promise.allSettled(
-      batch.map((f) => analyzer.analyze(f, []))
+      batch.map(async (f) => {
+        try {
+          const result = await Promise.race([
+            analyzer.analyze(f, []),
+            new Promise<null>((_, reject) =>
+              setTimeout(() => reject(new Error(`Analysis timed out after ${ANALYSIS_TIMEOUT_MS}ms for finding ${f.id}`)), ANALYSIS_TIMEOUT_MS)
+            ),
+          ])
+          return result
+        } catch (err) {
+          console.warn(`Report analysis failed for finding ${f.id}: ${(err as Error).message}`)
+          return null
+        }
+      })
     )
     for (const r of batchResults) {
       if (r.status === "fulfilled" && r.value) {

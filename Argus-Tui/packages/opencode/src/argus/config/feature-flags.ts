@@ -144,6 +144,22 @@ export class FeatureFlags implements IFeatureFlags {
     }
   }
 
+  /**
+   * Validate that no unknown feature keys exist in the config.
+   * In autonomous mode, this fails hard with an error listing unknown keys.
+   */
+  validateKeys(configObj: Record<string, unknown>): void {
+    const known = new Set(Object.values(Feature) as string[])
+    const unknown = Object.keys(configObj).filter(k => !known.has(k))
+    if (unknown.length > 0) {
+      const msg = `[argus] Unknown config keys: ${unknown.join(", ")}. Valid keys: ${Object.values(Feature).join(", ")}`
+      if (process.env.ARGUS_AUTONOMOUS === "1" || process.env.ARGUS_AUTONOMOUS === "true") {
+        throw new Error(msg)
+      }
+      console.warn(msg)
+    }
+  }
+
   /** Load from ~/.argus/config.yaml (user config) */
   loadFromUserConfig(configPath?: string): void {
     const path = configPath ?? StoragePaths.config

@@ -71,6 +71,25 @@ export class WorkflowPlanner {
       const plan = planDeterministic(target)
       // Filter out phases with zero tools (unless fail_fast) — deterministic
       // mode uses hardcoded phases that may reference capabilities no tool provides.
+      const hasError = plan.phases.some((p) => {
+        const tools = this.toolRegistry.selectBest(p.requiredCapabilities as any, targetType)
+        return tools.length === 0 && plan.errorRecovery?.[p.phaseId] !== "fail_fast"
+      })
+      // In autonomous mode, fail hard if ANY phase has zero tools
+      if (hasError) {
+        const zeroToolsPhases = plan.phases
+          .filter((p) => {
+            const tools = this.toolRegistry.selectBest(p.requiredCapabilities as any, targetType)
+            return tools.length === 0
+          })
+          .map((p) => p.name)
+        if (process.env.ARGUS_AUTONOMOUS === "1" || process.env.ARGUS_AUTONOMOUS === "true") {
+          throw new Error(
+            `[Argus] ARGUS_AUTONOMOUS=1: ${zeroToolsPhases.length} phase(s) have zero available tools: ${zeroToolsPhases.join(", ")}. ` +
+            `Install the required security tools or disable autonomous mode.`
+          )
+        }
+      }
       plan.phases = plan.phases.filter((p) => {
         const tools = this.toolRegistry.selectBest(p.requiredCapabilities as any, targetType)
         if (tools.length > 0) return true

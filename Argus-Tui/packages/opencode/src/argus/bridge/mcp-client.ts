@@ -246,11 +246,24 @@ export class WorkersBridge {
 
   killChild(): void {
     const proc = this.process
-    if (proc && !proc.killed && proc.exitCode === null) {
-      proc.kill("SIGTERM")
+    if (proc && !proc.killed && proc.exitCode === null && proc.pid !== undefined) {
+      // Send SIGTERM to the process group to ensure child processes are also
+      // terminated (blocker 40). Without this, orphaned grandchild processes
+      // (nuclei, nmap, sqlmap subprocesses) linger after the parent dies.
+      try {
+        process.kill(-proc.pid, "SIGTERM")
+      } catch {
+        // Negative PID kill may not work on all platforms — fall back to
+        // killing just the parent process
+        proc.kill("SIGTERM")
+      }
       setTimeout(() => {
-        if (proc && !proc.killed && proc.exitCode === null) {
-          proc.kill("SIGKILL")
+        if (proc && !proc.killed && proc.exitCode === null && proc.pid !== undefined) {
+          try {
+            process.kill(-proc.pid, "SIGKILL")
+          } catch {
+            proc.kill("SIGKILL")
+          }
         }
       }, 3000)
     }
@@ -270,15 +283,31 @@ export class WorkersBridge {
     }
   }
 
-  private async waitForReady(timeoutMs = 10000): Promise<void> {
+  private async waitForReady(timeoutMs?: number): Promise<void> {
+    // Read from env var with fallback to default 10s, then parameter
+    const effectiveTimeout = timeoutMs ?? (() => {
+      const raw = process.env.ARGUS_MCP_READY_TIMEOUT_MS
+      if (raw === undefined || raw === "") return 10000
+      const n = Number(raw)
+      return Number.isFinite(n) && n > 0 ? n : 10000
+    })()
     const start = Date.now()
     let delay = 200
-    while (Date.now() - start < timeoutMs) {
+    while (Date.now() - start < effectiveTimeout) {
       if (await this.isHealthy()) return
       await new Promise((r) => setTimeout(r, delay))
       delay = Math.min(delay * 2, 1600)
     }
-    throw new Error("MCP worker failed to become ready")
+    throw new Error(`MCP worker failed to become ready after ${effectiveTimeout}ms`)
+  }
+
+  /** Periodic health probe — returns true if worker is responsive. */
+  async probeHealth(): Promise<boolean> {
+    try {
+      return await this.isHealthy()
+    } catch {
+      return false
+    }
   }
 
   private async sendRequest(method: string, params?: unknown, timeoutMs = 30000): Promise<unknown> {
@@ -573,6 +602,15 @@ export class WorkersBridge {
   /** Phase 4.4.1: Release a distributed lock for an engagement via MCP. */
   async releaseEngagementLock(engagementId: string): Promise<{ released: boolean }> {
     return this.sendRequest("release_lock", { engagement_id: engagementId }) as Promise<{ released: boolean }>
+  }
+
+  /**
+   * Cancel the current ReActAgent session for an engagement (blocker 38).
+   * This propagates the stop signal from TypeScript to the Python agent
+   * so it stops mid-execution instead of continuing until the next iteration.
+   */
+  async cancelAgent(engagementId: string, sessionId?: string): Promise<{ cancelled: boolean; error?: string }> {
+    return this.sendRequest("cancel", { engagement_id: engagementId, session_id: sessionId }) as Promise<{ cancelled: boolean; error?: string }>
   }
 
   /**
