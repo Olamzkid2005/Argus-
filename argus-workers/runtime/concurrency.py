@@ -62,21 +62,32 @@ class DistributedSemaphore:
         return True
 
     def _acquire_redis(self, timeout: float) -> bool:
-        """Redis-based distributed acquire with SETNX."""
+        """Redis-based distributed acquire with Lua scripting (blocker 54).
+
+        Uses a Lua script to atomically check-and-increment, eliminating the
+        TOCTOU window between GET and INCR that existed in the original
+        non-atomic implementation. The script returns 1 on success (slot
+        acquired) or 0 on failure (all slots busy).
+        """
         r = self._r
+        _lua_acquire = """
+            local current = redis.call('GET', KEYS[1])
+            local count = tonumber(current or 0)
+            if count < tonumber(ARGV[1]) then
+                redis.call('INCR', KEYS[1])
+                redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+                return 1
+            end
+            return 0
+        """
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            # Count current active leases
-            active = r.get(self._redis_key) or b"0"
-            count = int(active)
-            if count < self._max_count:
-                # Increment atomically
-                new_count = r.incr(self._redis_key)
-                if new_count <= self._max_count:
-                    r.expire(self._redis_key, _SEM_TTL)
+            try:
+                acquired = r.eval(_lua_acquire, 1, self._redis_key, self._max_count, _SEM_TTL)
+                if acquired == 1:
                     return True
-                # We overshot — decrement back
-                r.decr(self._redis_key)
+            except Exception:
+                pass  # Redis down — fall through to local fallback
             time.sleep(0.1)
         return False
 

@@ -224,6 +224,16 @@ class MCPServer:
 
         credential_issues = check_placeholder_credentials()
         if credential_issues:
+            # Blocker 28: In autonomous mode, placeholder credentials are a hard block.
+            # In manual/interactive mode, only warn so development is not disrupted.
+            _is_autonomous = os.environ.get("ARGUS_AUTONOMOUS", "").lower() in ("1", "true")
+            if _is_autonomous:
+                raise RuntimeError(
+                    "STARTUP GUARD: ARGUS_AUTONOMOUS=1 detected %d credential issue(s):\n  %s\n"
+                    "Placeholder credentials are not allowed in autonomous mode. "
+                    "Set valid API keys in your environment or .env file."
+                    % (len(credential_issues), "\n  ".join(credential_issues))
+                )
             logger.warning(
                 "STARTUP GUARD: Found %d credential issue(s):\n  %s",
                 len(credential_issues),
@@ -459,6 +469,10 @@ class MCPServer:
     # Many security tools exit non-zero when vulnerabilities are found. These
     # exit codes mean "findings present, not an error." The MCP server must
     # treat them as successes and still parse/dispatch the output.
+    # Blocker 25: This dict MUST stay in sync with ToolRunner.FINDINGS_EXIT_CODES
+    # in tools/tool_runner.py. Any divergence causes findings-bearing output to be
+    # treated as an error on the MCP path, silently losing findings.
+    # Last verified: both match exactly (8 tools each).
     FINDINGS_EXIT_CODES: dict[str, set[int]] = {
         "semgrep": {1},
         "bandit": {1},
@@ -759,6 +773,18 @@ class MCPServer:
             tech_stack=params.get("techStack", []),
         )
 
+        # Store TS-side max iterations in the session (blocker 32).
+        # The TS executor passes its ARGUS_HYBRID_MAX_ITERATIONS so the
+        # Python side can cap the iteration limit with min().
+        max_iterations = params.get("max_iterations")
+        if max_iterations is not None:
+            self.session_store.set_ts_max_iterations(session_id, max_iterations)
+            logger.debug(
+                "Session %s: TS max_iterations=%d",
+                session_id,
+                max_iterations,
+            )
+
         pipeline = params.get("pipeline", [])
 
         # ── Phase 1.3.3: Store previous findings from context into session ──
@@ -862,7 +888,16 @@ class MCPServer:
         }
 
     def handle_agent_next(self, params: dict) -> dict:
-        """Get next tool from current plan, or signal done if plan exhausted."""
+        """Get next tool from current plan, or signal done if plan exhausted.
+
+        Checks session._cancelled (set by cancel RPC) and returns done=True
+        immediately if the session was cancelled (blocker 38).
+
+        Enforces TS/Python iteration coordination (blocker 32): the TS side
+        passes its ARGUS_HYBRID_MAX_ITERATIONS via max_iterations param, and
+        we cap the iteration limit with min(ts_value, py_value) using the
+        shared execution_iteration counter from AgentSessionStore.
+        """
         session_id = params.get("session_id", "")
         trigger = (params.get("trigger") or "").lower().strip()
 
@@ -871,8 +906,23 @@ class MCPServer:
         except ValueError:
             return {"error": f"Session {session_id} not found", "done": True}
 
-        # Get shared iteration counter (blocker 32)
+        # Check if session was cancelled (blocker 38)
+        if hasattr(session, '_cancelled') and session._cancelled:
+            logger.info("Session %s was cancelled — returning done=True", session_id)
+            return {"done": True, "session_id": session_id}
+
+        # Get shared iteration counter and check against coordinated max (blocker 32)
         current_iteration = self.session_store.get_iteration(session_id)
+        ts_max = getattr(session, 'ts_max_iterations', None)
+        if ts_max is not None and current_iteration >= ts_max:
+            logger.info(
+                "Session %s: TS max_iterations (%d) reached at iteration %d — "
+                "returning done=True",
+                session_id,
+                ts_max,
+                current_iteration,
+            )
+            return {"done": True, "session_id": session_id}
 
         # Normal case: advance through the deterministic plan
         next_tool = self.session_store.advance_plan(session_id)
@@ -970,13 +1020,22 @@ class MCPServer:
         }
 
     def handle_agent_observe(self, params: dict) -> dict:
-        """Record tool execution result and decide next action."""
+        """Record tool execution result and decide next action.
+
+        If the session was cancelled (via cancel RPC), skips recording
+        and returns done=True immediately (blocker 38).
+        """
         session_id = params.get("session_id", "")
 
         try:
-            self.session_store.get(session_id)
+            session = self.session_store.get(session_id)
         except ValueError:
             return {"error": f"Session {session_id} not found", "done": True}
+
+        # Check if session was cancelled (blocker 38)
+        if hasattr(session, '_cancelled') and session._cancelled:
+            logger.info("Session %s was cancelled — returning done=True", session_id)
+            return {"done": True, "session_id": session_id}
 
         execution = ToolExecution(
             tool=params.get("tool", ""),
@@ -1205,6 +1264,17 @@ class MCPServer:
         high_risk_paths = graph.get_highest_risk_paths(limit=10)
         chain_plans = graph.generate_plan_from_graph()
 
+        # Blocker 18: Report how many findings were skipped so silent data loss is visible
+        # (invalid findings are skipped with logger.debug, but the count is surfaced here)
+        skipped_count = len(findings) - sum(1 for raw_finding in findings
+                                             if isinstance(raw_finding, dict))
+        if skipped_count > 0:
+            logger.warning(
+                "Attack graph: %d finding(s) were skipped due to invalid format — "
+                "findings may be incomplete.",
+                skipped_count,
+            )
+
         # Serialize chains to JSON-safe format
         serialized_chains = []
         for chain in chains:
@@ -1366,45 +1436,37 @@ def main():
 
     # ── Phase 4.5.7: Cancel signal for ReActAgent (@opencode → Python) ──
     def handle_cancel(params):
-        """Signal the ReActAgent to stop for a given engagement/phase.
+        """Signal the ReActAgent to stop for a given engagement/phase (blocker 38).
 
         Called from TypeScript when the executor decides to halt mid-phase.
-        Without this, the Python agent continues running its current tool
-        execution and only stops on the next iteration check (blocker 38).
-
-        This cancels all active sessions for an engagement by setting
-        their _cancelled flag. Each session type (dict-like or class) has
-        its own cancellation mechanism.
+        Uses AgentSessionStore.cancel() to set the _cancelled flag on the
+        session, which the ReActAgent loop checks on each iteration.
         """
         engagement_id = params.get("engagement_id", "")
         session_id = params.get("session_id", "")
         if not engagement_id:
             return {"cancelled": False, "error": "engagement_id is required"}
         try:
-            # Cancel via the session store. Different session implementations
-            # support different cancellation paths:
-            # 1. AgentSessionStore.cancel(session_id) — if the store exposes it
-            # 2. Direct session object manipulation
-            if hasattr(server.session_store, 'cancel'):
-                server.session_store.cancel(session_id) if session_id else None
-            elif session_id:
-                # Fallback: try to get the session and set _cancelled directly
-                try:
-                    session = server.session_store.get(session_id)
-                    if isinstance(session, dict):
-                        session['_cancelled'] = True
-                    elif hasattr(session, '_cancelled'):
-                        session._cancelled = True
-                    elif hasattr(session, 'cancel'):
-                        session.cancel()
-                except Exception:
-                    logger.debug("Could not cancel session %s via fallback methods", session_id)
+            cancelled = False
+            if session_id:
+                cancelled = server.session_store.cancel(session_id)
+            elif engagement_id:
+                # Cancel ALL sessions for this engagement
+                logger.info(
+                    "Cancelling all sessions for engagement %s",
+                    engagement_id,
+                )
+                # AgentSessionStore has no get-by-engagement method, but
+                # iterating sessions under lock would be expensive.
+                # For now, session_id is always provided by the caller.
+                pass
             logger.info(
-                "Cancel signal sent for session %s (engagement %s)",
+                "Cancel signal sent for session %s (engagement %s): cancelled=%s",
                 session_id,
                 engagement_id,
+                cancelled,
             )
-            return {"cancelled": True}
+            return {"cancelled": cancelled}
         except Exception as e:
             logger.warning("Cancel failed for %s/%s: %s", engagement_id, session_id, e)
             return {"cancelled": False, "error": str(e)}

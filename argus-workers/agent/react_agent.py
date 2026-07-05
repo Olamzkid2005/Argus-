@@ -285,11 +285,16 @@ class ReActAgent:
                 }
             )
             # Cap history to last 50 entries to prevent memory growth
+            # When EngagementState is active, observations are delegated to it
+            # and this branch is NOT reached — see the `if` check above.
+            # Must stay in sync with engagement_state.py:OBSERVATION_TRUNCATION_LIMIT
+            # (blocker 49).
             if len(self.history) > 50:
+                dropped = len(self.history) - 50
                 logger.warning(
                     "Agent history truncated: %d entries dropped from engagement %s — "
-                    "LLM may lose context of earlier tool results",
-                    len(self.history) - 50,
+                    "LLM may lose context of earlier tool results.",
+                    dropped,
                     self.engagement_id,
                 )
                 self.history = self.history[-50:]
@@ -964,6 +969,22 @@ Based on these findings, what capabilities should the next phase use?
                     action.output_tokens = llm_service.last_output_tokens
                 return action
 
+        # Blocker 31: LLM → deterministic fallback should not be silent.
+        # When the LLM is available but returned None (failed/fallback),
+        # log a warning so operators can detect degraded performance.
+        # Guard: only warn if we actually TRIED the LLM (recon_context was present).
+        if (
+            llm_client
+            and hasattr(llm_client, "is_available")
+            and llm_client.is_available()
+            and recon_context
+        ):
+            logger.warning(
+                "LLM tool selection returned None — falling back to deterministic plan for %s. "
+                "Check LLM availability and response format if this recurs.",
+                task[:80],
+            )
+
         return self._deterministic_plan(task, tried_tools)
 
     def _update_hypotheses_from_result(
@@ -1202,6 +1223,9 @@ Based on these findings, what capabilities should the next phase use?
                             checkpoint.email,
                         )
                     finally:
+                        # Blocker 33: shutdown(wait=False) + cancel_futures=True ensures
+                        # the executor's worker threads are interrupted immediately rather
+                        # than lingering until garbage collection.
                         _login_pool.shutdown(wait=False, cancel_futures=True)
             except Exception as exc:
                 slog.warning("Failed to restore auth checkpoint: %s", exc)
@@ -1365,7 +1389,24 @@ Based on these findings, what capabilities should the next phase use?
                 tried_tools.add(action.tool)
                 results.append(result)
                 continue
-            result = self.registry.call(action.tool, **action.arguments)
+            # ── Active time tracking (blocker 58) ──
+            # Wrap tool execution with governance timer so that only active
+            # execution time counts against the runtime budget, not idle time
+            # between tool calls. Uses try/finally to ensure the timer is
+            # stopped even if registry.call() raises an exception.
+            if (
+                _ff_enabled("GOVERNANCE_V2", default=False)
+                and self.governance is not None
+            ):
+                self.governance.start_active_timer()
+            try:
+                result = self.registry.call(action.tool, **action.arguments)
+            finally:
+                if (
+                    _ff_enabled("GOVERNANCE_V2", default=False)
+                    and self.governance is not None
+                ):
+                    self.governance.stop_active_timer()
             tried_tools.add(action.tool)
             results.append(result)
 

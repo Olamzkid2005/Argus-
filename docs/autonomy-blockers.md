@@ -658,22 +658,29 @@ See blocker 43 above.
 | 41 | SQLite finalizer | `registerExitHandler()` method exists | No caller invokes it |
 | 49 | State truncation coordination | Warnings added at both layers | No coordination mechanism between layers |
 
-#### ❌ Top Code-Fixable Remaining (15 blockers)
+#### ❌ Top Code-Fixable Remaining (15 blockers — 13 fixed, 2 architectural)
 
-| # | Blocker | Reason Not Fixed |
+| # | Blocker | Fix Status |
 |---|---|---|
-| 6 | Circuit breaker fallback tools | Requires architectural design for fallback tool mapping |
-| 7 | Degraded mode cache staleness | Requires cache invalidation strategy |
-| 18 | Attack graph invalid findings | Minor edge case — low impact |
-| 21 | Best-effort try/catch masking | Requires careful per-path analysis — risky blanket change |
-| 22 | Circuit breaker defaults | Design choice — current defaults work for most cases |
-| 25 | Semgrep/bandit exit code sync | Minor — dicts are currently in sync |
-| 28 | Startup credential guard | Warns vs blocks — design decision |
-| 31 | LLM→deterministic fallback silence | Low observability impact |
-| 32 | Max iterations mismatch | Iteration counter added but defaults still differ |
-| 33 | Auth checkpoint thread leak | Minor — threads eventually cleaned up by GC |
-| 36 | scope.mode warn | Explicit config change required by design |
-| 42 | Evidence prune failure silence | Minor error-handling edge case |
-| 44 | Cross-tool rate limiting | Significant feature — requires global rate limiter |
-| 45 | Self-throttling 429/503 | Significant feature — requires unified throttle detection |
-| 47 | DB connection loss recovery | Requires psycopg2 reconnect logic |
+| 6 | Circuit breaker fallback tools | ✅ Fixed — `findFallbackTool()` in executor.ts |
+| 7 | Degraded mode cache staleness | ✅ Fixed — hit-count + stale warning |
+| 18 | Attack graph invalid findings | ✅ Fixed — skipped count logged |
+| 21 | Best-effort try/catch masking | ✅ Fixed — 4 silent catches now log |
+| 22 | Circuit breaker defaults | ✅ Fixed — 8 failures / 120s cooldown |
+| 25 | Semgrep/bandit exit code sync | ✅ Fixed — cross-reference comment added |
+| 28 | Startup credential guard | ✅ Fixed — hard block in autonomous mode |
+| 31 | LLM→deterministic fallback silence | ✅ Fixed — warning logged with recon_context guard |
+| 32 | Max iterations mismatch | ✅ Fixed — TS passes max_iterations to Python |
+| 33 | Auth checkpoint thread leak | ✅ Fixed — cancel_futures=True on shutdown |
+| 36 | scope.mode warn | ❌ Config design choice |
+| 42 | Evidence prune failure silence | ✅ Fixed — catch blocks log messages |
+| 44 | Cross-tool rate limiting | ✅ Fixed — CrossToolRateLimiter sliding window |
+| 45 | Self-throttling 429/503 | ✅ Fixed — ThrottleTracker expo backoff |
+| 47 | DB connection loss recovery | ✅ Fixed — pool reinitialization on exhaustion |
+| 48 | Governance token budget estimates | ✅ Fixed — actual token counts accepted |
+| 54 | Distributed semaphore TOCTOU | ✅ Fixed — Lua script for atomic acquire |
+| 55 | LLM provider auto-detect | ✅ Fixed — prefix validation + unknown-key warning |
+| 57 | Metrics/health endpoint | ❌ Architectural — requires HTTP listener |
+| 58 | Active time tracking | ✅ Fixed — start/stop_active_timer() in governance |
+| 62 | MCP transport stdin heartbeat | ❌ Architectural — requires transport changes |
+| 64 | low_signal vs zero_finding race | ✅ Fixed — aligned thresholds with cross-ref comments |

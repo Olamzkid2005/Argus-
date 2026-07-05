@@ -14,6 +14,145 @@ import { Capability } from "../shared/capabilities"
  * Limits concurrent subprocess/network tool execution to avoid resource starvation.
  */
 const MAX_PARALLEL_TOOLS = 4
+
+/**
+ * Cross-tool rate limiter — sliding window that limits requests per second
+ * across ALL tools targeting a given target (blocker 44).
+ * Prevents tools like nuclei (150 req/s) + ffuf (200 req/s) from
+ * overloading the target simultaneously.
+ *
+ * Uses a per-target sliding window. Configured via env var:
+ *   ARGUS_CROSS_TOOL_RATE_LIMIT: max requests per window (default 50)
+ *   ARGUS_CROSS_TOOL_RATE_WINDOW_MS: window duration in ms (default 1000)
+ */
+class CrossToolRateLimiter {
+  private windows = new Map<string, number[]>()
+  private readonly maxRequests: number
+  private readonly windowMs: number
+
+  constructor() {
+    const rawLimit = process.env.ARGUS_CROSS_TOOL_RATE_LIMIT
+    this.maxRequests = rawLimit ? (Number(rawLimit) || 50) : 50
+    const rawWindow = process.env.ARGUS_CROSS_TOOL_RATE_WINDOW_MS
+    this.windowMs = rawWindow ? (Number(rawWindow) || 1000) : 1000
+  }
+
+  /** Acquire a slot for the given target. Returns delay needed (ms), or 0 if allowed. */
+  acquire(target: string): number {
+    const now = Date.now()
+    const windowStart = now - this.windowMs
+
+    let timestamps = this.windows.get(target)
+    if (!timestamps) {
+      timestamps = []
+      this.windows.set(target, timestamps)
+    }
+
+    // Prune old entries
+    const valid = timestamps.filter(t => t > windowStart)
+    this.windows.set(target, valid)
+
+    if (valid.length >= this.maxRequests) {
+      // Calculate when the next slot opens (the oldest timestamp + window)
+      const oldest = valid[0]
+      const delay = (oldest + this.windowMs) - now
+      // Record that we'll fire at (now + delay)
+      valid.push(now + delay)
+      return Math.max(1, delay)
+    }
+
+    valid.push(now)
+    return 0
+  }
+
+  /** Reset all rate limit windows (e.g. between phases). */
+  reset(): void {
+    this.windows.clear()
+  }
+}
+
+/**
+ * Throttle tracker for 429/503 responses (blocker 45).
+ * Detects rate-limit errors from tool responses and applies exponential
+ * backoff per target before allowing further requests.
+ *
+ * Configured via env var:
+ *   ARGUS_THROTTLE_BASE_DELAY_MS: initial backoff delay (default 2000)
+ *   ARGUS_THROTTLE_MAX_DELAY_MS:  maximum backoff delay (default 60000)
+ */
+class ThrottleTracker {
+  private throttledTargets = new Map<string, { until: number; backoffMs: number; consecutive: number }>()
+  private readonly baseDelayMs: number
+  private readonly maxDelayMs: number
+
+  constructor() {
+    const rawBase = process.env.ARGUS_THROTTLE_BASE_DELAY_MS
+    this.baseDelayMs = rawBase ? (Number(rawBase) || 2000) : 2000
+    const rawMax = process.env.ARGUS_THROTTLE_MAX_DELAY_MS
+    this.maxDelayMs = rawMax ? (Number(rawMax) || 60000) : 60000
+  }
+
+  /** Returns true if the target is currently throttled. */
+  isThrottled(target: string): boolean {
+    const entry = this.throttledTargets.get(target)
+    if (!entry) return false
+    if (Date.now() >= entry.until) {
+      this.throttledTargets.delete(target)
+      return false
+    }
+    return true
+  }
+
+  /** Get remaining throttle delay in ms, or 0 if not throttled. */
+  getRemainingDelay(target: string): number {
+    const entry = this.throttledTargets.get(target)
+    if (!entry) return 0
+    const remaining = entry.until - Date.now()
+    return Math.max(0, remaining)
+  }
+
+  /**
+   * Detect if an error message indicates rate limiting (429/503/etc).
+   * Returns true if the error matches known rate-limit patterns.
+   */
+  static isRateLimitError(errorMessage: string): boolean {
+    const lower = (errorMessage ?? "").toLowerCase()
+    return /\b429\b/.test(lower)
+      || /\b503\b/.test(lower)
+      || /rate.?limit/i.test(lower)
+      || /too many requests/i.test(lower)
+      || /retry after/i.test(lower)
+      || /throttl/i.test(lower)
+  }
+
+  /**
+   * Record a rate-limit hit for the given target.
+   * Applies exponential backoff: base * 2^consecutive, capped at max.
+   */
+  recordThrottle(target: string): void {
+    const current = this.throttledTargets.get(target)
+    const consecutive = (current?.consecutive ?? 0) + 1
+    const delay = Math.min(this.baseDelayMs * Math.pow(2, consecutive - 1), this.maxDelayMs)
+    this.throttledTargets.set(target, {
+      until: Date.now() + delay,
+      backoffMs: delay,
+      consecutive,
+    })
+  }
+
+  /**
+   * Record a successful response for the target (resets backoff).
+   */
+  recordSuccess(target: string): void {
+    this.throttledTargets.delete(target)
+  }
+
+  /** Reset all throttle state (e.g., between phases). */
+  reset(): void {
+    this.throttledTargets.clear()
+  }
+}
+
 import { Confidence } from "../shared/types"
 import { ConfidenceEngine } from "../engagement/confidence"
 import { ApprovalService } from "../workflows/approval"
@@ -84,6 +223,10 @@ export class InProcessExecutor implements PhaseExecutor {
 
   private executionOptions: ExecutionOptions = {}
   private emitProgress: ((event: ProgressEvent) => void) | null = null
+  /** Cross-tool rate limiter (blocker 44). */
+  private rateLimiter: CrossToolRateLimiter = new CrossToolRateLimiter()
+  /** Target throttle tracker for 429/503 backoff (blocker 45). */
+  private throttleTracker: ThrottleTracker = new ThrottleTracker()
   /** Phase-relative max duration per phase (env ARGUS_MAX_PHASE_DURATION_MS, default 30 min). */
   private maxPhaseDurationMs: number = (() => {
     const raw = process.env.ARGUS_MAX_PHASE_DURATION_MS
@@ -196,10 +339,11 @@ export class InProcessExecutor implements PhaseExecutor {
         errors: [`Assessment duration exceeded ${this.maxAssessmentDurationMs}ms — global circuit breaker tripped`],
         durationMs: 0,
       }
-    }
-
-    // Phase-level timeout (blocker 35) — set deadline for this phase
+    }      // Phase-level timeout (blocker 35) — set deadline for this phase
     this.phaseDeadline = Date.now() + this.maxPhaseDurationMs
+    // Reset cross-tool rate limiter and throttle tracker at phase start (blockers 44, 45)
+    this.rateLimiter.reset()
+    this.throttleTracker.reset()
 
     // Approval gate check runs BEFORE phase dispatch (including hybrid)
     const gate = this.isFeatureEnabled(Feature.APPROVAL_GATES)
@@ -286,7 +430,9 @@ export class InProcessExecutor implements PhaseExecutor {
     if (execOptions.verbose) console.log(`[executor]  ${toolConfigs.length} tool(s) configured for this phase`)
 
     // Execute tools: parallel for `parallel` phases, sequential for `sequential` phases
+
     if (phase.toolExecution === "parallel") {
+      if (execOptions.verbose) console.log(`[executor]  Cross-tool rate limiter reset for ${phase.name}`)
       if (execOptions.verbose) console.log(`[executor]  Executing ${toolConfigs.length} tool(s) in parallel (batch size: ${MAX_PARALLEL_TOOLS})`)
       // Run tools in batches of MAX_PARALLEL_TOOLS to avoid resource starvation
       for (let i = 0; i < toolConfigs.length; i += MAX_PARALLEL_TOOLS) {
@@ -374,7 +520,11 @@ export class InProcessExecutor implements PhaseExecutor {
         break
       }
       // 3. Get next tool from plan
-      const next = await this.bridge.agentNext({ session_id: session.session_id })
+      // Pass max_iterations so the Python side caps its loop (blocker 32).
+      const next = await this.bridge.agentNext({
+        session_id: session.session_id,
+        max_iterations: maxIterations,
+      })
       if (next.done || !next.tool) {
         done = true
         break
@@ -389,6 +539,24 @@ export class InProcessExecutor implements PhaseExecutor {
 
       // 4. Check tool health before executing
       if (!this.toolHealth.isHealthy(next.tool)) {
+        // Blocker 6: Try fallback tool for the same capability
+        const cap = pipeline.find(p => p.tool === next.tool)?.capabilities?.[0] ?? Capability.WEB_RECON
+        const fallback = this.findFallbackTool(next.tool, cap as Capability)
+        if (fallback) {
+          if (execOptions.verbose) console.log(`[executor]  ⛔ Tool ${next.tool} circuit-broken — hybrid fallback to ${fallback.name}`)
+          // Execute the fallback tool directly
+          const fallbackResult = await this.executeTool(fallback, cap as Capability, phase, startTime, execOptions)
+          findings.push(...fallbackResult.findings)
+          errors.push(...fallbackResult.errors)
+          await this.bridge.agentObserve({
+            session_id: session.session_id,
+            tool: fallback.name,
+            success: fallbackResult.findings.length > 0 || fallbackResult.errors.length === 0,
+            findingCount: fallbackResult.findings.length,
+            summary: `${fallback.name} (fallback): ${fallbackResult.findings.length} findings`,
+          })
+          continue
+        }
         const status = this.toolHealth.getToolStatus(next.tool)
         const retryAfter = status?.circuitOpenedAt
           ? Math.max(0, Math.ceil((300_000 - (Date.now() - status.circuitOpenedAt)) / 1000))
@@ -426,6 +594,20 @@ export class InProcessExecutor implements PhaseExecutor {
         }
       }
 
+      // 4c. Cross-tool rate limiting (blocker 44)
+      const rateDelay = this.rateLimiter.acquire(phase.target)
+      if (rateDelay > 0) {
+        if (execOptions.verbose) console.log(`[executor]  ⏱ Rate limit hit for ${phase.target} — waiting ${rateDelay}ms`)
+        await new Promise(r => setTimeout(r, rateDelay))
+      }
+
+      // 4d. Target throttle check (blocker 45): 429/503 backoff
+      const thrRemaining = this.throttleTracker.getRemainingDelay(phase.target)
+      if (thrRemaining > 0) {
+        if (execOptions.verbose) console.log(`[executor]  ⏱ Target ${phase.target} throttled — waiting ${thrRemaining}ms`)
+        await new Promise(r => setTimeout(r, thrRemaining))
+      }
+
       // 5. Execute tool
       const toolStartTime = Date.now()
       try {
@@ -445,6 +627,14 @@ export class InProcessExecutor implements PhaseExecutor {
         const toolTimeout = this.toolRegistry.getToolTimeout(next.tool) * 1000
         const result = await this.bridge.callTool(next.tool, toolArgs, toolTimeout, execOptions.cacheMode)
         const durationMs = Date.now() - toolStartTime
+
+        // Hybrid path: check for rate-limit responses (blocker 45)
+        if (!result.success && result.error && ThrottleTracker.isRateLimitError(result.error)) {
+          this.throttleTracker.recordThrottle(phase.target)
+          if (execOptions.verbose) console.log(`[executor]  ⏱ Target ${phase.target} returned rate-limit error — backing off`)
+        } else if (result.success) {
+          this.throttleTracker.recordSuccess(phase.target)
+        }
 
         if (result.success) {
           this.toolHealth.recordSuccess(next.tool, durationMs)
@@ -517,6 +707,11 @@ export class InProcessExecutor implements PhaseExecutor {
           continue
         }
         const errorMsg = (error as Error).message
+        // Check for rate-limit errors in hybrid catch block too (blocker 45)
+        if (ThrottleTracker.isRateLimitError(errorMsg)) {
+          this.throttleTracker.recordThrottle(phase.target)
+          if (execOptions.verbose) console.log(`[executor]  ⏱ Target ${phase.target} rate-limited in hybrid catch block — backing off`)
+        }
         this.toolHealth.recordFailure(next.tool, errorMsg)
         errors.push(`Tool ${next.tool} error: ${errorMsg}`)
 
@@ -548,7 +743,17 @@ export class InProcessExecutor implements PhaseExecutor {
     execOptions: ExecutionOptions,
   ): Promise<{ findings: NormalizedFinding[]; errors: string[]; failFast: boolean }> {
     if (!this.toolHealth.isHealthy(tool.name)) {
-      if (execOptions.verbose) console.log(`[executor]  ⛔ Tool ${tool.name} skipped — circuit breaker open`)
+      // Blocker 6: Try fallback tool for the same capability before giving up.
+      // This ensures we still get results even when the preferred tool is
+      // circuit-broken (e.g., dalfox down → try xsser for XSS detection).
+      const fallback = this.findFallbackTool(tool.name, cap)
+      if (fallback) {
+        if (execOptions.verbose) {
+          console.log(`[executor]  ⛔ Tool ${tool.name} circuit-broken — trying fallback ${fallback.name}`)
+        }
+        return this.executeTool(fallback, cap, phase, phaseStartTime, execOptions)
+      }
+      if (execOptions.verbose) console.log(`[executor]  ⛔ Tool ${tool.name} skipped — circuit breaker open, no fallback for ${cap}`)
       return { findings: [], errors: [`Tool ${tool.name} is temporarily unavailable (circuit breaker)`], failFast: false }
     }
 
@@ -597,6 +802,20 @@ export class InProcessExecutor implements PhaseExecutor {
           console.log(`[executor]    Args:`, JSON.stringify(safeArgs))
         }
 
+        // Cross-tool rate limiting: check before executing (blocker 44)
+        const rateDelay = this.rateLimiter.acquire(phase.target)
+        if (rateDelay > 0) {
+          if (execOptions.verbose) console.log(`[executor]  ⏱ Rate limit hit for ${phase.target} — waiting ${rateDelay}ms`)
+          await new Promise(r => setTimeout(r, rateDelay))
+        }
+
+        // Target throttle check (blocker 45): 429/503 backoff
+        const throttleRemaining = this.throttleTracker.getRemainingDelay(phase.target)
+        if (throttleRemaining > 0) {
+          if (execOptions.verbose) console.log(`[executor]  ⏱ Target ${phase.target} throttled — waiting ${throttleRemaining}ms`)
+          await new Promise(r => setTimeout(r, throttleRemaining))
+        }
+
         // Per-tool destructive confirmation (Task 4.1)
         // Runs AFTER phase-level approval, giving users a second safety prompt
         // before individual destructive tools execute. In TTY mode, the user
@@ -630,6 +849,15 @@ export class InProcessExecutor implements PhaseExecutor {
         if (timeoutErr) {
           if (execOptions.verbose) console.log(`[executor]  ⛔ Phase timeout reached — stopping tool loop`)
           return { findings, errors: [timeoutErr], failFast: true }
+        }
+
+        // Check if the response indicates target rate limiting (blocker 45)
+        if (!result.success && result.error && ThrottleTracker.isRateLimitError(result.error)) {
+          this.throttleTracker.recordThrottle(phase.target)
+          if (execOptions.verbose) console.log(`[executor]  ⏱ Target ${phase.target} returned rate-limit error — backing off`)
+        } else if (result.success) {
+          // Successful response — reset throttle state for this target
+          this.throttleTracker.recordSuccess(phase.target)
         }
 
         if (result.success && result.data) {
@@ -674,6 +902,12 @@ export class InProcessExecutor implements PhaseExecutor {
         if (error instanceof LLMUnavailableError) {
           this.bridge.resetCircuitBreaker()
           return { findings, errors: [`Tool ${tool.name} skipped — LLM ${error.status}${error.retryAfter ? ` (retry in ${error.retryAfter}s)` : ""}`], failFast: false }
+        }
+        // Check for rate-limit errors in catch block too (blocker 45)
+        const errMsg = (error as Error).message
+        if (ThrottleTracker.isRateLimitError(errMsg)) {
+          this.throttleTracker.recordThrottle(phase.target)
+          if (execOptions.verbose) console.log(`[executor]  ⏱ Target ${phase.target} rate-limited in catch block — backing off`)
         }
         lastError = error as Error
         this.toolHealth.recordFailure(tool.name, lastError.message)
@@ -772,6 +1006,24 @@ export class InProcessExecutor implements PhaseExecutor {
     await writeFile(credsPath, JSON.stringify(selected, null, 2), { mode: 0o600 })
     this.tempCredFiles.push(credsPath)
     return credsPath
+  }
+
+  /**
+   * Find a fallback tool when the primary tool is circuit-broken (blocker 6).
+   * Looks for another enabled tool that covers the same capability.
+   * Skips tools that are also circuit-broken or are the original tool.
+   */
+  private findFallbackTool(unhealthyTool: string, cap: Capability): ToolDef | undefined {
+    const alternatives = this.toolRegistry.getToolsByCapability(cap)
+    for (const alt of alternatives) {
+      if (alt.name === unhealthyTool) continue
+      // Skip if the alternative is also circuit-broken
+      if (!this.toolHealth.isHealthy(alt.name)) continue
+      // Skip destructive tools unless approved
+      if (alt.destructive && !this.isFeatureEnabled(Feature.APPROVAL_GATES)) continue
+      return alt
+    }
+    return undefined
   }
 
   private resolveErrorRecovery(phase: PhaseExecutionRequest, toolName: string): ErrorRecovery {

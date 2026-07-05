@@ -36,6 +36,7 @@ export interface EngagementState {
  */
 export interface IEngagementStore {
   close(): void
+  registerExitHandler(): void
 
   // ── Engagement CRUD (root DB) ──
   createEngagement(target: string, workflow: string): EngagementState

@@ -18,9 +18,13 @@ export interface ResolvedToolConfig {
   getCircuitBreakerConfig(): { maxFailures: number; cooldownMs: number }
 }
 
+// Blocker 22: Relaxed defaults — was 5 failures / 5 min cooldown.
+// Increased maxFailures to 8 to avoid killing tools on transient errors
+// (network jitter, MCP worker restarts). Reduced cooldown to 120s so
+// tools recover faster. These can still be overridden via config YAML.
 const DEFAULT_CIRCUIT_BREAKER = {
-  maxFailures: 5,
-  cooldownMs: 300_000,
+  maxFailures: 8,
+  cooldownMs: 120_000,
 }
 
 export class ToolConfig implements ResolvedToolConfig {

@@ -285,7 +285,11 @@ class LLMAgentConfig:
     max_tokens_synth: int = 2000  # tokens for findings synthesis
     max_tokens_report: int = 3000  # tokens for final report
     context_max_tokens: int = 3500  # max context passed to LLM
-    zero_finding_stop: int = 4  # stop after N zero-finding iterations
+    # Blocker 64: zero_finding_stop (4) must be > Governance low_signal_threshold (3).
+    # This ensures Governance's low-signal detection fires FIRST, providing an
+    # informative stop reason instead of a generic "empty output" stop.
+    # Must stay > governance.py:_DEFAULT_LOW_SIGNAL_THRESHOLD.
+    zero_finding_stop: int = 4
 
     @classmethod
     def from_env(cls) -> "LLMAgentConfig":

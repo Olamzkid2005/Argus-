@@ -88,11 +88,29 @@ class LLMClient:
             or self._load_key_from_redis(redis_url)
         )
         # Auto-detect provider from API key prefix
+        # Blocker 55: Validate API key prefix against known providers.
+        # When the prefix doesn't match any known pattern, log a warning so
+        # the operator knows to set LLM_PROVIDER explicitly.
         if self.api_key:
+            _known_prefix = True
             if self.api_key.startswith("sk-or-"):
                 # OpenRouter
                 self.provider = "generic"
                 self.api_url = "https://openrouter.ai/api/v1/chat/completions"
+            elif self.api_key.startswith("sk-proj-"):
+                # OpenAI project API key (new format)
+                self.provider = "openai"
+                self.api_url = api_url or os.getenv(
+                    "LLM_API_URL",
+                    "https://api.openai.com/v1/chat/completions",
+                )
+            elif self.api_key.startswith("sk-"):
+                # OpenAI legacy key (sk-...) or compatible
+                self.provider = "openai"
+                self.api_url = api_url or os.getenv(
+                    "LLM_API_URL",
+                    "https://api.openai.com/v1/chat/completions",
+                )
             elif self.api_key.startswith("AIzaSy") or self.api_key.startswith("AQ."):
                 # Google Gemini / AI Studio (AIzaSy=old format, AQ.=new format)
                 self.provider = "generic"
@@ -103,12 +121,36 @@ class LLMClient:
                 # Default model for Gemini if not explicitly set
                 if not model and not os.getenv("LLM_MODEL"):
                     self.model = "gemini-2.0-flash"
-            else:
+            elif self.api_key.startswith("sk-ant-"):
+                # Anthropic — NOT auto-configurable because Anthropic's API is not
+                # OpenAI-compatible (different payload format). The user must set
+                # LLM_PROVIDER and LLM_API_URL explicitly for Anthropic keys.
+                _known_prefix = True
+                # Don't set api_url — let it fall through to default or user override.
+                # Anthropic keys are recognized but not automatically configured.
                 self.api_url = api_url or os.getenv(
                     "LLM_API_URL",
                     "https://api.openai.com/v1/chat/completions"
                     if self.provider == "openai"
                     else "",
+                )
+            else:
+                _known_prefix = False
+                self.api_url = api_url or os.getenv(
+                    "LLM_API_URL",
+                    "https://api.openai.com/v1/chat/completions"
+                    if self.provider == "openai"
+                    else "",
+                )
+
+            if not _known_prefix:
+                logger.warning(
+                    "LLM API key prefix '%s...' does not match any known provider pattern "
+                    "(sk-or-, sk-proj-, sk-, AIzaSy, AQ., sk-ant-). "
+                    "Set LLM_PROVIDER and LLM_API_URL explicitly if the auto-detected "
+                    "provider '%s' is incorrect.",
+                    self.api_key[:8],
+                    self.provider,
                 )
         else:
             self.api_url = api_url or os.getenv(

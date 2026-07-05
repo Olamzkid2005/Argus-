@@ -301,3 +301,48 @@ class AgentSessionStore:
         with self._lock:
             self._touch(session)
             return session.execution_iteration
+
+    def cancel(self, session_id: str) -> bool:
+        """Signal a session to stop (blocker 38).
+
+        Sets the ``_cancelled`` attribute on the session object so that
+        the ReActAgent loop can check it on the next iteration and
+        terminate gracefully.
+
+        If the session does not exist, returns False (no-op).
+
+        Args:
+            session_id: The session to cancel.
+
+        Returns:
+            True if the session was found and cancelled, False otherwise.
+        """
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                return False
+            object.__setattr__(session, '_cancelled', True)
+            return True
+
+    def set_ts_max_iterations(self, session_id: str, max_iterations: int) -> bool:
+        """Set the TS-side max iterations limit on a session (blocker 32).
+
+        The TypeScript executor communicates its ARGUS_HYBRID_MAX_ITERATIONS
+        so the Python side can cap the iteration limit with min(). This is
+        stored as ``ts_max_iterations`` on the session object.
+
+        If the session does not exist, returns False (no-op).
+
+        Args:
+            session_id: The session to configure.
+            max_iterations: The max iterations from the TS executor.
+
+        Returns:
+            True if the session was found and updated, False otherwise.
+        """
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                return False
+            object.__setattr__(session, 'ts_max_iterations', max_iterations)
+            return True

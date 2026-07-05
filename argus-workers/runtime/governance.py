@@ -30,7 +30,11 @@ logger = logging.getLogger(__name__)
 _DEFAULT_MAX_TOKENS = 100_000
 _DEFAULT_MAX_COST_USD = 10.0
 _DEFAULT_MAX_RUNTIME_SECONDS = 3600  # 1 hour
-_DEFAULT_LOW_SIGNAL_THRESHOLD = 3  # consecutive low-value tool runs
+# Blocker 64: Must be < constants.py:zero_finding_stop (4).
+# If low_signal_threshold >= zero_finding_stop, the legacy empty-output detection
+# in react_agent.py fires before Governance's low-signal check, creating a race.
+# Aligned: 3 < 4 ensures Governance always fires first with an informative reason.
+_DEFAULT_LOW_SIGNAL_THRESHOLD = 3
 _DEFAULT_HIGH_VALUE_SEVERITIES = {"CRITICAL", "HIGH"}
 
 
@@ -62,7 +66,8 @@ class Governance:
         self.max_runtime_seconds = max_runtime_seconds
         self.low_signal_threshold = low_signal_threshold
 
-        # Runtime tracking
+        # Runtime tracking — wall clock start is kept for diagnostics but the
+        # timeout check uses _active_time_accumulated (blocker 58).
         self._start_time = time.time()
         self._total_tokens_used = 0
         self._total_cost_usd = 0.0
@@ -70,6 +75,10 @@ class Governance:
         self._last_tool_results: list[dict] = []
         self._is_shutdown = False
         self._shutdown_reason = ""
+        # Active execution time tracking (blocker 58): accumulated seconds spent
+        # actively executing tool calls, excluding idle/waiting time.
+        self._active_time_accumulated: float = 0.0
+        self._active_timer_start: float | None = None
 
     # ── Public API ──
 
@@ -93,11 +102,17 @@ class Governance:
             tool_name = getattr(action, "tool", "unknown") or "unknown"
             cost = getattr(action, "cost_usd", 0.0) or 0.0
 
-        # 1. Runtime timeout check
-        elapsed = time.time() - self._start_time
+        # 1. Active runtime timeout check (blocker 58)
+        # Uses accumulated active execution time instead of wall-clock,
+        # so idle time between tool calls doesn't count against the budget.
+        elapsed = self._active_time_accumulated
+        if self._active_timer_start is not None:
+            elapsed += time.time() - self._active_timer_start
         if elapsed > self.max_runtime_seconds:
             self._shutdown(
-                "runtime_timeout", f"Runtime exceeded {self.max_runtime_seconds}s"
+                "runtime_timeout",
+                f"Active runtime exceeded {self.max_runtime_seconds}s "
+                f"(accumulated: {elapsed:.1f}s, wall: {time.time() - self._start_time:.1f}s)",
             )
             return False, self._shutdown_reason
 
@@ -213,12 +228,44 @@ class Governance:
             )
         return False, ""
 
+    def start_active_timer(self) -> None:
+        """Start tracking active execution time (blocker 58).
+
+        Call this just before executing a tool call. Idle time between
+        start/stop pairs is excluded from the active runtime budget.
+        """
+        self._active_timer_start = time.time()
+
+    def stop_active_timer(self) -> None:
+        """Stop tracking active execution time (blocker 58).
+
+        Call this immediately after a tool call completes. Accumulates
+        the elapsed time into _active_time_accumulated.
+        """
+        if self._active_timer_start is not None:
+            elapsed = time.time() - self._active_timer_start
+            self._active_time_accumulated += elapsed
+            self._active_timer_start = None
+
+    def get_active_runtime_seconds(self) -> float:
+        """Get accumulated active execution time in seconds.
+
+        Includes any currently-running timer if start_active_timer() was
+        called without a matching stop.
+        """
+        elapsed = self._active_time_accumulated
+        if self._active_timer_start is not None:
+            elapsed += time.time() - self._active_timer_start
+        return round(elapsed, 1)
+
     def get_status(self) -> dict:
         """Return current governance status for observation building."""
-        elapsed = time.time() - self._start_time
+        wall_elapsed = time.time() - self._start_time
+        active_elapsed = self.get_active_runtime_seconds()
         return {
             "engagement_id": self.engagement_id,
-            "runtime_elapsed_seconds": round(elapsed, 1),
+            "runtime_elapsed_seconds": round(wall_elapsed, 1),
+            "active_runtime_seconds": active_elapsed,
             "max_runtime_seconds": self.max_runtime_seconds,
             "total_cost_usd": round(self._total_cost_usd, 6),
             "max_cost_usd": self.max_cost_usd,

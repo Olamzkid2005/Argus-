@@ -162,7 +162,9 @@ export class EvidenceCollector {
                 await unlink(filePath)
                 pruned++
               }
-            } catch { /* skip unreadable */ }
+            } catch (e) {
+              console.warn(`[Evidence] Failed to stat/unlink ${filePath}: ${(e as Error).message}`)
+            }
           }
         }
 
@@ -175,10 +177,15 @@ export class EvidenceCollector {
             if (remaining.length === 0) {
               await rmdir(typePath)
             }
-          } catch { /* skip */ }
+          } catch (e) {
+            console.warn(`[Evidence] Failed to remove empty dir ${typePath}: ${(e as Error).message}`)
+          }
         }
       }
-    } catch { return pruned }
+    } catch (e) {
+      console.warn(`[Evidence] pruneEngagement error: ${(e as Error).message}`)
+      return pruned
+    }
 
     return pruned
   }

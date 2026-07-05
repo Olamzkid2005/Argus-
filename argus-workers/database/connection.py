@@ -210,13 +210,36 @@ class ConnectionManager:
                     pool_instance.putconn(conn)
                 except Exception:
                     pass
-                # Try getting a fresh connection (bypass pool for this retry)
-                fresh_conn = pool_instance.getconn()
-                conn = fresh_conn
-                logger.info(
-                    "Got fresh connection %s after health check failure",
-                    id(conn),
-                )
+                # Blocker 47: If pool is exhausted (all connections stale after
+                # network flap), close, reinitialize and return a fresh connection
+                # directly rather than trying to continue the retry loop.
+                try:
+                    fresh_conn = pool_instance.getconn()
+                    conn = fresh_conn
+                    logger.info(
+                        "Got fresh connection %s after health check failure",
+                        id(conn),
+                    )
+                except pool.PoolError:
+                    logger.warning(
+                        "Pool exhausted after connection loss — reinitializing pool"
+                    )
+                    with self._pool_lock:
+                        if self._pool is not None:
+                            try:
+                                self._pool.closeall()
+                            except Exception:
+                                pass
+                            self._pool = None
+                    with self._metrics_lock:
+                        self._metrics["reconnect_attempts"] += 1
+                    # Reinitialize pool and get a fresh connection directly
+                    pool_instance = self._ensure_pool()
+                    if pool_instance is not None:
+                        conn = pool_instance.getconn()
+                        logger.info(
+                            "Got fresh connection from reinitialized pool"
+                        )
 
             # Enforce statement_timeout on each connection
             # This prevents runaway queries from blocking the pool

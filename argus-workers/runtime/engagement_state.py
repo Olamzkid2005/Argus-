@@ -21,6 +21,10 @@ from state_machine import EngagementStateMachine
 
 logger = logging.getLogger(__name__)
 
+# Shared truncation limit for observations (coordinated with ReActAgent.history at 50).
+# When changed here, react_agent.py's add_to_history() cap must be updated to match.
+OBSERVATION_TRUNCATION_LIMIT = 50
+
 
 class ToolExecutionRecord:
     """Record of a single tool execution within the engagement."""
@@ -191,15 +195,18 @@ class EngagementState:
                 "timestamp": time.time(),
             }
         )
-        # Cap to last 50 entries
-        if len(self.observations) > 50:
+        # Cap to last OBSERVATION_TRUNCATION_LIMIT entries (coordinated with
+        # react_agent.py:add_to_history() which uses a hardcoded 50).
+        # If you change this constant, update react_agent.py to match (blocker 49).
+        if len(self.observations) > OBSERVATION_TRUNCATION_LIMIT:
+            dropped = len(self.observations) - OBSERVATION_TRUNCATION_LIMIT
             logger.warning(
                 "EngagementState observations truncated: %d entries dropped from %s — "
-                "LLM may lose context of earlier observations",
-                len(self.observations) - 50,
+                "LLM may lose context of earlier observations.",
+                dropped,
                 self.engagement_id,
             )
-            self.observations = self.observations[-50:]
+            self.observations = self.observations[-OBSERVATION_TRUNCATION_LIMIT:]
         self._bump_version()
 
     def get_context(self, max_entries: int = 6) -> str:

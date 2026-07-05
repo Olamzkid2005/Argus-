@@ -43,10 +43,24 @@ export class WorkersBridge {
 
   /** Phase 4.2.2: Cache of recent tool results used when the worker is in degraded mode.
    *  Keyed by tool name, stores the last successful result so non-critical operations
-   *  can return cached data instead of failing when the MCP worker is unavailable. */
-  private degradedToolCache = new Map<string, { result: ToolResult; timestamp: number }>()
-  /** Max age for cached results in degraded mode (5 minutes). */
-  private static readonly DEGRADED_CACHE_TTL_MS = 5 * 60 * 1000
+   *  can return cached data instead of failing when the MCP worker is unavailable.
+   *  Each entry tracks hit count to prevent stale data from being served
+   *  indefinitely (blocker 7). */
+  private degradedToolCache = new Map<string, {
+    result: ToolResult
+    timestamp: number
+    /** Number of times this cached result has been served. Reset on each fresh cache write. */
+    hitCount: number
+  }>()
+  /** Max age for cached results in degraded mode (5 minutes by default, configurable via ARGUS_DEGRADED_CACHE_TTL_MS). */
+  private static get DEGRADED_CACHE_TTL_MS(): number {
+    const raw = process.env.ARGUS_DEGRADED_CACHE_TTL_MS
+    if (raw === undefined || raw === "") return 5 * 60 * 1000
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? n : 5 * 60 * 1000
+  }
+  /** Max cache hits before a cached result transitions to stale (default 3). */
+  private static readonly DEGRADED_CACHE_MAX_HITS = 3
 
   private pendingCount = 0
   private readonly maxPending: number
@@ -62,6 +76,10 @@ export class WorkersBridge {
   private forwardingEnabled = false
   /** Flag to prevent restart races when disconnect is intentional */
   private _disconnecting = false
+  /** Periodic health probe interval handle (blocker 15). */
+  private _healthProbeTimer: ReturnType<typeof setInterval> | null = null
+  /** Default health probe interval in ms (30s). */
+  private static readonly HEALTH_PROBE_INTERVAL_MS = 30_000
 
   constructor(
     private workersPath: string,
@@ -153,9 +171,11 @@ export class WorkersBridge {
     this.cleanup()
     await this.spawnChild()
     this.enableSignalForwarding()
+    this._startHealthProbes()
   }
 
   private cleanup(): void {
+    this._stopHealthProbes()
     this.disableSignalForwarding()
     if (this.rl) {
       this.rl.removeAllListeners()
@@ -310,6 +330,34 @@ export class WorkersBridge {
     }
   }
 
+  /** Start periodic health probes every 30s while connected (blocker 15).
+   *  If probeHealth() returns false, logs a warning and kicks off worker
+   *  restart via the supervisor. Uses unref() so the timer doesn't keep
+   *  the process alive. */
+  private _startHealthProbes(): void {
+    this._stopHealthProbes()
+    this._healthProbeTimer = setInterval(async () => {
+      const healthy = await this.probeHealth()
+      if (!healthy) {
+        console.warn(`[MCP] Health probe failed — worker unresponsive, initiating restart`)
+        this.setLLMStatus("UNAVAILABLE")
+        if (!this._disconnecting) {
+          this.restartWorker().catch((err) => {
+            console.error(`[MCP] Worker restart from health probe failed:`, err)
+          })
+        }
+      }
+    }, WorkersBridge.HEALTH_PROBE_INTERVAL_MS)
+    this._healthProbeTimer.unref()
+  }
+
+  private _stopHealthProbes(): void {
+    if (this._healthProbeTimer !== null) {
+      clearInterval(this._healthProbeTimer)
+      this._healthProbeTimer = null
+    }
+  }
+
   private async sendRequest(method: string, params?: unknown, timeoutMs = 30000): Promise<unknown> {
     if (this.pendingCount >= this.maxPending) {
       throw new Error(`Too many pending requests (max ${this.maxPending})`)
@@ -446,22 +494,44 @@ export class WorkersBridge {
   }
 
   /** Phase 4.2.2: Get a cached tool result from the degraded cache.
+   *  Uses freshness tracking (blocker 7):
+   *  - Hit count tracks how many times the cached result has been served
+   *  - Warning logged at DEGRADED_CACHE_MAX_HITS (3) to indicate staleness
+   *  - TTL expiry removes entry entirely
+   *
    *  Returns undefined if no recent cache entry exists for the tool. */
   getCachedToolResult(toolName: string): ToolResult | undefined {
     const entry = this.degradedToolCache.get(toolName)
     if (!entry) return undefined
+
+    // Check TTL expiry
     if (Date.now() - entry.timestamp > WorkersBridge.DEGRADED_CACHE_TTL_MS) {
       this.degradedToolCache.delete(toolName)
       return undefined
     }
+
+    // Track hit count; warn when stale threshold is crossed
+    entry.hitCount++
+    if (entry.hitCount === WorkersBridge.DEGRADED_CACHE_MAX_HITS) {
+      console.warn(
+        `[MCP] Degraded cache stale for tool '${toolName}': served ${entry.hitCount} times since last write. ` +
+        `Consider refreshing or switching to alternative tools.`
+      )
+    }
+
     return entry.result
   }
 
   /** Phase 4.2.2: Store a successful tool result in the degraded cache.
-   *  Called automatically by callTool on success. */
+   *  Called automatically by callTool on success. Resets hit count on
+   *  each fresh write (blocker 7). */
   private cacheToolResult(toolName: string, result: ToolResult): void {
     if (result.success) {
-      this.degradedToolCache.set(toolName, { result, timestamp: Date.now() })
+      this.degradedToolCache.set(toolName, {
+        result,
+        timestamp: Date.now(),
+        hitCount: 0,
+      })
     }
   }
 
@@ -540,6 +610,8 @@ export class WorkersBridge {
   async agentNext(params: {
     session_id: string
     trigger?: "stuck" | "new_finding" | "phase_complete"
+    /** Max iterations for this agent session — TS caps the Python loop (blocker 32). */
+    max_iterations?: number
   }): Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }> {
     return this.sendRequest("agent_next", params) as Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }>
   }
@@ -635,11 +707,13 @@ export class WorkersBridge {
     next_capabilities: string[]
     reasoning: string
     stop: boolean
+    fallback?: boolean  // true when LLM was unavailable (blocker 16)
   }> {
     return this.sendRequest("phase_complete", params) as Promise<{
       next_capabilities: string[]
       reasoning: string
       stop: boolean
+      fallback?: boolean
     }>
   }
 

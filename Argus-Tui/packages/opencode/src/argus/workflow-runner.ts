@@ -337,8 +337,9 @@ export class WorkflowRunner {
 
     try {
       await engine.close()
-    } catch {
-      // best-effort cleanup
+    } catch (closeErr) {
+      // Blocker 21: Log engine close failures so they're observable
+      console.warn(`[workflow-runner] Engine close error: ${(closeErr as Error).message}`)
     }
 
     return updated
@@ -418,6 +419,8 @@ export class WorkflowRunner {
 
     // ── 1. Create or use existing engagement ──
     const store = this.deps?.store ?? new EngagementStore()
+    // Register exit handler for clean SQLite shutdown (blocker 41)
+    store.registerExitHandler()
     let engagementId = options.engagementId
     if (engagementId) {
       // Verify the engagement exists
@@ -448,14 +451,15 @@ export class WorkflowRunner {
         featureFlags.loadFromConfig(parsed.features)
       }
       configMaxReplans = parsed?.replan?.max_cycles
-    } catch {
+    } catch (configErr) {
       if (isAutonomous) {
         throw new Error(
           "[Argus] ARGUS_AUTONOMOUS=1: config file 'argus.config.yaml' is missing or malformed. " +
           "A valid config file is required in autonomous mode. Fix the file or disable autonomous mode."
         )
       }
-      console.warn("Config file missing or invalid, using defaults")
+      // Blocker 21: Log the actual error so silent config fallback is observable
+      console.warn("Config file missing or invalid, using defaults:", (configErr as Error).message)
       /* config file missing or invalid — use defaults */
     }
     featureFlags.loadFromEnv()
@@ -670,6 +674,13 @@ export class WorkflowRunner {
               confidence: f.confidence,
             })),
           })
+
+          // Log fallback (degraded) status from the Python side (blocker 16)
+          if (phaseCompleteResult.fallback) {
+            emit(`⚠ LLM unavailable for phase analysis — using fallback phase progression`)
+            store.appendAuditLog(engagementId, "PHASE_COMPLETE_FALLBACK",
+              `Phase ${phaseName} complete feedback used fallback (LLM unavailable): ${phaseCompleteResult.reasoning.slice(0, 200)}`)
+          }
 
           if (!phaseCompleteResult.stop && phaseCompleteResult.next_capabilities.length > 0) {
             store.appendAuditLog(engagementId, "PHASE_COMPLETE_LLM",
