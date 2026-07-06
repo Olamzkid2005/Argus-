@@ -169,7 +169,7 @@ The global circuit breaker is checked at the start of `execute()` (line ~164). T
 
 - **File:** `Argus-Tui/packages/opencode/src/argus/planner/executor.ts`
 - **Env vars:** `ARGUS_MAX_PHASE_DURATION_MS` (default 1800000), `ARGUS_MAX_ASSESSMENT_DURATION_MS` (default 7200000)
-- **Note:** The global timer (`assessmentStartTime`) is never explicitly set to `Date.now()` at assessment start — it stays at 0, meaning only the per-phase timeout is currently active. The global breaker requires wiring in the assessment entry point.
+- **Note:** The global timer (`assessmentStartTime`) is now set to `Date.now()` at the start of the first phase execution via an `if (=== 0)` guard in `execute()`. Both the global 2-hour ceiling and per-phase 30-min timeout are now actively enforced.
 </details>
 
 ### 21. Best-Effort try/catch Everywhere Masks Failures ✅ FIXED
@@ -519,6 +519,8 @@ See blocker 43 above.
 
 **`argus-workers/tools/scope_validator.py:214`** — Default mode changed from `"warn"` to `"allowlist"` so out-of-scope targets are **rejected** instead of warned. This applies to both the deterministic scan pipeline (`orchestrator_pkg/scan.py`) and all call sites that don't explicitly pass a mode. When no `allowed_targets` are configured, the validator logs a clear message (`"allowlist mode with no allowed_targets configured"`) and blocks all targets (fail-closed).
 
+**`Argus-Tui/packages/opencode/src/argus/workflow-runner.ts`** — Added autonomous-mode guard: when `ARGUS_AUTONOMOUS=1` and `security.scope.mode` is `"warn"` or `"open"`, the runner throws a hard error instead of proceeding with an implicit scope. This mirrors the existing pattern (blockers #13, #23, #28) of failing hard in autonomous mode rather than silently degrading. Users must explicitly set `scope.mode: allowlist` with `allowed_targets` in `argus.config.yaml` before running autonomously.
+
 ### 46. Docker Compose Has No Health Checks ✅ FIXED (already had them)
 
 **`docker-compose.yml`** — Verified: both PostgreSQL and Redis already have ``healthcheck:`` blocks with ``pg_isready`` and ``redis-cli ping``. The ``worker`` and ``celery-beat`` services already use ``depends_on: condition: service_healthy``. No code change needed — this blocker was already resolved.
@@ -581,7 +583,7 @@ redis:
 
 | Config Key | Default | Autonomous Impact | Fix Status |
 |---|---|---|---|
-| `scope.mode` | `warn` | Allows out-of-scope targets with warning | ✅ Fixed — now defaults to `allowlist` |
+| `scope.mode` | `warn` | In autonomous mode, fails hard if `warn` or `open` — must be `allowlist` | ✅ Fixed — TUI guard + Python default |
 | `git_host_policy` | `allowlist` | Blocks git repos from unlisted hosts | ✅ Fixed — errors propagate from from_config() |
 | `approval_gates` | `true` | Stdin prompts unless `ARGUS_AUTO_APPROVE=1` | ✅ See blocker 2 |
 | `storage.encryption.enabled` | `false` | Credentials stored in plaintext | ❌ Not fixed |
@@ -592,7 +594,7 @@ redis:
 | `DETERMINISTIC_FALLBACK` | `false` (opt-in) | LLM planning used even when LLM key missing | ❌ Not fixed |
 | `tools.circuit_breaker.max_failures` | `5` | Tools go dark for 5 min after 5 failures | ❌ Not fixed |
 | `tools.circuit_breaker.cooldown_ms` | `300000` (5 min) | No half-open probe in TS-side circuit breaker | ❌ Not fixed |
-| `scope.mode` default | `warn` | Not `allowlist` — now defaults to `allowlist` | ✅ Fixed |
+| `ARGUS_MAX_ASSESSMENT_DURATION_MS` | `7200000` (2h) | Global timer was dead code | ✅ Fixed — timer now starts at first phase via `=== 0` guard |
 | `ARGUS_HYBRID_MAX_ITERATIONS` | `50` | No safety net for runaway LLM loops | ✅ Per-phase + global breakers |
 | `storage.encryption.enabled` | `false` | Engagement DBs stored as plaintext SQLite | ❌ Not fixed |
 
@@ -604,15 +606,15 @@ redis:
 
 | Category | Total | ✅ Fixed | 🟡 Partial | ❌ Unfixed |
 |---|---|---|---|---|
-| P0 — Deadlocks/Stops | 5 | 5 | 0 | 0 |
+| P0 — Deadlocks/Stops (incl. #20 timer now active) | 5 | 5 | 0 | 0 |
 | P1 — Reliability | 5 | 5 | 0 | 0 |
 | P2 — Robustness | 6 | 6 | 0 | 0 |
-| P3 — Config/Polish | 5 | 5 | 0 | 0 |
+| P3 — Config/Polish (incl. #36 TUI scope guard) | 5 | 5 | 0 | 0 |
 | P4 — Edge Cases | 5 | 5 | 0 | 0 |
-| Other blockers | 40+ | 22 | 0 | ~2 code-fixable + ~16 operational |
-| **Total** | **66** | **48** | **0** | **~18** |
+| Other blockers | 40+ | 24 | 0 | ~16 operational |
+| **Total** | **66** | **50** | **0** | **~16** |
 
-**Net change:** #36 (scope.mode default→allowlist), #37 (ThreadPoolExecutor bounds), #46 (Docker health checks — already existed), #49 (state truncation coordination — shared import), #57 (health/metrics endpoint), #65 (Git SSRF allowlist propagation), and #66 (orphaned backoff key) resolved. Also: redirect SSRF hardening (dual_auth_scanner, ai_vuln_scanner, llm_review, auth_manager), migration SQL fixes (017, 006, 008), webhook SSRF (post_finding_hooks.py), CWE/OWASP column consolidation (025). 48 total fixed, 0 partial, ~18 unfixed.
+**Net change:** #20 (global timer now actively enforced — `assessmentStartTime = Date.now()` set in `execute()` with `=== 0` guard), #36 (TUI-side autonomous-mode scope guard — `workflow-runner.ts` fails hard when `scope.mode` is `warn`/`open`). Also: #37 (ThreadPoolExecutor bounds), #46 (Docker health checks — already existed), #49 (state truncation coordination — shared import), #57 (health/metrics endpoint), #65 (Git SSRF allowlist propagation), and #66 (orphaned backoff key) resolved. Plus: redirect SSRF hardening (dual_auth_scanner, ai_vuln_scanner, llm_review, auth_manager), migration SQL fixes (017, 006, 008), webhook SSRF (post_finding_hooks.py), CWE/OWASP column consolidation (025). **50 total fixed**, 0 partial, ~16 unfixed.
 
 ### What Must Be True for Autonomous Mode (Updated)
 
@@ -621,7 +623,7 @@ redis:
 3. All ~60 security tool binaries installed on PATH
 4. Python MCP worker environment set up for Python-based tools
 5. `credentials.json` with target login credentials (if browser testing needed)
-6. `scope.mode` set to `"open"` in `argus.config.yaml` (or targets in `allowed_targets`)
+6. `scope.mode` set to `"allowlist"` in `argus.config.yaml` with `allowed_targets` configured — **autonomous mode now fails hard** if scope is `"warn"` or `"open"`
 7. Browser-verifiable targets must not use MFA/CAPTCHA/OAuth
 8. PostgreSQL and Redis running
 9. Bun runtime (not Node.js) — `bun:sqlite` is required by `EngagementStore`
@@ -674,7 +676,7 @@ redis:
 | 17 | Structured findings lost | Consumed `data.structured` in executor |
 | 18 | Attack graph logging | Skipped finding count reported |
 | 19 | Zero-tools phase | Throws error in autonomous mode |
-| 20 | Runaway hybrid loop | Per-phase + global max-duration circuit breakers |
+| 20 | Runaway hybrid loop | Per-phase + global max-duration circuit breakers (global timer now active — `assessmentStartTime` set at first phase via `=== 0` guard) |
 | 21 | try/catch masking | 4 silent catches now log errors |
 | 22 | Circuit breaker defaults | Relaxed to 8 failures / 120s cooldown |
 | 23 | Lock skip | Fails hard in autonomous mode |

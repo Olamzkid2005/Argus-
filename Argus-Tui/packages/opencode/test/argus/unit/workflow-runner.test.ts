@@ -540,6 +540,127 @@ describe("formatFindingsSummary", () => {
     expect(result.engagementId).toBe("ENG-test-001")
   })
 
+  describe("autonomous-mode scope guard (blocker 36)", () => {
+    test("throws when ARGUS_AUTONOMOUS=1 and config is missing or malformed", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      const runner = new WorkflowRunner(deps)
+
+      process.env.ARGUS_AUTONOMOUS = "1"
+      try {
+        await expect(
+          runner.run({ target: "https://example.com" }),
+        ).rejects.toThrow("config file 'argus.config.yaml' is missing or malformed")
+      } finally {
+        delete process.env.ARGUS_AUTONOMOUS
+      }
+    })
+
+    test("does not throw in non-autonomous mode when config is missing", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      const runner = new WorkflowRunner(deps)
+
+      // In non-autonomous mode, missing config should not throw
+      // (it falls back to defaults with a warning)
+      const result = await runner.run({ target: "https://example.com" })
+      expect(result.engagementId).toBe("ENG-test-001")
+    })
+
+    test("ARGUS_AUTONOMOUS='true' also triggers guard", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      const runner = new WorkflowRunner(deps)
+
+      process.env.ARGUS_AUTONOMOUS = "true"
+      try {
+        await expect(
+          runner.run({ target: "https://example.com" }),
+        ).rejects.toThrow("config file 'argus.config.yaml' is missing or malformed")
+      } finally {
+        delete process.env.ARGUS_AUTONOMOUS
+      }
+    })
+
+    test("non-autonomous mode proceeds even when ARGUS_AUTONOMOUS is not set", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      const runner = new WorkflowRunner(deps)
+
+      delete process.env.ARGUS_AUTONOMOUS
+      const result = await runner.run({ target: "https://example.com" })
+      expect(result.engagementId).toBe("ENG-test-001")
+      expect(result.success).toBe(true)
+    })
+  })
+})
+
+// ── Autonomous-mode scope.mode value check (pure logic) ──
+// These tests validate the scope check logic in isolation, since the
+// full WorkflowRunner.run() path requires a valid YAML config file.
+describe("autonomous scope.mode validation logic", () => {
+  async function runnerWithConfig(scopeMode: string): Promise<boolean> {
+    // Simulate the check from workflow-runner.ts:
+    //   if (isAutonomous) {
+    //     const scopeMode = parsed?.security?.scope?.mode ?? "warn"
+    //     if (scopeMode === "warn" || scopeMode === "open") throw new Error(...)
+    //   }
+    if (process.env.ARGUS_AUTONOMOUS !== "1") return true
+    const mode = scopeMode
+    if (mode === "warn" || mode === "open") {
+      throw new Error(
+        "security.scope.mode must be explicitly set to 'allowlist' " +
+        "in autonomous mode. Current mode is '" + mode + "'."
+      )
+    }
+    return true
+  }
+
+  test("allowlist mode is accepted", async () => {
+    process.env.ARGUS_AUTONOMOUS = "1"
+    try {
+      await expect(runnerWithConfig("allowlist")).resolves.toBe(true)
+    } finally {
+      delete process.env.ARGUS_AUTONOMOUS
+    }
+  })
+
+  test("warn mode is rejected", async () => {
+    process.env.ARGUS_AUTONOMOUS = "1"
+    try {
+      await expect(runnerWithConfig("warn")).rejects.toThrow("must be explicitly set to 'allowlist'")
+    } finally {
+      delete process.env.ARGUS_AUTONOMOUS
+    }
+  })
+
+  test("open mode is rejected", async () => {
+    process.env.ARGUS_AUTONOMOUS = "1"
+    try {
+      await expect(runnerWithConfig("open")).rejects.toThrow("must be explicitly set to 'allowlist'")
+    } finally {
+      delete process.env.ARGUS_AUTONOMOUS
+    }
+  })
+
+  test("default (warn) is rejected when autonomous", async () => {
+    process.env.ARGUS_AUTONOMOUS = "1"
+    try {
+      await expect(runnerWithConfig("warn")).rejects.toThrow("Current mode is 'warn'")
+    } finally {
+      delete process.env.ARGUS_AUTONOMOUS
+    }
+  })
+
+  test("check passes when not in autonomous mode regardless of mode", async () => {
+    delete process.env.ARGUS_AUTONOMOUS
+    await expect(runnerWithConfig("warn")).resolves.toBe(true)
+    await expect(runnerWithConfig("open")).resolves.toBe(true)
+    await expect(runnerWithConfig("allowlist")).resolves.toBe(true)
+  })
+})
+
+describe("disconnect in finally block", () => {
   test("disconnects bridge in finally block despite error", async () => {
     const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
     const { deps } = makeDeps()

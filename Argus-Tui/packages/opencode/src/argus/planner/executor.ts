@@ -25,7 +25,7 @@ const MAX_PARALLEL_TOOLS = 4
  *   ARGUS_CROSS_TOOL_RATE_LIMIT: max requests per window (default 50)
  *   ARGUS_CROSS_TOOL_RATE_WINDOW_MS: window duration in ms (default 1000)
  */
-class CrossToolRateLimiter {
+export class CrossToolRateLimiter {
   private windows = new Map<string, number[]>()
   private readonly maxRequests: number
   private readonly windowMs: number
@@ -80,7 +80,7 @@ class CrossToolRateLimiter {
  *   ARGUS_THROTTLE_BASE_DELAY_MS: initial backoff delay (default 2000)
  *   ARGUS_THROTTLE_MAX_DELAY_MS:  maximum backoff delay (default 60000)
  */
-class ThrottleTracker {
+export class ThrottleTracker {
   private throttledTargets = new Map<string, { until: number; backoffMs: number; consecutive: number }>()
   private readonly baseDelayMs: number
   private readonly maxDelayMs: number
@@ -327,6 +327,12 @@ export class InProcessExecutor implements PhaseExecutor {
     const execOptions = { ...this.executionOptions, ...options }
     if (!this.gatesLoaded) {
       throw new Error("loadGates must be called before execute")
+    }
+
+    // Start global assessment timer on first phase execution (blocker 20 fix)
+    // Guard ensures the timer starts once per assessment, not reset on each phase.
+    if (this.assessmentStartTime === 0) {
+      this.assessmentStartTime = Date.now()
     }
 
     // Global max-assessment-duration circuit breaker (blocker 20)

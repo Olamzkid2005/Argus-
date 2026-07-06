@@ -27,6 +27,19 @@ security:
   # Glob patterns: *.example.com, example.*, * (all), or exact hostnames.
   scope:
     mode: warn  # "warn" | "allowlist" | "open" (default: warn)
+    #
+    # Autonomous mode (ARGUS_AUTONOMOUS=1) REQUIREMENT:
+    # When running autonomously, scope.mode MUST be set to 'allowlist'.
+    # If mode is 'warn' or 'open' in autonomous mode, the runner will
+    # throw a hard error before any phase executes (mirrors blockers
+    # #13/#23/#28 pattern). You must also configure allowed_targets.
+    #
+    # Safe example for autonomous use:
+    #   scope:
+    #     mode: allowlist
+    #     allowed_targets:
+    #       - "*.example.com"
+    #       - "api.example.com"
     allowed_targets: []
     blocked_targets: []
     # require_confirmation: false  # Ask before scanning new targets

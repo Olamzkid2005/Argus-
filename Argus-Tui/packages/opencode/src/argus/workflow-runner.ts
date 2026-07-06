@@ -446,11 +446,29 @@ export class WorkflowRunner {
       const { parse: YAML } = await import("yaml")
       const configPath = join(process.cwd(), "argus.config.yaml")
       const raw = readFileSync(configPath, "utf-8")
-      const parsed = YAML(raw) as { features?: Record<string, boolean>; replan?: { max_cycles?: number } } | undefined
+      const parsed = YAML(raw) as {
+        features?: Record<string, boolean>
+        replan?: { max_cycles?: number }
+        security?: { scope?: { mode?: string; allowed_targets?: string[] } }
+      } | undefined
       if (parsed?.features) {
         featureFlags.loadFromConfig(parsed.features)
       }
       configMaxReplans = parsed?.replan?.max_cycles
+
+      // In autonomous mode, scope.mode must be explicitly set to 'allowlist'
+      // so out-of-scope targets are rejected instead of warned (blocker 36 fix).
+      if (isAutonomous) {
+        const scopeMode = parsed?.security?.scope?.mode ?? "warn"
+        if (scopeMode === "warn" || scopeMode === "open") {
+          throw new Error(
+            "[Argus] ARGUS_AUTONOMOUS=1: security.scope.mode must be explicitly set to 'allowlist' " +
+            "in autonomous mode. Current mode is '" + scopeMode + "'. " +
+            "Set 'scope.mode: allowlist' and 'scope.allowed_targets' in argus.config.yaml " +
+            "to define the authorized scope, or disable autonomous mode."
+          )
+        }
+      }
     } catch (configErr) {
       if (isAutonomous) {
         throw new Error(

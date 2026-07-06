@@ -4,7 +4,7 @@ Tests for Scope Validator
 
 import pytest
 
-from tools.scope_validator import ScopeValidator, ScopeViolationError
+from tools.scope_validator import ScopeValidator, ScopeViolationError, validate_target_scope
 
 
 class TestScopeValidator:
@@ -107,3 +107,263 @@ class TestScopeValidator:
 
         with pytest.raises(ScopeViolationError):
             validator.validate_target("not-a-url")
+
+
+class TestValidateTargetScope:
+    """Tests for standalone validate_target_scope() function (blocker 36)"""
+
+    def test_allowlist_mode_allows_matching_target(self):
+        """allowlist mode allows target that matches allowed_patterns"""
+        result = validate_target_scope(
+            target="https://example.com/api",
+            mode="allowlist",
+            allowed_targets=["*example.com*"],
+        )
+        assert result is True
+
+    def test_allowlist_mode_blocks_mismatched_target(self):
+        """allowlist mode blocks target that doesn't match allowed_patterns"""
+        result = validate_target_scope(
+            target="https://evil.com/api",
+            mode="allowlist",
+            allowed_targets=["*example.com*"],
+        )
+        assert result is False
+
+    def test_allowlist_mode_without_allowed_targets_blocks_all(self):
+        """allowlist mode with no allowed_targets blocks all targets (fail-closed)"""
+        result = validate_target_scope(
+            target="https://anything.com",
+            mode="allowlist",
+            allowed_targets=[],
+        )
+        assert result is False
+
+    def test_allowlist_mode_with_none_allowed_targets_blocks_all(self):
+        """allowlist mode with None allowed_targets blocks all targets (fail-closed)"""
+        result = validate_target_scope(
+            target="https://anything.com",
+            mode="allowlist",
+            allowed_targets=None,
+        )
+        assert result is False
+
+    def test_warn_mode_allows_even_mismatched_target(self):
+        """warn mode allows target even when not in allowed_targets (with warning)"""
+        result = validate_target_scope(
+            target="https://evil.com",
+            mode="warn",
+            allowed_targets=["*example.com*"],
+        )
+        assert result is True
+
+    def test_open_mode_allows_all_targets(self):
+        """open mode allows any target regardless of allowed_targets"""
+        result = validate_target_scope(
+            target="https://anything.com",
+            mode="open",
+            allowed_targets=["*example.com*"],
+        )
+        assert result is True
+
+    def test_blocked_targets_always_block(self):
+        """blocked_targets are checked before mode — always block if matched"""
+        result = validate_target_scope(
+            target="https://malware.com",
+            mode="open",
+            allowed_targets=["*"],
+            blocked_targets=["*malware*"],
+        )
+        assert result is False
+
+    def test_blocked_targets_checked_in_allowlist_mode(self):
+        """blocked targets block even in allowlist mode with matching allowed"""
+        result = validate_target_scope(
+            target="https://example.com/admin",
+            mode="allowlist",
+            allowed_targets=["*example.com*"],
+            blocked_targets=["*example.com/admin*"],
+        )
+        assert result is False
+
+    def test_empty_blocked_targets_does_not_block(self):
+        """empty blocked_targets list should not block any target"""
+        result = validate_target_scope(
+            target="https://example.com",
+            mode="allowlist",
+            allowed_targets=["*example.com*"],
+            blocked_targets=[],
+        )
+        assert result is True
+
+    def test_legacy_authorized_scope_path_allows(self):
+        """Explicit authorized_scope dict should use legacy ScopeValidator path"""
+        result = validate_target_scope(
+            target="https://staging.app.com/api",
+            authorized_scope={"domains": ["staging.app.com"], "ipRanges": []},
+        )
+        assert result is True
+
+    def test_legacy_authorized_scope_path_blocks(self):
+        """Legacy ScopeValidator path should block out-of-scope targets"""
+        result = validate_target_scope(
+            target="https://production.app.com/api",
+            authorized_scope={"domains": ["staging.app.com"], "ipRanges": []},
+        )
+        assert result is False
+
+    def test_empty_authorized_scope_allows_all(self):
+        """Empty authorized_scope dict allows all targets"""
+        result = validate_target_scope(
+            target="https://anything.com",
+            authorized_scope={},
+        )
+        assert result is True
+
+    def test_glob_pattern_matching_in_allowed(self):
+        """Glob patterns in allowed_targets should match correctly"""
+        result = validate_target_scope(
+            target="https://sub.example.com",
+            mode="allowlist",
+            allowed_targets=["*example.com", "*example.org"],
+        )
+        assert result is True
+
+        result = validate_target_scope(
+            target="https://other.com",
+            mode="allowlist",
+            allowed_targets=["*example.com", "*example.org"],
+        )
+        assert result is False
+
+    def test_combined_blocked_overrides_allowed(self):
+        """blocked_targets should override allowed_targets when both match"""
+        result = validate_target_scope(
+            target="https://example.com/admin",
+            mode="allowlist",
+            allowed_targets=["*example.com*"],
+            blocked_targets=["*admin*"],
+        )
+        assert result is False
+
+    def test_blocked_checked_before_mode_even_in_open(self):
+        """blocked_targets checked before mode, even in open mode"""
+        result = validate_target_scope(
+            target="https://evil.com",
+            mode="open",
+            blocked_targets=["*evil*"],
+        )
+        assert result is False
+
+    def test_different_url_schemes_match_glob(self):
+        """Target with different URL schemes should match glob patterns"""
+        result = validate_target_scope(
+            target="http://example.com",
+            mode="allowlist",
+            allowed_targets=["*example.com*"],
+        )
+        assert result is True
+
+        result = validate_target_scope(
+            target="https://example.com",
+            mode="allowlist",
+            allowed_targets=["*example.com*"],
+        )
+        assert result is True
+
+        result = validate_target_scope(
+            target="ftp://example.com",
+            mode="allowlist",
+            allowed_targets=["*example.com*"],
+        )
+        assert result is True
+
+    def test_target_with_query_params_matches(self):
+        """Target with query parameters should still match glob"""
+        result = validate_target_scope(
+            target="https://example.com/page?foo=bar&baz=qux",
+            mode="allowlist",
+            allowed_targets=["*example.com*"],
+        )
+        assert result is True
+
+    def test_target_with_fragment_matches(self):
+        """Target with fragment should still match glob"""
+        result = validate_target_scope(
+            target="https://example.com/page#section",
+            mode="allowlist",
+            allowed_targets=["*example.com*"],
+        )
+        assert result is True
+
+    def test_legacy_authorized_scope_with_engagement_id(self):
+        """Legacy ScopeValidator path works with engagement_id"""
+        result = validate_target_scope(
+            target="https://staging.app.com/api",
+            engagement_id="eng-test-456",
+            authorized_scope={"domains": ["staging.app.com"], "ipRanges": []},
+        )
+        assert result is True
+
+
+class TestCheckBlocked:
+    """Tests for _check_blocked helper"""
+
+    def test_matches_blocked_pattern(self):
+        from tools.scope_validator import _check_blocked
+        assert _check_blocked("https://evil.com", ["*evil*"]) is True
+
+    def test_no_match_returns_false(self):
+        from tools.scope_validator import _check_blocked
+        assert _check_blocked("https://good.com", ["*evil*"]) is False
+
+    def test_none_blocked_list_returns_false(self):
+        from tools.scope_validator import _check_blocked
+        assert _check_blocked("https://example.com", None) is False
+
+    def test_empty_blocked_list_returns_false(self):
+        from tools.scope_validator import _check_blocked
+        assert _check_blocked("https://example.com", []) is False
+
+    def test_exact_match_in_blocked_list(self):
+        from tools.scope_validator import _check_blocked
+        assert _check_blocked("https://example.com/admin", ["*admin*"]) is True
+
+
+class TestCheckAllowed:
+    """Tests for _check_allowed helper"""
+
+    def test_matching_target_returns_true(self):
+        from tools.scope_validator import _check_allowed
+        result = _check_allowed("https://example.com", ["*example.com*"], "allowlist")
+        assert result is True
+
+    def test_no_allowed_targets_in_allowlist_returns_false(self):
+        from tools.scope_validator import _check_allowed
+        result = _check_allowed("https://example.com", [], "allowlist")
+        assert result is False
+
+    def test_no_allowed_targets_in_warn_returns_true(self):
+        from tools.scope_validator import _check_allowed
+        result = _check_allowed("https://example.com", [], "warn")
+        assert result is True
+
+    def test_non_matching_target_in_allowlist_returns_false(self):
+        from tools.scope_validator import _check_allowed
+        result = _check_allowed("https://evil.com", ["*example.com*"], "allowlist")
+        assert result is False
+
+    def test_non_matching_target_in_warn_returns_true(self):
+        from tools.scope_validator import _check_allowed
+        result = _check_allowed("https://evil.com", ["*example.com*"], "warn")
+        assert result is True
+
+    def test_none_allowed_targets_in_allowlist_returns_false(self):
+        from tools.scope_validator import _check_allowed
+        result = _check_allowed("https://example.com", None, "allowlist")
+        assert result is False
+
+    def test_none_allowed_targets_in_warn_returns_true(self):
+        from tools.scope_validator import _check_allowed
+        result = _check_allowed("https://example.com", None, "warn")
+        assert result is True
