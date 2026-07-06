@@ -12,7 +12,7 @@ def _root_cause_key(finding: dict) -> str:
 
     Uses CWE if present, otherwise falls back to finding type + endpoint host.
     """
-    cwe = finding.get("cwe") or finding.get("cwe_id") or ""
+    cwe = finding.get("cwe_id") or ""
     if cwe:
         return f"cwe:{cwe}"
 

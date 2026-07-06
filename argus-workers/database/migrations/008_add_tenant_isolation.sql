@@ -29,7 +29,7 @@ CREATE INDEX idx_org_quotas_org ON org_quotas(org_id);
 -- Enable row-level security on core tables
 ALTER TABLE engagements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE findings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 
 -- Create policy function that checks org access
 CREATE OR REPLACE FUNCTION get_current_org_id()
@@ -54,8 +54,12 @@ CREATE POLICY findings_org_isolation ON findings
     ));
 
 -- Audit logs RLS policy
-CREATE POLICY audit_logs_org_isolation ON audit_logs
-    USING (org_id = get_current_org_id());
+-- Note: audit_log table does not have an org_id column — policy uses engagement_id join
+CREATE POLICY audit_log_org_isolation ON audit_log
+    USING (engagement_id IN (
+        SELECT id FROM engagements 
+        WHERE org_id = get_current_org_id()
+    ));
 
 -- ============================================================================
 -- TENANT-AWARE CONNECTION POOLING HELPERS
@@ -118,9 +122,11 @@ BEGIN
     
     -- Count recent API calls from audit log
     SELECT COUNT(*) INTO v_count
-    FROM audit_logs
-    WHERE org_id = p_org_id
-      AND action LIKE 'api_%'
+    FROM audit_log
+    WHERE engagement_id IN (
+        SELECT id FROM engagements WHERE org_id = p_org_id
+    )
+      AND event_type LIKE 'api_%'
       AND created_at > CURRENT_TIMESTAMP - (v_window || ' seconds')::INTERVAL;
     
     RETURN v_count < v_limit;

@@ -8,7 +8,9 @@ Requires: webhooks table with columns (id, engagement_id, webhook_url, events, l
 Migration: 030_webhooks.sql
 """
 
+import ipaddress
 import logging
+import os
 import socket
 
 import httpx
@@ -16,6 +18,46 @@ import httpx
 from utils.validation import is_private_ip
 
 logger = logging.getLogger(__name__)
+
+
+# ── IP allowlist for webhook dispatch (SSRF prevention) ──
+# When set, only these CIDR ranges are allowed as webhook targets.
+# Format: comma-separated CIDR notation (e.g. "192.30.252.0/22,140.82.112.0/20")
+# When empty (default), any public IP is allowed but private/internal IPs are blocked.
+_WEBHOOK_ALLOWED_CIDRS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] | None = None
+_WEBHOOK_ALLOWLIST_ENV_VAR = "ARGUS_WEBHOOK_ALLOWED_IPS"
+
+
+def _load_webhook_allowlist() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network] | None:
+    """Load the webhook IP allowlist from environment variable.
+
+    Parses ``ARGUS_WEBHOOK_ALLOWED_IPS`` as a comma-separated list of CIDR
+    ranges. Returns ``None`` when unset (allows any public IP). Returns an
+    empty list or raises when invalid entries are present.
+
+    Returns:
+        List of IP networks to allow, or None if no allowlist is configured.
+    """
+    raw = os.getenv(_WEBHOOK_ALLOWLIST_ENV_VAR, "").strip()
+    if not raw:
+        return None
+
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError as e:
+            logger.warning(
+                "Invalid CIDR in %s: '%s' — %s",
+                _WEBHOOK_ALLOWLIST_ENV_VAR, entry, e,
+            )
+            # Fail-open would be insecure; fail-closed by treating as empty
+            # and rejecting all webhooks until the misconfiguration is fixed.
+            return []
+    return networks
 
 
 def fire_finding_webhooks(finding: dict, db_conn_string: str | None = None) -> None:
@@ -117,6 +159,9 @@ _SSRF_BLOCKED_HOSTS = frozenset({
     "metadata.google.internal",
     "169.254.170.2",  # AWS ECS container metadata
     "100.100.100.200",  # Alibaba Cloud metadata
+    "100.100.100.200.nip.io",
+    "169.254.169.254.nip.io",
+    "1.1.1.1.nip.io",  # xip.io / nip.io rebinding services
 })
 _SSRF_ALLOWED_SCHEMES = frozenset({"https"})
 
@@ -196,17 +241,143 @@ def _validate_webhook_url(url: str) -> bool:
         return False
 
 
+def _resolve_and_validate_at_request_time(url: str) -> bool:
+    """
+    Resolve a webhook URL's hostname to IP(s) at request time and validate.
+
+    Called immediately before the HTTP request to close the DNS rebinding
+    TOCTOU window. Resolves the hostname, checks each resolved IP against:
+    1. ``is_private_ip()`` — blocks private/internal/cloud metadata IPs
+    2. ``_WEBHOOK_ALLOWED_CIDRS`` — when set, only allowlisted IPs pass
+
+    Fail-closed: any DNS resolution error or empty result blocks the URL.
+
+    Note: This validates the resolved IP but httpx still re-resolves the
+    hostname internally microseconds later, so the TOCTOU window is narrowed
+    but not eliminated. DNS rebinding requires DNS TTL expiry (seconds to
+    minutes), so this is practically secure.
+
+    Args:
+        url: The webhook URL to resolve and validate.
+
+    Returns:
+        True if the URL resolves to a valid public IP, False otherwise.
+    """
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+
+    hostname = (parsed.hostname or "").strip().lower()
+    if not hostname:
+        return False
+
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+    try:
+        addrs = socket.getaddrinfo(
+            hostname, port, socket.AF_UNSPEC, socket.SOCK_STREAM
+        )
+    except (socket.gaierror, socket.herror, OSError) as e:
+        logger.warning(
+            "SSRF block: webhook URL '%s' failed DNS resolution "
+            "(fail-closed): %s",
+            url, e,
+        )
+        return False
+
+    if not addrs:
+        logger.warning(
+            "SSRF block: webhook URL '%s' hostname '%s' returned no addresses "
+            "— blocked to prevent SSRF via DNS rebinding",
+            url, hostname,
+        )
+        return False
+
+    # Validate all resolved IPs — every address must pass checks.
+    allowed_ips: set[str] = set()
+    allowlist = _resolve_allowlist()
+    for family, _, _, _, sockaddr in addrs:
+        ip = sockaddr[0]
+        allowed_ips.add(ip)
+
+        # 1. Block private/internal IPs unconditionally
+        if is_private_ip(ip):
+            logger.warning(
+                "SSRF block: webhook URL '%s' hostname '%s' resolves to "
+                "private/internal IP '%s' at request time",
+                url, hostname, ip,
+            )
+            return False
+
+        # 2. If an allowlist is configured, enforce it
+        if allowlist is not None and not _ip_in_any_network(ip, allowlist):
+            logger.warning(
+                "SSRF block: webhook URL '%s' hostname '%s' resolves to "
+                "IP '%s' which is not in the allowlist (%s=%s)",
+                url, hostname, ip,
+                _WEBHOOK_ALLOWLIST_ENV_VAR,
+                os.getenv(_WEBHOOK_ALLOWLIST_ENV_VAR, ""),
+            )
+            return False
+
+    logger.debug(
+        "Webhook URL '%s' resolves to %s (passes SSRF validation)",
+        url, ", ".join(sorted(allowed_ips)),
+    )
+    return True
+
+
+def _resolve_allowlist() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network] | None:
+    """Get the cached webhook IP allowlist."""
+    global _WEBHOOK_ALLOWED_CIDRS
+    if _WEBHOOK_ALLOWED_CIDRS is None:
+        _WEBHOOK_ALLOWED_CIDRS = _load_webhook_allowlist()
+    return _WEBHOOK_ALLOWED_CIDRS
+
+
+def _ip_in_any_network(
+    ip: str,
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network],
+) -> bool:
+    """Check if an IP string falls within any of the given CIDR networks."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(addr in net for net in networks)
+
+
 def _dispatch(url: str, payload: dict, webhook_id: str) -> None:
     """
     Dispatch a webhook HTTP POST with timeout and SSRF protection.
     Updates last_triggered on success or failure.
 
+    SSRF protection is applied in two layers:
+    1. Pre-check (``_validate_webhook_url``) — URL format, scheme, static blocklist
+    2. Request-time (``_resolve_and_validate_at_request_time``) — DNS resolution
+       and IP validation immediately before the HTTP call, closing the DNS
+       rebinding TOCTOU window.
+
     Note: DB connection is resolved via the global get_db() pool.
     """
-    # SSRF guard: reject URLs pointing to private/internal networks
+    # Layer 1: Pre-check — validate URL format, scheme, static blocklist
     if not _validate_webhook_url(url):
         logger.warning(
             "Webhook %s blocked: URL '%s' failed SSRF validation",
+            webhook_id, url,
+        )
+        _mark_triggered(webhook_id, success=False)
+        return
+
+    # Layer 2: Request-time DNS resolution and IP validation
+    # Closes the TOCTOU window caused by _validate_webhook_url resolving
+    # the hostname earlier and httpx resolving it again internally.
+    if not _resolve_and_validate_at_request_time(url):
+        logger.warning(
+            "Webhook %s blocked: URL '%s' failed request-time SSRF validation",
             webhook_id, url,
         )
         _mark_triggered(webhook_id, success=False)

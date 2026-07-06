@@ -215,7 +215,7 @@ def _check_allowed(target: str, allowed_targets: list[str] | None, mode: str) ->
 def validate_target_scope(
     target: str,
     engagement_id: str | None = None,
-    mode: str = "warn",
+    mode: str = "allowlist",
     allowed_targets: list[str] | None = None,
     blocked_targets: list[str] | None = None,
     authorized_scope: dict | None = None,
@@ -223,19 +223,19 @@ def validate_target_scope(
     """Standalone convenience wrapper around ScopeValidator.
 
     Supports deny-by-default scope enforcement with three modes:
-    - open: allow all targets (no protection)
-    - allowlist: only allow targets matching allowed_targets patterns
+    - allowlist (default): only allow targets matching ``allowed_targets``
     - warn: same as allowlist but log warning instead of blocking
+    - open: allow all targets (no protection)
 
-    blocked_targets always checked regardless of mode (if target matches
-    blocked, returns False). Glob patterns supported (*.example.com).
+    ``blocked_targets`` are always checked regardless of mode — if a target
+    matches a blocked pattern it is denied immediately.
 
-    When authorized_scope is provided (not None), uses the legacy DB-based
+    When ``authorized_scope`` is provided (not None), uses the legacy DB-based
     ScopeValidator path for backward compatibility.
 
-    Fail-Closed: If scope validation encounters an error (DB unavailable,
+    **Fail-Closed**: If scope validation encounters an error (DB unavailable,
     malformed scope JSON, network timeout), the target is considered
-    OUT of scope. Only when no scope is configured do we allow-all.
+    **OUT of scope**. Only when no scope is configured do we allow-all.
 
     R-03: DB lookup is wrapped in a thread with a configurable timeout
     (SCOPE_VALIDATION_TIMEOUT) to prevent scope validation from blocking
@@ -244,7 +244,7 @@ def validate_target_scope(
     Args:
         target: Target URL or hostname
         engagement_id: Engagement UUID
-        mode: Scope enforcement mode ("warn", "allowlist", "open")
+        mode: Scope enforcement mode ("allowlist", "warn", "open")
         allowed_targets: List of glob patterns for allowed targets
         blocked_targets: List of glob patterns for blocked targets
         authorized_scope: Optional scope dict (loaded from DB if None)

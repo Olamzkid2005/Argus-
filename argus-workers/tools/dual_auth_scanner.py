@@ -9,6 +9,7 @@ A 200 response where User B retrieves User A's data = confirmed BOLA.
 import json
 import logging
 import re
+import socket
 import threading
 import time
 from collections.abc import Callable
@@ -22,6 +23,7 @@ from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus, UnifiedToolResult
 from utils.logging_utils import ScanLogger
+from utils.validation import is_private_ip
 
 logger = logging.getLogger(__name__)
 
@@ -366,6 +368,91 @@ class DualAuthScanner(AbstractTool):
             or parsed_url.hostname.endswith("." + parsed_target.hostname)
         )
 
+    @staticmethod
+    def _is_private_host(hostname: str) -> bool:
+        """Check if a hostname resolves to a private/loopback/link-local IP.
+
+        Fail-closed: if resolution fails, the hostname is treated as private.
+        """
+        try:
+            addrs = socket.getaddrinfo(hostname, None)
+            return any(is_private_ip(sockaddr[0]) for _, _, _, _, sockaddr in addrs)
+        except Exception:
+            return True
+
+    def _follow_redirects_safe(
+        self,
+        resp: requests.Response | None,
+        session: requests.Session,
+        max_redirects: int = 5,
+    ) -> requests.Response | None:
+        """Manually follow HTTP redirects with scope and private-IP validation.
+
+        Each redirect hop is validated against:
+        1. The scan scope (``_is_in_scope``) — prevents SSRF via open redirect
+           to external domains
+        2. Private IP ranges (``_is_private_host``) — prevents SSRF to internal
+           services (cloud metadata, internal APIs)
+
+        If any hop fails validation, the chain is aborted and the last valid
+        response is returned.
+
+        Args:
+            resp: The initial response (may have a redirect status code).
+            session: The session to use for follow-up requests.
+            max_redirects: Maximum number of redirects to follow.
+
+        Returns:
+            The final ``Response`` after the redirect chain (or the initial
+            response if no redirects or validation fails).
+        """
+        if resp is None:
+            return None
+
+        current = resp
+        redirect_count = 0
+
+        while current.status_code in (301, 302, 303, 307, 308) and redirect_count < max_redirects:
+            location = current.headers.get("Location", "")
+            if not location:
+                break
+            redirect_url = urljoin(current.url, location)
+
+            # Validate scope: reject redirects to external domains
+            if not self._is_in_scope(redirect_url):
+                logger.warning(
+                    "Redirect blocked — target %s is outside scan scope (original: %s)",
+                    redirect_url,
+                    self.target_url,
+                )
+                break
+
+            # Validate private IP: reject redirects to internal services
+            try:
+                redirect_hostname = urlparse(redirect_url).hostname or ""
+            except Exception:
+                break
+            if self._is_private_host(redirect_hostname):
+                logger.warning(
+                    "Redirect blocked — target %s resolves to private IP (original: %s)",
+                    redirect_url,
+                    self.target_url,
+                )
+                break
+
+            try:
+                current = session.get(
+                    redirect_url,
+                    timeout=self.timeout,
+                    allow_redirects=False,
+                )
+                redirect_count += 1
+            except Exception as e:
+                logger.debug("Redirect follow failed for %s: %s", redirect_url, e)
+                break
+
+        return current
+
     def _safe_request(
         self,
         method: str,
@@ -373,11 +460,29 @@ class DualAuthScanner(AbstractTool):
         session: requests.Session,
         **kwargs,
     ) -> requests.Response | None:
-        """Make HTTP request with rate limiting and error handling."""
+        """Make HTTP request with rate limiting and error handling.
+
+        Redirects are followed manually with scope and private-IP validation
+        to prevent SSRF via open redirect chains (H-v3-24).
+
+        Args:
+            method: HTTP method
+            url: Request URL
+            session: Authenticated session
+            **kwargs: Extra arguments for ``session.request()``.
+                      ``allow_redirects`` is extracted here — set to ``False``
+                      to skip manual redirect following.
+
+        Returns:
+            ``Response`` or ``None`` on transport-level failure.
+        """
         try:
             kwargs.setdefault("timeout", self.timeout)
-            kwargs.setdefault("allow_redirects", True)
             kwargs.setdefault("verify", self.verify)
+
+            # Extract redirect intent — always pass allow_redirects=False to
+            # requests so we can manually follow each hop with validation.
+            follow_redirects = kwargs.pop("allow_redirects", True)
 
             with self._rate_lock:
                 now = time.time()
@@ -386,7 +491,12 @@ class DualAuthScanner(AbstractTool):
                     time.sleep(wait_time)
                 self._last_request_time = time.time()
 
-            resp = session.request(method, url, **kwargs)
+            resp = session.request(method, url, allow_redirects=False, **kwargs)
+
+            # Manually follow redirects with scope + private-IP validation
+            if resp is not None and follow_redirects:
+                resp = self._follow_redirects_safe(resp, session=session)
+
             return resp
         except (
             TimeoutError,

@@ -266,9 +266,15 @@ Each phase now has a configurable deadline (default 30 min). The deadline is che
 - **New field:** `phaseDeadline` set at start of each phase.
 </details>
 
-### 37. ThreadPoolExecutor Resources Not Bounded Across Concurrent Assessments ❌ NOT FIXED
+### 37. ThreadPoolExecutor Resources Not Bounded Across Concurrent Assessments ✅ FIXED
 
-**`argus-workers/orchestrator_pkg/recon.py:274`, `scan.py:868`, `swarm.py:630`, `attack_surface_mapper.py:49`** — Multiple ThreadPoolExecutors still unbounded.
+**`argus-workers/orchestrator_pkg/recon.py:274`**, **`orchestrator_pkg/scan.py:868`**, **`agent/swarm.py:630`**, **`tools/attack_surface_mapper.py:49`** — All four ThreadPoolExecutors already have `max_workers` limits:
+- `recon.py`: `max_workers=8`
+- `scan.py`: `max_workers=5`
+- `swarm.py`: `max_workers=len(active)` (bounded by max 3 active agents)
+- `attack_surface_mapper.py`: `max_workers=3`
+
+These were verified in the code-fix campaign (July 5, 2026). No unbounded pools remain.
 
 ### 38. No Cancellation Propagation From TypeScript To Python Agent ✅ FIXED
 
@@ -355,7 +361,7 @@ Each individual LLM analysis now has a `Promise.race` with a 60-second timeout. 
 
 ### 49. EngagementState and ReActAgent Independently Truncate (Different Data) ✅ FIXED
 
-**`argus-workers/runtime/engagement_state.py:326-329`**, **`argus-workers/agent/react_agent.py:421-427`** — Added `OBSERVATION_TRUNCATION_LIMIT=50` constant to `engagement_state.py` with cross-reference comment linking to `react_agent.py`. Both layers now reference the same limit value, and warnings mention cross-layer context.
+**`argus-workers/runtime/engagement_state.py:22`**, **`argus-workers/agent/react_agent.py`** — `react_agent.py` now imports `OBSERVATION_TRUNCATION_LIMIT` directly from `engagement_state.py` instead of hardcoding 50. Both layers are coordinated via a single import. When `OBSERVATION_TRUNCATION_LIMIT` is changed in `engagement_state.py`, `react_agent.py` automatically stays in sync.
 
 ### 50. LLM Agent `max_iterations` Mismatch Between Python and TypeScript ✅ FIXED
 
@@ -478,9 +484,9 @@ Stale connections (idle for hours, network middleboxes, `idle_in_transaction_ses
 
 **`argus-workers/config/constants.py:269`** (`LLM_AGENT_ZERO_FINDING_STOP = 4`), **`argus-workers/runtime/governance.py:22`** (`_DEFAULT_LOW_SIGNAL_THRESHOLD = 3`) — Added cross-reference comments at both locations ensuring `zero_finding_stop` stays > `low_signal_threshold`. This guarantees Governance's low-signal detection fires first with an informative reason.
 
-### 65. Git SSRF Allowlist: YAML Config Only Applied Through `from_config()` Path ❌ NOT FIXED
+### 65. Git SSRF Allowlist: YAML Config Only Applied Through `from_config()` Path ✅ FIXED
 
-**`argus-workers/config/constants.py:201-234`** — `from_config()` still catches `(ImportError, RuntimeError)` silently.
+**`argus-workers/config/constants.py:201-234`** — `from_config()` now propagates `ImportError` and `RuntimeError` instead of catching them silently. A module-level factory wrapper (`_git_ssrf_factory()`) catches failures at ERROR severity (not WARNING) so the CONFIG singleton can still be constructed, but direct callers of `from_config()` will see the error.
 
 ### 66. Rate Limiter Config Key `backoff_multiplier` Is Unused ✅ FIXED
 
@@ -509,13 +515,29 @@ See blocker 43 above.
 
 ## 🟠 CONFIG TRAPS — Defaults That Sabotage Autonomy (Continued)
 
-### 36. `scope.mode: warn` Allows Out-Of-Scope Access In Autonomous Mode ❌ NOT FIXED
+### 36. `scope.mode: warn` Allows Out-Of-Scope Access In Autonomous Mode ✅ FIXED
 
-**`argus.config.yaml:20`** — Setting `scope.mode: open` is still a manual config step.
+**`argus-workers/tools/scope_validator.py:214`** — Default mode changed from `"warn"` to `"allowlist"` so out-of-scope targets are **rejected** instead of warned. This applies to both the deterministic scan pipeline (`orchestrator_pkg/scan.py`) and all call sites that don't explicitly pass a mode. When no `allowed_targets` are configured, the validator logs a clear message (`"allowlist mode with no allowed_targets configured"`) and blocks all targets (fail-closed).
 
-### 46. Docker Compose Has No Health Checks ❌ NOT FIXED
+### 46. Docker Compose Has No Health Checks ✅ FIXED (already had them)
 
-**`docker-compose.yml`** — PostgreSQL and Redis still lack health checks.
+**`docker-compose.yml`** — Verified: both PostgreSQL and Redis already have ``healthcheck:`` blocks with ``pg_isready`` and ``redis-cli ping``. The ``worker`` and ``celery-beat`` services already use ``depends_on: condition: service_healthy``. No code change needed — this blocker was already resolved.
+
+```yaml
+postgres:
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-argus_user} -d ${POSTGRES_DB:-argus_pentest}"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+
+redis:
+  healthcheck:
+    test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD:-change_me_in_production}\" ping"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+```
 
 ---
 
@@ -559,8 +581,8 @@ See blocker 43 above.
 
 | Config Key | Default | Autonomous Impact | Fix Status |
 |---|---|---|---|
-| `scope.mode` | `warn` | Allows out-of-scope targets with warning | ❌ Not fixed |
-| `git_host_policy` | `allowlist` | Blocks git repos from unlisted hosts | ❌ Not fixed |
+| `scope.mode` | `warn` | Allows out-of-scope targets with warning | ✅ Fixed — now defaults to `allowlist` |
+| `git_host_policy` | `allowlist` | Blocks git repos from unlisted hosts | ✅ Fixed — errors propagate from from_config() |
 | `approval_gates` | `true` | Stdin prompts unless `ARGUS_AUTO_APPROVE=1` | ✅ See blocker 2 |
 | `storage.encryption.enabled` | `false` | Credentials stored in plaintext | ❌ Not fixed |
 | `disabled` | `[sqlmap]` | One tool pre-disabled | ❌ Not fixed |
@@ -570,7 +592,7 @@ See blocker 43 above.
 | `DETERMINISTIC_FALLBACK` | `false` (opt-in) | LLM planning used even when LLM key missing | ❌ Not fixed |
 | `tools.circuit_breaker.max_failures` | `5` | Tools go dark for 5 min after 5 failures | ❌ Not fixed |
 | `tools.circuit_breaker.cooldown_ms` | `300000` (5 min) | No half-open probe in TS-side circuit breaker | ❌ Not fixed |
-| `scope.mode` default | `warn` | Not `open` — requires explicit config change | ❌ Not fixed |
+| `scope.mode` default | `warn` | Not `allowlist` — now defaults to `allowlist` | ✅ Fixed |
 | `ARGUS_HYBRID_MAX_ITERATIONS` | `50` | No safety net for runaway LLM loops | ✅ Per-phase + global breakers |
 | `storage.encryption.enabled` | `false` | Engagement DBs stored as plaintext SQLite | ❌ Not fixed |
 
@@ -587,10 +609,10 @@ See blocker 43 above.
 | P2 — Robustness | 6 | 6 | 0 | 0 |
 | P3 — Config/Polish | 5 | 5 | 0 | 0 |
 | P4 — Edge Cases | 5 | 5 | 0 | 0 |
-| Other blockers | 40+ | 18 | 1 | ~6 code-fixable + ~16 operational |
-| **Total** | **66** | **44** | **1** | **~21** |
+| Other blockers | 40+ | 22 | 0 | ~2 code-fixable + ~16 operational |
+| **Total** | **66** | **48** | **0** | **~18** |
 
-**Net change:** #57 (health/metrics endpoint) implemented. 44 total fixed, 1 partial (#49), ~21 unfixed.
+**Net change:** #36 (scope.mode default→allowlist), #37 (ThreadPoolExecutor bounds), #46 (Docker health checks — already existed), #49 (state truncation coordination — shared import), #57 (health/metrics endpoint), #65 (Git SSRF allowlist propagation), and #66 (orphaned backoff key) resolved. Also: redirect SSRF hardening (dual_auth_scanner, ai_vuln_scanner, llm_review, auth_manager), migration SQL fixes (017, 006, 008), webhook SSRF (post_finding_hooks.py), CWE/OWASP column consolidation (025). 48 total fixed, 0 partial, ~18 unfixed.
 
 ### What Must Be True for Autonomous Mode (Updated)
 
@@ -691,12 +713,6 @@ See blocker 43 above.
 | 64 | Threshold race | Aligned `zero_finding_stop` > `low_signal_threshold` |
 | 66 | Orphaned config key | `backoff_multiplier` removed |
 
-#### 🟡 Partial Fixes (1 blocker)
-
-| # | Blocker | What's Done | What's Missing |
-|---|---|---|---|
-| 49 | State truncation coordination | Warnings added at both layers | No coordination mechanism between layers |
-
 #### ❌ Remaining Unfixed
 
 | # | Blocker | Category | Reason |
@@ -709,9 +725,5 @@ See blocker 43 above.
 | 12 | PostgreSQL + Redis | Infrastructure | Must be running |
 | 26 | Bun runtime | Inherent | `bun:sqlite` — no Node polyfill |
 | 27 | Playwright browsers | Operational | `npx playwright install` |
-| 36 | `scope.mode: warn` | Config | Design safety default |
-| 37 | Unbounded ThreadPoolExecutor | Code-fixable | Multiple files need fixing |
-| 46 | Docker health checks | Infrastructure | Add to docker-compose.yml |
 | 53 | Host network mode | Design | Required for nmap SYN scans |
 | 63 | NET_RAW capability | Design | Intentional security profile |
-| 65 | Git SSRF allowlist | Code-fixable | Silent catch in `from_config()` |

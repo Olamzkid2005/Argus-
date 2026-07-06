@@ -731,8 +731,12 @@ class AuthManager:
     def session_valid(session: requests.Session, test_url: str) -> bool:
         """Check whether a session is still authenticated.
 
-        Makes a GET request to test_url (or the login URL). Returns False
-        if the response is 401/403 or if redirected to a login page.
+        Makes a GET request to *test_url* (or the login URL) with redirects
+        disabled to prevent SSRF via server-side redirect (M-25). Returns
+        ``False`` if the response is 401/403 or if redirected to a login page.
+
+        When a redirect is detected (3xx with Location header), the Location
+        URL is checked for login page indicators instead of being followed.
         """
         LOGIN_INDICATORS = ["/login", "/signin", "sign in", "log in", "login"]
 
@@ -740,19 +744,22 @@ class AuthManager:
             resp = session.get(
                 test_url,
                 timeout=15,
-                allow_redirects=True,
+                allow_redirects=False,
                 headers={"User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)"},
             )
 
             if resp.status_code in (401, 403):
                 return False
 
-            # Detect redirect to login page
-            final_url = resp.url.lower()
-            if any(indicator in final_url for indicator in LOGIN_INDICATORS):
-                return False
+            # If redirected, check the Location header for login indicators
+            # instead of following the redirect (SSRF prevention).
+            if resp.is_redirect:
+                location = resp.headers.get("Location", "").lower()
+                return not any(
+                    indicator in location for indicator in LOGIN_INDICATORS
+                )
 
-            # Check body for login page indicators
+            # Check body for login page indicators (only on non-redirect responses)
             body_lower = (resp.text or "").lower()
             login_body_patterns = [
                 "<form",

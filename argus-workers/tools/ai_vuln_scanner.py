@@ -11,9 +11,10 @@ Designed for AI chat endpoints, copilot features, and LLM-integrated APIs.
 import json
 import logging
 import re
+import socket
 import threading
 import time
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 import urllib3
@@ -23,6 +24,7 @@ from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus, UnifiedToolResult
 from utils.logging_utils import ScanLogger
+from utils.validation import is_private_ip
 
 logger = logging.getLogger(__name__)
 
@@ -336,6 +338,100 @@ class AIVulnScanner(AbstractTool):
 
     # --- Private helpers ---
 
+    @staticmethod
+    def _is_private_host(hostname: str) -> bool:
+        """Resolve a hostname and check whether its IP is in a private range.
+
+        Fail-closed: returns ``True`` when resolution fails so that the
+        scanner does *not* follow a redirect whose host cannot be verified.
+
+        Returns:
+            ``True`` if the host is private or resolution fails.
+        """
+        try:
+            addrs = socket.getaddrinfo(hostname, None)
+            if not addrs:
+                return True
+            return any(is_private_ip(addr[4][0]) for addr in addrs)
+        except socket.gaierror:
+            logger.debug("Could not resolve hostname '%s' — assuming private", hostname)
+            return True
+
+    def _follow_redirects_safe(
+        self,
+        response: requests.Response,
+        session: requests.Session,
+    ) -> requests.Response | None:
+        """Manually follow redirects, validating each hop against scope and private IPs.
+
+        Each redirect target's hostname is validated:
+        - Must not resolve to a private IP
+        - Must be within the scan's target scope (same hostname)
+
+        Returns the final non-redirect response, or ``None`` if a hop fails
+        validation.
+        """
+        seen = set()
+        current = response
+        redirect_count = 0
+        max_redirects = 20
+
+        while current.is_redirect and redirect_count < max_redirects:
+            location = current.headers.get("Location")
+            if not location:
+                break
+
+            redirect_url = urljoin(current.url, location)
+            parsed = urlparse(redirect_url)
+            hostname = parsed.hostname or ""
+
+            # Duplicate detection
+            if redirect_url in seen:
+                break
+            seen.add(redirect_url)
+
+            # Private IP validation
+            if self._is_private_host(hostname):
+                logger.warning(
+                    "Redirect target %s resolves to a private IP — blocking redirect",
+                    redirect_url,
+                )
+                return None
+
+            # Scope validation
+            if not self._is_in_scope(hostname):
+                logger.warning(
+                    "Redirect target %s is out of scan scope — blocking redirect",
+                    redirect_url,
+                )
+                return None
+
+            try:
+                current = session.get(
+                    redirect_url,
+                    timeout=self.timeout,
+                    allow_redirects=False,
+                )
+            except (
+                TimeoutError,
+                RequestException,
+                Timeout,
+                ConnectionError,
+                urllib3.exceptions.SSLError,
+            ) as e:
+                logger.debug("Redirect follow failed: %s", e)
+                return None
+
+            redirect_count += 1
+
+        return current
+
+    def _is_in_scope(self, hostname: str) -> bool:
+        """Check whether a hostname is within the scan's target scope."""
+        target_parsed = urlparse(self.target_url)
+        target_host = target_parsed.hostname or ""
+        return hostname == target_host or hostname.endswith("." + target_host)
+
     def _safe_request(
         self,
         method: str,
@@ -346,8 +442,11 @@ class AIVulnScanner(AbstractTool):
         """Rate-limited HTTP request with error handling. Thread-safe."""
         try:
             kwargs.setdefault("timeout", self.timeout)
-            kwargs.setdefault("allow_redirects", True)
             kwargs.setdefault("verify", self.verify)
+
+            # Extract redirect intent — always pass allow_redirects=False to
+            # requests so we can validate each hop ourselves.
+            follow_redirects = kwargs.pop("allow_redirects", True)
 
             # Use provided session, authenticated session, or thread-local
             if session is not None:
@@ -374,7 +473,12 @@ class AIVulnScanner(AbstractTool):
                     time.sleep(wait_time)
                 self._last_request_time = time.time()
 
-            resp = req_session.request(method, url, **kwargs)
+            resp = req_session.request(method, url, allow_redirects=False, **kwargs)
+
+            # Manually follow redirects with scope/IP validation
+            if follow_redirects and resp and resp.is_redirect:
+                resp = self._follow_redirects_safe(resp, req_session)
+
             return resp
         except (
             TimeoutError,

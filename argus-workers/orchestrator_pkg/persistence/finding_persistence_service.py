@@ -46,7 +46,7 @@ class FindingPersistenceService:
         self.finding_repo = finding_repo
         self.bug_bounty_mode = bug_bounty_mode
         self._classify_finding_type = classify_finding_type_fn or (
-            lambda _: {"owasp": "N/A", "cwe": "N/A"}
+            lambda _: {"owasp_category": "N/A", "cwe_id": "N/A"}
         )
         self._get_org_id = get_org_id_fn or (lambda: None)
 
@@ -191,9 +191,9 @@ class FindingPersistenceService:
                 ftype = finding.get("type", "")
                 classification = self._classify_finding_type(ftype)
                 if not finding.get("owasp_category"):
-                    finding["owasp_category"] = classification.get("owasp")
+                    finding["owasp_category"] = classification.get("owasp_category")
                 if not finding.get("cwe_id"):
-                    finding["cwe_id"] = classification.get("cwe")
+                    finding["cwe_id"] = classification.get("cwe_id")
 
             st = finding.get("tool") or finding.get("source_tool") or "unknown"
             if not finding.get("source_tool"):

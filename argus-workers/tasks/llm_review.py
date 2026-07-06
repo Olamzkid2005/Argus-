@@ -11,8 +11,13 @@ Respects budget limits and gracefully degrades when LLM is unavailable.
 import contextlib
 import logging
 import os
+import socket
+from urllib.parse import urljoin, urlparse
+
+import requests
 
 from celery_app import app
+from utils.validation import is_private_ip
 
 logger = logging.getLogger(__name__)
 
@@ -402,9 +407,7 @@ def _replay_request(endpoint: str, evidence: dict, live_replay_enabled: bool = F
         return None
 
     try:
-        from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
-
-        import requests
+        from urllib.parse import parse_qs, urlencode, urlunparse
 
         headers = {"User-Agent": "Argus-LLM-Review/1.0"}
         timeout = 15
@@ -418,17 +421,88 @@ def _replay_request(endpoint: str, evidence: dict, live_replay_enabled: bool = F
             new_query = urlencode(params, doseq=True)
             test_url = urlunparse(parsed._replace(query=new_query))
             resp = requests.get(
-                test_url, headers=headers, timeout=timeout, allow_redirects=True
+                test_url, headers=headers, timeout=timeout, allow_redirects=False
             )
         else:
             # No payload — still try to GET the endpoint for analysis
             # This covers EXPOSED_SECRET, SERVER_INFO_DISCLOSURE, etc.
             resp = requests.get(
-                endpoint, headers=headers, timeout=timeout, allow_redirects=True
+                endpoint, headers=headers, timeout=timeout, allow_redirects=False
             )
+
+        # Manually follow redirects with private IP validation
+        if resp and resp.is_redirect:
+            resp = _follow_replay_redirects(resp)
 
         return resp
 
     except Exception as e:
         logger.debug("Request replay failed for %s: %s", endpoint, e)
         return None
+
+
+def _is_replay_private_host(hostname: str) -> bool:
+    """Resolve a hostname and check whether its IP is in a private range.
+
+    Fail-closed: returns ``True`` when resolution fails so redirects to
+    unresolvable hosts are blocked.
+    """
+    try:
+        addrs = socket.getaddrinfo(hostname, None)
+        if not addrs:
+            return True
+        return any(is_private_ip(addr[4][0]) for addr in addrs)
+    except socket.gaierror:
+        logger.debug("Could not resolve hostname '%s' — assuming private", hostname)
+        return True
+
+
+def _follow_replay_redirects(
+    response: requests.Response,
+) -> requests.Response | None:
+    """Manually follow redirects, validating each hop against private IP ranges.
+
+    Redirection is limited to 20 hops with loop detection.  Each hop's
+    hostname is resolved and checked: if the IP is private or resolution
+    fails the redirect is blocked and ``None`` is returned.
+    """
+    seen = set()
+    current = response
+    redirect_count = 0
+    max_redirects = 20
+
+    while current.is_redirect and redirect_count < max_redirects:
+        location = current.headers.get("Location")
+        if not location:
+            break
+
+        redirect_url = urljoin(current.url, location)
+        parsed = urlparse(redirect_url)
+        hostname = parsed.hostname or ""
+
+        # Duplicate detection
+        if redirect_url in seen:
+            break
+        seen.add(redirect_url)
+
+        # Private IP validation — fail-closed
+        if _is_replay_private_host(hostname):
+            logger.warning(
+                "Redirect target %s resolves to a private IP — blocking redirect",
+                redirect_url,
+            )
+            return None
+
+        try:
+            current = requests.get(
+                redirect_url,
+                headers={"User-Agent": "Argus-LLM-Review/1.0"},
+                timeout=15,
+                allow_redirects=False,
+            )
+        except Exception:
+            return None
+
+        redirect_count += 1
+
+    return current

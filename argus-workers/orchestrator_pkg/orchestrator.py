@@ -345,7 +345,7 @@ class Orchestrator:
         from parsers.normalizer import FindingNormalizer
 
         return FindingNormalizer.TYPE_CLASSIFICATION_MAP.get(
-            finding_type, {"owasp": "N/A", "cwe": "N/A"}
+            finding_type, {"owasp_category": "N/A", "cwe_id": "N/A"}
         )
 
     def _save_findings(self, findings: list[dict]) -> int:

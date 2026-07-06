@@ -28,6 +28,7 @@ from config.constants import (
 )
 from feature_flags import is_enabled as _ff_enabled
 from llm_service import LLMService
+from runtime.engagement_state import OBSERVATION_TRUNCATION_LIMIT
 from utils.logging_utils import ScanLogger
 
 from .agent_action import AgentAction
@@ -284,20 +285,20 @@ class ReActAgent:
                     "timestamp": time.time(),
                 }
             )
-            # Cap history to last 50 entries to prevent memory growth
-            # When EngagementState is active, observations are delegated to it
-            # and this branch is NOT reached — see the `if` check above.
-            # Must stay in sync with engagement_state.py:OBSERVATION_TRUNCATION_LIMIT
-            # (blocker 49).
-            if len(self.history) > 50:
-                dropped = len(self.history) - 50
+            # Cap history to OBSERVATION_TRUNCATION_LIMIT entries to prevent
+            # memory growth. When EngagementState is active, observations are
+            # delegated to it and this branch is NOT reached — see the `if`
+            # check above. The limit is imported from engagement_state.py so
+            # both layers are always coordinated (blocker 49).
+            if len(self.history) > OBSERVATION_TRUNCATION_LIMIT:
+                dropped = len(self.history) - OBSERVATION_TRUNCATION_LIMIT
                 logger.warning(
                     "Agent history truncated: %d entries dropped from engagement %s — "
                     "LLM may lose context of earlier tool results.",
                     dropped,
                     self.engagement_id,
                 )
-                self.history = self.history[-50:]
+                self.history = self.history[-OBSERVATION_TRUNCATION_LIMIT:]
 
     def get_context(self, max_tokens: int = LLM_AGENT_CONTEXT_MAX_TOKENS) -> str:
         """

@@ -458,7 +458,7 @@ def execute_scan_tools(
         try:
             from tools.scope_validator import validate_target_scope
 
-            scope_mode = getattr(ctx, "scope_mode", "warn")
+            scope_mode = getattr(ctx, "scope_mode", "allowlist")
             allowed = getattr(ctx, "allowed_targets", None)
             blocked = getattr(ctx, "blocked_targets", None)
 

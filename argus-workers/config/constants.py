@@ -138,33 +138,33 @@ class GitSSRFConfig:
         Create config from the YAML-backed ConfigManager singleton.
 
         Reads ``security.git_host_policy`` and ``security.allowed_git_hosts``
-        from argus.config.yaml. Falls back to the curated default allowlist
-        when the ConfigManager is unavailable.
+        from argus.config.yaml.
+
+        Propagates ``ImportError`` (config module unavailable) and
+        ``RuntimeError`` (singleton not initialized) so callers know the
+        YAML config was not loaded. The module-level ``CONFIG`` singleton
+        uses ``_git_ssrf_factory()`` which logs at ``ERROR`` level and
+        falls back to defaults.
+
+        Blocker 65: previously caught these exceptions silently and fell
+        back to the default allowlist, which could allow SSRF against
+        unlisted git hosts when the ConfigManager was misconfigured.
         """
-        try:
-            if config_manager is None:
-                from config.config_manager import get_config
+        if config_manager is None:
+            from config.config_manager import get_config
 
-                cm = get_config()
-            else:
-                cm = config_manager
+            cm = get_config()
+        else:
+            cm = config_manager
 
-            policy = cm.get("security.git_host_policy", "allowlist")
-            if policy == "allow_all":
-                return cls(host_allowlist=())  # Empty tuple = allow all
+        policy = cm.get("security.git_host_policy", "allowlist")
+        if policy == "allow_all":
+            return cls(host_allowlist=())  # Empty tuple = allow all
 
-            extra_hosts = cm.get("security.allowed_git_hosts", [])
-            base = cls()  # Get defaults
-            merged = tuple(sorted(set(base.host_allowlist) | set(extra_hosts)))
-            return cls(host_allowlist=merged)
-        except (ImportError, RuntimeError):
-            logger.warning(
-                "GitSSRFConfig.from_config(): ConfigManager unavailable — "
-                "using default host allowlist. Set ARGUS_ALLOWED_GIT_HOSTS or "
-                "configure security.git_host_policy in argus.config.yaml "
-                "to customize allowed git hosts."
-            )
-            return cls()
+        extra_hosts = cm.get("security.allowed_git_hosts", [])
+        base = cls()  # Get defaults
+        merged = tuple(sorted(set(base.host_allowlist) | set(extra_hosts)))
+        return cls(host_allowlist=merged)
 
 
 # ──────────────────────────────────────────────
@@ -339,6 +339,33 @@ class LLMCostConfig:
 
 
 # ──────────────────────────────────────────────
+# Factory wrappers that surface config failures at ERROR level
+# rather than silently catching (blocker 65 fix).
+# ──────────────────────────────────────────────
+
+
+def _git_ssrf_factory() -> GitSSRFConfig:
+    """Factory for GitSSRFConfig that logs errors instead of crashing.
+
+    ``GitSSRFConfig.from_config()`` now propagates ``ImportError`` and
+    ``RuntimeError`` (blocker 65). This wrapper catches them at the
+    module-init level so the ``CONFIG`` singleton can still be constructed,
+    but logs at ERROR severity so operators know the YAML config failed.
+    """
+    try:
+        return GitSSRFConfig.from_config()
+    except (ImportError, RuntimeError) as e:
+        logger.error(
+            "GitSSRFConfig.from_config() failed: %s — "
+            "using default host allowlist. The YAML config at "
+            "argus.config.yaml was NOT loaded; git SSRF protection "
+            "may not reflect configured policies.",
+            e,
+        )
+        return GitSSRFConfig()
+
+
+# ──────────────────────────────────────────────
 # Top-level config singleton — all groups merged
 # ──────────────────────────────────────────────
 @dataclass(frozen=True)
@@ -348,7 +375,7 @@ class ArgusConfig:
     content: ContentLimits = field(default_factory=ContentLimits)
     retries: RetryConfig = field(default_factory=RetryConfig)
     scan: ScanConfig = field(default_factory=ScanConfig)
-    git_ssrf: GitSSRFConfig = field(default_factory=GitSSRFConfig.from_config)
+    git_ssrf: GitSSRFConfig = field(default_factory=_git_ssrf_factory)
     circuit_breaker: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig.from_config)
     hypothesis: HypothesisConfig = field(default_factory=HypothesisConfig)
     tls: TLSConfig = field(default_factory=TLSConfig)

@@ -64,43 +64,27 @@ ON findings(engagement_id, severity, confidence, endpoint, source_tool, created_
 -- STATE AND JOB OPTIMIZATION
 -- ============================================================================
 
--- Composite index for job state lookups by engagement
-CREATE INDEX IF NOT EXISTS idx_job_states_engagement_type 
-ON job_states(engagement_id, job_type, status);
-
--- Index for recent state transitions
-CREATE INDEX IF NOT EXISTS idx_engagement_states_engagement_created 
-ON engagement_states(engagement_id, created_at DESC);
+-- NOTE: job_states and engagement_states tables not yet created —
+-- indexes omitted until those tables exist.
 
 -- ============================================================================
 -- AUDIT AND LOGGING OPTIMIZATION
 -- ============================================================================
 
--- Composite index for audit log queries
-CREATE INDEX IF NOT EXISTS idx_audit_logs_org_action_created 
-ON audit_logs(org_id, action, created_at DESC);
+-- Index for audit_log table (created in migration 002)
+CREATE INDEX IF NOT EXISTS idx_audit_log_event_type_created
+ON audit_log(event_type, created_at DESC);
 
--- Index for execution log lookups
-CREATE INDEX IF NOT EXISTS idx_execution_logs_engagement_event 
-ON execution_logs(engagement_id, event_type, created_at DESC);
-
--- Index for trace_id lookups on execution logs and spans
-CREATE INDEX IF NOT EXISTS idx_execution_logs_trace_id 
-ON execution_logs(trace_id, created_at ASC);
-CREATE INDEX IF NOT EXISTS idx_execution_spans_trace_id 
-ON execution_spans(trace_id, created_at ASC);
+-- NOTE: execution_logs and execution_spans tables not yet created —
+-- indexes omitted until those tables exist.
 
 -- ============================================================================
 -- BRIN INDEXES FOR TIME-SERIES DATA (large tables)
 -- ============================================================================
 
--- BRIN index for time-series data on very large tables
+-- BRIN index for time-series data on findings table
 CREATE INDEX IF NOT EXISTS idx_findings_created_brin 
 ON findings USING BRIN (created_at) 
-WITH (pages_per_range = 128);
-
-CREATE INDEX IF NOT EXISTS idx_execution_logs_created_brin 
-ON execution_logs USING BRIN (created_at) 
 WITH (pages_per_range = 128);
 
 -- ============================================================================
@@ -121,6 +105,4 @@ ON engagements USING GIN (authorized_scope);
 
 ANALYZE engagements;
 ANALYZE findings;
-ANALYZE job_states;
-ANALYZE execution_logs;
-ANALYZE audit_logs;
+ANALYZE audit_log;

@@ -276,7 +276,7 @@ def _findings_rows(findings: list[dict]) -> str:
         title = _escape(f.get("title") or finding_type)
         description = _escape(f.get("description") or "")
         remediation = _escape(f.get("remediation") or "")
-        cwe = _escape(f.get("cwe") or "")
+        cwe = _escape(f.get("cwe_id") or "")
         detail_id = f"detail-{i}"
 
         detail_html = ""

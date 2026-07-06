@@ -906,8 +906,11 @@ class WebScanner(AbstractTool):
         pooled_session = None
         try:
             kwargs.setdefault("timeout", self.timeout)
-            kwargs.setdefault("allow_redirects", True)
             kwargs.setdefault("verify", self.verify)  # Verify SSL certs by default
+
+            # Extract redirect intent — always pass allow_redirects=False to
+            # requests so we can manually follow each hop with scope validation.
+            follow_redirects = kwargs.pop("allow_redirects", True)
 
             if session is not None:
                 # Caller supplied a specific session; use it directly.
@@ -985,25 +988,15 @@ class WebScanner(AbstractTool):
                 if wait_time > 0:
                     time.sleep(wait_time)
                 self._last_request_time = time.time()
+            # Always disable automatic redirects — we follow them manually
+            # with scope validation (H-v3-24 SSRF prevention).
             logger.debug("WebScanner session=%s %s %s", session_id, method, url)
-            resp = req_session.request(method, url, **kwargs)
+            resp = req_session.request(method, url, allow_redirects=False, **kwargs)
 
-            # Post-request scope validation: if redirects were followed,
-            # check the final URL is still in scope (H-v3-24).
-            if (
-                resp is not None
-                and resp.url != url
-                and hasattr(self, "target_url")
-            ):
-                final_url = resp.url
-                if not _is_in_scope(final_url, self.target_url):
-                    logger.warning(
-                        "Request to %s redirected out of scope to %s "
-                        "(target scope: %s)",
-                        url,
-                        final_url,
-                        self.target_url,
-                    )
+            # Manually follow redirects with scope + private-IP validation
+            if resp is not None and follow_redirects:
+                resp = self._follow_redirects_safe(resp, session=req_session)
+
             return resp
         except (
             TimeoutError,
