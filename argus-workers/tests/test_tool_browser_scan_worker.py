@@ -29,59 +29,57 @@ class TestValidateURL:
     @patch("socket.gethostbyname")
     def test_blocks_private_ip(self, mock_dns):
         mock_dns.return_value = "10.0.0.1"
-        with pytest.raises(ValueError, match="Blocked internal IP"):
+        with pytest.raises(ValueError, match="Blocked internal/SSRF target"):
             _validate_url("http://10.0.0.1")
 
     @patch("socket.gethostbyname")
     def test_blocks_loopback_ip(self, mock_dns):
         mock_dns.return_value = "127.0.0.1"
-        with pytest.raises(ValueError, match="Blocked internal IP"):
+        with pytest.raises(ValueError, match="Blocked internal/SSRF target"):
             _validate_url("http://127.0.0.1")
 
     @patch("socket.gethostbyname")
     def test_blocks_link_local_ip(self, mock_dns):
         mock_dns.return_value = "169.254.1.1"
-        with pytest.raises(ValueError, match="Blocked internal IP"):
+        with pytest.raises(ValueError, match="Blocked internal/SSRF target"):
             _validate_url("http://169.254.1.1")
 
     @patch("socket.gethostbyname")
     def test_blocks_multicast_ip(self, mock_dns):
         mock_dns.return_value = "224.0.0.1"
-        with pytest.raises(ValueError, match="Blocked internal IP"):
+        with pytest.raises(ValueError, match="Blocked internal/SSRF target"):
             _validate_url("http://224.0.0.1")
 
     @patch("socket.gethostbyname")
     def test_blocks_cloud_metadata_ip_from_link_local(self, mock_dns):
         mock_dns.return_value = "169.254.169.254"
-        with pytest.raises(ValueError, match="Blocked internal IP"):
+        with pytest.raises(ValueError, match="Blocked internal/SSRF target"):
             _validate_url("http://169.254.169.254")
 
-    @patch("socket.gethostbyname")
-    def test_blocks_hostname_localhost_via_regex(self, mock_dns):
-        mock_dns.return_value = "1.2.3.4"
-        with pytest.raises(ValueError, match="Blocked internal hostname"):
+    def test_blocks_hostname_localhost_via_static_check(self):
+        with pytest.raises(ValueError, match="Blocked internal/SSRF target"):
             _validate_url("http://localhost:8080")
 
     def test_blocks_literal_192_168_via_ip_check(self):
-        with pytest.raises(ValueError, match="Blocked internal IP"):
+        with pytest.raises(ValueError, match="Blocked internal/SSRF target"):
             _validate_url("http://192.168.1.1")
 
     def test_blocks_literal_10_dot_via_ip_check(self):
-        with pytest.raises(ValueError, match="Blocked internal IP"):
+        with pytest.raises(ValueError, match="Blocked internal/SSRF target"):
             _validate_url("http://10.0.0.1")
 
     def test_blocks_literal_172_dot_16_31_via_ip_check(self):
-        with pytest.raises(ValueError, match="Blocked internal IP"):
+        with pytest.raises(ValueError, match="Blocked internal/SSRF target"):
             _validate_url("http://172.20.0.1")
 
     def test_blocks_literal_zero_dot_via_ip_check(self):
-        with pytest.raises(ValueError, match="Blocked internal IP"):
+        with pytest.raises(ValueError, match="Blocked internal/SSRF target"):
             _validate_url("http://0.0.0.0")
 
     @patch("socket.gethostbyname")
-    def test_blocks_metadata_google_via_regex(self, mock_dns):
+    def test_blocks_metadata_google_via_static_check(self, mock_dns):
         mock_dns.return_value = "1.2.3.4"
-        with pytest.raises(ValueError, match="Blocked internal hostname"):
+        with pytest.raises(ValueError, match="Blocked internal/SSRF target"):
             _validate_url("http://metadata.google.internal")
 
     @patch("socket.gethostbyname")

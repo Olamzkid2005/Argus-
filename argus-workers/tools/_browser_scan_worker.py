@@ -14,47 +14,46 @@ logger = logging.getLogger(__name__)
 
 
 def _validate_url(url: str) -> str:
-    """Prevent SSRF: only allow http/https URLs, block file://, internal IPs."""
-    import ipaddress as _ipaddress
-    import re as _re
+    """Prevent SSRF: delegate to the consolidated ScopeValidator SSOT.
+
+    Uses ``ScopeValidator.validate_url_scheme()`` for http/https enforcement
+    and ``ScopeValidator.is_internal_address()`` for private IP / cloud metadata
+    blocking — the canonical implementation shared across the codebase.
+
+    In addition, performs a DNS reachability check: if the hostname does not
+    resolve, the URL is blocked. This prevents non-resolving hostnames from
+    reaching Playwright, which would hang or leak DNS queries.
+    """
+    import socket as _socket
+
+    from tools.scope_validator import ScopeValidator
     from urllib.parse import urlparse as _urlparse
 
-    if not url.startswith(("http://", "https://")):
-        raise ValueError(f"Blocked non-HTTP URL (SSRF prevention): {url[:80]}")
+    # 1. Scheme validation (must be http/https) — captures return for consistency
+    url = ScopeValidator.validate_url_scheme(url)
 
+    # 2. Hostname extraction
     parsed = _urlparse(url)
     hostname = parsed.hostname
     if not hostname:
         raise ValueError(f"Could not parse hostname from URL: {url[:80]}")
 
-    # Resolve hostname to IP and check it's not internal (prevents DNS rebinding)
+    # 3. DNS reachability check + capture resolved IP
+    #    (browser-specific — non-resolving hostnames would cause Playwright
+    #    to hang or leak DNS queries)
     try:
-        import socket as _socket
-
         resolved_ip = _socket.gethostbyname(hostname)
-        ip = _ipaddress.ip_address(resolved_ip)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
-            raise ValueError(
-                f"Blocked internal IP (resolved {hostname} → {resolved_ip}): {url[:80]}"
-            )
-        # Block cloud metadata endpoint
-        if resolved_ip == "169.254.169.254":
-            raise ValueError(
-                f"Blocked cloud metadata endpoint ({hostname} → {resolved_ip})"
-            )
     except _socket.gaierror as e:
-        raise ValueError(f"DNS resolution failed for {hostname}: {url[:80]}") from e
-    except ValueError:
-        raise  # re-raise our own ValueError
+        raise ValueError(
+            f"DNS resolution failed for {hostname}: {url[:80]}"
+        ) from e
 
-    # Static block for common internal patterns (belt and suspenders)
-    blocked = _re.compile(
-        r"(127\.0\.0\.1|localhost|0\.0\.0\.0|10\.|172\.(1[6-9]|2[0-9]|3[01])\."
-        r"|192\.168\.|169\.254\.|::1|fc00:|fe80:|metadata\.google\.internal)",
-        _re.IGNORECASE,
-    )
-    if blocked.search(hostname):
-        raise ValueError(f"Blocked internal hostname (SSRF prevention): {hostname}")
+    # 4. Internal/SSRF target check (pass resolved_ip to avoid double DNS lookup)
+    if ScopeValidator.is_internal_address(hostname, resolved_ip=resolved_ip):
+        raise ValueError(
+            f"Blocked internal/SSRF target (hostname resolves to internal IP): {url[:80]}"
+        )
+
     return url
 
 

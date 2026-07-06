@@ -12,15 +12,45 @@ from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
+# Known cloud metadata / internal hostnames that must always be blocked (SSRF prevention)
+# Consolidated from react_agent.py _validate_arguments() and _browser_scan_worker.py
+_BLOCKED_METADATA_HOSTNAMES: frozenset = frozenset({
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "0.0.0.0",
+    "169.254.169.254",  # AWS metadata endpoint
+    "metadata.google.internal",  # GCP metadata
+    "metadata",  # GCP short name
+    "instance-data",  # AWS short name
+    "instance-data.us-east-1.compute.internal",  # AWS regional
+    "100.100.100.200",  # Alibaba Cloud metadata
+})
+
 
 class ScopeValidator:
     """
-    Validates that tool execution targets are within the engagement's authorized scope.
+    Validates that tool execution targets are within the engagement's authorized scope
+    and are not internal/SSRF targets.
 
-    Supports:
-    - Domain matching (including wildcard: *.example.com)
-    - IP range matching (CIDR notation)
-    - Exact URL prefix matching
+    Consolidated SSOT for ALL target validation:
+    - Engagement scope: domain matching (including wildcard: *.example.com),
+      IP range matching (CIDR notation), glob-pattern allow/block lists
+    - SSRF prevention: blocks private IPs, cloud metadata endpoints,
+      loopback addresses, DNS rebinding attacks
+    - URL scheme validation: only http/https allowed for browser contexts
+
+    Usage (preferred entry point)::
+
+        # Combined scope + SSRF check
+        validator = ScopeValidator(engagement_id, authorized_scope)
+        validator.validate_safe_target("https://target.com")
+        validator.is_safe_target("https://target.com")
+
+        # Static SSRF/internal check (no engagement scope needed)
+        ScopeValidator.is_internal_address("169.254.169.254")  # True
+        ScopeValidator.validate_url_scheme("https://example.com")  # OK
+        ScopeValidator.validate_url_scheme("file:///etc/passwd")  # raises ValueError
     """
 
     def __init__(self, engagement_id: str, authorized_scope: dict | None = None):
@@ -91,6 +121,185 @@ class ScopeValidator:
         except ScopeViolationError:
             return False
 
+    @staticmethod
+    def is_internal_address(hostname: str, resolved_ip: str | None = None) -> bool:
+        """Check if a hostname resolves to a private/internal/SSRF target.
+
+        Consolidated from react_agent.py _validate_arguments() and
+        _browser_scan_worker._validate_url() -- covers:
+        - Known cloud metadata hostnames (AWS, GCP, Azure, Alibaba)
+        - Private IPv4 ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+        - Loopback (127.0.0.1, ::1)
+        - Link-local (169.254.0.0/16, fe80::/10)
+        - Multicast (224.0.0.0/4)
+        - IPv4-mapped IPv6 private addresses
+        - DNS resolution check (DNS rebinding protection)
+
+        When ``resolved_ip`` is provided, DNS resolution is skipped and the
+        given IP is checked directly. This avoids a redundant DNS lookup
+        when the caller has already resolved the hostname (e.g.
+        ``_browser_scan_worker._validate_url()``).
+
+        Args:
+            hostname: Hostname or IP address string
+            resolved_ip: Pre-resolved IP address. When provided, skips DNS
+                         resolution and checks this IP for internal/SSRF patterns.
+
+        Returns:
+            True if the hostname is known internal, metadata, or resolves to a private IP
+        """
+        import ipaddress
+        import socket
+
+        if not hostname:
+            return False
+
+        host_lower = hostname.lower()
+
+        # 1. Static hostname check (fast path -- no DNS resolution needed)
+        if host_lower in _BLOCKED_METADATA_HOSTNAMES:
+            logger.warning(
+                "Blocked internal/SSRF hostname: %s", hostname
+            )
+            return True
+
+        # 2. Direct IP address check
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
+                logger.warning(
+                    "Blocked internal IP: %s (private=%s, loopback=%s, link_local=%s, multicast=%s)",
+                    hostname, ip.is_private, ip.is_loopback, ip.is_link_local, ip.is_multicast,
+                )
+                return True
+            # Check IPv4-mapped IPv6 addresses (e.g. ::ffff:10.0.0.1)
+            if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+                mapped = ipaddress.ip_address(ip.ipv4_mapped)
+                if mapped.is_private or mapped.is_loopback or mapped.is_link_local:
+                    logger.warning(
+                        "Blocked IPv4-mapped internal IP: %s -> %s",
+                        hostname, mapped,
+                    )
+                    return True
+            return False
+        except ValueError:
+            pass  # Not a bare IP -- resolve or use provided IP below
+
+        # 3. DNS resolution or use provided resolved_ip (avoids double DNS lookup
+        #    when the caller already resolved, e.g. _browser_scan_worker)
+        if resolved_ip:
+            # Caller provided a pre-resolved IP -- check it directly
+            try:
+                ip = ipaddress.ip_address(resolved_ip)
+            except ValueError:
+                logger.debug(
+                    "Invalid resolved_ip '%s' for hostname %s -- ignoring",
+                    resolved_ip, hostname,
+                )
+                return False
+        else:
+            # No pre-resolved IP -- do DNS resolution
+            try:
+                resolved_ip = socket.gethostbyname(hostname)
+                ip = ipaddress.ip_address(resolved_ip)
+            except (socket.gaierror, OSError):
+                logger.debug(
+                    "DNS resolution failed for %s -- cannot verify, allowing (engagement scope will be checked separately)",
+                    hostname,
+                )
+                # DNS failure is NOT a blocking signal -- the target may be an
+                # internal non-DNS name or a misconfigured host. Engagement scope
+                # validation will catch it if it's genuinely out of scope.
+                return False
+            except ValueError:
+                logger.debug(
+                    "DNS resolved '%s' for hostname %s is not a valid IP -- allowing",
+                    resolved_ip, hostname,
+                )
+                return False
+
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
+            logger.warning(
+                "Blocked hostname %s -- resolved to internal IP %s (DNS rebinding protection)",
+                hostname, resolved_ip,
+            )
+            return True
+        if resolved_ip == "169.254.169.254":
+            logger.warning(
+                "Blocked hostname %s -- resolved to cloud metadata endpoint %s",
+                hostname, resolved_ip,
+            )
+            return True
+
+        return False
+
+    @staticmethod
+    def validate_url_scheme(url: str) -> str:
+        """Validate URL has http/https scheme.
+
+        Used by browser scan contexts where non-HTTP schemes (file://, ftp://)
+        could be exploited for SSRF. Consolidated from _browser_scan_worker._validate_url().
+
+        Args:
+            url: Full URL string
+
+        Returns:
+            The URL unchanged on success
+
+        Raises:
+            ValueError: If scheme is not http or https
+        """
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"Blocked non-HTTP URL (SSRF prevention): {url[:80]}"
+            )
+        return url
+
+    def validate_safe_target(self, target: str) -> bool:
+        """Combined validation: in scope AND not an internal/SSRF target.
+
+        This is the single entry point for all target validation:
+        1. SSRF/internal target check (private IPs, cloud metadata, DNS rebinding)
+        2. Engagement scope check (domain matching, IP range, allow/block lists)
+
+        Args:
+            target: Target URL or hostname
+
+        Returns:
+            True if target is both in scope and not internal
+
+        Raises:
+            ScopeViolationError: If target is out of scope or internal/SSRF
+        """
+        slog = ScanLogger("scope_validator", engagement_id=self.engagement_id)
+
+        if not target:
+            return True
+
+        hostname = self._extract_hostname(target)
+
+        # Step 1: SSRF / internal target check
+        if self.is_internal_address(hostname):
+            slog.warn(
+                "Target %s blocked -- internal/SSRF target (hostname: %s)",
+                target, hostname,
+            )
+            raise ScopeViolationError(
+                f"Target '{target}' (hostname: {hostname}) is a known internal or "
+                f"cloud-metadata endpoint -- blocked (SSRF prevention)"
+            )
+
+        # Step 2: Engagement scope check
+        return self.validate_target(target)
+
+    def is_safe_target(self, target: str) -> bool:
+        """Boolean version of validate_safe_target -- no exception, just True/False."""
+        try:
+            self.validate_safe_target(target)
+            return True
+        except ScopeViolationError:
+            return False
+
     def _extract_hostname(self, target: str) -> str:
         """Extract hostname from URL or raw hostname."""
         import ipaddress
@@ -129,7 +338,7 @@ class ScopeValidator:
                 # Wildcard: match exactly one DNS label
                 suffix = domain[1:]  # ".example.com"
                 if hostname.endswith(suffix):
-                    prefix = hostname[: -len(suffix)]
+                    prefix = hostname[:-len(suffix)]
                     if prefix and "." not in prefix:
                         return True
         return False
@@ -166,7 +375,7 @@ def _check_blocked(target: str, blocked_targets: list[str] | None) -> bool:
     for pattern in blocked_targets:
         if _match_glob(pattern, target):
             logger.warning(
-                "Target %s matches blocked pattern '%s' — denying",
+                "Target %s matches blocked pattern '%s' -- denying",
                 target,
                 pattern,
             )
@@ -187,7 +396,7 @@ def _check_allowed(target: str, allowed_targets: list[str] | None, mode: str) ->
             )
             return False
         logger.warning(
-            "Target %s: no allowed_targets configured (mode=warn) — allowing with warning",
+            "Target %s: no allowed_targets configured (mode=warn) -- allowing with warning",
             target,
         )
         return True
@@ -205,7 +414,7 @@ def _check_allowed(target: str, allowed_targets: list[str] | None, mode: str) ->
         return False
 
     logger.warning(
-        "Target %s not in allowed_targets (mode=warn) — allowing with warning. "
+        "Target %s not in allowed_targets (mode=warn) -- allowing with warning. "
         "Set scope.mode=allowlist to block unauthorized targets.",
         target,
     )
@@ -227,7 +436,7 @@ def validate_target_scope(
     - warn: same as allowlist but log warning instead of blocking
     - open: allow all targets (no protection)
 
-    ``blocked_targets`` are always checked regardless of mode — if a target
+    ``blocked_targets`` are always checked regardless of mode -- if a target
     matches a blocked pattern it is denied immediately.
 
     When ``authorized_scope`` is provided (not None), uses the legacy DB-based
@@ -252,7 +461,7 @@ def validate_target_scope(
     Returns:
         True if target is in scope, False if not or on validation error
     """
-    # ── Legacy DB-based path (caller provided authorized_scope explicitly) ──
+    # -- Legacy DB-based path (caller provided authorized_scope explicitly) --
     if authorized_scope is not None:
         if not authorized_scope:
             return True
@@ -262,13 +471,13 @@ def validate_target_scope(
             return validator.is_in_scope(target)
         except Exception as e:
             logger.warning(
-                "Scope validation failed for %s — failing closed (deny): %s",
+                "Scope validation failed for %s -- failing closed (deny): %s",
                 target,
                 e,
             )
             return False
 
-    # ── Config-based enforcement path (mode / allowed / blocked) ──
+    # -- Config-based enforcement path (mode / allowed / blocked) --
     if _check_blocked(target, blocked_targets):
         return False
 

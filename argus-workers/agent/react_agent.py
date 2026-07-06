@@ -671,52 +671,33 @@ class ReActAgent:
                     )
                     return False
 
-        # Validate target is not internal/private if present.
-        # Check all common target parameter names, not just "target".
+        # Validate target is not internal/SSRF target (SSOT: ScopeValidator).
+        # Consolidated from the inline IP/hostname check that was duplicated
+        # from tools/scope_validator.py into this method.
+        from urllib.parse import urlparse
+
         _target_params = ["target", "url", "host", "hostname", "domain", "endpoint"]
         for param_name in _target_params:
             target = action.arguments.get(param_name, "")
             if target:
                 try:
-                    import ipaddress
-                    from urllib.parse import urlparse
+                    # Extract hostname the same way ScopeValidator._extract_hostname does
+                    from tools.scope_validator import ScopeValidator
 
                     hostname = urlparse(target).hostname
                     if not hostname:
                         # urlparse treats scheme-less targets (e.g. "169.254.169.254")
-                        # as paths — .hostname is None. Use the raw target string
-                        # for validation instead.
+                        # as paths — .hostname is None. Use raw split instead.
                         hostname = target.split("/")[0].split(":")[0]
-                    try:
-                        ip = ipaddress.ip_address(hostname)
-                        if ip.is_private or ip.is_loopback or ip.is_link_local:
-                            logger.warning(
-                                "Blocked internal target '%s' (param=%s) for tool '%s'",
-                                target,
-                                param_name,
-                                action.tool,
-                            )
-                            return False
-                    except ValueError:
-                        # M-v4-08: Block known cloud metadata hostnames to prevent SSRF.
-                        # Covers AWS, GCP, Azure, and Alibaba metadata endpoints.
-                        _blocked_metadata_hostnames = {
-                            "localhost",
-                            "169.254.169.254",
-                            "metadata.google.internal",  # GCP
-                            "metadata",  # GCP short name
-                            "instance-data",  # AWS short name
-                            "instance-data.us-east-1.compute.internal",  # AWS regional
-                            "100.100.100.200",  # Alibaba Cloud
-                        }
-                        if hostname.lower() in _blocked_metadata_hostnames:
-                            logger.warning(
-                                "Blocked internal hostname '%s' (param=%s) for tool '%s'",
-                                hostname,
-                                param_name,
-                                action.tool,
-                            )
-                            return False
+
+                    if ScopeValidator.is_internal_address(hostname):
+                        logger.warning(
+                            "Blocked internal target '%s' (param=%s) for tool '%s'",
+                            target,
+                            param_name,
+                            action.tool,
+                        )
+                        return False
                 except Exception as e:
                     logger.debug(
                         "Target validation failed for '%s' (param=%s): %s",

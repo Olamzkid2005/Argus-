@@ -306,6 +306,103 @@ class TestValidateTargetScope:
         assert result is True
 
 
+class TestIsInternalAddress:
+    """Tests for ScopeValidator.is_internal_address() — SSRF prevention."""
+
+    def test_blocks_cloud_metadata_aws(self):
+        assert ScopeValidator.is_internal_address("169.254.169.254") is True
+
+    def test_blocks_cloud_metadata_gcp(self):
+        assert ScopeValidator.is_internal_address("metadata.google.internal") is True
+
+    def test_blocks_cloud_metadata_alibaba(self):
+        assert ScopeValidator.is_internal_address("100.100.100.200") is True
+
+    def test_blocks_loopback_localhost(self):
+        assert ScopeValidator.is_internal_address("localhost") is True
+
+    def test_blocks_loopback_ipv4(self):
+        assert ScopeValidator.is_internal_address("127.0.0.1") is True
+
+    def test_blocks_private_ip_10_dot(self):
+        assert ScopeValidator.is_internal_address("10.0.0.1") is True
+
+    def test_blocks_private_ip_172_dot(self):
+        assert ScopeValidator.is_internal_address("172.16.0.1") is True
+
+    def test_blocks_private_ip_192_168(self):
+        assert ScopeValidator.is_internal_address("192.168.1.1") is True
+
+    def test_blocks_link_local(self):
+        assert ScopeValidator.is_internal_address("169.254.1.1") is True
+
+    def test_blocks_multicast(self):
+        assert ScopeValidator.is_internal_address("224.0.0.1") is True
+
+    def test_allows_public_ip(self):
+        assert ScopeValidator.is_internal_address("93.184.216.34") is False
+
+    def test_allows_public_hostname(self):
+        assert ScopeValidator.is_internal_address("example.com") is False
+
+    def test_allows_empty_string(self):
+        assert ScopeValidator.is_internal_address("") is False
+
+
+class TestValidateUrlScheme:
+    """Tests for ScopeValidator.validate_url_scheme()."""
+
+    def test_allows_https(self):
+        assert ScopeValidator.validate_url_scheme("https://example.com") == "https://example.com"
+
+    def test_allows_http(self):
+        assert ScopeValidator.validate_url_scheme("http://example.com") == "http://example.com"
+
+    def test_raises_on_file_url(self):
+        with pytest.raises(ValueError, match="Blocked non-HTTP URL"):
+            ScopeValidator.validate_url_scheme("file:///etc/passwd")
+
+    def test_raises_on_ftp(self):
+        with pytest.raises(ValueError, match="Blocked non-HTTP URL"):
+            ScopeValidator.validate_url_scheme("ftp://example.com")
+
+    def test_raises_on_empty(self):
+        with pytest.raises(ValueError, match="Blocked non-HTTP URL"):
+            ScopeValidator.validate_url_scheme("")
+
+
+class TestValidateSafeTarget:
+    """Tests for ScopeValidator.validate_safe_target() — combined SSRF + scope."""
+
+    def test_allows_public_target_in_scope(self):
+        validator = ScopeValidator(
+            "eng-123", {"domains": ["example.com"], "ipRanges": []}
+        )
+        assert validator.validate_safe_target("https://example.com/api")
+
+    def test_blocks_ssrf_target_even_if_in_scope(self):
+        validator = ScopeValidator(
+            "eng-123", {"domains": ["*"], "ipRanges": []}
+        )
+        with pytest.raises(ScopeViolationError, match="internal or cloud-metadata"):
+            validator.validate_safe_target("http://169.254.169.254")
+
+    def test_blocks_out_of_scope_target(self):
+        validator = ScopeValidator(
+            "eng-123", {"domains": ["example.com"], "ipRanges": []}
+        )
+        with pytest.raises(ScopeViolationError, match="not in authorized scope"):
+            validator.validate_safe_target("https://evil.com")
+
+    def test_is_safe_target_returns_boolean(self):
+        validator = ScopeValidator(
+            "eng-123", {"domains": ["example.com"], "ipRanges": []}
+        )
+        assert validator.is_safe_target("https://example.com/api") is True
+        assert validator.is_safe_target("https://evil.com") is False
+        assert validator.is_safe_target("http://169.254.169.254") is False
+
+
 class TestCheckBlocked:
     """Tests for _check_blocked helper"""
 

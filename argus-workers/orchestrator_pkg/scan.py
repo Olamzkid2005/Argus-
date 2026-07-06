@@ -450,13 +450,14 @@ def execute_scan_tools(
         slog.warn("No targets provided")
         return all_findings
 
-    # Phase 0: Scope validation — filter targets before any tool execution.
-    # This ensures the deterministic path enforces scope even when the agent
-    # path is not active (previously scope was only checked in LLM agent path).
+    # Phase 0: Scope + SSRF validation — filter targets before any tool execution.
+    # This ensures the deterministic path enforces both scope and SSRF/internal
+    # target prevention, matching what the agent path does via _validate_arguments().
+    # Consolidated SSOT: tools/scope_validator.py is the single entry point.
     engagement_id = getattr(ctx, "engagement_id", "")
     if engagement_id:
         try:
-            from tools.scope_validator import validate_target_scope
+            from tools.scope_validator import ScopeValidator, validate_target_scope
 
             scope_mode = getattr(ctx, "scope_mode", "allowlist")
             allowed = getattr(ctx, "allowed_targets", None)
@@ -464,7 +465,16 @@ def execute_scan_tools(
 
             scoped_targets = []
             blocked_targets = []
+            from urllib.parse import urlparse as _urlparse
             for t in targets:
+                # Step 1: SSRF/internal target check (filters private IPs, cloud metadata, DNS rebinding)
+                hostname = _urlparse(t).hostname or t.split("/")[0].split(":")[0]
+                if ScopeValidator.is_internal_address(hostname):
+                    blocked_targets.append(t)
+                    slog.warn("Target %s is an internal/SSRF target — blocking", t)
+                    continue
+
+                # Step 2: Engagement scope check (domain matching, allow/block lists)
                 if validate_target_scope(t, engagement_id, mode=scope_mode, allowed_targets=allowed, blocked_targets=blocked):
                     scoped_targets.append(t)
                 else:
@@ -472,7 +482,7 @@ def execute_scan_tools(
                     slog.warn("Target %s is out of scope — skipping", t)
             if blocked_targets:
                 logger.warning(
-                    "Scope filter blocked %d of %d targets for engagement %s",
+                    "Scope/SSRF filter blocked %d of %d targets for engagement %s",
                     len(blocked_targets),
                     len(targets),
                     engagement_id,
