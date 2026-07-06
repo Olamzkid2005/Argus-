@@ -595,68 +595,55 @@ describe("formatFindingsSummary", () => {
   })
 })
 
-// ── Autonomous-mode scope.mode value check (pure logic) ──
-// These tests validate the scope check logic in isolation, since the
-// full WorkflowRunner.run() path requires a valid YAML config file.
-describe("autonomous scope.mode validation logic", () => {
-  async function runnerWithConfig(scopeMode: string): Promise<boolean> {
-    // Simulate the check from workflow-runner.ts:
-    //   if (isAutonomous) {
-    //     const scopeMode = parsed?.security?.scope?.mode ?? "warn"
-    //     if (scopeMode === "warn" || scopeMode === "open") throw new Error(...)
-    //   }
-    if (process.env.ARGUS_AUTONOMOUS !== "1") return true
-    const mode = scopeMode
-    if (mode === "warn" || mode === "open") {
-      throw new Error(
-        "security.scope.mode must be explicitly set to 'allowlist' " +
-        "in autonomous mode. Current mode is '" + mode + "'."
-      )
-    }
-    return true
-  }
-
-  test("allowlist mode is accepted", async () => {
-    process.env.ARGUS_AUTONOMOUS = "1"
-    try {
-      await expect(runnerWithConfig("allowlist")).resolves.toBe(true)
-    } finally {
-      delete process.env.ARGUS_AUTONOMOUS
-    }
+// ── validateAutonomousScopeMode (pure function extracted from WorkflowRunner) ──
+// Tests the real exported function directly, no mock dependencies needed.
+describe("validateAutonomousScopeMode", () => {
+  test("does nothing when not autonomous regardless of mode", async () => {
+    const { validateAutonomousScopeMode } =
+      await import("../../../src/argus/workflow-runner")
+    // Should not throw for any mode when isAutonomous is false
+    validateAutonomousScopeMode(false, "warn")
+    validateAutonomousScopeMode(false, "open")
+    validateAutonomousScopeMode(false, "allowlist")
+    validateAutonomousScopeMode(false, undefined)
   })
 
-  test("warn mode is rejected", async () => {
-    process.env.ARGUS_AUTONOMOUS = "1"
-    try {
-      await expect(runnerWithConfig("warn")).rejects.toThrow("must be explicitly set to 'allowlist'")
-    } finally {
-      delete process.env.ARGUS_AUTONOMOUS
-    }
+  test("accepts allowlist in autonomous mode", async () => {
+    const { validateAutonomousScopeMode } =
+      await import("../../../src/argus/workflow-runner")
+    validateAutonomousScopeMode(true, "allowlist")
   })
 
-  test("open mode is rejected", async () => {
-    process.env.ARGUS_AUTONOMOUS = "1"
-    try {
-      await expect(runnerWithConfig("open")).rejects.toThrow("must be explicitly set to 'allowlist'")
-    } finally {
-      delete process.env.ARGUS_AUTONOMOUS
-    }
+  test("rejects warn in autonomous mode", async () => {
+    const { validateAutonomousScopeMode } =
+      await import("../../../src/argus/workflow-runner")
+    expect(() => validateAutonomousScopeMode(true, "warn")).toThrow(
+      "must be explicitly set to 'allowlist'"
+    )
   })
 
-  test("default (warn) is rejected when autonomous", async () => {
-    process.env.ARGUS_AUTONOMOUS = "1"
-    try {
-      await expect(runnerWithConfig("warn")).rejects.toThrow("Current mode is 'warn'")
-    } finally {
-      delete process.env.ARGUS_AUTONOMOUS
-    }
+  test("rejects open in autonomous mode", async () => {
+    const { validateAutonomousScopeMode } =
+      await import("../../../src/argus/workflow-runner")
+    expect(() => validateAutonomousScopeMode(true, "open")).toThrow(
+      "must be explicitly set to 'allowlist'"
+    )
   })
 
-  test("check passes when not in autonomous mode regardless of mode", async () => {
-    delete process.env.ARGUS_AUTONOMOUS
-    await expect(runnerWithConfig("warn")).resolves.toBe(true)
-    await expect(runnerWithConfig("open")).resolves.toBe(true)
-    await expect(runnerWithConfig("allowlist")).resolves.toBe(true)
+  test("rejects undefined (defaults to warn) in autonomous mode", async () => {
+    const { validateAutonomousScopeMode } =
+      await import("../../../src/argus/workflow-runner")
+    expect(() => validateAutonomousScopeMode(true, undefined)).toThrow(
+      "Current mode is 'warn'"
+    )
+  })
+
+  test("error message contains current mode value", async () => {
+    const { validateAutonomousScopeMode } =
+      await import("../../../src/argus/workflow-runner")
+    expect(() => validateAutonomousScopeMode(true, "open")).toThrow(
+      "Current mode is 'open'"
+    )
   })
 })
 

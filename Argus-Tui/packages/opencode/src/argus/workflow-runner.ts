@@ -108,6 +108,32 @@ export interface WorkflowRunResult {
 }
 
 /**
+ * Validate that scope.mode is 'allowlist' when running in autonomous mode.
+ * Fails hard with a descriptive error message if scope.mode is 'warn' or 'open'.
+ * This is the pure-logic extraction of the blocker 36 guard so it can be unit
+ * tested independently without a full WorkflowRunner or config file.
+ *
+ * @param isAutonomous - Whether ARGUS_AUTONOMOUS mode is active
+ * @param scopeMode - The parsed security.scope.mode value (or undefined/unset)
+ * @throws Error if autonomous and scopeMode is 'warn' or 'open'
+ */
+export function validateAutonomousScopeMode(
+  isAutonomous: boolean,
+  scopeMode: string | undefined,
+): void {
+  if (!isAutonomous) return
+  const mode = scopeMode ?? "warn"
+  if (mode === "warn" || mode === "open") {
+    throw new Error(
+      "[Argus] ARGUS_AUTONOMOUS=1: security.scope.mode must be explicitly set to 'allowlist' " +
+      "in autonomous mode. Current mode is '" + mode + "'. " +
+      "Set 'scope.mode: allowlist' and 'scope.allowed_targets' in argus.config.yaml " +
+      "to define the authorized scope, or disable autonomous mode."
+    )
+  }
+}
+
+/**
  * Format a findings summary string from raw findings.
  * Used by both TUI and CLI output.
  */
@@ -458,17 +484,7 @@ export class WorkflowRunner {
 
       // In autonomous mode, scope.mode must be explicitly set to 'allowlist'
       // so out-of-scope targets are rejected instead of warned (blocker 36 fix).
-      if (isAutonomous) {
-        const scopeMode = parsed?.security?.scope?.mode ?? "warn"
-        if (scopeMode === "warn" || scopeMode === "open") {
-          throw new Error(
-            "[Argus] ARGUS_AUTONOMOUS=1: security.scope.mode must be explicitly set to 'allowlist' " +
-            "in autonomous mode. Current mode is '" + scopeMode + "'. " +
-            "Set 'scope.mode: allowlist' and 'scope.allowed_targets' in argus.config.yaml " +
-            "to define the authorized scope, or disable autonomous mode."
-          )
-        }
-      }
+      validateAutonomousScopeMode(isAutonomous, parsed?.security?.scope?.mode)
     } catch (configErr) {
       if (isAutonomous) {
         throw new Error(
