@@ -52,7 +52,7 @@ from config.constants import (
 from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus, UnifiedToolResult
-from tools.scope_validator import validate_target_scope  # M-25: scope validation
+from tools.scope_validator import ScopeValidator, validate_target_scope  # M-25: scope validation
 from tools.web_scanner_checks._helpers import test_jwt_alg_none
 from utils.logging_utils import ScanLogger
 
@@ -62,30 +62,12 @@ logger = logging.getLogger(__name__)
 def _is_private_ip(hostname: str) -> bool:
     """Check if a hostname resolves to a private/loopback/link-local IP.
 
-    Performs a DNS lookup and checks if any resolved address falls within
-    private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16),
-    loopback (127.0.0.0/8, ::1), or link-local (169.254.0.0/16).
-
-    Returns True if the hostname resolves to a private address, or if
-    resolution fails (fail-closed for safety).
+    Delegates to the consolidated ScopeValidator.is_internal_address()
+    from tools/scope_validator.py (SSOT).
     """
-    import ipaddress as _ipaddress
-    import socket as _socket
+    from tools.scope_validator import ScopeValidator
 
-    try:
-        addrs = _socket.getaddrinfo(hostname, None)
-        for family, _, _, _, sockaddr in addrs:
-            ip_str = sockaddr[0]
-            try:
-                addr = _ipaddress.ip_address(ip_str)
-                if addr.is_private or addr.is_loopback or addr.is_link_local:
-                    return True
-            except ValueError:
-                continue
-        return False
-    except Exception:
-        # Fail-closed: if we can't resolve, treat as unsafe
-        return True
+    return ScopeValidator.is_internal_address(hostname)
 
 
 def _validate_redirect_chain(url: str, target_url: str) -> bool:
@@ -645,9 +627,17 @@ class WebScanner(AbstractTool):
                 f"Only http:// and https:// targets are permitted (H-v3-24 SSRF prevention)."
             )
 
-        # M-25: Scope validation — reject targets outside authorized scope before
-        # sending any potentially destructive payloads (mass assignment, credential
-        # testing, host header injection). Loads scope from DB if not provided.
+        # M-25: Scope validation + SSRF — reject targets outside authorized scope
+        # or internal/SSRF targets before sending any potentially destructive
+        # payloads (mass assignment, credential testing, host header injection).
+        hostname = parsed.hostname or target_url.split("/")[0].split(":")[0]
+        if hostname and ScopeValidator.is_internal_address(hostname):
+            logger.warning(
+                "Target %s is an internal/SSRF target — scan aborted",
+                target_url,
+            )
+            self.findings = []
+            return
         if self.engagement_id and not validate_target_scope(
             target_url, self.engagement_id
         ):

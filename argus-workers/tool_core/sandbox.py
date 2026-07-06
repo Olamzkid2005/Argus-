@@ -134,9 +134,24 @@ class AsyncToolRunner:
         if runner.is_dangerous(tool, args):
             raise SecurityError(f"Blocked dangerous payload: {tool} {' '.join(args)}")
 
-        # 2. Scope validation (fail-closed — out-of-scope targets are denied)
+        # 2. Scope validation (fail-closed — out-of-scope/SSRF targets are denied)
         if target and eng_id:
-            from tool_core.validators.scope import validate_target_scope
+            from tool_core.validators.scope import ScopeValidator, validate_target_scope
+            from urllib.parse import urlparse
+
+            hostname = urlparse(target).hostname or target.split("/")[0].split(":")[0]
+            if hostname and ScopeValidator.is_internal_address(hostname):
+                result = UnifiedToolResult(
+                    tool_name=tool,
+                    target=target,
+                    command=[tool, *args],
+                    status=ToolStatus.SKIPPED,
+                    error_message=(
+                        f"Target {target!r} is an internal/SSRF target — blocked"
+                    ),
+                )
+                result.mark_finished()
+                return result
 
             if not validate_target_scope(target, eng_id):
                 result = UnifiedToolResult(
@@ -303,9 +318,24 @@ class AsyncToolRunner:
         if runner.is_dangerous(tool, args):
             raise SecurityError(f"Blocked dangerous payload: {tool} {' '.join(args)}")
 
-        # 2. Scope validation
+        # 2. Scope validation (SSRF + scope)
         if target and eng_id:
-            from tool_core.validators.scope import validate_target_scope
+            from tool_core.validators.scope import ScopeValidator, validate_target_scope
+            from urllib.parse import urlparse
+
+            hostname = urlparse(target).hostname or target.split("/")[0].split(":")[0]
+            if hostname and ScopeValidator.is_internal_address(hostname):
+                result = UnifiedToolResult(
+                    tool_name=tool,
+                    target=target,
+                    command=[tool, *args],
+                    status=ToolStatus.SKIPPED,
+                    error_message=(
+                        f"Target {target!r} is an internal/SSRF target — blocked"
+                    ),
+                )
+                result.mark_finished()
+                return result
 
             if not validate_target_scope(target, eng_id):
                 result = UnifiedToolResult(

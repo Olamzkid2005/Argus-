@@ -197,41 +197,55 @@ class ScopeValidator:
                     resolved_ip, hostname,
                 )
                 return False
+
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
+                logger.warning(
+                    "Blocked hostname %s -- resolved to internal IP %s (DNS rebinding protection)",
+                    hostname, resolved_ip,
+                )
+                return True
+            if resolved_ip == "169.254.169.254":
+                logger.warning(
+                    "Blocked hostname %s -- resolved to cloud metadata endpoint %s",
+                    hostname, resolved_ip,
+                )
+                return True
+            return False
         else:
-            # No pre-resolved IP -- do DNS resolution
+            # No pre-resolved IP -- do DNS resolution via getaddrinfo so we
+            # check all resolved addresses (IPv4 + IPv6), matching the original
+            # _is_private_ip behavior in web_scanner.py.
             try:
-                resolved_ip = socket.gethostbyname(hostname)
-                ip = ipaddress.ip_address(resolved_ip)
+                addrs = socket.getaddrinfo(hostname, None)
             except (socket.gaierror, OSError):
                 logger.debug(
                     "DNS resolution failed for %s -- cannot verify, allowing (engagement scope will be checked separately)",
                     hostname,
                 )
-                # DNS failure is NOT a blocking signal -- the target may be an
-                # internal non-DNS name or a misconfigured host. Engagement scope
-                # validation will catch it if it's genuinely out of scope.
-                return False
-            except ValueError:
-                logger.debug(
-                    "DNS resolved '%s' for hostname %s is not a valid IP -- allowing",
-                    resolved_ip, hostname,
-                )
                 return False
 
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
-            logger.warning(
-                "Blocked hostname %s -- resolved to internal IP %s (DNS rebinding protection)",
-                hostname, resolved_ip,
-            )
-            return True
-        if resolved_ip == "169.254.169.254":
-            logger.warning(
-                "Blocked hostname %s -- resolved to cloud metadata endpoint %s",
-                hostname, resolved_ip,
-            )
-            return True
-
-        return False
+            for family, _, _, _, sockaddr in addrs:
+                ip_str = sockaddr[0]
+                try:
+                    ip = ipaddress.ip_address(ip_str)
+                    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
+                        logger.warning(
+                            "Blocked hostname %s -- resolved to internal IP %s (DNS rebinding protection)",
+                            hostname, ip_str,
+                        )
+                        return True
+                    # Check IPv4-mapped IPv6 addresses (e.g. ::ffff:10.0.0.1)
+                    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+                        mapped = ipaddress.ip_address(ip.ipv4_mapped)
+                        if mapped.is_private or mapped.is_loopback or mapped.is_link_local:
+                            logger.warning(
+                                "Blocked hostname %s -- resolved to IPv4-mapped internal IP %s -> %s",
+                                hostname, ip_str, mapped,
+                            )
+                            return True
+                except ValueError:
+                    continue
+            return False
 
     @staticmethod
     def validate_url_scheme(url: str) -> str:

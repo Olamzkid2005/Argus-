@@ -27,7 +27,7 @@ from streaming import (
     emit_swarm_agent_started,
     emit_swarm_merge_complete,
 )
-from tools.scope_validator import validate_target_scope
+from tools.scope_validator import ScopeValidator, validate_target_scope
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
@@ -164,10 +164,17 @@ class SpecialistAgent(ABC):
                     )
         if not targets and hasattr(rc, "target_url") and rc.target_url:
             targets = [rc.target_url]
-        # Filter to authorized scope
-        from tools.scope_validator import validate_target_scope
+        # Filter to authorized scope + SSRF prevention
+        from tools.scope_validator import ScopeValidator, validate_target_scope
+        from urllib.parse import urlparse
 
-        return [t for t in targets if validate_target_scope(t, self.engagement_id)]
+        def _safe(t: str) -> bool:
+            hostname = urlparse(t).hostname or t.split("/")[0].split(":")[0]
+            if hostname and ScopeValidator.is_internal_address(hostname):
+                return False
+            return validate_target_scope(t, self.engagement_id)
+
+        return [t for t in targets if _safe(t)]
 
     @staticmethod
     def _has_dynamic_surface(rc) -> bool:
@@ -513,7 +520,15 @@ class APIAgent(SpecialistAgent):
                 logger.warning("[API] dalfox failed for %s: %s", target, e)
 
             # 4. sqlmap injection testing on API params
-            # Re-validate target is in authorized scope before sqlmap execution
+            # Re-validate target (SSRF + scope) before sqlmap execution
+            from urllib.parse import urlparse
+
+            hostname = urlparse(target).hostname or target.split("/")[0].split(":")[0]
+            if hostname and ScopeValidator.is_internal_address(hostname):
+                logger.warning(
+                    "[API] Skipping sqlmap for %s — blocked internal/SSRF target", target
+                )
+                continue
             if not validate_target_scope(target, self.engagement_id):
                 logger.warning(
                     "[API] Skipping sqlmap for %s — not in authorized scope", target

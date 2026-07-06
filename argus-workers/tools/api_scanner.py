@@ -140,14 +140,22 @@ class LegacyAPISecurityScanner(AbstractTool):
         )
         slog.phase_header("API SCAN", f"target={target_url}, type={api_type}")
 
-        # L-17: Validate target URL before scanning
+        # L-17: Validate target URL before scanning (SSRF + scope)
         from urllib.parse import urlparse as _urlparse
 
-        from tools.scope_validator import validate_target_scope
+        from tools.scope_validator import ScopeValidator, validate_target_scope
 
         parsed = _urlparse(target_url)
         if parsed.scheme not in ("http", "https"):
             slog.warn("Rejected scan with scheme '%s': %s", parsed.scheme, target_url)
+            result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)
+            result.mark_finished()
+            return result
+        hostname = parsed.hostname or target_url.split("/")[0].split(":")[0]
+        if hostname and ScopeValidator.is_internal_address(hostname):
+            slog.warn(
+                "Target %s is an internal/SSRF target — scan aborted", target_url
+            )
             result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)
             result.mark_finished()
             return result
