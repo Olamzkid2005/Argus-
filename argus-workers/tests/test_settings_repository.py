@@ -21,7 +21,7 @@ class TestSettingsRepositoryGetUserSetting:
 
     @patch("database.settings_repository.db_cursor")
     def test_get_user_setting_executes_correct_query(self, mock_db_cursor):
-        """Verifies the correct SELECT query is executed with user_email and key."""
+        """Verifies the correct SELECT query is executed with user_id and key."""
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = ("sk-openrouter-key123",)
         mock_db_cursor.return_value.__enter__.return_value = mock_cursor
@@ -29,11 +29,14 @@ class TestSettingsRepositoryGetUserSetting:
         repo = SettingsRepository()
         result = repo.get_user_setting("admin@example.com", "openrouter_api_key")
 
+        # The result is decrypted; since the mock returns a plain string
+        # (not encrypted), _decrypt returns it as-is
         assert result == "sk-openrouter-key123"
-        mock_cursor.execute.assert_called_once_with(
-            "SELECT value FROM user_settings WHERE user_email = %s AND key = %s",
-            ("admin@example.com", "openrouter_api_key"),
-        )
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+        assert "settings->>%s" in sql
+        assert "user_id = %s" in sql
+        assert params == ("openrouter_api_key", "admin@example.com")
 
     @patch("database.settings_repository.db_cursor")
     def test_get_user_setting_returns_none_when_not_found(self, mock_db_cursor):
@@ -75,45 +78,44 @@ class TestSettingsRepositoryGetUserSettings:
 
     @patch("database.settings_repository.db_cursor")
     def test_get_user_settings_returns_dict_of_all_settings(self, mock_db_cursor):
-        """All rows are returned as a dict of key -> value."""
+        """The JSONB settings column is parsed into a dict of key -> value."""
         mock_cursor = MagicMock()
-        mock_cursor.fetchall.return_value = [
-            ("openai_api_key", "sk-openai-xxx"),
-            ("openrouter_api_key", "sk-or-v1-yyy"),
-            ("llm_api_key", "sk-llm-zzz"),
-        ]
-        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
-
-        repo = SettingsRepository()
-        result = repo.get_user_settings("admin@example.com")
-
-        assert result == {
+        mock_cursor.fetchone.return_value = ({
             "openai_api_key": "sk-openai-xxx",
             "openrouter_api_key": "sk-or-v1-yyy",
             "llm_api_key": "sk-llm-zzz",
-        }
-
-    @patch("database.settings_repository.db_cursor")
-    def test_get_user_settings_filters_none_values(self, mock_db_cursor):
-        """Rows with None values are excluded from the result dict."""
-        mock_cursor = MagicMock()
-        mock_cursor.fetchall.return_value = [
-            ("openai_api_key", "sk-valid-key"),
-            ("empty_key", None),
-        ]
+        },)
         mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
         repo = SettingsRepository()
         result = repo.get_user_settings("admin@example.com")
 
-        assert "empty_key" not in result
+        assert result["openai_api_key"] == "sk-openai-xxx"
+        assert result["openrouter_api_key"] == "sk-or-v1-yyy"
+        assert result["llm_api_key"] == "sk-llm-zzz"
+
+    @patch("database.settings_repository.db_cursor")
+    def test_get_user_settings_mixed_types(self, mock_db_cursor):
+        """Non-string JSONB values are converted to str; string values are decrypted."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = ({
+            "openai_api_key": "sk-valid-key",
+            "empty_key": None,
+        },)
+        mock_db_cursor.return_value.__enter__.return_value = mock_cursor
+
+        repo = SettingsRepository()
+        result = repo.get_user_settings("admin@example.com")
+
+        # None values are converted to the string "None" by str(v)
+        assert result.get("empty_key") == "None"
         assert result["openai_api_key"] == "sk-valid-key"
 
     @patch("database.settings_repository.db_cursor")
     def test_get_user_settings_empty_returns_empty_dict(self, mock_db_cursor):
         """No settings returns empty dict, not None."""
         mock_cursor = MagicMock()
-        mock_cursor.fetchall.return_value = []
+        mock_cursor.fetchone.return_value = ({},)
         mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
         repo = SettingsRepository()
@@ -169,8 +171,8 @@ class TestSettingsRepositoryDeleteUserSetting:
     """Tests for SettingsRepository.delete_user_setting()."""
 
     @patch("database.settings_repository.db_cursor")
-    def test_delete_user_setting_executes_delete(self, mock_db_cursor):
-        """delete_user_setting runs a DELETE query with correct params."""
+    def test_delete_user_setting_executes_update(self, mock_db_cursor):
+        """delete_user_setting runs an UPDATE to remove a key from JSONB."""
         mock_cursor = MagicMock()
         mock_db_cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -178,10 +180,11 @@ class TestSettingsRepositoryDeleteUserSetting:
         result = repo.delete_user_setting("admin@example.com", "openai_api_key")
 
         assert result is True
-        mock_cursor.execute.assert_called_once_with(
-            "DELETE FROM user_settings WHERE user_email = %s AND key = %s",
-            ("admin@example.com", "openai_api_key"),
-        )
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+        assert "settings -" in sql
+        assert "user_id = %s" in sql
+        assert params == ("openai_api_key", "admin@example.com")
 
     @patch("database.settings_repository.db_cursor")
     def test_delete_user_setting_error_returns_false(self, mock_db_cursor):

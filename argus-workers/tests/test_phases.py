@@ -66,11 +66,13 @@ class TestPHASES:
         assert "recon" in ids
         assert "scanning" in ids
         assert "analyzing" in ids
+        assert "post_exploitation" in ids
+        assert "pivot" in ids
         assert "reporting" in ids
         assert "complete" in ids
         assert "failed" in ids
         assert "paused" in ids
-        assert len(ids) == 8
+        assert len(ids) == 10
 
     def test_terminal_phases(self):
         complete = get_phase("complete")

@@ -17,6 +17,7 @@ parameters:
     default: "2"
 capabilities:
   - sast
+  - vulnerability_scanning
 signal_quality: PROBABLE
 risk_level: low
 requires:

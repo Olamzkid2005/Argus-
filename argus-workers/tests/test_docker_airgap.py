@@ -78,13 +78,12 @@ class TestDockerfileAirgap:
 
     def test_no_old_key_format(self):
         """Ensure old Go download pattern (unconditional curl) is not present."""
-        # Should only appear inside the AIRGAP conditional
-        airgap_lines = [
+        # Check for non-commented curl commands
+        non_comment_curl_lines = [
             line for line in self.lines
             if 'curl -fsSL "https://go.dev/dl/go' in line
+            and not line.strip().startswith("#")
         ]
-        for line in airgap_lines:
-            # Each curl line should be after the if and before the fi
-            assert any(
-                'if [ "$AIRGAP" = "0" ]; then' in self.content.split(line)[0].rsplit("\n", 1)[-1]
-            ), f"Curl line must be inside AIRGAP block:\n{line}"
+        assert len(non_comment_curl_lines) == 0, (
+            f"Found {len(non_comment_curl_lines)} non-commented curl command(s): {non_comment_curl_lines}"
+        )

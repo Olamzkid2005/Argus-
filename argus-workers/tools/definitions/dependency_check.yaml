@@ -12,6 +12,7 @@ parameters:
     flag: "--scan"
 capabilities:
   - sca
+  - vulnerability_scanning
 signal_quality: CONFIRMED
 risk_level: low
 phases:

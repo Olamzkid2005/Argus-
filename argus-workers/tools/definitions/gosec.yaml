@@ -11,6 +11,7 @@ parameters:
     required: true
 capabilities:
   - sast
+  - vulnerability_scanning
 signal_quality: PROBABLE
 risk_level: low
 requires:

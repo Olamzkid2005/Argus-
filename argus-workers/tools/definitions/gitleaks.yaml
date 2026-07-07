@@ -18,6 +18,7 @@ parameters:
     flag: "--max-target-megabytes"
 capabilities:
   - secret_detection
+  - vulnerability_scanning
 signal_quality: CONFIRMED
 risk_level: low
 priority: 85

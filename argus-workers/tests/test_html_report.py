@@ -117,7 +117,7 @@ class TestRenderHtmlReport:
                 "title": "SQLi",
                 "description": "Time-based SQL injection detected.",
                 "remediation": "Use parameterized queries.",
-                "cwe": "CWE-89",
+                "cwe_id": "CWE-89",
             }
         ]
         html = render_html_report(findings=findings)

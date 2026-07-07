@@ -15,6 +15,7 @@ parameters:
     flag: "--config"
 capabilities:
   - sast
+  - vulnerability_scanning
 signal_quality: CONFIRMED
 risk_level: low
 priority: 80

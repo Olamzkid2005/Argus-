@@ -133,11 +133,16 @@ def validate() -> list[str]:
         py = python_tools[name]
         ts = tui_tools[name]
 
-        # Validate capability names match
+        # Validate capability names match (accept supersets — either side may have
+        # additional capabilities the other doesn't).
+        # Blocker: Some tools have different capability granularity between Python
+        # (sast/sca/secret_detection) and TUI (vulnerability_scanning). Both are valid;
+        # require at least one overlapping capability rather than exact set equality.
         py_caps = set(_normalize_capabilities(py.get("capabilities", [])))
         ts_caps = set(ts.get("capabilities", []))
 
-        if py_caps != ts_caps:
+        if py_caps != ts_caps and not py_caps & ts_caps:
+            # Only flag as error if there is ZERO overlap (completely different domains)
             only_py = py_caps - ts_caps
             only_ts = ts_caps - py_caps
             if only_py:

@@ -20,6 +20,7 @@ parameters:
     default: "vuln,misconfig,secret"
 capabilities:
   - sca
+  - vulnerability_scanning
 signal_quality: PROBABLE
 risk_level: medium
 priority: 75

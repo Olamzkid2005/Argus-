@@ -477,13 +477,18 @@ class TestGovernance:
         assert reason == ""
 
     def test_check_fails_on_runtime_timeout(self):
-        """Test that check() fails when runtime exceeds limit."""
-        # Use a governance with a very short timeout
+        """Test that check() fails when active runtime exceeds limit."""
+        # Governance uses active runtime tracking (blocker 58).
+        # Set timeout to 0 and accumulate some active time.
         g = Governance("eng-1", max_runtime_seconds=0)
+        g.start_active_timer()
+        import time
+        time.sleep(0.01)  # accumulate a tiny amount of active time
+        g.stop_active_timer()
         action = MagicMock(tool="nuclei", cost_usd=0.01)
         can_proceed, reason = g.check(action)
         assert can_proceed is False
-        assert "Runtime exceeded" in reason
+        assert "Active runtime exceeded" in reason or "Runtime exceeded" in reason
         assert g.is_shutdown() is True
 
     def test_check_fails_on_cost_exceeded(self):

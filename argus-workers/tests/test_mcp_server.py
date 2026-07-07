@@ -143,7 +143,8 @@ class TestMCPServer:
         assert "disabled" in result["content"][0]["text"]
 
     def test_call_tool_args_sanitized(self):
-        """Shell injection chars in args should be rejected."""
+        """Shell metacharacters are safe with subprocess list form (no shell=True).
+        Only null bytes and control chars are blocked."""
         server = MCPServer()
         td = ToolDefinition(
             name="test",
@@ -152,11 +153,11 @@ class TestMCPServer:
         )
         server.register_tool(td)
         result = server.call_tool("test", {"target": "hello; rm -rf /"})
-        assert result["isError"] is True
-        assert "Security validation" in result["content"][0]["text"]
+        # List-form subprocess (no shell=True) passes args literally — safe
+        assert result["isError"] is False
 
-    def test_call_tool_injection_detection(self):
-        """Backtick injection should be rejected."""
+    def test_call_tool_blocks_null_bytes(self):
+        """Null bytes in args should be rejected."""
         server = MCPServer()
         td = ToolDefinition(
             name="test",
@@ -164,7 +165,7 @@ class TestMCPServer:
             parameters=[{"name": "msg", "type": "string", "flag": "-n"}],
         )
         server.register_tool(td)
-        result = server.call_tool("test", {"msg": "`cat /etc/passwd`"})
+        result = server.call_tool("test", {"msg": "cat\x00/etc/passwd"})
         assert result["isError"] is True
         assert "shell metacharacters" in result["content"][0]["text"].lower()
 
