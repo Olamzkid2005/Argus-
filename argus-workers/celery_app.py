@@ -138,6 +138,7 @@ if not os.getenv("DATABASE_URL"):
 # All *.sql files in database/migrations/ are applied in sorted order on startup.
 # Uses its own direct connection, safe to run before the pool is ready.
 from database.migrations.runner import run_migrations
+
 run_migrations()
 
 # Create Celery application

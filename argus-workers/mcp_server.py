@@ -228,11 +228,12 @@ class MCPServer:
             # In manual/interactive mode, only warn so development is not disrupted.
             _is_autonomous = os.environ.get("ARGUS_AUTONOMOUS", "").lower() in ("1", "true")
             if _is_autonomous:
+                issues_str = "\n  ".join(credential_issues)
                 raise RuntimeError(
-                    "STARTUP GUARD: ARGUS_AUTONOMOUS=1 detected %d credential issue(s):\n  %s\n"
+                    f"STARTUP GUARD: ARGUS_AUTONOMOUS=1 detected {len(credential_issues)} credential issue(s):\n"
+                    f"  {issues_str}\n"
                     "Placeholder credentials are not allowed in autonomous mode. "
                     "Set valid API keys in your environment or .env file."
-                    % (len(credential_issues), "\n  ".join(credential_issues))
                 )
             logger.warning(
                 "STARTUP GUARD: Found %d credential issue(s):\n  %s",
@@ -1160,7 +1161,6 @@ class MCPServer:
             dict with next_capabilities, reasoning, and stop flag.
         """
         findings = findings or []
-        from agent.react_agent import ReActAgent
 
         # Phase-to-next-capabilities progression map
         severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0}
@@ -1227,7 +1227,6 @@ class MCPServer:
             return {"error": "engagement_id is required", "chains": [], "paths": [], "chain_plans": []}
 
         from attack_graph import AttackGraph
-        from attack_graph_db import AttackGraphRepository
 
         graph = AttackGraph(engagement_id)
 

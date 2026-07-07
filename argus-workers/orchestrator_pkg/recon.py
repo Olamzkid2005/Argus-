@@ -28,15 +28,21 @@ def execute_recon_tools(
     target: str,
     budget: dict,
     aggressiveness: str = DEFAULT_AGGRESSIVENESS,
+    cache_mode: str | None = None,
 ) -> tuple[list[dict], object]:
     """
     Execute reconnaissance tools against target.
+
+    TODO: cache_mode is accepted for pipeline interface compatibility
+    but is not yet implemented. When implemented, it should control
+    whether tool outputs are cached/retrieved from cache.
 
     Args:
         ctx: ToolContext or Orchestrator (provides tool_runner, parser, normalizer)
         target: Target URL
         budget: Budget configuration
         aggressiveness: Scan aggressiveness level (default, high, extreme)
+        cache_mode: Cache execution mode (accepted for pipeline interface compatibility)
 
     Returns:
         Tuple of (list of normalized findings, ReconContext)

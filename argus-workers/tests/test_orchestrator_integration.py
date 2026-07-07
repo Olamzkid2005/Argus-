@@ -32,6 +32,8 @@ def mock_heavy_deps():
             "psycopg2.extensions": MagicMock(),
             "redis": MagicMock(),
             "database.connection": MagicMock(),
+            "database.migrations": MagicMock(),
+            "database.migrations.runner": MagicMock(),
             "database.repositories.finding_repository": MagicMock(),
             "database.repositories.engagement_repository": MagicMock(),
             "database.repositories.tool_metrics_repository": MagicMock(),
@@ -233,7 +235,7 @@ class TestReActAgent:
 
         call_num = [0]
 
-        def mock_plan(task, context, tried_tools=None):
+        def mock_plan(task, context, tried_tools=None, **kwargs):
             call_num[0] += 1
             if call_num[0] == 1:
                 return AgentAction(tool="counter", arguments={}, reasoning="test")
@@ -265,7 +267,7 @@ class TestReActAgent:
 
         call_num = [0]
 
-        def mock_plan(task, context, tried_tools=None):
+        def mock_plan(task, context, tried_tools=None, **kwargs):
             call_num[0] += 1
             if call_num[0] == 1:
                 return AgentAction(tool="flaky", arguments={}, reasoning="test")

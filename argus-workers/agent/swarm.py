@@ -165,8 +165,9 @@ class SpecialistAgent(ABC):
         if not targets and hasattr(rc, "target_url") and rc.target_url:
             targets = [rc.target_url]
         # Filter to authorized scope + SSRF prevention
-        from tools.scope_validator import ScopeValidator, validate_target_scope
         from urllib.parse import urlparse
+
+        from tools.scope_validator import ScopeValidator, validate_target_scope
 
         def _safe(t: str) -> bool:
             hostname = urlparse(t).hostname or t.split("/")[0].split(":")[0]

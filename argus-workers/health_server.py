@@ -21,8 +21,7 @@ import os
 import sys
 import threading
 import time as _time
-import socketserver
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -88,6 +87,20 @@ class _MetricsHandler(BaseHTTPRequestHandler):
 
     # ── /health endpoint ────────────────────────────────────────────
 
+    @staticmethod
+    def _check_celery_worker() -> dict[str, Any]:
+        """Ping the Celery worker via the health ping task.
+
+        Calls ``ping_task.run()`` directly (not through the broker) to verify
+        the worker process can execute tasks. Returns the ping result dict on
+        success, or an error dict on failure.
+        """
+        try:
+            from celery_app import ping_task
+            return {"alive": True, "result": ping_task.run()}
+        except Exception as e:
+            return {"alive": False, "error": str(e)}
+
     def _collect_liveness(self) -> dict[str, Any]:
         """Gather the lightweight liveness snapshot used by /health."""
         from mcp_server import get_mcp_server
@@ -101,6 +114,7 @@ class _MetricsHandler(BaseHTTPRequestHandler):
         tools_enabled = len(tools_list)   # only enabled via public API
 
         llm_available = self._check_llm_available()
+        celery = self._check_celery_worker()
 
         # Determine overall status
         status = "ok"
@@ -108,11 +122,14 @@ class _MetricsHandler(BaseHTTPRequestHandler):
             status = "degraded"
         if not llm_available:
             status = "degraded"
+        if not celery["alive"]:
+            status = "degraded"
 
         return {
             "status": status,
             "uptime_seconds": round(uptime, 1),
             "llm_available": llm_available,
+            "celery_worker": celery,
             "tools": {
                 "total": tools_total,
                 "available": tools_enabled,
@@ -251,7 +268,7 @@ def start_health_server(
     # Use ThreadingHTTPServer so concurrent /health and /metrics requests
     # don't queue. For a 30s Docker probe interval this doesn't matter much,
     # but it's a one-line change for peace of mind.
-    server = socketserver.ThreadingHTTPServer((host, port), _MetricsHandler)
+    server = ThreadingHTTPServer((host, port), _MetricsHandler)
     server.timeout = 1.0  # wake every second to check for shutdown
 
     def _serve() -> None:

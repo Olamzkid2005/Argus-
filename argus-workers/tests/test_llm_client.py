@@ -90,17 +90,18 @@ class TestLLMClientInit:
 
 class TestLLMClientCircuitBreaker:
     def test_initial_state_closed(self):
-        client = LLMClient(api_key="sk-test")
+        client = LLMClient(api_key="sk-test-key-12345")
         assert client.is_available() is True
 
     def test_is_available_false_when_circuit_open(self):
-        client = LLMClient(api_key="sk-test")
-        client._circuit_failures = 2
+        client = LLMClient(api_key="sk-test-key-12345")
+        # Must exceed _circuit_threshold (5) for the circuit to be open
+        client._circuit_failures = 5
         client._circuit_open_until = 9999999999.0
         assert client.is_available() is False
 
     def test_is_available_resets_after_cooldown(self):
-        client = LLMClient(api_key="sk-test")
+        client = LLMClient(api_key="sk-test-key-12345")
         client._circuit_failures = 2
         client._circuit_open_until = 0.0  # expired
         assert client.is_available() is True

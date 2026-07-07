@@ -154,8 +154,11 @@ class TestConnectionContextManager:
         caplog.set_level(logging.WARNING)
         with patch.object(cm, "get_connection", return_value=mock_conn):
             with patch.object(cm, "release_connection"):
-                with cm.connection(org_id="test-org-123"):
-                    pass
+                # Production code re-raises after logging the warning so callers
+                # know tenant isolation was not established (H-v3-12).
+                with pytest.raises(Exception, match="set_tenant_context"):
+                    with cm.connection(org_id="test-org-123"):
+                        pass
 
         # Check that at least one WARNING record about tenant context was logged
         tenant_warnings = [

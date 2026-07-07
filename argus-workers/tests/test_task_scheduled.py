@@ -79,6 +79,7 @@ class TestRunDueScans:
                 "default",
                 True,
                 "test-user",
+                "0 */6 * * *",
             ),
         ]
         mock_connect.return_value = mock_conn
@@ -117,6 +118,7 @@ class TestRunDueScans:
                 "default",
                 True,
                 "user-1",
+                "0 */6 * * *",
             ),
             (
                 sched_id_2,
@@ -127,6 +129,7 @@ class TestRunDueScans:
                 "default",
                 True,
                 "user-2",
+                "0 */6 * * *",
             ),
         ]
         mock_connect.return_value = mock_conn
@@ -186,6 +189,7 @@ class TestRunDueScans:
                 "default",
                 True,
                 "user-1",
+                "0 */6 * * *",
             ),
             (
                 str(uuid.uuid4()),
@@ -196,6 +200,7 @@ class TestRunDueScans:
                 "aggressive",
                 True,
                 "user-2",
+                "0 */6 * * *",
             ),
         ]
 
@@ -234,6 +239,7 @@ class TestSpawnEngagement:
             aggressiveness="default",
             agent_mode=True,
             created_by="test-user",
+            cron_expression="0 */6 * * *",
             db_url="postgres://localhost/argus",
         )
 
@@ -271,6 +277,7 @@ class TestSpawnEngagement:
             aggressiveness="aggressive",
             agent_mode=False,
             created_by="user",
+            cron_expression="0 */6 * * *",
             db_url="postgres://localhost/argus",
         )
 
@@ -299,6 +306,7 @@ class TestSpawnEngagement:
             aggressiveness="default",
             agent_mode=True,
             created_by="user",
+            cron_expression="0 */6 * * *",
             db_url="postgres://localhost/argus",
         )
 
@@ -341,15 +349,16 @@ class TestSpawnEngagement:
                 aggressiveness="default",
                 agent_mode=True,
                 created_by="user",
+                cron_expression="0 */6 * * *",
                 db_url="postgres://localhost/argus",
             )
 
         update_call = mock_cursor.execute.call_args_list[4]
         sql, params = update_call[0]
         assert "UPDATE scheduled_engagements" in sql
-        assert "next_run_at = CASE" in sql
-        assert params[0] == result["engagement_id"]
-        assert params[1] == sched_id
+        assert "next_run_at = %s" in sql
+        assert params[1] == result["engagement_id"]
+        assert params[2] == sched_id
 
     @pytest.mark.requires_db
     def test_scope_is_serialized_to_json_when_dict(self, mock_db):
@@ -366,6 +375,7 @@ class TestSpawnEngagement:
             aggressiveness="gentle",
             agent_mode=False,
             created_by="admin",
+            cron_expression="0 */6 * * *",
             db_url="postgres://localhost/argus",
         )
 

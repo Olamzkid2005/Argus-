@@ -282,16 +282,21 @@ class WorkerCache:
         # Use a tag-based invalidation approach
         return self.clear_pattern(f"*table:{table_name}*")
 
-    def _query_key(self, query: str, params: dict | None = None) -> str:
+    def _query_key(self, query: str, params: tuple | None = None) -> str:
         """Generate a cache key from the SQL query template and params.
 
         Uses the query template (with placeholders, not expanded values)
         to prevent cache key collisions from user-controlled data.
+        Includes params in the key so different parameter sets produce
+        different cache entries.
         """
         # Normalize the query template by stripping whitespace
         normalized_query = ' '.join(query.split())
-        # Hash the template + param structure (not param values)
-        key_data = f"{normalized_query}"
+        # Include params in the key data so different params = different cache entries
+        key_parts = [normalized_query]
+        if params:
+            key_parts.append(json.dumps(params, sort_keys=True))
+        key_data = ":".join(key_parts)
         hash_value = hashlib.sha256(key_data.encode()).hexdigest()[:16]
         return f"query:{hash_value}"
 

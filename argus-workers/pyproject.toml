@@ -101,6 +101,71 @@ markers = [
     "requires_redis: marks tests that require redis connection",
 ]
 
+[tool.mypy]
+python_version = "3.11"
+
+# Exclude generated, vendored, and test fixture directories
+exclude = [
+    "test_fixtures/",
+    "venv/",
+    ".venv/",
+    "__pycache__/",
+    "_generated_tools.py",
+]
+
+# Suppress errors for third-party packages that lack type stubs.
+# Most of our dependencies (celery, psycopg2, flask, etc.) are not typed.
+ignore_missing_imports = true
+
+# Resolve packages correctly even without __init__.py files
+# (fixes "custom_rules/engine.py" being found as both "engine" and "custom_rules.engine")
+explicit_package_bases = true
+
+# Suppress the unused-ignore noise from libraries we already mark as missing
+warn_unused_ignores = false
+
+# ── Strictness (start relaxed, tighten over time) ──
+
+# Allow functions with no annotations to be unchecked
+check_untyped_defs = false
+
+# Report type errors in bodies of functions with type annotations
+# but do NOT force all functions to be annotated
+warn_return_any = false
+warn_unused_configs = true
+
+# Don't require `@override` decorator everywhere
+implicit_reexport = true
+
+# Allow untyped decorators to not break type checking
+# (common with Celery tasks, pytest fixtures, etc.)
+no_implicit_optional = false
+
+# Do NOT flag assignments of Any-typed values to typed variables
+# (far too common in this codebase to enable yet)
+disable_error_code = [
+    "misc",       # misc checks like truthiness on iterables
+    "type-arg",   # missing generic type arguments
+    "annotation-unchecked",  # untyped decorator on typed function
+]
+
+# ── Per-module overrides ──
+
+# Tests: be more permissive
+[[tool.mypy.overrides]]
+module = [
+    "tests.*",
+]
+ignore_errors = true
+
+# Scripts and helpers: be more permissive
+[[tool.mypy.overrides]]
+module = [
+    "scripts.*",
+    "conftest",
+]
+ignore_errors = true
+
 [tool.coverage.run]
 # What to measure
 source = ["."]

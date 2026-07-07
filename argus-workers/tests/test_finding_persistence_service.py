@@ -50,7 +50,7 @@ class TestFindingPersistenceServiceInit:
 
         svc = FindingPersistenceService(engagement_id="e1", finding_repo=None)
         result = svc._classify_finding_type("SOME_TYPE")
-        assert result == {"owasp": "N/A", "cwe": "N/A"}
+        assert result == {"owasp_category": "N/A", "cwe_id": "N/A"}
 
     def test_default_get_org_id_fn(self):
         from orchestrator_pkg.persistence.finding_persistence_service import (
@@ -65,7 +65,7 @@ class TestFindingPersistenceServiceInit:
             FindingPersistenceService,
         )
 
-        classify_fn = MagicMock(return_value={"owasp": "A1", "cwe": "CWE-1"})
+        classify_fn = MagicMock(return_value={"owasp_category": "A1", "cwe_id": "CWE-1"})
         org_fn = MagicMock(return_value="org-42")
         svc = FindingPersistenceService(
             engagement_id="e1",
@@ -73,7 +73,7 @@ class TestFindingPersistenceServiceInit:
             classify_finding_type_fn=classify_fn,
             get_org_id_fn=org_fn,
         )
-        assert svc._classify_finding_type("TEST") == {"owasp": "A1", "cwe": "CWE-1"}
+        assert svc._classify_finding_type("TEST") == {"owasp_category": "A1", "cwe_id": "CWE-1"}
         assert svc._get_org_id() == "org-42"
 
 
@@ -264,7 +264,7 @@ class TestPreprocess:
             FindingPersistenceService,
         )
 
-        classify = MagicMock(return_value={"owasp": "A7", "cwe": "CWE-79"})
+        classify = MagicMock(return_value={"owasp_category": "A7", "cwe_id": "CWE-79"})
         svc = FindingPersistenceService(
             engagement_id="e1",
             finding_repo=None,

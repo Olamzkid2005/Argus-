@@ -10,10 +10,55 @@ These tests mock Redis, DB, locks, and orchestrator; they assert invariants only
 
 from __future__ import annotations
 
+import sys
 import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+# Module-level mocks so importing tasks.scan (which imports celery_app)
+# doesn't fail on database.migrations.runner import
+@pytest.fixture(autouse=True)
+def mock_heavy_deps():
+    """Mock heavy external dependencies so tests run without DB/Redis/tools.
+
+    Strategy:
+    1. Mock `database.migrations.runner` in sys.modules so that importing
+       celery_app (which calls run_migrations() at module level) doesn't
+       trigger unnecessary psycopg2 imports.
+    2. Mock `state_machine.EngagementStateMachine` so the real task_context
+       can initialize without DB access (the real constructor calls
+       get_db().get_connection() when current_state is None).
+    3. Patch `database.connection.connect` and `db_cursor` so that
+       get_engagement_state (called inside run_scan with ctx.db_conn_string
+       from the test's MagicMock ctx) doesn't call real psycopg2.connect.
+    4. Do NOT mock `psycopg2` or `redis` — the real modules are needed for
+       their Exception subclasses (used in except clauses) and submodule
+       imports (extras, sql). Only the actual connection functions are mocked.
+    """
+    mock_sm = MagicMock()
+    mock_sm.current_state = "created"
+    mock_sm.can_transition_to.return_value = True
+
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = None
+    mock_cm = MagicMock()
+    mock_cm.__enter__.return_value = mock_cursor
+
+    with patch.dict(
+        sys.modules,
+        {
+            "database.migrations": MagicMock(),
+            "database.migrations.runner": MagicMock(),
+        },
+    ):
+        with (
+            patch("state_machine.EngagementStateMachine", return_value=mock_sm),
+            patch("database.connection.connect", return_value=MagicMock()),
+            patch("database.connection.db_cursor", return_value=mock_cm),
+        ):
+            yield
 
 
 @pytest.fixture

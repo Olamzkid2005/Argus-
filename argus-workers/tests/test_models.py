@@ -455,6 +455,7 @@ class TestFeedbackLearningLoop:
     @pytest.mark.requires_db
     def test_on_feedback_stores_feedback_when_enabled(self):
         with (
+            patch("models.feedback.get_db"),
             patch("models.feedback.is_enabled", return_value=True),
             patch.object(FeedbackLearningLoop, "_store_feedback"),
             patch.object(FeedbackLearningLoop, "_update_finding"),
@@ -480,6 +481,7 @@ class TestFeedbackLearningLoop:
     @pytest.mark.requires_db
     def test_on_feedback_sends_alert_when_fp_rate_exceeds_threshold(self):
         with (
+            patch("models.feedback.get_db"),
             patch("models.feedback.is_enabled", return_value=True),
             patch.object(FeedbackLearningLoop, "_store_feedback"),
             patch.object(FeedbackLearningLoop, "_update_finding"),
@@ -504,6 +506,7 @@ class TestFeedbackLearningLoop:
     @pytest.mark.requires_db
     def test_on_feedback_does_not_send_alert_when_fp_rate_below_threshold(self):
         with (
+            patch("models.feedback.get_db"),
             patch("models.feedback.is_enabled", return_value=True),
             patch.object(FeedbackLearningLoop, "_store_feedback"),
             patch.object(FeedbackLearningLoop, "_update_finding"),
@@ -526,6 +529,7 @@ class TestFeedbackLearningLoop:
     @pytest.mark.requires_db
     def test_on_feedback_skips_alert_when_no_source_tool(self):
         with (
+            patch("models.feedback.get_db"),
             patch("models.feedback.is_enabled", return_value=True),
             patch.object(FeedbackLearningLoop, "_store_feedback"),
             patch.object(FeedbackLearningLoop, "_update_finding"),

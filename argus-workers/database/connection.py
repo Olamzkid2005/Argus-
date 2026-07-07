@@ -55,6 +55,7 @@ class ConnectionManager:
             self._initialized = True
             self._pool: pool.ThreadedConnectionPool | None = None
             self._pool_lock = threading.Lock()
+            self._atexit_registered = False
         self._min_connections = int(os.getenv("DB_POOL_MIN", "2"))
         self._max_connections = int(os.getenv("DB_POOL_MAX", "20"))
         self._slow_query_threshold_ms = int(os.getenv("DB_SLOW_QUERY_MS", "500"))
@@ -77,7 +78,7 @@ class ConnectionManager:
         self._metrics_lock = threading.Lock()
         # Condition variable for signaling connection availability (B.03 fix)
         self._pool_cond = threading.Condition()
-        
+
     def _register_atexit(self):
         """Register atexit handler for pool cleanup (blocker 52)."""
         if not self._atexit_registered:

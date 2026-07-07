@@ -406,9 +406,14 @@ def execute_scan_tools(
     tech_stack: list[str] | None = None,
     skip_tools: set | None = None,
     recon_context=None,
+    cache_mode: str | None = None,
 ) -> list[dict]:
     """
     Execute scanning tools against targets.
+
+    TODO: cache_mode is accepted for pipeline interface compatibility
+    but is not yet implemented. When implemented, it should control
+    whether tool outputs are cached/retrieved from cache.
 
     Args:
         ctx: ToolContext or Orchestrator (provides tool_runner, parser, normalizer)

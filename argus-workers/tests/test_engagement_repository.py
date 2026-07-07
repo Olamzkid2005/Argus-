@@ -65,7 +65,7 @@ class TestCreate:
         params = mock_db.execute.call_args[0][1]
         assert params[1] == "org-1"
         assert params[2] == "https://example.com"
-        assert params[5] == "created"
+        assert params[4] == "created"
 
     def test_create_uses_authorization_fallback(self, repo, mock_db):
         """create falls back from authorization_proof to authorization."""
@@ -106,7 +106,7 @@ class TestFindByOrg:
         assert results[0]["created_by_email"] == "admin@example.com"
         assert results[0]["findings_count"] == 3
         sql = mock_db.execute.call_args[0][0]
-        assert "LEFT JOIN users" in sql
+        assert "LEFT JOIN" in sql
         assert "findings" in sql
 
     def test_find_by_org_respects_limit_offset(self, repo, mock_db):

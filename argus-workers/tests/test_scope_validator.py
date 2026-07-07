@@ -4,7 +4,11 @@ Tests for Scope Validator
 
 import pytest
 
-from tools.scope_validator import ScopeValidator, ScopeViolationError, validate_target_scope
+from tools.scope_validator import (
+    ScopeValidator,
+    ScopeViolationError,
+    validate_target_scope,
+)
 
 
 class TestScopeValidator:

@@ -82,7 +82,6 @@ class SecretsManager:
         if self._aws_client is None:
             try:
                 import boto3
-
                 from botocore.config import Config as BotoConfig
 
                 aws_timeout = float(os.getenv("AWS_TIMEOUT", "10"))

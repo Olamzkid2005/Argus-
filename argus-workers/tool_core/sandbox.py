@@ -136,8 +136,9 @@ class AsyncToolRunner:
 
         # 2. Scope validation (fail-closed — out-of-scope/SSRF targets are denied)
         if target and eng_id:
-            from tool_core.validators.scope import ScopeValidator, validate_target_scope
             from urllib.parse import urlparse
+
+            from tool_core.validators.scope import ScopeValidator, validate_target_scope
 
             hostname = urlparse(target).hostname or target.split("/")[0].split(":")[0]
             if hostname and ScopeValidator.is_internal_address(hostname):
@@ -320,8 +321,9 @@ class AsyncToolRunner:
 
         # 2. Scope validation (SSRF + scope)
         if target and eng_id:
-            from tool_core.validators.scope import ScopeValidator, validate_target_scope
             from urllib.parse import urlparse
+
+            from tool_core.validators.scope import ScopeValidator, validate_target_scope
 
             hostname = urlparse(target).hostname or target.split("/")[0].split(":")[0]
             if hostname and ScopeValidator.is_internal_address(hostname):

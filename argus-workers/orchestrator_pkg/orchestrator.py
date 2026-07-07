@@ -1088,7 +1088,7 @@ class Orchestrator:
         Returns:
             Dict with verification recommendations
         """
-        from streaming import emit_thinking, get_stream_manager
+        from streaming import emit_thinking
 
         findings = job.get("findings", [])
         threshold = job.get("threshold", 3)  # Severity.HIGH

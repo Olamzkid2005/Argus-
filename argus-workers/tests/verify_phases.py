@@ -1,5 +1,6 @@
 """Verify repo-only tool phase assignments at runtime."""
 import sys
+
 sys.path.insert(0, ".")
 
 from tool_definitions import TOOLS

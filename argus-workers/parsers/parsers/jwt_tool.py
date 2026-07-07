@@ -101,6 +101,7 @@ class JwtToolParser(BaseParser):
         "traversal",
         "none algorithm", "none' algorithm",
         "accepts none", "empty signature", "no signature",
+        "alg:none",
     }
 
     def _parse_text_lines(self, raw_output: str) -> list[dict]:

@@ -25,9 +25,9 @@ def _validate_url(url: str) -> str:
     reaching Playwright, which would hang or leak DNS queries.
     """
     import socket as _socket
+    from urllib.parse import urlparse as _urlparse
 
     from tools.scope_validator import ScopeValidator
-    from urllib.parse import urlparse as _urlparse
 
     # 1. Scheme validation (must be http/https) — captures return for consistency
     url = ScopeValidator.validate_url_scheme(url)

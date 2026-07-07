@@ -3,7 +3,7 @@
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
-from mcp_transport import MCPTransport, create_ping_handler
+from mcp_transport import _SKIP_LINE, MCPTransport, create_ping_handler
 
 
 class TestMCPTransport:
@@ -22,20 +22,22 @@ class TestMCPTransport:
         assert result == {"method": "ping"}
 
     @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_read_request_returns_none_for_empty_line(self, mock_stdin):
+    def test_read_request_returns_skip_line_for_empty_line(self, mock_stdin):
+        """A blank line is invalid JSON, which returns the _SKIP_LINE sentinel."""
         mock_stdin.write("\n")
         mock_stdin.seek(0)
         transport = MCPTransport()
         result = transport._read_request()
-        assert result is None
+        assert result is _SKIP_LINE
 
     @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_read_request_returns_none_for_invalid_json(self, mock_stdin):
+    def test_read_request_returns_skip_line_for_invalid_json(self, mock_stdin):
+        """Invalid JSON returns the _SKIP_LINE sentinel, not None."""
         mock_stdin.write("not json\n")
         mock_stdin.seek(0)
         transport = MCPTransport()
         result = transport._read_request()
-        assert result is None
+        assert result is _SKIP_LINE
 
     @patch("mcp_transport.sys.stdout", new_callable=StringIO)
     def test_send_response_writes_result(self, mock_stdout):

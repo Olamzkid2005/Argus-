@@ -1,5 +1,7 @@
 """Integration tests for MCP agent methods."""
 
+from unittest.mock import patch
+
 import pytest
 
 from mcp_server import MCPServer, ToolDefinition
@@ -66,7 +68,9 @@ class TestHandleAgentInit:
 
 
 class TestHandleAgentNext:
-    def test_advances_plan_step_by_step(self, server):
+    @patch("mcp_server.LLMClient")
+    def test_advances_plan_step_by_step(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
         init = server.handle_agent_init(
             {
                 "target": "https://example.com",
@@ -84,7 +88,9 @@ class TestHandleAgentNext:
         assert step2["tool"] == "nmap"
         assert step2["done"] is False
 
-    def test_returns_done_when_plan_exhausted(self, server):
+    @patch("mcp_server.LLMClient")
+    def test_returns_done_when_plan_exhausted(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
         init = server.handle_agent_init(
             {
                 "target": "https://example.com",
@@ -104,8 +110,10 @@ class TestHandleAgentNext:
         assert result["done"] is True
         assert "error" in result
 
-    def test_trigger_normalization(self, server):
+    @patch("mcp_server.LLMClient")
+    def test_trigger_normalization(self, mock_llm, server):
         """Trigger keys should be normalized (case-insensitive)."""
+        mock_llm.return_value.is_available.return_value = False
         init = server.handle_agent_init(
             {
                 "target": "https://example.com",

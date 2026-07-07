@@ -430,7 +430,7 @@ def _build_group_dict(
 
 def _extract_cwe(finding: dict) -> str | None:
     """Extract CWE ID from a finding dict."""
-    cwe = finding.get("cwe_id")
+    cwe = finding.get("cwe_id") or finding.get("cwe")
     if cwe:
         # Handle "CWE-89" or "89" formats
         return str(cwe).replace("CWE-", "").replace("cwe-", "")

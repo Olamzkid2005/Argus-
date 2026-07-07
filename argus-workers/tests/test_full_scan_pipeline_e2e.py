@@ -57,6 +57,8 @@ def mock_heavy_deps():
             "redis.client": MagicMock(),
             "database": MagicMock(),
             "database.connection": MagicMock(),
+            "database.migrations": MagicMock(),
+            "database.migrations.runner": MagicMock(),
             "database.repositories": MagicMock(),
             "database.repositories.finding_repository": MagicMock(),
             "database.repositories.engagement_repository": MagicMock(),
@@ -955,7 +957,6 @@ class TestFullScanPipelineE2E:
             # Phase 4: Report
             patch.object(report_module, "task_context", side_effect=make_report_ctx),
             patch.object(report_module, "app", mock_celery_app),
-            patch("tasks.utils.get_engagement_state", return_value="reporting"),
             patch("config.constants.LLM_MAX_COST_PER_ENGAGEMENT", 5000),
             patch("intelligence_engine.IntelligenceEngine"),
             patch("utils.logging_utils.ScanLogger"),
@@ -1080,11 +1081,12 @@ class TestFullScanPipelineE2E:
             assert report_args[0] == engagement_id
             assert report_args[1] == trace_id
 
-            report_result = report_module.generate_report.run(
-                report_args[0],
-                report_args[1],
-                report_args[2],
-            )
+            with patch("tasks.utils.get_engagement_state", return_value="reporting"):
+                report_result = report_module.generate_report.run(
+                    report_args[0],
+                    report_args[1],
+                    report_args[2],
+                )
             assert report_result["status"] == "completed"
             assert report_result["trace_id"] == trace_id
             contexts["report"].state.safe_transition.assert_any_call(
@@ -1753,7 +1755,6 @@ class TestFullScanPipelineE2E:
             # Phase 4: Report
             patch.object(report_module, "task_context", side_effect=make_report_ctx_fn),
             patch.object(report_module, "app", mock_celery_app),
-            patch("tasks.utils.get_engagement_state", return_value="reporting"),
             patch("config.constants.LLM_MAX_COST_PER_ENGAGEMENT", 5000),
             patch("intelligence_engine.IntelligenceEngine"),
             patch("utils.logging_utils.ScanLogger"),
@@ -1815,12 +1816,13 @@ class TestFullScanPipelineE2E:
             )
             report_args = report_dispatch["args"]
 
-            with pytest.raises(RuntimeError, match="Report generation failed"):
-                report_module.generate_report.run(
-                    report_args[0],
-                    report_args[1],
-                    report_args[2],
-                )
+            with patch("tasks.utils.get_engagement_state", return_value="reporting"):
+                with pytest.raises(RuntimeError, match="Report generation failed"):
+                    report_module.generate_report.run(
+                        report_args[0],
+                        report_args[1],
+                        report_args[2],
+                    )
 
         # ── Assert error recovery ──
 
@@ -2268,6 +2270,8 @@ class TestFullScanPipelineE2E:
         orch.start_time = time.time()
         orch.trace_id = None
         orch.bug_bounty_mode = False
+        orch._timeout_reference = None
+        orch.engagement_repo = None
 
         # span_recorder needed by run() → self.span_recorder.span(...)
         span_mock = MagicMock()

@@ -11,8 +11,9 @@ we want to test that the real SSRF detection works end-to-end.
 Mock only external dependencies (DB lookups, subprocess, HTTP).
 """
 
-import pytest
 from unittest import mock
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -73,7 +74,7 @@ class TestReactAgentScope:
         registry = ToolRegistry()
         registry.register(
             "nuclei",
-            lambda target="": None,
+            lambda *_: None,
             {
                 "name": "nuclei",
                 "description": "Vulnerability scanner",
@@ -129,7 +130,7 @@ class TestReactAgentScope:
         registry = ToolRegistry()
         registry.register(
             "nuclei",
-            lambda target="": None,
+            lambda *_: None,
             {
                 "name": "nuclei",
                 "description": "Vulnerability scanner",
@@ -192,7 +193,7 @@ class TestReactAgentScope:
         registry = ToolRegistry()
         registry.register(
             "nuclei",
-            lambda target="": None,
+            lambda *_: None,
             {
                 "name": "nuclei",
                 "description": "Vulnerability scanner",
@@ -222,8 +223,9 @@ class TestSwarmScope:
 
     def test_filters_internal_targets(self, mock_validate_target_scope):
         """Internal targets are filtered out by SSRF check before scope check."""
-        from agent.swarm import APIAgent
         from types import SimpleNamespace
+
+        from agent.swarm import APIAgent
 
         rc = SimpleNamespace()
         rc.live_endpoints = [
@@ -249,8 +251,9 @@ class TestSwarmScope:
 
     def test_filters_out_of_scope_targets(self, mock_validate_target_scope_block):
         """Out-of-scope targets are filtered after SSRF check."""
-        from agent.swarm import APIAgent
         from types import SimpleNamespace
+
+        from agent.swarm import APIAgent
 
         rc = SimpleNamespace()
         rc.live_endpoints = [
@@ -276,8 +279,9 @@ class TestSwarmScope:
 
     def test_allows_safe_in_scope_targets(self, mock_validate_target_scope):
         """Safe public targets that are in scope pass both checks."""
-        from agent.swarm import APIAgent
         from types import SimpleNamespace
+
+        from agent.swarm import APIAgent
 
         rc = SimpleNamespace()
         rc.live_endpoints = [
@@ -301,8 +305,9 @@ class TestSwarmScope:
 
     def test_ssrf_blocked_first_regardless_of_scope(self, mock_validate_target_scope):
         """SSRF check runs BEFORE scope check — internal targets blocked even if in scope."""
-        from agent.swarm import APIAgent
         from types import SimpleNamespace
+
+        from agent.swarm import APIAgent
 
         rc = SimpleNamespace()
         rc.live_endpoints = [
@@ -454,7 +459,6 @@ class TestApiScannerScope:
     def scanner(self):
         """Create a LegacyAPISecurityScanner with minimal wiring."""
         from tools.api_scanner import LegacyAPISecurityScanner
-        from utils.logging_utils import ScanLogger
         sc = LegacyAPISecurityScanner(engagement_id="eng-test")
         # Mock the builder to avoid FindingBuilder dependencies
         sc._builder = mock.MagicMock()

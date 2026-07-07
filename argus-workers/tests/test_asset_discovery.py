@@ -65,7 +65,7 @@ class TestAssetDiscovery:
         mock_cursor.fetchone.return_value = (1,)
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -92,7 +92,7 @@ class TestAssetDiscovery:
         mock_cursor.fetchone.return_value = (2,)
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -113,7 +113,7 @@ class TestAssetDiscovery:
         mock_cursor.fetchone.side_effect = [(1,), None]
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -134,7 +134,7 @@ class TestAssetDiscovery:
         mock_cursor.fetchone.return_value = None  # conflict, no row returned
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -154,7 +154,7 @@ class TestAssetDiscovery:
         mock_cursor.execute.side_effect = Exception("DB error")
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -175,7 +175,7 @@ class TestAssetDiscovery:
         mock_cursor.fetchone.return_value = (1,)
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.object(asset_discovery, "TracingManager", return_value=mock_tracing),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
@@ -199,7 +199,7 @@ class TestAssetDiscovery:
         ]
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
             result = asset_discovery.update_asset_risk_scores(
@@ -227,7 +227,7 @@ class TestAssetDiscovery:
         ]
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
             result = asset_discovery.update_asset_risk_scores(
@@ -253,7 +253,7 @@ class TestAssetDiscovery:
         ]
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
             asset_discovery.update_asset_risk_scores(self=MagicMock(), org_id="org-456")
@@ -275,7 +275,7 @@ class TestAssetDiscovery:
         ]
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
             asset_discovery.update_asset_risk_scores(self=MagicMock(), org_id="org-456")
@@ -297,7 +297,7 @@ class TestAssetDiscovery:
         ]
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
             asset_discovery.update_asset_risk_scores(self=MagicMock(), org_id="org-456")
@@ -315,7 +315,7 @@ class TestAssetDiscovery:
         mock_cursor.execute.side_effect = Exception("DB error")
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
             result = asset_discovery.update_asset_risk_scores(
@@ -331,7 +331,7 @@ class TestAssetDiscovery:
         mock_cursor.fetchall.return_value = []
 
         with (
-            patch.object(asset_discovery, "connect", return_value=mock_conn),
+            patch("database.connection.db_connection", return_value=mock_conn),
             patch.dict(os.environ, {"DATABASE_URL": "postgres://test"}, clear=False),
         ):
             result = asset_discovery.update_asset_risk_scores(
