@@ -59,6 +59,8 @@ class AsyncToolRunner:
         "dalfox": {1},
         "trivy": {1},
         "pip-audit": {1},
+        "dependency_check": {1},
+        "nuclei": {1},
     }
 
     def __init__(

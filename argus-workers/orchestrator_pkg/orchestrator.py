@@ -244,6 +244,8 @@ class Orchestrator:
                 return self.run_repo_scan(job)
             elif job_type == "post_exploit":
                 return self.run_post_exploitation(job)
+            elif job_type == "verification":
+                return self.run_verification(job)
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
 
@@ -641,6 +643,27 @@ class Orchestrator:
                     f"All {findings_count} scan findings failed to save — aborting phase"
                 )
 
+        # Gap 1.1: Auto-verify HIGH/CRITICAL findings after scan phase
+        if findings:
+            try:
+                verification_result = self.run_verification({
+                    "findings": findings,
+                    "threshold": 3,  # Severity.HIGH
+                    "max_to_verify": 10,
+                    "phase": "scan",
+                })
+                to_verify = verification_result.get("findings_to_verify", 0)
+                if to_verify > 0:
+                    slog.info(
+                        "Auto-verification recommended for %d HIGH/CRITICAL finding(s) "
+                        "— WebSocket event emitted for TypeScript workflow runner",
+                        to_verify,
+                    )
+            except Exception as e:
+                slog.warning(
+                    "Auto-verification dispatch failed (non-fatal): %s", e
+                )
+
         slog.tool_complete(
             "orchestrator.run_scan", success=True, findings=findings_count
         )
@@ -996,6 +1019,23 @@ class Orchestrator:
         # ── 4. BudgetPersistenceService — persist budget counters ──
         BudgetPersistenceService.persist(budget_mgr)
 
+        # ── 5. Gap 5.1: Check for foothold findings to auto-trigger post-exploitation ──
+        needs_post_exploitation = False
+        try:
+            from tools.post_exploitation import PostExploitationOrchestrator
+
+            post_exploit_orch = PostExploitationOrchestrator(
+                engagement_id=self.engagement_id,
+            )
+            scored = evaluation.get("scored_findings", [])
+            needs_post_exploitation = post_exploit_orch.has_foothold_findings(scored)
+            if needs_post_exploitation:
+                slog.info(
+                    "Foothold indicators detected — post-exploitation phase recommended"
+                )
+        except Exception as e:
+            slog.debug("Post-exploitation foothold check failed (non-fatal): %s", e)
+
         analysis = evaluation.get("analysis", {})
         slog.tool_complete(
             "orchestrator.run_analysis",
@@ -1003,11 +1043,12 @@ class Orchestrator:
             findings=len(evaluation.get("scored_findings", [])),
         )
         slog.info(
-            "Analysis complete — risk=%s, coverage_gaps=%d, high_value_targets=%d, hypotheses=%d",
+            "Analysis complete — risk=%s, coverage_gaps=%d, high_value_targets=%d, hypotheses=%d, needs_post_exploitation=%s",
             analysis.get("risk_level", "unknown"),
             len(analysis.get("coverage_gaps", [])),
             len(analysis.get("high_value_targets", [])),
             len(hypotheses),
+            needs_post_exploitation,
         )
         return {
             "phase": "analyze",
@@ -1019,6 +1060,7 @@ class Orchestrator:
             "synthesis": synthesis,
             "hypotheses": hypotheses,
             "next_state": "reporting",
+            "needs_post_exploitation": needs_post_exploitation,
             "trace_id": get_trace_id(),
         }
 

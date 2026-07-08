@@ -164,6 +164,7 @@ class JobMessage:
             self.trace_id,
             standard=self.standard,
             auth_config=self.auth_config,
+            dual_auth_config=self.dual_auth_config,
             platform=self.platform,
             output_path=self.output_path,
             repo_url=self.repo_url,
@@ -172,5 +173,7 @@ class JobMessage:
             scan_mode=self.scan_mode,
             bug_bounty_mode=self.bug_bounty_mode,
             budget_for_report=self.budget,
+            report_id=self.report_id,
+            org_id=self.org_id,
             generate_chain_exploits=self.generate_chain_exploits,
         )

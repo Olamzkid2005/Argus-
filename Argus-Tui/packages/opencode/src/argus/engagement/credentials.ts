@@ -6,6 +6,10 @@ import { EncryptionManager } from "../storage/encryption"
 export interface CredentialEntry {
   username: string
   password: string
+  /** Optional JWT/token for OAuth or token-based auth (Gap 2.6) */
+  authToken?: string
+  /** Optional auth cookies for session-based auth fallback */
+  authCookies?: Array<{ name: string; value: string; domain: string; path?: string; httpOnly?: boolean; secure?: boolean }>
 }
 
 export interface CredentialFile {

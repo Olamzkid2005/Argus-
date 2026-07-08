@@ -2,6 +2,10 @@ import { PlaywrightEngine } from "../browser/engine"
 import { BOLAVerifier } from "../browser/verifiers/bola"
 import { StoredXSSVerifier } from "../browser/verifiers/xss"
 import { PrivilegeEscalationVerifier } from "../browser/verifiers/priv-esc"
+import { SSRFVerifier } from "../browser/verifiers/ssrf"
+import { LFIVerifier } from "../browser/verifiers/lfi"
+import { JWTVerifier } from "../browser/verifiers/jwt"
+import { SecretsExposureVerifier } from "../browser/verifiers/secrets"
 import { VerificationRunner } from "../browser/verifiers/runner"
 import { EngagementStore } from "../engagement/store"
 import type { IEngagementStore } from "../engagement/types"
@@ -84,19 +88,40 @@ export async function verifyCommand(
 
   // Determine which verifier to run based on finding tool
   try {
-    if (finding.tool?.includes("bola") && attackerRole && victimRole) {
+    if ((finding.tool?.includes("bola") || finding.subtype === "bola" || finding.subtype === "idor") && attackerRole && victimRole) {
       const verifier = new BOLAVerifier(engine, targetUrl, "/api/resource", attackerRole, victimRole, evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
       lines.push(`[BOLA] ${result.summary} (confidence: ${result.confidence})`)
-    } else if (finding.tool?.includes("xss") && (userRole || adminRole)) {
+    } else if ((finding.tool?.includes("xss") || finding.subtype === "xss" || finding.subtype === "xss_stored" || finding.subtype === "xss_reflected") && (userRole || adminRole)) {
       const creds = userRole ?? adminRole!
       const verifier = new StoredXSSVerifier(engine, targetUrl, targetUrl, "<script>alert('xss')</script>", evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
       lines.push(`[XSS] ${result.summary} (confidence: ${result.confidence})`)
-    } else if (finding.tool?.includes("priv-esc") && userRole) {
+    } else if ((finding.tool?.includes("priv-esc") || finding.subtype === "privilege_escalation" || finding.subtype === "privesc") && userRole) {
       const verifier = new PrivilegeEscalationVerifier(engine, targetUrl, ["/admin"], userRole, evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
       lines.push(`[PrivEsc] ${result.summary} (confidence: ${result.confidence})`)
+    } else if ((finding.tool?.includes("ssrf") || finding.subtype === "ssrf") && targetUrl) {
+      const ssrfEndpoint = finding.description?.match(/\/\S+/)?.[0] ?? "/"
+      const verifier = new SSRFVerifier(engine, targetUrl, ssrfEndpoint, evidenceCollector, engagementId, findingId)
+      const result = await runner.run(verifier)
+      lines.push(`[SSRF] ${result.summary} (confidence: ${result.confidence})`)
+    } else if ((finding.tool?.includes("lfi") || finding.tool?.includes("path_traversal") || finding.subtype === "lfi" || finding.subtype === "path_traversal") && targetUrl) {
+      const lfiParam = finding.description?.match(/(?:file|page|include|path|template|load|read|document|folder|root|preview|view|dir|show|url|lang|cat)\s*[:=]\s*\S+/i)?.[0] ?? finding.description?.match(/(\/[^\s,]+)/)?.[1] ?? "file"
+      const verifier = new LFIVerifier(engine, targetUrl, lfiParam.startsWith("/") ? lfiParam : `?${lfiParam}=`, evidenceCollector, engagementId, findingId)
+      const result = await runner.run(verifier)
+      lines.push(`[LFI] ${result.summary} (confidence: ${result.confidence})`)
+    } else if ((finding.tool?.includes("jwt") || finding.subtype === "jwt" || finding.subtype === "jwt_tampering" || finding.subtype === "jwt_none_algorithm") && targetUrl) {
+      const protectedEndpoint = finding.description?.match(/(\/[^\s,]+)/)?.[1] ?? "/admin"
+      const jwtMatch = finding.description?.match(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/)
+      const verifier = new JWTVerifier(engine, targetUrl, protectedEndpoint, jwtMatch?.[0], evidenceCollector, engagementId, findingId)
+      const result = await runner.run(verifier)
+      lines.push(`[JWT] ${result.summary} (confidence: ${result.confidence})`)
+    } else if ((finding.tool?.includes("secrets") || finding.subtype === "secrets" || finding.subtype === "exposed_secrets" || finding.subtype === "exposed_credentials") && targetUrl) {
+      const scanEndpoint = finding.description?.match(/(\/[^\s,]+)/)?.[1] ?? "/"
+      const verifier = new SecretsExposureVerifier(engine, targetUrl, scanEndpoint, evidenceCollector, engagementId, findingId)
+      const result = await runner.run(verifier)
+      lines.push(`[Secrets] ${result.summary} (confidence: ${result.confidence})`)
     } else {
       lines.push(`[Argus] No matching verifier found for tool: ${finding.tool}`)
       lines.push(`[Argus] Available roles: ${Object.keys(allRoles).join(", ") || "none"}`)

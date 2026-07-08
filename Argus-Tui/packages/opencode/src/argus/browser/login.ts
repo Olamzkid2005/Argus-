@@ -34,13 +34,24 @@ export type AuthChallengeCallback = (challenge: AuthChallenge) => void
  * Inject authentication tokens/cookies into the browser context.
  * Useful for OAuth, SSO, or token-based auth where login forms are not present.
  *
+ * Gap 2.4 fix: Previously defaulted `secure: true` unconditionally, which
+ * silently prevented cookies from being sent on plain HTTP targets.
+ * Now accepts a `targetUrl` parameter to determine the secure flag automatically.
+ *
  * @param context - The browser context to inject cookies into.
  * @param cookies - Array of cookie objects to set.
+ * @param targetUrl - Optional target URL to determine if cookies should be secure.
+ *                    If not provided, defaults to `secure: true` (backward compatible).
  */
 export async function injectAuthCookies(
   context: BrowserContext,
   cookies: Array<{ name: string; value: string; domain: string; path?: string; httpOnly?: boolean; secure?: boolean }>,
+  targetUrl?: string,
 ): Promise<void> {
+  const isSecureTarget = targetUrl
+    ? targetUrl.startsWith("https://")
+    : true  // Backward compatible default
+
   await context.addCookies(
     cookies.map((c) => ({
       name: c.name,
@@ -48,7 +59,7 @@ export async function injectAuthCookies(
       domain: c.domain,
       path: c.path ?? "/",
       httpOnly: c.httpOnly ?? true,
-      secure: c.secure ?? true,
+      secure: c.secure ?? isSecureTarget,
       sameSite: "Lax" as const,
     })),
   )
@@ -140,10 +151,13 @@ async function loginWithLocators(
       // Network may not stabilize — proceed anyway
     }
 
-    // Verify login success
+    // Verify login success using positive confirmation
     const postLoginUrl = page.url()
     const stillOnLogin = /\/login\b|\/signin\b|\/auth\b/i.test(postLoginUrl)
-    return !stillOnLogin || detectAuthSuccess(page)
+    if (!stillOnLogin) return true
+    return detectAuthSuccess(page, {
+      targetUrl: page.url(),
+    })
   } catch {
     // Locator APIs may not be available on all Playwright versions
     return null
@@ -232,6 +246,13 @@ export async function loginIfFormPresent(
 ): Promise<boolean> {
   const content = await page.content()
 
+  // Capture session cookies before any form interaction
+  // so detectAuthSuccess() can compare them after login (Gap 2.1).
+  let beforeCookies: Array<{ name: string; value: string }> = []
+  try {
+    beforeCookies = await page.context().cookies()
+  } catch { /* context may not be available */ }
+
   // First check for OAuth/SSO buttons — these should not be auto-filled
   const hasOAuth = /\boauth\b/i.test(content) &&
     (/\bgoogle\b/i.test(content) || /\bgithub\b/i.test(content) || /\bmicrosoft\b/i.test(content) || /\bfacebook\b/i.test(content) || /\bsso\b/i.test(content) || /\bsaml\b/i.test(content))
@@ -314,10 +335,16 @@ export async function loginIfFormPresent(
     // Network may not stabilize (e.g. long-polling) — proceed anyway
   }
 
-  // Verify login success: check we're not still on the login page
+  // Verify login success using positive confirmation
   const postLoginUrl = page.url()
   const stillOnLogin = /\/login\b|\/signin\b|\/auth\b/i.test(postLoginUrl)
-  const authSuccess = !stillOnLogin || await detectAuthSuccess(page)
+  if (!stillOnLogin) {
+    return true
+  }
+  const authSuccess = await detectAuthSuccess(page, {
+    beforeCookies,
+    targetUrl: page.url(),
+  })
 
   // Phase 3.4.2: If login failed, check for auth challenges
   if (!authSuccess) {
@@ -329,10 +356,241 @@ export async function loginIfFormPresent(
 }
 
 /**
- * Detect if the page shows an auth failure (MFA challenge, CAPTCHA, error message).
- * Returns true if auth was successful, false if blocked by MFA/CAPTCHA.
+ * Common selectors for authenticated-only DOM elements.
+ * Used by detectAuthSuccess() for positive auth confirmation.
  */
-export async function detectAuthSuccess(page: Page): Promise<boolean> {
+const AUTHENTICATED_SELECTORS = [
+  // Logout / sign out buttons
+  'a[href*="logout"]',
+  'a[href*="signout"]',
+  'a[href*="sign-out"]',
+  'a[href*="log-out"]',
+  'button:has-text("Logout")',
+  'button:has-text("Sign out")',
+  'button:has-text("Sign Out")',
+  'button:has-text("Log out")',
+  'button:has-text("Log Out")',
+  // User avatar / profile elements
+  '[class*="avatar"]',
+  '[class*="profile"]',
+  '[class*="user-menu"]',
+  '[class*="account-menu"]',
+  'a[href*="/profile"]',
+  'a[href*="/account"]',
+  // "My Account" links (common authenticated-only element)
+  'a:has-text("My Account")',
+  'a:has-text("My account")',
+  'a:has-text("Dashboard")',
+  // Common authenticated nav items
+  '[data-testid*="user"]',
+  '[data-testid*="account"]',
+]
+
+/**
+ * Common authenticated-only API endpoints to probe for session validation.
+ */
+const AUTH_PROBE_ENDPOINTS = [
+  "/api/me",
+  "/api/user",
+  "/api/profile",
+  "/api/account",
+  "/api/v1/me",
+  "/api/v1/user",
+  "/api/v1/profile",
+  "/me",
+  "/profile",
+  "/dashboard",
+  "/account",
+]
+
+/**
+ * Check 1 (positive): Look for authenticated-only DOM elements like logout
+ * buttons, user avatars, and profile links.
+ */
+export async function checkAuthenticatedDomElement(page: Page): Promise<boolean | null> {
+  try {
+    for (const selector of AUTHENTICATED_SELECTORS) {
+      const count = await page.locator(selector).count()
+      if (count > 0) {
+        return true
+      }
+    }
+    // Check text content for authenticated patterns
+    const body = await page.textContent("body") ?? ""
+    const lower = body.toLowerCase()
+    if (
+      lower.includes("logout") ||
+      lower.includes("sign out") ||
+      lower.includes("my account") ||
+      lower.includes("my profile") ||
+      lower.includes("dashboard")
+    ) {
+      return true
+    }
+    return null  // Inconclusive
+  } catch {
+    return null  // Inconclusive on error
+  }
+}
+
+/**
+ * Check 2 (positive): Compare session cookies before and after login to
+ * confirm the session was actually established.
+ *
+ * @param context - The browser context to read cookies from.
+ * @param beforeCookies - Cookies captured before login attempt.
+ * @returns True if new session cookies appeared, null if inconclusive.
+ */
+export async function checkSessionCookiesChanged(
+  context: BrowserContext,
+  beforeCookies: Array<{ name: string; value: string }>,
+): Promise<boolean | null> {
+  try {
+    const afterCookies = await context.cookies()
+    // If there were no cookies before AND no cookies now, can't compare
+    if (beforeCookies.length === 0 && afterCookies.length === 0) {
+      return null
+    }
+    const beforeNames = new Set(beforeCookies.map(c => c.name))
+    const beforeValues = new Map(beforeCookies.map(c => [c.name, c.value]))
+
+    let newSessionCookies = 0
+    for (const cookie of afterCookies) {
+      const isSessionCookie = /session|token|auth|sid|connect/i.test(cookie.name)
+      if (!isSessionCookie) continue
+
+      if (!beforeNames.has(cookie.name)) {
+        newSessionCookies++
+      } else if (beforeValues.get(cookie.name) !== cookie.value) {
+        newSessionCookies++
+      }
+    }
+
+    if (newSessionCookies > 0) {
+      return true
+    }
+    return null  // No new session cookies, but could be token-based auth
+  } catch {
+    return null  // Inconclusive on error
+  }
+}
+
+/**
+ * Check 3 (positive): Probe an authenticated-only API endpoint to verify
+ * the session works (expect 200 vs 401/403).
+ *
+ * Uses in-page fetch() via page.evaluate() to avoid navigating the page away
+ * from its current URL (Gap 2.1 fix — page.goto() had destructive side effects
+ * on the caller's page state).
+ *
+ * @param page - The Playwright page to use for the probe request.
+ * @param targetUrl - The base target URL to derive probe URLs from.
+ * @returns True if endpoint returned 200 (authenticated), false if 401/403, null if inconclusive.
+ */
+export async function probeAuthenticatedEndpoint(
+  page: Page,
+  targetUrl: string,
+): Promise<boolean | null> {
+  // Derive the origin from the target URL or current page URL
+  let origin = ""
+  try {
+    origin = new URL(targetUrl).origin
+  } catch {
+    try {
+      origin = new URL(page.url()).origin
+    } catch {
+      return null
+    }
+  }
+
+  for (const endpoint of AUTH_PROBE_ENDPOINTS) {
+    try {
+      const probeUrl = `${origin}${endpoint}`
+      // Use in-page fetch() — does NOT navigate the page away, preserving
+      // the caller's page state and URL.
+      const status = await page.evaluate(async (url: string) => {
+        try {
+          const res = await fetch(url, {
+            method: "GET",
+            credentials: "include",
+            headers: { "Accept": "application/json, text/plain, */*" },
+          })
+          return res.status
+        } catch {
+          return 0
+        }
+      }, probeUrl)
+
+      if (status === 200) {
+        return true  // Authenticated endpoint returned data
+      }
+      if (status === 401 || status === 403) {
+        return false  // Server explicitly rejected the session
+      }
+      if (status === 0) {
+        continue  // fetch failed (network error, CORS, etc.) — try next endpoint
+      }
+    } catch {
+      continue  // Try next endpoint
+    }
+  }
+
+  return null  // No probe endpoint was conclusive
+}
+
+/**
+ * Detect if the page shows an auth failure (MFA challenge, CAPTCHA, error message).
+ *
+ * Gap 2.1 fix: Uses positive confirmation strategies BEFORE falling back to
+ * absence-of-negative-signals:
+ * 1. Check for authenticated-only DOM elements (logout button, avatar, profile link)
+ * 2. Check if session cookies changed after login
+ * 3. Probe an authenticated-only endpoint (/api/me, /profile) for 200 vs 401/403
+ * 4. Fall back to negative check (no MFA/CAPTCHA/error messages)
+ *
+ * @param page - The Playwright page to check.
+ * @param options - Optional configuration for session cookie comparison and API probing.
+ * @returns True if auth succeeded, false if blocked.
+ */
+export async function detectAuthSuccess(
+  page: Page,
+  options?: {
+    beforeCookies?: Array<{ name: string; value: string }>
+    targetUrl?: string
+  },
+): Promise<boolean> {
+  // Step 1: Positive check — look for authenticated-only DOM elements
+  const domResult = await checkAuthenticatedDomElement(page)
+  if (domResult === true) {
+    return true
+  }
+
+  // Step 2: Positive check — compare session cookies before/after login
+  if (options?.beforeCookies) {
+    try {
+      const context = page.context()
+      const cookieResult = await checkSessionCookiesChanged(context, options.beforeCookies)
+      if (cookieResult === true) {
+        return true
+      }
+    } catch {
+      // BrowserContext may not be available in all environments
+    }
+  }
+
+  // Step 3: Positive check — probe an authenticated-only API endpoint
+  if (options?.targetUrl) {
+    const probeResult = await probeAuthenticatedEndpoint(page, options.targetUrl)
+    if (probeResult === true) {
+      return true
+    }
+    if (probeResult === false) {
+      // Server explicitly rejected — auth definitely failed
+      return false
+    }
+  }
+
+  // Step 4: Fallback — absence-of-negative check (original behavior)
   const bodyText = await page.textContent("body") ?? ""
   const lower = bodyText.toLowerCase()
 
@@ -351,7 +609,7 @@ export async function detectAuthSuccess(page: Page): Promise<boolean> {
     return false  // Auth error
   }
 
-  return true  // No auth blockers detected
+  return true  // All checks inconclusive — assume success (backward compatible)
 }
 
 /**
@@ -378,4 +636,145 @@ export function isAccessDenied(bodyText: string): boolean {
     lower.includes("forbidden") || lower.includes("access denied") ||
     lower.includes("unauthorized") || lower.includes("not authorized") ||
     lower.includes("insufficient permissions")
+}
+
+/**
+ * Auth tokens for OAuth/token-based authentication fallback.
+ * Used when form-based login fails (e.g., OAuth/SSO pages).
+ */
+export interface AuthTokens {
+  /** JWT or bearer token to inject via Authorization header */
+  bearerToken?: string
+  /** Cookies to inject into the browser context */
+  cookies?: Array<{ name: string; value: string; domain: string; path?: string; httpOnly?: boolean; secure?: boolean }>
+  /** localStorage key-value pairs for SPA token storage */
+  localStorageTokens?: Record<string, string>
+}
+
+/**
+ * Verify that the session is working after token/cookie injection by
+ * navigating to the current URL and checking we're not redirected to a login page.
+ */
+async function verifySession(page: Page, verifyUrl?: string): Promise<boolean> {
+  try {
+    await page.goto(verifyUrl ?? page.url(), { waitUntil: "networkidle", timeout: 10000 })
+    const url = page.url()
+    // If we end up on a login page, the session didn't work
+    return !/\/login\b|\/signin\b|\/auth\b/i.test(url)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Orchestrate authentication with fallback: try form login first,
+ * then fall back to token/cookie injection for OAuth/SSO scenarios.
+ *
+ * Gap 2.6 fix: When loginIfFormPresent() returns false (e.g., OAuth/SSO page),
+ * this function falls through to token/cookie injection using the provided
+ * AuthTokens before declaring authentication failure.
+ *
+ * Gap 2.7 fix: Adds configurable backoff (default 2000ms) between login attempts
+ * and emits an auth_error challenge after 3 consecutive failures.
+ *
+ * @param page - The Playwright page to authenticate on.
+ * @param creds - Username and password credentials for form login.
+ * @param authTokens - Optional tokens/cookies for OAuth/SSO fallback.
+ * @param context - Optional BrowserContext for cookie injection (required for authTokens.cookies).
+ * @param onChallenge - Optional callback for auth challenge signal emission.
+ * @param loginDelayMs - Delay in ms between login attempts (default 2000).
+ * @returns True if authentication succeeded via form login or token injection.
+ */
+export async function authenticateSession(
+  page: Page,
+  creds: { username: string; password: string },
+  authTokens?: AuthTokens,
+  context?: BrowserContext,
+  onChallenge?: AuthChallengeCallback,
+  loginDelayMs: number = 2000,
+): Promise<boolean> {
+  let loginAttempts = 0
+  const maxLoginAttempts = 3
+
+  // Step 1: Try form-based login (with retry and backoff)
+  for (let attempt = 0; attempt < maxLoginAttempts; attempt++) {
+    if (attempt > 0) {
+      // Gap 2.7: Backoff between login attempts to prevent account lockout
+      await page.waitForTimeout(loginDelayMs * attempt)
+    }
+
+    const formLoginResult = await loginIfFormPresent(page, creds, undefined, onChallenge)
+    loginAttempts++
+
+    if (formLoginResult) {
+      return true
+    }
+
+    // Check for auth challenges that would make further retries futile
+    const challenge = await detectAuthChallenge(page)
+    if (challenge && (challenge.type === "mfa" || challenge.type === "captcha")) {
+      onChallenge?.(challenge)
+      break  // Can't retry past MFA or CAPTCHA
+    }
+  }
+
+  // Emit auth_error challenge after max attempts exceeded
+  if (loginAttempts >= maxLoginAttempts) {
+    const errorChallenge: AuthChallenge = {
+      type: "auth_error",
+      detail: `Login failed after ${maxLoginAttempts} attempts with backoff. Check credentials or try manual authentication.`,
+    }
+    onChallenge?.(errorChallenge)
+  }
+
+  // Log the challenge type for debugging
+  const challenge = await detectAuthChallenge(page)
+  if (challenge) {
+    onChallenge?.(challenge)
+  }
+
+  // Step 2: If no tokens are available, form login failure is final
+  if (!authTokens) {
+    return false
+  }
+
+  // Step 3: Try cookie injection first (most reliable for session-based auth)
+  if (authTokens.cookies && authTokens.cookies.length > 0 && context) {
+    try {
+      await injectAuthCookies(context, authTokens.cookies, page.url())
+      if (await verifySession(page)) {
+        return true
+      }
+    } catch (err) {
+      console.warn(`[authenticateSession] Cookie injection failed: ${err}`)
+    }
+  }
+
+  // Step 4: Try localStorage token injection (for SPAs)
+  if (authTokens.localStorageTokens && Object.keys(authTokens.localStorageTokens).length > 0) {
+    try {
+      await injectLocalStorageTokens(page, authTokens.localStorageTokens)
+      if (await verifySession(page)) {
+        return true
+      }
+    } catch (err) {
+      console.warn(`[authenticateSession] localStorage token injection failed: ${err}`)
+    }
+  }
+
+  // Step 5: Try bearer token via extra HTTP headers
+  if (authTokens.bearerToken) {
+    try {
+      await page.setExtraHTTPHeaders({
+        "Authorization": `Bearer ${authTokens.bearerToken}`,
+      })
+      if (await verifySession(page)) {
+        return true
+      }
+    } catch (err) {
+      console.warn(`[authenticateSession] Bearer token injection failed: ${err}`)
+    }
+  }
+
+  return false
 }

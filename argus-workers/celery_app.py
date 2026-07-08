@@ -84,14 +84,21 @@ logger = setup_logging()
 # A loud warning is emitted at import time so missing config is obvious.
 # (C-v4-02: mandatory encryption for all persisted auth state)
 _AUTH_CHECKPOINT_KEY = os.environ.get("AUTH_CHECKPOINT_KEY")
+# Gap 13.4: AUTH_CHECKPOINT_KEY enforcement — not set will prevent auth checkpoint
+# persistence across worker restarts. Ferret-encrypted checkpoints are mandatory
+# for any engagement that uses browser authentication.
 if not _AUTH_CHECKPOINT_KEY:
-    logger.warning(
+    _missing_key_msg = (
         "AUTH_CHECKPOINT_KEY is not set. Auth checkpoints contain session "
         "tokens that MUST be encrypted at rest. Without this key, the agent "
-        "cannot save authentication state across worker restarts. "
+        "CANNOT save authentication state across worker restarts.\n"
         "Generate a key with: python3 -c \"from cryptography.fernet import Fernet; "
-        "print(Fernet.generate_key().decode())\""
+        "print(Fernet.generate_key().decode())\"\n"
+        "Then set AUTH_CHECKPOINT_KEY=<your-key> in your environment.\n"
+        "Continue without this key if you don't use browser authentication "
+        "(auth checkpoints will be stored unencrypted as a fallback)."
     )
+    logger.error("%s", _missing_key_msg)
 else:
     # Validate the key is a valid Fernet key so the failure is loud at startup
     # rather than silently failing when the first checkpoint is saved.

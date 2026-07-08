@@ -23,6 +23,7 @@ export class LFIVerifier implements VerificationScenario {
   private logs: string[] = []
   private lfiConfirmed = false
   private fileContentDetected = false
+  private fileContentWith200Detected = false
   private capturedScreenshots: { data: Buffer; label: string }[] = []
   private capturedResponses: string[] = []
   private capturedRequests: string[] = []
@@ -93,7 +94,7 @@ export class LFIVerifier implements VerificationScenario {
   }
 
   async execute(): Promise<void> {
-    await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
+    const context = await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
 
     for (const payload of LFIVerifier.LFI_PAYLOADS) {
       const probeUrl = this.probeEndpoint.includes("=")
@@ -101,7 +102,10 @@ export class LFIVerifier implements VerificationScenario {
         : `${this.probeEndpoint}${payload}`
 
       try {
-        const page = await this.engine.navigate(probeUrl)
+        // The response from page.goto is captured by using context.newPage + page.goto directly
+        const page = await context.newPage()
+        const response = await page.goto(probeUrl, { waitUntil: "networkidle", timeout: 30000 }).catch(() => null)
+        const pageStatus = response?.status() ?? 0
         await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {})
         const bodyText = await page.textContent("body").catch(() => "")
         const bodyLower = (bodyText ?? "").toLowerCase()
@@ -110,13 +114,12 @@ export class LFIVerifier implements VerificationScenario {
 
         // Check for LFI success markers in response
         const matchedMarkers = LFIVerifier.LFI_SUCCESS_MARKERS.filter(m => bodyLower.includes(m.toLowerCase()))
-        const status = 200  // If page loaded, assume 200
 
-        this.capturedResponses.push(`LFI probe "${payload}": HTTP ${status}, ${matchedMarkers.length} marker(s)`)
+        this.capturedResponses.push(`LFI probe "${payload}": HTTP ${pageStatus}, ${matchedMarkers.length} marker(s)`)
 
         this.probeResults.push({
           payload,
-          status,
+          status: pageStatus,
           bodyPreview: (bodyText ?? "").slice(0, 500),
           markers: matchedMarkers,
         })
@@ -124,7 +127,14 @@ export class LFIVerifier implements VerificationScenario {
         if (matchedMarkers.length > 0) {
           this.fileContentDetected = true
           this.lfiConfirmed = true
-          this.logs.push(`LFI detected with payload "${payload}": markers=${matchedMarkers.join(", ")}`)
+          if (pageStatus === 200) {
+            // Confirmed LFI: file content returned with success status
+            this.fileContentWith200Detected = true
+            this.logs.push(`LFI confirmed with payload "${payload}": HTTP 200, markers=${matchedMarkers.join(", ")}`)
+          } else {
+            // Suspicious: markers found but non-200 status (possibly reflected in error page)
+            this.logs.push(`LFI suspicious with payload "${payload}": HTTP ${pageStatus} (non-200), markers=${matchedMarkers.join(", ")} — may be error page reflection`)
+          }
         }
 
         try {
@@ -153,7 +163,11 @@ export class LFIVerifier implements VerificationScenario {
 
     return {
       passed,
-      confidence: passed ? Confidence.HIGH : Confidence.INFORMATIONAL,
+      // HIGH confidence: markers found with HTTP 200 (actual file read)
+      // MEDIUM confidence: markers found but all non-200 status (possible error page reflection)
+      confidence: passed && this.fileContentWith200Detected ? Confidence.HIGH
+        : passed ? Confidence.MEDIUM
+        : Confidence.INFORMATIONAL,
       evidence: [],
       summary,
     }

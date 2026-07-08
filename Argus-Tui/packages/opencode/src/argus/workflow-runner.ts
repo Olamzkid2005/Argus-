@@ -92,6 +92,17 @@ export interface WorkflowRunOptions {
   xssDefaultPayload?: string
 }
 
+export interface VerifyEngagementResult {
+  /** Number of findings that were verified (had a matching verifier run) */
+  verified: number
+  /** Number of findings where verification passed (exploit confirmed) */
+  passed: number
+  /** Number of findings where verification failed (exploit not confirmed) */
+  failed: number
+  /** Updated findings with verificationResult annotations */
+  findings: NormalizedFinding[]
+}
+
 export interface WorkflowRunResult {
   engagementId: string
   findings: number
@@ -207,15 +218,25 @@ export class WorkflowRunner {
       xssDefaultPayload?: string
     },
   ): Promise<NormalizedFinding[]> {
-    if (!creds) return findings
-
     const threshold = options?.severityThreshold ?? Severity.HIGH
     // If threshold is > CRITICAL (5+), disable verification entirely
     if (threshold > Severity.CRITICAL) return findings
 
-    const toVerify = findings.filter(
-      (f) => f.severity >= threshold && !f.verificationResult,
-    )
+    // Subtypes that don't require authentication (SSRF, LFI, JWT, Secrets)
+    // can be verified without credentials, unlike BOLA, XSS, or PrivEsc.
+    const noAuthSubtypes = new Set([
+      "ssrf", "lfi", "path_traversal",
+      "jwt", "jwt_tampering", "jwt_none_algorithm",
+      "secrets", "exposed_secrets", "exposed_credentials",
+    ])
+
+    const toVerify = !creds
+      ? findings.filter(
+          (f) => f.subtype && noAuthSubtypes.has(f.subtype) && f.severity >= threshold && !f.verificationResult,
+        )
+      : findings.filter(
+          (f) => f.severity >= threshold && !f.verificationResult,
+        )
     if (toVerify.length === 0) return findings
 
     const runner = new VerificationRunner()
@@ -369,6 +390,227 @@ export class WorkflowRunner {
     }
 
     return updated
+  }
+
+  /**
+   * Verify findings for an existing engagement — public entry point for
+   * WebSocket/SSE event-driven verification (Gap 1.1 end-to-end).
+   *
+   * When the Python orchestrator's run_scan() completes, it emits a
+   * VERIFICATION_RECOMMENDED event via the WebSocket. This method can be
+   * called by any event handler that receives that event, providing an
+   * integration point for the TUI, CLI, or API.
+   *
+   * Steps:
+   * 1. Loads all findings from the engagement store
+   * 2. Filters for findings that need browser verification (severity >= threshold)
+   * 3. Runs browser-based verifiers (BOLA, XSS, PrivEsc, SSRF, LFI, JWT, Secrets)
+   * 4. Annotates findings with verification results
+   * 5. Saves updated findings back to the store
+   *
+   * @param engagementId - The engagement to verify findings for.
+   * @param options - Optional overrides (severity threshold, creds, etc.)
+   * @returns Number of findings verified, and how many passed.
+   */
+  async verifyEngagement(
+    engagementId: string,
+    options?: {
+      targetUrl?: string
+      credsPath?: string
+      severityThreshold?: number
+      onProgress?: (event: ProgressEvent | string) => void
+    },
+  ): Promise<VerifyEngagementResult> {
+    const emit = (event: ProgressEvent | string) => {
+      options?.onProgress?.(event)
+      if (typeof event !== "string") handleProgressEvent(event, engagementId)
+    }
+
+    const store = this.deps?.store ?? new EngagementStore()
+    const engagement = store.getEngagement(engagementId)
+    if (!engagement) {
+      emit(`Engagement not found: ${engagementId}`)
+      return { verified: 0, passed: 0, failed: 0, findings: [] }
+    }
+
+    const targetUrl = options?.targetUrl ?? engagement.target ?? ""
+    if (!targetUrl) {
+      emit(`No target URL for engagement ${engagementId}`)
+      return { verified: 0, passed: 0, failed: 0, findings: [] }
+    }
+
+    emit(`⠋ Loading findings for engagement ${engagementId}...`)
+    const allFindings = store.getFindings(engagementId) as NormalizedFinding[]
+    if (!allFindings || allFindings.length === 0) {
+      emit(`No findings to verify for engagement ${engagementId}`)
+      return { verified: 0, passed: 0, failed: 0, findings: [] }
+    }
+
+    emit(`✓ Loaded ${allFindings.length} findings — running browser verification...`)
+
+    // Load credentials
+    const credStore = this.deps?.credStore ?? new CredentialStore()
+    const creds = options?.credsPath ? credStore.load(options.credsPath) : credStore.load()
+    const defaultCreds = credStore.getDefaultCredentials()
+    credStore.clear()
+
+    // Run verification using the existing verifyFindings logic
+    const verifiedFindings = await this.verifyFindings(
+      allFindings,
+      targetUrl,
+      defaultCreds,
+      engagementId,
+      emit,
+      {
+        severityThreshold: options?.severityThreshold,
+      },
+    )
+
+    // Confidence promotion cascade: HIGH → VERIFIED → CONFIRMED for passed verifications
+    const confidenceEngine = this.deps?.confidenceEngine ?? new ConfidenceEngine()
+    for (const finding of verifiedFindings) {
+      if (finding.verificationResult?.passed) {
+        let promoted = confidenceEngine.promote(finding)
+        if (promoted !== finding.confidence) {
+          finding.confidence = promoted
+          const secondPromotion = confidenceEngine.promote(finding)
+          if (secondPromotion !== promoted) {
+            finding.confidence = secondPromotion
+          }
+        }
+      }
+    }
+
+    // Save updated findings back to the store with verification results
+    const verifiedCount = verifiedFindings.filter((f) => f.verificationResult).length
+    const passedCount = verifiedFindings.filter((f) => f.verificationResult?.passed).length
+    const failedCount = verifiedFindings.filter((f) => f.verificationResult && !f.verificationResult.passed).length
+
+    store.saveFindings(engagementId, verifiedFindings)
+
+    emit(`✓ Verification complete: ${passedCount} passed, ${failedCount} failed (${verifiedCount} total verified)`)
+
+    return { verified: verifiedCount, passed: passedCount, failed: failedCount, findings: verifiedFindings }
+  }
+
+  /**
+   * Subscribe to VERIFICATION_RECOMMENDED events and automatically dispatch
+   * browser verification when they arrive. This completes the Gap 1.1
+   * end-to-end: the Python orchestrator emits events via run_verification(),
+   * and this listener picks them up without manual intervention.
+   *
+   * The listener accepts a callback-based event source (e.g., from the TUI's
+   * SSE stream, WebSocket handler, or MCP bridge). When a matching event
+   * arrives, it calls verifyEngagement() to run browser verifiers.
+   *
+   * Usage with an SSE/WebSocket event source:
+   * ```typescript
+   * const runner = new WorkflowRunner()
+   * const unsub = runner.subscribeToVerificationEvents({
+   *   onEvent: (handler) => {
+   *     // Wire to your event transport:
+   *     // sseClient.on("message", handler)
+   *     // websocket.on("message", handler)
+   *     return () => { }  // cleanup function
+   *   },
+   * })
+   * ```
+   *
+   * Note: The handler receives the **parsed event object**, not a message
+   * wrapper. If your transport delivers wrapped events (e.g., MessageEvent
+   * with a .data property), extract the inner payload before passing it
+   * to the handler.
+   *
+   * @param source - Event source with an onEvent callback and optional targetUrl
+   * @returns An unsubscribe function to stop listening
+   */
+  subscribeToVerificationEvents(source: {
+    /**
+     * Called to register the event handler. Receives a function that should
+     * be called for every incoming event. Returns a cleanup function that
+     * will be called to unsubscribe.
+     */
+    onEvent: (handler: (event: unknown) => void) => (() => void) | undefined
+    /** Optional target URL override for verification */
+    targetUrl?: string
+    /** Optional severity threshold (default: Severity.HIGH = 3) */
+    severityThreshold?: number
+    /** Optional progress callback for status updates */
+    onProgress?: (event: ProgressEvent | string) => void
+  }): () => void {
+    const pendingVerifications = new Set<string>()
+
+    // Subscribe to events — handle both sync and async subscription APIs
+    let cleanup: (() => void) | undefined
+    try {
+      cleanup = source.onEvent(async (rawEvent: unknown) => {
+        try {
+          const event = rawEvent as Record<string, unknown>
+
+          // Check if this is a VERIFICATION_RECOMMENDED event from the Python orchestrator
+          // The event can arrive in multiple formats depending on the transport:
+          // 1. scanner_activity with tool_name="verification_runner" and activity="Browser verification recommended"
+          // 2. A structured event with type/stype matching verification patterns
+          const isVerificationEvent =
+            // Format 1: scanner_activity from WebSocketEventPublisher
+            (event.tool_name === "verification_runner" &&
+              typeof event.activity === "string" &&
+              event.activity.toLowerCase().includes("verification")) ||
+            // Format 2: Direct event type match
+            (typeof event.type === "string" &&
+              (event.type.toUpperCase() === "VERIFICATION_RECOMMENDED" ||
+                event.type === "scanner_activity")) ||
+            // Format 3: Details field with finding_ids
+            (typeof event.details === "string" &&
+              event.details.includes("finding_ids"))
+
+          if (!isVerificationEvent) return
+
+          // Extract engagement ID from the event
+          let eventEngagementId: string | undefined =
+            (event.engagement_id as string) ??
+            (event.engagementId as string)
+
+          if (!eventEngagementId) {
+            // Try to extract from details JSON
+            if (typeof event.details === "string") {
+              try {
+                const details = JSON.parse(event.details)
+                eventEngagementId = details.engagement_id as string
+              } catch {
+                // Ignore parse failures
+              }
+            }
+          }
+
+          if (!eventEngagementId) return
+
+          // Deduplicate: don't verify the same engagement concurrently
+          if (pendingVerifications.has(eventEngagementId)) return
+          pendingVerifications.add(eventEngagementId)
+
+          try {
+            const result = await this.verifyEngagement(eventEngagementId, {
+              targetUrl: source.targetUrl,
+              severityThreshold: source.severityThreshold,
+              onProgress: source.onProgress,
+            })
+
+            if (result.verified > 0) {
+              source.onProgress?.(`✓ Auto-verification complete for ${eventEngagementId}: ${result.passed} passed, ${result.failed} failed`)
+            }
+          } finally {
+            pendingVerifications.delete(eventEngagementId)
+          }
+        } catch {
+          // Event processing is best-effort — don't crash on malformed events
+        }
+      })
+    } catch {
+      // Subscription setup failed — cleanup is undefined
+    }
+
+    return () => { cleanup?.() }
   }
 
   /**
@@ -651,7 +893,20 @@ export class WorkflowRunner {
 
         for (const finding of phaseFindings) {
           emit({ type: "finding", phaseId: phase.phaseId, severity: String(finding.severity), title: finding.title })
-          const promoted = confidenceEngine.promote(finding)
+          // First promotion: advances one tier (e.g., HIGH → VERIFIED if evidence exists)
+          let promoted = confidenceEngine.promote(finding)
+          // Cascade promotion: if the first promotion moved the finding to a new tier,
+          // call promote again so e.g. VERIFIED → CONFIRMED can apply when browser
+          // verification passed (verificationResult.passed === true).
+          // The promote() method only advances one tier per call, so this cascade is
+          // needed to reach CONFIRMED in a single pass after browser verification.
+          if (promoted !== finding.confidence) {
+            finding.confidence = promoted
+            const secondPromotion = confidenceEngine.promote(finding)
+            if (secondPromotion !== promoted) {
+              promoted = secondPromotion
+            }
+          }
           allFindings.push({ ...finding, confidence: promoted })
         }
 

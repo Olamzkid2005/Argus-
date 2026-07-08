@@ -29,6 +29,8 @@ from config.constants import (
 from feature_flags import is_enabled as _ff_enabled
 from llm_service import LLMService
 from runtime.engagement_state import OBSERVATION_TRUNCATION_LIMIT
+from streaming import emit_error_hint
+from utils.error_hints import ErrorHint
 from utils.logging_utils import ScanLogger
 
 from .agent_action import AgentAction
@@ -241,6 +243,8 @@ class ReActAgent:
         self._candidate_list = None
         self._cancelled = False
         self._auth_context: AuthContext | None = None
+        # Tracks consecutive LLM tool selection failures for alerting
+        self._llm_failure_count = 0
 
     def set_candidate_list(self, candidate_list) -> None:
         """Accept a CandidateList from the scan phase for agent reasoning."""
@@ -614,7 +618,8 @@ class ReActAgent:
 
         except Exception as e:
             logger.warning(
-                "LLM tool selection failed: %s. Using deterministic fallback.", e
+                "LLM tool selection failed: %s. Using deterministic fallback.",
+                e,
             )
             return None
 
@@ -624,7 +629,7 @@ class ReActAgent:
         phase_tools = None
 
         for phase_name, tools in self.PHASE_TOOLS.items():
-            if phase_name in task.lower() or task.lower() in phase_name:
+            if task.lower().startswith(phase_name + ":") or task.lower() == phase_name:
                 phase_tools = tools
                 break
 
@@ -940,6 +945,8 @@ Based on these findings, what capabilities should the next phase use?
             if action is _DONE:
                 return None
             if action is not None:
+                # LLM succeeded — reset failure counter
+                self._llm_failure_count = 0
                 # Attach actual LLM token counts to the action for governance (blocker 48)
                 # These are read from the LLMService which tracks them from the LLMResponse.
                 if (
@@ -961,11 +968,35 @@ Based on these findings, what capabilities should the next phase use?
             and llm_client.is_available()
             and recon_context
         ):
+            self._llm_failure_count += 1
             logger.warning(
-                "LLM tool selection returned None — falling back to deterministic plan for %s. "
-                "Check LLM availability and response format if this recurs.",
+                "LLM tool selection returned None (failure #%d) — falling back to "
+                "deterministic plan for %s. Check LLM availability and response format "
+                "if this recurs.",
+                self._llm_failure_count,
                 task[:80],
             )
+            # Emit an error hint so the UI knows the agent is running in degraded mode
+            try:
+                if self.engagement_id:
+                    _hint = ErrorHint(
+                        summary="Agent running in degraded mode",
+                        detail=(
+                            f"LLM returned no valid tool selection after "
+                            f"{self._llm_failure_count} consecutive attempt(s). "
+                            f"Falling back to deterministic tool ordering."
+                        ),
+                        remediation=(
+                            "The LLM may be unavailable, rate-limited, or returning "
+                            "unparseable responses. Verify API key and quota. "
+                            "The assessment continues with deterministic tools "
+                            "but may have reduced coverage."
+                        ),
+                        tool="react_agent",
+                    )
+                    emit_error_hint(self.engagement_id, _hint)
+            except Exception:
+                logger.debug("Failed to emit fallback error hint", exc_info=True)
 
         return self._deterministic_plan(task, tried_tools)
 
@@ -1204,6 +1235,26 @@ Based on these findings, what capabilities should the next phase use?
                             "Auth checkpoint restore timed out after 30s for %s",
                             checkpoint.email,
                         )
+                        # Gap 9.8: Emit auth_error hint when checkpoint restore fails silently
+                        try:
+                            if self.engagement_id:
+                                _hint = ErrorHint(
+                                    summary="Auth checkpoint restore timed out",
+                                    detail=(
+                                        f"Login restoration for {checkpoint.email} timed out "
+                                        f"after 30s. The agent will continue without authentication."
+                                    ),
+                                    remediation=(
+                                        "The saved authentication session could not be restored. "
+                                        "The target may be rate-limiting login attempts or the "
+                                        "credentials may no longer be valid. Try providing fresh "
+                                        "credentials for this engagement."
+                                    ),
+                                    tool="react_agent",
+                                )
+                                emit_error_hint(self.engagement_id, _hint)
+                        except Exception:
+                            logger.debug("Failed to emit auth checkpoint error hint", exc_info=True)
                     finally:
                         # Blocker 33: shutdown(wait=False) + cancel_futures=True ensures
                         # the executor's worker threads are interrupted immediately rather

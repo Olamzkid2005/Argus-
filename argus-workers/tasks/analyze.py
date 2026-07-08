@@ -68,19 +68,65 @@ def run_analysis(
         result = ctx.orchestrator.run_analysis(ctx.job)
 
         analysis = result.get("analysis", {})
+        needs_post_exploitation = result.get("needs_post_exploitation", False)
         slog.info(
-            "Analysis complete — risk=%s, coverage_gaps=%d, high_value_targets=%d",
+            "Analysis complete — risk=%s, coverage_gaps=%d, high_value_targets=%d, needs_post_exploitation=%s",
             analysis.get("risk_level", "unknown"),
             len(analysis.get("coverage_gaps", [])),
             len(analysis.get("high_value_targets", [])),
+            needs_post_exploitation,
         )
 
-        # Advance to reporting — transition FIRST so the report task
-        # always finds the engagement in "reporting" state. If transition
-        # fails, no downstream task is dispatched and the engagement
-        # stays in "analyzing" (handled by the ctx.state exception below).
-        # If transition succeeds but dispatch fails, we transition to
-        # "failed" cleanly (analyzing→reporting→failed is valid).
+        # Gap 5.1: Dispatch post-exploitation phase when foothold findings exist
+        if needs_post_exploitation:
+            slog.info(
+                "Foothold indicators found — dispatching post-exploitation phase"
+            )
+            try:
+                ctx.state.safe_transition(
+                    "post_exploitation",
+                    "Foothold detected — advancing to post-exploitation",
+                )
+            except Exception as e:
+                logger.exception(
+                    "Failed to transition to post_exploitation for engagement=%s: %s",
+                    engagement_id,
+                    e,
+                )
+                ctx.state.safe_transition(
+                    "failed", f"State transition failed: {e}"
+                )
+                result["status"] = "failed"
+                result["reason"] = "state_transition_failed"
+                return result
+            try:
+                app.send_task(
+                    "tasks.post_exploit.run_post_exploit",
+                    args=[engagement_id, budget, ctx.trace_id],
+                )
+                slog.info(
+                    "Post-exploitation dispatched for engagement %s",
+                    engagement_id,
+                )
+            except Exception as e:
+                logger.exception(
+                    "Failed to enqueue post-exploitation for engagement=%s: %s",
+                    engagement_id,
+                    e,
+                )
+                ctx.state.safe_transition(
+                    "failed",
+                    f"Failed to enqueue post-exploitation: {e}",
+                )
+                result["status"] = "failed"
+                result["reason"] = "post_exploit_dispatch_failed"
+                return result
+            return result
+
+        # No foothold — advance to reporting as normal
+        # Transition FIRST so the report task always finds the engagement
+        # in "reporting" state. If transition fails, no downstream task is
+        # dispatched and the engagement stays in "analyzing".
         try:
             ctx.state.transition("reporting", "Analysis complete — advancing to report")
         except Exception as e:

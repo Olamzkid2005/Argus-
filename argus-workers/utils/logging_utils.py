@@ -431,6 +431,19 @@ class ScanLogger:
         msg = f"{self._prefix()}   {self._DIM}  -> {detail}{self._RESET}"
         self._logger.info(msg)
 
+    def debug(self, message: str, *args, **kwargs):
+        """Log a debug message with the standard prefix.
+
+        Supports printf-style format substitution via *args, matching the
+        standard logging.Logger.debug() API:
+            slog.debug("Processing %d items", count)
+            slog.debug("Static debug message")
+        """
+        if args:
+            message = message % args
+        msg = f"{self._prefix()}  {message}"
+        self._logger.debug(msg, **kwargs)
+
     def info(self, message: str, *args, **kwargs):
         """Log a simple info message with the standard prefix.
 

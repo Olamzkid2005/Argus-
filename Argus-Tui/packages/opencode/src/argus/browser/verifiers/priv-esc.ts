@@ -1,7 +1,7 @@
 import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
 import { Confidence } from "../../shared/types"
-import { loginIfFormPresent, isAccessDenied, detectAuthChallenge, logAuthChallenge } from "../login"
+import { authenticateSession, isAccessDenied, detectAuthChallenge, logAuthChallenge } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
 import { tmpdir } from "os"
 import { join } from "path"
@@ -72,19 +72,28 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
     // Step 1: Baseline checks — each endpoint without auth
     // Step 2: Login once, then check all endpoints with session shared
     const page = await this.engine.navigate(this.targetUrl)
-    // Phase 3.4.2: Capture auth challenges during login
-    const loginSuccess = await loginIfFormPresent(page, this.lowPrivCreds, undefined, (challenge) => {
-      logAuthChallenge(challenge, (line) => this.logs.push(line))
-    })
+    // Phase 3.4.2: Capture auth challenges during login.
+    // Uses authenticateSession() which tries form login first, then falls
+    // back to token/cookie injection for OAuth/SSO pages (Gap 2.6).
+    const loginSuccess = await authenticateSession(
+      page,
+      this.lowPrivCreds,
+      undefined, // authTokens — injected from CredentialStore when available
+      undefined, // context — passed when cookies are available
+      (challenge) => {
+        logAuthChallenge(challenge, (line) => this.logs.push(line))
+      },
+    )
     if (loginSuccess) {
       if (this.lowPrivCreds.username) this.logs.push(`Logged in as low-priv user ${this.lowPrivCreds.username}`)
     } else {
       const challenge = await detectAuthChallenge(page)
       if (challenge) {
         logAuthChallenge(challenge, (line) => this.logs.push(line))
-      } else {
-        this.logs.push(`Login may have failed for ${this.lowPrivCreds.username} — proceeding with unauthenticated checks`)
       }
+      this.logs.push(`Login failed for ${this.lowPrivCreds.username} — aborting privilege escalation check (fail-closed)`)
+      await page.close()
+      return
     }
 
     for (const ep of this.highPrivEndpoints) {

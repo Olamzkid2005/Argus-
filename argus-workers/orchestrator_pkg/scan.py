@@ -165,6 +165,20 @@ def _build_nuclei_tags(tech_stack, agg="default") -> list[str]:
 
 
 def _is_reachable(target: str) -> bool:
+    """Check if a target hostname is DNS-resolvable.
+
+    Gap 13.1: IP/SSRF blocking logic removed — this is now handled by
+    the Phase 0 scope+SSRF validation in execute_scan_tools() which uses
+    the consolidated ScopeValidator.is_internal_address() from
+    tools/scope_validator.py (the single source of truth).
+
+    This function only checks DNS resolution:
+    - Returns True if the hostname resolves (any IP, even private —
+      private IPs are already blocked upstream by Phase 0)
+    - Returns False only if DNS resolution fails (NXDOMAIN, SERVFAIL)
+    - Returns True for bare IP addresses (they are always "reachable"
+      from a DNS perspective)
+    """
     # Use urlparse for reliable hostname extraction (handles IPv6, userinfo, etc.)
     from urllib.parse import urlparse
 
@@ -179,53 +193,16 @@ def _is_reachable(target: str) -> bool:
             .split(":")[0]
         )
 
+    # Bare IP addresses are always reachable from a DNS perspective
     try:
-        ip = ipaddress.ip_address(hostname)
-        # Block private / link-local / loopback IPs to prevent internal network scanning
-        # Includes IPv4 private (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16),
-        # IPv6 unique local (fc00::/7), IPv6 link-local (fe80::/10), loopback, etc.
-        # M-01: ipaddress.is_private also covers IPv6 unique-local on Python 3.9+,
-        # and is_link_local covers fe80::/10. Check ipv4_mapped addresses too.
-        if ip.is_private or ip.is_loopback or ip.is_link_local:
-            logger.warning("Target %s resolves to private IP %s — skipping", target, ip)
-            return False
-        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
-            mapped = ipaddress.ip_address(ip.ipv4_mapped)
-            if mapped.is_private or mapped.is_loopback or mapped.is_link_local:
-                logger.warning(
-                    "Target %s resolves to IPv4-mapped private IP %s — skipping",
-                    target,
-                    ip,
-                )
-                return False
+        ipaddress.ip_address(hostname)
         return True
     except ValueError:
         pass
-    if hostname in ("localhost", "127.0.0.1", "::1"):
-        logger.warning("Target %s resolves to loopback — skipping", target)
-        return False
-    if hostname.startswith("169.254."):
-        logger.warning("Target %s is link-local — skipping", target)
-        return False
+
+    # DNS resolution check
     try:
-        addrinfo = socket.getaddrinfo(
-            hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
-        )
-        # Validate resolved IPs to prevent DNS rebinding
-        for _family, _typ, _proto, _cn, sockaddr in addrinfo:
-            resolved_ip = sockaddr[0]
-            try:
-                addr = ipaddress.ip_address(resolved_ip)
-                if addr.is_private or addr.is_loopback or addr.is_link_local:
-                    logger.warning(
-                        "Target %s resolved to %s (private/internal) — "
-                        "blocking to prevent DNS rebinding SSRF",
-                        target,
-                        resolved_ip,
-                    )
-                    return False
-            except ValueError:
-                pass
+        socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
         return True
     except socket.gaierror as e:
         if e.errno in (-2, -3):

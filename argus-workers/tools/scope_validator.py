@@ -61,10 +61,18 @@ class ScopeValidator:
         """
         self.engagement_id = engagement_id
         self._scope = self._parse_scope(authorized_scope)
+        self._slog = ScanLogger("scope_validator", engagement_id=engagement_id)
         if self._scope["domains"] or self._scope["ipRanges"]:
-            slog = ScanLogger("scope_validator", engagement_id=engagement_id)
-            slog.info(
+            self._slog.info(
                 f"Scope loaded: {len(self._scope['domains'])} domains, {len(self._scope['ipRanges'])} IP ranges"
+            )
+        else:
+            # Gap 13.2 / 7.7: Warn when no scope is configured — all targets will be allowed
+            self._slog.warn(
+                "NO SCOPE CONFIGURED — all targets will be allowed. "
+                "Set 'authorized_scope' in the engagement configuration to scope scanning. "
+                "To explicitly allow unscoped scanning, pass authorize_scope={} (empty dict) "
+                "after acknowledging this warning."
             )
 
     def _parse_scope(self, scope) -> dict:
@@ -478,6 +486,11 @@ def validate_target_scope(
     # -- Legacy DB-based path (caller provided authorized_scope explicitly) --
     if authorized_scope is not None:
         if not authorized_scope:
+            logger.warning(
+                "authorized_scope is empty — ALLOWING ALL TARGETS. "
+                "This is acceptable only for development/testing. "
+                "For production, set authorized_scope with domains/IP ranges."
+            )
             return True
 
         try:

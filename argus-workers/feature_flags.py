@@ -208,6 +208,38 @@ class FeatureFlags:
         return flags
 
 
+# ── Feature flag startup guidance (Gap 7.9) ──
+# All feature flags default to False, which means a fresh checkout runs
+# in degraded mode with all advanced features disabled. To enable them:
+# 1. Set ARGUS_AUTONOMOUS=1 to enable all autonomous features (recommended)
+# 2. Set individual ARGUS_FF_<NAME>=1 env vars for specific features
+# 3. Store flags in the database via the Settings UI
+
+def log_feature_flag_guidance():
+    """Emit a startup message to help operators configure feature flags.
+
+    Gap 7.9: Since all flags default to False, first-time users may be
+    running in degraded mode without realizing it. This function logs
+    guidance on how to enable features.
+    """
+    autonomous = os.environ.get("ARGUS_AUTONOMOUS", "")
+    is_autonomous = autonomous.lower() in ("1", "true", "yes")
+
+    if not is_autonomous:
+        logger.info(
+            "Feature flags: All features default to False. "
+            "Set ARGUS_AUTONOMOUS=1 to enable autonomous features, "
+            "or set individual ARGUS_FF_<NAME>=1 env vars. "
+            "See AUTONOMOUS_FEATURES in feature_flags.py for the full list."
+        )
+    else:
+        logger.info(
+            "Feature flags: ARGUS_AUTONOMOUS is enabled — "
+            "%d autonomous features activated",
+            len(AUTONOMOUS_FEATURES),
+        )
+
+
 # ── Autonomous mode flag names ──
 # These are force-enabled when ARGUS_AUTONOMOUS=1 is set.
 AUTONOMOUS_FEATURES = frozenset({
@@ -251,6 +283,7 @@ def get_feature_flags(db_connection=None) -> FeatureFlags:
     if _global_flags is None:
         with _global_flags_lock:
             if _global_flags is None:
+                log_feature_flag_guidance()
                 _global_flags = FeatureFlags(db_connection)
     return _global_flags
 

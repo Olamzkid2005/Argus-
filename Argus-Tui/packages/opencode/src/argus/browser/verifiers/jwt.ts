@@ -95,12 +95,21 @@ export class JWTVerifier implements VerificationScenario {
     await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
     const page = await this.engine.navigate(this.targetUrl)
     try {
-      // Inject the JWT as a bearer token in subsequent requests
+      // Inject the JWT into localStorage (covers SPAs that read from storage)
       await page.evaluate((t) => {
         localStorage.setItem("token", t)
         localStorage.setItem("access_token", t)
         localStorage.setItem("jwt", t)
       }, token)
+
+      // Also inject as Authorization header to test the actual backend API
+      // (most real-world APIs authenticate via Authorization: Bearer header,
+      //  not localStorage — this was the critical gap in the original verifier)
+      await page.setExtraHTTPHeaders({
+        "Authorization": `Bearer ${token}`,
+      }).catch((err) => {
+        this.logs.push(`Failed to set Authorization header: ${err}`)
+      })
 
       this.capturedRequests.push(`JWT test "${testLabel}": accessing ${protectedUrl}`)
 

@@ -62,24 +62,37 @@ class DistributedLock:
     def redis_client(self, client: redis.Redis) -> None:
         self._redis_client = client
 
-    def _with_reconnect(self, method_name: str, *args, **kwargs):
+    def _with_reconnect(self, method_name, *args, **kwargs):
         """Execute a Redis operation with auto-reconnect on failure (M6).
 
-        Accepts a method name string rather than a bound method so the
-        retry uses a fresh client instance after reconnect.
+        Accepts either:
+        - A method name string (e.g., "set", "get") — resolved via getattr
+        - A bound/callable method (e.g., self.redis_client.set) — used directly
+
+        Gap 7.10 fix: Previously only handled string method names. If a bound
+        method was passed, getattr would fail with TypeError. Now handles both.
 
         Attempts the operation once. If it fails with a connection error,
         discards the stale client and retries once. If both attempts fail,
         propagates the exception.
         """
+        def _resolve_operation(client, name):
+            if isinstance(name, str):
+                return getattr(client, name)
+            if callable(name):
+                return name
+            raise TypeError(
+                f"_with_reconnect expected str or callable, got {type(name).__name__}"
+            )
+
         try:
-            operation = getattr(self.redis_client, method_name)
+            operation = _resolve_operation(self.redis_client, method_name)
             return operation(*args, **kwargs)
         except (redis.ConnectionError, redis.TimeoutError, OSError) as e:
             logger.warning("Redis connection lost, attempting reconnect: %s", e)
             self._redis_client = None  # Discard stale client
             try:
-                operation = getattr(self.redis_client, method_name)
+                operation = _resolve_operation(self.redis_client, method_name)
                 return operation(*args, **kwargs)
             except (redis.ConnectionError, redis.TimeoutError, OSError) as e2:
                 logger.error("Redis reconnect failed: %s", e2)

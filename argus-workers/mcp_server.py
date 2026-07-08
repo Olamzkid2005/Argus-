@@ -247,6 +247,7 @@ class MCPServer:
             os.path.dirname(__file__), "tools", "definitions"
         )
         self._load_yaml_tools()
+        self._check_critical_tools()
         self.session_store = AgentSessionStore()
         # Proactive DNS check — warn at startup if DNS is broken.
         # DNS-reliant tools (subfinder, amass, dnsx, etc.) silently fail
@@ -259,6 +260,50 @@ class MCPServer:
                 "DNS resolution failed — DNS-reliant tools (subfinder, amass, dnsx) may not work. "
                 "Check container DNS config or set --dns-servers 8.8.8.8"
             )
+
+    # Critical tools that must be available for full functionality.
+    # Used by _check_critical_tools() to warn or enforce at startup.
+    CRITICAL_TOOLS: frozenset = frozenset({
+        "nuclei",
+        "nmap",
+        "sqlmap",
+        "subfinder",
+        "httpx",
+        "whatweb",
+    })
+
+    def _check_critical_tools(self) -> None:
+        """Check critical tools are available after YAML loading.
+
+        Logs a consolidated warning listing all missing critical tools.
+        If ``ARGUS_ENFORCE_TOOLS`` env var is set to "1" or "true",
+        raises ``RuntimeError`` instead of just warning.
+
+        Critical tools are defined in ``CRITICAL_TOOLS``.
+        """
+        missing = [
+            name for name in self.CRITICAL_TOOLS
+            if name not in self._tools
+        ]
+        if not missing:
+            logger.info(
+                "All %d critical tool(s) are available",
+                len(self.CRITICAL_TOOLS),
+            )
+            return
+
+        _enforce = os.environ.get("ARGUS_ENFORCE_TOOLS", "").lower() in ("1", "true")
+        _msg = (
+            f"{len(missing)} of {len(self.CRITICAL_TOOLS)} critical tool(s) missing:\n"
+            f"  Missing: {', '.join(missing)}\n"
+            f"  Available: {', '.join(sorted(self.CRITICAL_TOOLS - set(missing)))}\n"
+            "Install the missing tools or add their directories to PATH. "
+            "Set ARGUS_EXTRA_PATH for non-standard install locations.\n"
+            "To enforce (abort on missing tools), set ARGUS_ENFORCE_TOOLS=1."
+        )
+        if _enforce:
+            raise RuntimeError(f"ARGUS_ENFORCE_TOOLS=1: {_msg}")
+        logger.warning("STARTUP GUARD: %s", _msg)
 
     def _load_yaml_tools(self):
         """Load tool definitions from YAML files in tools/definitions/."""

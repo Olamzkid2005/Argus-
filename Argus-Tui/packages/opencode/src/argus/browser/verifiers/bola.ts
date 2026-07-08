@@ -1,7 +1,7 @@
 import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
 import { Confidence } from "../../shared/types"
-import { loginIfFormPresent, isAccessDenied, detectAuthChallenge, logAuthChallenge } from "../login"
+import { authenticateSession, isAccessDenied, detectAuthChallenge, logAuthChallenge } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
 import { randomUUID, createHash } from "crypto"
 import { tmpdir } from "os"
@@ -177,17 +177,25 @@ export class BOLAVerifier implements VerificationScenario {
       await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30000 })
       this.capturedRequests.push(`GET ${this.targetUrl} [${label} login]`)
 
-      // Phase 3.4.2: Capture auth challenges during login
-      const loginSuccess = await loginIfFormPresent(page, creds, undefined, (challenge) => {
-        logAuthChallenge(challenge, (line) => this.logs.push(line))
-      })
+      // Phase 3.4.2: Capture auth challenges during login.
+      // Uses authenticateSession() which tries form login first, then falls
+      // back to token/cookie injection for OAuth/SSO pages (Gap 2.6).
+      const loginSuccess = await authenticateSession(
+        page,
+        creds,
+        undefined, // authTokens — injected from CredentialStore when available
+        context,
+        (challenge) => {
+          logAuthChallenge(challenge, (line) => this.logs.push(line))
+        },
+      )
       if (!loginSuccess) {
         const challenge = await detectAuthChallenge(page)
         if (challenge) {
           logAuthChallenge(challenge, (line) => this.logs.push(line))
-        } else {
-          this.logs.push(`Login may have failed for ${creds.username} — proceeding with resource check`)
         }
+        this.logs.push(`Login failed for ${creds.username} — aborting access check (fail-closed)`)
+        return false
       }
 
       // Navigate directly to the resource page after login.

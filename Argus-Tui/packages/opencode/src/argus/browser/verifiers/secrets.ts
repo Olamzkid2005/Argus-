@@ -36,7 +36,7 @@ export class SecretsExposureVerifier implements VerificationScenario {
     // AWS keys
     { type: "AWS Access Key", pattern: /(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b/g, confidence: Confidence.HIGH },
     // AWS Secret Key
-    { type: "AWS Secret Key", pattern: /(?:(?i)aws[_-]?(?:secret|security)[_-]?(?:access[_-]?)?key)\s*[:=]\s*['"][A-Za-z0-9\/+=]{40}['"]/g, confidence: Confidence.HIGH },
+    { type: "AWS Secret Key", pattern: /(?:aws[_-]?(?:secret|security)[_-]?(?:access[_-]?)?key)\s*[:=]\s*['"][A-Za-z0-9\/+=]{40}['"]/gi, confidence: Confidence.HIGH },
     // GitHub tokens
     { type: "GitHub Token", pattern: /(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}\b/g, confidence: Confidence.HIGH },
     // GitLab tokens
@@ -46,13 +46,13 @@ export class SecretsExposureVerifier implements VerificationScenario {
     // Google API keys
     { type: "Google API Key", pattern: /AIza[0-9A-Za-z\-_]{35}\b/g, confidence: Confidence.HIGH },
     // Generic bearer tokens in headers or JSON
-    { type: "Bearer Token", pattern: /(?:(?i)bearer)\s+[A-Za-z0-9\-_.~+/]{20,}={0,2}\b/g, confidence: Confidence.MEDIUM },
+    { type: "Bearer Token", pattern: /(?:bearer)\s+[A-Za-z0-9\-_.~+/]{20,}={0,2}\b/gi, confidence: Confidence.MEDIUM },
     // Basic auth credentials in URLs
     { type: "Basic Auth in URL", pattern: /https?:\/\/[^:/\s@]+:[^@/\s]+@[^\s'"]+/g, confidence: Confidence.HIGH },
     // Private SSH keys (inline)
     { type: "SSH Private Key", pattern: /-----BEGIN\s+(?:RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----[\s\S]{1,1000}?-----END/g, confidence: Confidence.HIGH },
     // Generic password assignments
-    { type: "Hardcoded Password", pattern: /(?:(?i)password|passwd|pwd)\s*[:=]\s*['\"][^'\"]{4,}['"]/g, confidence: Confidence.MEDIUM },
+    { type: "Hardcoded Password", pattern: /(?:password|passwd|pwd)\s*[:=]\s*['\"][^'\"]{4,}['"]/gi, confidence: Confidence.MEDIUM },
     // Connection strings
     { type: "Connection String", pattern: /(?:mongodb|postgresql|mysql|redis|amqp|rabbitmq):\/\/[^\s'"]+/g, confidence: Confidence.HIGH },
     // JWT tokens
@@ -60,7 +60,7 @@ export class SecretsExposureVerifier implements VerificationScenario {
     // Internal hostnames / IPs in config
     { type: "Internal URL", pattern: /https?:\/\/(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|localhost)(?::\d{1,5})?(?:\/[^\s'"]*)?/g, confidence: Confidence.MEDIUM },
     // Stripe keys
-    { type: "Stripe Key", pattern: /(?:(?i)sk_live|pk_live|sk_test|pk_test)_[A-Za-z0-9]{10,}\b/g, confidence: Confidence.HIGH },
+    { type: "Stripe Key", pattern: /(?:sk_live|pk_live|sk_test|pk_test)_[A-Za-z0-9]{10,}\b/gi, confidence: Confidence.HIGH },
     // Twilio keys
     { type: "Twilio Key", pattern: /SK[A-Za-z0-9]{32}\b/g, confidence: Confidence.HIGH },
     // SendGrid keys
