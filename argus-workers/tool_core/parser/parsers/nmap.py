@@ -5,7 +5,7 @@ from ..types import NormalizedFinding
 
 
 def parse(output: str) -> list[NormalizedFinding]:
-    findings = []
+    findings: list[NormalizedFinding] = []
     try:
         root = ET.fromstring(output)
     except ET.ParseError:

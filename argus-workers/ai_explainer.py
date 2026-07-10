@@ -625,7 +625,7 @@ Keep response under 500 tokens. Be factual and specific."""
 
     async def generate_and_store_embeddings(
         self, findings: list[dict], engagement_id: str
-    ) -> dict[str, bool]:
+    ) -> dict[str, int]:
         """
         Generate and store embeddings for findings using pgvector.
 
@@ -638,7 +638,7 @@ Keep response under 500 tokens. Be factual and specific."""
         """
         from database.repositories.pgvector_repository import PGVectorRepository
 
-        result = {"success": 0, "errors": 0, "skipped": 0}
+        result: dict[str, int] = {"success": 0, "errors": 0, "skipped": 0}
 
         # Check if pgvector is available
         repo = PGVectorRepository(self.db)
@@ -664,7 +664,7 @@ Keep response under 500 tokens. Be factual and specific."""
                     finding_id=finding.get("id", ""),
                     engagement_id=engagement_id,
                     embedding=embedding,
-                    text_content=text_for_embedding,
+                    _text_content=text_for_embedding,
                 )
 
                 if success:

@@ -82,6 +82,7 @@ class SnapshotManager:
         import time
 
         for attempt in range(max_retries):
+            last_error = None
             try:
                 conn = self._get_connection()
                 # Set SERIALIZABLE isolation level
@@ -203,7 +204,7 @@ class SnapshotManager:
                         )
                 # Re-raise all non-retryable exceptions immediately
                 if attempt == max_retries - 1:
-                    raise Exception(
+                    raise RuntimeError(
                         f"Failed to create snapshot after {max_retries} attempts: {e}"
                     ) from e
                 else:
@@ -215,6 +216,9 @@ class SnapshotManager:
                 if conn:
                     self._release_connection(conn)
                     conn = None
+
+        # Fallback: should never reach here (loop always raises or returns)
+        return {}
 
     def _to_jsonable(self, value):
         """Recursively convert values to JSON-safe types."""
@@ -314,7 +318,9 @@ class SnapshotManager:
             (snapshot_id,),
             fetch="one",
         )
-        return result
+        if isinstance(result, dict):
+            return result
+        return None
 
     def get_latest_snapshot(self, engagement_id: str) -> dict | None:
         """
@@ -337,7 +343,9 @@ class SnapshotManager:
             (engagement_id,),
             fetch="one",
         )
-        return result
+        if isinstance(result, dict):
+            return result
+        return None
 
     def list_snapshots(self, engagement_id: str) -> list[dict]:
         """
@@ -360,4 +368,6 @@ class SnapshotManager:
             (engagement_id,),
             fetch="all",
         )
-        return result if result else []
+        if isinstance(result, list):
+            return result
+        return []

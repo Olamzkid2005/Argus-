@@ -20,6 +20,8 @@ from cache import CacheMode, cache
 from config.constants import CIRCUIT_BREAKER_COOLDOWN, CIRCUIT_BREAKER_THRESHOLD
 from database.repositories.engagement_repository import EngagementRepository
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
+from typing import Any, Callable
+
 from error_classifier import ErrorCode
 from exceptions import SecurityError
 from runtime.concurrency import (
@@ -142,7 +144,7 @@ class ToolRunner:
         if not self.engagement_id or not self.connection_string:
             return None
         try:
-            repo = EngagementRepository(db_connection=self.connection_string)
+            repo = EngagementRepository(connection=self.connection_string)
             engagement = repo.find_by_id(self.engagement_id)
             if not engagement:
                 return None
@@ -500,7 +502,7 @@ class ToolRunner:
         start_time = time.time()
 
         slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
-        slog.tool_start(tool, "running")
+        slog.tool_start(tool, ["running"])
 
         # Execute with span tracing
         with self.span_recorder.span(ExecutionSpan.SPAN_TOOL_EXECUTION, {"tool": tool}):
@@ -515,7 +517,7 @@ class ToolRunner:
                 # high-cost tools (sqlmap, masscan, etc.) to avoid saturating CPU/memory.
                 _sem = HIGH_COST_SEMAPHORE if tool in HIGH_COST_TOOLS else SUBPROCESS_SEMAPHORE
                 with _sem:
-                    result = subprocess.run(  # noqa: S603 — safe: list form, tool_path resolved internally, args validated by is_dangerous()
+                    proc_result: subprocess.CompletedProcess[str] = subprocess.run(  # noqa: S603 — safe: list form, tool_path resolved internally, args validated by is_dangerous()
                         [tool_path] + args,
                         capture_output=True,
                         text=True,
@@ -528,24 +530,24 @@ class ToolRunner:
                 # multi-byte UTF-8 characters correctly (H1). Decode safely
                 # at the truncated boundary, discarding any partial multi-byte
                 # character at the cut point.
-                if len(result.stdout.encode("utf-8")) > max_output_bytes:
+                if len(proc_result.stdout.encode("utf-8")) > max_output_bytes:
                     logger.warning(
                         "Truncating stdout for %s (%d bytes > %d limit)",
                         tool,
-                        len(result.stdout),
+                        len(proc_result.stdout),
                         max_output_bytes,
                     )
-                    stdout_bytes = result.stdout.encode("utf-8")[:max_output_bytes]
-                    result.stdout = stdout_bytes.decode("utf-8", errors="ignore")
-                if len(result.stderr.encode("utf-8")) > max_output_bytes:
+                    stdout_bytes = proc_result.stdout.encode("utf-8")[:max_output_bytes]
+                    proc_result.stdout = stdout_bytes.decode("utf-8", errors="ignore")
+                if len(proc_result.stderr.encode("utf-8")) > max_output_bytes:
                     logger.warning(
                         "Truncating stderr for %s (%d bytes > %d limit)",
                         tool,
-                        len(result.stderr),
+                        len(proc_result.stderr),
                         max_output_bytes,
                     )
-                    stderr_bytes = result.stderr.encode("utf-8")[:max_output_bytes]
-                    result.stderr = stderr_bytes.decode("utf-8", errors="ignore")
+                    stderr_bytes = proc_result.stderr.encode("utf-8")[:max_output_bytes]
+                    proc_result.stderr = stderr_bytes.decode("utf-8", errors="ignore")
 
                 # Calculate duration
                 duration_ms = int((time.time() - start_time) * 1000)
@@ -561,8 +563,8 @@ class ToolRunner:
                     "pip-audit": {1},
                 }
                 success = (
-                    result.returncode == 0
-                    or result.returncode in findings_exit_codes.get(tool, set())
+                    proc_result.returncode == 0
+                    or proc_result.returncode in findings_exit_codes.get(tool, set())
                 )
 
                 # Record tool metrics (Requirement 22.1)
@@ -588,7 +590,7 @@ class ToolRunner:
                         arguments=args,
                         duration_ms=duration_ms,
                         success=success,
-                        return_code=result.returncode,
+                        return_code=proc_result.returncode,
                     )
                 except Exception as log_err:
                     logger.warning("Failed to log tool execution: %s", log_err)
@@ -599,13 +601,13 @@ class ToolRunner:
                     target="",
                     status=ToolStatus.SUCCESS
                     if (
-                        result.returncode == 0
-                        or result.returncode in findings_exit_codes.get(tool, set())
+                        proc_result.returncode == 0
+                        or proc_result.returncode in findings_exit_codes.get(tool, set())
                     )
                     else ToolStatus.NONZERO_EXIT,
-                    stdout=result.stdout,
-                    stderr=result.stderr,
-                    exit_code=result.returncode,
+                    stdout=proc_result.stdout,
+                    stderr=proc_result.stderr,
+                    exit_code=proc_result.returncode,
                     started_at=datetime.fromtimestamp(start_time, tz=UTC),
                     duration_seconds=time.time() - start_time,
                     error_message="",
@@ -614,10 +616,10 @@ class ToolRunner:
 
                 # Cross-tool backpressure: detect 429/rate-limit responses (blocker 44)
                 if _target_host:
-                    _combined_output = (result.stderr + " " + result.stdout).lower()
+                    _combined_output = (proc_result.stderr + " " + proc_result.stdout).lower()
                     if "429" in _combined_output and "rate" in _combined_output:
                         PER_HOST_LIMITER.record_backpressure(_target_host)
-                    elif result.returncode == 0:
+                    elif proc_result.returncode == 0:
                         # Non-429 success — clear backpressure if active
                         PER_HOST_LIMITER.clear_backpressure(_target_host)
 
@@ -725,7 +727,7 @@ class ToolRunner:
                 )
 
     def run_streaming(
-        self, tool: str, args: list[str], timeout: int, on_line: callable
+        self, tool: str, args: list[str], timeout: int, on_line: Callable[[str], Any]
     ) -> UnifiedToolResult:
         """Stream tool output line by line, calling on_line() for each."""
         tool_path = self._resolve_tool_path(tool)
@@ -744,7 +746,7 @@ class ToolRunner:
         PER_HOST_LIMITER.acquire(_target_host)
 
         slog = ScanLogger("tool_runner", engagement_id=self.engagement_id or "")
-        slog.tool_start(tool, f"streaming, timeout={timeout}s")
+        slog.tool_start(tool, [f"streaming, timeout={timeout}s"])
 
         # Acquire global concurrency semaphore — same pattern as run()
         _sem = HIGH_COST_SEMAPHORE if tool in HIGH_COST_TOOLS else SUBPROCESS_SEMAPHORE
@@ -766,6 +768,7 @@ class ToolRunner:
         )
 
         try:
+            assert proc.stdout is not None, "stdout pipe required for streaming"
             while proc.poll() is None:
                 if time.time() - start > timeout:
                     proc.kill()
@@ -837,21 +840,27 @@ class ToolRunner:
                     proc.pid,
                 )
                 try:
-                    import signal
+                    import signal as _signal
 
+                    _SIGKILL = getattr(_signal, "SIGKILL", 9)
                     if not process_killed:
-                        os.kill(proc.pid, signal.SIGKILL)
+                        os.kill(proc.pid, _SIGKILL)
                         process_killed = True
                     # Poll with exponential backoff until reaped (max ~6.3s total)
+                    _WNOHANG = getattr(os, "WNOHANG", 1)
+                    _WIFEXITED = getattr(os, "WIFEXITED", lambda s: True)
+                    _WEXITSTATUS = getattr(os, "WEXITSTATUS", lambda s: s)
+                    _WIFSIGNALED = getattr(os, "WIFSIGNALED", lambda s: False)
+                    _WTERMSIG = getattr(os, "WTERMSIG", lambda s: 9)
                     for delay in [0.1, 0.2, 0.5, 1.0, 2.0, 2.5]:
                         try:
-                            wpid, status = os.waitpid(proc.pid, os.WNOHANG)
+                            wpid, status = os.waitpid(proc.pid, _WNOHANG)
                             if wpid != 0:
                                 # Update returncode from wait status
-                                if os.WIFEXITED(status):
-                                    proc.returncode = os.WEXITSTATUS(status)
-                                elif os.WIFSIGNALED(status):
-                                    proc.returncode = -os.WTERMSIG(status)
+                                if _WIFEXITED(status):
+                                    proc.returncode = _WEXITSTATUS(status)
+                                elif _WIFSIGNALED(status):
+                                    proc.returncode = -_WTERMSIG(status)
                                 else:
                                     proc.returncode = -1
                                 break

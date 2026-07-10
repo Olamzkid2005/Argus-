@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 class _DoneSentinel:
     """Sentinel value returned when LLM signals __done__."""
 
-    pass
+    # The class body is intentionally just the docstring — Python allows this.
 
 
 _DONE = _DoneSentinel()
@@ -100,8 +100,8 @@ class ReActAgent:
             }
             cls._phase_tools_loaded = True
 
-    PHASE_TOOLS = {}
-    PHASE_AGENTS = {}
+    PHASE_TOOLS: dict[str, list[str]] = {}
+    PHASE_AGENTS: dict[str, dict[str, Any]] = {}
 
     VALID_TRANSITIONS = {
         "recon": ["scan"],
@@ -494,7 +494,7 @@ class ReActAgent:
         recon_context: Any,
         llm_service: LLMService | None = None,
         hypotheses: list[dict] | None = None,
-    ) -> AgentAction | None:
+    ) -> "AgentAction | _DoneSentinel | None":
         """
         Call LLM to decide next tool via LLMService.
         Returns _DONE, AgentAction, or None on failure.
@@ -594,11 +594,17 @@ class ReActAgent:
                 temperature=LLM_AGENT_TEMPERATURE,
             )
 
+            if not isinstance(decision, dict):
+                return None
+
             if decision.get("_fallback"):
                 logger.warning("LLM fallback: %s", decision.get("_reason"))
                 return None
 
-            tool_name = decision.get("tool")
+            tool_name: str | None = decision.get("tool")
+
+            if tool_name is None:
+                return None
 
             if tool_name == "__done__":
                 return _DONE
@@ -829,6 +835,9 @@ Based on these findings, what capabilities should the next phase use?
                 temperature=0.3,
             )
 
+            if not isinstance(result, dict):
+                return self._deterministic_next_phase(findings, phase)
+
             if result.get("_fallback"):
                 logger.warning(
                     "LLM phase planning fallback: %s", result.get("_reason")
@@ -868,7 +877,7 @@ Based on these findings, what capabilities should the next phase use?
         that warrant deeper investigation.
         """
         # Default phase progression map
-        phase_to_next_capabilities = {
+        phase_to_next_capabilities: dict[str, list[str]] = {
             "recon": ["VULN_SCAN", "AUTH_TEST"],
             "scan": ["DEEP_SCAN", "XSS_DETECTION", "SQLI_DETECTION"],
             "deep_scan": ["POST_EXPLOIT", "EXPLOIT_CHAIN"],
@@ -906,7 +915,7 @@ Based on these findings, what capabilities should the next phase use?
         self,
         task: str,
         context: str,
-        tried_tools: set = None,
+        tried_tools: set[str] | None = None,
         recon_context: Any = None,
         llm_client: Any = None,
         hypotheses: list[dict] | None = None,
@@ -942,7 +951,7 @@ Based on these findings, what capabilities should the next phase use?
                 llm_service=llm_service,
                 hypotheses=hypotheses,
             )
-            if action is _DONE:
+            if isinstance(action, _DoneSentinel):
                 return None
             if action is not None:
                 # LLM succeeded — reset failure counter
@@ -956,6 +965,7 @@ Based on these findings, what capabilities should the next phase use?
                 ):
                     action.input_tokens = llm_service.last_input_tokens
                     action.output_tokens = llm_service.last_output_tokens
+                assert isinstance(action, AgentAction)
                 return action
 
         # Blocker 31: LLM → deterministic fallback should not be silent.
@@ -1099,7 +1109,7 @@ Based on these findings, what capabilities should the next phase use?
                     elif updates.get("status") == "REJECTED":
                         increment_counter("hypothesis.rejected")
                 except Exception:
-                    pass
+                    logger.debug("Failed to emit hypothesis metrics", exc_info=True)
 
         except HypothesisPersistenceError:
             # Revert in-memory cache on Postgres write failure
@@ -1169,7 +1179,7 @@ Based on these findings, what capabilities should the next phase use?
         Returns:
             List of tool execution results
         """
-        slog = ScanLogger("agent", engagement_id=self.engagement_id)
+        slog = ScanLogger("agent", engagement_id=self.engagement_id or "")
         slog.phase_header(f"AGENT RUN: {task[:80]}")
         if _reset_history:
             self.history = []
@@ -1177,7 +1187,7 @@ Based on these findings, what capabilities should the next phase use?
         if initial_context:
             self.add_to_history("system", f"Initial context: {initial_context}")
         results = []
-        tried_tools = set()
+        tried_tools: set[str] = set()
         total_cost_usd = 0.0
         empty_output_consecutive = 0  # FIX: track empty output, not findings count
 
@@ -1280,7 +1290,7 @@ Based on these findings, what capabilities should the next phase use?
                     self.engagement_id,
                 )
                 break
-            plan_kwargs = {"tried_tools": tried_tools}
+            plan_kwargs: dict[str, Any] = {"tried_tools": tried_tools}
             if recon_context is not None:
                 plan_kwargs["recon_context"] = recon_context
             if self.llm_client is not None:
@@ -1514,9 +1524,7 @@ Based on these findings, what capabilities should the next phase use?
                 _ff_enabled("GOVERNANCE_V2", default=False)
                 and self.governance is not None
             ):
-                if not result.success:
-                    pass
-                else:
+                if result.success:
                     # Safely handle non-string output (e.g. dict from tool wrappers)
                     raw_output = result.output
                     if not isinstance(raw_output, str):
@@ -1576,7 +1584,7 @@ Based on these findings, what capabilities should the next phase use?
                     logger.debug("Failed to track execution iteration: %s", e)
 
             # Log decision to repository
-            if self.decision_repo:
+            if self.decision_repo and self.engagement_id:
                 try:
                     self.decision_repo.log_decision(
                         engagement_id=self.engagement_id,

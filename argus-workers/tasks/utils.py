@@ -299,8 +299,8 @@ def fetch_engagement_scan_options(engagement_id: str) -> dict[str, str | bool]:
                     "bug_bounty_mode": bool(bbm)
                     if bbm is not None
                     else defaults["bug_bounty_mode"],
-                    "auth_config": auth_config,
-                    "dual_auth_config": dual_auth_config,
+                    "auth_config": auth_config or "",
+                    "dual_auth_config": dual_auth_config or "",
                 }
             logger.error(
                 "Engagement %s not found for scan options — returning defaults",

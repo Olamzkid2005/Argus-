@@ -2,6 +2,7 @@
 """Stored XSS detection via Playwright. Called as a subprocess by MCP server."""
 
 import argparse
+from typing import Any
 import json
 
 from playwright.sync_api import sync_playwright
@@ -68,7 +69,7 @@ def check_stored_xss(
     password_selector: str = "input[name=password]",
     submit_selector: str = "button[type=submit]",
 ) -> list[dict]:
-    findings = []
+    findings: list[dict] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
         context = browser.new_context()
@@ -142,7 +143,7 @@ if __name__ == "__main__":
 
     if args.creds_file:
         with open(args.creds_file) as f:
-            creds = json.load(f)
+            creds: Any = json.load(f)
     elif args.username and args.password:
         creds = {"username": args.username, "password": args.password}
     else:

@@ -35,12 +35,13 @@ def run_analysis(
         trace_id: Optional trace ID
         bug_bounty_mode: Forwarded from scan phase for report generation
     """
+    from typing import Any
     from utils.logging_utils import ScanLogger
 
     slog = ScanLogger("analyze", engagement_id=engagement_id)
     slog.phase_header("ANALYZE PHASE")
 
-    job_extra = {"budget": budget}
+    job_extra: dict[str, Any] = {"budget": budget}
     if bug_bounty_mode is not None:
         job_extra["bug_bounty_mode"] = bug_bounty_mode
 

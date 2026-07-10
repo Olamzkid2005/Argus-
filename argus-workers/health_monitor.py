@@ -15,6 +15,7 @@ from datetime import UTC, datetime, timedelta
 
 import psutil
 import redis
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +66,9 @@ class WorkerHealthMonitor:
     def __init__(self, worker_id: str | None = None, redis_url: str = None):
         self.worker_id = worker_id or f"worker-{os.getpid()}"
         try:
-            self.hostname = os.uname().nodename
+            self.hostname = _platform.uname().node
         except AttributeError:
-            # Windows compatibility: os.uname() is Unix-only
+            # Fallback if platform.uname() fails
             self.hostname = _platform.node() or "localhost"
         self.pid = os.getpid()
         self.redis_url = redis_url or REDIS_URL
@@ -80,6 +81,7 @@ class WorkerHealthMonitor:
         """Lazy Redis connection"""
         if self._redis is None:
             self._redis = redis.from_url(self.redis_url)
+        assert self._redis is not None
         return self._redis
 
     def get_system_metrics(self) -> dict[str, float]:
@@ -179,7 +181,8 @@ class WorkerHealthMonitor:
         try:
             pattern = f"{self.REDIS_KEY_PREFIX}:*"
             for key in self.redis.scan_iter(match=pattern):
-                data = self.redis.hgetall(key)
+                raw_hgetall = self.redis.hgetall(key)
+                data: dict[bytes, bytes] = cast(dict[bytes, bytes], raw_hgetall)
                 if data:
                     try:
                         workers.append(
@@ -239,7 +242,8 @@ class WorkerHealthMonitor:
             now = datetime.now(UTC)
 
             for key in self.redis.scan_iter(match=pattern):
-                data = self.redis.hgetall(key)
+                raw_hgetall = self.redis.hgetall(key)
+                data: dict[bytes, bytes] = cast(dict[bytes, bytes], raw_hgetall)
                 if data:
                     last_beat = data.get(b"last_heartbeat", b"").decode()
                     try:

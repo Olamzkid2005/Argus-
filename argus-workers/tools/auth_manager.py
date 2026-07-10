@@ -9,6 +9,7 @@ so all subsequent scanner requests carry the authenticated context.
 import json
 import logging
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
@@ -92,11 +93,14 @@ class AuthManager:
     """
 
     def __init__(self, auth_config: AuthConfig | dict | None = None):
-        self._config = auth_config
+        _cfg: AuthConfig
         if isinstance(auth_config, dict):
-            self._config = AuthConfig(**auth_config)
-        elif auth_config is None:
-            self._config = AuthConfig()
+            _cfg = AuthConfig(**auth_config)
+        elif isinstance(auth_config, AuthConfig):
+            _cfg = auth_config
+        else:
+            _cfg = AuthConfig()
+        self._config = _cfg
 
     def authenticate(
         self, target_url: str, auth_endpoints: list[str] | None = None
@@ -139,7 +143,7 @@ class AuthManager:
 
         if self._config.username and self._config.password:
             try:
-                return self._login(session, target_url, auth_endpoints, slog)
+                return self._login(session, target_url, auth_endpoints)
             except AuthError:
                 if self._config.login_url and not self._config.browser_auth:
                     logger.debug(
@@ -408,7 +412,7 @@ class AuthManager:
                 if self._config.username:
                     for selector in username_selectors:
                         try:
-                            field = page.locator(selector).first()
+                            field = page.locator(selector).first()  # type: ignore[operator]
                             if field.is_visible():
                                 field.fill(self._config.username)
                                 filled_username = True
@@ -434,7 +438,7 @@ class AuthManager:
                 if self._config.password:
                     for selector in password_selectors:
                         try:
-                            field = page.locator(selector).first()
+                            field = page.locator(selector).first()  # type: ignore[operator]
                             if field.is_visible():
                                 field.fill(self._config.password)
                                 filled_password = True
@@ -467,7 +471,7 @@ class AuthManager:
                         ):
                             continue
                         try:
-                            field = page.locator(f'[name="{field_name}"]').first()
+                            field = page.locator(f'[name="{field_name}"]').first()  # type: ignore[operator]
                             if field.is_visible():
                                 field.fill(str(field_value))
                                 logger.debug(
@@ -487,23 +491,23 @@ class AuthManager:
 
                 # Strategy 1: Try Enter key on password field first (SPAs often handle this)
                 if filled_password:
-                    password_field = page.locator(password_selectors[0] if not self._config.password_selector else self._config.password_selector).first()
+                    password_field = page.locator(password_selectors[0] if not self._config.password_selector else self._config.password_selector).first()  # type: ignore[operator]
                     try:
                         if password_field.is_visible():
                             password_field.press("Enter")
                             page.wait_for_timeout(1000)
                             # Check if navigation occurred
-                            if page.url() != login_url:
+                            if page.url != login_url:
                                 submitted = True
                                 logger.debug("Browser auth: submitted via Enter key")
                     except Exception:
-                        pass
+                        logger.debug("Browser auth: Enter key submission failed", exc_info=True)
 
                 # Strategy 2: Click submit button
                 if not submitted:
                     for selector in submit_selectors:
                         try:
-                            btn = page.locator(selector).first()
+                            btn = page.locator(selector).first()  # type: ignore[operator]
                             if btn.is_visible():
                                 btn.click()
                                 submitted = True
@@ -958,9 +962,7 @@ class AuthManager:
 
         if is_json:
             headers["Content-Type"] = "application/json"
-            data = json.dumps(payload)
-        else:
-            data = payload
+        data: Any = json.dumps(payload) if is_json else payload
 
         try:
             method = self._config.login_method.upper()

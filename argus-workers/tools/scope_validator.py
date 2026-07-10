@@ -43,7 +43,7 @@ class ScopeValidator:
     Usage (preferred entry point)::
 
         # Combined scope + SSRF check
-        validator = ScopeValidator(engagement_id, authorized_scope)
+        validator = ScopeValidator(engagement_id or "", authorized_scope)
         validator.validate_safe_target("https://target.com")
         validator.is_safe_target("https://target.com")
 
@@ -494,7 +494,7 @@ def validate_target_scope(
             return True
 
         try:
-            validator = ScopeValidator(engagement_id, authorized_scope)
+            validator = ScopeValidator(engagement_id or "", authorized_scope)
             return validator.is_in_scope(target)
         except Exception as e:
             logger.warning(

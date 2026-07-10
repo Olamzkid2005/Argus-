@@ -43,7 +43,7 @@ class MCPToolBridge:
         """Register tools from tool_definitions.py with the MCP server."""
         from tools.tool_utils import is_tool_available
 
-        slog = ScanLogger("mcp_bridge", engagement_id=self.engagement_id)
+        slog = ScanLogger("mcp_bridge", engagement_id=self.engagement_id or "")
 
         # Build MCP ToolDefinition objects from the single source of truth
         mcp_tools = build_mcp_tool_definitions()
@@ -102,7 +102,7 @@ class MCPToolBridge:
                     e,
                 )
 
-        slog = ScanLogger("mcp_bridge", engagement_id=self.engagement_id)
+        slog = ScanLogger("mcp_bridge", engagement_id=self.engagement_id or "")
         slog.tool_start(f"mcp_call:{tool}")
         result = self.mcp.call_tool(
             tool,

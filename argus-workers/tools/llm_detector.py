@@ -114,7 +114,7 @@ If NOT vulnerable:
             max_retries: Max retry attempts for LLM calls
         """
         self.llm = llm_client
-        self.model = model or getattr(llm_client, "model", "gpt-4o-mini")
+        self.model = str(model or getattr(llm_client, "model", "gpt-4o-mini"))
         self.max_retries = max_retries
 
     async def analyze_async(
@@ -215,7 +215,7 @@ If NOT vulnerable:
                 return result
 
             slog.llm_result(
-                "response_analysis", vulnerable=False, reason="parse_failed"
+                "response_analysis — vulnerable=False, reason=parse_failed"
             )
             return None
 
@@ -350,14 +350,10 @@ If NOT vulnerable:
 
             # Fallback: try regex extraction
             try:
-                vulnerable = (
-                    "true"
-                    in re.search(
-                        r'"vulnerable"\s*:\s*(true|false)', raw_text, re.IGNORECASE
-                    )
-                    .group(1)
-                    .lower()
+                vulnerable_match = re.search(
+                    r'"vulnerable"\s*:\s*(true|false)', raw_text, re.IGNORECASE
                 )
+                vulnerable = "true" in (vulnerable_match.group(1) if vulnerable_match else "false").lower()
                 confidence_match = re.search(r'"confidence"\s*:\s*([0-9.]+)', raw_text)
                 confidence = (
                     float(confidence_match.group(1)) if confidence_match else 0.0

@@ -276,7 +276,7 @@ app.conf.update(
 
 
 # Task Base Class Configuration
-class BaseTask(app.Task):
+class BaseTask(app.Task):  # type: ignore[name-defined]
     """Base task class with common functionality"""
 
     # Only retry on transient infrastructure errors — not on validation,
@@ -465,7 +465,7 @@ class BaseTask(app.Task):
             # Check if shutdown is requested before starting
             if shutdown_handler.should_shutdown():
                 logger.warning("Task %s cancelled due to shutdown", task_id)
-                raise Exception("Worker is shutting down")
+                raise RuntimeError("Worker is shutting down")
 
             return self.run(*args, **kwargs)
         finally:

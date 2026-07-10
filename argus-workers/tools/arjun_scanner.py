@@ -108,7 +108,7 @@ class ArjunScanner(AbstractTool):
                 if os.path.exists(output_path):
                     os.remove(output_path)
             except OSError:
-                pass
+                logger.debug("Failed to remove temp file %s", output_path)
 
         result.mark_finished()
         return result

@@ -134,7 +134,10 @@ class EngagementState:
     @property
     def current_state(self) -> str:
         if self.state_machine:
-            return self.state_machine.current_state
+            state = self.state_machine
+            if state is None:
+                return self.current_phase
+            return state.current_state or self.current_phase
         return self.current_phase
 
     def can_transition_to(self, new_state: str) -> bool:
@@ -326,7 +329,7 @@ class EngagementState:
 
     def is_complete(self) -> bool:
         """Check if the engagement is in a terminal state."""
-        return self.current_state in ("complete", "failed")
+        return self.current_state in ("complete", "failed")  # type: ignore[return-value]
 
     # ── Hypothesis management ──
 

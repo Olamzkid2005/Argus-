@@ -33,7 +33,7 @@ def _build_dependency_graph(findings: list[dict]) -> dict[str, list[str]]:
         "MISCONFIGURATION": ["INFORMATION_DISCLOSURE", "UNAUTHORIZED_ACCESS"],
     }
     for _host, indices in by_host.items():
-        types_at_host = {}
+        types_at_host: dict[str, list[int]] = {}
         for idx in indices:
             ftype = findings[idx].get("type", "UNKNOWN")
             types_at_host.setdefault(ftype, []).append(idx)

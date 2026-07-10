@@ -1,3 +1,4 @@
+from typing import Any
 import json
 
 from parsers.parsers.base import BaseParser
@@ -5,7 +6,7 @@ from parsers.parsers.base import BaseParser
 
 class ArjunParser(BaseParser):
     def parse(self, raw_output: str) -> list[dict]:
-        findings = []
+        findings: list[dict[str, Any]] = []
         try:
             data = json.loads(raw_output)
         except json.JSONDecodeError:

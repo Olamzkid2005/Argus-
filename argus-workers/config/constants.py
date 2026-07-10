@@ -6,6 +6,7 @@ for discoverability, type safety, and IDE autocompletion.
 
 import logging
 import os
+from typing import Any
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -153,7 +154,7 @@ class GitSSRFConfig:
         if config_manager is None:
             from config.config_manager import get_config
 
-            cm = get_config()
+            cm: Any = get_config()
         else:
             cm = config_manager
 
@@ -212,7 +213,7 @@ class CircuitBreakerConfig:
             if config_manager is None:
                 from config.config_manager import get_config
 
-                cm = get_config()
+                cm: Any = get_config()
             else:
                 cm = config_manager
 

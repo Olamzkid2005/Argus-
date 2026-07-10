@@ -25,12 +25,12 @@ def _parse_json(output: str) -> list[NormalizedFinding]:
     except json.JSONDecodeError:
         return []
 
-    findings = []
-    entries = []
+    findings: list[NormalizedFinding] = []
+    entries: list = []
     if isinstance(data, list):
         entries = data
     elif isinstance(data, dict):
-        entries = data.get("data", data.get("entries", [data]))
+        entries = data.get("data", data.get("entries", [data])) or []
 
     if not isinstance(entries, list):
         entries = [entries]
@@ -72,7 +72,7 @@ def _parse_json(output: str) -> list[NormalizedFinding]:
 
 
 def _parse_text(output: str) -> list[NormalizedFinding]:
-    findings = []
+    findings: list[NormalizedFinding] = []
     if "sqlmap identified the following injection point" in output.lower():
         url_match = re.search(r"(https?://(?:www\.)?(?!sqlmap\.org)[^\s]+)", output)
         endpoint = url_match.group(1) if url_match else "unknown_target"

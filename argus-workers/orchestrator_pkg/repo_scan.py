@@ -90,7 +90,7 @@ def validate_repo_url(repo_url: str) -> str:
         try:
             addr_info = socket.getaddrinfo(hostname, None)
             for family, type_, proto, canonname, sockaddr in addr_info:
-                ip = sockaddr[0]
+                ip = str(sockaddr[0])
                 if is_private_ip(ip):
                     raise ValueError(
                         f"Git host '{hostname}' resolves to private IP '{ip}' (SSRF risk)"
@@ -302,7 +302,7 @@ def execute_repo_scan(
         else "",
     )
     slog.phase_header("EXECUTE REPO SCAN", repo=repo_url, aggressiveness=aggressiveness)
-    all_findings = []
+    all_findings: list[dict] = []
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
 
     # Get path to custom semgrep rules

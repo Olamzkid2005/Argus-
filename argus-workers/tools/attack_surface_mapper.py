@@ -8,7 +8,7 @@ katana, gau, waybackurls with a single orchestrated tool.
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 
 from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder
@@ -47,7 +47,7 @@ class AttackSurfaceMapper(AbstractTool):
         graph = AssetGraph()
 
         with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {
+            futures: dict[Future, str] = {
                 executor.submit(
                     subdomain_disc.discover, domain, ctx.timeout
                 ): "subdomains",
@@ -55,7 +55,7 @@ class AttackSurfaceMapper(AbstractTool):
                 executor.submit(url_disc.discover, ctx.target, ctx.timeout): "urls",
             }
 
-            for future in as_completed(futures):
+            for future in as_completed(futures):  # type: ignore[arg-type]
                 task = futures[future]
                 try:
                     data = future.result()

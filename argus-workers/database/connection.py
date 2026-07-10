@@ -169,6 +169,7 @@ class ConnectionManager:
         """
         wait_start = time.time()
         pool_instance = self._ensure_pool()
+        conn = None
         try:
             # Use a condition-variable wait with exponential backoff + jitter
             # to avoid busy-wait CPU waste under high contention.
@@ -194,80 +195,85 @@ class ConnectionManager:
                     with self._pool_cond:
                         self._pool_cond.wait(timeout=jitter)
                     continue
-            wait_time = (time.time() - wait_start) * 1000
+                wait_time = (time.time() - wait_start) * 1000
 
-            # Validate connection health with SELECT 1 ping (blocker 60)
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT 1")
-            except psycopg2.Error as health_err:
-                # Connection is stale — close it and try a fresh one
-                logger.warning(
-                    "Connection %s failed health check — getting a fresh one: %s",
-                    id(conn),
-                    health_err,
-                )
+                # Validate connection health with SELECT 1 ping (blocker 60)
                 try:
-                    pool_instance.putconn(conn)
-                except Exception:
-                    pass
-                # Blocker 47: If pool is exhausted (all connections stale after
-                # network flap), close, reinitialize and return a fresh connection
-                # directly rather than trying to continue the retry loop.
-                try:
-                    fresh_conn = pool_instance.getconn()
-                    conn = fresh_conn
-                    logger.info(
-                        "Got fresh connection %s after health check failure",
-                        id(conn),
-                    )
-                except pool.PoolError:
-                    logger.warning(
-                        "Pool exhausted after connection loss — reinitializing pool"
-                    )
-                    with self._pool_lock:
-                        if self._pool is not None:
-                            try:
-                                self._pool.closeall()
-                            except Exception:
-                                pass
-                            self._pool = None
-                    with self._metrics_lock:
-                        self._metrics["reconnect_attempts"] += 1
-                    # Reinitialize pool and get a fresh connection directly
-                    pool_instance = self._ensure_pool()
-                    if pool_instance is not None:
-                        conn = pool_instance.getconn()
-                        logger.info(
-                            "Got fresh connection from reinitialized pool"
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT 1")
+                except psycopg2.Error as health_err:
+                    # Connection is stale — close it and try a fresh one
+                    if conn is not None:
+                        logger.warning(
+                            "Connection %s failed health check — getting a fresh one: %s",
+                            id(conn),
+                            health_err,
+                        )
+                        try:
+                            pool_instance.putconn(conn)
+                        except Exception:
+                            pass
+                    # Blocker 47: If pool is exhausted (all connections stale after
+                    # network flap), close, reinitialize and return a fresh connection
+                    # directly rather than trying to continue the retry loop.
+                    try:
+                        fresh_conn = pool_instance.getconn()
+                        conn = fresh_conn
+                        if conn is not None:
+                            logger.info(
+                                "Got fresh connection %s after health check failure",
+                                id(conn),
+                            )
+                    except pool.PoolError:
+                        logger.warning(
+                            "Pool exhausted after connection loss — reinitializing pool"
+                        )
+                        with self._pool_lock:
+                            if self._pool is not None:
+                                try:
+                                    self._pool.closeall()
+                                except Exception:
+                                    pass
+                                self._pool = None
+                        with self._metrics_lock:
+                            self._metrics["reconnect_attempts"] += 1
+                        # Reinitialize pool and get a fresh connection directly
+                        pool_instance = self._ensure_pool()
+                        if pool_instance is not None:
+                            conn = pool_instance.getconn()
+                            logger.info(
+                                "Got fresh connection from reinitialized pool"
+                            )
+
+                # Enforce statement_timeout on each connection
+                # This prevents runaway queries from blocking the pool
+                if conn is not None:
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SET statement_timeout = %s", (self._statement_timeout_ms,)
+                            )
+                    except psycopg2.Error as st_err:
+                        # M-v4-02: Log warning when statement_timeout can't be set.
+                        # Without this, the connection returns to the pool without
+                        # query timeout, allowing runaway queries.
+                        logger.warning(
+                            "Failed to set statement_timeout on connection %s: %s",
+                            id(conn),
+                            st_err,
                         )
 
-            # Enforce statement_timeout on each connection
-            # This prevents runaway queries from blocking the pool
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SET statement_timeout = %s", (self._statement_timeout_ms,)
-                    )
-            except psycopg2.Error as st_err:
-                # M-v4-02: Log warning when statement_timeout can't be set.
-                # Without this, the connection returns to the pool without
-                # query timeout, allowing runaway queries.
-                logger.warning(
-                    "Failed to set statement_timeout on connection %s: %s",
-                    id(conn),
-                    st_err,
-                )
+                    with self._metrics_lock:
+                        self._metrics["active_connections"] += 1
+                        self._metrics["total_wait_time_ms"] += wait_time
 
-            with self._metrics_lock:
-                self._metrics["active_connections"] += 1
-                self._metrics["total_wait_time_ms"] += wait_time
+                    # Log slow connection acquisition
+                    if wait_time > self._slow_query_threshold_ms:
+                        logger.warning("Slow connection acquisition: %.1fms", wait_time)
 
-            # Log slow connection acquisition
-            if wait_time > self._slow_query_threshold_ms:
-                logger.warning("Slow connection acquisition: %.1fms", wait_time)
-
-            return conn
+                    return conn
+                else:
+                    raise DatabaseConnectionError("Failed to acquire database connection")
         except psycopg2.Error as e:
             raise DatabaseConnectionError(f"Connection error: {e}") from e
 

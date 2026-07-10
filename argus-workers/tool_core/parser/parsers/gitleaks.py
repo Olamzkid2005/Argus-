@@ -6,7 +6,7 @@ from ..types import NormalizedFinding
 
 
 def parse(output: str) -> list[NormalizedFinding]:
-    findings = []
+    findings: list[NormalizedFinding] = []
     try:
         data = json.loads(output)
     except json.JSONDecodeError:

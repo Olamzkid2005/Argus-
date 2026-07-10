@@ -86,17 +86,20 @@ class WebSocketEventPublisher:
                         socket_timeout=5,
                     )
         try:
-            self._redis.ping()
+            if self._redis is not None:
+                self._redis.ping()
         except Exception:
             with self._flush_lock:
                 try:
-                    self._redis.ping()
+                    if self._redis is not None:
+                        self._redis.ping()
                 except Exception:
                     self._redis = redis.from_url(
                         self.redis_url,
                         socket_connect_timeout=5,
                         socket_timeout=5,
                     )
+        assert self._redis is not None
         return self._redis
 
     def close(self):
@@ -223,9 +226,10 @@ class WebSocketEventPublisher:
 
     def _add_to_batch(self, event: dict[str, Any]) -> None:
         engagement_id = event.get("engagement_id")
-        if engagement_id not in self._batch_buffer:
-            self._batch_buffer[engagement_id] = []
-        self._batch_buffer[engagement_id].append(event)
+        safe_id: str = engagement_id or ""
+        if safe_id not in self._batch_buffer:
+            self._batch_buffer[safe_id] = []
+        self._batch_buffer[safe_id].append(event)
         self._schedule_auto_flush()
 
     def _schedule_auto_flush(self) -> None:

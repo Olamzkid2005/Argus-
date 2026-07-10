@@ -23,6 +23,7 @@ Semgrep output format:
     }
 """
 
+from typing import Any
 import json
 import logging
 
@@ -42,7 +43,7 @@ class SemgrepParser(BaseParser):
     """Parser for semgrep JSON output."""
 
     def parse(self, raw_output: str) -> list[dict]:
-        findings = []
+        findings: list[dict[str, Any]] = []
         try:
             data = json.loads(raw_output)
         except json.JSONDecodeError:

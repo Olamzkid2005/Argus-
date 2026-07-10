@@ -131,7 +131,7 @@ class PortScanner(AbstractTool):
         live_ports: list[dict] = []
 
         # ── Phase 1: naabu SYN scan via ToolRunner ────────────────────
-        slog.tool_start("naabu", f"target={target}, ports={ports}")
+        slog.tool_start("naabu", [f"target={target}, ports={ports}"])
         try:
             naabu_result = self._tool_runner.run(
                 "naabu",
@@ -165,7 +165,7 @@ class PortScanner(AbstractTool):
             result.mark_finished()
             return result
 
-        slog.tool_start("nmap", f"target={target}, ports={port_list}")
+        slog.tool_start("nmap", [f"target={target}, ports={port_list}"])
         nmap_ports: dict[int, dict] = {}
         try:
             nmap_result = self._tool_runner.run(

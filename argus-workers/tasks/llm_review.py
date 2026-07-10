@@ -12,6 +12,7 @@ import contextlib
 import logging
 import os
 import socket
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -182,7 +183,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
         return {"status": "skipped", "reason": "LLM detector unavailable"}
 
     # Get finding repository
-    repo = _get_finding_repo(db_conn_string)
+    repo = _get_finding_repo(db_conn_string or "")
     if not repo:
         slog.warning("Finding repository not available, skipping LLM review")
         return {"status": "skipped", "reason": "Finding repository unavailable"}
@@ -277,7 +278,7 @@ def run_llm_review(self, engagement_id: str, budget: dict = None, trace_id: str 
                 import threading
 
                 done = threading.Event()
-                result_container = {}
+                result_container: dict[str, Any] = {}
 
                 def _run_in_new_loop(
                     finding=finding,
@@ -451,7 +452,7 @@ def _is_replay_private_host(hostname: str) -> bool:
         addrs = socket.getaddrinfo(hostname, None)
         if not addrs:
             return True
-        return any(is_private_ip(addr[4][0]) for addr in addrs)
+        return any(is_private_ip(str(addr[4][0])) for addr in addrs)
     except socket.gaierror:
         logger.debug("Could not resolve hostname '%s' — assuming private", hostname)
         return True

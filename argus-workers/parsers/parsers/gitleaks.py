@@ -1,5 +1,6 @@
 """Parser for gitleaks JSON output (gitleaks detect --json)."""
 
+from typing import Any
 import hashlib
 import json
 import logging
@@ -13,7 +14,7 @@ class GitleaksParser(BaseParser):
     """Parser for gitleaks secret scan output."""
 
     def parse(self, raw_output: str) -> list[dict]:
-        findings = []
+        findings: list[dict[str, Any]] = []
         try:
             data = json.loads(raw_output)
         except json.JSONDecodeError:

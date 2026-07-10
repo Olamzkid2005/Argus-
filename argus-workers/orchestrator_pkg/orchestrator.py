@@ -228,8 +228,7 @@ class Orchestrator:
         with self.span_recorder.span(ExecutionSpan.SPAN_ORCHESTRATOR_STEP):
             self.logger.log(
                 "orchestrator_step",
-                "Routing job: %s",
-                job_type,
+                f"Routing job: {job_type}",
                 {"job_type": job_type, "engagement_id": self.engagement_id},
             )
             if job_type == "recon":
@@ -344,11 +343,17 @@ class Orchestrator:
 
     @staticmethod
     def _classify_finding_type(finding_type: str) -> dict[str, str | None]:
+        from typing import cast
         from parsers.normalizer import FindingNormalizer
 
-        return FindingNormalizer.TYPE_CLASSIFICATION_MAP.get(
-            finding_type, {"owasp_category": "N/A", "cwe_id": "N/A"}
+        from typing import cast as _cast
+        result = _cast(
+            "dict[str, str | None]",
+            FindingNormalizer.TYPE_CLASSIFICATION_MAP.get(
+                finding_type, {"owasp_category": "N/A", "cwe_id": "N/A"}
+            ),
         )
+        return result
 
     def _save_findings(self, findings: list[dict]) -> int:
         """Save findings to the database.
@@ -446,7 +451,7 @@ class Orchestrator:
                                 name, args, kwargs = result
                         return _orig(name, **kwargs)
 
-                    agent.registry.call = _scoped_dispatch
+                    setattr(agent.registry, 'call', _scoped_dispatch)
                 else:
                     # Legacy scope validation wrapper (backward compatible)
                     if authorized_scope:
@@ -491,7 +496,7 @@ class Orchestrator:
                                         )
                             return _original_call(name, **kwargs)
 
-                        agent.registry.call = scoped_call
+                        setattr(agent.registry, 'call', scoped_call)
 
                 emit_thinking(
                     self.engagement_id,
@@ -601,7 +606,7 @@ class Orchestrator:
                 agent_mode,
                 scan_mode,
             )
-            tech_stack = recon_context.tech_stack if recon_context else None
+            tech_stack: list[str] | None = getattr(recon_context, "tech_stack", None) if recon_context else None
             findings = execute_scan_pipeline(
                 self,
                 targets,
@@ -727,7 +732,7 @@ class Orchestrator:
             logger.info(
                 "Agent scan complete — safety net skipping agent tools: %s", agent_tried
             )
-            tech_stack = recon_context.tech_stack if recon_context else None
+            tech_stack: list[str] | None = getattr(recon_context, "tech_stack", None) if recon_context else None
             deterministic_findings = execute_scan_pipeline(
                 self,
                 targets,
@@ -766,13 +771,13 @@ class Orchestrator:
                 if hasattr(self, "_execution_engine")
                 else None,
             )
-            tech_stack = recon_context.tech_stack if recon_context else None
+            tech_stack_dr: list[str] | None = getattr(recon_context, "tech_stack", None) if recon_context else None
             result = dr.run(
                 targets=targets,
                 budget=budget,
                 aggressiveness=aggressiveness,
                 auth_config=auth_config,
-                tech_stack=tech_stack,
+                tech_stack=tech_stack_dr,
                 skip_tools=None,
                 recon_context=recon_context,
             )
@@ -790,7 +795,7 @@ class Orchestrator:
         recon_context,
         findings: list[dict],
     ) -> list[dict]:
-        tech_stack = recon_context.tech_stack if recon_context else []
+        tech_stack: list[str] = getattr(recon_context, "tech_stack", []) if recon_context else []
         # Use the shared SPA detection from browser_scanner module
         try:
             from tools.browser_scanner import is_spa_target
@@ -870,9 +875,12 @@ class Orchestrator:
         hypotheses: list[dict] = []
         if _hyp_ff_enabled("HYPOTHESIS_ENGINE", default=False):
             try:
-                top_findings = self.finding_repo.get_top_findings_for_hypothesis(
-                    self.engagement_id, limit=HYPOTHESIS_MAX_INPUT_FINDINGS,
-                )
+                if self.finding_repo is not None:
+                    top_findings = self.finding_repo.get_top_findings_for_hypothesis(
+                        self.engagement_id, limit=HYPOTHESIS_MAX_INPUT_FINDINGS,
+                    )
+                else:
+                    top_findings = None
                 if top_findings:
                     from tools.hypothesis_engine import HypothesisEngine
 
@@ -1277,18 +1285,7 @@ class Orchestrator:
         # Save any new findings from post-exploitation
         new_findings = result.get("new_findings", [])
         if new_findings:
-            from orchestrator_pkg.persistence import FindingPersistenceService
-
-            fps = FindingPersistenceService(
-                engagement_id=self.engagement_id,
-                finding_repo=self.finding_repo,
-                bug_bounty_mode=self.bug_bounty_mode,
-                classify_finding_type_fn=self._classify_finding_type,
-                get_org_id_fn=self._get_org_id,
-            )
-            for finding in new_findings:
-                finding["engagement_id"] = self.engagement_id
-                fps.save_finding(finding)
+            self._save_findings(new_findings)
 
         slog.tool_complete(
             "orchestrator.run_post_exploitation",
@@ -1329,7 +1326,9 @@ class Orchestrator:
             "orchestrator.run_repo_scan", [f"repo={job.get('repo_url', '')}"]
         )
         self._check_timeout()
-        repo_url = job.get("repo_url")
+        repo_url: str | None = job.get("repo_url")
+        if not repo_url:
+            raise ValueError("repo_url is required for repo scan")
         self._validate_repo_url(repo_url)
         self.ws_publisher.publish_job_started(
             engagement_id=self.engagement_id, job_type="repo_scan", target=repo_url

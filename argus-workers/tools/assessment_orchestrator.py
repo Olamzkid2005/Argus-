@@ -97,7 +97,7 @@ class AssessmentOrchestrator(AbstractTool):
                     from tools.scope_validator import ScopeValidator
 
                     _scope_validator = ScopeValidator(
-                        ctx.engagement_id, ctx.authorized_scope
+                        ctx.engagement_id or "", ctx.authorized_scope or {}  # type: ignore[arg-type]
                     )
                 except Exception as _scope_err:
                     logger.warning(

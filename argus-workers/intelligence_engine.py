@@ -230,7 +230,7 @@ class IntelligenceEngine:
         finding_groups = self._group_findings_for_agreement(findings)
         slog.info("Grouped into %d vulnerability families", len(finding_groups))
 
-        scored_findings = []
+        scored_findings: list[dict] = []
 
         for group in finding_groups.values():
             # Calculate tool agreement once per group
@@ -388,7 +388,7 @@ class IntelligenceEngine:
         Returns:
             Evidence strength score (0.6-1.0)
         """
-        evidence_strength = finding.get("evidence_strength")
+        evidence_strength: Any = finding.get("evidence_strength")
         if evidence_strength is None or evidence_strength == "":
             evidence_strength = "MINIMAL"
         evidence_strength = str(evidence_strength).upper()
@@ -426,7 +426,7 @@ class IntelligenceEngine:
             "INFO": ["INFO", "INFORMATION_DISCLOSURE", "DIRECTORY_LISTING"],
         }
 
-        groups = {}
+        groups: dict[str, list[dict]] = {}
         for finding in findings:
             endpoint = finding.get("endpoint") or ""
             finding_type = (finding.get("type") or "").upper()
@@ -503,7 +503,7 @@ class IntelligenceEngine:
 
         for finding_dict in enriched_findings:
             try:
-                severity_str = finding_dict.get("severity", "MEDIUM")
+                severity_str: str | None = finding_dict.get("severity", "MEDIUM")
                 if isinstance(severity_str, str):
                     try:
                         severity = Severity[severity_str.upper()]
@@ -529,6 +529,14 @@ class IntelligenceEngine:
                     evidence=evidence,
                     source_tool=finding_dict.get("source_tool", "unknown"),
                     cvss_score=finding_dict.get("cvss_score"),
+                    repro_steps=None,
+                    owasp_category=None,
+                    cwe_id=None,
+                    evidence_strength=None,
+                    tool_agreement_level=None,
+                    fp_likelihood=None,
+                    discovered_at=None,
+                    engagement_id=engagement_id,
                 )
                 graph.add_finding(finding)
             except Exception as e:
@@ -692,7 +700,7 @@ class IntelligenceEngine:
                 domains.add(domain)
 
         # Suggest common subdomains
-        suggestions = []
+        suggestions: list[str] = []
         for domain in domains:
             suggestions.extend(
                 [
@@ -732,12 +740,12 @@ class IntelligenceEngine:
         Returns:
             List of priority endpoints
         """
-        priority_endpoints = []
+        priority_endpoints: list[str] = []
 
         for finding in findings:
             severity = finding.get("severity", "INFO")
             if severity in ["CRITICAL", "HIGH"]:
-                endpoint = finding.get("endpoint")
+                endpoint: str | None = finding.get("endpoint")
                 if endpoint and endpoint not in priority_endpoints:
                     priority_endpoints.append(endpoint)
 
@@ -794,14 +802,16 @@ class IntelligenceEngine:
             "jwt",
         ]
 
-        auth_endpoints = []
+        auth_endpoints: list[str] = []
 
         for finding in findings:
             endpoint = finding.get("endpoint", "").lower()
 
             for keyword in auth_keywords:
                 if keyword in endpoint and endpoint not in auth_endpoints:
-                    auth_endpoints.append(finding.get("endpoint"))
+                    ep: str = finding.get("endpoint", "") or ""
+                    if ep:
+                        auth_endpoints.append(ep)
                     break
 
         return auth_endpoints[:10]  # Limit to top 10
@@ -822,7 +832,7 @@ class IntelligenceEngine:
         reasoning_parts.append(f"Analyzed {len(findings)} findings.")
 
         # Count by severity
-        severity_counts = defaultdict(int)
+        severity_counts: dict[str, int] = defaultdict(int)
         for finding in findings:
             severity_counts[finding.get("severity", "INFO")] += 1
 
@@ -861,7 +871,7 @@ class IntelligenceEngine:
 
         def _enrich_one(finding: dict) -> dict:
             enriched_finding = finding.copy()
-            threat_intel = {}
+            threat_intel: dict[str, Any] = {}
 
             # Extract potential CVE IDs from evidence or type
             cve_ids = self._extract_cve_ids(finding)
@@ -880,7 +890,7 @@ class IntelligenceEngine:
 
         with ThreadPoolExecutor(max_workers=min(len(findings) or 1, 10)) as pool:
             futures = [pool.submit(_enrich_one, f) for f in findings]
-            enriched = [future.result() for future in futures]
+            enriched: list[dict] = [future.result() for future in futures]
 
         return enriched
 
@@ -932,7 +942,7 @@ class IntelligenceEngine:
 
         async def _enrich_one(finding: dict) -> dict:
             enriched_finding = finding.copy()
-            threat_intel = {}
+            threat_intel: dict[str, Any] = {}
 
             cve_ids = self._extract_cve_ids(finding)
             if cve_ids:
@@ -962,7 +972,7 @@ class IntelligenceEngine:
         Returns:
             Dictionary mapping CVE ID to details
         """
-        results = {}
+        results: dict[str, dict] = {}
         if not cve_ids:
             return results
 
@@ -1039,7 +1049,7 @@ class IntelligenceEngine:
         Returns:
             Dictionary mapping CVE ID to EPSS score (0.0-1.0)
         """
-        scores = {}
+        scores: dict[str, float] = {}
         if not cve_ids:
             return scores
 
@@ -1115,7 +1125,7 @@ class IntelligenceEngine:
         if len(self._in_memory_cache) > self._CACHE_MAX_SIZE:
             # First pass: remove expired entries
             now = _time.time()
-            expired_keys = [k for k, (expiry, _) in self._in_memory_cache.items() if now >= expiry]
+            expired_keys: list[str] = [k for k, (expiry, _) in self._in_memory_cache.items() if now >= expiry]
             for k in expired_keys:
                 del self._in_memory_cache[k]
             # Second pass: if still over limit, remove oldest entries
@@ -1136,7 +1146,7 @@ class IntelligenceEngine:
         Returns:
             Dictionary mapping CVE ID to details
         """
-        results = {}
+        results: dict[str, dict] = {}
         if not cve_ids:
             return results
 
@@ -1232,7 +1242,7 @@ class IntelligenceEngine:
         Returns:
             Dictionary mapping CVE ID to EPSS score (0.0-1.0)
         """
-        scores = {}
+        scores: dict[str, float] = {}
 
         if not cve_ids:
             return scores
@@ -1548,7 +1558,7 @@ class IntelligenceEngine:
 
         # Adjust for EPSS scores — only amplify when paired with relevant severity.
         # A MEDIUM+ finding with EPSS > 0.5 counts as a bonus high.
-        high_epss_count = 0
+        high_epss_count: float = 0
         for f in findings:
             intel = f.get("threat_intel", {})
             epss = intel.get("epss_scores", {})
@@ -1561,7 +1571,7 @@ class IntelligenceEngine:
 
         effective_high = high_count + high_epss_count
 
-        if critical_count >= 3 or critical_count >= 1 and effective_high >= 2:
+        if critical_count >= 3 or (critical_count >= 1 and effective_high >= 2):
             return "critical"
         elif critical_count >= 1:
             return "high"

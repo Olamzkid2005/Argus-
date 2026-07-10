@@ -63,7 +63,7 @@ def check_bola(
     password_selector: str = "input[name=password]",
     submit_selector: str = "button[type=submit]",
 ) -> list[dict]:
-    findings = []
+    findings: list[dict] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
         context = browser.new_context()
@@ -81,11 +81,11 @@ def check_bola(
 
         resource_url = f"{target}{resource_pattern.format(username=victim['username'])}"
         response = page.goto(resource_url, timeout=30000, wait_until="networkidle")
-        if response.status == 200:
+        if response and response.status == 200:
             try:
                 body = response.json()
             except Exception:
-                body = response.text()
+                body = response.text() if response else ""
             findings.append(
                 {
                     "title": "BOLA: Unauthorized Access to Victim Resource",
@@ -147,8 +147,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.creds_file:
-        with open(args.creds_file) as f:
-            creds = json.load(f)
+        with open(args.creds_file) as fp:
+            creds = json.load(fp)
     elif (
         args.attacker_username
         and args.attacker_password

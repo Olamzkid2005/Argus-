@@ -83,7 +83,7 @@ class DistributedSemaphore:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             try:
-                acquired = r.eval(_lua_acquire, 1, self._redis_key, self._max_count, _SEM_TTL)
+                acquired = r.eval(_lua_acquire, 1, self._redis_key, self._max_count, _SEM_TTL)  # type: ignore[union-attr]
                 if acquired == 1:
                     return True
             except Exception:

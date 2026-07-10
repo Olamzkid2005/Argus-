@@ -74,19 +74,22 @@ class LLMClient:
                         cross-tenant billing leakage.
         """
         self.provider = provider or os.getenv("LLM_PROVIDER", "openai")
-        self.model = model or os.getenv("LLM_MODEL", "gpt-4o-mini")
+        # Declare typed fields before conditional assignment blocks
+        self.api_url: str = api_url or ""
+        self.model: str = (model or os.getenv("LLM_MODEL")) or "gpt-4o-mini"
         self.max_retries = max_retries
         self._user_email = user_email
 
         # Resolve API key: explicit > env var > DB (user_settings) > Redis (UI Settings)
         # DB and Redis lookups are scoped to user_email when available (M-v5-01).
-        self.api_key = (
+        resolved_key: str | None = (
             api_key
             or os.getenv("OPENAI_API_KEY")
             or os.getenv("LLM_API_KEY")
             or self._load_key_from_db()
             or self._load_key_from_redis(redis_url)
         )
+        self.api_key: str | None = resolved_key
         # Auto-detect provider from API key prefix
         # Blocker 55: Validate API key prefix against known providers.
         # When the prefix doesn't match any known pattern, log a warning so
@@ -100,24 +103,24 @@ class LLMClient:
             elif self.api_key.startswith("sk-proj-"):
                 # OpenAI project API key (new format)
                 self.provider = "openai"
-                self.api_url = api_url or os.getenv(
+                self.api_url = (api_url or os.getenv(
                     "LLM_API_URL",
                     "https://api.openai.com/v1/chat/completions",
-                )
+                )) or ""
             elif self.api_key.startswith("sk-"):
                 # OpenAI legacy key (sk-...) or compatible
                 self.provider = "openai"
-                self.api_url = api_url or os.getenv(
+                self.api_url = (api_url or os.getenv(
                     "LLM_API_URL",
                     "https://api.openai.com/v1/chat/completions",
-                )
+                )) or ""
             elif self.api_key.startswith("AIzaSy") or self.api_key.startswith("AQ."):
                 # Google Gemini / AI Studio (AIzaSy=old format, AQ.=new format)
                 self.provider = "generic"
-                self.api_url = api_url or os.getenv(
+                self.api_url = (api_url or os.getenv(
                     "LLM_API_URL",
                     "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-                )
+                )) or ""
                 # Default model for Gemini if not explicitly set
                 if not model and not os.getenv("LLM_MODEL"):
                     self.model = "gemini-2.0-flash"
@@ -145,18 +148,18 @@ class LLMClient:
                     )
                 else:
                     # User has explicitly set LLM_PROVIDER — respect that
-                    self.api_url = api_url or os.getenv(
+                    self.api_url = (api_url or os.getenv(
                         "LLM_API_URL",
                         "https://api.anthropic.com/v1/messages",
-                    )
+                    )) or ""
             else:
                 _known_prefix = False
-                self.api_url = api_url or os.getenv(
+                self.api_url = (api_url or os.getenv(
                     "LLM_API_URL",
                     "https://api.openai.com/v1/chat/completions"
                     if self.provider == "openai"
                     else "",
-                )
+                )) or ""
 
             if not _known_prefix:
                 logger.warning(
@@ -168,18 +171,19 @@ class LLMClient:
                     self.provider,
                 )
         else:
-            self.api_url = api_url or os.getenv(
+            self.api_url = (api_url or os.getenv(
                 "LLM_API_URL",
                 "https://api.openai.com/v1/chat/completions"
                 if self.provider == "openai"
                 else "",
-            )
+            )) or ""
 
         # OpenAI SDK client (lazy init)
         self._openai_client = None
-
-        # Gap 9.5: Track whether an Anthropic key was detected without proper config.
+        self._async_openai_client = None
         self._has_anthropic_key_without_config = False
+
+
 
         # Rate limiting: max 60 requests per minute per provider
         # Uses Redis sorted-set sliding window for cross-worker coordination.
@@ -586,6 +590,10 @@ class LLMClient:
                     if response_format:
                         kwargs["response_format"] = response_format
 
+                    if self._async_openai_client is None:
+                        raise LLMUnavailableError(
+                            "Async OpenAI client not initialized — fall back to HTTP API"
+                        )
                     response = await asyncio.wait_for(
                         self._async_openai_client.chat.completions.create(**kwargs),
                         timeout=req_timeout,
@@ -691,6 +699,10 @@ class LLMClient:
                     if response_format:
                         kwargs["response_format"] = response_format
 
+                    if self._openai_client is None:
+                        raise LLMUnavailableError(
+                            "OpenAI client not initialized — fall back to HTTP API"
+                        )
                     response = self._openai_client.chat.completions.create(**kwargs)
                     self._circuit_failures = 0
                     result = self._build_llm_response_from_sdk(response, start)

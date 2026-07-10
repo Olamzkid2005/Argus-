@@ -70,7 +70,7 @@ class SettingsRepository:
                     (key, user_email),
                 )
                 row = cursor.fetchone()
-                value = row[0] if row else None
+                value: str | None = row[0] if row else None
                 return _decrypt(value) if value else None
         except Exception as e:
             logger.error("Failed to get user setting: %s", e)
@@ -176,6 +176,6 @@ def get_user_api_keys(user_email: str) -> dict[str, str]:
     settings = repo.get_user_settings(user_email)
 
     return {
-        "openai_api_key": settings.get("openai_api_key"),
-        "opencode_api_key": settings.get("opencode_api_key"),
+        "openai_api_key": settings.get("openai_api_key") or "",
+        "opencode_api_key": settings.get("opencode_api_key") or "",
     }

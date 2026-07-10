@@ -147,7 +147,7 @@ class MCPTransport:
 
         try:
             parsed = json.loads(line.strip())
-            self._last_activity = __import__("time").time()
+            self._last_activity = _time.time()
             return parsed
         except json.JSONDecodeError as e:
             logger.error("Invalid JSON-RPC request: %s", e)

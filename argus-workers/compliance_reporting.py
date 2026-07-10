@@ -12,6 +12,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -263,7 +264,7 @@ class ComplianceReportGenerator:
         )
 
         compliance_findings = []
-        category_counts = {}
+        category_counts: dict[str, int] = {}
 
         for finding in findings:
             owasp_ref = self.mapper.map_to_owasp(finding.get("type", "UNKNOWN"))
@@ -345,7 +346,7 @@ class ComplianceReportGenerator:
         }
 
         compliance_findings = []
-        requirement_status = {
+        requirement_status: dict[str, dict[str, Any]] = {
             req: {"status": "compliant", "findings": [], "name": name}
             for req, name in pci_requirements.items()
         }
@@ -429,7 +430,7 @@ class ComplianceReportGenerator:
         }
 
         compliance_findings = []
-        criteria_status = {
+        criteria_status: dict[str, dict[str, Any]] = {
             c: {"status": "pass", "findings": [], "name": name}
             for c, name in soc2_criteria.items()
         }
@@ -512,7 +513,7 @@ class ComplianceReportGenerator:
         }
 
         compliance_findings = []
-        function_findings = {func: [] for func in nist_functions}
+        function_findings: dict[str, list[str]] = {func: [] for func in nist_functions}
 
         for finding in findings:
             nist_ref = self.mapper.map_to_nist_csf(finding.get("type", "UNKNOWN"))
@@ -539,7 +540,7 @@ class ComplianceReportGenerator:
                     break
 
         # Build summary with function-level stats
-        functions_summary = {}
+        functions_summary: dict[str, Any] = {}
         for func_key, func_name in nist_functions.items():
             finding_ids = function_findings[func_key]
             functions_summary[func_key] = {
@@ -594,7 +595,7 @@ class ComplianceReportGenerator:
         )
 
         # HIPAA Security Rule sections and criteria
-        hipaa_sections = {
+        hipaa_sections: dict[str, dict[str, Any]] = {
             "Administrative Safeguards": {
                 "css_class": "admin",
                 "criteria": {
@@ -630,10 +631,10 @@ class ComplianceReportGenerator:
         }
 
         compliance_findings = []
-        section_status = {}
+        section_status: dict[str, dict[str, Any]] = {}
 
         for section_name, section_config in hipaa_sections.items():
-            section_criteria = {}
+            section_criteria: dict[str, dict[str, Any]] = {}
             for criteria_id, criteria_name in section_config["criteria"].items():
                 section_criteria[criteria_id] = {
                     "name": criteria_name,
@@ -666,7 +667,8 @@ class ComplianceReportGenerator:
             )
 
             # Map ref to section and mark as failing
-            for section_name, section_data in section_status.items():
+            for section_name in list(section_status):
+                section_data = section_status[section_name]
                 if ref_key in section_data["criteria"]:
                     ctrl = section_data["criteria"][ref_key]
                     if ctrl["status"] == "pass":
@@ -726,7 +728,7 @@ class ComplianceReportGenerator:
         )
 
         # ISO 27001:2022 Annex A control themes
-        iso_themes = {
+        iso_themes: dict[str, dict[str, Any]] = {
             "A.5 Organizational": {
                 "css_class": "organizational",
                 "controls": {
@@ -770,10 +772,10 @@ class ComplianceReportGenerator:
         }
 
         compliance_findings = []
-        theme_status = {}
+        theme_status: dict[str, dict[str, Any]] = {}
 
         for theme_name, theme_config in iso_themes.items():
-            theme_controls = {}
+            theme_controls: dict[str, dict[str, Any]] = {}
             for control_id, control_name in theme_config["controls"].items():
                 theme_controls[control_id] = {
                     "name": control_name,
@@ -806,7 +808,8 @@ class ComplianceReportGenerator:
             )
 
             # Map ref to theme and mark as failing
-            for theme_name, theme_data in theme_status.items():
+            for theme_name in list(theme_status):
+                theme_data = theme_status[theme_name]
                 if ref_key in theme_data["controls"]:
                     ctrl = theme_data["controls"][ref_key]
                     if ctrl["status"] == "pass":

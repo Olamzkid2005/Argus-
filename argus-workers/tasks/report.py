@@ -337,7 +337,7 @@ def _generate_report_data(
     params = [org_id]
 
     if engagement_ids:
-        params.append(engagement_ids)
+        params.extend(engagement_ids)
 
     # Build dynamic WHERE clause safely using psycopg2.sql
     if engagement_ids:
@@ -659,7 +659,7 @@ def generate_full_report(
             low_count = sum(1 for f in findings if f["severity"] == "LOW")
 
             # 4. Get top categories (group by type)
-            type_counts = {}
+            type_counts: dict[str, int] = {}
             for f in findings:
                 ftype = f["type"]
                 type_counts[ftype] = type_counts.get(ftype, 0) + 1
@@ -740,12 +740,12 @@ def generate_full_report(
                     ),
                 )
                 row = cursor.fetchone()
-                report_id = row["id"] if row else None
+                report_id = str(row["id"]) if row else ""
 
             conn.commit()
 
             return {
-                "report_id": str(report_id) if report_id else None,
+                "report_id": report_id or None,
                 "engagement_id": engagement_id,
                 "findings_count": len(findings),
                 "status": "ready",

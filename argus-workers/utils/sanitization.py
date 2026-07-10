@@ -54,7 +54,7 @@ def sanitize_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
     if not evidence:
         return {}
 
-    sanitized = {}
+    sanitized: dict[str, Any] = {}
 
     for key, value in evidence.items():
         if isinstance(value, str):

@@ -233,6 +233,7 @@ class EngagementStateMachine:
         # The real validation happens again under FOR UPDATE in
         # _persist_state_and_budget, so there's no TOCTOU issue.
         self._resolve_state_if_needed()
+        assert self.current_state is not None, "current_state must be resolved before transition"
 
         # Check if transition is valid (quick pre-check — final check under lock)
         if not self.can_transition_to(new_state):
@@ -242,6 +243,7 @@ class EngagementStateMachine:
             )
 
         old_state = self.current_state
+        assert old_state is not None, "current_state must be resolved before transition"
 
         # Persist state transition atomically with FOR UPDATE locking
         self._persist_state_and_budget(
@@ -432,6 +434,8 @@ class EngagementStateMachine:
         Returns:
             List of valid target states
         """
+        if self.current_state is None:
+            return []
         return self.TRANSITIONS.get(self.current_state, [])
 
     def safe_transition(self, new_state: str, reason: str | None = None) -> bool:
@@ -444,6 +448,12 @@ class EngagementStateMachine:
             logger.warning(
                 "safe_transition: '%s' is not a valid state for engagement %s — skipping",
                 new_state,
+                self.engagement_id,
+            )
+            return False
+        if self.current_state is None:
+            logger.warning(
+                "safe_transition: current state is None for engagement %s — skipping",
                 self.engagement_id,
             )
             return False
@@ -479,11 +489,12 @@ class EngagementStateMachine:
             InvalidStateTransitionError: If any transition in the chain is invalid
         """
         if not states:
-            return self.current_state
+            return self.current_state or "created"
 
         # Resolve lazy state so terminal-state check is accurate.
         # The FOR UPDATE lock in the DB ensures freshness.
         self._resolve_state_if_needed()
+        assert self.current_state is not None, "current_state must be resolved"
 
         if self.current_state in ("complete", "failed"):
             logger.warning(
@@ -588,6 +599,7 @@ class EngagementStateMachine:
             # All events go through SSE via StreamManager.
 
             self.current_state = final_state
+            assert final_state is not None
             return final_state
         except psycopg2.Error as e:
             if conn:
@@ -615,4 +627,6 @@ class EngagementStateMachine:
         Returns:
             True if transition is valid, False otherwise
         """
+        if self.current_state is None:
+            return False
         return new_state in self.TRANSITIONS.get(self.current_state, [])

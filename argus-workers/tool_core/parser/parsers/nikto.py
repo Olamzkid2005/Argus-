@@ -21,7 +21,7 @@ def _infer_severity(msg: str) -> int:
 
 
 def _parse_json(output: str) -> list[NormalizedFinding]:
-    findings = []
+    findings: list[NormalizedFinding] = []
     try:
         items = json.loads(output)
     except json.JSONDecodeError:
@@ -60,7 +60,7 @@ def _parse_json(output: str) -> list[NormalizedFinding]:
 
 
 def _parse_csv(output: str) -> list[NormalizedFinding]:
-    findings = []
+    findings: list[NormalizedFinding] = []
     reader = csv.reader(io.StringIO(output))
     for row in reader:
         if not row or len(row) < 5:
@@ -98,7 +98,7 @@ def _parse_csv(output: str) -> list[NormalizedFinding]:
 
 
 def _parse_text(output: str) -> list[NormalizedFinding]:
-    findings = []
+    findings: list[NormalizedFinding] = []
     pattern = re.compile(r"^[-+]\s+(.*)", re.MULTILINE)
     for match in pattern.finditer(output):
         content = match.group(1).strip()

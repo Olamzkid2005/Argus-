@@ -41,7 +41,7 @@ def execute_recon_pipeline(
     from orchestrator_pkg.recon import execute_recon_tools
 
     return execute_recon_tools(
-        ctx, target, budget, aggressiveness, cache_mode=cache_mode
+        ctx, target, budget, aggressiveness, cache_mode=cache_mode  # type: ignore[arg-type]
     )
 
 
@@ -86,7 +86,7 @@ def execute_scan_pipeline(
         ctx,
         targets,
         budget,
-        aggressiveness,
+        aggressiveness,  # type: ignore[arg-type]
         auth_config,
         dual_auth_config,
         tech_stack,

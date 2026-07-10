@@ -126,6 +126,7 @@ def run_login(
         )
 
     # Discover login endpoint (or use provided login_url override)
+    endpoints: dict[str, Any]
     if login_url:
         endpoints = {
             "login_url": login_url,
@@ -140,24 +141,10 @@ def run_login(
     login_url = endpoints.get("login_url")
 
     if not login_url:
-        return (
-            UnifiedToolResult(
-                tool_name="login",
-                status=ToolStatus.NONZERO_EXIT,
-                stdout=json.dumps(
-                    {
-                        "status": "failed",
-                        "error_code": "FORM_NOT_FOUND",
-                        "message": ERROR_CODES["FORM_NOT_FOUND"],
-                    }
-                ),
-                stderr=ERROR_CODES["FORM_NOT_FOUND"],
-            ),
-            ctx,
-        )
+        return _fail_result("FORM_NOT_FOUND", ERROR_CODES["FORM_NOT_FOUND"], ctx)
 
-    fields = endpoints.get("login_fields", {})
-    login_mode = endpoints.get("login_mode", "form")
+    fields: dict[str, Any] = endpoints.get("login_fields", {}) or {}
+    login_mode: str = endpoints.get("login_mode", "form") or "form"
 
     last_error: str | None = None
     result_data: dict[str, Any] = {
@@ -230,7 +217,8 @@ def run_login(
                         last_error = ERROR_CODES["INVALID_CREDENTIALS"]
                         _rate_limit_backoff(attempt)
                         continue
-                    return _fail_result("INVALID_CREDENTIALS", last_error, ctx)
+                    err_msg = last_error or ERROR_CODES["INVALID_CREDENTIALS"]
+                    return _fail_result("INVALID_CREDENTIALS", err_msg, ctx)
 
                 # Check for 2FA requirement
                 if _detect_2fa(body_text):
@@ -283,7 +271,8 @@ def run_login(
                     last_error = ERROR_CODES["INVALID_CREDENTIALS"]
                     _rate_limit_backoff(attempt)
                     continue
-                return _fail_result("INVALID_CREDENTIALS", last_error, ctx)
+                err_msg = last_error or ERROR_CODES["INVALID_CREDENTIALS"]
+                return _fail_result("INVALID_CREDENTIALS", err_msg, ctx)
 
             if "rate" in body_text and "limit" in body_text:
                 last_error = ERROR_CODES["RATE_LIMITED"]
@@ -340,7 +329,7 @@ def _build_login_payload(
         # HTML form with known field names — always use form-encoded.
         # JSON body would break CSRF validation (servers read CSRF from
         # form data, not JSON) and field name extraction.
-        payload: dict[str, str | bool] = {
+        payload: dict[str, str | bool] = {  # type: ignore[no-redef]
             fields["email"]: email,
             fields["password"]: password,
             "_is_json": False,
@@ -360,7 +349,7 @@ def _build_login_payload(
         return None  # all combinations exhausted
 
     (id_key, pw_key), use_json = all_combos[attempt]
-    payload: dict[str, str | bool] = {
+    payload: dict[str, str | bool] = {  # type: ignore[no-redef]
         id_key: email,
         pw_key: password,
         "_is_json": use_json,

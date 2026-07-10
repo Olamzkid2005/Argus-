@@ -6,6 +6,7 @@ Covers: plugin/theme CVEs, weak passwords, user enumeration,
         xmlrpc abuse, backup file exposure.
 """
 
+from typing import Any
 import json
 import logging
 
@@ -26,7 +27,7 @@ class WpscanParser(BaseParser):
     }
 
     def parse(self, raw_output: str) -> list[dict]:
-        findings = []
+        findings: list[dict[str, Any]] = []
         if not raw_output or not raw_output.strip():
             return findings
 

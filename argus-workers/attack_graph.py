@@ -7,6 +7,7 @@ high-value attack chains that escalate individual findings to critical severity.
 
 import math
 from enum import StrEnum
+from typing import Any
 
 from models.finding import VulnerabilityFinding
 
@@ -28,7 +29,7 @@ class RelationshipType(StrEnum):
 # High-value chain templates that convert P3/P4 findings ($200-500) into
 # P1/P2 findings ($5,000-50,000). Source: agent/bugbounty_knowledge/chaining.md
 
-CHAIN_RULES = [
+CHAIN_RULES: list[dict[str, Any]] = [
     {
         "id": "chain_1",
         "name": "Open Redirect → OAuth Authorization Code Theft → ATO",
@@ -277,8 +278,8 @@ class AttackGraph:
             engagement_id: Engagement ID
         """
         self.engagement_id = engagement_id
-        self.nodes = {}  # node_id -> Node
-        self.edges = []  # List of edges
+        self.nodes: dict[str, Node] = {}  # node_id -> Node
+        self.edges: list[Edge] = []  # List of edges
 
     def _get_severity_value(self, severity) -> int:
         """Get numeric severity value for comparison"""
@@ -422,7 +423,7 @@ class AttackGraph:
         """Map finding type to chain prerequisite type."""
         return TYPE_TO_CHAIN_PREREQ.get(finding_type.upper())
 
-    def find_chains(self) -> list[dict]:
+    def find_chains(self) -> list[dict[str, Any]]:
         """
         Detect vulnerability chains in the graph.
 
@@ -511,7 +512,7 @@ class AttackGraph:
 
         return paths
 
-    def get_highest_risk_paths(self, limit: int = 10) -> list[dict]:
+    def get_highest_risk_paths(self, limit: int = 10) -> list[dict[str, Any]]:
         """
         Get highest risk paths including chain bonuses.
 
@@ -526,7 +527,7 @@ class AttackGraph:
         paths = self.get_all_paths_with_chains()
 
         # Calculate risk for each path
-        path_risks = []
+        path_risks: list[dict[str, Any]] = []
         chains = self.find_chains()
         from collections import defaultdict
 
@@ -558,7 +559,7 @@ class AttackGraph:
             )
 
         # Sort by risk score descending
-        path_risks.sort(key=lambda x: x["risk_score"], reverse=True)
+        path_risks.sort(key=lambda x: float(x["risk_score"]), reverse=True)
 
         return path_risks[:limit]
 
@@ -731,17 +732,19 @@ class AttackGraph:
         # Also check chain rules where this node is the prerequisite
         chains = self.find_chains()
         for chain in chains:
-            if chain["prereq_node"].id == node_id:
+            prereq_node: Node = chain["prereq_node"]
+            chain_node: Node = chain["chain_node"]
+            if prereq_node.id == node_id:
                 downstream.append(
                     Path(
-                        nodes=[chain["prereq_node"], chain["chain_node"]],
+                        nodes=[prereq_node, chain_node],
                         edges=[],
                     )
                 )
 
         return downstream
 
-    def to_snapshot_dict(self) -> dict:
+    def to_snapshot_dict(self) -> dict[str, Any]:
         """
         Serialize the attack graph to a dictionary for snapshot storage.
 
@@ -806,7 +809,7 @@ class AttackGraph:
 
         return paths
 
-    def generate_plan_from_graph(self) -> list[dict]:
+    def generate_plan_from_graph(self) -> list[dict[str, Any]]:
         """
         Generate an ordered list of exploitation phases from detected attack chains.
 
@@ -842,7 +845,7 @@ class AttackGraph:
 
         # Collect unique chain results
         seen = set()
-        plans = []
+        plans: list[dict[str, Any]] = []
         for chain in chains:
             chain_id = chain.get("chain_id", "")
             if chain_id in seen:
@@ -851,8 +854,8 @@ class AttackGraph:
 
             prereq_node = chain.get("prereq_node")
             chain_node = chain.get("chain_node")
-            prereq_type = (prereq_node.data.get("type", "") if prereq_node else "")
-            chain_type = (chain_node.data.get("type", "") if chain_node else "")
+            prereq_type = str(prereq_node.data.get("type", "")) if prereq_node else ""
+            chain_type = str(chain_node.data.get("type", "")) if chain_node else ""
 
             # Compute risk score from the chain path
             path = Path(nodes=[prereq_node, chain_node], edges=[]) if prereq_node and chain_node else None

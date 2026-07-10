@@ -218,7 +218,7 @@ def _validate_webhook_url(url: str) -> bool:
             )
             return False
         for family, _, _, _, sockaddr in addrs:
-            ip = sockaddr[0]
+            ip = str(sockaddr[0])
             if is_private_ip(ip):
                 logger.warning(
                     "SSRF block: webhook URL resolves to private/internal IP "
@@ -300,20 +300,21 @@ def _resolve_and_validate_at_request_time(url: str) -> bool:
     allowed_ips: set[str] = set()
     allowlist = _resolve_allowlist()
     for family, _, _, _, sockaddr in addrs:
-        ip = sockaddr[0]
+        ip = str(sockaddr[0])
         allowed_ips.add(ip)
 
         # 1. Block private/internal IPs unconditionally
-        if is_private_ip(ip):
+        ip_str = str(ip)
+        if is_private_ip(ip_str):
             logger.warning(
                 "SSRF block: webhook URL '%s' hostname '%s' resolves to "
                 "private/internal IP '%s' at request time",
-                url, hostname, ip,
+                url, hostname, ip_str,
             )
             return False
 
         # 2. If an allowlist is configured, enforce it
-        if allowlist is not None and not _ip_in_any_network(ip, allowlist):
+        if allowlist is not None and not _ip_in_any_network(ip_str, allowlist):
             logger.warning(
                 "SSRF block: webhook URL '%s' hostname '%s' resolves to "
                 "IP '%s' which is not in the allowlist (%s=%s)",

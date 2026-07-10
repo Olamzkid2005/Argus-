@@ -104,7 +104,7 @@ class LegacyAPISecurityScanner(AbstractTool):
                 "Content-Type": "application/json",
             }
         )
-        self.findings = []
+        self.findings: list[dict] = []
         self._builder: FindingBuilder | None = None
         self.target_url: str = ""
 
@@ -188,31 +188,31 @@ class LegacyAPISecurityScanner(AbstractTool):
             )
 
         # 1. OWASP ZAP-style basic checks
-        slog.tool_start("security_headers", f"target={self.target_url}")
+        slog.tool_start("security_headers", [f"target={self.target_url}"])
         self.check_security_headers()
         slog.tool_complete("security_headers", success=True)
 
         # 2. API type-specific scanning
         if api_type == "graphql":
-            slog.tool_start("graphql_scan", f"target={self.target_url}")
+            slog.tool_start("graphql_scan", [f"target={self.target_url}"])
             self.scan_graphql()
             slog.tool_complete("graphql_scan", success=True)
         elif api_type == "openapi":
-            slog.tool_start("openapi_scan", f"target={self.target_url}")
+            slog.tool_start("openapi_scan", [f"target={self.target_url}"])
             self.scan_openapi()
             slog.tool_complete("openapi_scan", success=True)
         else:
-            slog.tool_start("rest_scan", f"target={self.target_url}")
+            slog.tool_start("rest_scan", [f"target={self.target_url}"])
             self.scan_rest_endpoints()
             slog.tool_complete("rest_scan", success=True)
 
         # 3. Authentication testing
-        slog.tool_start("auth_testing", f"target={self.target_url}")
+        slog.tool_start("auth_testing", [f"target={self.target_url}"])
         self.test_authentication()
         slog.tool_complete("auth_testing", success=True)
 
         # 4. Rate limiting test
-        slog.tool_start("rate_limit_test", f"target={self.target_url}")
+        slog.tool_start("rate_limit_test", [f"target={self.target_url}"])
         self.test_rate_limiting()
         slog.tool_complete("rate_limit_test", success=True)
 

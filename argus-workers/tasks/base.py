@@ -115,6 +115,7 @@ class TaskContext:
     job: dict
     trace_id: str
     orchestrator: Any = None
+    state: Any = None
     db_conn_string: str = ""
     redis_url: str = ""
 
@@ -124,9 +125,9 @@ def task_context(
     task,
     engagement_id: str,
     job_type: str,
-    job_extra: dict = None,
-    trace_id: str = None,
-    current_state: str = None,
+    job_extra: dict | None = None,
+    trace_id: str | None = None,
+    current_state: str | None = None,
 ):
     """
     Unified task scaffolding context manager.
@@ -158,7 +159,7 @@ def task_context(
 
     slog = ScanLogger(job_type, engagement_id=engagement_id)
 
-    db_conn_string = os.getenv("DATABASE_URL")
+    db_conn_string = os.getenv("DATABASE_URL") or ""
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 
     tracing_manager = TracingManager(db_conn_string)
@@ -188,11 +189,11 @@ def task_context(
         try:
             with LockContext(lock, engagement_id):
                 _lock_acquired = True
+                resolved_state = (current_state or get_engagement_state(engagement_id, db_conn_string)) or ""
                 sm = EngagementStateMachine(
                     engagement_id,
                     db_connection_string=db_conn_string,
-                    current_state=current_state
-                    or get_engagement_state(engagement_id, db_conn_string),
+                    current_state=resolved_state,
                 )
                 # WebSocket publisher removed (M-07 consolidation).
                 # All events go through SSE via StreamManager.
@@ -207,9 +208,7 @@ def task_context(
                 slog.info("Lock acquired, state machine initialized")
 
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
-                orchestrator.state = (
-                    state  # Always wire state into orchestrator (regardless of type)
-                )
+                setattr(orchestrator, "state", state)  # type: ignore[method-assign]
                 ctx.orchestrator = orchestrator
 
                 # Check for operator-initiated cancellation before starting work
@@ -371,7 +370,7 @@ def task_error_boundary(
             "%s failed: %s [%s]",
             phase_name,
             e,
-            classification.error_code.name if classification else "UNKNOWN",
+            classification.error_code.name if classification and classification.error_code else "UNKNOWN",
         )
 
         # Send to DLQ when non-retryable

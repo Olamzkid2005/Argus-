@@ -199,7 +199,7 @@ class _MetricsHandler(BaseHTTPRequestHandler):
             pool_metrics = db.get_pool_metrics() if hasattr(db, "get_pool_metrics") else {}
             pool_metrics["available"] = True
         except Exception:
-            pass
+            logger.debug("Failed to collect pool metrics", exc_info=True)
 
         # System info
         system_info = {
@@ -280,7 +280,7 @@ def start_health_server(
         try:
             server.serve_forever()
         except Exception:
-            logger.warning("Health server stopped: %s", exc_info=True)
+            logger.warning("Health server stopped", exc_info=True)
 
     t = threading.Thread(target=_serve, daemon=True, name="health-server")
     t.start()

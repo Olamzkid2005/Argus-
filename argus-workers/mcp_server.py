@@ -1298,6 +1298,14 @@ class MCPServer:
                         source_tool=raw_finding.get("source_tool", ""),
                         confidence=raw_finding.get("confidence", 0.5),
                         cvss_score=raw_finding.get("cvss_score"),
+                        repro_steps=None,
+                        owasp_category=None,
+                        cwe_id=None,
+                        evidence_strength=None,
+                        tool_agreement_level=None,
+                        fp_likelihood=None,
+                        discovered_at=None,
+                        engagement_id=None,
                     )
                     graph.add_finding(finding)
                 except Exception as e:

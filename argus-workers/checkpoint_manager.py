@@ -5,6 +5,7 @@ Checkpoint Manager - Saves and recovers from checkpoints during long scans
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from psycopg2.extras import Json, RealDictCursor
 
@@ -543,7 +544,7 @@ class CheckpointContext:
         self.checkpoint_manager = checkpoint_manager
         self.engagement_id = engagement_id
         self.phase = phase
-        self.results = {}
+        self.results: dict[str, Any] = {}
 
     def __enter__(self):
         """Enter context"""

@@ -199,9 +199,10 @@ class AIVulnScanner(AbstractTool):
         self.engagement_id = engagement_id
         self.emit_finding_callback = emit_finding_callback
         self.findings: list[dict] = []
+        self.target_url: str = ""
         self._last_request_time = 0.0
         self._rate_lock = threading.Lock()
-        self._detected_format = None  # Cached successful AI payload format
+        self._detected_format: dict[str, str] | None = None
         self._thread_session = threading.local()  # Thread-local sessions
         self._builder: FindingBuilder | None = None
 
@@ -352,7 +353,7 @@ class AIVulnScanner(AbstractTool):
             addrs = socket.getaddrinfo(hostname, None)
             if not addrs:
                 return True
-            return any(is_private_ip(addr[4][0]) for addr in addrs)
+            return any(is_private_ip(str(addr[4][0])) for addr in addrs)
         except socket.gaierror:
             logger.debug("Could not resolve hostname '%s' — assuming private", hostname)
             return True
@@ -371,7 +372,7 @@ class AIVulnScanner(AbstractTool):
         Returns the final non-redirect response, or ``None`` if a hop fails
         validation.
         """
-        seen = set()
+        seen: set[str] = set()
         current = response
         redirect_count = 0
         max_redirects = 20

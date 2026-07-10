@@ -71,7 +71,8 @@ class AttackGraphRepository:
         """
         from attack_graph import AttackGraph as AG
 
-        graph: AG = graph  # type hint for IDE
+        _ = AG  # type hint reference, avoid redef
+        # graph is already parameter of type AttackGraph
 
         conn = None
         cursor = None
@@ -89,7 +90,7 @@ class AttackGraphRepository:
                 (engagement_id,),
             )
             existing_scripts: dict[str, str] = {}  # fingerprint -> script JSON
-            for row in cursor.fetchall():
+            for row in cursor.fetchall():  # type: ignore[attr-defined]
                 old_path_id, old_path_nodes_json, script = row
                 if script:
                     # Build a fingerprint from the path node types to match across re-saves
@@ -104,7 +105,7 @@ class AttackGraphRepository:
                         # to prevent chain scripts from being restored to wrong paths.
                         node_types = tuple(
                             n.get("data", {}).get("type", "")
-                            for n in (old_nodes.get("nodes") or [])
+                            for n in (old_nodes.get("nodes") or [])  # type: ignore[attr-defined]
                         )
                         existing_scripts[str(node_types)] = script
                     except (json.JSONDecodeError, AttributeError):
@@ -157,7 +158,7 @@ class AttackGraphRepository:
                 # Re-associate any previously-saved chain_exploit_script
                 # Use finding type for matching (same fingerprint as above)
                 node_types = tuple(
-                    n.get("data", {}).get("type", "") for n in path_nodes["nodes"]
+                    n.get("data", {}).get("type", "") for n in path_nodes["nodes"]  # type: ignore[attr-defined]
                 )
                 chain_script = existing_scripts.get(str(node_types))
 
@@ -260,7 +261,7 @@ class AttackGraphRepository:
             if not rows:
                 return None
 
-            graph = AttackGraph(engagement_id)
+            graph = AttackGraph(engagement_id)  # type: ignore[no-redef]
 
             for row in rows:
                 path_data = row[0]

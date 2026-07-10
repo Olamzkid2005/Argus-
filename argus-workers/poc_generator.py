@@ -251,7 +251,7 @@ class PoCGenerator:
             else:
                 from llm_service import LLMService as LLMSvc
 
-                svc = LLMSvc(llm_client=self.llm_client)
+                svc = LLMSvc(llm_client=self.llm_client)  # type: ignore[arg-type]
                 result = svc.chat_json(
                     system_prompt=POC_SYSTEM_PROMPT,
                     user_prompt=user_prompt,

@@ -16,10 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +26,9 @@ class EmbeddingService:
 
     def __init__(self, engagement_id: str):
         self.engagement_id = engagement_id
-        self._llm_client = None
-        self._pgvector = None
+        self._llm_client: Any | None = None
+        self._pgvector: Any | None = None
+        self._get_embedding_cache: dict[str, list[float]] = {}
 
     # ── Validation ─────────────────────────────────────────────────────────
 
@@ -132,8 +130,7 @@ class EmbeddingService:
         Results are cached in-memory to avoid redundant API calls when saving
         many findings with similar dedup_text values (common after recon).
         """
-        if not hasattr(self, "_get_embedding_cache"):
-            self._get_embedding_cache = {}
+        # _get_embedding_cache is now initialized in __init__
         import hashlib
 
         key = hashlib.md5(
@@ -197,6 +194,7 @@ class EmbeddingService:
 
             self._pgvector = PGVectorRepository()
 
+        assert self._pgvector is not None
         if not self._pgvector.check_pgvector_available():
             return None
 

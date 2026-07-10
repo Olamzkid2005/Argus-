@@ -39,7 +39,7 @@ def extract_host(text: str) -> str | None:
         try:
             return urlparse(text).hostname
         except ValueError:
-            pass
+            logger.debug("Failed to parse URL: %s, falling back to regex", text[:100])
     # Fall back to regex
     m = _HOST_PATTERN.match(text)
     if m:

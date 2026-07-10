@@ -91,7 +91,8 @@ class AgentRuntime:
             self._execution_engine = ExecutionEngine(
                 tool_runner=self.tool_runner,
                 scope_validator=ScopeValidator(
-                    self.engagement_id, self.authorized_scope
+                    self.engagement_id,
+                    {"domains": self.authorized_scope} if self.authorized_scope else None,
                 ),
             )
             # Wrap agent registry.call with scope middleware
@@ -114,7 +115,8 @@ class AgentRuntime:
                         name, args, kwargs = result
                 return _orig(name, **kwargs)
 
-            agent.registry.call = _scoped_dispatch
+            # Use setattr to avoid mypy "Cannot assign to a method" error
+            setattr(agent.registry, 'call', _scoped_dispatch)
 
         self._react_agent = agent
         return agent

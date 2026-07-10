@@ -49,5 +49,5 @@ def rank_paths(
             }
         )
 
-    scored.sort(key=lambda x: x["score"], reverse=True)
+    scored.sort(key=lambda x: x["score"], reverse=True)  # type: ignore[arg-type, return-value]
     return scored

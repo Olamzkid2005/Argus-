@@ -113,10 +113,10 @@ class BolaWorkflow:
                             exc_info=True,
                         )
 
-        outcome = "partial" if len(self.ctx.state.obstacles) > 0 else "complete"
+        outcome: str = "partial" if len(self.ctx.state.obstacles) > 0 else "complete"
         return WorkflowResult(
             success=True,
-            outcome=outcome,
+            outcome=outcome,  # type: ignore[arg-type]
             findings_created=findings_total,
             obstacles_encountered=len(self.ctx.state.obstacles),
             identities_created=0,

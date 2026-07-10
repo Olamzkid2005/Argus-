@@ -216,7 +216,7 @@ class StreamManager(EventBus):
         self._eviction_interval = 500
 
     def subscribe(self, engagement_id: str) -> queue.Queue:
-        q = queue.Queue(maxsize=1000)
+        q: queue.Queue = queue.Queue(maxsize=1000)
         with self._lock:
             if engagement_id not in self._queues:
                 self._queues[engagement_id] = []
@@ -478,7 +478,7 @@ def emit_finding(
         confidence: Optional confidence score 0.0-1.0
         source_tool: Optional tool that discovered the finding
     """
-    data = {
+    data: dict[str, Any] = {
         "type": finding_type,
         "severity": severity,
         "endpoint": endpoint,
@@ -490,7 +490,7 @@ def emit_finding(
         data["source_tool"] = source_tool
     if _maybe_transactional(engagement_id, "finding", data):
         return
-    event_data = {
+    event_data: dict[str, Any] = {
         "type": finding_type,
         "severity": severity,
         "endpoint": endpoint,
@@ -529,7 +529,7 @@ def emit_state_change(
     )
 
 
-def emit_progress(engagement_id: str, phase: str, progress: float, message: str = ""):
+def emit_progress(engagement_id: str, phase: str, progress_val: float, message: str = ""):
     """Emit a progress update (0.0 to 1.0)."""
     get_stream_manager().publish(
         Event(
@@ -537,7 +537,7 @@ def emit_progress(engagement_id: str, phase: str, progress: float, message: str 
             engagement_id=engagement_id,
             data={
                 "phase": phase,
-                "progress": progress,
+                "progress": progress_val,
                 "message": message,
             },
         )

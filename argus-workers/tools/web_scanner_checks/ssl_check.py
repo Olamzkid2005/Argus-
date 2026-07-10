@@ -279,9 +279,10 @@ class SslCheck:
                     cert = ssock.getpeercert()
                     tls_version = ssock.version()
                     cipher = ssock.cipher()
-                    _check_cert_expiry(cert, hostname, port, findings)
-                    _check_self_signed(cert, hostname, port, findings)
-                    _check_san(cert, hostname, port, findings)
+                    if cert:
+                        _check_cert_expiry(cert, hostname, port, findings)
+                        _check_self_signed(cert, hostname, port, findings)
+                        _check_san(cert, hostname, port, findings)
                     _check_tls_version(tls_version, hostname, port, findings)
                     if cipher:
                         _check_weak_cipher(cipher, findings, hostname, port)

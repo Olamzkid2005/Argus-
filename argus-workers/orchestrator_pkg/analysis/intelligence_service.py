@@ -86,7 +86,7 @@ class IntelligenceService:
 
                 llm_svc = LLMService(
                     self.llm_client,
-                    cost_tracker=engagement_cost_tracker,
+                    cost_tracker=engagement_cost_tracker,  # type: ignore[arg-type]
                 )
                 recon_ctx = load_recon_context(self.engagement_id)
             except Exception as e:

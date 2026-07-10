@@ -8,9 +8,12 @@ Handles the first-scan case (no previous engagement to diff against).
 Auto-closes fixed findings and fires webhooks for actionable changes.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
+from typing import Any
 
 from celery_app import app
 from tasks.base import task_error_boundary
@@ -142,7 +145,7 @@ def _get_engagement_target(engagement_id: str) -> str | None:
 
 
 def _update_fixed_fingerprints(
-    profile_repo: "TargetProfileRepository",  # noqa: F821
+    profile_repo: Any,
     org_id: str,
     domain: str,
     fixed_findings: list[dict],

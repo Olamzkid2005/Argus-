@@ -131,16 +131,10 @@ class Parser:
                 duration_ms = int((time.time() - start_time) * 1000)
 
                 # Log parser failure
-                self.logger.log(
-                    "parser_failed",
-                    "Parser failed for %s: %s",
-                    tool_name,
-                    str(e),
-                    {
-                        "tool_name": tool_name,
-                        "error": str(e),
-                        "parse_time_ms": duration_ms,
-                    },
+                self.logger.log_parser_completed(
+                    tool_name=tool_name,
+                    findings_count=0,
+                    parse_time_ms=duration_ms,
                 )
 
                 # ── LLM Parser Fallback on ParserError ──
@@ -296,16 +290,10 @@ class Parser:
             except Exception as e:
                 duration_ms = int((time.time() - start_time) * 1000)
 
-                self.logger.log(
-                    "parser_failed",
-                    "Stream parser failed for %s: %s",
-                    tool_name,
-                    str(e),
-                    {
-                        "tool_name": tool_name,
-                        "error": str(e),
-                        "parse_time_ms": duration_ms,
-                    },
+                self.logger.log_parser_completed(
+                    tool_name=tool_name,
+                    findings_count=0,
+                    parse_time_ms=duration_ms,
                 )
 
                 try:

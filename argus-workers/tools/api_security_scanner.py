@@ -258,19 +258,19 @@ class APISecurityScanner(AsyncTool):
 
         slog.phase_header("API SECURITY SCAN", f"{len(scan_endpoints)} endpoints")
 
-        slog.tool_start("bola", f"{len(scan_endpoints)} endpoints")
+        slog.tool_start("bola", [f"{len(scan_endpoints)} endpoints"])
         await self._test_bola(base_url, scan_endpoints, auth_headers)
         slog.tool_complete("bola", findings=len(builder.findings))
 
-        slog.tool_start("mass_assignment", f"{len(scan_endpoints)} endpoints")
+        slog.tool_start("mass_assignment", [f"{len(scan_endpoints)} endpoints"])
         await self._test_mass_assignment(base_url, scan_endpoints, auth_headers)
         slog.tool_complete("mass_assignment")
 
-        slog.tool_start("auth_bypass", f"{len(scan_endpoints)} endpoints")
+        slog.tool_start("auth_bypass", [f"{len(scan_endpoints)} endpoints"])
         await self._test_auth_bypass(base_url, scan_endpoints)
         slog.tool_complete("auth_bypass")
 
-        slog.tool_start("rate_limiting", f"{len(scan_endpoints)} endpoints")
+        slog.tool_start("rate_limiting", [f"{len(scan_endpoints)} endpoints"])
         await self._test_api_rate_limiting(base_url, scan_endpoints, auth_headers)
         slog.tool_complete("rate_limiting")
 
@@ -586,7 +586,7 @@ class APISecurityScanner(AsyncTool):
                         continue
 
                     for result in results:
-                        if isinstance(result, Exception):
+                        if not isinstance(result, httpx.Response):
                             continue
                         status_counts[result.status_code] = (
                             status_counts.get(result.status_code, 0) + 1

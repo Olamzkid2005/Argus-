@@ -364,7 +364,7 @@ class TracingManager:
             try:
                 yield context
             finally:
-                pass
+                pass  # Context is cleared by TraceContext.with_context
 
     def log(self, event_type: str, message: str, metadata: dict = None) -> None:
         self.logger.log(event_type, message, metadata)

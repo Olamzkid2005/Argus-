@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import redis
+from typing import cast, Any as TAny
 
 from config.redis import REDIS_URL
 
@@ -62,6 +63,8 @@ class DeadLetterQueue:
         """Lazy Redis connection"""
         if self._redis is None:
             self._redis = redis.from_url(self.redis_url)
+        # At this point _redis is always set — help mypy narrow the type
+        assert self._redis is not None
         return self._redis
 
     def close(self):
@@ -267,10 +270,12 @@ class DeadLetterQueue:
             if engagement_id:
                 safe_id = self._sanitize_engagement_key(engagement_id)
                 key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
-                task_ids = self.redis.zrevrange(key, offset, offset + limit - 1)
+                raw_ids = self.redis.zrevrange(key, offset, offset + limit - 1)
+                task_ids: list[bytes] = cast(list[bytes], raw_ids)
             else:
                 key = f"{self.REDIS_KEY_PREFIX}:tasks"
-                task_ids = self.redis.zrevrange(key, offset, offset + limit - 1)
+                raw_ids = self.redis.zrevrange(key, offset, offset + limit - 1)
+                task_ids = cast(list[bytes], raw_ids)
 
             if not task_ids:
                 return []
@@ -280,7 +285,7 @@ class DeadLetterQueue:
                 tid.decode("utf-8") if isinstance(tid, bytes) else tid
                 for tid in task_ids
             ]
-            raw_data = self.redis.hmget(self.TASK_INDEX_KEY, decoded_ids)
+            raw_data = cast(list[bytes | None], self.redis.hmget(self.TASK_INDEX_KEY, decoded_ids))
             tasks = []
             for raw in raw_data:
                 if raw:
@@ -302,10 +307,10 @@ class DeadLetterQueue:
             if engagement_id:
                 safe_id = self._sanitize_engagement_key(engagement_id)
                 key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
-                return self.redis.zcard(key)
+                return cast(int, self.redis.zcard(key))
             else:
                 key = f"{self.REDIS_KEY_PREFIX}:tasks"
-                return self.redis.zcard(key)
+                return cast(int, self.redis.zcard(key))
         except Exception as e:
             logger.error("Failed to get DLQ count: %s", e)
             return 0
@@ -323,7 +328,7 @@ class DeadLetterQueue:
             Task dict if found, None otherwise
         """
         try:
-            raw = self.redis.hget(self.TASK_INDEX_KEY, task_id)
+            raw = cast(bytes | None, self.redis.hget(self.TASK_INDEX_KEY, task_id))
             if raw:
                 return json.loads(raw)
             return None
@@ -341,7 +346,7 @@ class DeadLetterQueue:
         if not task_ids:
             return
         try:
-            self.redis.hdel(self.TASK_INDEX_KEY, *task_ids)
+            self.redis.hdel(self.TASK_INDEX_KEY, *cast(list[TAny], task_ids))
         except Exception:
             logger.debug("Failed to selectively clean TASK_INDEX_KEY", exc_info=True)
 
@@ -454,52 +459,44 @@ class DeadLetterQueue:
                 # Both filters: purge old tasks for a specific engagement.
                 safe_id = self._sanitize_engagement_key(engagement_id)
                 eng_key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
-                # Get task IDs within the score range (members are now task_ids, not JSON)
-                eng_task_ids = self.redis.zrangebyscore(eng_key, 0, cutoff)
+                eng_task_ids = cast(list[bytes], self.redis.zrangebyscore(eng_key, 0, cutoff))
                 count = len(eng_task_ids)
                 if count > 0:
                     decoded = [
                         tid.decode("utf-8") if isinstance(tid, bytes) else tid
                         for tid in eng_task_ids
                     ]
-                    # Remove from both the main key and the engagement index
                     for tid in eng_task_ids:
                         self.redis.zrem(main_key, tid)
                     self.redis.zremrangebyscore(eng_key, 0, cutoff)
-                    # Selective index cleanup (M4 fix: don't delete entire index)
                     self._remove_from_index(decoded)
                 return count
             elif engagement_id:
                 safe_id = self._sanitize_engagement_key(engagement_id)
                 eng_key = f"{self.REDIS_KEY_PREFIX}:engagement:{safe_id}"
-                # Get all task IDs from the engagement key before removing
-                all_ids = self.redis.zrange(eng_key, 0, -1)
+                all_ids = cast(list[bytes], self.redis.zrange(eng_key, 0, -1))
                 decoded_ids = [
                     tid.decode("utf-8") if isinstance(tid, bytes) else tid
                     for tid in all_ids
                 ]
-                count = self.redis.zcard(eng_key)
+                count = cast(int, self.redis.zcard(eng_key))
                 self.redis.delete(eng_key)
-                # Remove from main key too
                 for tid in all_ids:
                     self.redis.zrem(main_key, tid)
-                # Selective index cleanup (M4 fix: don't delete entire index)
                 self._remove_from_index(decoded_ids)
                 return count
             elif cutoff is not None:
-                # Get task IDs in the score range before removing them
-                task_ids = self.redis.zrangebyscore(main_key, 0, cutoff)
+                task_ids = cast(list[bytes], self.redis.zrangebyscore(main_key, 0, cutoff))
                 decoded_ids = [
                     tid.decode("utf-8") if isinstance(tid, bytes) else tid
                     for tid in task_ids
                 ]
                 count = len(decoded_ids)
                 self.redis.zremrangebyscore(main_key, 0, cutoff)
-                # Selective index cleanup (M4 fix: don't delete entire index)
                 self._remove_from_index(decoded_ids)
                 return count
             else:
-                count = self.redis.zcard(main_key)
+                count = cast(int, self.redis.zcard(main_key))
                 self.redis.delete(main_key)
                 self.redis.delete(self.TASK_INDEX_KEY)
                 return count

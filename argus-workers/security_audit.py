@@ -190,7 +190,7 @@ class SecurityAudit:
                                 )
                             )
                     except OSError:
-                        pass
+                        logger.debug("Failed to stat %s: skipping", filepath)
 
     def check_dependencies(self):
         """Check for known vulnerable dependencies (basic check)"""

@@ -252,10 +252,10 @@ class FindingRepository(BaseRepository):
                             endpoint,
                             finding_type,
                         )
-                        return None
+                        return ""
                 except Exception as fb_err:
                     logger.error("Fallback query failed: %s", fb_err)
-                    return None
+                    return ""
             # M-02: Invalidate findings cache after mutation
             try:
                 cache.invalidate_table("findings")
@@ -361,7 +361,7 @@ class FindingRepository(BaseRepository):
                 ),
             )
             row = cursor.fetchone()
-            return str(row[0]) if row else None
+            return str(row[0]) if row else ""
 
     def find_high_confidence(
         self, engagement_id: str, threshold: float = 0.7

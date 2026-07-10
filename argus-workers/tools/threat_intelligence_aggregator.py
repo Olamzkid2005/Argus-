@@ -12,6 +12,8 @@ import logging
 import ssl
 import urllib.request
 
+from typing import Any
+
 from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus, UnifiedToolResult
@@ -32,7 +34,7 @@ class ThreatIntelligenceAggregator(AbstractTool):
         domain = parsed.hostname or ctx.target
         builder = FindingBuilder(self.tool_name, engagement_id=ctx.engagement_id)
 
-        intel = {"domain": domain, "certificates": [], "dns_records": []}
+        intel: dict[str, Any] = {"domain": domain, "certificates": [], "dns_records": []}
 
         # Check if domain resolves before querying WHOIS to avoid TLD registry fallthrough
         domain_resolves = self._check_dns_resolution(domain)

@@ -121,7 +121,7 @@ def run_register(
 
         # Step 1: Discover registration endpoint (or use provided register_url override)
         if register_url:
-            endpoints = {
+            endpoints: dict[str, Any] = {
                 "register_url": register_url,
                 "login_url": None,
                 "register_fields": {},
@@ -129,9 +129,10 @@ def run_register(
             }
             logger.debug("Register: using provided register_url='%s'", register_url)
         else:
-            endpoints = discover_auth_endpoints(
+            discovered = discover_auth_endpoints(
                 target, http_session, recon_crawled_paths
             )
+            endpoints = discovered if isinstance(discovered, dict) else {}
 
         register_url = endpoints.get("register_url")
         if not register_url:
@@ -314,7 +315,7 @@ def run_register(
             ctx,
         )
 
-    except TimeoutError as e:
+    except requests.Timeout as e:
         # Hard deadline hit — return timeout result
         return (
             UnifiedToolResult(
@@ -325,8 +326,6 @@ def run_register(
             ),
             auth_context or AuthContext(),
         )
-    finally:
-        pass
 
 
 # ── Internal helpers ──
@@ -339,7 +338,8 @@ def _build_register_payload(
     mode: str,
     attempt: int,
 ) -> dict[str, str | bool] | None:
-    """Build the credential payload for a registration attempt.
+    """
+    Build the credential payload for a registration attempt.
 
     For HTML form mode: uses the extracted field names, always form-encoded
     (JSON would break CSRF token delivery).
@@ -374,12 +374,12 @@ def _build_register_payload(
         return None  # all combinations exhausted
 
     (id_key, pw_key), use_json = all_combos[attempt]
-    payload: dict[str, str | bool] = {
+    result_payload: dict[str, str | bool] = {
         id_key: email,
         pw_key: password,
         "_is_json": use_json,
     }
-    return payload
+    return result_payload
 
 
 def _generate_password(length: int = 16) -> str:

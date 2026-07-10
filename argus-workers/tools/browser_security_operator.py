@@ -41,9 +41,9 @@ class BrowserSecurityOperator(AbstractTool):
 
         builder = FindingBuilder(self.tool_name, engagement_id=ctx.engagement_id)
 
-        dom_findings = self._analyze_dom(ctx, builder)
-        auth_findings = self._analyze_auth(ctx, builder)
-        header_findings = self._analyze_headers(ctx, builder)
+        dom_findings: list[dict] = self._analyze_dom(ctx, builder)
+        auth_findings: list[dict] = self._analyze_auth(ctx, builder)
+        header_findings: list[dict] = self._analyze_headers(ctx, builder)
 
         all_findings = dom_findings + auth_findings + header_findings + builder.findings
         result.findings = all_findings
@@ -88,7 +88,7 @@ class BrowserSecurityOperator(AbstractTool):
 
     def _analyze_auth(self, ctx: ToolContext, builder: FindingBuilder) -> list[dict]:
         """Analyze authentication mechanisms."""
-        findings = []
+        findings: list[dict] = []
         auth_config = getattr(ctx, "dual_auth", None)
 
         if auth_config:
@@ -106,7 +106,7 @@ class BrowserSecurityOperator(AbstractTool):
         When called standalone (no _browser_headers context), fetches headers
         via direct HTTP request so the tool always produces meaningful output.
         """
-        findings = []
+        findings: list[dict] = []
         headers = getattr(ctx, "_browser_headers", None)
 
         # Standalone fallback: fetch headers directly if no browser context

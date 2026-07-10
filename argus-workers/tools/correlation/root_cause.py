@@ -47,14 +47,14 @@ def find_root_causes(findings: list[dict], min_group_size: int = 2) -> list[dict
     Returns list of root cause summaries sorted by severity impact.
     """
     groups = group_by_root_cause(findings)
-    root_causes = []
+    root_causes: list[dict] = []
 
     for key, group in groups.items():
         if len(group) < min_group_size:
             continue
 
         max_severity = max(
-            (_SEVERITY_RANK.get(f.get("severity", "INFO"), 0) for f in group),
+            (_SEVERITY_RANK.get(str(f.get("severity", "INFO")), 0) for f in group),
             default=0,
         )
         severity_name = {v: k for k, v in _SEVERITY_RANK.items()}.get(

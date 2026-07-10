@@ -1408,12 +1408,12 @@ def build_mcp_tool_definitions() -> list:
                 command=tool.binary or tool.name,
                 description=tool.description,
                 args=list(tool.default_args),
-                parameters=schema_params,
+                parameters=schema_params,  # type: ignore[arg-type]
                 timeout=tool.timeout,
                 signal_quality=tool.signal_quality.value if hasattr(tool.signal_quality, 'value') else tool.signal_quality,
                 priority=tool.priority,
                 cost=tool.cost,
-                requires=tool.requires,
+                requires=tool.requires,  # type: ignore[arg-type]
                 capabilities=getattr(tool, 'capabilities', None),
                 credential_roles=getattr(tool, 'credential_roles', None),
             )

@@ -389,14 +389,21 @@ class FindingNormalizer:
                 source_tool=source_tool,
                 evidence_strength=evidence_strength,
                 fp_likelihood=fp_likelihood,
+                repro_steps=None,
+                cvss_score=None,
+                owasp_category=None,
+                cwe_id=None,
+                tool_agreement_level=None,
+                discovered_at=None,
+                engagement_id=None,
             )
 
             return finding
 
         except ValidationError as e:
-            raise FindingValidationError("Validation failed: %s", e) from e
+            raise FindingValidationError("Validation failed: %s" % e) from e
         except Exception as e:
-            raise FindingValidationError("Normalization failed: %s", e) from e
+            raise FindingValidationError("Normalization failed: %s" % e) from e
 
     def _normalize_type(
         self, raw_type: str, _source_tool: str, raw_finding: dict = None

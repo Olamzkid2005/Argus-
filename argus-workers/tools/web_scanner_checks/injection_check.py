@@ -346,7 +346,7 @@ def _check_xss_dom_based(target_url: str, session, findings: list):
         inline_patterns = re.findall(
             r"<script[^>]*>(.*?)</script>", resp.text, re.I | re.DOTALL
         )
-        js_urls = []
+        js_urls: list[str] = []
         for src in script_srcs:
             js_url = urljoin(target_url, src)
             if js_url.startswith(("http://", "https://")):
@@ -371,7 +371,7 @@ def _check_xss_dom_based(target_url: str, session, findings: list):
                         js_url,
                         {
                             "source": "js_file_scan",
-                            "sink": dom_sinks.search(js_resp.text).group(1),
+                            "sink": (dom_sinks.search(js_resp.text) or [None])[0] or "",
                         },
                         0.6,
                     )
@@ -386,7 +386,7 @@ def _check_xss_dom_based(target_url: str, session, findings: list):
                         target_url,
                         {
                             "source": "inline_script_scan",
-                            "sink": dom_sinks.search(inline).group(1),
+                            "sink": (dom_sinks.search(inline) or [None])[0] or "",
                         },
                         0.6,
                     )

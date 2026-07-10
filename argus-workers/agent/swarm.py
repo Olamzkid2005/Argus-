@@ -71,10 +71,12 @@ class SpecialistAgent(ABC):
     @abstractmethod
     def should_activate(self) -> bool:
         """Return True if recon signals suggest this domain is relevant."""
+        ...
 
     @abstractmethod
     def run(self) -> list[dict]:
         """Run this specialist's tool suite. Returns raw finding dicts."""
+        ...
 
     @property
     def parser(self):
@@ -595,7 +597,7 @@ class SwarmOrchestrator:
         self.bug_bounty_mode = bug_bounty_mode
         # Deep copy happens inside each agent's __init__
         self.agents = [
-            cls(
+            cls(  # type: ignore[abstract]
                 llm_service=llm_service,
                 tool_runner=tool_runner,
                 recon_context=recon_context,
@@ -787,7 +789,7 @@ class SwarmOrchestrator:
 
         all_tools_attempted: set[str] = set()
         for agent in self.agents:
-            tools = getattr(agent, "tools_attempted", set())
+            tools: set[str] = getattr(agent, "tools_attempted", set())
             all_tools_attempted.update(tools)
 
         return deduped, all_tools_attempted

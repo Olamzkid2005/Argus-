@@ -451,7 +451,7 @@ class WebScanner(AbstractTool):
             "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         )
         self.session.headers.setdefault("Accept-Language", "en-US,en;q=0.5")
-        self.findings = []
+        self.findings: list[dict] = []
         self.discovered_parameters = None  # Initialized before parameter_discovery()
         self._last_request_time = 0.0  # For token-bucket rate limiting
         self._rate_lock = threading.Lock()  # Thread safety for rate limiting

@@ -11,6 +11,7 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from types import SimpleNamespace
+from typing import Any
 
 from config.constants import (
     DEFAULT_AGGRESSIVENESS,
@@ -86,7 +87,7 @@ def _should_run_tool(
         return True  # no gate → always run
 
     # Start with tech_stack and target_url
-    gate_ctx = {
+    gate_ctx: dict[str, Any] = {
         "tech_stack": tech_stack or [],
         "target_url": target,
     }
@@ -243,7 +244,7 @@ def _get_async_loop() -> asyncio.AbstractEventLoop:
     return _ASYNC_LOOP
 
 
-def _run_async(coro) -> any:
+def _run_async(coro) -> Any:
     """Run a coroutine on the persistent background event loop from a sync context."""
     loop = _get_async_loop()
     fut = asyncio.run_coroutine_threadsafe(coro, loop)
@@ -332,7 +333,7 @@ def _run_scan_tool(
     timeout: int,
     all_findings: list,
     on_line: Callable | None = None,
-    line_buffer: list | None = None,
+    line_buffer: list[str] | None = None,
 ) -> tuple[str, bool, str | None]:
     """Thread-safe wrapper for running a scan tool.
 
@@ -370,7 +371,7 @@ def _run_scan_tool(
         logger.warning("%s failed: %s", tool_name, e)
         return tool_name, False, None
     finally:
-        emit_tool_complete(ctx.engagement_id, tool_name, success=success)
+        emit_tool_complete(ctx.engagement_id, tool_name, success, 0)
 
 
 def execute_scan_tools(
@@ -420,7 +421,7 @@ def execute_scan_tools(
     engagement_id = getattr(ctx, "engagement_id", "")
     with _emitted_fingerprints_lock:
         _emitted_fingerprints.pop(engagement_id, None)
-    all_findings = []
+    all_findings: list[dict] = []
     # M-v5-04: Track temp output files for cleanup to prevent disk exhaustion.
     _temp_outputs: list[str] = []
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
@@ -545,7 +546,7 @@ def execute_scan_tools(
             )
 
     # Factory for per-tool streaming callbacks (captures ctx, all_findings via closure)
-    def _make_on_tool_line(tool_name, json_lines=True, line_buffer=None):
+    def _make_on_tool_line(tool_name: str, json_lines: bool = True, line_buffer: list[str] | None = None):
         _json_acc = ""
 
         def on_tool_line(line: str) -> bool:
@@ -862,7 +863,7 @@ def execute_scan_tools(
                 for name, args, timeout in scan_jobs:
                     config = _streaming_tools.get(name)
                     if config:
-                        line_buffer = [] if config.get("batch_json") else None
+                        line_buffer: list[str] | None = [] if config.get("batch_json") else None
                         on_line = _make_on_tool_line(
                             name,
                             json_lines=config["json_lines"],
@@ -1153,11 +1154,13 @@ def execute_scan_tools(
                 ws_findings = []
 
                 # Discover WebSocket URLs from the target page
-                ws_urls = []
+                ws_urls: list[str] = []
                 try:
-                    ws_urls = _run_async(
+                    ws_found = _run_async(
                         WebSocketScanner.discover_websocket_urls(target)
                     )
+                    if ws_found:
+                        ws_urls = ws_found
                 except Exception as disc_err:
                     logger.debug(
                         "WebSocket URL discovery failed for %s: %s", target, disc_err

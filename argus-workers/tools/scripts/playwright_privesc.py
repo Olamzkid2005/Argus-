@@ -70,7 +70,7 @@ def check_privesc(
     password_selector: str = "input[name=password]",
     submit_selector: str = "button[type=submit]",
 ) -> list[dict]:
-    findings = []
+    findings: list[dict] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
         context = browser.new_context()
@@ -88,7 +88,7 @@ def check_privesc(
 
         for path in admin_paths:
             response = page.goto(f"{target}{path}", timeout=30000, wait_until="networkidle")
-            if response.status == 200:
+            if response and response.status == 200:
                 findings.append(
                     {
                         "title": "Privilege Escalation: Unauthorized Admin Access",
@@ -142,8 +142,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.creds_file:
-        with open(args.creds_file) as f:
-            creds = json.load(f)
+        with open(args.creds_file) as fp:
+            creds = json.load(fp)
     elif args.low_priv_username and args.low_priv_password:
         creds = {"username": args.low_priv_username, "password": args.low_priv_password}
     else:

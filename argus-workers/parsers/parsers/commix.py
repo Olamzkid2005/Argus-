@@ -1,9 +1,11 @@
+from typing import Any
+
 from parsers.parsers.base import BaseParser
 
 
 class CommixParser(BaseParser):
     def parse(self, raw_output: str) -> list[dict]:
-        findings = []
+        findings: list[dict[str, Any]] = []
         confirmed = False
         for line in raw_output.splitlines():
             if "[*] Setting the OS shell" in line or "[*] Setting the pseudo" in line:

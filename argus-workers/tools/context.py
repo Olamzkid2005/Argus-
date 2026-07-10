@@ -76,7 +76,7 @@ class ToolContext:
         if self.normalizer is not None:
             from orchestrator_pkg.normalizer_utils import normalize_finding
 
-            return normalize_finding(self.normalizer, raw_finding, tool)
+            return normalize_finding(self.normalizer, raw_finding, tool)  # type: ignore[arg-type]
         return raw_finding
 
     def normalize(self, raw_finding: dict, tool: str) -> dict | None:

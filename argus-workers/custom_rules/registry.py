@@ -60,7 +60,7 @@ class RuleRegistry:
         version = 1
         if rule_file.exists():
             existing = self.get_rule(rule_id)
-            version = existing.get("version", 1) + 1
+            version = (existing or {}).get("version", 1) + 1
 
         # Save current version
         rule_data = {
@@ -148,7 +148,7 @@ class RuleRegistry:
         """Get current version number for a rule."""
         versions = self.get_rule_versions(rule_id)
         if versions:
-            return max(v.get("version", 1) for v in versions)
+            return max((v.get("version", 1) for v in versions if v is not None), default=1)  # type: ignore[union-attr]
         return 1
 
     # Community marketplace (basic structure)
@@ -168,7 +168,7 @@ class RuleRegistry:
             Published rule info
         """
         rule = self.get_rule(rule_id)
-        if not rule:
+        if rule is None:
             raise ValueError(f"Rule not found: {rule_id}")
 
         community_file = self.community_dir / f"{rule_id}.json"

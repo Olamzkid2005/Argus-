@@ -10,6 +10,7 @@ And text lines with indicators:
     [-] Nothing here (ignored)
 """
 
+from typing import Any
 import hashlib
 import json
 import logging
@@ -32,7 +33,7 @@ class JwtToolParser(BaseParser):
     """Parser for jwt_tool output — JSON lines first, then text indicators."""
 
     def parse(self, raw_output: str) -> list[dict]:
-        findings = []
+        findings: list[dict[str, Any]] = []
 
         if not raw_output or not raw_output.strip():
             return findings

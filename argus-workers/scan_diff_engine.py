@@ -15,6 +15,7 @@ import contextlib
 import hashlib
 import json
 import logging
+from typing import Any
 from urllib.parse import urlparse
 
 from database.connection import get_db
@@ -281,7 +282,7 @@ class ScanDiffEngine:
             return self._empty_diff()
         fixed_fps = self._load_fixed_fingerprints(profile)
 
-        result = {
+        result: dict[str, Any] = {
             self.CAT_NEW: [],
             self.CAT_FIXED: [],
             self.CAT_REGRESSED: [],
@@ -572,14 +573,12 @@ class ScanDiffEngine:
         # R-06: Store BOTH primary and fallback fingerprints so regression
         # detection works regardless of whether the returning finding has
         # the same payload or a different one.
-        fps = set()
+        fps_set: set[str] = set()
         for f in findings:
             if f.get("id") in finding_ids:
-                fps.add(self._fingerprint(f))
-                fps.add(self._fallback_fingerprint(f))
-        fps = list(fps)
-        if not fps:
-            fps = []
+                fps_set.add(self._fingerprint(f))
+                fps_set.add(self._fallback_fingerprint(f))
+        fps_list: list[str] = list(fps_set) if fps_set else []
 
         conn = None
         cursor = None
@@ -611,7 +610,7 @@ class ScanDiffEngine:
             updated = cursor.rowcount
 
             # L-09: Update fixed fingerprints in the same transaction
-            if fps and domain:
+            if fps_list and domain:
                 cursor.execute(
                     """
                     UPDATE target_profiles
@@ -629,7 +628,7 @@ class ScanDiffEngine:
                     updated_at = NOW()
                     WHERE org_id = %s AND target_domain = %s
                     """,
-                    (json.dumps(fps), org_id, domain),
+                    (json.dumps(fps_list), org_id, domain),
                 )
 
             conn.commit()
@@ -675,7 +674,7 @@ class ScanDiffEngine:
                     updated_at = NOW()
                 WHERE org_id = %s AND target_domain = %s
                 """,
-                (json.dumps(diff["summary"]), org_id, domain),
+                (json.dumps(diff.get("summary", {})), org_id, domain),
             )
             conn.commit()
             return cursor.rowcount > 0

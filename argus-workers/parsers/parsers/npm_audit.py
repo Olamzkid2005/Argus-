@@ -1,5 +1,6 @@
 """Parser for npm audit JSON output (npm audit --json)."""
 
+from typing import Any
 import json
 import logging
 
@@ -12,7 +13,7 @@ class NpmAuditParser(BaseParser):
     """Parser for npm audit vulnerability scanner output."""
 
     def parse(self, raw_output: str) -> list[dict]:
-        findings = []
+        findings: list[dict[str, Any]] = []
         try:
             data = json.loads(raw_output)
         except json.JSONDecodeError:

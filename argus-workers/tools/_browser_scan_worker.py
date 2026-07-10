@@ -59,7 +59,7 @@ def _validate_url(url: str) -> str:
 
 def scan(target_url: str, tech_stack: list) -> list[dict]:
     slog = ScanLogger("browser_scan_worker")
-    findings = []
+    findings: list[dict] = []
     browser = None
     try:
         target_url = _validate_url(target_url)  # SSRF guard

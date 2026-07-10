@@ -164,13 +164,13 @@ class SecretsManager:
         """Get database URL from secrets or env"""
         return self.get_secret(
             "DATABASE_URL", os.getenv("DATABASE_URL", "postgresql://localhost/argus")
-        )
+        ) or ""
 
     def get_redis_url(self) -> str:
         """Get Redis URL from secrets or env"""
         return self.get_secret(
             "REDIS_URL", os.getenv("REDIS_URL", "redis://localhost:6379")
-        )
+        ) or ""
 
     def get_api_key(self, service: str) -> str | None:
         """Get API key for external service"""

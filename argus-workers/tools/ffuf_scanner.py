@@ -50,7 +50,7 @@ class FfufScanner(AbstractTool):
     def _get_wordlist_path(name: str) -> str:
         """Resolve path to a wordlist file."""
         try:
-            from tools.tool_cache import get_wordlist_path
+            from tools.tool_cache import get_wordlist_path  # type: ignore[attr-defined]
 
             return get_wordlist_path(name)
         except ImportError:

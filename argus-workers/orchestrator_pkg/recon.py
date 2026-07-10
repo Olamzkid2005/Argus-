@@ -72,11 +72,12 @@ def execute_recon_tools(
     from urllib.parse import urlparse
 
     parsed_target = urlparse(target)
-    target_domain = (
+    target_domain: str = (
         parsed_target.hostname
         or urlparse("//" + target).hostname
         or target.split("/")[0]
-    )
+        or ""
+    ) or ""
 
     # Aggressiveness config
     agg = aggressiveness or DEFAULT_AGGRESSIVENESS
@@ -295,7 +296,7 @@ def execute_recon_tools(
                 tool_name, success, parsed_count, error = future.result(timeout=15)
                 if success:
                     slog.tool_complete(tool_name, success=True, findings=parsed_count)
-                    success_msg = recon_tools[tool_name]["success_msg"]
+                    success_msg = str(recon_tools[tool_name].get("success_msg", ""))
                     formatted_msg = (
                         success_msg.replace("{{}}", str(parsed_count))
                         if "{{}}" in success_msg
@@ -306,7 +307,7 @@ def execute_recon_tools(
                     slog.tool_complete(tool_name, success=False)
                     _emit(
                         tool_name,
-                        f"{tool_name} failed: {error}"
+                        f"{tool_name} failed: {error or ''}"
                         if error
                         else f"{tool_name} failed",
                         "failed",

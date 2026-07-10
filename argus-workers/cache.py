@@ -350,6 +350,24 @@ class WorkerCache:
 cache = WorkerCache(ttl=300)  # 5 minute default TTL
 
 
+class _CachedFunc:
+    """Wrapper type that carries a cache_invalidate method."""
+
+    def __init__(self, func: Callable, invalidate: Callable[[], int]):
+        from functools import update_wrapper
+
+        self.__wrapped__ = func
+        self._func = func
+        self._invalidate = invalidate
+        update_wrapper(self, func)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self._func(*args, **kwargs)
+
+    def cache_invalidate(self) -> int:
+        return self._invalidate()
+
+
 def cached(
     key_prefix: str, ttl: int | None = None, invalidate_on: list[str] | None = None
 ):
@@ -379,10 +397,11 @@ def cached(
 
             return result
 
-        # Attach invalidation helper
-        wrapper.cache_invalidate = lambda: cache.clear_pattern(f"{key_prefix}:*")
-
-        return wrapper
+        # Return a _CachedFunc instead of attaching attribute to wrapper
+        return _CachedFunc(
+            wrapper,
+            invalidate=lambda: cache.clear_pattern(f"{key_prefix}:*"),
+        )
 
     return decorator
 
@@ -396,6 +415,9 @@ def cached_query(ttl: int = 300):
     """
 
     def decorator(func: Callable):
+        # Derive a prefix from the function name for scoped invalidation
+        func_prefix = f"cached_query:{func.__name__}"
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             # Generate cache key from function name and args
@@ -415,7 +437,10 @@ def cached_query(ttl: int = 300):
 
             return result
 
-        wrapper.cache_invalidate = lambda: cache.clear_pattern("query:*")
-        return wrapper
+        return _CachedFunc(
+            wrapper,
+            # Scope invalidation to this function's keys using the hash prefix
+            invalidate=lambda: cache.clear_pattern(f"*cached_query:{func.__name__}*"),
+        )
 
     return decorator

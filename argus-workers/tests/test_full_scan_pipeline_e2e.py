@@ -1453,7 +1453,7 @@ class TestFullScanPipelineE2E:
         # downstream dispatch when orchestrator returns failure status)
         def _transition_raises_if_analyzing(state_name, msg):
             if state_name == "analyzing":
-                raise Exception(f"Cannot transition to {state_name} — scan failed")
+                raise RuntimeError(f"Cannot transition to {state_name} — scan failed")
 
         scan_ctx.state.transition.side_effect = _transition_raises_if_analyzing
 

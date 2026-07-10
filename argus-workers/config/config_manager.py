@@ -147,7 +147,7 @@ class ConfigManager:
             current = self._config
             for part in parts:
                 if isinstance(current, dict):
-                    current = current.get(part)
+                    current = current.get(part)  # type: ignore[assignment]
                     if current is None:
                         return default
                 else:

@@ -111,7 +111,7 @@ def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
         "session_token",
     }
 
-    result = {}
+    result: dict[str, Any] = {}
 
     for key, value in data.items():
         # Check if this key is sensitive
@@ -151,7 +151,7 @@ class SecretsRedactionFilter(logging.Filter):
 
         # Redact from args if they're strings or dicts
         if record.args:
-            new_args = []
+            new_args: list[Any] = []
             for arg in record.args:
                 if isinstance(arg, str):
                     new_args.append(redact_string(arg))
@@ -172,7 +172,9 @@ class RedactedLogger:
     def __init__(self, logger: logging.Logger):
         self.logger = logger
 
-    def _redact_message(self, message: str, metadata: dict = None) -> str:
+    def _redact_message(
+        self, message: str, metadata: dict[str, Any] | None = None
+    ) -> tuple[str, dict[str, Any] | None]:
         """Redact secrets from message and metadata."""
         message = redact_string(message)
         if metadata:

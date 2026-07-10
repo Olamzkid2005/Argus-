@@ -114,9 +114,11 @@ class DualAuthScanner(AbstractTool):
         self.engagement_id = engagement_id
         self.emit_finding_callback = emit_finding_callback
         self.findings: list[dict] = []
+        self.target_url: str = ""
         self._builder: FindingBuilder | None = None
         self._last_request_time = 0.0
         self._rate_lock = threading.Lock()
+        self._last_response_received: bool = False
 
     @classmethod
     def for_phase_execution(
@@ -266,7 +268,7 @@ class DualAuthScanner(AbstractTool):
         target_url = ctx.target
         slog = ScanLogger("dual_auth_scanner", engagement_id=self.engagement_id)
         self.target_url = target_url.rstrip("/")
-        self.findings: list[dict] = []
+        self.findings = []
 
         slog.phase_header("Dual-Auth Scan", target=self.target_url)
         logger.info("Starting dual-auth scan: %s", self.target_url)
@@ -276,6 +278,8 @@ class DualAuthScanner(AbstractTool):
         session_a = None
         session_b = None
         try:
+            if self.auth_manager_a is None:
+                raise RuntimeError("AuthManager for User A not configured")
             session_a = self.auth_manager_a.authenticate(self.target_url)
             slog.info("User A authenticated")
             logger.info("User A authenticated successfully")
@@ -299,6 +303,8 @@ class DualAuthScanner(AbstractTool):
                 # Phase 2: Authenticate as User B and test cross-account access
                 slog.info("Phase 2: Authenticating as User B")
                 try:
+                    if self.auth_manager_b is None:
+                        raise RuntimeError("AuthManager for User B not configured")
                     session_b = self.auth_manager_b.authenticate(self.target_url)
                     slog.info("User B authenticated")
                     logger.info("User B authenticated successfully")
@@ -356,17 +362,16 @@ class DualAuthScanner(AbstractTool):
         """
         ctx = ToolContext(target=target_url)
         result = self.execute(ctx)
-        return result.findings
+        return result.findings or []
 
     # --- Private helpers ---
 
     def _is_in_scope(self, url: str) -> bool:
         parsed_url = urlparse(url)
         parsed_target = urlparse(self.target_url)
-        return (
-            parsed_url.hostname == parsed_target.hostname
-            or parsed_url.hostname.endswith("." + parsed_target.hostname)
-        )
+        hostname = (parsed_url.hostname or "").lower()
+        target_hostname = (parsed_target.hostname or "").lower()
+        return hostname == target_hostname or hostname.endswith("." + target_hostname)
 
     @staticmethod
     def _is_private_host(hostname: str) -> bool:
@@ -376,7 +381,7 @@ class DualAuthScanner(AbstractTool):
         """
         try:
             addrs = socket.getaddrinfo(hostname, None)
-            return any(is_private_ip(sockaddr[0]) for _, _, _, _, sockaddr in addrs)
+            return any(is_private_ip(str(sockaddr[0])) for _, _, _, _, sockaddr in addrs)
         except Exception:
             return True
 
@@ -624,7 +629,7 @@ class DualAuthScanner(AbstractTool):
         owned_resources: dict[str, list[str]],
     ) -> list[dict]:
         """Test whether User B can access resources owned by User A."""
-        findings = []
+        findings: list[dict] = []
 
         # Build a map of resource type → URL template
         resource_urls = {
@@ -711,7 +716,7 @@ class DualAuthScanner(AbstractTool):
 
     def _check_bopla(self, session: requests.Session, role_label: str) -> list[dict]:
         """Check API responses for sensitive fields that shouldn't be exposed."""
-        findings = []
+        findings: list[dict] = []
 
         api_endpoints = [
             "/api/v1/users",

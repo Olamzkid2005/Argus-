@@ -6,6 +6,7 @@ This parser extracts open ports, their service information, and host details
 from the XML output.
 """
 
+from typing import Any
 import logging
 import xml.etree.ElementTree as ET
 
@@ -18,7 +19,7 @@ class NmapParser(BaseParser):
     """Parser for nmap XML output — extracts open ports and service details."""
 
     def parse(self, raw_output: str) -> list[dict]:
-        findings = []
+        findings: list[dict[str, Any]] = []
         if not raw_output or not raw_output.strip():
             return findings
 

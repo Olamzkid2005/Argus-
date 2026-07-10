@@ -188,7 +188,7 @@ class MemoryRetriever:
             )
 
             repo = TargetProfileRepository()
-            profile = repo.get_by_engagement_id(engagement_id)
+            profile = repo.get_by_engagement_id(engagement_id)  # type: ignore[attr-defined]
             if profile and hasattr(profile, "to_dict"):
                 return profile.to_dict()
             if isinstance(profile, dict):

@@ -6,6 +6,7 @@ When run through the tool_runner subprocess path, findings are JSON-encoded.
 This parser handles both cases.
 """
 
+from typing import Any
 import json
 import logging
 
@@ -44,7 +45,7 @@ class WebScannerParser(BaseParser):
         2. JSON lines (one finding per line)
         3. Already-structured dict output (when called inline)
         """
-        findings = []
+        findings: list[dict] = []
 
         if not raw_output or not raw_output.strip():
             return findings

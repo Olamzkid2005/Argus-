@@ -197,7 +197,7 @@ def _scan_common_paths(
             resp = session.get(url, timeout=5)
 
             if resp.ok:
-                content_type = resp.headers.get("Content-Type", "").lower()
+                content_type = (resp.headers.get("Content-Type", "") or "").lower()
 
                 # HTML form with input fields (existing behavior)
                 if "<input" in resp.text or "<form" in resp.text:
@@ -294,22 +294,22 @@ def _extract_form_fields(html: str, form_type: str = "register") -> dict[str, st
             return fields
 
         # Extract form action and method
-        action = form.get("action", "")
-        if action:
-            fields["form_action"] = action
-        fields["form_method"] = form.get("method", "post").upper()
+        raw_action = str(form.get("action", ""))
+        if raw_action:
+            fields["form_action"] = raw_action
+        fields["form_method"] = str(form.get("method", "post")).upper()
 
         # Extract input fields
         for inp in form.find_all("input"):
-            name = inp.get("name", "") or inp.get("id", "")
+            name = str(inp.get("name", "") or inp.get("id", ""))
             if not name:
                 continue
-            input_type = inp.get("type", "text").lower()
+            input_type = str(inp.get("type", "text")).lower()
 
             if input_type == "email" or "email" in name.lower():
-                fields["email"] = name
+                fields["email"] = str(name)
             elif input_type == "password":
-                name_lower = name.lower()
+                name_lower = str(name).lower()
                 if any(kw in name_lower for kw in ("confirm", "repeat", "verify")):
                     fields["confirm"] = name
                 else:
@@ -320,7 +320,7 @@ def _extract_form_fields(html: str, form_type: str = "register") -> dict[str, st
                     fields["email"] = name
             elif "csrf" in name.lower() or "token" in name.lower() or name == "_token":
                 fields["csrf"] = name
-                csrf_value = inp.get("value", "")
+                csrf_value = str(inp.get("value", ""))
                 if csrf_value:
                     fields["csrf_value"] = csrf_value
 

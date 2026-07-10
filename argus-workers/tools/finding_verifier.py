@@ -377,10 +377,13 @@ async def verify_finding(finding: dict, engagement_id: str = "") -> dict:
         }
         return finding
 
+    from typing import Any, cast, Callable
+
     endpoint = finding.get("endpoint") or finding.get("url") or ""
     payload = finding.get("evidence", {}).get("payload") or finding.get("payload") or ""
 
-    bound_verifier = functools.partial(verifier, engagement_id=engagement_id)
+    verifier_fn = cast(Callable[..., Any], verifier)
+    bound_verifier = functools.partial(verifier_fn, engagement_id=engagement_id)
     # Open redirect verifier does not accept payload (only endpoint + engagement_id)
     if finding_type in ("open-redirect", "open_redirect"):
         result = await bound_verifier(endpoint)

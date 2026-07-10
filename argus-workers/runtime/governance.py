@@ -103,8 +103,6 @@ class Governance:
             cost = getattr(action, "cost_usd", 0.0) or 0.0
 
         # 1. Active runtime timeout check (blocker 58)
-        # Uses accumulated active execution time instead of wall-clock,
-        # so idle time between tool calls doesn't count against the budget.
         elapsed = self._active_time_accumulated
         if self._active_timer_start is not None:
             elapsed += time.time() - self._active_timer_start
@@ -117,8 +115,6 @@ class Governance:
             return False, self._shutdown_reason
 
         # 2. Cost check (estimate before execution)
-        # We check approximate cost even before execution to prevent
-        # the agent from choosing expensive tools when budget is tight.
         projected_cost = self._total_cost_usd + float(cost)
         if projected_cost > self.max_cost_usd:
             self._shutdown(
@@ -145,7 +141,7 @@ class Governance:
         action: dict | Any | None = None,
         actual_input_tokens: int | None = None,
         actual_output_tokens: int | None = None,
-    ):
+    ) -> None:
         """
         Record a tool result for signal-quality tracking.
 
@@ -214,20 +210,6 @@ class Governance:
         else:
             self._consecutive_low_signal = 0
 
-    def check_low_signal(self) -> tuple[bool, str]:
-        """
-        Check if consecutive low-signal threshold is exceeded.
-
-        Returns:
-            (is_low_signal: bool, detail: str)
-        """
-        if self._consecutive_low_signal >= self.low_signal_threshold:
-            return True, (
-                f"Low-signal threshold reached: "
-                f"{self._consecutive_low_signal} consecutive low-value tool runs"
-            )
-        return False, ""
-
     def start_active_timer(self) -> None:
         """Start tracking active execution time (blocker 58).
 
@@ -286,7 +268,7 @@ class Governance:
     def shutdown_reason(self) -> str:
         return self._shutdown_reason
 
-    def reset_low_signal_counter(self):
+    def reset_low_signal_counter(self) -> None:
         """Reset the low-signal counter (e.g., when starting a new phase)."""
         self._consecutive_low_signal = 0
 
@@ -334,7 +316,7 @@ class Governance:
                 if isinstance(data, list):
                     return len(data)
                 if isinstance(data, dict):
-                    return len(data.get("findings", data.get("results", [])))
+                    return len(data.get("findings", data.get("results", [])))  # type: ignore[arg-type]
             except (json.JSONDecodeError, TypeError):
                 pass
         return 0
@@ -356,7 +338,7 @@ class Governance:
                 if isinstance(data, list):
                     findings = data
                 elif isinstance(data, dict):
-                    findings = data.get("findings", data.get("results", []))
+                    findings = data.get("findings", data.get("results", []))  # type: ignore[assignment]
             except (json.JSONDecodeError, TypeError):
                 pass
 

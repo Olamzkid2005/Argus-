@@ -11,6 +11,7 @@ rich parsing the orchestrator path uses.
 """
 
 import logging
+from typing import Any
 
 from .parsers import generic, gitleaks, nikto, nmap, nuclei, semgrep, sqlmap, whatweb
 from .types import NormalizedFinding
@@ -29,10 +30,10 @@ _PARSERS = {
 }
 
 # ── System B: BaseParser class registry (lazy-loaded) ──
-_EXTRA_PARSERS: dict[str, object] | None = None
+_EXTRA_PARSERS: dict[str, Any] | None = None
 
 
-def _ensure_extra_parsers() -> dict[str, object]:
+def _ensure_extra_parsers() -> dict[str, Any]:
     """Lazy-load parsers from parsers/parsers/_parser_registry."""
     global _EXTRA_PARSERS
     if _EXTRA_PARSERS is not None:

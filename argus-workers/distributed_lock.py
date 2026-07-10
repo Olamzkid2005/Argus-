@@ -36,7 +36,7 @@ class DistributedLock:
         self.redis_url = redis_url
         self._redis_client = None
         self.worker_id = worker_id or str(uuid.uuid4())
-        self.held_locks = {}  # engagement_id -> lock_key mapping
+        self.held_locks: dict[str, dict[str, object]] = {}  # engagement_id -> lock_key mapping
         # Phase 4.5.2: Register in global lock registry for shutdown cleanup
         with _worker_locks_lock:
             _worker_locks[self.worker_id] = self
@@ -56,7 +56,7 @@ class DistributedLock:
                 socket_timeout=5,
                 retry_on_timeout=True,
             )
-        return self._redis_client
+        return self._redis_client  # type: ignore[return-value]
 
     @redis_client.setter
     def redis_client(self, client: redis.Redis) -> None:

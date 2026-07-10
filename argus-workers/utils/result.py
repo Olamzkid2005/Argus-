@@ -88,7 +88,7 @@ def unwrap(result: Result[T, E]) -> T:
     Raises:
         The inner error if Err.
     """
-    if is_ok(result):
+    if isinstance(result, Ok):
         return result.value
     raise result.error  # type: ignore[misc]
 
@@ -103,6 +103,6 @@ def unwrap_or(result: Result[T, E], default: T) -> T:
     Returns:
         The inner value if Ok, otherwise the default.
     """
-    if is_ok(result):
+    if isinstance(result, Ok):
         return result.value
     return default
