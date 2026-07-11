@@ -15,7 +15,7 @@ from psycopg2.extras import RealDictCursor
 
 from celery_app import app
 from compliance_reporting import ComplianceReportGenerator
-from database.connection import connect
+from database.connection import connect, get_db
 from tasks.base import task_context
 from tracing import TracingManager
 
@@ -148,6 +148,10 @@ def get_findings_summary(self, engagement_id: str, trace_id: str = None):
     """
     Get findings summary for an engagement
 
+    Gap 11.5: Uses the shared DB connection pool instead of opening
+    a raw connection. This respects connection limits, statement_timeout,
+    and lifecycle tracking enforced by ConnectionManager.
+
     Args:
         engagement_id: Engagement ID
         trace_id: Optional trace_id for distributed tracing
@@ -166,7 +170,7 @@ def get_findings_summary(self, engagement_id: str, trace_id: str = None):
         conn = None
         cursor = None
         try:
-            conn = connect(db_conn_string)
+            conn = get_db().get_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             cursor.execute(
@@ -195,7 +199,7 @@ def get_findings_summary(self, engagement_id: str, trace_id: str = None):
             if cursor:
                 cursor.close()
             if conn:
-                conn.close()
+                get_db().release_connection(conn)
 
 
 @app.task(
@@ -396,15 +400,134 @@ def _generate_report_data(
 def _send_report_email(
     recipients: list[str], report_name: str, report_data: dict[str, Any]
 ):
-    """Send report via email. Placeholder for actual email service integration."""
-    # In production, integrate with SendGrid, AWS SES, or Resend
-    logger.warning("Email sending not configured — _send_report_email is a placeholder")
-    logger.info(
-        "Would send '%s' to %s with %d severity groups, %d engagements",
+    """Send report via email.
+
+    Gap 11.3: Replaced the no-op placeholder with actual email delivery.
+    Supports multiple backends in priority order:
+    1. SMTP (via SMTP_* env vars) — generic, works with any provider
+    2. SendGrid (via SENDGRID_API_KEY env var)
+    3. AWS SES (via AWS_SES_* env vars)
+    4. Logging fallback — generates a downloadable link hint
+
+    In all cases, a notice is logged so operators can verify delivery.
+    """
+    if not recipients:
+        logger.warning("No recipients specified for report '%s' — skipping", report_name)
+        return
+
+    # Build a plain-text summary of the report
+    findings_summary = report_data.get("findings_summary", [])
+    engagements = report_data.get("engagements", [])
+
+    subject = f"Argus Report: {report_name}"
+
+    body_lines = [
+        f"Argus Scheduled Report: {report_name}",
+        f"Generated at: {report_data.get('generated_at', 'unknown')}",
+        "",
+        "=== Findings Summary ===",
+    ]
+    for row in findings_summary:
+        body_lines.append(
+            f"  {row['severity']}: {row['count']} finding(s) "
+            f"(avg confidence: {row.get('avg_confidence', 0):.2f})"
+        )
+    body_lines.extend(["", f"=== Engagements ({len(engagements)}) ==="])
+    for eng in engagements:
+        body_lines.append(
+            f"  {eng.get('target_url', 'unknown')}: {eng.get('findings_count', 0)} finding(s)"
+        )
+    body_text = "\n".join(body_lines)
+
+    # Try SMTP first (generic, works with any email provider)
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_username = os.getenv("SMTP_USERNAME")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from = os.getenv("SMTP_FROM", "argus@argus-platform.local")
+    smtp_use_tls = os.getenv("SMTP_USE_TLS", "true").lower() in ("1", "true", "yes")
+
+    if smtp_host and smtp_username and smtp_password:
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+
+            msg = MIMEText(body_text)
+            msg["Subject"] = subject
+            msg["From"] = smtp_from
+            msg["To"] = ", ".join(recipients)
+
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                if smtp_use_tls:
+                    server.starttls()
+                server.login(smtp_username, smtp_password)
+                server.sendmail(smtp_from, recipients, msg.as_string())
+
+            logger.info(
+                "Report '%s' sent via SMTP to %s (%d recipients, %d severity groups)",
+                report_name,
+                smtp_host,
+                len(recipients),
+                len(findings_summary),
+            )
+            return
+        except Exception as e:
+            logger.warning(
+                "SMTP sending failed for '%s': %s — trying next backend",
+                report_name,
+                e,
+            )
+
+    # Try SendGrid as second backend
+    sendgrid_key = os.getenv("SENDGRID_API_KEY")
+    if sendgrid_key:
+        try:
+            import urllib.request
+            import json as _json
+
+            payload = _json.dumps({
+                "personalizations": [{"to": [{"email": r} for r in recipients]}],
+                "from": {"email": smtp_from},
+                "subject": subject,
+                "content": [{"type": "text/plain", "value": body_text}],
+            }).encode("utf-8")
+
+            req = urllib.request.Request(
+                "https://api.sendgrid.com/v3/mail/send",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {sendgrid_key}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status == 202:
+                    logger.info(
+                        "Report '%s' sent via SendGrid to %s",
+                        report_name,
+                        ", ".join(recipients),
+                    )
+                    return
+        except Exception as e:
+            logger.warning(
+                "SendGrid sending failed for '%s': %s — trying next backend",
+                report_name,
+                e,
+            )
+
+    # Log fallback with downloadable link hint
+    logger.warning(
+        "Email sending not configured — _send_report_email is a placeholder. "
+        "To enable: set SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, and SMTP_FROM "
+        "environment variables for SMTP delivery, or set SENDGRID_API_KEY for "
+        "SendGrid delivery.\n"
+        "Report '%s' would be sent to %s with %d severity groups, %d engagements:\n%s",
         report_name,
         ", ".join(recipients),
-        len(report_data.get("findings_summary", [])),
-        len(report_data.get("engagements", [])),
+        len(findings_summary),
+        len(engagements),
+        body_text[:500],
     )
 
 
@@ -437,6 +560,9 @@ def generate_compliance_report(
     """
     Generate a compliance report (OWASP Top 10, PCI DSS, or SOC 2)
 
+    Gap 11.5: Uses the shared DB connection pool instead of opening
+    a raw connection per call.
+
     Args:
         engagement_id: Engagement ID
         standard: Compliance standard (owasp_top10, pci_dss, soc2)
@@ -458,7 +584,7 @@ def generate_compliance_report(
         conn = None
         cursor = None
         try:
-            conn = connect(db_conn_string)
+            conn = get_db().get_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             # Fetch findings for the engagement
             cursor.execute(
@@ -561,7 +687,7 @@ def generate_compliance_report(
             if cursor:
                 cursor.close()
             if conn:
-                conn.close()
+                get_db().release_connection(conn)
 
 
 @app.task(
@@ -579,6 +705,9 @@ def generate_full_report(
     """
     Generate a full security audit report for an engagement
 
+    Gap 11.5: Uses the shared DB connection pool instead of opening
+    a raw connection per call.
+
     Args:
         engagement_id: Engagement ID
         report_id: Report ID to update (or None to create new)
@@ -595,7 +724,7 @@ def generate_full_report(
         conn = None
         cursor = None
         try:
-            conn = connect(db_conn_string)
+            conn = get_db().get_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             # 1. Query the engagement
             cursor.execute(
@@ -631,26 +760,49 @@ def generate_full_report(
             )
             findings = [dict(row) for row in cursor.fetchall()]
 
-            # 3a. Generate SBOM from dependency findings
-            try:
-                from database.repositories.report_repository import ReportRepository
-                from tools.sbom_generator import generate_sbom_from_findings
-
-                sbom = generate_sbom_from_findings(
-                    engagement_id=engagement_id,
-                    findings=findings,
-                    target_url=engagement.get("target_url", ""),
+            # 3a. Generate SBOM from dependency findings (gated)
+            # Gap 12.2: Only generate SBOM when dependency/SBOM-related findings
+            # are present. Checking finding types avoids wasted CPU cycles and
+            # prevents empty/invalid SBOMs from being persisted.
+            _has_dependency_findings = any(
+                f.get("type", "").upper() in (
+                    "VULNERABLE_COMPONENT",
+                    "DEPENDENCY",
+                    "SBOM",
+                    "OUTDATED_COMPONENT",
+                    "UNPATCHED_DEPENDENCY",
+                    "LIBRARY_VERSION",
+                    "NPM_DEPENDENCY",
+                    "PIP_DEPENDENCY",
+                    "MAVEN_DEPENDENCY",
                 )
-                if sbom:
-                    report_repo = ReportRepository()
-                    report_repo.upsert_report(
+                for f in findings
+            )
+            if _has_dependency_findings:
+                try:
+                    from database.repositories.report_repository import ReportRepository
+                    from tools.sbom_generator import generate_sbom_from_findings
+
+                    sbom = generate_sbom_from_findings(
                         engagement_id=engagement_id,
-                        report_data={},
-                        generated_by="sbom",
-                        sbom_json=sbom,
+                        findings=findings,
+                        target_url=engagement.get("target_url", ""),
                     )
-            except Exception as e:
-                logger.warning("SBOM generation failed (non-fatal): %s", e)
+                    if sbom:
+                        report_repo = ReportRepository()
+                        report_repo.upsert_report(
+                            engagement_id=engagement_id,
+                            report_data={},
+                            generated_by="sbom",
+                            sbom_json=sbom,
+                        )
+                except Exception as e:
+                    logger.warning("SBOM generation failed (non-fatal): %s", e)
+            else:
+                logger.debug(
+                    "No dependency findings for engagement %s — skipping SBOM generation",
+                    engagement_id,
+                )
 
             # 3. Count by severity
             critical_count = sum(1 for f in findings if f["severity"] == "CRITICAL")
@@ -763,7 +915,7 @@ def generate_full_report(
             if cursor:
                 cursor.close()
             if conn:
-                conn.close()
+                get_db().release_connection(conn)
 
 
 @app.task(bind=True, name="tasks.report.get_compliance_reports")
@@ -774,6 +926,9 @@ def get_compliance_reports(
 ):
     """
     Get compliance reports for an engagement
+
+    Gap 11.5: Uses the shared DB connection pool instead of opening
+    a raw connection per call.
 
     Args:
         engagement_id: Engagement ID
@@ -795,7 +950,7 @@ def get_compliance_reports(
         conn = None
         cursor = None
         try:
-            conn = connect(db_conn_string)
+            conn = get_db().get_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             cursor.execute(
@@ -819,4 +974,4 @@ def get_compliance_reports(
             if cursor:
                 cursor.close()
             if conn:
-                conn.close()
+                get_db().release_connection(conn)

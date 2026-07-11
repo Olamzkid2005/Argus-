@@ -74,13 +74,26 @@ class MCPToolBridge:
             len(skipped_tools),
         )
 
-    def call_via_mcp(self, tool: str, arguments: dict = None) -> dict:
-        """Call a tool via MCP with scope validation.
+    def call_via_mcp(
+        self, tool: str, arguments: dict = None, cache_mode: str | None = None
+    ) -> dict:
+        """Call a tool via MCP with scope validation and cache control.
+
+        Gap 4.4: cache_mode is forwarded to call_tool() to control
+        whether tool outputs are cached/retrieved from cache.
 
         When ``engagement_id`` is set, this method creates a
         ``ScopeValidator`` and passes it to ``call_tool`` so the
         target is validated against the engagement's authorized scope
         before the tool subprocess is launched.
+
+        Args:
+            tool: Tool name
+            arguments: Tool parameters
+            cache_mode: Cache execution mode ("normal", "no_cache", "refresh")
+
+        Returns:
+            MCP-formatted result dict
         """
         scope_validator = None
         if self.engagement_id:
@@ -107,6 +120,7 @@ class MCPToolBridge:
         result = self.mcp.call_tool(
             tool,
             arguments or {},
+            cache_mode=cache_mode,
             engagement_id=self.engagement_id,
             scope_validator=scope_validator,
         )
@@ -114,8 +128,27 @@ class MCPToolBridge:
         return result
 
     def call_via_runner(
-        self, tool: str, args: list[str], timeout: int = None
+        self,
+        tool: str,
+        args: list[str],
+        timeout: int = None,
+        cache_mode: str | None = None,
     ) -> UnifiedToolResult:
-        """Call a tool via the existing ToolRunner."""
+        """Call a tool via the existing ToolRunner.
+
+        Gap 4.4: cache_mode is forwarded to tool_runner.run() to control
+        whether tool outputs are cached/retrieved from cache.
+
+        Args:
+            tool: Tool name
+            args: CLI arguments
+            timeout: Execution timeout in seconds
+            cache_mode: Cache execution mode ("normal", "no_cache", "refresh")
+
+        Returns:
+            UnifiedToolResult
+        """
         timeout = timeout or 300
-        return self.tool_runner.run(tool, args, timeout=timeout)
+        from cache import CacheMode
+        _cm = CacheMode(cache_mode) if cache_mode else CacheMode.NORMAL
+        return self.tool_runner.run(tool, args, timeout=timeout, cache_mode=_cm)

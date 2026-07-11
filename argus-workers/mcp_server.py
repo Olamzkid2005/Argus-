@@ -3,6 +3,8 @@ MCP Protocol Server - Wraps tool execution with discoverable schemas
 Implements Model Context Protocol for standardized tool calling
 """
 
+import hashlib
+import json
 import logging
 import os
 import shutil
@@ -17,6 +19,7 @@ from typing import Any
 from agent.react_agent import ReActAgent
 from agent.session_store import AgentSessionStore, ToolExecution
 from agent.tool_registry import ToolRegistry
+from cache import CacheMode, WorkerCache
 from llm_client import LLMClient
 from tool_core.parser import dispatch
 from tools.scope_validator import ScopeViolationError
@@ -203,6 +206,16 @@ class MCPToolResult:
             "isError": not self.success,
             "meta": meta,
         }
+
+
+# MCP tool result cache (5-minute default TTL)
+_mcp_cache = WorkerCache(ttl=300)
+
+
+def _mcp_cache_key(name: str, arguments: dict | None) -> str:
+    """Build a deterministic cache key from tool name and arguments."""
+    key_data = f"mcp:{name}:{json.dumps(arguments or {}, sort_keys=True)}"
+    return hashlib.sha256(key_data.encode()).hexdigest()[:16]
 
 
 class MCPServer:
@@ -548,9 +561,10 @@ class MCPServer:
             timeout: Execution timeout in seconds
             cache_mode: Cache execution mode ("normal", "no_cache", "refresh").
                         Passed through to tool execution when using the pipeline
-                        router path. For direct subprocess calls, cache_mode is
-                        accepted but not enforced (the cache lives in ToolRunner,
-                        which is used by the orchestrator path).
+                        router path. For direct subprocess calls,                        cache_mode controls whether tool results are cached.
+                        "normal" -> read cache, write cache.
+                        "no_cache" -> skip cache read AND write (fresh execution).
+                        "refresh" -> skip cache read, still write (update cache).
             engagement_id: Optional engagement UUID for scope validation and audit.
             scope_validator: Optional ``ScopeValidator`` instance. When provided,
                              the tool's ``target`` argument is validated against the
@@ -699,6 +713,18 @@ class MCPServer:
                 signal_quality=tool_signal_quality,
             ).to_dict()
 
+        # Gap 4.4: Check cache before executing
+        _cache_mode = (cache_mode or CacheMode.NORMAL.value)
+        _cache_key = _mcp_cache_key(name, arguments)
+        if _cache_mode == CacheMode.NORMAL.value:
+            _cached = _mcp_cache.get(_cache_key)
+            if _cached is not None:
+                logger.debug("MCP cache HIT for tool '%s'", name)
+                # Zero out stale duration so consumers don't see old timestamps
+                if "meta" in _cached and isinstance(_cached["meta"], dict):
+                    _cached["meta"]["duration_ms"] = 0
+                return _cached
+
         # Track execution
         start = time.time()
         self._execution_stats[name]["calls"] += 1
@@ -781,6 +807,10 @@ class MCPServer:
             structured = dispatch(name, output_to_parse)
             if structured:
                 mcp_result.data["structured"] = [f.__dict__ for f in structured]
+
+            # Cache the result (NO_CACHE mode skips writes)
+            if _cache_mode != CacheMode.NO_CACHE.value:
+                _mcp_cache.set(_cache_key, mcp_result.to_dict(), ttl=300)
             return mcp_result.to_dict()
 
         except subprocess.TimeoutExpired:
@@ -1525,13 +1555,31 @@ def main():
 
     transport.register("cancel", handle_cancel)
 
+    # ── Gap 8.3: Log startup health diagnostics ──
+    # Run a comprehensive health check and log the results so operators
+    # can see the startup state without querying the /health endpoint.
+    from health_server import log_startup_health, start_health_server_from_env
+
+    try:
+        health = log_startup_health()
+        if health["status"] == "degraded":
+            logger.warning(
+                "Startup health: DEGRADED — %d/%d tools available, LLM=%s, Celery=%s",
+                health["tools"]["available"],
+                health["tools"]["total"],
+                health["llm_available"],
+                health["celery_worker"]["alive"],
+            )
+        else:
+            logger.info("Startup health: OK")
+    except Exception:
+        logger.debug("Startup health diagnostics failed", exc_info=True)
+
     # ── Phase 5.1: Start health/metrics HTTP server (blocker 57) ──
     # Runs on a daemon thread so it doesn't block stdio transport shutdown.
     # Configurable via ARGUS_METRICS_PORT (default 9090) and
     # ARGUS_METRICS_HOST (default 127.0.0.1).
     # Set ARGUS_METRICS_PORT=0 or empty to disable.
-    from health_server import start_health_server_from_env
-
     start_health_server_from_env()
 
     logger.info("MCP stdio transport starting")

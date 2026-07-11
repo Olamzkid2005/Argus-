@@ -334,8 +334,14 @@ def _run_scan_tool(
     all_findings: list,
     on_line: Callable | None = None,
     line_buffer: list[str] | None = None,
+    cache_mode: str | None = None,
 ) -> tuple[str, bool, str | None]:
     """Thread-safe wrapper for running a scan tool.
+
+    Gap 4.4: cache_mode is forwarded to tool_runner.run() to control
+    whether tool outputs are cached/retrieved from cache.
+    Streaming tools (on_line provided) do not cache — their output is
+    processed in real-time and findings are accumulated inline.
 
     Findings are emitted in real-time via emit_finding_rt as each tool
     parses them, so analysts can start triaging critical findings while
@@ -354,7 +360,9 @@ def _run_scan_tool(
             success = result.success
             return tool_name, success, result.stdout if success else None
         else:
-            result = ctx.tool_runner.run(tool_name, args, timeout=timeout)
+            from cache import CacheMode
+            _cm = CacheMode(cache_mode) if cache_mode else CacheMode.NORMAL
+            result = ctx.tool_runner.run(tool_name, args, timeout=timeout, cache_mode=_cm)
             if result.success and result.stdout:
                 parsed = ctx.parser.parse(tool_name, result.stdout)
                 for p in parsed:
@@ -389,9 +397,8 @@ def execute_scan_tools(
     """
     Execute scanning tools against targets.
 
-    TODO: cache_mode is accepted for pipeline interface compatibility
-    but is not yet implemented. When implemented, it should control
-    whether tool outputs are cached/retrieved from cache.
+    Gap 4.4: cache_mode is forwarded to all tool_runner.run() calls to
+    control whether tool outputs are cached/retrieved from cache.
 
     Args:
         ctx: ToolContext or Orchestrator (provides tool_runner, parser, normalizer)
@@ -400,6 +407,8 @@ def execute_scan_tools(
         aggressiveness: Scan aggressiveness level (default, high, extreme)
         auth_config: Optional authentication configuration for scanning
         tech_stack: Detected technology stack (triggers browser scanner for SPAs)
+        cache_mode: Cache execution mode ("normal", "no_cache", "refresh").
+                     Forwarded to ToolRunner.run() for cache control.
 
     Returns:
         List of findings
@@ -629,6 +638,7 @@ def execute_scan_tools(
                     ["-u", target, "-m", "GET", "-o", arjun_out, "-t", arjun_threads],
                     arjun_timeout,
                     all_findings,
+                    cache_mode=cache_mode,
                 )
             except Exception as e:
                 logger.warning("arjun failed for %s: %s", target, e)
@@ -639,7 +649,7 @@ def execute_scan_tools(
                 waf_timeout = 120
                 slog.tool_start("wafw00f", [target])
                 waf_result = ctx.tool_runner.run(
-                    "wafw00f", [target, "-a"], timeout=waf_timeout
+                    "wafw00f", [target, "-a"], timeout=waf_timeout, cache_mode=cache_mode
                 )
                 if waf_result.success and waf_result.stdout:
                     logger.info(
@@ -878,6 +888,7 @@ def execute_scan_tools(
                             all_findings,
                             on_line=on_line,
                             line_buffer=line_buffer,
+                            cache_mode=cache_mode,
                         )
                     else:
                         future = pool.submit(
@@ -887,6 +898,7 @@ def execute_scan_tools(
                             args,
                             timeout,
                             all_findings,
+                            cache_mode=cache_mode,
                         )
                     futures[future] = name
                 try:

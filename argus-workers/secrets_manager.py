@@ -7,15 +7,78 @@ Falls back to environment variables for local development.
 Security notes:
 - Default Vault URL uses HTTPS (not HTTP) to enforce TLS
 - Set VAULT_SKIP_VERIFY=true only for development with self-signed certs
-- Secrets are cached in-memory; use invalidate_cache() to clear
+- Secrets are cached in-memory with optional Fernet encryption (Gap 7.8)
+- Use invalidate_cache() to clear the cache
 """
 
+import base64
 import logging
 import os
 import threading
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Gap 7.8: Lazy Fernet cipher for optional at-rest encryption of cached secrets.
+# Enabled when FERNET_SECRET_KEY env var is set. The key must be 32 URL-safe
+# base64-encoded bytes (44 chars). Generate with: python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+_FERNET_UNAVAILABLE = object()  # Sentinel to cache failed init
+_fernet_cipher = None
+_fernet_lock = threading.Lock()
+
+
+def _get_fernet():
+    """Get the Fernet cipher from FERNET_SECRET_KEY env var.
+
+    Returns None if the env var is not set, cryptography is not installed,
+    or the key is invalid. The failure is cached so we don't retry the
+    import on every call.
+    """
+    global _fernet_cipher
+    if _fernet_cipher is None:
+        key = os.getenv("FERNET_SECRET_KEY")
+        if not key:
+            _fernet_cipher = _FERNET_UNAVAILABLE
+            return None
+        with _fernet_lock:
+            if _fernet_cipher is None or _fernet_cipher is _FERNET_UNAVAILABLE:
+                try:
+                    from cryptography.fernet import Fernet
+                    _fernet_cipher = Fernet(key.encode() if isinstance(key, str) else key)
+                except Exception:
+                    logger.warning(
+                        "Fernet encryption unavailable: cryptography not installed "
+                        "or invalid FERNET_SECRET_KEY. Secrets will be cached in plaintext."
+                    )
+                    _fernet_cipher = _FERNET_UNAVAILABLE
+                    return None
+    if _fernet_cipher is _FERNET_UNAVAILABLE:
+        return None
+    return _fernet_cipher
+
+
+def _encrypt_value(value: str) -> str:
+    """Encrypt a secret value with Fernet. Falls back to plaintext if unavailable."""
+    cipher = _get_fernet()
+    if cipher is None:
+        return value
+    encrypted = cipher.encrypt(value.encode())
+    return f"__enc__:{encrypted.decode()}"
+
+
+def _decrypt_value(value: str) -> str:
+    """Decrypt a cached secret value. Passes through plaintext values unchanged."""
+    if not isinstance(value, str) or not value.startswith("__enc__:"):
+        return value
+    cipher = _get_fernet()
+    if cipher is None:
+        return value
+    try:
+        encrypted = value[len("__enc__:"):].encode()
+        return cipher.decrypt(encrypted).decode()
+    except Exception:
+        logger.warning("Failed to decrypt cached secret — returning as-is")
+        return value
 
 
 class SecretsManager:
@@ -26,6 +89,9 @@ class SecretsManager:
     1. HashiCorp Vault (if VAULT_ADDR configured)
     2. AWS Secrets Manager (if AWS_REGION configured)
     3. Environment variables (fallback)
+
+    Gap 7.8: All secrets stored in the in-memory cache are encrypted at rest
+    using Fernet (symmetric AES-128-CBC with HMAC) when FERNET_SECRET_KEY is set.
     """
 
     def __init__(self):
@@ -109,9 +175,9 @@ class SecretsManager:
         Returns:
             Secret value or default
         """
-        # Check cache first
+        # Check cache first (decrypt if stored encrypted)
         if key in self._cache:
-            return self._cache[key]
+            return _decrypt_value(self._cache[key])
 
         # Try Vault
         vault = self._get_vault_client()
@@ -130,7 +196,7 @@ class SecretsManager:
                 data = response.get("data", {}).get("data", {})
                 # Try the original key first, then the vault_path_key, then 'value'
                 value = data.get(key) or data.get(vault_path_key) or data.get("value") or ""
-                self._cache[key] = value
+                self._cache[key] = _encrypt_value(value)
                 return value
             except Exception as e:
                 logger.debug("Vault secret lookup failed for %s: %s", key, e)
@@ -143,12 +209,10 @@ class SecretsManager:
                 if "SecretString" in response:
                     value = response["SecretString"]
                 elif "SecretBinary" in response:
-                    import base64
-
                     value = base64.b64decode(response["SecretBinary"]).decode()
                 else:
                     value = default
-                self._cache[key] = value
+                self._cache[key] = _encrypt_value(value)
                 return value
             except Exception as e:
                 logger.debug("AWS Secrets Manager lookup failed for %s: %s", key, e)
@@ -182,6 +246,13 @@ class SecretsManager:
             self._cache.pop(key, None)
         else:
             self._cache.clear()
+
+    def is_cache_encrypted(self) -> bool:
+        """Check if the cache is using Fernet encryption.
+
+        Returns True if FERNET_SECRET_KEY is configured and cryptography is available.
+        """
+        return _get_fernet() is not None
 
 
 # Singleton instance

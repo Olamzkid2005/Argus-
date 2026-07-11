@@ -164,9 +164,12 @@ class Orchestrator:
             for tool in build_mcp_tool_definitions():
                 self.mcp.register_tool(tool)
 
-    def mcp_run(self, tool: str, arguments: dict = None) -> dict:
+    def mcp_run(self, tool: str, arguments: dict = None, cache_mode: str | None = None) -> dict:
         """
         Run a tool via MCP, routing through MCPToolBridge when available.
+
+        Gap 4.4: cache_mode is forwarded to control whether tool outputs
+        are cached/retrieved from cache.
 
         When MCPToolBridge is initialized, calls route through ToolRunner
         for sandboxing, circuit breakers, and metrics. Otherwise falls back
@@ -174,10 +177,18 @@ class Orchestrator:
 
         Scope validation is ALWAYS enforced — even in the fallback path —
         to prevent out-of-scope targets from reaching tool subprocesses.
+
+        Args:
+            tool: Tool name
+            arguments: Tool arguments dict
+            cache_mode: Cache execution mode ("normal", "no_cache", "refresh")
+
+        Returns:
+            MCP-formatted result dict
         """
         emit_tool_start(self.engagement_id, tool, list((arguments or {}).keys()))
         if hasattr(self, "mcp_bridge") and self.mcp_bridge is not None:
-            result = self.mcp_bridge.call_via_mcp(tool, arguments or {})
+            result = self.mcp_bridge.call_via_mcp(tool, arguments or {}, cache_mode=cache_mode)
         else:
             # Fallback path: create scope validator to ensure out-of-scope
             # targets are rejected even when MCPToolBridge is unavailable.
@@ -202,6 +213,7 @@ class Orchestrator:
             result = self.mcp.call_tool(
                 tool,
                 arguments,
+                cache_mode=cache_mode,
                 engagement_id=self.engagement_id,
                 scope_validator=_scope_validator,
             )
@@ -300,8 +312,10 @@ class Orchestrator:
         logger.debug("Recon starting for engagement %s", self.engagement_id)
 
         aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
+        cache_mode = job.get("cache_mode")
         findings, recon_context = execute_recon_pipeline(
-            self, target, job.get("budget", {}), aggressiveness
+            self, target, job.get("budget", {}), aggressiveness,
+            cache_mode=cache_mode,
         )
         slog.tool_complete(
             "orchestrator.run_recon", success=True, findings=len(findings)
@@ -535,6 +549,7 @@ class Orchestrator:
                     auth_config,
                     dual_auth_config=dual_auth_config,
                     tech_stack=recon_context.tech_stack if recon_context else None,
+                    cache_mode=None,  # Agent fallback: no cache to ensure fresh results
                 )
                 for f in fallback:
                     norm = self._normalize_finding(f, f.get("source_tool", "fallback"))
@@ -597,6 +612,7 @@ class Orchestrator:
             self.state.agent_mode_enabled = bool(agent_mode)
 
         budget = job.get("budget", {})
+        _cache_mode = job.get("cache_mode")
         if not agent_mode or scan_mode == "deterministic":
             # User explicitly disabled agent or requested deterministic-only scan.
             # Skip LLM agent entirely — run full deterministic scan without fallback.
@@ -616,6 +632,7 @@ class Orchestrator:
                 dual_auth_config=dual_auth_config,
                 tech_stack=tech_stack,
                 recon_context=recon_context,
+                cache_mode=_cache_mode,
             )
         else:
             # Agent-first scan with deterministic safety-net fallback.
@@ -632,6 +649,7 @@ class Orchestrator:
                 auth_config,
                 bug_bounty_mode,
                 dual_auth_config=dual_auth_config,
+                cache_mode=_cache_mode,
             )
 
         self._maybe_run_browser_scanner(targets, recon_context, findings)
@@ -703,6 +721,33 @@ class Orchestrator:
         returned by run_scan_with_agent to prevent the safety net from
         duplicating findings the agent already produced.
         """
+    def _run_scan_with_fallback(
+        self,
+        targets: list[str],
+        recon_context,
+        budget: dict,
+        aggressiveness: str,
+        auth_config: dict,
+        bug_bounty_mode: bool = False,
+        dual_auth_config: dict | None = None,
+        cache_mode: str | None = None,
+    ) -> list[dict]:
+        """
+        Agent-first scan with deterministic fallback.
+
+        Gap 4.4: cache_mode is forwarded to execute_scan_pipeline() to
+        control caching behavior.
+
+        Phase 3: The orchestrator no longer selects between agent and deterministic
+        modes. It always tries the agent first. If the agent succeeds, a safety-net
+        deterministic pass runs with tools the agent already tried skipped. If the
+        agent fails entirely, a full deterministic scan runs as fallback.
+
+        Tried-tool tracking: Always extracts agent-tried tools from the
+        EngagementState (when available) OR from the scan result metadata
+        returned by run_scan_with_agent to prevent the safety net from
+        duplicating findings the agent already produced.
+        """
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.phase_header("SCAN WITH FALLBACK", targets=f"{len(targets)} target(s)")
         emit_thinking(self.engagement_id, "Running agent-driven scan...")
@@ -743,6 +788,7 @@ class Orchestrator:
                 tech_stack=tech_stack,
                 skip_tools=agent_tried,
                 recon_context=recon_context,
+                cache_mode=cache_mode,
             )
             # Normalize deterministic findings before extending — they are raw
             # dicts from execute_scan_pipeline, not normalized via _normalize_finding().
@@ -1270,13 +1316,13 @@ class Orchestrator:
             )
 
         config = PostExploitationConfig()
-        orchestrator = PostExploitationOrchestrator(
+        post_exploit_orch = PostExploitationOrchestrator(
             engagement_id=self.engagement_id,
             scope_validator=scope_validator,
             config=config,
         )
 
-        result = orchestrator.run(
+        result = post_exploit_orch.run(
             findings=job.get("findings", []),
             target_endpoints=job.get("target_endpoints", []),
             known_hosts=job.get("known_hosts"),

@@ -10,8 +10,6 @@ import pytest
 from streaming import (
     Event,
     EventType,
-    StreamEvent,
-    StreamEventType,
     StreamingFindingEmitter,
     StreamManager,
     clear_engagement_rt_fingerprints,
@@ -77,35 +75,6 @@ class TestEvent:
         assert sse.startswith("data: ")
         assert sse.endswith("\n\n")
         assert "test" in sse
-
-
-class TestStreamEventType:
-    def test_maps_to_eventtype(self):
-        assert StreamEventType.THINKING.value == EventType.THINKING
-        assert StreamEventType.TOOL_START.value == EventType.TOOL_START
-
-
-class TestStreamEvent:
-    def test_default_construction(self):
-        se = StreamEvent(event_type=StreamEventType.ERROR)
-        assert se.event_type == StreamEventType.ERROR
-        assert se.data == {}
-        assert se.engagement_id == ""
-
-    def test_to_dict(self):
-        se = StreamEvent(
-            event_type=StreamEventType.FINDING, data={"key": "val"}, engagement_id="e1"
-        )
-        d = se.to_dict()
-        assert d["type"] == "finding"
-        assert d["data"]["key"] == "val"
-        assert d["engagement_id"] == "e1"
-
-    def test_to_sse(self):
-        se = StreamEvent(event_type=StreamEventType.THINKING, engagement_id="e1")
-        sse = se.to_sse()
-        assert "thinking" in sse
-        assert sse.startswith("data: ")
 
 
 class TestStreamManager:
@@ -179,21 +148,6 @@ class TestStreamManager:
         sm = StreamManager()
         sm.subscribe("eng-1")
         assert sm.get_dropped_count("eng-1") == 0
-
-    def test_publish_stream_event_compat(self):
-        """StreamManager.publish should accept legacy StreamEvent objects."""
-        sm = StreamManager()
-        q = sm.subscribe("eng-1")
-        se = StreamEvent(
-            event_type=StreamEventType.THINKING,
-            data={"msg": "hello"},
-            engagement_id="eng-1",
-        )
-        sm.publish(se)
-        received = q.get(timeout=1)
-        # Should be converted to Event internally
-        assert received.type == "thinking"
-        assert received.data["msg"] == "hello"
 
     def test_publish_to_all_subscribers(self):
         sm = StreamManager()

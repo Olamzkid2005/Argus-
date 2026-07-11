@@ -237,6 +237,96 @@ class _MetricsHandler(BaseHTTPRequestHandler):
         self._send_json(data, http_status)
 
 
+def log_startup_health() -> dict[str, Any]:
+    """Run startup health diagnostics and log a structured summary.
+
+    Checks LLM availability, Celery worker status, tool registration,
+    and DNS resolution. Logs a consolidated JSON summary at INFO level
+    so operators can see the health state in the startup log output.
+
+    Returns:
+        dict with all check results (same shape as /health endpoint).
+    """
+    from mcp_server import get_mcp_server
+
+    server = get_mcp_server()
+
+    # ── LLM check ──
+    llm_available = _MetricsHandler._check_llm_available()
+
+    # ── Celery check ──
+    celery = _MetricsHandler._check_celery_worker()
+
+    # ── Tool registration check ──
+    tools_list = server.get_tools()
+    tools_total = len(server._tools)
+    tools_enabled = len(tools_list)
+
+    # ── DNS check ──
+    dns_ok = True
+    try:
+        import socket
+        socket.getaddrinfo("dns.google", 53)
+    except Exception:
+        dns_ok = False
+
+    # ── Credential check ──
+    credential_issues = []
+    try:
+        from config.startup_guard import check_placeholder_credentials
+        credential_issues = check_placeholder_credentials()
+    except Exception:
+        pass
+
+    # ── Determine overall status ──
+    status = "ok"
+    if tools_enabled == 0:
+        status = "degraded"
+    if not llm_available:
+        status = "degraded"
+    if not celery["alive"]:
+        status = "degraded"
+    if credential_issues:
+        status = "degraded"
+
+    result = {
+        "status": status,
+        "llm_available": llm_available,
+        "celery_worker": celery,
+        "dns_resolution": dns_ok,
+        "credential_issues": len(credential_issues),
+        "tools": {
+            "total": tools_total,
+            "available": tools_enabled,
+            "disabled": tools_total - tools_enabled,
+            "critical_missing": [
+                name for name in server.CRITICAL_TOOLS
+                if name not in server._tools
+            ],
+        },
+    }
+
+    # Log as single-line JSON for structured log parsing
+    logger.info(
+        "Startup health: status=%s llm=%s celery=%s dns=%s tools=%d/%d credentials=%d",
+        status,
+        llm_available,
+        celery["alive"],
+        dns_ok,
+        tools_enabled,
+        tools_total,
+        len(credential_issues),
+    )
+    if tools_enabled < tools_total:
+        disabled = [
+            name for name, t in server._tools.items() if not t.enabled
+        ]
+        if disabled:
+            logger.info("Disabled tools: %s", ", ".join(sorted(disabled)))
+
+    return result
+
+
 def start_health_server(
     host: str = _DEFAULT_HOST,
     port: int = 0,  # 0 = use _DEFAULT_PORT_STR

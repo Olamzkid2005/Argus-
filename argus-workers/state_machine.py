@@ -256,8 +256,20 @@ class EngagementStateMachine:
         # Update current state
         self.current_state = new_state
 
-        # WebSocket state transition publishing removed (M-07 consolidation).
-        # All events go through SSE via StreamManager.
+        # Emit state change event via SSE (replaces removed WebSocket publisher)
+        try:
+            from streaming import emit_state_change
+            emit_state_change(
+                self.engagement_id,
+                old_state,
+                new_state,
+                reason or f"Transition to {new_state}",
+            )
+        except Exception:
+            logger.debug(
+                "Failed to emit state_change event for engagement %s: %s -> %s",
+                self.engagement_id, old_state, new_state, exc_info=True,
+            )
 
     def _persist_state_and_budget(
         self, from_state: str, to_state: str, reason: str, trace_id: str | None = None
@@ -595,8 +607,23 @@ class EngagementStateMachine:
 
             conn.commit()
 
-            # WebSocket chain transition publishing removed (M-07 consolidation).
-            # All events go through SSE via StreamManager.
+            # Emit state change event for each transition in the chain via SSE
+            try:
+                from streaming import emit_state_change
+                _chain_from = db_current
+                for _chain_to, _chain_reason in states:
+                    emit_state_change(
+                        self.engagement_id,
+                        _chain_from,
+                        _chain_to,
+                        _chain_reason,
+                    )
+                    _chain_from = _chain_to
+            except Exception:
+                logger.debug(
+                    "Failed to emit chain state_change events for engagement %s: %s",
+                    self.engagement_id, exc_info=True,
+                )
 
             self.current_state = final_state
             assert final_state is not None

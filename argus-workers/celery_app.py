@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import sys
+import threading
 
 from celery import Celery
 from dotenv import load_dotenv
@@ -141,12 +142,58 @@ if not os.getenv("DATABASE_URL"):
         except OSError as e:
             logger.warning("Failed to read DATABASE_URL from %s: %s", root_env, e)
 
-# ── Apply pending database migrations ──
-# All *.sql files in database/migrations/ are applied in sorted order on startup.
-# Uses its own direct connection, safe to run before the pool is ready.
-from database.migrations.runner import run_migrations
+# ── Lazy migration flag ──
+# Migrations are NOT run at module import time (Gap 11.1 fix). Instead, they
+# run on the FIRST task execution via BaseTask.__call__, which calls
+# ensure_migrations_applied() before executing the task body.
+# This prevents an import-time crash when a migration fails and allows the
+# worker to start up, log the failure, and handle it gracefully.
+_migrations_applied_this_process = False
+_migrations_lock = threading.Lock()
 
-run_migrations()
+
+def ensure_migrations_applied() -> None:
+    """Run pending database migrations lazily (not at module import time).
+
+    This function is called by BaseTask.__call__() before the first task
+    body executes. It runs migrations only once per process lifetime.
+
+    Gap 11.1: Migrations no longer run at module import time, which means a
+    migration failure won't crash the Celery worker at startup. The worker
+    starts, logs the failure, and can still serve health checks and other
+    non-DB tasks while the operator addresses the issue.
+
+    Gap 11.2: Each migration file runs in its own transaction. If a migration
+    fails, the _migrations table records it as 'failed'. The operator can
+    revert using rollback_last_migration().
+    """
+    global _migrations_applied_this_process
+    if _migrations_applied_this_process:
+        return
+    with _migrations_lock:
+        if _migrations_applied_this_process:
+            return
+        try:
+            from database.migrations.runner import run_migrations
+
+            applied = run_migrations()
+            _migrations_applied_this_process = True
+            if applied:
+                logger.info(
+                    "Applied %d pending migration(s) on first task execution",
+                    len(applied),
+                )
+        except Exception as e:
+            logger.error(
+                "Database migration failed on first task execution: %s. "
+                "Worker will continue but DB queries may fail. "
+                "Run migrations manually or fix the issue and restart.",
+                e,
+                exc_info=True,
+            )
+            # Don't set the flag — allow retry on next task
+            raise
+
 
 # Create Celery application
 app = Celery(
@@ -441,7 +488,19 @@ class BaseTask(app.Task):  # type: ignore[name-defined]
         logger.info("Task %s succeeded", task_id)
 
     def __call__(self, *args, **kwargs):
-        """Wrap task execution with shutdown checking"""
+        """Wrap task execution with shutdown checking and lazy migration"""
+        # Gap 11.1: Run migrations on first task execution (not at module import)
+        if not _migrations_applied_this_process:
+            try:
+                ensure_migrations_applied()
+            except Exception as _mig_err:
+                logger.error(
+                    "Migrations failed before task %s: %s — task will proceed "
+                    "but DB operations may fail",
+                    self.request.id if self.request else "unknown",
+                    _mig_err,
+                )
+
         # Ensure project root is in sys.path (needed for forked/spawned workers on macOS)
         if PROJECT_ROOT not in sys.path:
             sys.path.insert(0, PROJECT_ROOT)

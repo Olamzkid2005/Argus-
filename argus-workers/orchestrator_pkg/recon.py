@@ -33,16 +33,16 @@ def execute_recon_tools(
     """
     Execute reconnaissance tools against target.
 
-    TODO: cache_mode is accepted for pipeline interface compatibility
-    but is not yet implemented. When implemented, it should control
-    whether tool outputs are cached/retrieved from cache.
+    Gap 4.4: cache_mode is forwarded to all tool_runner.run() calls to
+    control whether tool outputs are cached/retrieved from cache.
 
     Args:
         ctx: ToolContext or Orchestrator (provides tool_runner, parser, normalizer)
         target: Target URL
         budget: Budget configuration
         aggressiveness: Scan aggressiveness level (default, high, extreme)
-        cache_mode: Cache execution mode (accepted for pipeline interface compatibility)
+        cache_mode: Cache execution mode ("normal", "no_cache", "refresh").
+                     Forwarded to ToolRunner.run() for cache control.
 
     Returns:
         Tuple of (list of normalized findings, ReconContext)
@@ -154,13 +154,15 @@ def execute_recon_tools(
         naabu_cmd.extend(["-top-ports", naabu_port_val])
     naabu_timeout = 60 if agg == "default" else 90 if agg == "high" else 120
 
-    def _run_recon_tool(ctx, tool_name, args, timeout, all_findings, start_msg=None):
+    def _run_recon_tool(ctx, tool_name, args, timeout, all_findings, start_msg=None, cache_mode=None):
         try:
             # Emit start event when tool actually begins (not before pool submits)
             if start_msg:
                 _emit(tool_name, start_msg, "started")
             emit_tool_start(ctx.engagement_id, tool_name, args)
-            result = ctx.tool_runner.run(tool_name, args, timeout=timeout)
+            from cache import CacheMode
+            _cm = CacheMode(cache_mode) if cache_mode else CacheMode.NORMAL
+            result = ctx.tool_runner.run(tool_name, args, timeout=timeout, cache_mode=_cm)
             parsed_count = 0
             if result and result.success:
                 parsed = ctx.parser.parse(tool_name, result.stdout)
@@ -288,6 +290,7 @@ def execute_recon_tools(
                 cfg["timeout"],
                 all_findings,
                 cfg.get("start_msg"),
+                cache_mode,
             ): name
             for name, cfg in selected_tools.items()
         }
