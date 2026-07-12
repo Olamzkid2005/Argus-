@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import logging
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
 from typing import Any
 
 from feature_flags import is_enabled
@@ -38,24 +37,36 @@ SERVICE_TEMPLATE_MAP: dict[str, list[str]] = {
 }
 
 
-@dataclass
-class OpenPort:
-    """Internal port representation used by parsing helpers."""
+# Internal port format used by port scanner parsing helpers.
+# A port is represented as a plain dict with keys:
+#   port, protocol, service, version, state
+# This replaces the legacy ``OpenPort`` dataclass which was removed in
+# favor of using ``UnifiedToolResult.ports`` (list[dict]) directly.
 
-    port: int
-    protocol: str
-    service: str = ""
-    version: str = ""
-    state: str = "open"
+# Legacy alias — ``OpenPort(**kwargs)`` still works for backward compat
+# but returns a plain dict, not a dataclass instance.
+def OpenPort(  # type: ignore[misc]  # noqa: N802
+    port: int = 0,
+    protocol: str = "tcp",
+    service: str = "",
+    version: str = "",
+    state: str = "open",
+) -> dict[str, Any]:
+    """
+    Legacy ``OpenPort`` factory.  Returns a port dict instead of a dataclass.
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "port": self.port,
-            "protocol": self.protocol,
-            "service": self.service,
-            "version": self.version,
-            "state": self.state,
-        }
+    .. deprecated:: 0.2.0
+        Use a plain dict ``{"port": ..., "protocol": ..., ...}`` instead.
+        This factory is provided for backward compat with external callers
+        of ``get_recommended_templates()``.
+    """
+    return {
+        "port": port,
+        "protocol": protocol,
+        "service": service,
+        "version": version,
+        "state": state,
+    }
 
 
 class PortScanner(AbstractTool):
@@ -326,14 +337,26 @@ class PortScanner(AbstractTool):
         return result
 
 
-def get_recommended_templates(open_ports: list[OpenPort]) -> dict[str, list[str]]:
-    """Map discovered services to vulnerability scanner templates."""
+def get_recommended_templates(
+    open_ports: list[dict[str, Any]],
+) -> dict[str, list[str]]:
+    """
+    Map discovered services to vulnerability scanner templates.
+
+    Args:
+        open_ports: List of port dicts with keys ``port``, ``protocol``,
+            ``service``, ``version``, ``state``.  This is the format used
+            by ``UnifiedToolResult.ports``.
+
+    Returns:
+        Mapping of ``"port/protocol"`` → ``["nuclei", "nikto", ...]``.
+    """
     recommendations: dict[str, list[str]] = {}
     for port in open_ports:
-        svc_key = port.service.lower()
+        svc_key = port.get("service", "").lower()
         if svc_key in SERVICE_TEMPLATE_MAP:
             for scanner in SERVICE_TEMPLATE_MAP[svc_key]:
-                target_key = f"{port.port}/{port.protocol}"
+                target_key = f"{port.get('port', 0)}/{port.get('protocol', 'tcp')}"
                 if target_key not in recommendations:
                     recommendations[target_key] = []
                 if scanner not in recommendations[target_key]:

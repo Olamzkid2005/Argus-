@@ -169,7 +169,11 @@ class UnifiedToolResult:
         sandbox_dir: str = "",
         effective_env: dict[str, str] | None = None,
     ) -> UnifiedToolResult:
-        tb = traceback.format_exc()
+        tb = "".join(traceback.format_exception(
+            type(exc), exc, exc.__traceback__,
+        ))
+        # When exc.__traceback__ is None (exception created but not raised),
+        # format_exception returns just the exception line.
         error_type = type(exc).__name__
         status = (
             ToolStatus.IMPORT_ERROR
@@ -207,13 +211,18 @@ class UnifiedToolResult:
         return result
 
     @classmethod
-    def timeout(
+    def create_timeout(
         cls,
         tool_name: str,
         command: list[str],
         limit_seconds: int,
         target: str = "",
     ) -> UnifiedToolResult:
+        """Create a TIMEOUT result.
+
+        Named ``create_timeout`` to avoid conflict with the ``.timeout``
+        backward-compat property.
+        """
         result = cls(
             tool_name=tool_name,
             command=command,

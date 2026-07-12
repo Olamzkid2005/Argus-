@@ -33,7 +33,7 @@ def is_dangerous(args: list[str], tool: str = "") -> tuple[bool, str]:
         if runner.is_dangerous(tool, args):
             return True, f"ToolRunner flagged args for {tool!r} as dangerous"
         return False, ""
-    except (ImportError, AttributeError):
+    except (ImportError, AttributeError, TypeError):
         pass
 
     # Fallback: basic shell metacharacter check matching mcp_server pattern

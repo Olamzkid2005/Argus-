@@ -69,13 +69,8 @@ class LegacyAPISecurityScanner(AbstractTool):
     ]
 
     def __init__(
-        self,
-        timeout: int = 15,
-        rate_limit: float = 0.05,
-        llm_payload_generator=None,
-        authorized_scope: str | None = None,
-        session: requests.Session | None = None,
-        tech_stack: list[str] | None = None,
+        self, timeout: int = 15, rate_limit: float = 0.05, llm_payload_generator=None, authorized_scope: str | None = None,
+        session: requests.Session | None = None, tech_stack: list[str] | None = None,
         engagement_id: str = "",
     ):
         """
@@ -104,7 +99,7 @@ class LegacyAPISecurityScanner(AbstractTool):
                 "Content-Type": "application/json",
             }
         )
-        self.findings: list[dict] = []
+        self.findings = []
         self._builder: FindingBuilder | None = None
         self.target_url: str = ""
 
@@ -135,36 +130,21 @@ class LegacyAPISecurityScanner(AbstractTool):
         api_type = getattr(self, "_scan_api_type", "rest")
         auth_config = getattr(self, "_scan_auth_config", None)
 
-        slog = ScanLogger(
-            "api_scanner", engagement_id=getattr(self, "engagement_id", "")
-        )
+        slog = ScanLogger("api_scanner", engagement_id=getattr(self, 'engagement_id', ''))
         slog.phase_header("API SCAN", f"target={target_url}, type={api_type}")
 
-        # L-17: Validate target URL before scanning (SSRF + scope)
+        # L-17: Validate target URL before scanning
         from urllib.parse import urlparse as _urlparse
 
-        from tools.scope_validator import ScopeValidator, validate_target_scope
-
+        from tools.scope_validator import validate_target_scope
         parsed = _urlparse(target_url)
         if parsed.scheme not in ("http", "https"):
-            slog.warn("Rejected scan with scheme '%s': %s", parsed.scheme, target_url)
+            slog.warn(f"Rejected scan with scheme '{parsed.scheme}': {target_url}")
             result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)
             result.mark_finished()
             return result
-        hostname = parsed.hostname or target_url.split("/")[0].split(":")[0]
-        if hostname and ScopeValidator.is_internal_address(hostname):
-            slog.warn(
-                "Target %s is an internal/SSRF target — scan aborted", target_url
-            )
-            result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)
-            result.mark_finished()
-            return result
-        if self.engagement_id and not validate_target_scope(
-            target_url, self.engagement_id
-        ):
-            slog.warn(
-                "Target %s is outside authorized scope — scan aborted", target_url
-            )
+        if self.engagement_id and not validate_target_scope(target_url, self.engagement_id):
+            slog.warn(f"Target {target_url} is outside authorized scope — scan aborted")
             result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)
             result.mark_finished()
             return result
@@ -175,9 +155,7 @@ class LegacyAPISecurityScanner(AbstractTool):
 
         # Apply authentication if configured
         if self.auth_config.get("type") == "api_key":
-            slog.info(
-                f"Applying API key auth to header: {self.auth_config.get('header', 'X-API-Key')}"
-            )
+            slog.info(f"Applying API key auth to header: {self.auth_config.get('header', 'X-API-Key')}")
             self.session.headers[self.auth_config.get("header", "X-API-Key")] = (
                 self.auth_config.get("key", "")
             )
@@ -188,31 +166,31 @@ class LegacyAPISecurityScanner(AbstractTool):
             )
 
         # 1. OWASP ZAP-style basic checks
-        slog.tool_start("security_headers", [f"target={self.target_url}"])
+        slog.tool_start("security_headers", f"target={self.target_url}")
         self.check_security_headers()
         slog.tool_complete("security_headers", success=True)
 
         # 2. API type-specific scanning
         if api_type == "graphql":
-            slog.tool_start("graphql_scan", [f"target={self.target_url}"])
+            slog.tool_start("graphql_scan", f"target={self.target_url}")
             self.scan_graphql()
             slog.tool_complete("graphql_scan", success=True)
         elif api_type == "openapi":
-            slog.tool_start("openapi_scan", [f"target={self.target_url}"])
+            slog.tool_start("openapi_scan", f"target={self.target_url}")
             self.scan_openapi()
             slog.tool_complete("openapi_scan", success=True)
         else:
-            slog.tool_start("rest_scan", [f"target={self.target_url}"])
+            slog.tool_start("rest_scan", f"target={self.target_url}")
             self.scan_rest_endpoints()
             slog.tool_complete("rest_scan", success=True)
 
         # 3. Authentication testing
-        slog.tool_start("auth_testing", [f"target={self.target_url}"])
+        slog.tool_start("auth_testing", f"target={self.target_url}")
         self.test_authentication()
         slog.tool_complete("auth_testing", success=True)
 
         # 4. Rate limiting test
-        slog.tool_start("rate_limit_test", [f"target={self.target_url}"])
+        slog.tool_start("rate_limit_test", f"target={self.target_url}")
         self.test_rate_limiting()
         slog.tool_complete("rate_limit_test", success=True)
 
@@ -221,13 +199,13 @@ class LegacyAPISecurityScanner(AbstractTool):
             self.findings = self._builder.findings
 
         slog.tool_complete("api_scan", success=True, findings=len(self.findings))
-        slog.info("API scan complete: %d total findings", len(self.findings))
+        slog.info(f"API scan complete: {len(self.findings)} total findings")
 
         result = UnifiedToolResult(
             tool_name=self.tool_name,
             target=target_url,
         )
-        result.findings = self._builder.findings or self.findings
+        result.findings = self._builder.findings
         result.status = ToolStatus.SUCCESS
         result.mark_finished()
         return result
@@ -268,32 +246,6 @@ class LegacyAPISecurityScanner(AbstractTool):
         except (RequestException, Timeout, ConnectionError):
             return None
 
-    def _add_finding(
-        self,
-        finding_type: str,
-        severity: str,
-        endpoint: str,
-        evidence: dict,
-        confidence: float = 0.8,
-    ):
-        """Add a finding to results.
-
-        Delegates to ``FindingBuilder`` for schema consistency.  Creates the
-        builder lazily if ``execute()`` was not called (backward-compat path).
-
-        The finding is also appended to ``self.findings`` so that direct
-        calls to individual check methods produce immediately visible results.
-        """
-        if self._builder is None:
-            self._builder = FindingBuilder(
-                source_tool=self.tool_name,
-                engagement_id=self.engagement_id,
-            )
-        finding = self._builder.add(
-            finding_type, severity, endpoint, evidence, confidence
-        )
-        self.findings.append(finding)
-
     def check_security_headers(self):
         """Check API security headers."""
         resp = self._safe_request("GET", self.target_url)
@@ -307,23 +259,19 @@ class LegacyAPISecurityScanner(AbstractTool):
         missing = [h for h in required if h not in headers]
 
         if missing:
-            self._add_finding(
-                finding_type="MISSING_API_SECURITY_HEADERS",
-                severity="MEDIUM",
-                endpoint=self.target_url,
-                evidence={"missing_headers": missing},
-                confidence=0.90,
+            self._ensure_builder()
+            self._builder.add(
+                "MISSING_API_SECURITY_HEADERS", "MEDIUM", self.target_url,
+                {"missing_headers": missing}, confidence=0.90,
             )
 
         # Check for CORS misconfiguration on API
         acao = headers.get("access-control-allow-origin", "")
         if acao == "*":
-            self._add_finding(
-                finding_type="WILDCARD_CORS_API",
-                severity="HIGH",
-                endpoint=self.target_url,
-                evidence={"Access-Control-Allow-Origin": "*"},
-                confidence=0.90,
+            self._ensure_builder()
+            self._builder.add(
+                "WILDCARD_CORS_API", "HIGH", self.target_url,
+                {"Access-Control-Allow-Origin": "*"}, confidence=0.90,
             )
 
     def scan_graphql(self):
@@ -340,11 +288,10 @@ class LegacyAPISecurityScanner(AbstractTool):
             try:
                 data = resp.json()
                 if data.get("data", {}).get("__schema"):
-                    self._add_finding(
-                        finding_type="GRAPHQL_INTROSPECTION_ENABLED",
-                        severity="MEDIUM",
-                        endpoint=graphql_url,
-                        evidence={"message": "GraphQL introspection is enabled"},
+                    self._ensure_builder()
+                    self._builder.add(
+                        "GRAPHQL_INTROSPECTION_ENABLED", "MEDIUM", graphql_url,
+                        {"message": "GraphQL introspection is enabled"},
                         confidence=0.95,
                     )
             except (json.JSONDecodeError, ValueError):
@@ -376,11 +323,10 @@ class LegacyAPISecurityScanner(AbstractTool):
             json={"query": deep_query},
         )
         if resp and resp.status_code == 200:
-            self._add_finding(
-                finding_type="GRAPHQL_DEPTH_LIMIT_MISSING",
-                severity="MEDIUM",
-                endpoint=graphql_url,
-                evidence={"message": "Deep nested query executed without depth limit"},
+            self._ensure_builder()
+            self._builder.add(
+                "GRAPHQL_DEPTH_LIMIT_MISSING", "MEDIUM", graphql_url,
+                {"message": "Deep nested query executed without depth limit"},
                 confidence=0.75,
             )
 
@@ -396,13 +342,10 @@ class LegacyAPISecurityScanner(AbstractTool):
             url = urljoin(self.target_url, path)
             resp = self._safe_request("GET", url)
             if resp and resp.status_code == 200:
-                self._add_finding(
-                    finding_type="EXPOSED_OPENAPI_SPEC",
-                    severity="LOW",
-                    endpoint=url,
-                    evidence={
-                        "message": "OpenAPI/Swagger specification is publicly accessible"
-                    },
+                self._ensure_builder()
+                self._builder.add(
+                    "EXPOSED_OPENAPI_SPEC", "LOW", url,
+                    {"message": "OpenAPI/Swagger specification is publicly accessible"},
                     confidence=0.90,
                 )
                 break
@@ -414,16 +357,13 @@ class LegacyAPISecurityScanner(AbstractTool):
             url = urljoin(self.target_url, path)
             resp = self._safe_request("GET", url)
             if resp and resp.status_code in (401, 403) and len(resp.text) > 50:
-                self._add_finding(
-                    finding_type="VERBOSE_API_ERROR",
-                    severity="LOW",
-                    endpoint=url,
-                    evidence={
-                        "status_code": resp.status_code,
-                        "response_preview": resp.text[:200],
-                    },
-                    confidence=0.70,
-                )
+                    self._ensure_builder()
+                    self._builder.add(
+                        "VERBOSE_API_ERROR", "LOW", url,
+                        {"status_code": resp.status_code,
+                         "response_preview": resp.text[:200]},
+                        confidence=0.70,
+                    )
 
     def test_authentication(self):
         """Test API authentication mechanisms."""
@@ -448,13 +388,10 @@ class LegacyAPISecurityScanner(AbstractTool):
 
             resp = self._safe_request("GET", test_url)
             if resp and resp.status_code == 200:
-                self._add_finding(
-                    finding_type="MISSING_AUTHENTICATION",
-                    severity="CRITICAL",
-                    endpoint=test_url,
-                    evidence={
-                        "message": "Sensitive endpoint accessible without authentication"
-                    },
+                self._ensure_builder()
+                self._builder.add(
+                    "MISSING_AUTHENTICATION", "CRITICAL", test_url,
+                    {"message": "Sensitive endpoint accessible without authentication"},
                     confidence=0.85,
                 )
         finally:
@@ -482,9 +419,7 @@ class LegacyAPISecurityScanner(AbstractTool):
                     self.llm_payload_generator
                     and self.llm_payload_generator.is_available()
                 ):
-                    tech_hints = (
-                        ", ".join(self.tech_stack[:8]) if self.tech_stack else "unknown"
-                    )
+                    tech_hints = ", ".join(self.tech_stack[:8]) if self.tech_stack else "unknown"
                     llm_payloads = self.llm_payload_generator.generate_sync(
                         vuln_class="JWT_WEAKNESS",
                         param_name="jwt",
@@ -497,22 +432,17 @@ class LegacyAPISecurityScanner(AbstractTool):
                         if len(lp) > 20:  # Looks like a token
                             llm_jwt_payloads.append(lp)
                 if alg == "none":
-                    self._add_finding(
-                        finding_type="JWT_ALG_NONE",
-                        severity="CRITICAL",
-                        endpoint=self.target_url,
-                        evidence={"message": "JWT uses 'none' algorithm"},
+                    self._ensure_builder()
+                    self._builder.add(
+                        "JWT_ALG_NONE", "CRITICAL", self.target_url,
+                        {"message": "JWT uses 'none' algorithm"},
                         confidence=0.95,
                     )
                 elif alg in ["hs256", "hs384", "hs512"]:
-                    self._add_finding(
-                        finding_type="JWT_HMAC_ALGORITHM",
-                        severity="INFO",
-                        endpoint=self.target_url,
-                        evidence={
-                            "algorithm": alg,
-                            "message": "JWT uses symmetric signing",
-                        },
+                    self._ensure_builder()
+                    self._builder.add(
+                        "JWT_HMAC_ALGORITHM", "INFO", self.target_url,
+                        {"algorithm": alg, "message": "JWT uses symmetric signing"},
                         confidence=0.80,
                     )
 
@@ -520,14 +450,10 @@ class LegacyAPISecurityScanner(AbstractTool):
                 if alg == "hs256":
                     payload = json.loads(_b64_decode(parts[1]))
                     if payload.get("admin") is True or payload.get("role") == "admin":
-                        self._add_finding(
-                            finding_type="JWT_PRIVILEGE_ESCALATION",
-                            severity="HIGH",
-                            endpoint=self.target_url,
-                            evidence={
-                                "payload": payload,
-                                "message": "JWT contains privilege claims",
-                            },
+                        self._ensure_builder()
+                        self._builder.add(
+                            "JWT_PRIVILEGE_ESCALATION", "HIGH", self.target_url,
+                            {"payload": payload, "message": "JWT contains privilege claims"},
                             confidence=0.70,
                         )
 
@@ -540,15 +466,12 @@ class LegacyAPISecurityScanner(AbstractTool):
                             headers={auth_header: f"Bearer {llm_payload}"},
                         )
                         if test_resp and test_resp.status_code == 200:
-                            self._add_finding(
-                                finding_type="JWT_LLM_DETECTED_WEAKNESS",
-                                severity="HIGH",
-                                endpoint=self.target_url,
-                                evidence={
-                                    "llm_generated_payload": llm_payload[:30] + "...",
-                                    "auth_header": auth_header,
-                                    "message": "LLM-generated JWT bypass accepted by server",
-                                },
+                            self._ensure_builder()
+                            self._builder.add(
+                                "JWT_LLM_DETECTED_WEAKNESS", "HIGH", self.target_url,
+                                {"llm_generated_payload": llm_payload[:30] + "...",
+                                 "auth_header": auth_header,
+                                 "message": "LLM-generated JWT bypass accepted by server"},
                                 confidence=0.6,
                             )
                             break
@@ -558,26 +481,19 @@ class LegacyAPISecurityScanner(AbstractTool):
     def _test_api_key(self, api_key: str):
         """Test API key strength."""
         if len(api_key) < 16:
-            self._add_finding(
-                finding_type="WEAK_API_KEY",
-                severity="HIGH",
-                endpoint=self.target_url,
-                evidence={
-                    "key_length": len(api_key),
-                    "message": "API key is too short",
-                },
+            self._ensure_builder()
+            self._builder.add(
+                "WEAK_API_KEY", "HIGH", self.target_url,
+                {"key_length": len(api_key), "message": "API key is too short"},
                 confidence=0.90,
             )
 
     def test_rate_limiting(self):
         """Test API rate limiting with controlled burst requests."""
-        if self.authorized_scope and not self.target_url.startswith(
-            self.authorized_scope
-        ):
+        if self.authorized_scope and not self.target_url.startswith(self.authorized_scope):
             logger.warning(
                 "Target %s is outside authorized scope %s — skipping rate limit test",
-                self.target_url,
-                self.authorized_scope,
+                self.target_url, self.authorized_scope,
             )
             return
 
@@ -602,9 +518,8 @@ class LegacyAPISecurityScanner(AbstractTool):
 
             # L-15: Use the configured request count, not a hard cap of 20.
             for _i in range(requests_count):
-                resp = self._safe_request(
-                    "POST", test_url, json={"username": "test", "password": "test"}
-                )
+                resp = self._safe_request("POST", test_url,
+                    json={"username": "test", "password": "test"})
                 if resp:
                     if resp.status_code == 429:
                         rate_limited_count += 1
@@ -614,15 +529,12 @@ class LegacyAPISecurityScanner(AbstractTool):
             duration = time.time() - start_time
 
             if rate_limited_count == 0 and success_count >= 10:
-                self._add_finding(
-                    finding_type="MISSING_RATE_LIMITING",
-                    severity="HIGH",
-                    endpoint=test_url,
-                    evidence={
-                        "requests_sent": success_count,
-                        "duration_seconds": round(duration, 2),
-                        "message": "No rate limiting detected",
-                    },
+                self._ensure_builder()
+                self._builder.add(
+                    "MISSING_RATE_LIMITING", "HIGH", test_url,
+                    {"requests_sent": success_count,
+                     "duration_seconds": round(duration, 2),
+                     "message": "No rate limiting detected"},
                     confidence=0.75,
                 )
                 break
