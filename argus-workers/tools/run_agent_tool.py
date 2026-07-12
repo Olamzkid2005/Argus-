@@ -45,6 +45,7 @@ ALLOWED_TOOLS = frozenset({
     "vulnerability_knowledge_engine",
     "web_scanner",
     "workflow_intelligence_engine",
+    "cloud_metadata_probe",
 })
 
 

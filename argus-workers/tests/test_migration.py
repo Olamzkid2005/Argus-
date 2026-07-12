@@ -4,7 +4,8 @@ feature-flag + timestamp gate.
 """
 
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+from tool_core._compat import utc
 from unittest.mock import MagicMock, patch
 
 

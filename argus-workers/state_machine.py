@@ -7,6 +7,7 @@ Supports passing an external connection for transaction support.
 
 import logging
 import uuid
+from contextlib import contextmanager
 
 import psycopg2
 
@@ -211,6 +212,24 @@ class EngagementStateMachine:
         if conn and not self._external_conn:
             get_db().release_connection(conn)
 
+    @contextmanager
+    def _connection_scope(self):
+        """Context manager that acquires a connection and guarantees release.
+
+        The connection is always returned to the pool, even if an exception
+        occurs within the scope. This eliminates the leak risk of manual
+        get/release pairs on error paths.
+
+        Yields:
+            A database connection from the pool (or the external one).
+        """
+        conn = None
+        try:
+            conn = self._get_connection()
+            yield conn
+        finally:
+            self._release_connection(conn)
+
     def transition(
         self, new_state: str, reason: str | None = None, trace_id: str | None = None
     ):
@@ -287,116 +306,113 @@ class EngagementStateMachine:
             reason: Reason for transition
             trace_id: Distributed trace ID for causality chain
         """
-        conn = None
         cursor = None
 
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
+        with self._connection_scope() as conn:
+            try:
+                cursor = conn.cursor()
 
-            # Lock the engagement row to prevent concurrent state transitions
-            cursor.execute(
-                "SELECT status FROM engagements WHERE id = %s FOR UPDATE",
-                (self.engagement_id,),
-            )
-            locked_row = cursor.fetchone()
-            if not locked_row:
-                raise ValueError(f"Engagement {self.engagement_id} not found")
-
-            current_db_state = locked_row[0]
-            if current_db_state != from_state:
-                # State was already changed by another worker — this is a race.
-                # The FOR UPDATE lock guarantees we have the latest value, so
-                # we reject the transition rather than silently accepting the
-                # new from_state. The caller should retry with fresh state.
-                logger.error(
-                    "State race detected: expected %s, actual %s for engagement %s. "
-                    "Rejecting transition to %s — another worker changed state.",
-                    from_state,
-                    current_db_state,
-                    self.engagement_id,
-                    to_state,
-                )
-                raise InvalidStateTransitionError(
-                    f"Race: engagement {self.engagement_id} is {current_db_state}, "
-                    f"not {from_state}. Another worker changed state first."
-                )
-
-            # Record state transition with trace_id for causality chain
-            transition_id = str(uuid.uuid4())
-            cursor.execute(
-                """
-                INSERT INTO engagement_states (
-                    id, engagement_id, from_state, to_state, reason, trace_id, created_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, NOW()
-                )
-                """,
-                (
-                    transition_id,
-                    self.engagement_id,
-                    current_db_state,
-                    to_state,
-                    reason,
-                    trace_id,
-                ),
-            )
-
-            # Update engagement status with WHERE clause for safety
-            cursor.execute(
-                """
-                UPDATE engagements
-                SET status = %s, updated_at = NOW()
-                WHERE id = %s AND status = %s
-                """,
-                (to_state, self.engagement_id, current_db_state),
-            )
-
-            if cursor.rowcount == 0:
-                # Someone else changed state after our FOR UPDATE lock —
-                # this shouldn't happen, but guard against it
-                conn.rollback()
-                raise InvalidStateTransitionError(
-                    f"Concurrent state change detected for engagement {self.engagement_id}"
-                )
-
-            # If looping back from analyzing to recon, enforce max_cycles.
-            # NOTE: The budget counter (current_cycles) is NOT incremented here.
-            # LoopBudgetManager.consume() is the sole owner of budget tracking.
-            # This block only checks max_cycles as a safety guard — it reads
-            # the current DB value (which LoopBudgetManager.persist_to_db()
-            # has already written) and rejects the transition if budget is
-            # exhausted, preventing a double-increment bug where both
-            # state_machine and LoopBudgetManager increased the counter.
-            if from_state == "analyzing" and to_state == "recon":
+                # Lock the engagement row to prevent concurrent state transitions
                 cursor.execute(
-                    "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
+                    "SELECT status FROM engagements WHERE id = %s FOR UPDATE",
                     (self.engagement_id,),
                 )
-                lb_row = cursor.fetchone()
-                current_cycles = lb_row[0] if lb_row else 0
-                max_cycles = lb_row[1] if lb_row else 5
-                if current_cycles >= max_cycles:
+                locked_row = cursor.fetchone()
+                if not locked_row:
+                    raise ValueError(f"Engagement {self.engagement_id} not found")
+
+                current_db_state = locked_row[0]
+                if current_db_state != from_state:
+                    # State was already changed by another worker — this is a race.
+                    # The FOR UPDATE lock guarantees we have the latest value, so
+                    # we reject the transition rather than silently accepting the
+                    # new from_state. The caller should retry with fresh state.
+                    logger.error(
+                        "State race detected: expected %s, actual %s for engagement %s. "
+                        "Rejecting transition to %s — another worker changed state.",
+                        from_state,
+                        current_db_state,
+                        self.engagement_id,
+                        to_state,
+                    )
                     raise InvalidStateTransitionError(
-                        f"Loop budget exhausted for engagement {self.engagement_id}: "
-                        f"{current_cycles}/{max_cycles} cycles used."
+                        f"Race: engagement {self.engagement_id} is {current_db_state}, "
+                        f"not {from_state}. Another worker changed state first."
                     )
 
-            conn.commit()
+                # Record state transition with trace_id for causality chain
+                transition_id = str(uuid.uuid4())
+                cursor.execute(
+                    """
+                    INSERT INTO engagement_states (
+                        id, engagement_id, from_state, to_state, reason, trace_id, created_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, NOW()
+                    )
+                    """,
+                    (
+                        transition_id,
+                        self.engagement_id,
+                        current_db_state,
+                        to_state,
+                        reason,
+                        trace_id,
+                    ),
+                )
 
-        except psycopg2.Error as e:
-            if conn:
+                # Update engagement status with WHERE clause for safety
+                cursor.execute(
+                    """
+                    UPDATE engagements
+                    SET status = %s, updated_at = NOW()
+                    WHERE id = %s AND status = %s
+                    """,
+                    (to_state, self.engagement_id, current_db_state),
+                )
+
+                if cursor.rowcount == 0:
+                    # Someone else changed state after our FOR UPDATE lock —
+                    # this shouldn't happen, but guard against it
+                    conn.rollback()
+                    raise InvalidStateTransitionError(
+                        f"Concurrent state change detected for engagement {self.engagement_id}"
+                    )
+
+                # If looping back from analyzing to recon, enforce max_cycles.
+                # NOTE: The budget counter (current_cycles) is NOT incremented here.
+                # LoopBudgetManager.consume() is the sole owner of budget tracking.
+                # This block only checks max_cycles as a safety guard — it reads
+                # the current DB value (which LoopBudgetManager.persist_to_db()
+                # has already written) and rejects the transition if budget is
+                # exhausted, preventing a double-increment bug where both
+                # state_machine and LoopBudgetManager increased the counter.
+                if from_state == "analyzing" and to_state == "recon":
+                    cursor.execute(
+                        "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
+                        (self.engagement_id,),
+                    )
+                    lb_row = cursor.fetchone()
+                    current_cycles = lb_row[0] if lb_row else 0
+                    max_cycles = lb_row[1] if lb_row else 5
+                    if current_cycles >= max_cycles:
+                        raise InvalidStateTransitionError(
+                            f"Loop budget exhausted for engagement {self.engagement_id}: "
+                            f"{current_cycles}/{max_cycles} cycles used."
+                        )
+
+                conn.commit()
+
+            except psycopg2.Error as e:
                 conn.rollback()
-            logger.error(
-                "Failed to persist state transition for engagement %s: %s",
-                self.engagement_id,
-                e,
-            )
-            raise
-        finally:
-            if cursor:
-                cursor.close()
-            self._release_connection(conn)
+                logger.error(
+                    "Failed to persist state transition for engagement %s: %s",
+                    self.engagement_id,
+                    e,
+                )
+                raise
+            finally:
+                if cursor:
+                    cursor.close()
 
     def get_transition_history(self) -> list[dict]:
         """
@@ -405,42 +421,38 @@ class EngagementStateMachine:
         Returns:
             List of transition records
         """
-        conn = self._get_connection()
-        cursor = None
-
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT from_state, to_state, reason, created_at
-                FROM engagement_states
-                WHERE engagement_id = %s
-                ORDER BY created_at ASC
-                """,
-                (self.engagement_id,),
-            )
-
-            rows = cursor.fetchall()
-            cursor.close()
-
-            history = []
-            for row in rows:
-                history.append(
-                    {
-                        "from_state": row[0],
-                        "to_state": row[1],
-                        "reason": row[2],
-                        "timestamp": row[3].isoformat() if row[3] else None,
-                    }
+        with self._connection_scope() as conn:
+            cursor = None
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT from_state, to_state, reason, created_at
+                    FROM engagement_states
+                    WHERE engagement_id = %s
+                    ORDER BY created_at ASC
+                    """,
+                    (self.engagement_id,),
                 )
 
-            return history
+                rows = cursor.fetchall()
 
-        finally:
-            if cursor:
-                cursor.close()
-            if not self._external_conn:
-                self._release_connection(conn)
+                history = []
+                for row in rows:
+                    history.append(
+                        {
+                            "from_state": row[0],
+                            "to_state": row[1],
+                            "reason": row[2],
+                            "timestamp": row[3].isoformat() if row[3] else None,
+                        }
+                    )
+
+                return history
+
+            finally:
+                if cursor:
+                    cursor.close()
 
     def get_valid_transitions(self) -> list[str]:
         """
@@ -519,133 +531,131 @@ class EngagementStateMachine:
             )
             return self.current_state
 
-        conn = self._get_connection()
-        cursor = None
-        try:
-            cursor = conn.cursor()
+        with self._connection_scope() as conn:
+            cursor = None
+            try:
+                cursor = conn.cursor()
 
-            # Lock the engagement row to prevent concurrent state transitions
-            cursor.execute(
-                "SELECT status FROM engagements WHERE id = %s FOR UPDATE",
-                (self.engagement_id,),
-            )
-            locked_row = cursor.fetchone()
-            if not locked_row:
-                raise ValueError(f"Engagement {self.engagement_id} not found")
-
-            db_current = locked_row[0]
-            if db_current in ("complete", "failed"):
-                logger.warning(
-                    "chain_transition: engagement %s already in terminal state %s — skipping",
-                    self.engagement_id,
-                    db_current,
-                )
-                conn.rollback()
-                return db_current
-
-            # Sync local state with DB to ensure websocket events use the correct from_state
-            self.current_state = db_current
-            current = db_current
-            for new_state, reason in states:
-                if new_state not in self.STATES:
-                    raise ValueError(f"Invalid state: {new_state}")
-                if new_state not in self.TRANSITIONS.get(current, []):
-                    raise InvalidStateTransitionError(
-                        f"Invalid transition from {current} to {new_state}. "
-                        f"Valid transitions: {self.TRANSITIONS[current]}"
-                    )
-                # Insert into engagement_states history
-                transition_id = str(uuid.uuid4())
+                # Lock the engagement row to prevent concurrent state transitions
                 cursor.execute(
-                    """
-                    INSERT INTO engagement_states (id, engagement_id, from_state, to_state, reason, trace_id, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                    """,
-                    (
-                        transition_id,
-                        self.engagement_id,
-                        current,
-                        new_state,
-                        reason,
-                        trace_id,
-                    ),
-                )
-                current = new_state
-
-            # Update the engagement's current status with WHERE guard
-            final_state = states[-1][0]
-            cursor.execute(
-                "UPDATE engagements SET status = %s, updated_at = NOW() WHERE id = %s AND status = %s",
-                (final_state, self.engagement_id, db_current),
-            )
-
-            if cursor.rowcount == 0:
-                conn.rollback()
-                raise InvalidStateTransitionError(
-                    f"Concurrent state change detected for engagement {self.engagement_id}"
-                )
-
-            # If looping through analyze→recon in the chain, enforce max_cycles.
-            # NOTE: The budget counter (current_cycles) is NOT incremented here.
-            # LoopBudgetManager.consume() is the sole owner of budget tracking.
-            # This block only checks max_cycles as a safety guard (same rationale
-            # as _persist_state_and_budget) — prevents double-increment bug.
-            recon_loop_count = sum(
-                1 for f, t in states if f == "analyzing" and t == "recon"
-            )
-            if recon_loop_count > 0:
-                cursor.execute(
-                    "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
+                    "SELECT status FROM engagements WHERE id = %s FOR UPDATE",
                     (self.engagement_id,),
                 )
-                lb_row = cursor.fetchone()
-                current_cycles = lb_row[0] if lb_row else 0
-                max_cycles = lb_row[1] if lb_row else 5
-                if current_cycles + recon_loop_count > max_cycles:
-                    conn.rollback()
-                    raise InvalidStateTransitionError(
-                        f"Loop budget exhausted for engagement {self.engagement_id}: "
-                        f"{current_cycles + recon_loop_count}/{max_cycles} cycles required."
-                    )
+                locked_row = cursor.fetchone()
+                if not locked_row:
+                    raise ValueError(f"Engagement {self.engagement_id} not found")
 
-            conn.commit()
-
-            # Emit state change event for each transition in the chain via SSE
-            try:
-                from streaming import emit_state_change
-                _chain_from = db_current
-                for _chain_to, _chain_reason in states:
-                    emit_state_change(
+                db_current = locked_row[0]
+                if db_current in ("complete", "failed"):
+                    logger.warning(
+                        "chain_transition: engagement %s already in terminal state %s — skipping",
                         self.engagement_id,
-                        _chain_from,
-                        _chain_to,
-                        _chain_reason,
+                        db_current,
                     )
-                    _chain_from = _chain_to
-            except Exception:
-                logger.debug(
-                    "Failed to emit chain state_change events for engagement %s: %s",
-                    self.engagement_id, exc_info=True,
+                    conn.rollback()
+                    return db_current
+
+                # Sync local state with DB to ensure websocket events use the correct from_state
+                self.current_state = db_current
+                current = db_current
+                for new_state, reason in states:
+                    if new_state not in self.STATES:
+                        raise ValueError(f"Invalid state: {new_state}")
+                    if new_state not in self.TRANSITIONS.get(current, []):
+                        raise InvalidStateTransitionError(
+                            f"Invalid transition from {current} to {new_state}. "
+                            f"Valid transitions: {self.TRANSITIONS[current]}"
+                        )
+                    # Insert into engagement_states history
+                    transition_id = str(uuid.uuid4())
+                    cursor.execute(
+                        """
+                        INSERT INTO engagement_states (id, engagement_id, from_state, to_state, reason, trace_id, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                        """,
+                        (
+                            transition_id,
+                            self.engagement_id,
+                            current,
+                            new_state,
+                            reason,
+                            trace_id,
+                        ),
+                    )
+                    current = new_state
+
+                # Update the engagement's current status with WHERE guard
+                final_state = states[-1][0]
+                cursor.execute(
+                    "UPDATE engagements SET status = %s, updated_at = NOW() WHERE id = %s AND status = %s",
+                    (final_state, self.engagement_id, db_current),
                 )
 
-            self.current_state = final_state
-            assert final_state is not None
-            return final_state
-        except psycopg2.Error as e:
-            if conn:
+                if cursor.rowcount == 0:
+                    conn.rollback()
+                    raise InvalidStateTransitionError(
+                        f"Concurrent state change detected for engagement {self.engagement_id}"
+                    )
+
+                # If looping through analyze→recon in the chain, enforce max_cycles.
+                # NOTE: The budget counter (current_cycles) is NOT incremented here.
+                # LoopBudgetManager.consume() is the sole owner of budget tracking.
+                # This block only checks max_cycles as a safety guard (same rationale
+                # as _persist_state_and_budget) — prevents double-increment bug.
+                recon_loop_count = sum(
+                    1 for f, t in states if f == "analyzing" and t == "recon"
+                )
+                if recon_loop_count > 0:
+                    cursor.execute(
+                        "SELECT current_cycles, max_cycles FROM loop_budgets WHERE engagement_id = %s",
+                        (self.engagement_id,),
+                    )
+                    lb_row = cursor.fetchone()
+                    current_cycles = lb_row[0] if lb_row else 0
+                    max_cycles = lb_row[1] if lb_row else 5
+                    if current_cycles + recon_loop_count > max_cycles:
+                        conn.rollback()
+                        raise InvalidStateTransitionError(
+                            f"Loop budget exhausted for engagement {self.engagement_id}: "
+                            f"{current_cycles + recon_loop_count}/{max_cycles} cycles required."
+                        )
+
+                conn.commit()
+
+                # Emit state change event for each transition in the chain via SSE
+                try:
+                    from streaming import emit_state_change
+                    _chain_from = db_current
+                    for _chain_to, _chain_reason in states:
+                        emit_state_change(
+                            self.engagement_id,
+                            _chain_from,
+                            _chain_to,
+                            _chain_reason,
+                        )
+                        _chain_from = _chain_to
+                except Exception:
+                    logger.debug(
+                        "Failed to emit chain state_change events for engagement %s: %s",
+                        self.engagement_id, exc_info=True,
+                    )
+
+                self.current_state = final_state
+                assert final_state is not None
+                return final_state
+
+            except psycopg2.Error as e:
                 conn.rollback()
-            logger.error(
-                "chain_transition failed for engagement %s: %s", self.engagement_id, e
-            )
-            raise
-        except ValueError:
-            if conn:
+                logger.error(
+                    "chain_transition failed for engagement %s: %s", self.engagement_id, e
+                )
+                raise
+            except ValueError:
                 conn.rollback()
-            raise
-        finally:
-            if cursor:
-                cursor.close()
-            self._release_connection(conn)
+                raise
+            finally:
+                if cursor:
+                    cursor.close()
 
     def can_transition_to(self, new_state: str) -> bool:
         """

@@ -214,6 +214,11 @@ class FindingBuilder:
             "EVIDENCE_SUMMARY",
             "CWE_KNOWLEDGE",
             "OWASP_MAPPING",
+            # Cloud metadata probe types
+            "CLOUD_METADATA_UNREACHABLE",
+            "CLOUD_METADATA_ACCESSIBLE",
+            "CLOUD_CREDENTIAL_EXFILTRATION",
+            "AWS_IAM_ROLE_CREDENTIALS",
         }
     )
 

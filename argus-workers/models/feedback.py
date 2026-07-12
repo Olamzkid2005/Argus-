@@ -7,7 +7,8 @@ Gated behind ARGUS_FF_FEEDBACK_LOOP feature flag (checked via is_enabled("FEEDBA
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 
 from database.connection import get_db
 from feature_flags import is_enabled
@@ -122,7 +123,7 @@ class FeedbackLearningLoop:
                 feedback.is_true_positive,
                 feedback.analyst_notes,
                 feedback.corrected_severity,
-                datetime.now(UTC),
+                datetime.now(utc),
             ),
         )
 

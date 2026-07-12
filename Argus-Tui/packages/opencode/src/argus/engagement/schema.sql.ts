@@ -25,6 +25,12 @@ export const engagements = sqliteTable("engagements", {
    * 3 = per-engagement DB, encrypted
    */
   storage_version: integer().notNull().default(STORAGE_VERSION_LEGACY),
+  /**
+   * Optimistic concurrency version. Incremented on every update.
+   * Added via ALTER TABLE migration (ADD_VERSION_COLUMN_SQL in store.ts).
+   * Defined here so Drizzle's type system recognizes the column.
+   */
+  version: integer().notNull().default(1),
   created_at: integer().notNull().$default(() => Date.now()),
   updated_at: integer().notNull().$onUpdate(() => Date.now()),
 })

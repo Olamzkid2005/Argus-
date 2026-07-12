@@ -3,9 +3,9 @@ Data models for vulnerability findings
 """
 
 from datetime import datetime
-from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from tool_core._compat import StrEnum
 
 from exceptions import FindingValidationError as FindingValidationError  # re-exported
 

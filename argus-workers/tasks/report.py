@@ -7,7 +7,8 @@ Requirements: 20.1, 20.2, 20.3, 23.4, 23.5, 17.1, 17.2, 17.3, 17.4
 import json
 import logging
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+from tool_core._compat import utc
 from typing import Any
 
 import psycopg2.sql as pysql
@@ -391,7 +392,7 @@ def _generate_report_data(
 
     return {
         "report_type": report_type,
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(utc).isoformat(),
         "findings_summary": findings,
         "engagements": engagements,
     }
@@ -533,7 +534,7 @@ def _send_report_email(
 
 def _calculate_next_run(frequency: str) -> datetime:
     """Calculate the next run time based on frequency."""
-    now = datetime.now(UTC)
+    now = datetime.now(utc)
     if frequency == "daily":
         return now + timedelta(days=1)
     elif frequency == "weekly":
@@ -933,7 +934,7 @@ tr:hover { background: #f8f9fa; }
                 "findings": findings,
             }
 
-            generated_at = datetime.now(UTC)
+            generated_at = datetime.now(utc)
             html = template.render(
                 report=report_context,
                 generated_at=generated_at.strftime("%Y-%m-%d %H:%M:%S"),

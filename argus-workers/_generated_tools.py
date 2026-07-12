@@ -724,7 +724,12 @@ _register(ToolDefinition(
     default_args=["argus-workers/tools/scripts/playwright_bola.py"],
     parameters=[
     ToolParameter(name="target", description="Target URL", required=True, flag="--target"),
-    ToolParameter(name="creds_file", description="Path to JSON credentials file with attacker/victim credentials", required=True, flag="--creds-file"),
+    ToolParameter(name="creds_file", description="Path to JSON credentials file with attacker/victim credentials (alternative to --attacker-username/--attacker-password and --victim-username/--victim-password)", flag="--creds-file"),
+    ToolParameter(name="attacker-username", description="Attacker username (not required when --creds-file is provided)", flag="--attacker-username"),
+    ToolParameter(name="attacker-password", description="Attacker password (not required when --creds-file is provided)", flag="--attacker-password"),
+    ToolParameter(name="victim-username", description="Victim username (not required when --creds-file is provided)", flag="--victim-username"),
+    ToolParameter(name="victim-password", description="Victim password (not required when --creds-file is provided)", flag="--victim-password"),
+    ToolParameter(name="resource-pattern", description="URL pattern for victim resource (use {username} placeholder)", flag="--resource-pattern", default="/api/users/{username}/details"),
     ToolParameter(name="username-selector", description="CSS selector for username input field", flag="--username-selector", default="input[name=username]"),
     ToolParameter(name="password-selector", description="CSS selector for password input field", flag="--password-selector", default="input[name=password]"),
     ToolParameter(name="submit-selector", description="CSS selector for submit button", flag="--submit-selector", default="button[type=submit]"),

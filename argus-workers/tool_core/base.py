@@ -13,9 +13,13 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from tool_core.config.models import DualAuthConfig
+
+if TYPE_CHECKING:
+    from tool_core.finding_builder import FindingBuilder
 from tool_core.result import UnifiedToolResult
 
 
@@ -62,6 +66,7 @@ class AbstractTool(ABC):
     """
 
     tool_name: str = ""  # Override in subclasses
+    _builder: FindingBuilder | None = None
 
     @abstractmethod
     def execute(self, ctx: ToolContext) -> UnifiedToolResult:
@@ -86,7 +91,7 @@ class AbstractTool(ABC):
         result = UnifiedToolResult(
             tool_name=self.tool_name,
             target=ctx.target,
-            started_at=datetime.now(UTC),
+            started_at=datetime.now(timezone.utc),
         )
 
         try:
@@ -103,6 +108,26 @@ class AbstractTool(ABC):
             result.mark_finished()
 
         return result
+
+    def _ensure_builder(self) -> None:
+        """Lazily initialise ``self._builder`` if not already set.
+
+        Creates a ``FindingBuilder`` with ``self.tool_name`` as the source
+        tool and ``self.engagement_id`` (if set).  Passes ``emit_finding``
+        for real-time streaming when the scanner instance has set
+        ``self.emit_finding_callback``.
+
+        Handles the case where a check method is called directly
+        (not through ``execute()``, which always creates the builder).
+        """
+        from tool_core.finding_builder import FindingBuilder
+
+        if self._builder is None:
+            self._builder = FindingBuilder(
+                source_tool=self.tool_name,
+                engagement_id=getattr(self, "engagement_id", ""),
+                emit_finding=getattr(self, "emit_finding_callback", None),
+            )
 
 
 class AsyncTool(ABC):
@@ -144,7 +169,7 @@ class AsyncTool(ABC):
         result = UnifiedToolResult(
             tool_name=self.tool_name,
             target=ctx.target,
-            started_at=datetime.now(UTC),
+            started_at=datetime.now(timezone.utc),
         )
 
         try:

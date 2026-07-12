@@ -14,7 +14,8 @@ Design:
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from uuid import uuid4
 
 from models.finding_types import TYPE_TO_FAMILY, VERIFICATION_TOOL_MAP
@@ -69,7 +70,7 @@ class HypothesisEngine:
             verification_steps = self._build_verification_steps(
                 group, suggested_tools)
 
-            now = datetime.now(UTC).isoformat()
+            now = datetime.now(utc).isoformat()
             hypotheses.append({
                 "id": str(uuid4()),
                 "engagement_id": engagement_id,
@@ -136,7 +137,7 @@ class HypothesisEngine:
         family = TYPE_TO_FAMILY.get(f_type.upper(), f_type.upper())
         tools = VERIFICATION_TOOL_MAP.get(family, ["verification_agent"])
         confidence = min(1.0, f.get("confidence", 0.5) * 1.2)
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(utc).isoformat()
 
         return {
             "id": str(uuid4()),

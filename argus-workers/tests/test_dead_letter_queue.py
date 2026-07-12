@@ -3,7 +3,8 @@ Tests for dead_letter_queue.py
 """
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -101,7 +102,7 @@ class TestDeadLetterQueue:
             "error_class": "TimeoutError",
             "worker_id": None,
             "retry_count": 2,
-            "failed_at": datetime.now(UTC).isoformat(),
+            "failed_at": datetime.now(utc).isoformat(),
             "engagement_id": "ENG-001",
         }
         # Sorted sets now hold task IDs, not full JSON (C3 fix)
@@ -127,7 +128,7 @@ class TestDeadLetterQueue:
             "error_class": "TimeoutError",
             "worker_id": None,
             "retry_count": 2,
-            "failed_at": datetime.now(UTC).isoformat(),
+            "failed_at": datetime.now(utc).isoformat(),
             "engagement_id": "ENG-001",
         }
         # Sorted sets now hold task IDs (C3 fix)
@@ -271,7 +272,7 @@ class TestGetDLQ:
             error_class="TimeoutError",
             worker_id="worker-1",
             retry_count=2,
-            failed_at=datetime.now(UTC).isoformat(),
+            failed_at=datetime.now(utc).isoformat(),
             engagement_id="ENG-001",
         )
 

@@ -11,7 +11,8 @@ import platform as _platform
 import threading
 import time
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+from tool_core._compat import utc
 
 import psutil
 import redis
@@ -126,7 +127,7 @@ class WorkerHealthMonitor:
             memory_percent=metrics["memory_percent"],
             memory_mb=metrics["memory_mb"],
             tasks_processed=self.tasks_processed,
-            last_heartbeat=datetime.now(UTC).isoformat(),
+            last_heartbeat=datetime.now(utc).isoformat(),
             status=status,
             uptime_seconds=int(time.time() - self.start_time),
         )
@@ -213,7 +214,7 @@ class WorkerHealthMonitor:
         all_workers = self.get_all_worker_health()
 
         unhealthy = []
-        now = datetime.now(UTC)
+        now = datetime.now(utc)
 
         for worker in all_workers:
             # Check heartbeat age
@@ -239,7 +240,7 @@ class WorkerHealthMonitor:
         removed = 0
         try:
             pattern = f"{self.REDIS_KEY_PREFIX}:*"
-            now = datetime.now(UTC)
+            now = datetime.now(utc)
 
             for key in self.redis.scan_iter(match=pattern):
                 raw_hgetall = self.redis.hgetall(key)
@@ -309,7 +310,7 @@ class ToolHealthTracker:
             db = get_db()
             conn = db.get_connection()
             cursor = conn.cursor()
-            cutoff = datetime.now(UTC) - timedelta(hours=24)
+            cutoff = datetime.now(utc) - timedelta(hours=24)
 
             cursor.execute(
                 """

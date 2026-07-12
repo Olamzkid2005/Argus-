@@ -31,7 +31,9 @@ export class JWTVerifier implements VerificationScenario {
   private testResults: { test: string; status: number; bodyPreview: string; passed: boolean }[] = []
 
   // Common admin/privileged claims to inject
-  private static readonly PRIVILEGE_CLAIMS = [
+  // Exposed as public so createTamperedTokens() can access it from the
+  // same-class lexical scope (TypeScript strict mode restriction).
+  static readonly PRIVILEGE_CLAIMS = [
     { role: "admin" },
     { role: "administrator" },
     { role: "superuser" },

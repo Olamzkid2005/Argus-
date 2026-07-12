@@ -8,7 +8,8 @@ import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from typing import Any
 
 from opentelemetry import trace
@@ -151,7 +152,7 @@ class StructuredLogger:
             "event_type": event_type,
             "message": message,
             "metadata": metadata or {},
-            "created_at": datetime.now(UTC).isoformat(),
+            "created_at": datetime.now(utc).isoformat(),
         }
 
         self._store_log(log_entry)

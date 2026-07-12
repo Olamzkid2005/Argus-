@@ -6,8 +6,9 @@ high-value attack chains that escalate individual findings to critical severity.
 """
 
 import math
-from enum import StrEnum
 from typing import Any
+
+from tool_core._compat import StrEnum
 
 from models.finding import VulnerabilityFinding
 

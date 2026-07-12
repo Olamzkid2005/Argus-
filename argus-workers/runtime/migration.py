@@ -20,7 +20,8 @@ Rollout timestamp is configured via:
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from typing import Any
 
 logger = logging.getLogger(__name__)

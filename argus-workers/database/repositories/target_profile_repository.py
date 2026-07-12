@@ -7,7 +7,8 @@ Pure-function reads: the profile is a snapshot, not a live cursor.
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from urllib.parse import urlparse
 
 from database.connection import db_cursor
@@ -103,7 +104,7 @@ class TargetProfileRepository:
 
         best_tools = sorted(tool_counts.items(), key=lambda x: -x[1])[:5]
         best_tools_list = [
-            {"tool": t, "finding_count": c, "last_seen": datetime.now(UTC).isoformat()}
+            {"tool": t, "finding_count": c, "last_seen": datetime.now(utc).isoformat()}
             for t, c in best_tools
         ]
 

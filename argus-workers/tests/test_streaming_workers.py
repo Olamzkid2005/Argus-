@@ -2,7 +2,8 @@
 
 import queue
 import threading
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -126,7 +127,7 @@ class TestStreamManager:
         sm = StreamManager()
         sm.subscribe("eng-1")
         sm.publish(Event(type="old", engagement_id="eng-1"))
-        ts = datetime.now(UTC).isoformat()
+        ts = datetime.now(utc).isoformat()
         sm.publish(Event(type="new", engagement_id="eng-1"))
         history = sm.get_history("eng-1", since=ts)
         assert len(history) == 1

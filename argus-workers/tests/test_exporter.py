@@ -60,7 +60,9 @@ class TestGenerateFilename:
         """Filename includes the current date."""
         import datetime
 
-        today = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d")
+        from tool_core._compat import utc
+
+        today = datetime.datetime.now(utc).strftime("%Y-%m-%d")
         name = _generate_filename("html", target_slug="test")
         assert today in name
 

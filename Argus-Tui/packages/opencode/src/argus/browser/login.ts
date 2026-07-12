@@ -652,81 +652,89 @@ export async function probeAuthenticatedEndpoint(
   }
 
   return null  // No probe endpoint was conclusive
-}
-
-/**
- * Detect if the page shows an auth failure (MFA challenge, CAPTCHA, error message).
- *
- * Gap 2.1 fix: Uses positive confirmation strategies BEFORE falling back to
- * absence-of-negative-signals:
- * 1. Check for authenticated-only DOM elements (logout button, avatar, profile link)
- * 2. Check if session cookies changed after login
- * 3. Probe an authenticated-only endpoint (/api/me, /profile) for 200 vs 401/403
- * 4. Fall back to negative check (no MFA/CAPTCHA/error messages)
- *
- * @param page - The Playwright page to check.
- * @param options - Optional configuration for session cookie comparison and API probing.
- * @returns True if auth succeeded, false if blocked.
- */
-export async function detectAuthSuccess(
-  page: Page,
-  options?: {
-    beforeCookies?: Array<{ name: string; value: string }>
-    targetUrl?: string
-  },
-): Promise<boolean> {
-  // Step 1: Positive check — look for authenticated-only DOM elements
-  const domResult = await checkAuthenticatedDomElement(page)
-  if (domResult === true) {
-    return true
-  }
-
-  // Step 2: Positive check — compare session cookies before/after login
-  if (options?.beforeCookies) {
-    try {
-      const context = page.context()
-      const cookieResult = await checkSessionCookiesChanged(context, options.beforeCookies)
-      if (cookieResult === true) {
-        return true
-      }
-    } catch {
-      // BrowserContext may not be available in all environments
-    }
-  }
-
-  // Step 3: Positive check — probe an authenticated-only API endpoint
-  if (options?.targetUrl) {
-    const probeResult = await probeAuthenticatedEndpoint(page, options.targetUrl)
-    if (probeResult === true) {
+}  /**
+   * Detect if the page shows an auth failure (MFA challenge, CAPTCHA, error message).
+   *
+   * Gap 2.1 fix: Uses positive confirmation strategies BEFORE falling back to
+   * absence-of-negative-signals:
+   * 1. Check for authenticated-only DOM elements (logout button, avatar, profile link)
+   * 2. Check if session cookies changed after login
+   * 3. Probe an authenticated-only endpoint (/api/me, /profile) for 200 vs 401/403
+   * 4. Fall back to negative check (no MFA/CAPTCHA/error messages)
+   *
+   * Blocker 7 fix: The final fallback returns `false` instead of `true` so that
+   * generic pages without any authentication evidence don't count as "success".
+   * Only pages with CLEAR positive evidence (logout button, session cookie change,
+   * authenticated API 200) are considered authenticated. This prevents the scanner
+   * from proceeding with "authenticated" testing when login silently failed.
+   *
+   * @param page - The Playwright page to check.
+   * @param options - Optional configuration for session cookie comparison and API probing.
+   * @returns True if auth succeeded, false if blocked.
+   */
+  export async function detectAuthSuccess(
+    page: Page,
+    options?: {
+      beforeCookies?: Array<{ name: string; value: string }>
+      targetUrl?: string
+    },
+  ): Promise<boolean> {
+    // Step 1: Positive check — look for authenticated-only DOM elements
+    const domResult = await checkAuthenticatedDomElement(page)
+    if (domResult === true) {
       return true
     }
-    if (probeResult === false) {
-      // Server explicitly rejected — auth definitely failed
-      return false
+
+    // Step 2: Positive check — compare session cookies before/after login
+    if (options?.beforeCookies) {
+      try {
+        const context = page.context()
+        const cookieResult = await checkSessionCookiesChanged(context, options.beforeCookies)
+        if (cookieResult === true) {
+          return true
+        }
+      } catch {
+        // BrowserContext may not be available in all environments
+      }
     }
+
+    // Step 3: Positive check — probe an authenticated-only API endpoint
+    if (options?.targetUrl) {
+      const probeResult = await probeAuthenticatedEndpoint(page, options.targetUrl)
+      if (probeResult === true) {
+        return true
+      }
+      if (probeResult === false) {
+        // Server explicitly rejected — auth definitely failed
+        return false
+      }
+    }
+
+    // Step 4: Fallback — check for negative signals (MFA, CAPTCHA, auth error messages)
+    const bodyText = await page.textContent("body") ?? ""
+    const lower = bodyText.toLowerCase()
+
+    // Check for MFA challenges
+    if (/\bmfa\b|\bmulti-factor\b|\b2fa\b|\btwo-factor\b|\bauthenticator\b|\bverification code\b/i.test(lower)) {
+      return false  // MFA challenge detected
+    }
+
+    // Check for CAPTCHA
+    if (/\bcaptcha\b|\brecaptcha\b|\bhcaptcha\b|\bturnstile\b/i.test(lower)) {
+      return false  // CAPTCHA detected
+    }
+
+    // Check for auth error messages
+    if (/\binvalid (credentials|username|password|email)\b|\blogin failed\b|\bincorrect\b|\bwrong password\b/i.test(lower)) {
+      return false  // Auth error
+    }
+
+    // Blocker 7: All checks inconclusive — require positive evidence.
+    // Previously returned `true` (assume success), which caused failed logins
+    // landing on generic pages to count as "authenticated", allowing the scanner
+    // to proceed with "authenticated testing" against an unauthenticated state.
+    return false
   }
-
-  // Step 4: Fallback — absence-of-negative check (original behavior)
-  const bodyText = await page.textContent("body") ?? ""
-  const lower = bodyText.toLowerCase()
-
-  // Check for MFA challenges
-  if (/\bmfa\b|\bmulti-factor\b|\b2fa\b|\btwo-factor\b|\bauthenticator\b|\bverification code\b/i.test(lower)) {
-    return false  // MFA challenge detected
-  }
-
-  // Check for CAPTCHA
-  if (/\bcaptcha\b|\brecaptcha\b|\bhcaptcha\b|\bturnstile\b/i.test(lower)) {
-    return false  // CAPTCHA detected
-  }
-
-  // Check for auth error messages
-  if (/\binvalid (credentials|username|password|email)\b|\blogin failed\b|\bincorrect\b|\bwrong password\b/i.test(lower)) {
-    return false  // Auth error
-  }
-
-  return true  // All checks inconclusive — assume success (backward compatible)
-}
 
 /**
  * Detect and handle multi-factor authentication challenges.

@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from cache import cache
+from cve_cache import get_cve_cache
 from models.confidence_scorer import ConfidenceScorer
 from tracing import ExecutionSpan, StructuredLogger, get_trace_id
 
@@ -44,16 +44,9 @@ class IntelligenceEngine:
     """
 
     # ── Threat Intel Caching ──
-    # In-memory fallback cache when Redis is unavailable.
-    # Structure: {key: (expiry_timestamp, value)}
-    # Use OrderedDict so we can evict oldest entries when the cache grows too large.
-    _in_memory_cache: dict[str, tuple[float, Any]] = {}
-    # TTL for NVD/EPSS API responses (1 hour by default — these datasets
-    # only update every 2-8 hours, so hourly refresh is sufficient).
-    THREAT_INTEL_CACHE_TTL = 3600  # 1 hour
-    # Maximum entries in the in-memory cache before eviction kicks in.
-    # Prevents unbounded growth under sustained load.
-    _CACHE_MAX_SIZE = 10000
+    # NOTE: NVD/EPSS API responses are now cached via the dedicated
+    # CveEpssCache (cve_cache.py) with Redis-backed cross-worker sharing.
+    # The old _cache_get/_cache_set methods were removed in B.02.
 
     def __init__(self, connection_string: str = None):
         """
@@ -977,9 +970,9 @@ class IntelligenceEngine:
             return results
 
         sorted_ids = sorted(set(cve_ids))
-        cache_key = f"threat_intel:nvd:{','.join(sorted_ids)}"
+        cve_cache = get_cve_cache()
 
-        cached = self._cache_get(cache_key)
+        cached = cve_cache.get_nvd_data(sorted_ids)
         if cached is not None:
             return cached
 
@@ -1036,7 +1029,7 @@ class IntelligenceEngine:
         except Exception as e:
             logger.warning("NVD API async fetch failed: %s", e)
 
-        self._cache_set(cache_key, results)
+        cve_cache.set_nvd_data(sorted_ids, results)
         return results
 
     async def _fetch_epss_scores_async(self, cve_ids: list[str]) -> dict[str, float]:
@@ -1054,9 +1047,9 @@ class IntelligenceEngine:
             return scores
 
         sorted_ids = sorted(set(cve_ids))
-        cache_key = f"threat_intel:epss:{','.join(sorted_ids)}"
+        cve_cache = get_cve_cache()
 
-        cached = self._cache_get(cache_key)
+        cached = cve_cache.get_epss_scores(sorted_ids)
         if cached is not None:
             return cached
 
@@ -1080,65 +1073,15 @@ class IntelligenceEngine:
         except Exception as e:
             logger.warning("EPSS API async fetch failed: %s", e)
 
-        self._cache_set(cache_key, scores)
+        cve_cache.set_epss_scores(sorted_ids, scores)
         return scores
-
-    def _cache_get(self, key: str) -> Any | None:
-        """
-        Get value from cache — tries Redis first, falls back to in-memory dict.
-
-        Args:
-            key: Cache key
-
-        Returns:
-            Cached value or None if not found
-        """
-        # Try Redis first
-        cached = cache.get(key)
-        if cached is not None:
-            return cached
-        # Fall back to in-memory cache
-        entry = self._in_memory_cache.get(key)
-        if entry is not None:
-            expiry, value = entry
-            if _time.time() < expiry:
-                return value
-            # Expired — remove stale entry
-            del self._in_memory_cache[key]
-        return None
-
-    def _cache_set(self, key: str, value: Any, ttl: int | None = None) -> None:
-        """
-        Set value in both Redis and in-memory fallback cache.
-
-        Args:
-            key: Cache key
-            value: Value to cache
-            ttl: TTL in seconds (defaults to THREAT_INTEL_CACHE_TTL)
-        """
-        ttl = ttl or self.THREAT_INTEL_CACHE_TTL
-        # Set in Redis (best-effort — silently logs on failure)
-        cache.set(key, value, ttl)
-        # Always set in-memory fallback for when Redis is unavailable
-        self._in_memory_cache[key] = (_time.time() + ttl, value)
-        # Evict oldest entries when cache exceeds max size
-        if len(self._in_memory_cache) > self._CACHE_MAX_SIZE:
-            # First pass: remove expired entries
-            now = _time.time()
-            expired_keys: list[str] = [k for k, (expiry, _) in self._in_memory_cache.items() if now >= expiry]
-            for k in expired_keys:
-                del self._in_memory_cache[k]
-            # Second pass: if still over limit, remove oldest entries
-            while len(self._in_memory_cache) > self._CACHE_MAX_SIZE:
-                # dicts preserve insertion order in Python 3.7+, so the first key is the oldest
-                self._in_memory_cache.pop(next(iter(self._in_memory_cache)))
 
     def _fetch_nvd_cve_data(self, cve_ids: list[str]) -> dict[str, dict]:
         """
         Fetch CVE details from NVD (National Vulnerability Database) API
 
-        Results are cached for 1 hour to avoid NVD rate limiting.
-        Uses Redis cache with in-memory dict fallback.
+        Results are cached via CveEpssCache (Redis-backed with no expiry)
+        to avoid NVD rate limiting (5 req / 30 s without API key).
 
         Args:
             cve_ids: List of CVE IDs
@@ -1151,10 +1094,10 @@ class IntelligenceEngine:
             return results
 
         sorted_ids = sorted(set(cve_ids))
-        cache_key = f"threat_intel:nvd:{','.join(sorted_ids)}"
+        cve_cache = get_cve_cache()
 
-        # Check cache first
-        cached = self._cache_get(cache_key)
+        # Check dedicated CVE cache first
+        cached = cve_cache.get_nvd_data(sorted_ids)
         if cached is not None:
             logger.debug("NVD cache hit for %d CVEs", len(sorted_ids))
             return cached
@@ -1225,16 +1168,16 @@ class IntelligenceEngine:
         except Exception as e:
             logger.warning("NVD API parallel fetch failed: %s", e)
 
-        # Cache result (even if partial — empty dict means "we checked, nothing there")
-        self._cache_set(cache_key, results)
+        # Cache via dedicated CVE cache (no expiry for immutable NVD data)
+        cve_cache.set_nvd_data(sorted_ids, results)
         return results
 
     def _fetch_epss_scores(self, cve_ids: list[str]) -> dict[str, float]:
         """
         Fetch EPSS (Exploit Prediction Scoring System) scores
 
-        Results are cached for 1 hour to avoid EPSS API rate limiting.
-        Uses Redis cache with in-memory dict fallback.
+        Results are cached via CveEpssCache (Redis-backed with 24-hour TTL)
+        to avoid EPSS API rate limiting and provide cross-worker sharing.
 
         Args:
             cve_ids: List of CVE IDs
@@ -1248,10 +1191,10 @@ class IntelligenceEngine:
             return scores
 
         sorted_ids = sorted(set(cve_ids))
-        cache_key = f"threat_intel:epss:{','.join(sorted_ids)}"
+        cve_cache = get_cve_cache()
 
-        # Check cache first
-        cached = self._cache_get(cache_key)
+        # Check dedicated EPSS cache first
+        cached = cve_cache.get_epss_scores(sorted_ids)
         if cached is not None:
             logger.debug("EPSS cache hit for %d CVEs", len(sorted_ids))
             return cached
@@ -1278,8 +1221,8 @@ class IntelligenceEngine:
         except Exception as e:
             logger.warning("EPSS API fetch failed: %s", e)
 
-        # Cache result (even if partial)
-        self._cache_set(cache_key, scores)
+        # Cache via dedicated EPSS cache (24-hour TTL)
+        cve_cache.set_epss_scores(sorted_ids, scores)
         return scores
 
     def _check_threat_feeds(self, finding: dict) -> list[dict]:

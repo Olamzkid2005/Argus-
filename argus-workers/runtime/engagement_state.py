@@ -13,7 +13,6 @@ Every mutation increments state_version for replay safety.
 
 import logging
 import time
-from datetime import UTC
 from typing import Any
 
 from loop_budget_manager import LoopBudgetManager
@@ -347,7 +346,7 @@ class EngagementState:
         for h in self.hypotheses:
             if h.get("id") == hypothesis_id:
                 h.update(updates)
-                h["updated_at"] = datetime.now(UTC).isoformat()
+                h["updated_at"] = datetime.now(utc).isoformat()
                 return True
         return False
 

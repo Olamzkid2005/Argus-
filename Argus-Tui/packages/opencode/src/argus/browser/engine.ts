@@ -32,6 +32,42 @@ function jitterViewport(vp: { width: number; height: number }): { width: number;
   return { width: jitter(vp.width), height: jitter(vp.height) }
 }
 
+// ── Stealth: User-Agent rotation pool ──
+// Modern Chrome versions with realistic platform strings.
+// Rotated randomly per context to prevent UA-based fingerprinting.
+const UA_POOL: string[] = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+]
+
+/** Pick a random realistic User-Agent from the pool. */
+function randomUserAgent(): string {
+  return UA_POOL[Math.floor(Math.random() * UA_POOL.length)]
+}
+
+// ── Stealth: Realistic Accept-Language values ──
+const ACCEPT_LANGUAGE_POOL = [
+  "en-US,en;q=0.9",
+  "en-US,en;q=0.9,es;q=0.8",
+  "en-US,en;q=0.9,fr;q=0.8",
+  "en-US,en;q=0.9,de;q=0.8",
+  "en,en-US;q=0.9",
+]
+
+function randomAcceptLanguage(): string {
+  return ACCEPT_LANGUAGE_POOL[Math.floor(Math.random() * ACCEPT_LANGUAGE_POOL.length)]
+}
+
+
+
 export interface BrowserEngine {
   launch(headless?: boolean, userAgent?: string): Promise<void>
   createContext(options?: BrowserEngineOptions): Promise<BrowserContext>
@@ -123,12 +159,7 @@ export class PlaywrightEngine implements BrowserEngine {
     // Build context options with stealth-friendly defaults
     const ctxOptions: Record<string, unknown> = {
       viewport,
-      userAgent: options?.userAgent ?? (
-        // Realistic modern Chrome UA to avoid bot detection
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-        "AppleWebKit/537.36 (KHTML, like Gecko) " +
-        "Chrome/125.0.0.0 Safari/537.36"
-      ),
+      userAgent: options?.userAgent ?? randomUserAgent(),
       locale: options?.locale ?? "en-US",
       timezoneId: options?.timezoneId ?? "America/New_York",
       // Set geolocation to a realistic default (NYC) to avoid detection
@@ -140,6 +171,13 @@ export class PlaywrightEngine implements BrowserEngine {
       colorScheme: "light",
       reducedMotion: "no-preference",
       forcedColors: "none",
+      // WebRTC: prevent real IP leaks through STUN requests by restricting
+      // WebRTC to proxy/TURN relays only. This prevents the browser from
+      // exposing the real public IP via STUN discovery, which is a common
+      // fingerprint used by bot detection systems.
+      webrtc: {
+        ipHandlingPolicy: "disable_non_proxied_udp",
+      },
     }
 
     // Enable HAR capture when harDir is provided
@@ -158,6 +196,16 @@ export class PlaywrightEngine implements BrowserEngine {
     }
 
     this.context = await this.browser.newContext(ctxOptions)
+
+    // ── Stealth: Set extra HTTP headers after context creation ──
+    // Playwright's newContext() doesn't accept extraHTTPHeaders directly.
+    // Must be set via setExtraHTTPHeaders() after the context is created.
+    // This spoofs Accept-Language to match the locale and prevent
+    // language-based fingerprinting by bot detection systems.
+    const acceptLanguage = randomAcceptLanguage()
+    await this.context.setExtraHTTPHeaders({
+      "Accept-Language": acceptLanguage,
+    })
 
     // ── Stealth: Apply comprehensive patches to remove automation fingerprints ──
     // Removes navigator.webdriver property, overrides navigator.plugins length,
@@ -273,6 +321,89 @@ export class PlaywrightEngine implements BrowserEngine {
           }
         } catch {
           // Canvas noise is best-effort
+        }
+
+        // 9. AudioContext fingerprint noise: add subtle gain modulation
+        //    to prevent audio fingerprinting from uniquely identifying
+        //    the automation instance. Same approach as canvas noise but
+        //    for the audio pipeline.
+        try {
+          const originalGetChannelData = (AudioBuffer.prototype as any).getChannelData
+          if (originalGetChannelData) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ;(AudioBuffer.prototype as any).getChannelData = function (channel: number) {
+              const data = originalGetChannelData.call(this, channel)
+              // Apply ~10% noise to a small portion of samples
+              // Real browsers have minor analog-to-digital variation,
+              // so subtle noise actually makes us look more human.
+              if (Math.random() < 0.15) {
+                for (let i = 0; i < data.length; i += 64) {
+                  // Modify every 64th sample by ±0.0001 (below human hearing threshold)
+                  data[i] += (Math.random() - 0.5) * 0.0002
+                }
+              }
+              return data
+            }
+          }
+        } catch {
+          // AudioContext noise is best-effort
+        }
+
+        // 10. Override navigator.connection to report realistic network
+        //     characteristics. Headless browsers often expose "unknown" or
+        //     missing connection properties which Cloudflare flags.
+        try {
+          const connTypes = ["4g", "4g", "4g", "5g"]
+          const effectiveType = connTypes[Math.floor(Math.random() * connTypes.length)]
+          Object.defineProperty(navigator, "connection", {
+            get: () => ({
+              effectiveType,
+              rtt: 50 + Math.floor(Math.random() * 150),
+              downlink: 5 + Math.random() * 45,
+              saveData: false,
+              onchange: null,
+            }),
+            configurable: true,
+          })
+        } catch {
+          // Connection spoofing is best-effort
+        }
+
+        // 11. Override navigator.platform to report a realistic OS platform.
+        //     Uses the userAgent string from the current context to determine
+        //     the correct platform, avoiding direct UA reads inside the getter
+        //     (which could cause issues if navigator.userAgent is proxied).
+        try {
+          const ua = navigator.userAgent || ""
+          const selected = ua.includes("Macintosh") ? "MacIntel"
+            : ua.includes("Linux") ? "Linux x86_64"
+            : "Win32"
+          Object.defineProperty(navigator, "platform", {
+            get: () => selected,
+            configurable: true,
+          })
+        } catch {
+          // Platform spoofing is best-effort
+        }
+
+        // 12. Ensure document.visibilityState is "visible" and
+        //     document.hidden is false. Headless browsers sometimes report
+        //     hidden state which is a strong automation signal.
+        try {
+          // Only patch if the document is currently reporting hidden.
+          // If we're visible already (most cases), skip the override.
+          if (document.hidden) {
+            Object.defineProperty(document, "hidden", {
+              get: () => false,
+              configurable: true,
+            })
+            Object.defineProperty(document, "visibilityState", {
+              get: () => "visible" as DocumentVisibilityState,
+              configurable: true,
+            })
+          }
+        } catch {
+          // Visibility patch is best-effort
         }
       })
     }

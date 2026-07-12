@@ -28,9 +28,10 @@ from __future__ import annotations
 
 import traceback
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from enum import StrEnum
+from datetime import datetime
 from typing import Any
+
+from tool_core._compat import StrEnum, utc
 
 
 class ToolStatus(StrEnum):
@@ -103,7 +104,7 @@ class UnifiedToolResult:
     findings_count: int = 0
 
     # ── Timing ────────────────────────────────────────────────────────────────
-    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    started_at: datetime = field(default_factory=lambda: datetime.now(utc))
     finished_at: datetime | None = None
     duration_seconds: float = 0.0
 
@@ -133,7 +134,7 @@ class UnifiedToolResult:
 
     def mark_finished(self) -> None:
         """Call immediately after subprocess returns."""
-        self.finished_at = datetime.now(UTC)
+        self.finished_at = datetime.now(utc)
         self.duration_seconds = (self.finished_at - self.started_at).total_seconds()
         self.findings_count = len(self.findings)
         if self.ports:

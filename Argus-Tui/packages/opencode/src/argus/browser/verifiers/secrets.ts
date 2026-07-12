@@ -109,7 +109,9 @@ export class SecretsExposureVerifier implements VerificationScenario {
     this.capturedResponses.push(`Scanned: ${pageUrl}`)
 
     // Collect page content from multiple sources
-    this.pageContent = await page.textContent("body").catch(() => "")
+    // textContent() returns string | null — catch handles exceptions,
+    // and ?? converts the null case to empty string for type safety
+    this.pageContent = (await page.textContent("body").catch(() => null)) ?? ""
     this.pageScripts = await page.evaluate(() => {
       const scripts = document.querySelectorAll("script:not([src])")
       return Array.from(scripts).map(s => s.textContent ?? "").join("\n")

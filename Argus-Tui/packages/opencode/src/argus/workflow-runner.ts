@@ -229,9 +229,15 @@ export class WorkflowRunner {
     // If threshold is > CRITICAL (5+), disable verification entirely
     if (threshold > Severity.CRITICAL) return findings
 
-    // Subtypes that don't require authentication (SSRF, LFI, JWT, Secrets)
-    // can be verified without credentials, unlike BOLA, XSS, or PrivEsc.
+    // Subtypes that don't require authentication can be verified without
+    // credentials. The set includes:
+    // - SSRF, LFI, JWT, Secrets: Never need auth (they probe the server itself)
+    // - XSS: Can test unauthenticated injection points (search, contact forms,
+    //   login pages, public API endpoints). Auth-only XSS endpoints are tested
+    //   when credentials are available.
+    // - BOLA, PrivEsc: Require credentials to compare attacker vs victim roles.
     const noAuthSubtypes = new Set([
+      "xss", "xss_stored", "xss_reflected",
       "ssrf", "lfi", "path_traversal",
       "jwt", "jwt_tampering", "jwt_none_algorithm",
       "secrets", "exposed_secrets", "exposed_credentials",

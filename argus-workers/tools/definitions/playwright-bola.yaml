@@ -12,8 +12,34 @@ parameters:
   - name: creds_file
     flag: --creds-file
     type: string
-    required: true
-    description: Path to JSON credentials file with attacker/victim credentials
+    required: false
+    description: Path to JSON credentials file with attacker/victim credentials (alternative to --attacker-username/--attacker-password and --victim-username/--victim-password)
+  - name: attacker-username
+    flag: --attacker-username
+    type: string
+    required: false
+    description: Attacker username (not required when --creds-file is provided)
+  - name: attacker-password
+    flag: --attacker-password
+    type: string
+    required: false
+    description: Attacker password (not required when --creds-file is provided)
+  - name: victim-username
+    flag: --victim-username
+    type: string
+    required: false
+    description: Victim username (not required when --creds-file is provided)
+  - name: victim-password
+    flag: --victim-password
+    type: string
+    required: false
+    description: Victim password (not required when --creds-file is provided)
+  - name: resource-pattern
+    flag: --resource-pattern
+    type: string
+    required: false
+    default: "/api/users/{username}/details"
+    description: URL pattern for victim resource (use {username} placeholder)
   - name: username-selector
     flag: --username-selector
     type: string

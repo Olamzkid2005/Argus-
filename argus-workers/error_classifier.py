@@ -8,9 +8,11 @@ import logging
 import os
 import threading
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from enum import Enum, StrEnum
+from datetime import datetime
+from enum import Enum
 from typing import Any
+
+from tool_core._compat import StrEnum, utc
 
 logger = logging.getLogger(__name__)
 
@@ -280,7 +282,7 @@ def send_alert(message: str, severity: ErrorSeverity):
                     json={
                         "text": message,
                         "severity": severity.value,
-                        "timestamp": datetime.now(UTC).isoformat(),
+                        "timestamp": datetime.now(utc).isoformat(),
                     },
                 )
         except Exception as e:

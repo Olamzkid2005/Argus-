@@ -15,6 +15,7 @@ import threading
 from celery import Celery
 from dotenv import load_dotenv
 
+from tool_core._compat import utc
 from tracing import setup_tracing
 
 tracer = setup_tracing()
@@ -543,7 +544,7 @@ def ping_task(self):
         "status": "ok",
         "worker": self.request.hostname,
         "pid": os.getpid(),
-        "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
+        "timestamp": datetime.datetime.now(utc).isoformat(),
     }
 
 

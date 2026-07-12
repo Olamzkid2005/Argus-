@@ -5,7 +5,8 @@ Uses shared ConnectionManager for database access (H-23).
 """
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+from tool_core._compat import utc
 
 from celery_app import app
 from database.connection import db_cursor
@@ -24,7 +25,7 @@ def cleanup_old_results(self):
     - Clean up old checkpoints
     """
     try:
-        cutoff_date = datetime.now(UTC) - timedelta(days=30)
+        cutoff_date = datetime.now(utc) - timedelta(days=30)
 
         with db_cursor(commit=True) as cursor:
             cursor.execute(
@@ -66,7 +67,7 @@ def cleanup_failed_engagements(self):
     Clean up engagements that have been in failed state for more than 7 days
     """
     try:
-        cutoff_date = datetime.now(UTC) - timedelta(days=7)
+        cutoff_date = datetime.now(utc) - timedelta(days=7)
 
         with db_cursor(commit=True) as cursor:
             cursor.execute(
@@ -140,8 +141,8 @@ def cleanup_checkpoints(self):
     try:
         # Keep 90 days of checkpoints for active engagements,
         # 30 days for completed/failed
-        cutoff_active = datetime.now(UTC) - timedelta(days=90)
-        cutoff_completed = datetime.now(UTC) - timedelta(days=30)
+        cutoff_active = datetime.now(utc) - timedelta(days=90)
+        cutoff_completed = datetime.now(utc) - timedelta(days=30)
 
         with db_cursor(commit=True) as cursor:
             # Delete old checkpoints for active engagements
@@ -187,7 +188,7 @@ def worker_health_check(self):
     """
     import socket
 
-    now = datetime.now(UTC)
+    now = datetime.now(utc)
     return {
         "status": "ok",
         "hostname": socket.gethostname(),

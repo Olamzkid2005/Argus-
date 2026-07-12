@@ -13,7 +13,8 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from typing import Any
 
 from utils.logging_utils import ScanLogger
@@ -206,7 +207,7 @@ If NOT vulnerable:
             result = self._parse_response(raw_response)
             if result:
                 result.model = self.model
-                result.timestamp = datetime.now(UTC).isoformat()
+                result.timestamp = datetime.now(utc).isoformat()
                 slog.llm_complete(
                     "response_analysis",
                     vulnerable=result.vulnerable,

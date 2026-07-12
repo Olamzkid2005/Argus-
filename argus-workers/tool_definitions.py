@@ -20,8 +20,9 @@ Pattern: Declarative agent registry with derived types and phase maps.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import final
+
+from tool_core._compat import StrEnum
 
 from tool_core.config.models import ToolMetadata
 
@@ -1244,6 +1245,7 @@ _AGENT_INTERNAL_TOOLS = frozenset(
         "post_exploitation",
         "credential_replay",
         "internal_probe",
+        "cloud_metadata_probe",
         "finding_correlation_engine",
         "attack_path_generator",
         "verification_agent",

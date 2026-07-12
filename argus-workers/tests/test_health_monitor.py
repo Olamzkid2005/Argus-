@@ -4,7 +4,8 @@ Tests for health_monitor.py
 Validates: Health check recording, heartbeat, self-healing, dead worker cleanup
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+from tool_core._compat import utc
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -181,7 +182,7 @@ class TestWorkerHealthMonitor:
                 b"memory_percent": b"20.0",
                 b"memory_mb": b"100.0",
                 b"tasks_processed": b"5",
-                b"last_heartbeat": datetime.now(UTC).isoformat().encode(),
+                b"last_heartbeat": datetime.now(utc).isoformat().encode(),
                 b"status": b"healthy",
                 b"uptime_seconds": b"300",
             },
@@ -193,7 +194,7 @@ class TestWorkerHealthMonitor:
                 b"memory_percent": b"40.0",
                 b"memory_mb": b"200.0",
                 b"tasks_processed": b"10",
-                b"last_heartbeat": datetime.now(UTC).isoformat().encode(),
+                b"last_heartbeat": datetime.now(utc).isoformat().encode(),
                 b"status": b"warning",
                 b"uptime_seconds": b"600",
             },
@@ -216,7 +217,7 @@ class TestWorkerHealthMonitor:
     def test_get_unhealthy_workers_dead(self, monitor, mock_redis):
         """Test detecting dead workers by stale heartbeat"""
         stale_time = (
-            datetime.now(UTC) - timedelta(seconds=HEARTBEAT_TTL * 3)
+            datetime.now(utc) - timedelta(seconds=HEARTBEAT_TTL * 3)
         ).isoformat()
         mock_redis.scan_iter.return_value = [b"worker:health:worker-dead"]
         mock_redis.hgetall.return_value = {
@@ -249,7 +250,7 @@ class TestWorkerHealthMonitor:
             b"memory_percent": b"95.0",
             b"memory_mb": b"500.0",
             b"tasks_processed": b"5",
-            b"last_heartbeat": datetime.now(UTC).isoformat().encode(),
+            b"last_heartbeat": datetime.now(utc).isoformat().encode(),
             b"status": b"critical",
             b"uptime_seconds": b"300",
         }
@@ -270,7 +271,7 @@ class TestWorkerHealthMonitor:
             b"memory_percent": b"20.0",
             b"memory_mb": b"100.0",
             b"tasks_processed": b"5",
-            b"last_heartbeat": datetime.now(UTC).isoformat().encode(),
+            b"last_heartbeat": datetime.now(utc).isoformat().encode(),
             b"status": b"healthy",
             b"uptime_seconds": b"300",
         }
@@ -281,7 +282,7 @@ class TestWorkerHealthMonitor:
     def test_cleanup_dead_workers(self, monitor, mock_redis):
         """Test cleanup removes stale worker entries"""
         stale_time = (
-            datetime.now(UTC) - timedelta(seconds=HEARTBEAT_TTL * 6)
+            datetime.now(utc) - timedelta(seconds=HEARTBEAT_TTL * 6)
         ).isoformat()
         mock_redis.scan_iter.return_value = [b"worker:health:old-worker"]
         mock_redis.hgetall.return_value = {
@@ -296,7 +297,7 @@ class TestWorkerHealthMonitor:
 
     def test_cleanup_dead_workers_none(self, monitor, mock_redis):
         """Test cleanup does not remove recent workers"""
-        recent_time = datetime.now(UTC).isoformat()
+        recent_time = datetime.now(utc).isoformat()
         mock_redis.scan_iter.return_value = [b"worker:health:recent-worker"]
         mock_redis.hgetall.return_value = {
             b"last_heartbeat": recent_time.encode(),

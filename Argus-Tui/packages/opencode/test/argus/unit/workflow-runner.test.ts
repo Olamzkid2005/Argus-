@@ -879,17 +879,21 @@ describe("formatFindingsSummary", () => {
         updated_at: new Date().toISOString(),
       }
 
-      deps.executor.execute = mock(() => ({
-        phaseId: "phase-0-recon",
-        status: "completed",
-        findings: [xssFinding],
-        artifacts: [],
-        errors: [],
-        durationMs: 10,
-      }))
-
+      // Call mcpVerifyFindings directly to avoid browser verification
+      // (XSS is now in noAuthSubtypes, so it would trigger Playwright
+      // browser verification via runner.run(), which requires a real browser).
       const runner = new WorkflowRunner(deps)
-      await runner.run({ target: "https://example.com" })
+      ;(runner as any).executorBridge = deps.bridge
+      const onProgress = mock(() => {})
+      const emit = (event: any) => {
+        if (typeof event === "string") onProgress(event)
+      }
+      await (runner as any).mcpVerifyFindings(
+        [xssFinding],
+        "https://example.com",
+        "ENG-test-001",
+        emit,
+      )
 
       expect(callToolMock).toHaveBeenCalledWith(
         "finding_verifier",

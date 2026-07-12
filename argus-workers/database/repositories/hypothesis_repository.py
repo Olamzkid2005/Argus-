@@ -2,7 +2,8 @@
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 
 from psycopg2.extras import Json, RealDictCursor
 
@@ -71,9 +72,9 @@ class HypothesisRepository(BaseRepository):
                     "suggested_tools": Json(
                         hypothesis.get("suggested_tools", [])),
                     "created_at": hypothesis.get("created_at",
-                        datetime.now(UTC).isoformat()),
+                        datetime.now(utc).isoformat()),
                     "updated_at": hypothesis.get("updated_at",
-                        datetime.now(UTC).isoformat()),
+                        datetime.now(utc).isoformat()),
                 },
             )
             row = cursor.fetchone()

@@ -9,7 +9,8 @@ Mirrors DeepSec's FileRecord contract pattern — typed, structured, sortable.
 """
 
 from dataclasses import dataclass, field
-from enum import StrEnum
+
+from tool_core._compat import StrEnum
 
 
 class CandidateSource(StrEnum):

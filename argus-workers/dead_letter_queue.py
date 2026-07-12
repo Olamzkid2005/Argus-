@@ -11,7 +11,8 @@ import logging
 import re
 import threading
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from typing import Any
 
 import redis
@@ -208,7 +209,7 @@ class DeadLetterQueue:
                 error_class=error_class,
                 worker_id=worker_id,
                 retry_count=retry_count,
-                failed_at=datetime.now(UTC).isoformat(),
+                failed_at=datetime.now(utc).isoformat(),
                 engagement_id=engagement_id,
             )
 
@@ -216,7 +217,7 @@ class DeadLetterQueue:
             # Use task_id as the sorted set member (not full JSON) so that
             # cross-key operations (purge, cleanup) always match correctly
             # regardless of JSON serialization ordering (C3).
-            score = datetime.now(UTC).timestamp()
+            score = datetime.now(utc).timestamp()
             task_json = json.dumps(asdict(failed_task))
             key = f"{self.REDIS_KEY_PREFIX}:tasks"
 
@@ -451,7 +452,7 @@ class DeadLetterQueue:
         try:
             cutoff = None
             if older_than_hours:
-                cutoff = datetime.now(UTC).timestamp() - (older_than_hours * 3600)
+                cutoff = datetime.now(utc).timestamp() - (older_than_hours * 3600)
 
             main_key = f"{self.REDIS_KEY_PREFIX}:tasks"
 

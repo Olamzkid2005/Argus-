@@ -173,7 +173,7 @@ function toEngagementState(row: typeof engagements.$inferSelect): EngagementStat
     status: row.status as EngagementStatus,
     schemaVersion: row.schema_version,
     storageVersion: row.storage_version ?? STORAGE_VERSION_LEGACY,
-    version: (row as any).version ?? 1,
+    version: row.version ?? 1,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   }
@@ -787,7 +787,8 @@ export class EngagementStore implements IEngagementStore {
     const now = Date.now()
     const newVersion = engagement.version + 1
 
-    const update = this.rootDb.update(engagements)
+    // Build the update with optional optimistic locking
+    const baseUpdate = this.rootDb.update(engagements)
       .set({
         target: engagement.target,
         workflow: engagement.workflow,
@@ -798,15 +799,15 @@ export class EngagementStore implements IEngagementStore {
         version: newVersion,
         updated_at: now,
       })
-      .where(eq(engagements.id, engagement.id))
 
     // Phase 4.4.3: Optimistic concurrency — only update if version matches
-    if (EngagementStore._optimisticLockEnabled) {
-      update.where(sql`${engagements.version} = ${engagement.version}`)
-    }
+    const whereClause = EngagementStore._optimisticLockEnabled
+      ? sql`${engagements.id} = ${engagement.id} AND ${engagements.version} = ${engagement.version}`
+      : eq(engagements.id, engagement.id)
 
-    const result = update.run()
-    if (EngagementStore._optimisticLockEnabled && result.changes === 0) {
+    const result = baseUpdate.where(whereClause).run()
+    const changes = (result as any).changes ?? 0
+    if (EngagementStore._optimisticLockEnabled && changes === 0) {
       throw new Error(
         `Optimistic lock conflict: engagement ${engagement.id} was modified by another process. ` +
         `Expected version ${engagement.version}. Reload and retry.`
@@ -822,17 +823,16 @@ export class EngagementStore implements IEngagementStore {
     const now = Date.now()
     const newVersion = eng.version + 1
 
-    const update = this.rootDb.update(engagements)
+    const baseUpdate = this.rootDb.update(engagements)
       .set({ status, version: newVersion, updated_at: now })
-      .where(eq(engagements.id, id))
 
-    // Phase 4.4.3: Optimistic concurrency
-    if (EngagementStore._optimisticLockEnabled) {
-      update.where(sql`${engagements.version} = ${eng.version}`)
-    }
+    const whereClause = EngagementStore._optimisticLockEnabled
+      ? sql`${engagements.id} = ${id} AND ${engagements.version} = ${eng.version}`
+      : eq(engagements.id, id)
 
-    const result = update.run()
-    if (EngagementStore._optimisticLockEnabled && result.changes === 0) {
+    const result = baseUpdate.where(whereClause).run()
+    const changes = (result as any).changes ?? 0
+    if (EngagementStore._optimisticLockEnabled && changes === 0) {
       throw new Error(
         `Optimistic lock conflict: engagement ${id} was modified by another process. ` +
         `Expected version ${eng.version}. Reload and retry.`

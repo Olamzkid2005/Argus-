@@ -8,11 +8,12 @@ and multi-format rendering (PDF, Markdown, HTML).
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 
 from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus, UnifiedToolResult
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ class ExecutiveReportGenerator(AbstractTool):
             "report_type": "executive_security_report",
             "target": target,
             "engagement_id": engagement_id,
-            "generated_at": datetime.now(UTC).isoformat(),
+            "generated_at": datetime.now(utc).isoformat(),
             "executive_summary": self._generate_executive_summary(
                 findings, target, severity_breakdown
             ),
@@ -155,7 +156,7 @@ class ExecutiveReportGenerator(AbstractTool):
         lines = [
             f"# Security Assessment Report: {target}",
             "",
-            f"**Date:** {datetime.now(UTC).strftime('%Y-%m-%d')}",
+            f"**Date:** {datetime.now(utc).strftime('%Y-%m-%d')}",
             f"**Total Findings:** {len(findings)}",
             "",
             "## Severity Breakdown",

@@ -21,7 +21,8 @@ import queue
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from typing import Any
 
 from utils.error_hints import ErrorHint
@@ -82,7 +83,7 @@ class Event:
     type: str
     engagement_id: str
     data: dict = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(utc).isoformat())
 
     def to_sse(self) -> str:
         return f"data: {json.dumps(self.to_dict())}\n\n"
@@ -263,7 +264,7 @@ class StreamManager(EventBus):
 
     def _evict_stale_engagements_inline(self, max_engagement_age_seconds: int = 86400):
         """Evict stale engagements (must hold self._lock)."""
-        cutoff = datetime.now(UTC).timestamp() - max_engagement_age_seconds
+        cutoff = datetime.now(utc).timestamp() - max_engagement_age_seconds
         stale = []
         for eid, events in self._history.items():
             if events and events[-1].timestamp:

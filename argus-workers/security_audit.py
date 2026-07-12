@@ -9,7 +9,8 @@ import logging
 import os
 import sys
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -253,7 +254,7 @@ class SecurityAudit:
             )
 
         return {
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(utc).isoformat(),
             "summary": {
                 "total_findings": len(findings),
                 "critical": severity_counts["critical"],

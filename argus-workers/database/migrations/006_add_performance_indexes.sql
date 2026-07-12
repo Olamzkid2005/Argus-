@@ -14,9 +14,12 @@ CREATE INDEX IF NOT EXISTS idx_engagements_active
 ON engagements(org_id, created_at DESC) 
 WHERE status NOT IN ('complete', 'failed');
 
--- Index for target URL search (case-insensitive lookups)
-CREATE INDEX IF NOT EXISTS idx_engagements_target_url 
-ON engagements(target_url);
+-- NOTE: idx_engagements_target_url, idx_engagements_scope_gin, and
+-- idx_engagements_covering reference columns (target_url, authorized_scope,
+-- scan_type) that are added by migration 022. To prevent a crash on fresh
+-- DBs where this migration runs before 022, those indexes are created in
+-- migration 022 itself (which has the columns).
+-- See: 022_add_engagement_columns.sql
 
 -- Index for completion tracking
 CREATE INDEX IF NOT EXISTS idx_engagements_completed_at 
@@ -52,9 +55,9 @@ ON findings(source_tool, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_findings_engagement_id_type 
 ON findings(engagement_id, type);
 
--- Covering index for engagement list query (avoids table lookups)
-CREATE INDEX IF NOT EXISTS idx_engagements_covering 
-ON engagements(org_id, status, created_at DESC, target_url, scan_type);
+-- NOTE: idx_engagements_covering is created in migration 022 (which has the
+-- target_url and scan_type columns). Skipping here to prevent crash on fresh
+-- DBs where this migration runs before 022. See: 022_add_engagement_columns.sql
 
 -- Covering index for findings list with severity filter
 CREATE INDEX IF NOT EXISTS idx_findings_covering 
@@ -95,9 +98,9 @@ WITH (pages_per_range = 128);
 CREATE INDEX IF NOT EXISTS idx_findings_evidence_gin 
 ON findings USING GIN (evidence);
 
--- GIN index for authorized scope search
-CREATE INDEX IF NOT EXISTS idx_engagements_scope_gin 
-ON engagements USING GIN (authorized_scope);
+-- NOTE: idx_engagements_scope_gin is created in migration 022 (which has the
+-- authorized_scope column). Skipping here to prevent crash on fresh DBs where
+-- this migration runs before 022. See: 022_add_engagement_columns.sql
 
 -- ============================================================================
 -- ANALYZE TABLES

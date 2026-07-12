@@ -4,7 +4,8 @@ Snapshot Manager - Creates immutable state snapshots for decision-making
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from decimal import Decimal
 
 import psycopg2
@@ -156,7 +157,7 @@ class SnapshotManager:
                     },
                     "loop_budget": loop_budget,
                     "engagement_state": engagement_state,
-                    "snapshot_timestamp": datetime.now(UTC).isoformat(),
+                    "snapshot_timestamp": datetime.now(utc).isoformat(),
                 }
 
                 # Convert DB-native types (e.g. Decimal) into JSON-safe values

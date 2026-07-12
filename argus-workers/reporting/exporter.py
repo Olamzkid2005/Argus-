@@ -31,6 +31,8 @@ import os
 import subprocess
 import sys
 import webbrowser
+
+from tool_core._compat import utc
 from pathlib import Path
 from typing import Literal
 
@@ -103,7 +105,7 @@ def _generate_filename(
     Returns:
         Filename string (no directory prefix).
     """
-    ts = timestamp or datetime.datetime.now(datetime.UTC)
+    ts = timestamp or datetime.datetime.now(utc)
     date_str = ts.strftime("%Y-%m-%d")
 
     ext_map: dict[ReportFormat, str] = {

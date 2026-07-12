@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import NotRequired, TypedDict
+
+from tool_core._compat import StrEnum
 
 
 class HypothesisStatus(StrEnum):

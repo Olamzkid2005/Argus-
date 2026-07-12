@@ -28,6 +28,10 @@ export interface NormalizedFinding {
   finalized_at?: string
   /** HTTP status code observed during finding (e.g., 200, 403, 500) */
   statusCode?: number
+  /** The URL/endpoint where this finding was discovered. */
+  url?: string
+  /** Source tool that generated this finding (e.g., "nuclei", "sqlmap"). */
+  source?: string
   /** If true, this finding represents the absence of a finding (negative evidence).
    *  Used by replan to trigger capability insertion on scan misses.
    *  Negative findings are exempt from MAX_REPLANS on first consideration. */

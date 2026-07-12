@@ -1427,7 +1427,39 @@ def main():
         arguments = params.get("arguments", {})
         timeout = params.get("timeout")
         cache_mode = params.get("cache_mode")
-        return server.call_tool(name, arguments, timeout, cache_mode)
+        engagement_id = params.get("engagement_id", "")
+
+        # Create ScopeValidator when engagement_id is provided
+        # This ensures target validation against authorized scope even
+        # when call_tool is invoked directly via MCP transport.
+        _scope_validator = None
+        if engagement_id:
+            try:
+                from orchestrator_pkg.engagement import EngagementService
+                from tools.scope_validator import ScopeValidator
+
+                _authorized_scope = EngagementService.load_authorized_scope(
+                    engagement_id
+                )
+                if _authorized_scope:
+                    _scope_validator = ScopeValidator(
+                        engagement_id, _authorized_scope
+                    )
+            except Exception:
+                logger.debug(
+                    "Could not create scope validator for engagement %s in MCP call_tool",
+                    engagement_id,
+                    exc_info=True,
+                )
+
+        return server.call_tool(
+            name,
+            arguments,
+            timeout,
+            cache_mode,
+            engagement_id=engagement_id,
+            scope_validator=_scope_validator,
+        )
 
     transport.register("list_tools", handle_list_tools)
     transport.register("call_tool", handle_call_tool)

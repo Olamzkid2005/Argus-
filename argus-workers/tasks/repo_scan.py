@@ -14,7 +14,8 @@ import re
 import subprocess
 import tempfile
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 
 from celery_app import app
 
@@ -340,7 +341,7 @@ def generate_cyclonedx_sbom(repo_path, dependencies):
         "version": 1,
         "serialNumber": f"urn:uuid:{uuid.uuid4()}",
         "creationInfo": {
-            "timestamp": datetime.now(UTC).isoformat() + "Z",
+            "timestamp": datetime.now(utc).isoformat() + "Z",
             "tools": [
                 {"vendor": "Argus", "name": "Security Platform", "version": "1.0"}
             ],

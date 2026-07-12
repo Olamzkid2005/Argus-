@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 from cache import CacheMode, cache
@@ -32,6 +32,7 @@ from runtime.concurrency import (
 from runtime.rate_limiter import PER_HOST_LIMITER, extract_host
 from streaming import emit_error_hint
 from tool_core.result import ToolStatus, UnifiedToolResult
+from tool_core._compat import utc
 from tools.circuit_breaker import (
     CircuitOpenError,
     ToolCircuitBreakerManager,
@@ -140,7 +141,12 @@ class ToolRunner:
         )
 
     def _load_authorized_scope(self) -> dict | None:
-        """Load authorized scope for the current engagement, if known."""
+        """Load authorized scope for the current engagement, if known.
+
+        Checks the ``authorized_scope`` column first (added by migration 022),
+        then falls back to ``metadata._authorized_scope`` for backward compatibility
+        with pre-migration data.
+        """
         if not self.engagement_id or not self.connection_string:
             return None
         try:
@@ -148,11 +154,24 @@ class ToolRunner:
             engagement = repo.find_by_id(self.engagement_id)
             if not engagement:
                 return None
+
+            # Primary: authorized_scope column (migration 022)
+            scope = engagement.get("authorized_scope")
+            if scope:
+                if isinstance(scope, str):
+                    import json
+                    try:
+                        scope = json.loads(scope)
+                    except json.JSONDecodeError:
+                        scope = None
+                if scope:
+                    return scope
+
+            # Fallback: metadata._authorized_scope (pre-migration)
             metadata = engagement.get("metadata") or {}
             scope = metadata.get("_authorized_scope")
             if isinstance(scope, str):
                 import json
-
                 try:
                     scope = json.loads(scope)
                 except json.JSONDecodeError:

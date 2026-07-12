@@ -4,7 +4,8 @@ Checkpoint Manager - Saves and recovers from checkpoints during long scans
 
 import logging
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+from tool_core._compat import utc
 from typing import Any
 
 from psycopg2.extras import Json, RealDictCursor
@@ -500,7 +501,7 @@ class CheckpointManager:
         try:
             conn = get_db().get_connection()
             cursor = conn.cursor()
-            cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
+            cutoff = datetime.now(utc) - timedelta(days=max_age_days)
 
             cursor.execute(
                 """

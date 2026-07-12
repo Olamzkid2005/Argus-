@@ -9,7 +9,8 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 

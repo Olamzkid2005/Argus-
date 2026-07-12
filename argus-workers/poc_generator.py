@@ -11,7 +11,6 @@ Type-specific templates ensure structured, predictable output.
 
 import json
 import logging
-from datetime import UTC
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -272,7 +271,7 @@ class PoCGenerator:
                 if _record:
                     _record(0.005)  # ~$0.005 estimated per 800-token call
 
-            result["generated_at"] = datetime.now(UTC).isoformat()
+            result["generated_at"] = datetime.now(utc).isoformat()
             result["finding_type"] = vuln_type
             result["endpoint"] = finding.get("endpoint", "")
             result["_warning"] = (

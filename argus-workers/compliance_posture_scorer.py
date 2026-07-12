@@ -15,7 +15,8 @@ Scores are computed per-framework and as a composite across all frameworks.
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 
 from compliance_reporting import ComplianceMapper
 
@@ -46,7 +47,7 @@ class FrameworkPosture:
     medium_count: int
     finding_breakdown: dict[str, list[dict]] = field(default_factory=dict)
     """Maps compliance_ref -> list of finding dicts contributing to that ref."""
-    computed_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    computed_at: str = field(default_factory=lambda: datetime.now(utc).isoformat())
 
 
 @dataclass
@@ -59,7 +60,7 @@ class PostureSnapshot:
     total_findings: int = 0
     trend: str = "stable"  # "improving", "declining", "stable"
     previous_score: float | None = None
-    computed_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    computed_at: str = field(default_factory=lambda: datetime.now(utc).isoformat())
 
 
 class CompliancePostureScorer:
@@ -511,7 +512,7 @@ class CompliancePostureScorer:
                     "total_engagements": len(engagements),
                     "engagements": engagements,
                     "worst_performers": worst,
-                    "computed_at": datetime.now(UTC).isoformat(),
+                    "computed_at": datetime.now(utc).isoformat(),
                 }
         except Exception as e:
             logger.warning(
@@ -526,7 +527,7 @@ class CompliancePostureScorer:
                 "engagements": [],
                 "worst_performers": [],
                 "error": str(e),
-                "computed_at": datetime.now(UTC).isoformat(),
+                "computed_at": datetime.now(utc).isoformat(),
             }
 
     # ── Per-control tracking ──

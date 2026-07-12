@@ -6,7 +6,8 @@ Requirements: 27.4, 27.5
 
 import json
 import os
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from pathlib import Path
 
 
@@ -67,7 +68,7 @@ class RuleRegistry:
             "id": rule_id,
             "yaml": rule_yaml,
             "version": version,
-            "created_at": datetime.now(UTC).isoformat(),
+            "created_at": datetime.now(utc).isoformat(),
             "metadata": metadata or {},
         }
 
@@ -177,7 +178,7 @@ class RuleRegistry:
             "yaml": rule.get("yaml", ""),
             "author": author,
             "description": description,
-            "published_at": datetime.now(UTC).isoformat(),
+            "published_at": datetime.now(utc).isoformat(),
             "downloads": 0,
         }
 

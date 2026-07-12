@@ -682,19 +682,45 @@ class ReActAgent:
                     )
                     return False
 
-        # Validate target is not internal/SSRF target (SSOT: ScopeValidator).
-        # Consolidated from the inline IP/hostname check that was duplicated
-        # from tools/scope_validator.py into this method.
+        # Validate target is not internal/SSRF target AND is in engagement scope
+        # (SSOT: ScopeValidator). Consolidated from the inline IP/hostname check
+        # that was duplicated from tools/scope_validator.py into this method.
         from urllib.parse import urlparse
 
+        # Lazily load ScopeValidator with engagement scope for full validation
+        _scope_validator = None
         _target_params = ["target", "url", "host", "hostname", "domain", "endpoint"]
+
+        # Try to create a ScopeValidator with the engagement's authorized scope
+        if self.engagement_id:
+            try:
+                from orchestrator_pkg.engagement import EngagementService
+                from tools.scope_validator import ScopeValidator
+
+                _authorized_scope = EngagementService.load_authorized_scope(
+                    self.engagement_id
+                )
+                if _authorized_scope:
+                    _scope_validator = ScopeValidator(
+                        self.engagement_id, _authorized_scope
+                    )
+            except Exception:
+                logger.debug(
+                    "Could not create scope validator for engagement %s in agent",
+                    self.engagement_id,
+                    exc_info=True,
+                )
+
         for param_name in _target_params:
             target = action.arguments.get(param_name, "")
             if target:
                 try:
-                    # Extract hostname the same way ScopeValidator._extract_hostname does
-                    from tools.scope_validator import ScopeValidator
+                    from tools.scope_validator import (
+                        ScopeValidator,
+                        ScopeViolationError,
+                    )
 
+                    # Step 1: SSRF / internal target check
                     hostname = urlparse(target).hostname
                     if not hostname:
                         # urlparse treats scheme-less targets (e.g. "169.254.169.254")
@@ -709,6 +735,20 @@ class ReActAgent:
                             action.tool,
                         )
                         return False
+
+                    # Step 2: Engagement scope validation
+                    if _scope_validator is not None:
+                        try:
+                            _scope_validator.validate_target(target)
+                        except ScopeViolationError as _e:
+                            logger.warning(
+                                "Blocked out-of-scope target '%s' (param=%s) for tool '%s': %s",
+                                target,
+                                param_name,
+                                action.tool,
+                                _e,
+                            )
+                            return False
                 except Exception as e:
                     logger.debug(
                         "Target validation failed for '%s' (param=%s): %s",

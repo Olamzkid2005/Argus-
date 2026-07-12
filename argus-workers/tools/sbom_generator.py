@@ -14,7 +14,8 @@ Usage:
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from typing import Any
 
 from utils.logging_utils import ScanLogger
@@ -158,7 +159,7 @@ def generate_sbom_from_findings(
         purl_index += 1
 
     metadata: dict[str, Any] = {
-        "timestamp": datetime.now(UTC).isoformat(),
+        "timestamp": datetime.now(utc).isoformat(),
         "tools": [{"vendor": "Argus", "name": "Security Platform", "version": "1.0"}],
         "component": {
             "type": "application",

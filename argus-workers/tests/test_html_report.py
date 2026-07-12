@@ -167,9 +167,10 @@ class TestRenderHtmlReport:
     def test_auto_generates_scan_date(self):
         """Auto-generated scan date when not provided."""
         import datetime
+        from tool_core._compat import utc
 
         html = render_html_report()
-        today = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d")
+        today = datetime.datetime.now(utc).strftime("%Y-%m-%d")
         assert today in html
 
     def test_self_contained_no_external_refs(self):

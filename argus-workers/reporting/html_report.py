@@ -10,6 +10,8 @@ Architecture (ADR-007): Pure renderers at library layer; side effects at CLI bou
 
 import datetime
 from html import escape
+
+from tool_core._compat import utc
 from typing import Any
 
 # Severity colors (GitHub-dark inspired)
@@ -349,7 +351,7 @@ def render_html_report(
         Complete HTML string (self-contained, no external resources).
     """
     findings = findings or []
-    scan_date = scan_date or datetime.datetime.now(datetime.UTC).strftime(
+    scan_date = scan_date or datetime.datetime.now(utc).strftime(
         "%Y-%m-%d %H:%M UTC"
     )
 

@@ -1,0 +1,25 @@
+name: cloud_metadata_probe
+command: python3
+args:
+  - argus-workers/tools/run_agent_tool.py
+  - cloud_metadata_probe
+description: "cloud_metadata_probe - security assessment tool"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or scope"
+    required: true
+    flag: "--target"
+  - name: extra
+    type: string
+    description: 'JSON-encoded extra parameters (e.g. {"tech_stack":["apache"]})'
+    required: false
+capabilities:
+  - cloud_metadata_probe
+  - post_exploitation
+signal_quality: CONFIRMED
+risk_level: high
+priority: 95
+cost: low
+enabled: true
+timeout: 60

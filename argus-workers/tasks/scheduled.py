@@ -265,11 +265,11 @@ def _spawn_engagement(
             prev_engagement_id = None
 
         # Compute next run from cron expression
-        from datetime import UTC, datetime
+        from datetime import datetime
 
         from croniter import croniter
 
-        now = datetime.now(UTC)
+        now = datetime.now(utc)
         next_run = croniter(cron_expression, now).get_next(datetime)
 
         # Update scheduled engagement with next run and last engagement reference

@@ -16,7 +16,8 @@ from __future__ import annotations
 import os
 import re
 import sys
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -36,7 +37,7 @@ def _make_hypothesis(
     **overrides,
 ) -> dict:
     """Helper to build a hypothesis dict with sensible defaults."""
-    now = datetime.now(UTC).isoformat()
+    now = datetime.now(utc).isoformat()
     hyp = {
         "id": str(uuid4()),
         "engagement_id": engagement_id,

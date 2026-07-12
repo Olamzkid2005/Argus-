@@ -7,7 +7,8 @@ only the dependencies they need.
 """
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from typing import Any, Protocol
 
 from tools.tool_runner import ToolRunner
@@ -101,4 +102,4 @@ class ScanContext:
     target_url: str = ""
     aggressiveness: str = "default"
     db_connection_string: str = ""
-    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(utc).isoformat())

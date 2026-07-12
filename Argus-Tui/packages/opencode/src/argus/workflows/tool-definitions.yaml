@@ -1138,3 +1138,78 @@ tools:
     signal_quality: CONFIRMED
     priority: 95
     cost: low
+
+  # ── Post-Exploitation Tools ─────────────────────────────────────
+
+  - name: post_exploitation
+    label: Post-Exploitation Orchestrator
+    description: Extracts credentials from findings, replays against endpoints, probes internal networks for lateral movement
+    capabilities:
+      - post_exploitation
+    requires_auth: false
+    destructive: true
+    credential_roles:
+      - attacker
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 1800
+    scoring:
+      confidence_score: 90
+      coverage_score: 85
+    signal_quality: CONFIRMED
+    priority: 95
+    cost: medium
+
+  - name: credential_replay
+    label: Credential Replay
+    description: Extract credentials from findings and replay against discovered endpoints to test credential reuse
+    capabilities:
+      - post_exploitation
+      - credential_analysis
+    requires_auth: false
+    destructive: true
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 85
+      coverage_score: 75
+    signal_quality: CONFIRMED
+    priority: 90
+    cost: low
+
+  - name: internal_probe
+    label: Internal Network Probe
+    description: Probe internal network ranges for lateral movement opportunities after foothold
+    capabilities:
+      - post_exploitation
+      - lateral_movement
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+    signal_quality: PROBABLE
+    priority: 85
+    cost: low
+
+  - name: cloud_metadata_probe
+    label: Cloud Metadata Probe
+    description: Probe cloud provider metadata endpoints (AWS IMDS, GCP, Azure) after SSRF detection to extract IAM credentials and instance metadata
+    capabilities:
+      - cloud_metadata_probe
+      - post_exploitation
+    requires_auth: false
+    destructive: true
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 95
+      coverage_score: 90
+    signal_quality: CONFIRMED
+    priority: 95
+    cost: low

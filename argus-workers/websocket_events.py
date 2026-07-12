@@ -30,7 +30,8 @@ import logging
 import os
 import threading
 import time
-from datetime import UTC, datetime
+from datetime import datetime
+from tool_core._compat import utc
 from typing import Any
 
 import redis
@@ -314,7 +315,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_FINDING_DISCOVERED,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(utc).isoformat(),
             "data": {
                 "finding_id": finding_id,
                 "finding_type": finding_type,
@@ -354,7 +355,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_STATE_TRANSITION,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(utc).isoformat(),
             "data": {
                 "from_state": from_state,
                 "to_state": to_state,
@@ -393,7 +394,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_RATE_LIMIT,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(utc).isoformat(),
             "data": {
                 "domain": domain,
                 "event_type": event_type,
@@ -425,7 +426,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_TOOL_EXECUTED,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(utc).isoformat(),
             "data": {
                 "tool_name": tool_name,
                 "duration_ms": duration_ms,
@@ -449,7 +450,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_JOB_STARTED,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(utc).isoformat(),
             "data": {
                 "job_type": job_type,
                 "target": target,
@@ -478,7 +479,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_JOB_COMPLETED,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(utc).isoformat(),
             "data": {
                 "job_type": job_type,
                 "status": status,
@@ -516,7 +517,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_SCANNER_ACTIVITY,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(utc).isoformat(),
             "data": {
                 "tool_name": tool_name,
                 "activity": activity,
@@ -562,7 +563,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_AGENT_DECISION,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(utc).isoformat(),
             "data": {
                 "iteration": iteration,
                 "tool": tool,
@@ -593,7 +594,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_POSTURE_UPDATED,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(utc).isoformat(),
             "data": {
                 "composite_score": composite_score,
                 "framework_scores": framework_scores,
@@ -677,7 +678,7 @@ class WebSocketEventPublisher:
         event = {
             "type": self.EVENT_ERROR,
             "engagement_id": engagement_id,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(utc).isoformat(),
             "data": {
                 "error_message": error_message,
                 "error_code": error_code,
