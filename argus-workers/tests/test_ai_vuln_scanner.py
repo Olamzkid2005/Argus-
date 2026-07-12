@@ -173,39 +173,27 @@ class TestExtractResponseText:
 
 
 class TestEmitFinding:
-    """ "_emit_finding" works with and without builder."""
+    """Findings route through ``_builder.add()``."""
 
-    def test_without_builder_calls_callback(self):
-        """When _builder is None, callback is fired."""
+    def test_with_builder_calls_callback(self):
+        """Callback fires when builder has emit_finding set."""
         callback = Mock()
+        from tool_core.finding_builder import FindingBuilder
         scanner = AIVulnScanner(engagement_id="eng-1", emit_finding_callback=callback)
-        scanner._emit_finding(
-            {
-                "type": "PROMPT_INJECTION",
-                "severity": "CRITICAL",
-                "endpoint": "https://example.com/chat",
-                "evidence": {"test": True},
-                "confidence": 0.85,
-                "cwe": "CWE-77",
-            }
+        scanner._builder = FindingBuilder(
+            source_tool="ai_vuln_scanner",
+            engagement_id="eng-1",
+            emit_finding=callback,
+        )
+        scanner._builder.add(
+            "PROMPT_INJECTION", "CRITICAL", "https://example.com/chat",
+            {"test": True}, confidence=0.85,
+            cwe="CWE-77",
         )
         callback.assert_called_once()
 
-    def test_without_builder_no_callback_skips(self):
-        scanner = AIVulnScanner()
-        scanner._emit_finding(
-            {
-                "type": "PROMPT_INJECTION",
-                "severity": "CRITICAL",
-                "endpoint": "https://example.com/chat",
-                "evidence": {"test": True},
-                "confidence": 0.85,
-            }
-        )
-        # Should not raise
-
-    @pytest.mark.xfail(reason="Requires LLM", strict=False)
-    def test_with_builder_routes_through(self):
+    def test_with_builder_adds_finding(self):
+        """_builder.add() stores finding without raising."""
         from tool_core.finding_builder import FindingBuilder
 
         scanner = AIVulnScanner()
@@ -213,15 +201,24 @@ class TestEmitFinding:
             source_tool="ai_vuln_scanner",
             engagement_id="eng-1",
         )
-        scanner._emit_finding(
-            {
-                "type": "PROMPT_INJECTION",
-                "severity": "CRITICAL",
-                "endpoint": "https://example.com/chat",
-                "evidence": {"test": True},
-                "confidence": 0.85,
-                "cwe": "CWE-77",
-            }
+        scanner._builder.add(
+            "PROMPT_INJECTION", "CRITICAL", "https://example.com/chat",
+            {"test": True}, confidence=0.85,
+        )
+        assert len(scanner._builder.findings) == 1
+
+    def test_with_builder_routes_through(self):
+        """Extra fields (cwe) are passed through via builder.add()."""
+        from tool_core.finding_builder import FindingBuilder
+        scanner = AIVulnScanner()
+        scanner._builder = FindingBuilder(
+            source_tool="ai_vuln_scanner",
+            engagement_id="eng-1",
+        )
+        scanner._builder.add(
+            "PROMPT_INJECTION", "CRITICAL", "https://example.com/chat",
+            {"test": True}, confidence=0.85,
+            cwe="CWE-77",
         )
         assert len(scanner._builder.findings) == 1
         f = scanner._builder.findings[0]

@@ -21,7 +21,7 @@ import sys
 # Allow running from the repo root without installing the package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from tools.tool_result import ToolStatus
+from tool_core.result import ToolStatus
 from tools.tool_runner import ToolRunner
 
 

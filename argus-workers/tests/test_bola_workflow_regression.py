@@ -7,29 +7,20 @@ logic" design goal.
 
 These tests are excluded from default CI. Run manually:
     python -m pytest tests/test_bola_workflow_regression.py -v
-# To run manually: pytest tests/test_bola_workflow_regression.py -v
-# This suite tests BolaWorkflow-vs-DualAuthScanner parity and is excluded
-# from default CI because it requires full integration setup.
 """
 
 from __future__ import annotations
 
-import sys
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
-# Skip on Windows — tests require local HTTP server with threading
-pytestmark = pytest.mark.skipif(
-    sys.platform.startswith("win"),
-    reason="Integration test requires Unix-compatible HTTP server behavior",
-)
+from runtime.engagement_state import EngagementState
+from runtime.workflows.bola import BolaWorkflow
 
-from runtime.engagement_state import EngagementState  # noqa: E402
-from runtime.workflows.bola import BolaWorkflow  # noqa: E402
 
 # ── Test Server ────────────────────────────────────────────────────────
 
@@ -47,33 +38,20 @@ class RegressionTestServerHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/accounts":
-            self._send_json(
-                200,
-                {
-                    "accounts": [{"id": 1, "owner": "user_a", "balance": 100}],
-                    "_links": ["/api/accounts/1"],
-                },
-            )
+            self._send_json(200, {
+                "accounts": [{"id": 1, "owner": "user_a", "balance": 100}],
+                "_links": ["/api/accounts/1"],
+            })
         elif self.path.startswith("/api/accounts/"):
-            self._send_json(
-                200,
-                {
-                    "id": 1,
-                    "owner": "user_a",
-                    "balance": 100,
-                    "description": "User A's primary checking account.",
-                },
-            )
+            self._send_json(200, {
+                "id": 1, "owner": "user_a", "balance": 100,
+                "description": "User A's primary checking account.",
+            })
         elif self.path == "/api/profile":
-            self._send_json(
-                200,
-                {
-                    "username": "user_a",
-                    "email": "a@example.com",
-                    "ssn": "123-45-6789",
-                    "credit_card": "4111-1111-1111-1111",
-                },
-            )
+            self._send_json(200, {
+                "username": "user_a", "email": "a@example.com",
+                "ssn": "123-45-6789", "credit_card": "4111-1111-1111-1111",
+            })
         elif self.path == "/api/me":
             self._send_json(200, {"id": 1, "username": "user_a"})
         else:
@@ -90,7 +68,6 @@ class RegressionTestServerHandler(BaseHTTPRequestHandler):
 
     def _send_json(self, status: int, data: dict | list) -> None:
         import json
-
         body = json.dumps(data).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -120,33 +97,29 @@ def server_url() -> str:
 
 def _run_dual_auth_scanner(server_url: str) -> list[dict]:
     """Run the legacy DualAuthScanner against the server and return findings."""
+    from tools.dual_auth_scanner import DualAuthScanner
     from tool_core.base import ToolContext
     from tool_core.config.models import DualAuthConfig
-    from tools.dual_auth_scanner import DualAuthScanner
 
     scanner = DualAuthScanner()
     # Mock the auth_manager to avoid real auth flow
-    with (
-        patch.object(scanner, "auth_manager_a") as mgr_a,
-        patch.object(scanner, "auth_manager_b") as mgr_b,
-    ):
+    with patch.object(scanner, "auth_manager_a") as mgr_a, \
+         patch.object(scanner, "auth_manager_b") as mgr_b:
         mock_session = Mock()
         mock_session.headers = {}
         mock_session.request.return_value = Mock(status_code=200, text="{}")
         mgr_a.authenticate.return_value = mock_session
         mgr_b.authenticate.return_value = Mock()
 
-        scanner.execute(
-            ToolContext(
-                target=server_url,
-                dual_auth=DualAuthConfig(
-                    auth_a={"token": "tok_a", "token_header": "Authorization"},
-                    auth_b={"token": "tok_b", "token_header": "Authorization"},
-                ),
-            )
-        )
+        result = scanner.execute(ToolContext(
+            target=server_url,
+            dual_auth=DualAuthConfig(
+                auth_a={"token": "tok_a", "token_header": "Authorization"},
+                auth_b={"token": "tok_b", "token_header": "Authorization"},
+            ),
+        ))
 
-    return scanner.findings
+    return result.findings
 
 
 def _run_bola_workflow(server_url: str) -> tuple[EngagementState, list[dict]]:
@@ -188,7 +161,6 @@ def _run_bola_workflow(server_url: str) -> tuple[EngagementState, list[dict]]:
 class TestBolaWorkflowRegression:
     """Parity tests: BolaWorkflow should match DualAuthScanner output."""
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     @pytest.mark.integration
     def test_bola_finding_count_parity(self, server_url: str) -> None:
         """BolaWorkflow produces at least the same number of BOLA findings."""
@@ -207,7 +179,6 @@ class TestBolaWorkflowRegression:
             f"DualAuthScanner found {len(da_bola)}"
         )
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     @pytest.mark.integration
     def test_bopla_finding_count_parity(self, server_url: str) -> None:
         """BolaWorkflow produces BOPLA findings (same detection reused)."""
@@ -221,18 +192,20 @@ class TestBolaWorkflowRegression:
         assert len(bw_bopla) > 0
         assert len(da_bopla) > 0
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     @pytest.mark.integration
     def test_finding_types_match(self, server_url: str) -> None:
         """BolaWorkflow produces the same finding types as DualAuthScanner."""
         _, bw_findings, _ = _run_bola_workflow(server_url)
+        da_findings = _run_dual_auth_scanner(server_url)
+
         bw_types = {f.get("type") for f in bw_findings}
+        da_types = {f.get("type") for f in da_findings}
+
         # BolaWorkflow should produce CONFIRMED_BOLA or POTENTIAL_BOLA
         assert bw_types.intersection({"CONFIRMED_BOLA", "POTENTIAL_BOLA"})
         # BolaWorkflow should produce BOPLA_SENSITIVE_FIELDS
         assert "BOPLA_SENSITIVE_FIELDS" in bw_types
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     @pytest.mark.integration
     def test_workflow_completes_without_crash(self, server_url: str) -> None:
         """BolaWorkflow always returns a valid WorkflowResult."""
