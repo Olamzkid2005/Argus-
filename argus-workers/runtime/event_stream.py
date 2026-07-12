@@ -175,9 +175,11 @@ class SafeEventEmitter:
             from streaming import (
                 emit_tool_start as _emit_tool_start,
             )
-            from websocket_events import get_websocket_publisher
-
-            _ws = get_websocket_publisher()
+            from streaming import (
+                emit_event as _emit_event,
+                emit_state_change as _emit_state_change,
+                EventType as _EventType,
+            )
 
             for event in self._queue:
                 etype = event["type"]
@@ -202,24 +204,28 @@ class SafeEventEmitter:
                             data.get("finding_count", 0),
                         )
                     elif etype == "finding":
-                        if _ws:
-                            _ws.publish_finding(
-                                self.engagement_id,
-                                data["finding_id"],
-                                data["finding_type"],
-                                data["severity"],
-                                data["confidence"],
-                                data["endpoint"],
-                                data["source_tool"],
-                            )
+                        # Gap 10.1: Use SSE emit_event instead of WebSocket
+                        _emit_event(
+                            self.engagement_id,
+                            _EventType.FINDING,
+                            {
+                                "finding_id": data["finding_id"],
+                                "type": data["finding_type"],
+                                "severity": data["severity"],
+                                "confidence": data["confidence"],
+                                "endpoint": data["endpoint"],
+                                "source_tool": data.get("source_tool", ""),
+                                "title": f"{data['finding_type']} on {data['endpoint']}",
+                            },
+                        )
                     elif etype == "state_change":
-                        if _ws:
-                            _ws.publish_state_transition(
-                                self.engagement_id,
-                                data["from_state"],
-                                data["to_state"],
-                                data.get("reason", ""),
-                            )
+                        # Gap 10.1: Use SSE emit_state_change instead of WebSocket
+                        _emit_state_change(
+                            self.engagement_id,
+                            data["from_state"],
+                            data["to_state"],
+                            data.get("reason", ""),
+                        )
                     elif etype == "agent_decision":
                         _emit_agent_decision(
                             self.engagement_id,

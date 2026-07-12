@@ -76,16 +76,23 @@ PHASES: list[Phase] = [
         tool_phases=("scan", "deep_scan", "repo_scan"),
     ),
     Phase(
+        id="exploitation",
+        display_name="Exploitation",
+        order=3,
+        estimated_minutes=8,
+        tool_phases=("exploit",),
+    ),
+    Phase(
         id="analyzing",
         display_name="Analysis",
-        order=3,
+        order=4,
         estimated_minutes=5,
         tool_phases=("analyze",),
     ),
     Phase(
         id="post_exploitation",
         display_name="Post-Exploitation",
-        order=4,
+        order=5,
         estimated_minutes=8,
         step_id="post_exploitation",
         tool_phases=("post_exploit",),
@@ -93,7 +100,7 @@ PHASES: list[Phase] = [
     Phase(
         id="pivot",
         display_name="Pivot & Lateral Movement",
-        order=5,
+        order=6,
         estimated_minutes=10,
         step_id="pivot",
         tool_phases=("post_exploit",),
@@ -101,7 +108,7 @@ PHASES: list[Phase] = [
     Phase(
         id="reporting",
         display_name="Report Generation",
-        order=4,
+        order=7,
         estimated_minutes=2,
         step_id="reporting",
         tool_phases=("report",),
@@ -109,7 +116,7 @@ PHASES: list[Phase] = [
     Phase(
         id="complete",
         display_name="Complete",
-        order=5,
+        order=8,
         is_terminal=True,
     ),
     Phase(
@@ -138,12 +145,13 @@ PHASES: list[Phase] = [
 TRANSITIONS: dict[str, list[str]] = {
     "created": ["recon", "failed", "paused"],
     "recon": ["scanning", "failed", "paused"],
-    "scanning": ["analyzing", "failed", "paused"],
+    "scanning": ["analyzing", "exploitation", "failed", "paused"],
+    "exploitation": ["analyzing", "reporting", "failed", "paused"],
     "analyzing": ["post_exploitation", "reporting", "recon", "scanning", "failed", "paused"],
     "post_exploitation": ["pivot", "scanning", "reporting", "failed", "paused"],
     "pivot": ["scanning", "post_exploitation", "failed", "paused"],
     "reporting": ["complete", "failed", "paused"],
-    "paused": ["recon", "scanning", "analyzing", "post_exploitation", "pivot", "reporting", "failed"],
+    "paused": ["recon", "scanning", "analyzing", "exploitation", "post_exploitation", "pivot", "reporting", "failed"],
     "failed": [],
     "complete": [],
 }

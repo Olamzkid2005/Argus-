@@ -44,7 +44,7 @@ from tracing import (
     get_trace_id,
 )
 from utils.logging_utils import ScanLogger
-from websocket_events import get_websocket_publisher
+# websocket_events import removed (Gap 10.1 — all events now use streaming.py SSE)
 
 from .repo_scan import execute_repo_scan
 
@@ -72,7 +72,7 @@ class Orchestrator:
         self.tracing_manager = TracingManager(db_conn)
         self.logger = StructuredLogger(db_conn)
         self.span_recorder = ExecutionSpan(db_conn)
-        self.ws_publisher = get_websocket_publisher()
+        # ws_publisher removed (Gap 10.1 — use streaming.py emit_* instead)
         self.tool_runner = ToolRunner(
             connection_string=db_conn, engagement_id=self.engagement_id
         )
@@ -261,6 +261,7 @@ class Orchestrator:
                 raise ValueError(f"Unknown job type: {job_type}")
 
     def run_recon(self, job: dict) -> dict:
+        # emit_thinking is imported at module level
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.tool_start("orchestrator.run_recon", ["target"])
         self._check_timeout()
@@ -274,7 +275,7 @@ class Orchestrator:
                 "run_recon called with no target for engagement %s, skipping",
                 self.engagement_id,
             )
-            # Also transition the DB state, not just the websocket
+            # Also transition the DB state
             try:
                 from state_machine import EngagementStateMachine
 
@@ -286,12 +287,6 @@ class Orchestrator:
                 logger.warning(
                     "Failed to transition engagement state for no-target case"
                 )
-            self.ws_publisher.publish_state_transition(
-                engagement_id=self.engagement_id,
-                from_state=self._get_scan_state(),
-                to_state="failed",
-                reason="Recon skipped — no target URL configured",
-            )
             return {
                 "phase": "recon",
                 "status": "failed",
@@ -301,14 +296,12 @@ class Orchestrator:
                 "error": "No target URL configured for engagement",
             }
 
-        self.ws_publisher.publish_job_started(
-            engagement_id=self.engagement_id, job_type="recon", target=target
+        emit_thinking(
+            self.engagement_id, f"Starting reconnaissance against {target}"
         )
         self.logger.log_job_started(
             job_type="recon", engagement_id=self.engagement_id, target=target
         )
-        emit_thinking(self.engagement_id, f"Starting reconnaissance against {target}")
-        # State change published via state machine _ws_publisher in transition()
         logger.debug("Recon starting for engagement %s", self.engagement_id)
 
         aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
@@ -575,8 +568,8 @@ class Orchestrator:
         )
         self._check_timeout()
         targets = job.get("targets", [])
-        self.ws_publisher.publish_job_started(
-            engagement_id=self.engagement_id, job_type="scan", target=str(targets)
+        emit_thinking(
+            self.engagement_id, f"Starting scan phase against {len(targets)} target(s)"
         )
         self.logger.log_job_started(
             job_type="scan", engagement_id=self.engagement_id, target=str(targets)
@@ -587,7 +580,6 @@ class Orchestrator:
         CustomRulesService.publish(
             engagement_id=self.engagement_id,
             targets=targets,
-            ws_publisher=self.ws_publisher,
         )
 
         scan_aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
@@ -698,29 +690,6 @@ class Orchestrator:
             "trace_id": get_trace_id(),
         }
 
-    def _run_scan_with_fallback(
-        self,
-        targets: list[str],
-        recon_context,
-        budget: dict,
-        aggressiveness: str,
-        auth_config: dict,
-        bug_bounty_mode: bool = False,
-        dual_auth_config: dict | None = None,
-    ) -> list[dict]:
-        """
-        Agent-first scan with deterministic fallback.
-
-        Phase 3: The orchestrator no longer selects between agent and deterministic
-        modes. It always tries the agent first. If the agent succeeds, a safety-net
-        deterministic pass runs with tools the agent already tried skipped. If the
-        agent fails entirely, a full deterministic scan runs as fallback.
-
-        Tried-tool tracking: Always extracts agent-tried tools from the
-        EngagementState (when available) OR from the scan result metadata
-        returned by run_scan_with_agent to prevent the safety net from
-        duplicating findings the agent already produced.
-        """
     def _run_scan_with_fallback(
         self,
         targets: list[str],
@@ -888,10 +857,7 @@ class Orchestrator:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.tool_start("orchestrator.run_analysis", [])
         self._check_timeout()
-        self.ws_publisher.publish_job_started(
-            engagement_id=self.engagement_id,
-            job_type="analyze",
-        )
+        emit_thinking(self.engagement_id, "Starting analysis phase")
         self.logger.log_job_started(
             job_type="analyze",
             engagement_id=self.engagement_id,
@@ -1127,10 +1093,7 @@ class Orchestrator:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.tool_start("orchestrator.run_reporting", [])
         self._check_timeout()
-        self.ws_publisher.publish_job_started(
-            engagement_id=self.engagement_id,
-            job_type="report",
-        )
+        emit_thinking(self.engagement_id, "Starting report generation phase")
         self.logger.log_job_started(
             job_type="report",
             engagement_id=self.engagement_id,
@@ -1184,8 +1147,7 @@ class Orchestrator:
         Returns:
             Dict with verification recommendations
         """
-        from streaming import emit_thinking
-
+        # emit_thinking is imported at module level
         findings = job.get("findings", [])
         threshold = job.get("threshold", 3)  # Severity.HIGH
         max_to_verify = job.get("max_to_verify", 10)
@@ -1237,22 +1199,26 @@ class Orchestrator:
             f"(severity >= {threshold})",
         )
 
-        # Publish scanner activity event for the TypeScript side
-        # (Phase 3.1.2: signals that browser verification is recommended)
-        details = json.dumps({
-            "finding_ids": verified_ids,
-            "count": len(to_verify),
-            "threshold": threshold,
-            "phase": job.get("phase", "unknown"),
-        })
-        self.ws_publisher.publish_scanner_activity(
-            engagement_id=self.engagement_id,
-            tool_name="verification_runner",
-            activity="Browser verification recommended",
-            status="completed",
-            details=details,
-            items_found=len(to_verify),
-        )
+        # Gap 10.1: Emit SSE event signaling browser verification is recommended
+        # This replaces the old WebSocket publish_scanner_activity call
+        try:
+            from streaming import emit_event as _emit_event, EventType as _EventType
+            _emit_event(
+                self.engagement_id,
+                _EventType.SCANNER_ACTIVITY,
+                {
+                    "activity": "verification_recommended",
+                    "finding_ids": verified_ids,
+                    "count": len(to_verify),
+                    "threshold": threshold,
+                    "phase": "scan",
+                },
+            )
+        except Exception:
+            logger.debug(
+                "Failed to emit verification_recommended event (non-fatal)",
+                exc_info=True,
+            )
 
         logger.info(
             "Verification recommended for %d finding(s) (threshold=%d, max=%d)",
@@ -1295,10 +1261,7 @@ class Orchestrator:
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.tool_start("orchestrator.run_post_exploitation", [])
         self._check_timeout()
-        self.ws_publisher.publish_job_started(
-            engagement_id=self.engagement_id,
-            job_type="post_exploit",
-        )
+        emit_thinking(self.engagement_id, "Starting post-exploitation phase")
 
         # Load scope validator if authorized scope is available
         scope_validator = None
@@ -1376,8 +1339,8 @@ class Orchestrator:
         if not repo_url:
             raise ValueError("repo_url is required for repo scan")
         self._validate_repo_url(repo_url)
-        self.ws_publisher.publish_job_started(
-            engagement_id=self.engagement_id, job_type="repo_scan", target=repo_url
+        emit_thinking(
+            self.engagement_id, f"Starting repo scan for {repo_url}"
         )
         self.logger.log_job_started(
             job_type="repo_scan", engagement_id=self.engagement_id, target=repo_url
@@ -1398,12 +1361,6 @@ class Orchestrator:
                 prefix, rest = err_str.split(":", 1)
                 failed_url, reason = rest.rsplit(":", 1)
                 logger.error("Repository clone failed for %s: %s", failed_url, reason)
-                self.ws_publisher.publish_state_transition(
-                    engagement_id=self.engagement_id,
-                    from_state="recon",
-                    to_state="failed",
-                    reason=f"Repository clone failed: {reason[:200]}",
-                )
                 return {
                     "phase": "repo_scan",
                     "status": "failed",
@@ -1432,14 +1389,6 @@ class Orchestrator:
                 repo_url=repo_url,
             )
 
-        # The task handler already transitioned the DB from 'created' to 'recon'
-        # before calling this method, so use 'recon' as the from_state
-        self.ws_publisher.publish_state_transition(
-            engagement_id=self.engagement_id,
-            from_state="recon",
-            to_state=next_state,
-            reason="Repository scan completed — auto-advancing to web scan",
-        )
         slog.tool_complete(
             "orchestrator.run_repo_scan", success=True, findings=findings_count
         )

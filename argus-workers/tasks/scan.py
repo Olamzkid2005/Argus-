@@ -119,6 +119,100 @@ def run_scan(
             ctx.state.transition("scanning", "Starting scan")
         result = ctx.orchestrator.run_scan(ctx.job)
 
+        # ── Gap 3.x: Exploit chain checkpoint ──
+        # After scan completes, check the attack graph for vulnerability chains
+        # that warrant an immediate exploitation phase before analysis.
+        # If chain plans are found with CRITICAL severity, dispatch exploitation.
+        # run_scan() returns findings_count (int) not the findings list, so
+        # handle_get_attack_graph loads findings from the database.
+        _needs_exploitation = False
+        _findings_count = result.get("findings_count", 0)
+        if _findings_count > 0:
+            try:
+                from mcp_server import get_mcp_server
+                
+                _mcp = get_mcp_server()
+                _attack_graph_result = _mcp.handle_get_attack_graph({
+                    "engagement_id": engagement_id,
+                    # No inline findings — handle_get_attack_graph loads from DB
+                })
+                _chain_plans = _attack_graph_result.get("chain_plans", [])
+                if _chain_plans:
+                    # Check if any chain plan is CRITICAL/HIGH severity
+                    _critical_chains = [
+                        c for c in _chain_plans 
+                        if c.get("severity", "") in ("CRITICAL", "HIGH")
+                    ]
+                    if _critical_chains:
+                        _needs_exploitation = True
+                        slog.info(
+                            "Attack graph detected %d CRITICAL/HIGH chain(s) among %d "
+                            "findings — dispatching exploitation phase before analysis",
+                            len(_critical_chains),
+                            _findings_count,
+                        )
+                        for _chain in _critical_chains:
+                            slog.info(
+                                "  Chain: %s (severity=%s, risk_score=%.2f) — %s",
+                                _chain.get("name", "unknown"),
+                                _chain.get("severity", ""),
+                                _chain.get("risk_score", 0.0),
+                                _chain.get("description", "")[:100],
+                            )
+            except Exception as _chain_err:
+                logger.debug(
+                    "Attack graph chain detection failed (non-fatal): %s", _chain_err
+                )
+
+        if _needs_exploitation:
+            # Insert exploitation phase before analysis
+            try:
+                ctx.state.transition(
+                    "exploitation",
+                    f"Attack chain(s) detected — dispatching exploitation phase",
+                )
+            except Exception as e:
+                logger.exception(
+                    "Failed to transition to exploitation for engagement=%s: %s",
+                    engagement_id,
+                    e,
+                )
+                ctx.state.safe_transition(
+                    "failed", f"State transition failed: {e}"
+                )
+                result["status"] = "failed"
+                result["reason"] = "exploitation_transition_failed"
+                return result
+            try:
+                app.send_task(
+                    "tasks.post_exploit.run_post_exploit",
+                    args=[engagement_id, budget, ctx.trace_id],
+                )
+                slog.info(
+                    "Exploitation phase dispatched for engagement %s",
+                    engagement_id,
+                )
+            except Exception as e:
+                logger.exception(
+                    "Failed to enqueue exploitation for engagement=%s: %s",
+                    engagement_id,
+                    e,
+                )
+                ctx.state.safe_transition(
+                    "failed",
+                    f"Failed to enqueue exploitation: {e}",
+                )
+                result["status"] = "failed"
+                result["reason"] = "exploitation_dispatch_failed"
+                return result
+            # After exploitation completes, the exploitation task transitions to
+            # "reporting" and dispatches report generation directly (see post_exploit.py).
+            # The analyze phase is skipped in this path because exploitation findings
+            # are self-contained (credential replay, internal probing) and the report
+            # generation covers them directly. If LLM analysis is needed, add an
+            # analyze dispatch here before post_exploit.
+            return result
+
         # Transition state BEFORE dispatching downstream to prevent orphaned tasks.
         # If transition fails, no task is dispatched and engagement correctly stays failed.
         try:

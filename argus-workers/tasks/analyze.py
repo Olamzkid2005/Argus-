@@ -21,6 +21,7 @@ def run_analysis(
     budget: dict,
     trace_id: str = None,
     bug_bounty_mode: bool | None = None,
+    skip_post_exploitation_check: bool = False,
 ):
     """
     Execute analysis phase for an engagement.
@@ -34,6 +35,9 @@ def run_analysis(
         budget: Budget config dict
         trace_id: Optional trace ID
         bug_bounty_mode: Forwarded from scan phase for report generation
+        skip_post_exploitation_check: When True (e.g. after exploit chain dispatch),
+            skip the needs_post_exploitation check to prevent infinite loops
+            where post_exploit → analyze → re-dispatches post_exploit.
     """
     from typing import Any
     from utils.logging_utils import ScanLogger
@@ -79,52 +83,61 @@ def run_analysis(
         )
 
         # Gap 5.1: Dispatch post-exploitation phase when foothold findings exist
+        # Guard: when skip_post_exploitation_check is True (e.g. analysis dispatched
+        # from the exploit chain path in post_exploit.py), skip re-dispatching
+        # post_exploit to prevent infinite loops — fall through to reporting instead.
         if needs_post_exploitation:
-            slog.info(
-                "Foothold indicators found — dispatching post-exploitation phase"
-            )
-            try:
-                ctx.state.safe_transition(
-                    "post_exploitation",
-                    "Foothold detected — advancing to post-exploitation",
-                )
-            except Exception as e:
-                logger.exception(
-                    "Failed to transition to post_exploitation for engagement=%s: %s",
-                    engagement_id,
-                    e,
-                )
-                ctx.state.safe_transition(
-                    "failed", f"State transition failed: {e}"
-                )
-                result["status"] = "failed"
-                result["reason"] = "state_transition_failed"
-                return result
-            try:
-                app.send_task(
-                    "tasks.post_exploit.run_post_exploit",
-                    args=[engagement_id, budget, ctx.trace_id],
-                )
+            if skip_post_exploitation_check:
                 slog.info(
-                    "Post-exploitation dispatched for engagement %s",
-                    engagement_id,
+                    "Foothold indicators remain but exploitation just completed — "
+                    "skipping re-dispatch to avoid loop, proceeding to report"
                 )
-            except Exception as e:
-                logger.exception(
-                    "Failed to enqueue post-exploitation for engagement=%s: %s",
-                    engagement_id,
-                    e,
+            else:
+                slog.info(
+                    "Foothold indicators found — dispatching post-exploitation phase"
                 )
-                ctx.state.safe_transition(
-                    "failed",
-                    f"Failed to enqueue post-exploitation: {e}",
-                )
-                result["status"] = "failed"
-                result["reason"] = "post_exploit_dispatch_failed"
+                try:
+                    ctx.state.safe_transition(
+                        "post_exploitation",
+                        "Foothold detected — advancing to post-exploitation",
+                    )
+                except Exception as e:
+                    logger.exception(
+                        "Failed to transition to post_exploitation for engagement=%s: %s",
+                        engagement_id,
+                        e,
+                    )
+                    ctx.state.safe_transition(
+                        "failed", f"State transition failed: {e}"
+                    )
+                    result["status"] = "failed"
+                    result["reason"] = "state_transition_failed"
+                    return result
+                try:
+                    app.send_task(
+                        "tasks.post_exploit.run_post_exploit",
+                        args=[engagement_id, budget, ctx.trace_id],
+                    )
+                    slog.info(
+                        "Post-exploitation dispatched for engagement %s",
+                        engagement_id,
+                    )
+                except Exception as e:
+                    logger.exception(
+                        "Failed to enqueue post-exploitation for engagement=%s: %s",
+                        engagement_id,
+                        e,
+                    )
+                    ctx.state.safe_transition(
+                        "failed",
+                        f"Failed to enqueue post-exploitation: {e}",
+                    )
+                    result["status"] = "failed"
+                    result["reason"] = "post_exploit_dispatch_failed"
+                    return result
                 return result
-            return result
 
-        # No foothold — advance to reporting as normal
+        # Advance to reporting — dispatch report generation
         # Transition FIRST so the report task always finds the engagement
         # in "reporting" state. If transition fails, no downstream task is
         # dispatched and the engagement stays in "analyzing".

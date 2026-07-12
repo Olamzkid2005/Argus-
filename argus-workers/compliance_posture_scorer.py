@@ -693,12 +693,11 @@ class CompliancePostureScorer:
         self.save_snapshot(snapshot)
         self.save_control_scores(snapshot, findings, org_id)
 
-        # Publish real-time posture update
+        # Publish real-time posture update via SSE (Gap 10.1 migration)
         try:
-            from websocket_events import get_websocket_publisher
+            from streaming import emit_posture_update
 
-            ws = get_websocket_publisher()
-            ws.publish_posture_update(
+            emit_posture_update(
                 engagement_id=self.engagement_id,
                 composite_score=snapshot.composite_score,
                 framework_scores={
@@ -708,7 +707,7 @@ class CompliancePostureScorer:
                 total_findings=snapshot.total_findings,
             )
         except Exception as e:
-            logger.debug("Failed to publish posture update (non-fatal): %s", e)
+            logger.debug("Failed to emit posture update (non-fatal): %s", e)
 
         return snapshot
 

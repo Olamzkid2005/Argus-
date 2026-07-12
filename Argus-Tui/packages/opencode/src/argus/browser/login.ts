@@ -221,16 +221,126 @@ export function logAuthChallenge(
 
 
 /**
+ * Attempt a multi-step login flow where the identifier (email/username) is
+ * submitted first, then the password field appears on a subsequent page.
+ *
+ * Gap 2.5 fix: Modern login flows often ask for the email first and only
+ * render the password field after a submit/continue step. This function
+ * handles that pattern by filling the first form, submitting, waiting for
+ * navigation, then looking for the password field on the next page.
+ *
+ * @param page - The Playwright page to interact with.
+ * @param creds - Username and password credentials.
+ * @param onChallenge - Optional callback invoked when an auth challenge is detected.
+ * @returns True if login succeeded via multi-step flow, false otherwise.
+ */
+async function loginMultiStep(
+  page: Page,
+  creds: Credentials,
+  onChallenge?: AuthChallengeCallback,
+): Promise<boolean> {
+  // Check if this looks like a multi-step flow:
+  // - There's an email/username field but no visible password field
+  // - There's a submit/continue button
+  const hasEmailField = await page.locator(
+    "input[type=email], input[name=email], input[autocomplete=email], input[type=text][name*=email], input[type=text][name*=user]"
+  ).count() > 0
+  const hasPasswordField = await page.locator("input[type=password]").count() > 0
+  const hasSubmitButton = await page.locator(
+    "button[type=submit], input[type=submit], button:has-text('Continue'), button:has-text('Next'), button:has-text('Sign in'), button:has-text('Log in')"
+  ).count() > 0
+
+  // Only attempt multi-step if we have an email field, NO password field, and a submit button
+  if (!hasEmailField || hasPasswordField || !hasSubmitButton) {
+    return false
+  }
+
+  // Step 1: Fill the email field
+  const emailInput = page.locator(
+    "input[type=email], input[name=email], input[autocomplete=email], input[type=text][name*=email], input[type=text][name*=user]"
+  ).first()
+  if (await emailInput.isVisible()) {
+    await emailInput.fill(creds.username)
+  }
+
+  // Step 2: Click the submit/continue button
+  const submitBtn = page.locator(
+    "button[type=submit], input[type=submit], button:has-text('Continue'), button:has-text('Next'), button:has-text('Sign in'), button:has-text('Log in')"
+  ).first()
+  if (await submitBtn.isVisible()) {
+    await submitBtn.click()
+  } else {
+    // Try pressing Enter on the email field
+    await emailInput.press("Enter")
+  }
+
+  // Step 3: Wait for navigation or password field to appear
+  try {
+    await page.waitForLoadState("networkidle", { timeout: 15000 })
+  } catch {
+    // Network may not stabilize
+  }
+
+  // Wait for password field to appear (up to 10s)
+  try {
+    await page.waitForSelector("input[type=password]", { timeout: 10000 })
+  } catch {
+    return false  // Password field never appeared — not a multi-step flow
+  }
+
+  // Step 4: Fill the password field on the new page
+  const passwordInput = page.locator("input[type=password]").first()
+  if (await passwordInput.isVisible()) {
+    await passwordInput.fill(creds.password)
+    await passwordInput.press("Enter")
+
+    // Wait briefly to see if Enter triggered navigation
+    await page.waitForTimeout(500)
+
+    // Try clicking any submit button on this page too
+    const nextSubmitBtn = page.locator(
+      "button[type=submit], input[type=submit], button:has-text('Sign in'), button:has-text('Log in'), button:has-text('Submit')"
+    ).first()
+    if (await nextSubmitBtn.isVisible()) {
+      await nextSubmitBtn.click()
+    }
+  }
+
+  // Step 5: Wait for final navigation after password submission
+  try {
+    await page.waitForLoadState("networkidle", { timeout: 30000 })
+  } catch {
+    // Network may not stabilize
+  }
+
+  // Check if login succeeded
+  const postLoginUrl = page.url()
+  const stillOnLogin = /\/login\b|\/signin\b|\/auth\b/i.test(postLoginUrl)
+  if (!stillOnLogin) {
+    return true
+  }
+
+  // Check for auth challenges
+  const challenge = await detectAuthChallenge(page)
+  if (challenge) onChallenge?.(challenge)
+  return false
+}
+
+
+/**
  * Detect and fill login forms on a page using progressive selector strategies.
  * Supports:
  *  - Standard username+password forms
  *  - Email+password forms
+ *  - **Multi-step flows** (email-first → password-next, Gap 2.5)
  *  - OAuth/SSO detection (returns false, caller should use injectAuthCookies)
  *  - Modal/dynamically rendered forms (waits for form to become visible)
  *
  * Phase 3.4.1: Uses Playwright locator-based form detection (getByLabel, getByRole)
  * before falling back to CSS selectors for better resilience.
  * Phase 3.4.2: Accepts onChallenge callback for auth challenge signal emission.
+ * Phase 3.4.3 (Gap 2.5): Falls through to multi-step flow detection when no
+ * password field is found on the initial page.
  *
  * @param page - The Playwright page to interact with.
  * @param creds - Username and password credentials.
@@ -284,7 +394,13 @@ export async function loginIfFormPresent(
   // 3. Keyword matching in page content
   const hasPasswordField = await page.locator("input[type=password]").count() > 0
   if (!hasPasswordField) {
-    // No password field — try token injection instead
+    // Gap 2.5: No password field on initial page — try multi-step login flow
+    // (email-first → password-next pattern common in modern auth flows)
+    const multiStepResult = await loginMultiStep(page, creds, onChallenge)
+    if (multiStepResult) {
+      return true
+    }
+    // Multi-step didn't work either — try token injection instead
     return false
   }
 

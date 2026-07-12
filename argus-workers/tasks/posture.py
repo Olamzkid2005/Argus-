@@ -125,24 +125,17 @@ def _check_compliance_alerts(
         else:
             return  # No alert needed
 
-        # Emit compliance alert event via WebSocket
+        # Emit compliance alert event via SSE (Gap 10.1 migration)
         try:
-            from websocket_events import get_websocket_publisher
+            from streaming import emit_error
 
-            publisher = get_websocket_publisher()
-            publisher.publish_error(
+            emit_error(
                 engagement_id=engagement_id,
-                error_message=(
+                error=(
                     f"Compliance posture alert ({level}): "
                     f"score dropped to {score:.1f} (trend: {snapshot.trend})"
                 ),
-                error_code="compliance_alert",
-                context={
-                    "composite_score": score,
-                    "trend": snapshot.trend,
-                    "alert_level": level,
-                    "threshold": thresholds.get(level, 0),
-                },
+                phase="posture",
             )
             logger.info(
                 "Compliance alert emitted for %s: %s (score=%.1f)",
@@ -150,8 +143,8 @@ def _check_compliance_alerts(
                 level,
                 score,
             )
-        except Exception as ws_err:
-            logger.debug("Failed to emit compliance alert (non-fatal): %s", ws_err)
+        except Exception as emit_err:
+            logger.debug("Failed to emit compliance alert (non-fatal): %s", emit_err)
 
     except Exception as e:
         logger.warning("Compliance alert check failed (non-fatal): %s", e)

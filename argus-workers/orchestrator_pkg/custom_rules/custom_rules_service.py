@@ -99,34 +99,29 @@ class CustomRulesService:
     def publish(
         engagement_id: str,
         targets: list[str],
-        ws_publisher: Any,
+        ws_publisher: Any = None,
     ) -> None:
-        """Load custom rules and publish them via the websocket publisher.
+        """Load custom rules and publish them via SSE (Gap 10.1 migration).
 
         Combines the load and publish steps so callers only need a single
-        invocation. Uses ``ws_publisher.publish_scanner_activity()`` to
-        emit each rule to the websocket stream.
+        invocation. Uses SSE emit_thinking to broadcast each loaded rule.
 
         Args:
             engagement_id: The engagement UUID.
             targets: Target URLs or identifiers for the scan.
-            ws_publisher: Object with a ``publish_scanner_activity`` method
-                (typically ``self.ws_publisher`` from the orchestrator).
+            ws_publisher: Deprecated — kept for backward compatibility but
+                no longer used. All events go through SSE streaming.py.
         """
         custom_rules = CustomRulesService.load(engagement_id)
         if custom_rules:
+            from streaming import emit_thinking
+
             for rule in custom_rules:
-                ws_publisher.publish_scanner_activity(
-                    engagement_id=engagement_id,
-                    tool_name="Custom Rules Engine",
-                    activity="custom rule loaded",
-                    status="completed",
-                    target=str(targets),
-                    details=(
-                        f"{rule.get('name', 'unknown')} "
-                        f"({rule.get('severity', 'unknown')}) — "
-                        f"{rule.get('description', '')[:120]}"
-                    ),
+                emit_thinking(
+                    engagement_id,
+                    f"Loaded custom rule: {rule.get('name', 'unknown')} "
+                    f"({rule.get('severity', 'unknown')}) — "
+                    f"{rule.get('description', '')[:120]}",
                 )
             logger.info(
                 "Loaded %d custom rule(s) for engagement %s",

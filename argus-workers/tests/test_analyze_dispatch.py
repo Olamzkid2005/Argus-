@@ -194,6 +194,38 @@ class TestIdempotency:
         mock_ctx.orchestrator.run_analysis.assert_not_called()
 
 
+class TestSkipPostExploitationCheck:
+    """Tests for skip_post_exploitation_check (Gap 5.1 infinite-loop guard).
+
+    When skip_post_exploitation_check=True is passed (e.g. from post_exploit.py),
+    the analyze task should skip re-dispatching post_exploit to prevent loops.
+    """
+
+    def test_skips_post_exploit_when_flag_is_true(self, mock_task, mock_ctx):
+        """When skip_post_exploitation_check=True and needs_post_exploitation,
+        should skip post-exploit dispatch and proceed to report."""
+        mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=True)
+        result, ms = _run(mock_task, mock_ctx, skip_post_exploitation_check=True)
+        assert result["status"] == "completed"
+        ms.assert_called_once_with("tasks.report.generate_report", args=["test-eng-001", "trace-001", {}])
+
+    def test_dispatches_post_exploit_when_flag_is_false(self, mock_task, mock_ctx):
+        """When skip_post_exploitation_check=False (default) and
+        needs_post_exploitation, should dispatch post-exploit normally."""
+        mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=True)
+        result, ms = _run(mock_task, mock_ctx, skip_post_exploitation_check=False)
+        assert result["status"] == "completed"
+        ms.assert_called_once_with("tasks.post_exploit.run_post_exploit", args=["test-eng-001", {}, "trace-001"])
+
+    def test_dispatches_report_when_no_foothold_and_flag_true(self, mock_task, mock_ctx):
+        """When skip_post_exploitation_check=True but no foothold,
+        should dispatch report normally (flag is irrelevant without foothold)."""
+        mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=False)
+        result, ms = _run(mock_task, mock_ctx, skip_post_exploitation_check=True)
+        assert result["status"] == "completed"
+        ms.assert_called_once_with("tasks.report.generate_report", args=["test-eng-001", "trace-001", {}])
+
+
 class TestBugBountyModeForwarding:
     def test_forwards_bug_bounty_mode(self, mock_task, mock_ctx):
         mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=False)

@@ -833,8 +833,88 @@ def generate_full_report(
                 scan_duration = f"{hours}h {minutes}m {seconds}s"
 
             # 6. Render full report template via ComplianceReportGenerator
+            # Gap 12.1: Use try/except with fallback template to prevent crashes
+            # when the template file is missing or the env attribute doesn't exist.
             generator = ComplianceReportGenerator()
-            template = generator.env.get_template("full_report.html")
+            try:
+                env = getattr(generator, 'env', None)
+                if env is not None and hasattr(env, 'get_template'):
+                    template = env.get_template("full_report.html")
+                else:
+                    raise AttributeError("ComplianceReportGenerator has no 'env' attribute or get_template method")
+            except (AttributeError, Exception) as _tmpl_err:
+                logger.warning(
+                    "Full report template 'full_report.html' not available (%s) — "
+                    "using inline fallback template",
+                    _tmpl_err,
+                )
+                # Inline fallback template: generates a basic HTML report
+                # without Jinja2 dependency.
+                from jinja2 import Environment, BaseLoader
+
+                _fallback_template_str = """<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>{{ report.title }}</title>
+<style>
+body { font-family: -apple-system, system-ui, sans-serif; max-width: 1200px; margin: 2em auto; padding: 0 1em; }
+h1 { color: #1a1a2e; border-bottom: 2px solid #e0e0e0; padding-bottom: 0.5em; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1em; margin: 2em 0; }
+.stat { background: #f5f5f5; border-radius: 8px; padding: 1em; text-align: center; }
+.stat .value { font-size: 2em; font-weight: bold; color: #1a1a2e; }
+.stat .label { font-size: 0.85em; color: #666; margin-top: 0.25em; }
+.stat.critical .value { color: #dc3545; }
+.stat.high .value { color: #fd7e14; }
+.stat.medium .value { color: #ffc107; }
+.stat.low .value { color: #6c757d; }
+table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+th, td { padding: 0.75em; text-align: left; border-bottom: 1px solid #dee2e6; }
+th { background: #f8f9fa; font-weight: 600; }
+tr:hover { background: #f8f9fa; }
+.finding-CRITICAL { border-left: 4px solid #dc3545; }
+.finding-HIGH { border-left: 4px solid #fd7e14; }
+.finding-MEDIUM { border-left: 4px solid #ffc107; }
+.finding-LOW { border-left: 4px solid #6c757d; }
+.finding-INFO { border-left: 4px solid #17a2b8; }
+.meta { color: #666; font-size: 0.9em; margin-top: 2em; }
+</style></head>
+<body>
+<h1>{{ report.title }}</h1>
+<div class="meta">Generated: {{ generated_at }}</div>
+
+<h2>Summary</h2>
+<div class="summary">
+  <div class="stat critical"><div class="value">{{ report.summary.critical_count }}</div><div class="label">Critical</div></div>
+  <div class="stat high"><div class="value">{{ report.summary.high_count }}</div><div class="label">High</div></div>
+  <div class="stat medium"><div class="value">{{ report.summary.medium_count }}</div><div class="label">Medium</div></div>
+  <div class="stat low"><div class="value">{{ report.summary.low_count }}</div><div class="label">Low</div></div>
+  <div class="stat"><div class="value">{{ report.summary.total_findings }}</div><div class="label">Total</div></div>
+</div>
+
+<h2>Findings ({{ report.summary.total_findings }})</h2>
+<table>
+<thead><tr><th>Type</th><th>Severity</th><th>Endpoint</th><th>Tool</th></tr></thead>
+<tbody>
+{% for finding in report.findings %}
+<tr class="finding-{{ finding.severity }}">
+  <td>{{ finding.type }}</td>
+  <td>{{ finding.severity }}</td>
+  <td>{{ finding.endpoint }}</td>
+  <td>{{ finding.source_tool }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+
+<h2>Top Categories</h2>
+<ul>
+{% for cat in report.summary.top_categories %}
+<li>{{ cat.name }}: {{ cat.count }} finding(s)</li>
+{% endfor %}
+</ul>
+</body></html>"""
+                env = Environment(loader=BaseLoader())
+                template = env.from_string(_fallback_template_str)
+                logger.info("Using inline fallback template for full report generation")
 
             report_context = {
                 "title": f"Full Security Audit Report - {engagement_id}",

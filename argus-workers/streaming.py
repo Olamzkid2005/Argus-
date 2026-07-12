@@ -120,6 +120,7 @@ class EventType:
     SWARM_AGENT_COMPLETE = "swarm_agent_complete"
     SWARM_MERGE_COMPLETE = "swarm_merge_complete"
     POSTURE_UPDATE = "posture_update"
+    SCANNER_ACTIVITY = "scanner_activity"
 
 
 # ── EventBus Port (ABC) ──

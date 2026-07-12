@@ -65,6 +65,7 @@ class TestPHASES:
         assert "created" in ids
         assert "recon" in ids
         assert "scanning" in ids
+        assert "exploitation" in ids
         assert "analyzing" in ids
         assert "post_exploitation" in ids
         assert "pivot" in ids
@@ -72,7 +73,7 @@ class TestPHASES:
         assert "complete" in ids
         assert "failed" in ids
         assert "paused" in ids
-        assert len(ids) == 10
+        assert len(ids) == 11
 
     def test_terminal_phases(self):
         complete = get_phase("complete")
@@ -86,11 +87,13 @@ class TestPHASES:
     def test_order_values(self):
         for p in PHASES:
             if p.id == "complete":
-                assert p.order == 5
+                assert p.order == 8
             elif p.id == "recon":
                 assert p.order == 1
             elif p.id == "scanning":
                 assert p.order == 2
+            elif p.id == "exploitation":
+                assert p.order == 3
             elif p.id in ("failed", "paused"):
                 assert p.order == -1
 
@@ -114,6 +117,7 @@ class TestTransitions:
         assert "recon" in TRANSITIONS["paused"]
         assert "scanning" in TRANSITIONS["paused"]
         assert "analyzing" in TRANSITIONS["paused"]
+        assert "exploitation" in TRANSITIONS["paused"]
 
     def test_analyzing_can_loop_back(self):
         assert "recon" in TRANSITIONS["analyzing"]
@@ -173,7 +177,7 @@ class TestGetPhaseOrder:
 
     def test_known_phase(self):
         assert get_phase_order("recon") == 1
-        assert get_phase_order("complete") == 5
+        assert get_phase_order("complete") == 8
 
     def test_unknown_phase_returns_sentinel(self):
         # Unknown phases return 999 so they sort at the end of progress bars,

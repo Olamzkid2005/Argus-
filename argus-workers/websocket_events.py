@@ -8,6 +8,20 @@ and other engagement updates.
 Supports event batching and severity-based filtering.
 
 Requirements: 31.2, 31.3, 31.4
+
+⚠️ DEPRECATED (Gap 10.1): This module is being consolidated into streaming.py.
+All new event types should be added to streaming.py's EventBus interface.
+This module remains active for backward compatibility with existing consumers
+that connect via the Redis WebSocket channel. New consumers should use
+streaming.py's SSE-based EventBus via the /api/stream/[id] endpoint.
+
+Migration path:
+  1. New event consumers → use streaming.py emit_* functions + SSE
+  2. This module will be removed in a future release once all consumers
+     have migrated to the unified EventBus in streaming.py
+  3. Orchestrator and task code should prefer streaming.py emit_* functions
+     for all new event types; WebSocketEventPublisher is retained only for
+     existing Redis pub/sub consumers that have not yet migrated.
 """
 
 import contextlib
