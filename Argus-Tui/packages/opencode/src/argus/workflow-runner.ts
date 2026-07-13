@@ -20,8 +20,8 @@ import { ConfidenceEngine } from "./engagement/confidence"
 import { FeatureFlags, Feature } from "./config/feature-flags"
 import { detectTargetType, detectAuthState } from "./planner/strategy"
 import { join, resolve } from "path"
-import { Capability } from "./planner/capabilities"
-import type { NormalizedFinding, VerificationResult } from "./shared/types"
+import { Capability, guessCapability } from "./planner/capabilities"
+import type { NormalizedFinding, VerificationResult, EvidencePackage } from "./shared/types"
 import { Severity } from "./shared/types"
 import type { PhaseRecord } from "./engagement/types"
 import { VerificationRunner } from "./browser/verifiers/runner"
@@ -190,6 +190,13 @@ export function formatFindingsSummary(
 }
 
 export class WorkflowRunner {
+  /**
+   * Bridge reference for MCP-based verification (finding_verifier tool calls).
+   * Set during run() when the WorkersBridge is initialized.
+   * Used by mcpVerifyFindings() to call the Python finding_verifier tool.
+   */
+  private executorBridge: WorkersBridge | null = null
+
   constructor(
     private deps?: {
       store?: IEngagementStore
@@ -374,7 +381,22 @@ export class WorkflowRunner {
           verifier: scenario.name,
           verifiedAt: new Date().toISOString(),
         }
-        updated.push({ ...finding, verificationResult })
+
+        // Store verification evidence on the finding so the confidence engine's
+        // HIGH→VERIFIED rule can use it. Without this, even passed verification
+        // doesn't cascade beyond HIGH confidence.
+        const verificationEvidence: EvidencePackage[] = (result.evidence || [])
+          .filter((e): e is EvidencePackage =>
+            (e as EvidencePackage).packageId !== undefined,
+          )
+
+        updated.push({
+          ...finding,
+          verificationResult,
+          evidence: verificationEvidence.length > 0
+            ? verificationEvidence
+            : finding.evidence,  // Keep original evidence if verifier returned none
+        })
         emit(`✓ Verification ${result.passed ? "passed" : "failed"} for ${finding.title}`)
       } catch (error) {
         updated.push(finding)
@@ -466,17 +488,16 @@ export class WorkflowRunner {
       },
     )
 
-    // Confidence promotion cascade: HIGH → VERIFIED → CONFIRMED for passed verifications
+    // Confidence promotion cascade: full while-loop through all tiers.
+    // Each promote() call advances at most one tier, so the while loop
+    // is required to reach CONFIRMED from any starting confidence.
     const confidenceEngine = this.deps?.confidenceEngine ?? new ConfidenceEngine()
     for (const finding of verifiedFindings) {
       if (finding.verificationResult?.passed) {
         let promoted = confidenceEngine.promote(finding)
-        if (promoted !== finding.confidence) {
+        while (promoted !== finding.confidence) {
           finding.confidence = promoted
-          const secondPromotion = confidenceEngine.promote(finding)
-          if (secondPromotion !== promoted) {
-            finding.confidence = secondPromotion
-          }
+          promoted = confidenceEngine.promote(finding)
         }
       }
     }
@@ -491,6 +512,107 @@ export class WorkflowRunner {
     emit(`✓ Verification complete: ${passedCount} passed, ${failedCount} failed (${verifiedCount} total verified)`)
 
     return { verified: verifiedCount, passed: passedCount, failed: failedCount, findings: verifiedFindings }
+  }
+
+  /**
+   * Run MCP-based verification for HIGH+ findings using the Python
+   * finding_verifier tool (HTTP-based: SQLi, XSS, Open Redirect).
+   *
+   * This is a supplement to browser-based verification. It sends lightweight
+   * HTTP probes to confirm findings like SQLi payload reflection, XSS payload
+   * reflection, and open redirect chains.
+   *
+   * Findings that have already passed browser verification are skipped since
+   * they already have higher-confidence verification results.
+   */
+  private async mcpVerifyFindings(
+    findings: NormalizedFinding[],
+    target: string,
+    engagementId: string,
+    emit: (event: ProgressEvent | string) => void,
+  ): Promise<NormalizedFinding[]> {
+    // Finding types that the Python finding_verifier can verify via HTTP
+    const mcpVerifiableTypes = new Set([
+      "sqli", "sql-injection", "sql_injection",
+      "xss", "cross-site-scripting",
+      "open-redirect", "open_redirect",
+    ])
+
+    const toVerify = findings.filter(
+      (f) =>
+        f.severity >= 3 &&  // HIGH+
+        f.subtype &&
+        mcpVerifiableTypes.has(f.subtype) &&
+        !f.verificationResult,  // Skip already-verified findings
+    )
+
+    if (toVerify.length === 0) return findings
+
+    // Get the bridge from the executor (set during run())
+    // We access it via the deps pattern — bridge is created in run()
+    // and available through the executor's bridge reference.
+    // For standalone use, we check this.deps?.bridge first.
+    // MCP call is best-effort — failures don't block the assessment.
+    const finderResult = { verifiedCount: 0 }
+
+    await Promise.all(
+      toVerify.map(async (finding) => {
+        try {
+          emit(`⠋ MCP-verifying ${finding.subtype} finding: ${finding.title}`)
+
+          const endpoint = finding.url ?? finding.description?.match(/(https?:\/\/[^\s]+)/)?.[1] ?? target
+          const payload = finding.description?.includes("<script>")
+            ? finding.description
+            : finding.evidence?.[0]?.artifacts?.[0]?.path ?? ""
+
+          // The bridge must be available — if not, skip MCP verification silently
+          let result: { success: boolean; data?: { verified?: boolean; confidence?: string; reason?: string } } | null = null
+          try {
+            // Use the properly-typed private field set during run().
+            // If it's null, the bridge was never assigned (run() failed early
+            // or mcpVerifyFindings was called outside the run() context).
+            if (!this.executorBridge) {
+              emit("⚠ MCP verification skipped: bridge not available (run() may not have completed setup)")
+            } else if (this.executorBridge.callTool) {
+              result = await this.executorBridge.callTool(
+                "finding_verifier",
+                {
+                  target,
+                  finding_type: finding.subtype,
+                  payload,
+                  endpoint,
+                  engagement_id: engagementId,
+                },
+                60000,  // 60s timeout
+              ) as { success: boolean; data?: { verified?: boolean; confidence?: string; reason?: string } }
+            }
+          } catch (bridgeErr) {
+            emit(`⚠ MCP bridge call failed for ${finding.subtype} finding: ${(bridgeErr as Error).message}`)
+          }
+
+          if (result?.success && result.data?.verified) {
+            finderResult.verifiedCount++
+            finding.verificationResult = {
+              passed: true,
+              summary: `MCP verified: ${result.data.reason ?? "HTTP probe confirmed"}`,
+              verifier: "finding_verifier",
+              verifiedAt: new Date().toISOString(),
+            }
+            emit(`✓ MCP verification passed for ${finding.title}`)
+          } else if (result) {
+            emit(`⚠ MCP verification did not confirm for ${finding.title}: ${result.data?.reason ?? "no reason"}`)
+          }
+        } catch {
+          // MCP verification failures are best-effort — don't block
+        }
+      }),
+    )
+
+    if (finderResult.verifiedCount > 0) {
+      emit(`✓ MCP verification: ${finderResult.verifiedCount} finding(s) confirmed`)
+    }
+
+    return findings
   }
 
   /**
@@ -708,6 +830,7 @@ export class WorkflowRunner {
     // ── 2. Load credentials, feature flags & replan config ──
     const featureFlags = new FeatureFlags(options.features)
     let configMaxReplans: number | undefined
+    let configLlmMaxReplans: number | undefined
     const isAutonomous = process.env.ARGUS_AUTONOMOUS === "1" || process.env.ARGUS_AUTONOMOUS === "true"
     try {
       const { readFileSync } = await import("fs")
@@ -716,13 +839,14 @@ export class WorkflowRunner {
       const raw = readFileSync(configPath, "utf-8")
       const parsed = YAML(raw) as {
         features?: Record<string, boolean>
-        replan?: { max_cycles?: number }
+        replan?: { max_cycles?: number; llm_max_cycles?: number }
         security?: { scope?: { mode?: string; allowed_targets?: string[] } }
       } | undefined
       if (parsed?.features) {
         featureFlags.loadFromConfig(parsed.features)
       }
       configMaxReplans = parsed?.replan?.max_cycles
+      configLlmMaxReplans = parsed?.replan?.llm_max_cycles
 
       // In autonomous mode, scope.mode must be explicitly set to 'allowlist'
       // so out-of-scope targets are rejected instead of warned (blocker 36 fix).
@@ -796,6 +920,8 @@ export class WorkflowRunner {
     const allFindings: NormalizedFinding[] = []
     let executionError: Error | null = null
     const bridge = this.deps?.bridge ?? new WorkersBridge(workersPath)
+    // Store bridge reference for mcpVerifyFindings() to access
+    this.executorBridge = bridge
 
     try {
       emit(`⠋ Connecting MCP workers...`)
@@ -848,6 +974,7 @@ export class WorkflowRunner {
       const insertedPhaseIds = new Set<string>()
       const allHypotheses: Array<{ id: string; description: string; confidence: number; status: string }> = []
       let replanCount = 0
+      let llmReplanCount = 0
       const targetType = detectTargetType(target)
       const authState = detectAuthState(target)
 
@@ -878,6 +1005,7 @@ export class WorkflowRunner {
 
         let phaseFindings = result.findings
         if (phaseFindings.length > 0) {
+          // Step 1: Browser-based verification for subtypes with Playwright verifiers
           phaseFindings = await this.verifyFindings(
             phaseFindings,
             target,
@@ -889,23 +1017,28 @@ export class WorkflowRunner {
               xssDefaultPayload: options.xssDefaultPayload,
             },
           )
+
+          // Step 2: MCP-based verification for HIGH+ findings using the Python
+          // finding_verifier tool (HTTP-based: SQLi, XSS, Open Redirect).
+          // This supplements browser verification with lightweight HTTP probes.
+          await this.mcpVerifyFindings(
+            phaseFindings,
+            target,
+            engagementId,
+            emit,
+          )
         }
 
         for (const finding of phaseFindings) {
           emit({ type: "finding", phaseId: phase.phaseId, severity: String(finding.severity), title: finding.title })
-          // First promotion: advances one tier (e.g., HIGH → VERIFIED if evidence exists)
+          // Promote confidence iteratively until no more promotions apply.
+          // This cascades: MEDIUM→HIGH→VERIFIED→CONFIRMED in a single pass
+          // when browser verification passed (verificationResult.passed === true).
+          // Each promote() call advances at most one tier.
           let promoted = confidenceEngine.promote(finding)
-          // Cascade promotion: if the first promotion moved the finding to a new tier,
-          // call promote again so e.g. VERIFIED → CONFIRMED can apply when browser
-          // verification passed (verificationResult.passed === true).
-          // The promote() method only advances one tier per call, so this cascade is
-          // needed to reach CONFIRMED in a single pass after browser verification.
-          if (promoted !== finding.confidence) {
+          while (promoted !== finding.confidence) {
             finding.confidence = promoted
-            const secondPromotion = confidenceEngine.promote(finding)
-            if (secondPromotion !== promoted) {
-              promoted = secondPromotion
-            }
+            promoted = confidenceEngine.promote(finding)
           }
           allFindings.push({ ...finding, confidence: promoted })
         }
@@ -949,6 +1082,9 @@ export class WorkflowRunner {
         // After each phase completes, signal completion to the Python MCP worker
         // so the LLM can analyze accumulated findings and suggest next capabilities.
         // This is best-effort — failures don't block the assessment.
+        // Collect LLM suggestions for the planner's replan() method below.
+        let llmSuggestedCapabilities: string[] | undefined
+        let llmReasoningText: string | undefined
         try {
           const phaseCompleteResult = await bridge.phaseComplete({
             engagement_id: engagementId,
@@ -975,6 +1111,14 @@ export class WorkflowRunner {
             store.appendAuditLog(engagementId, "PHASE_COMPLETE_LLM",
               `Phase ${phaseName} complete — LLM suggests ${phaseCompleteResult.next_capabilities.join(", ")}: ${phaseCompleteResult.reasoning.slice(0, 200)}`)
             emit(`⠋ LLM analysis: phase ${phaseName} complete — suggested next: ${phaseCompleteResult.next_capabilities.join(", ")}`)
+
+            // ── LLM-Driven Replanning ──
+            // Instead of creating phases inline, pass the LLM suggestions to the
+            // planner's replan() method below. This ensures all replan decisions
+            // (deduplication, attack chain merging, MAX_REPLANS budget, and tool
+            // selection) go through the same single code path in WorkflowPlanner.
+            llmSuggestedCapabilities = phaseCompleteResult.next_capabilities
+            llmReasoningText = phaseCompleteResult.reasoning
           }
 
           // If the next phase is llm_driven, wire accumulated findings as previousPhaseResults
@@ -1031,11 +1175,23 @@ export class WorkflowRunner {
             insertedPhases: insertedPhaseIds,
             replanCount,
             maxReplans: configMaxReplans,
+            llmMaxReplans: (() => {
+              // Config file takes precedence over env var
+              if (configLlmMaxReplans !== undefined) return configLlmMaxReplans
+              const raw = process.env.ARGUS_LLM_MAX_REPLANS
+              if (!raw) return undefined  // unset → planner default
+              const n = Number(raw)
+              return Number.isFinite(n) && n >= 0 ? n : undefined
+            })(),
+            llmReplanCount,
             hypotheses: allHypotheses.length > 0 ? allHypotheses : undefined,
             chainPlans,
+            llmSuggestedCapabilities,
+            llmReasoning: llmReasoningText,
           }
           const replanPhases = planner.replan(replanCtx)
           replanCount = replanCtx.replanCount
+          llmReplanCount = replanCtx.llmReplanCount ?? 0
 
           if (replanPhases && replanPhases.length > 0) {
             emit(`⠋ Replanning: ${replanPhases.length} new phase(s) from accumulated findings`)

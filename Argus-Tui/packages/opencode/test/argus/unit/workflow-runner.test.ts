@@ -1,4 +1,5 @@
 import { describe, expect, test, mock } from "bun:test"
+import { ConfidenceEngine } from "@argus/engagement/confidence"
 
 // ── Pure function tests ──
 
@@ -82,6 +83,7 @@ describe("formatFindingsSummary", () => {
       savePhase: mock(() => {}),
       saveFindings: mock(() => {}),
       appendAuditLog: mock(() => {}),
+      registerExitHandler: mock(() => {}),
       listEngagements: mock(() => []),
       getFindings: mock(() => []),
       getPhases: mock(() => []),
@@ -164,6 +166,23 @@ describe("formatFindingsSummary", () => {
       killChild: mock(() => {}),
       restartWorker: mock(() => Promise.resolve()),
       setRegistryTools: mock(() => {}),
+      supervisor: { degraded: false },
+      callTool: mock(async (_tool: string, _args: unknown, _timeout?: number) => ({
+        success: true,
+        data: { verified: true, confidence: "HIGH", reason: "Mock MCP verification passed" },
+      })),
+      phaseComplete: mock(() => Promise.resolve({
+        stop: false,
+        next_capabilities: [],
+        reasoning: "",
+        fallback: false,
+      })),
+      getAttackGraph: mock(() => Promise.resolve({
+        chains: [],
+        chain_plans: [],
+      })),
+      acquireEngagementLock: mock(() => Promise.resolve({ acquired: true })),
+      resetCircuitBreaker: mock(() => {}),
     }
 
     const mockConfidenceEngine = {
@@ -593,6 +612,565 @@ describe("formatFindingsSummary", () => {
       expect(result.success).toBe(true)
     })
   })
+
+  // ── MCP verification (mcpVerifyFindings) ──
+  describe("MCP verification (mcpVerifyFindings)", () => {
+    test("calls MCP verification for SQLi findings during run()", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+
+      const callToolMock = mock(async (_tool: string, _args: any, _timeout?: number) => ({
+        success: true,
+        data: { verified: true, confidence: "HIGH", reason: "Payload reflected in response" },
+      }))
+      deps.bridge.callTool = callToolMock
+
+      const sqliFinding = {
+        id: "find-sqli-1",
+        title: "SQL Injection in login",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "SQLi in /login?user=admin' OR '1'='1",
+        subtype: "sqli",
+        tool: "scanner",
+        phase: "scan",
+        url: "https://example.com/login",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      deps.executor.execute = mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [sqliFinding],
+        artifacts: [],
+        errors: [],
+        durationMs: 10,
+      }))
+
+      const runner = new WorkflowRunner(deps)
+      await runner.run({ target: "https://example.com" })
+
+      expect(callToolMock).toHaveBeenCalledWith(
+        "finding_verifier",
+        expect.objectContaining({ finding_type: "sqli" }),
+        expect.any(Number),
+      )
+    })
+
+    test("skips MCP verification for non-verifiable subtypes (bola)", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+
+      const callToolMock = mock(() => {})
+      deps.bridge.callTool = callToolMock
+
+      const bolaFinding = {
+        id: "find-bola-1",
+        title: "BOLA in profile endpoint",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "BOLA in /api/profile",
+        subtype: "bola",
+        tool: "scanner",
+        phase: "scan",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      deps.executor.execute = mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [bolaFinding],
+        artifacts: [],
+        errors: [],
+        durationMs: 10,
+      }))
+
+      const runner = new WorkflowRunner(deps)
+      await runner.run({ target: "https://example.com" })
+
+      expect(callToolMock).not.toHaveBeenCalled()
+    })
+
+    test("skips MCP verification for already-verified findings", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+
+      const callToolMock = mock(() => {})
+      deps.bridge.callTool = callToolMock
+
+      const alreadyVerified = {
+        id: "find-sqli-2",
+        title: "SQL Injection already verified",
+        severity: 3,
+        confidence: 4,
+        status: "PENDING" as const,
+        description: "SQLi in /search",
+        subtype: "sqli",
+        tool: "scanner",
+        phase: "scan",
+        verificationResult: { passed: true, summary: "Already verified", verifier: "browser", verifiedAt: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      deps.executor.execute = mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [alreadyVerified],
+        artifacts: [],
+        errors: [],
+        durationMs: 10,
+      }))
+
+      const runner = new WorkflowRunner(deps)
+      await runner.run({ target: "https://example.com" })
+
+      expect(callToolMock).not.toHaveBeenCalled()
+    })
+
+    test("emits warning when bridge is null (executorBridge not set)", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      // Create runner without deps — executorBridge starts as null
+      const runner = new WorkflowRunner()
+
+      const onProgress = mock(() => {})
+      const emit = (event: any) => {
+        if (typeof event === "string") onProgress(event)
+      }
+
+      const sqlFinding = {
+        id: "find-sqli-null",
+        title: "SQLi with null bridge",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "SQLi in /login",
+        subtype: "sqli",
+        tool: "scanner",
+        phase: "scan",
+        url: "https://example.com/login",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      // Access private method via any cast
+      await (runner as any).mcpVerifyFindings(
+        [sqlFinding],
+        "https://example.com",
+        "ENG-NULL-BRIDGE",
+        emit,
+      )
+
+      expect(onProgress).toHaveBeenCalledWith(
+        expect.stringContaining("bridge not available"),
+      )
+    })
+
+    test("emits warning when bridge.callTool throws", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+
+      const callToolMock = mock(async () => {
+        throw new Error("Connection refused")
+      })
+      deps.bridge.callTool = callToolMock
+
+      const sqliFinding = {
+        id: "find-sqli-throw",
+        title: "SQLi that triggers bridge error",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "SQLi in /search",
+        subtype: "sqli",
+        tool: "scanner",
+        phase: "scan",
+        url: "https://example.com/search",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      deps.executor.execute = mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [sqliFinding],
+        artifacts: [],
+        errors: [],
+        durationMs: 10,
+      }))
+
+      const onProgress = mock(() => {})
+      const runner = new WorkflowRunner(deps)
+      await runner.run({ target: "https://example.com", onProgress })
+
+      const calls = onProgress.mock.calls.map((c: any[]) => String(c[0]))
+      expect(calls.some((s: string) => s.includes("MCP bridge call failed"))).toBe(true)
+      expect(calls.some((s: string) => s.includes("Connection refused"))).toBe(true)
+    })
+
+    test("does not verify when callTool returns unverified", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+
+      const callToolMock = mock(async (_tool: string, _args: any, _timeout?: number) => ({
+        success: true,
+        data: { verified: false, confidence: "LOW", reason: "Payload not reflected" },
+      }))
+      deps.bridge.callTool = callToolMock
+
+      const sqliFinding = {
+        id: "find-sqli-unver",
+        title: "SQLi not confirmed",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "SQLi in /login",
+        subtype: "sqli",
+        tool: "scanner",
+        phase: "scan",
+        url: "https://example.com/login",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      deps.executor.execute = mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [sqliFinding],
+        artifacts: [],
+        errors: [],
+        durationMs: 10,
+      }))
+
+      const runner = new WorkflowRunner(deps)
+      const result = await runner.run({ target: "https://example.com" })
+
+      // Finding should still be in results, but no verificationResult set
+      expect(result.allFindings).toHaveLength(1)
+      expect(result.allFindings[0].id).toBe("find-sqli-unver")
+      expect(result.allFindings[0].verificationResult).toBeUndefined()
+    })
+
+    test("verifies XSS via MCP when subtype matches", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+
+      const callToolMock = mock(async (_tool: string, _args: any, _timeout?: number) => ({
+        success: true,
+        data: { verified: true, confidence: "HIGH", reason: "XSS payload reflected" },
+      }))
+      deps.bridge.callTool = callToolMock
+
+      const xssFinding = {
+        id: "find-xss-1",
+        title: "Reflected XSS in search",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "XSS in /search?q=<script>alert(1)</script>",
+        subtype: "xss",
+        tool: "scanner",
+        phase: "scan",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      deps.executor.execute = mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [xssFinding],
+        artifacts: [],
+        errors: [],
+        durationMs: 10,
+      }))
+
+      const runner = new WorkflowRunner(deps)
+      await runner.run({ target: "https://example.com" })
+
+      expect(callToolMock).toHaveBeenCalledWith(
+        "finding_verifier",
+        expect.objectContaining({ finding_type: "xss" }),
+        expect.any(Number),
+      )
+    })
+  })
+
+  // ── Confidence cascade while loop ──
+  describe("Confidence cascade while loop", () => {
+    function makeCascadeDeps() {
+      const base = makeDeps()
+      const realEngine = new ConfidenceEngine()
+      base.deps.confidenceEngine = realEngine
+      return base
+    }
+
+    test("promotes MEDIUM→HIGH→VERIFIED→CONFIRMED when browser verification passes", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeCascadeDeps()
+
+      const verifiedFinding = {
+        id: "find-xss-2",
+        title: "Stored XSS in comments",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "XSS in /comments",
+        subtype: "xss",
+        tool: "scanner",
+        phase: "scan",
+        cwe: "CWE-79",
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: new Date().toISOString() }],
+        verificationResult: { passed: true, summary: "XSS confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      deps.executor.execute = mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [verifiedFinding],
+        artifacts: [],
+        errors: [],
+        durationMs: 10,
+      }))
+
+      const runner = new WorkflowRunner(deps)
+      const result = await runner.run({ target: "https://example.com" })
+
+      expect(result.allFindings).toHaveLength(1)
+      expect(result.allFindings[0].confidence).toBe(5)
+    })
+
+    test("promotes HIGH→VERIFIED→CONFIRMED when starting from HIGH", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeCascadeDeps()
+
+      const highFinding = {
+        id: "find-rce-1",
+        title: "Command Injection",
+        severity: 4,
+        confidence: 3,
+        status: "PENDING" as const,
+        description: "RCE in /exec",
+        subtype: "command_injection",
+        tool: "scanner",
+        phase: "scan",
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: new Date().toISOString() }],
+        verificationResult: { passed: true, summary: "RCE confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      deps.executor.execute = mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [highFinding],
+        artifacts: [],
+        errors: [],
+        durationMs: 10,
+      }))
+
+      const runner = new WorkflowRunner(deps)
+      const result = await runner.run({ target: "https://example.com" })
+
+      expect(result.allFindings).toHaveLength(1)
+      expect(result.allFindings[0].confidence).toBe(5)
+    })
+
+    test("does not promote beyond available metadata", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeCascadeDeps()
+
+      const lowFinding = {
+        id: "find-info-1",
+        title: "Info leak in header",
+        severity: 1,
+        confidence: 0,
+        status: "PENDING" as const,
+        description: "Server: Apache/2.4.41",
+        subtype: "info_leak",
+        tool: "scanner",
+        phase: "scan",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      deps.executor.execute = mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [lowFinding],
+        artifacts: [],
+        errors: [],
+        durationMs: 10,
+      }))
+
+      const runner = new WorkflowRunner(deps)
+      const result = await runner.run({ target: "https://example.com" })
+
+      expect(result.allFindings).toHaveLength(1)
+      expect(result.allFindings[0].confidence).toBe(1)
+    })
+
+    test("preserves existing VERIFIED confidence when verification failed", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeCascadeDeps()
+
+      const finding = {
+        id: "find-ssrf-1",
+        title: "SSRF in fetchUrl",
+        severity: 3,
+        confidence: 4,
+        status: "PENDING" as const,
+        description: "SSRF in /fetch?url=",
+        subtype: "ssrf",
+        tool: "scanner",
+        phase: "scan",
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: new Date().toISOString() }],
+        verificationResult: { passed: false, summary: "SSRF not confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      deps.executor.execute = mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [finding],
+        artifacts: [],
+        errors: [],
+        durationMs: 10,
+      }))
+
+      const runner = new WorkflowRunner(deps)
+      const result = await runner.run({ target: "https://example.com" })
+
+      expect(result.allFindings).toHaveLength(1)
+      expect(result.allFindings[0].confidence).toBe(4)
+    })
+  })
+
+  // ── ARGUS_LLM_MAX_REPLANS env var fallback ──
+  describe("ARGUS_LLM_MAX_REPLANS env var fallback", () => {
+    test("sets llmMaxReplans in replan context when env var is set", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      let capturedLlmmax: number | undefined
+      deps.planner.replan = mock((ctx: any) => {
+        capturedLlmmax = ctx.llmMaxReplans
+        return null
+      })
+
+      process.env.ARGUS_LLM_MAX_REPLANS = "5"
+      try {
+        const runner = new WorkflowRunner(deps)
+        await runner.run({ target: "https://example.com" })
+
+        expect(capturedLlmmax).toBe(5)
+      } finally {
+        delete process.env.ARGUS_LLM_MAX_REPLANS
+      }
+    })
+
+    test("llmMaxReplans is undefined when env var is not set", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      let capturedLlmmax: number | undefined = -999  // sentinel
+      deps.planner.replan = mock((ctx: any) => {
+        capturedLlmmax = ctx.llmMaxReplans
+        return null
+      })
+
+      delete process.env.ARGUS_LLM_MAX_REPLANS
+      const runner = new WorkflowRunner(deps)
+      await runner.run({ target: "https://example.com" })
+
+      expect(capturedLlmmax).toBeUndefined()
+    })
+
+    test("non-numeric ARGUS_LLM_MAX_REPLANS results in undefined", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      let capturedLlmmax: number | undefined
+      deps.planner.replan = mock((ctx: any) => {
+        capturedLlmmax = ctx.llmMaxReplans
+        return null
+      })
+
+      process.env.ARGUS_LLM_MAX_REPLANS = "abc"
+      try {
+        const runner = new WorkflowRunner(deps)
+        await runner.run({ target: "https://example.com" })
+
+        expect(capturedLlmmax).toBeUndefined()
+      } finally {
+        delete process.env.ARGUS_LLM_MAX_REPLANS
+      }
+    })
+
+    test("negative ARGUS_LLM_MAX_REPLANS results in undefined", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      let capturedLlmmax: number | undefined
+      deps.planner.replan = mock((ctx: any) => {
+        capturedLlmmax = ctx.llmMaxReplans
+        return null
+      })
+
+      process.env.ARGUS_LLM_MAX_REPLANS = "-5"
+      try {
+        const runner = new WorkflowRunner(deps)
+        await runner.run({ target: "https://example.com" })
+
+        expect(capturedLlmmax).toBeUndefined()
+      } finally {
+        delete process.env.ARGUS_LLM_MAX_REPLANS
+      }
+    })
+
+    test("ARGUS_LLM_MAX_REPLANS=0 passes through as 0", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      let capturedLlmmax: number | undefined
+      deps.planner.replan = mock((ctx: any) => {
+        capturedLlmmax = ctx.llmMaxReplans
+        return null
+      })
+
+      process.env.ARGUS_LLM_MAX_REPLANS = "0"
+      try {
+        const runner = new WorkflowRunner(deps)
+        await runner.run({ target: "https://example.com" })
+
+        expect(capturedLlmmax).toBe(0)
+      } finally {
+        delete process.env.ARGUS_LLM_MAX_REPLANS
+      }
+    })
+  })
+
+  // ── disconnect in finally block ──
+  describe("disconnect in finally block", () => {
+    test("disconnects bridge in finally block despite error", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      let disconnectCalled = false
+      deps.bridge.disconnect = mock(() => {
+        disconnectCalled = true
+        return Promise.resolve()
+      })
+      deps.executor.execute = mock(() => { throw new Error("Crash") })
+
+      const runner = new WorkflowRunner(deps)
+
+      await runner.run({ target: "https://example.com" })
+
+      expect(disconnectCalled).toBe(true)
+      expect(deps.bridge.disconnect).toHaveBeenCalledTimes(1)
+    })
+  })
 })
 
 // ── validateAutonomousScopeMode (pure function extracted from WorkflowRunner) ──
@@ -647,22 +1225,4 @@ describe("validateAutonomousScopeMode", () => {
   })
 })
 
-describe("disconnect in finally block", () => {
-  test("disconnects bridge in finally block despite error", async () => {
-    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
-    const { deps } = makeDeps()
-    let disconnectCalled = false
-    deps.bridge.disconnect = mock(() => {
-      disconnectCalled = true
-      return Promise.resolve()
-    })
-    deps.executor.execute = mock(() => { throw new Error("Crash") })
 
-    const runner = new WorkflowRunner(deps)
-
-    await runner.run({ target: "https://example.com" })
-
-    expect(disconnectCalled).toBe(true)
-    expect(deps.bridge.disconnect).toHaveBeenCalledTimes(1)
-  })
-})
