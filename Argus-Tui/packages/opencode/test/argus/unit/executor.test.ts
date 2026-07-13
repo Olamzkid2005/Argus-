@@ -147,6 +147,122 @@ describe("InProcessExecutor fixes", () => {
     })
   })
 
+  describe("consumeVerificationResult", () => {
+    function makeExecutor() {
+      return new InProcessExecutor(
+        new MockToolRegistry() as any,
+        mockBridge as any,
+        new ConfidenceEngine(),
+        mockWorkflowRegistry as any,
+      )
+    }
+
+    test("cascades MEDIUM→HIGH→VERIFIED→CONFIRMED in single call", () => {
+      const executor = makeExecutor()
+      const finding = {
+        id: "find-sqli-1",
+        title: "SQL Injection",
+        severity: 3,
+        confidence: 2, // MEDIUM
+        status: "PENDING" as const,
+        description: "SQLi in login",
+        tool: "scanner",
+        phase: "scan",
+        cwe: "CWE-89",
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
+        verificationResult: { passed: true, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      const result = executor.consumeVerificationResult(finding)
+      expect(result).toBe(5) // CONFIRMED
+      expect(finding.confidence).toBe(5) // In-place mutation
+    })
+
+    test("cascades HIGH→VERIFIED→CONFIRMED when starting from HIGH", () => {
+      const executor = makeExecutor()
+      const finding = {
+        id: "find-xss-1",
+        title: "Reflected XSS",
+        severity: 3,
+        confidence: 3, // HIGH
+        status: "PENDING" as const,
+        description: "XSS in search",
+        tool: "scanner",
+        phase: "scan",
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
+        verificationResult: { passed: true, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      const result = executor.consumeVerificationResult(finding)
+      expect(result).toBe(5) // CONFIRMED
+      expect(finding.confidence).toBe(5)
+    })
+
+    test("does not promote when finding has no metadata beyond baseline", () => {
+      const executor = makeExecutor()
+      const finding = {
+        id: "find-info-1",
+        title: "Info leak",
+        severity: 0,
+        confidence: 0, // INFORMATIONAL
+        status: "PENDING" as const,
+        description: "Server header leak",
+        tool: "scanner",
+        phase: "scan",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      const result = executor.consumeVerificationResult(finding)
+      // INFORMATIONAL→LOW is unconditional, then no further promotions
+      expect(result).toBe(1) // LOW
+      expect(finding.confidence).toBe(1)
+    })
+
+    test("keeps CONFIRMED when already confirmed", () => {
+      const executor = makeExecutor()
+      const finding = {
+        id: "find-rce-1",
+        title: "RCE Confirmed",
+        severity: 4,
+        confidence: 5, // Already CONFIRMED
+        status: "CONFIRMED" as const,
+        description: "RCE in upload endpoint",
+        tool: "scanner",
+        phase: "scan",
+        verificationResult: { passed: true, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      const result = executor.consumeVerificationResult(finding)
+      expect(result).toBe(5) // Stays CONFIRMED
+      expect(finding.confidence).toBe(5)
+    })
+
+    test("does not promote to CONFIRMED when verificationResult.passed is false", () => {
+      const executor = makeExecutor()
+      const finding = {
+        id: "find-ssrf-1",
+        title: "SSRF Probe",
+        severity: 3,
+        confidence: 4, // VERIFIED (from evidence)
+        status: "PENDING" as const,
+        description: "SSRF in fetch",
+        tool: "scanner",
+        phase: "scan",
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
+        verificationResult: { passed: false, summary: "Probe failed", verifier: "ssrf", verifiedAt: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      const result = executor.consumeVerificationResult(finding)
+      // VERIFIED stays VERIFIED because passed=false prevents promotion to CONFIRMED
+      expect(result).toBe(4)
+      expect(finding.confidence).toBe(4)
+    })
+  })
+
   describe("reset clears emitProgress and executionOptions", () => {
     test("reset nullifies emitProgress", () => {
       const executor = new InProcessExecutor(
