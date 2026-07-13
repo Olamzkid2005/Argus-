@@ -11,6 +11,11 @@ from tasks.base import task_context
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of post-exploit rounds allowed in a single engagement.
+# Each round: analyze → post_exploit → analyze → (maybe) post_exploit.
+# This prevents infinite loops when post_exploit keeps producing findings.
+MAX_POST_EXPLOIT_ROUNDS = 3
+
 
 @app.task(
     bind=True, name="tasks.analyze.run_analysis", soft_time_limit=1800, time_limit=2400
@@ -21,7 +26,7 @@ def run_analysis(
     budget: dict,
     trace_id: str = None,
     bug_bounty_mode: bool | None = None,
-    skip_post_exploitation_check: bool = False,
+    post_exploit_round: int = 0,
 ):
     """
     Execute analysis phase for an engagement.
@@ -35,9 +40,10 @@ def run_analysis(
         budget: Budget config dict
         trace_id: Optional trace ID
         bug_bounty_mode: Forwarded from scan phase for report generation
-        skip_post_exploitation_check: When True (e.g. after exploit chain dispatch),
-            skip the needs_post_exploitation check to prevent infinite loops
-            where post_exploit → analyze → re-dispatches post_exploit.
+        post_exploit_round: Number of post-exploit rounds already completed.
+            Used to bound the analyze→post_exploit→analyze loop. When this
+            reaches MAX_POST_EXPLOIT_ROUNDS, post-exploit re-dispatch is skipped
+            regardless of foothold indicators (infinite loop guard).
     """
     from typing import Any
     from utils.logging_utils import ScanLogger
@@ -87,14 +93,18 @@ def run_analysis(
         # from the exploit chain path in post_exploit.py), skip re-dispatching
         # post_exploit to prevent infinite loops — fall through to reporting instead.
         if needs_post_exploitation:
-            if skip_post_exploitation_check:
+            if post_exploit_round >= MAX_POST_EXPLOIT_ROUNDS:
                 slog.info(
-                    "Foothold indicators remain but exploitation just completed — "
-                    "skipping re-dispatch to avoid loop, proceeding to report"
+                    "Foothold indicators remain but max post-exploit rounds (%d) "
+                    "reached — proceeding to report",
+                    MAX_POST_EXPLOIT_ROUNDS,
                 )
             else:
                 slog.info(
-                    "Foothold indicators found — dispatching post-exploitation phase"
+                    "Foothold indicators found — dispatching post-exploitation phase "
+                    "(round %d/%d)",
+                    post_exploit_round + 1,
+                    MAX_POST_EXPLOIT_ROUNDS,
                 )
                 try:
                     ctx.state.safe_transition(
@@ -117,9 +127,11 @@ def run_analysis(
                     app.send_task(
                         "tasks.post_exploit.run_post_exploit",
                         args=[engagement_id, budget, ctx.trace_id],
+                        kwargs={"post_exploit_round": post_exploit_round + 1},
                     )
                     slog.info(
-                        "Post-exploitation dispatched for engagement %s",
+                        "Post-exploitation (round %d) dispatched for engagement %s",
+                        post_exploit_round + 1,
                         engagement_id,
                     )
                 except Exception as e:

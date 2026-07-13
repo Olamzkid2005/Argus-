@@ -1079,7 +1079,7 @@ class Orchestrator:
             "reasoning": evaluation.get("reasoning", ""),
             "synthesis": synthesis,
             "hypotheses": hypotheses,
-            "next_state": "reporting",
+            "next_state": "post_exploitation" if needs_post_exploitation else "reporting",
             "needs_post_exploitation": needs_post_exploitation,
             "trace_id": get_trace_id(),
         }
@@ -1131,12 +1131,16 @@ class Orchestrator:
         }
 
     def run_verification(self, job: dict) -> dict:
-        """Run browser-based verification on HIGH/CRITICAL findings.
+        """Run verification on HIGH/CRITICAL findings.
 
-        Phase 3.1.2: After tools complete, this method reviews findings
-        and determines whether browser verification is needed. It marks
-        findings that should be verified and emits websocket events so
-        the TypeScript workflow runner can execute Playwright-based verifiers.
+        Phase 3.1.2: After tools complete, this method runs lightweight HTTP-based
+        verification (via finding_verifier) on findings that support it (SQLi, XSS,
+        Open Redirect). For findings needing Playwright-based verification, it emits
+        structured SSE events for the TypeScript workflow runner to consume.
+
+        The finding_verifier tool is called via the MCP server for each qualifying
+        finding. Results are stored on the finding dict, making them available for
+        the TypeScript side to consume and promote confidence.
 
         Args:
             job: Job dict with:
@@ -1145,9 +1149,13 @@ class Orchestrator:
                 - max_to_verify: max findings to verify (default 10)
 
         Returns:
-            Dict with verification recommendations
+            Dict with verification results
         """
-        # emit_thinking is imported at module level
+        import asyncio
+
+        from tools.finding_verifier import verify_finding as _run_finding_verifier
+
+        slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         findings = job.get("findings", [])
         threshold = job.get("threshold", 3)  # Severity.HIGH
         max_to_verify = job.get("max_to_verify", 10)
@@ -1158,10 +1166,11 @@ class Orchestrator:
                 "phase": "verification",
                 "status": "skipped",
                 "findings_to_verify": 0,
+                "findings_verified": 0,
                 "recommendation": "No findings — skipping verification",
             }
 
-        # Filter findings by severity threshold
+        # Filter findings by severity
         candidates = [
             f for f in findings
             if f.get("severity", 0) >= threshold
@@ -1170,15 +1179,16 @@ class Orchestrator:
         if not candidates:
             emit_thinking(
                 self.engagement_id,
-                "No findings meet the verification threshold — skipping browser verification",
+                "No findings meet the verification threshold — skipping verification",
             )
             return {
                 "phase": "verification",
                 "status": "no_candidates",
                 "findings_to_verify": 0,
+                "findings_verified": 0,
                 "recommendation": (
                     f"No findings with severity >= {threshold} — "
-                    "browser verification skipped"
+                    "verification skipped"
                 ),
             }
 
@@ -1186,55 +1196,133 @@ class Orchestrator:
         candidates.sort(key=lambda f: f.get("severity", 0), reverse=True)
         to_verify = candidates[:max_to_verify]
 
-        # Mark findings for browser verification
-        verified_ids = []
-        for finding in to_verify:
-            finding["_needs_browser_verification"] = True
-            finding["_verification_priority"] = finding.get("severity", 3)
-            verified_ids.append(finding.get("id", ""))
+        # ── Phase 1: Run finding_verifier HTTP probes for verifiable types ──
+        # Run async verification in a thread pool executor since finding_verifier
+        # functions are async (use httpx.AsyncClient) but we're in a sync context.
+        verified_count = 0
+        verified_ids: list[str] = []
+        verification_details: list[dict] = []
 
-        emit_thinking(
-            self.engagement_id,
-            f"Browser verification recommended for {len(to_verify)} finding(s) "
-            f"(severity >= {threshold})",
-        )
+        async def _verify_finding(finding: dict) -> dict | None:
+            """Run verification for a single finding."""
+            finding_type = (
+                (finding.get("type") or "").lower().replace(" ", "-").replace("_", "-")
+            )
+            # Only verify types that have matching verifiers
+            from tools.finding_verifier import VERIFIERS as _verifiers
+            if finding_type not in _verifiers:
+                return None
 
-        # Gap 10.1: Emit SSE event signaling browser verification is recommended
-        # This replaces the old WebSocket publish_scanner_activity call
+            try:
+                result = await _run_finding_verifier(finding, self.engagement_id)
+                verification = result.get("verification", {})
+                if verification.get("verified"):
+                    finding["verification"] = verification
+                    finding["_verified"] = True
+                    return result
+            except Exception as e:
+                logger.debug(
+                    "Finding verifier failed for %s: %s",
+                    finding.get("id", "unknown"),
+                    e,
+                )
+            return None
+
+        if to_verify:
+            emit_thinking(
+                self.engagement_id,
+                f"Running HTTP-based verification on {len(to_verify)} finding(s)...",
+            )
+            slog.info(
+                "Running finding_verifier on %d finding(s)",
+                len(to_verify),
+            )
+
+            # Use asyncio.run with a fresh event loop to run async verifiers
+            async def _verify_all():
+                tasks = [_verify_finding(f) for f in to_verify]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                return results
+
+            loop = None
+            verify_results = []
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                verify_results = loop.run_until_complete(_verify_all())
+            except Exception as e:
+                slog.warning(
+                    "Finding verifier async execution failed: %s",
+                    e,
+                )
+            finally:
+                if loop is not None:
+                    loop.close()
+
+            for f_result in verify_results:
+                if isinstance(f_result, dict) and f_result.get("verification", {}).get("verified"):
+                    verified_count += 1
+                    f_id = f_result.get("id", "")
+                    if f_id:
+                        verified_ids.append(f_id)
+                    verification_details.append({
+                        "id": f_id,
+                        "type": f_result.get("type", ""),
+                        "endpoint": f_result.get("endpoint", ""),
+                        "verification": f_result.get("verification", {}),
+                    })
+
+        # ── Phase 2: Emit SSE event so TypeScript can run Playwright verifiers ──
+        findings_to_verify = len(to_verify)
         try:
             from streaming import emit_event as _emit_event, EventType as _EventType
             _emit_event(
                 self.engagement_id,
                 _EventType.SCANNER_ACTIVITY,
                 {
-                    "activity": "verification_recommended",
+                    "activity": "verification_complete",
                     "finding_ids": verified_ids,
-                    "count": len(to_verify),
+                    "total_candidates": len(candidates),
+                    "http_verified": verified_count,
+                    "playwright_pending": findings_to_verify - verified_count,
                     "threshold": threshold,
                     "phase": "scan",
+                    "details": verification_details,
                 },
             )
         except Exception:
             logger.debug(
-                "Failed to emit verification_recommended event (non-fatal)",
+                "Failed to emit verification_complete event (non-fatal)",
                 exc_info=True,
             )
 
+        if verified_count > 0:
+            emit_thinking(
+                self.engagement_id,
+                f"HTTP-based verification confirmed {verified_count} finding(s)",
+            )
+
         logger.info(
-            "Verification recommended for %d finding(s) (threshold=%d, max=%d)",
-            len(to_verify),
+            "Verification: %d/%d HTTP-verified, %d pending Playwright (threshold=%d, max=%d)",
+            verified_count,
+            findings_to_verify,
+            findings_to_verify - verified_count,
             threshold,
             max_to_verify,
         )
 
         return {
             "phase": "verification",
-            "status": "recommended",
-            "findings_to_verify": len(to_verify),
+            "status": "completed" if findings_to_verify == verified_count else "partial",
+            "findings_to_verify": findings_to_verify,
+            "findings_verified": verified_count,
+            "findings_pending_playwright": findings_to_verify - verified_count,
             "verified_ids": verified_ids,
+            "verification_details": verification_details,
             "recommendation": (
-                f"Browser verification recommended for {len(to_verify)} finding(s), "
-                f"severity >= {threshold}"
+                f"HTTP verification {'confirmed' if verified_count > 0 else 'no results'} "
+                f"for {verified_count}/{findings_to_verify} finding(s). "
+                f"{findings_to_verify - verified_count} pending Playwright browser verification."
             ),
         }
 
