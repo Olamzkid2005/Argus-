@@ -107,7 +107,7 @@ class TestPostExploitDispatch:
         result, ms = _run(mock_task, mock_ctx)
         assert result["status"] == "completed"
         mock_ctx.state.safe_transition.assert_any_call("post_exploitation", "Foothold detected — advancing to post-exploitation")
-        ms.assert_called_once_with("tasks.post_exploit.run_post_exploit", args=["test-eng-001", {}, "trace-001"])
+        ms.assert_called_once_with("tasks.post_exploit.run_post_exploit", args=["test-eng-001", {}, "trace-001"], kwargs={"post_exploit_round": 1})
 
     def test_uses_safe_transition_for_post_exploit(self, mock_task, mock_ctx):
         mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=True)
@@ -194,34 +194,54 @@ class TestIdempotency:
         mock_ctx.orchestrator.run_analysis.assert_not_called()
 
 
-class TestSkipPostExploitationCheck:
-    """Tests for skip_post_exploitation_check (Gap 5.1 infinite-loop guard).
+class TestPostExploitRoundCounter:
+    """Tests for post_exploit_round counter (replaces skip_post_exploitation_check).
 
-    When skip_post_exploitation_check=True is passed (e.g. from post_exploit.py),
-    the analyze task should skip re-dispatching post_exploit to prevent loops.
+    Bounds the analyze→post_exploit→analyze loop. When post_exploit_round
+    reaches MAX_POST_EXPLOIT_ROUNDS, re-dispatch is skipped regardless of
+    foothold indicators to prevent infinite loops.
     """
 
-    def test_skips_post_exploit_when_flag_is_true(self, mock_task, mock_ctx):
-        """When skip_post_exploitation_check=True and needs_post_exploitation,
+    def test_skips_post_exploit_when_max_rounds_reached(self, mock_task, mock_ctx):
+        """When post_exploit_round >= MAX (3) and needs_post_exploitation,
         should skip post-exploit dispatch and proceed to report."""
         mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=True)
-        result, ms = _run(mock_task, mock_ctx, skip_post_exploitation_check=True)
+        result, ms = _run(mock_task, mock_ctx, post_exploit_round=3)
         assert result["status"] == "completed"
         ms.assert_called_once_with("tasks.report.generate_report", args=["test-eng-001", "trace-001", {}])
 
-    def test_dispatches_post_exploit_when_flag_is_false(self, mock_task, mock_ctx):
-        """When skip_post_exploitation_check=False (default) and
-        needs_post_exploitation, should dispatch post-exploit normally."""
+    def test_skips_post_exploit_when_above_max_rounds(self, mock_task, mock_ctx):
+        """When post_exploit_round > MAX, should also skip (safety net)."""
         mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=True)
-        result, ms = _run(mock_task, mock_ctx, skip_post_exploitation_check=False)
+        result, ms = _run(mock_task, mock_ctx, post_exploit_round=5)
         assert result["status"] == "completed"
-        ms.assert_called_once_with("tasks.post_exploit.run_post_exploit", args=["test-eng-001", {}, "trace-001"])
+        ms.assert_called_once_with("tasks.report.generate_report", args=["test-eng-001", "trace-001", {}])
 
-    def test_dispatches_report_when_no_foothold_and_flag_true(self, mock_task, mock_ctx):
-        """When skip_post_exploitation_check=True but no foothold,
-        should dispatch report normally (flag is irrelevant without foothold)."""
+    def test_dispatches_post_exploit_when_round_below_max(self, mock_task, mock_ctx):
+        """When post_exploit_round < MAX (3) and
+        needs_post_exploitation, should dispatch post-exploit with incremented round."""
+        mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=True)
+        result, ms = _run(mock_task, mock_ctx, post_exploit_round=1)
+        assert result["status"] == "completed"
+        ms.assert_called_once()
+        call_args = ms.call_args
+        assert call_args[0][0] == "tasks.post_exploit.run_post_exploit"
+        assert call_args.kwargs.get("kwargs", {}).get("post_exploit_round") == 2
+
+    def test_dispatches_post_exploit_from_round_zero(self, mock_task, mock_ctx):
+        """Default post_exploit_round=0 should dispatch post-exploit."""
+        mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=True)
+        result, ms = _run(mock_task, mock_ctx)
+        assert result["status"] == "completed"
+        ms.assert_called_once()
+        call_args = ms.call_args
+        assert call_args[0][0] == "tasks.post_exploit.run_post_exploit"
+        assert call_args.kwargs.get("kwargs", {}).get("post_exploit_round") == 1
+
+    def test_dispatches_report_when_no_foothold(self, mock_task, mock_ctx):
+        """When needs_post_exploitation=False, round counter is irrelevant."""
         mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=False)
-        result, ms = _run(mock_task, mock_ctx, skip_post_exploitation_check=True)
+        result, ms = _run(mock_task, mock_ctx, post_exploit_round=2)
         assert result["status"] == "completed"
         ms.assert_called_once_with("tasks.report.generate_report", args=["test-eng-001", "trace-001", {}])
 
