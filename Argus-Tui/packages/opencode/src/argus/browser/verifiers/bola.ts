@@ -21,6 +21,7 @@ export class BOLAVerifier implements VerificationScenario {
   private capturedRequests: string[] = []
   private resourceUrl = ""
   private harDir: string | null = null
+  private loginFailed = false
 
   constructor(
     private engine: BrowserEngine,
@@ -72,6 +73,16 @@ export class BOLAVerifier implements VerificationScenario {
   }
 
   async verify(): Promise<VerifierResult> {
+    // If login failed, report as skipped (not a clean "not vulnerable" result)
+    if (this.loginFailed) {
+      return {
+        passed: false,
+        confidence: Confidence.INFORMATIONAL,
+        evidence: [],
+        summary: `BOLA skipped — login failed for one or both users, access check could not complete`,
+      }
+    }
+
     // BOLA only meaningful if the resource is actually access-controlled
     const passed = this.resourceRequiresAuth && this.userAResourceAccessible && this.userBResourceAccessible
 
@@ -195,6 +206,7 @@ export class BOLAVerifier implements VerificationScenario {
           logAuthChallenge(challenge, (line) => this.logs.push(line))
         }
         this.logs.push(`Login failed for ${creds.username} — aborting access check (fail-closed)`)
+        this.loginFailed = true
         return false
       }
 

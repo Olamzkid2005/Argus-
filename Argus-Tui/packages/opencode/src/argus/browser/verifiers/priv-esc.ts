@@ -17,6 +17,7 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
   private capturedResponses: string[] = []
   private capturedRequests: string[] = []
   private harDir: string | null = null
+  private loginFailed = false
 
   constructor(
     private engine: BrowserEngine,
@@ -92,6 +93,7 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
         logAuthChallenge(challenge, (line) => this.logs.push(line))
       }
       this.logs.push(`Login failed for ${this.lowPrivCreds.username} — aborting privilege escalation check (fail-closed)`)
+      this.loginFailed = true
       await page.close()
       return
     }
@@ -133,6 +135,16 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
   }
 
   async verify(): Promise<VerifierResult> {
+    // If login failed, report as skipped (not a clean "access control enforced" result)
+    if (this.loginFailed) {
+      return {
+        passed: false,
+        confidence: Confidence.INFORMATIONAL,
+        evidence: [],
+        summary: `Privilege escalation skipped — login failed, endpoint access checks could not be performed`,
+      }
+    }
+
     const escalationEndpoints = this.accessibleEndpoints.filter(e => e.accessible && e.baselineDenied)
     const hasEscalation = escalationEndpoints.length > 0
     const some200 = escalationEndpoints.some(e => e.status === 200)

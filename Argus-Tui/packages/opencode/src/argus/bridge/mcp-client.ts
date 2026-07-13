@@ -65,11 +65,24 @@ export class WorkersBridge {
   private pendingCount = 0
   private readonly maxPending: number
 
-  // Circuit breaker state
+  // Circuit breaker state (Gap 9.2: must track failures across calls)
   private circuitFailures = 0
-  private readonly circuitThreshold = 3
+  private readonly circuitThreshold: number = (() => {
+    const raw = process.env.ARGUS_LLM_CIRCUIT_THRESHOLD
+    // Must equal Python's max_retries + 1 (default: max_retries=2 → threshold=3)
+    if (raw === undefined || raw === "") return 3
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? n : 3
+  })()
   private circuitOpenUntil = 0
-  private readonly circuitCooldown = 300_000 // 5 minutes
+  private readonly circuitCooldown: number = (() => {
+    const raw = process.env.ARGUS_LLM_CIRCUIT_COOLDOWN_MS
+    // Aligned with Python _circuit_cooldown=30s (default)
+    if (raw === undefined || raw === "") return 30_000
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? n : 30_000
+  })()
+  private readonly llmToolNames = new Set(["finding_verifier", "llm_detector", "llm_payload_generator"])
 
   // Signal forwarding state
   private signalHandlers: Array<{ signal: NodeJS.Signals; handler: () => void }> = []
@@ -402,9 +415,11 @@ export class WorkersBridge {
   }
 
   async callTool(name: string, args: unknown, timeoutMs?: number, cacheMode?: CacheMode): Promise<ToolResult> {
-    // Circuit breaker check
     const now = Date.now()
-    if (this.circuitOpenUntil > now) {
+    // Circuit breaker check — only for LLM-related tools (Gap 9.2 fix)
+    // Non-LLM tools (nmap, nuclei, gau, etc.) bypass this check entirely
+    // so a period of LLM failures doesn't block unrelated scanning tools.
+    if (this.llmToolNames.has(name) && this.circuitOpenUntil > now) {
       const retryAfter = Math.ceil((this.circuitOpenUntil - now) / 1000)
       throw new LLMUnavailableError("UNAVAILABLE", retryAfter)
     }
@@ -458,7 +473,7 @@ export class WorkersBridge {
           const cooldownSec = Math.ceil(this.circuitCooldown / 1000)
           console.warn(
             `[LLM Circuit Breaker] ${this.circuitFailures} consecutive LLM failures — ` +
-            `circuit OPEN for ${cooldownSec}s. Subsequent LLM calls will fail fast until cooldown expires.`
+            `circuit OPEN for ${cooldownSec}s. Subsequent LLM tool calls will fail fast until cooldown expires.`
           )
           this.circuitOpenUntil = now + this.circuitCooldown
           this.setLLMStatus("UNAVAILABLE")
