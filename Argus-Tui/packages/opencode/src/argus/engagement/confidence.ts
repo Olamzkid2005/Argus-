@@ -23,10 +23,16 @@ const PROMOTION_RULES: Array<{ from: Confidence; to: Confidence; condition: (fin
   {
     from: Confidence.HIGH,
     to: Confidence.VERIFIED,
-    condition: (f) => f.evidence !== undefined && f.evidence.length > 0,
+    condition: (f) =>
+      (f.evidence !== undefined && f.evidence.length > 0) ||
+      // Browser verification passing is strong evidence — promote to VERIFIED
+      // even when the scanner didn't attach structured evidence packages.
+      f.verificationResult?.passed === true,
   },
   {
-    // CONFIRMED is promoted when an independent verification run has passed.
+    // CONFIRMED is promoted when an independent verification run has passed
+    // AND the finding already has VERIFIED confidence. This requires a
+    // cascading promote() call (see workflow-runner.ts while loop).
     from: Confidence.VERIFIED,
     to: Confidence.CONFIRMED,
     condition: (f) => f.verificationResult?.passed === true,

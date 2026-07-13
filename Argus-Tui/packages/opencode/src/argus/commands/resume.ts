@@ -214,6 +214,12 @@ export async function resumeCommand(
             const n = Number(raw)
             return Number.isFinite(n) && n >= 0 ? n : undefined
           })(),
+          llmMaxReplans: (() => {
+            const raw = process.env.ARGUS_LLM_MAX_REPLANS
+            if (!raw) return undefined  // unset → planner default
+            const n = Number(raw)
+            return Number.isFinite(n) && n >= 0 ? n : undefined
+          })(),
         }
         const replanPhases = planner.replan(replanCtx)
         replanCount = replanCtx.replanCount
