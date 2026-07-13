@@ -1,6 +1,6 @@
 import crypto from "crypto"
 import type { PlannerContext, AssessmentPlan, PhaseExecutionRequest } from "./types"
-import { Capability } from "./capabilities"
+import { Capability, guessCapability } from "./capabilities"
 import { WorkflowRegistry } from "../workflows/registry"
 import { ToolRegistry } from "../workflows/tool-registry"
 import { detectTargetType, detectAuthState, determineRequiredCapabilities } from "./strategy"
@@ -11,6 +11,13 @@ import { getTargetValidator } from "../shared/target-validator"
 
 export const MAX_REPLANS = (() => {
   const raw = process.env.ARGUS_MAX_REPLANS
+  if (raw === undefined || raw === "") return 10     // default
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : 10       // coerce NaN/negative to default
+})()
+
+export const LLM_MAX_REPLANS = (() => {
+  const raw = process.env.ARGUS_LLM_MAX_REPLANS
   if (raw === undefined || raw === "") return 10     // default
   const n = Number(raw)
   return Number.isFinite(n) && n >= 0 ? n : 10       // coerce NaN/negative to default
@@ -182,17 +189,47 @@ export class WorkflowPlanner {
   }
 
   replan(context: PlannerContext): PhaseExecutionRequest[] | null {
-    // Negative findings are exempt from MAX_REPLANS on first consideration
+    // ── Independent budgets for LLM and rule-based replanning ──
+    // LLM suggestions and rule-based capabilities each have their own counter
+    // and max. This prevents LLM replanning from starving rule-based replanning
+    // and vice versa.
     const hasNegativeFindings = context.findings.some((f) => f.negative)
     const maxReplans = (context.maxReplans != null && Number.isFinite(context.maxReplans) && context.maxReplans >= 0)
       ? context.maxReplans
       : MAX_REPLANS
     const effectiveMax = hasNegativeFindings ? maxReplans + 1 : maxReplans
-    if (context.replanCount >= effectiveMax) {
-      return null
+    const ruleBudgetExhausted = context.replanCount >= effectiveMax
+
+    const llmMax = (context.llmMaxReplans != null && Number.isFinite(context.llmMaxReplans) && context.llmMaxReplans >= 0)
+      ? context.llmMaxReplans
+      : LLM_MAX_REPLANS
+    const llmBudgetExhausted = (context.llmReplanCount ?? 0) >= llmMax
+
+    // If BOTH budgets are exhausted, no replanning at all
+    if (ruleBudgetExhausted && llmBudgetExhausted) return null
+
+    // ── Build capability set from rule-based sources (findings, hypotheses) ──
+    const newCapabilities = new Set<Capability>()
+    if (!ruleBudgetExhausted) {
+      const ruleCaps = determineNewCapabilities(context)
+      for (const cap of ruleCaps) newCapabilities.add(cap)
     }
 
-    const newCapabilities = determineNewCapabilities(context)
+    // ── Merge LLM-suggested capabilities (independent budget) ──
+    // The Python MCP worker runs LLM analysis on accumulated findings and returns
+    // suggested next capabilities. These have their own budget so the LLM can
+    // still suggest phases even after rule-based replanning is exhausted.
+    let llmProducedPhases = false
+    if (!llmBudgetExhausted && context.llmSuggestedCapabilities && context.llmSuggestedCapabilities.length > 0) {
+      for (const raw of context.llmSuggestedCapabilities) {
+        const cap = guessCapability(raw)
+        if (cap && !context.executedCapabilities.has(cap)) {
+          newCapabilities.add(cap)
+          llmProducedPhases = true
+        }
+      }
+    }
+
     // Capabilities derived from negative findings are kept even if already
     // executed — the absence of evidence suggests a different approach is needed
     const unhandled = Array.from(newCapabilities).filter((c) => {
@@ -259,6 +296,22 @@ export class WorkflowPlanner {
 
     const allPhases = [...chainPhases, ...regularPhases]
     if (allPhases.length === 0) return null
+
+    // ── Increment budgets independently ──
+    // Each source that produced phases consumes one cycle of its own budget.
+    // This prevents one source from starving the other.
+    // Crucially, when the rule budget is exhausted, LLM-only phases must NOT
+    // increment the rule counter — even though they flow through regularPhases.
+    if (llmProducedPhases) {
+      context.llmReplanCount = (context.llmReplanCount ?? 0) + 1
+    }
+    // Rule counter only increments for actual rule/chain content.
+    // When ruleBudgetExhausted is true, regularPhases came entirely from
+    // LLM suggestions (determineNewCapabilities was skipped).
+    const hasRuleContent = (!ruleBudgetExhausted && regularPhases.length > 0) || chainPhases.length > 0
+    if (hasRuleContent) {
+      context.replanCount++
+    }
 
     return allPhases
   }

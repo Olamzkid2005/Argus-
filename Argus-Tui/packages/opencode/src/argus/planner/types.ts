@@ -123,4 +123,22 @@ export interface PlannerContext {
   attackChains?: AttackChain[]
   /** Chain-derived phase plans to insert as exploitation steps. */
   chainPlans?: ChainPhasePlan[]
+  /**
+   * Capabilities suggested by LLM analysis (from handle_phase_complete).
+   * These are fed into replan() so the planner can apply its own
+   * deduplication, tool selection, and gate evaluation logic.
+   */
+  llmSuggestedCapabilities?: string[]
+  /** LLM reasoning text from handle_phase_complete analysis. */
+  llmReasoning?: string
+  /**
+   * LLM-specific replan counter — independent from rule-based replanCount.
+   * Tracks how many times the LLM has triggered phase insertion.
+   */
+  llmReplanCount?: number
+  /**
+   * Max replan cycles for LLM-driven replanning.
+   * Defaults to MAX_REPLANS (10) if not set.
+   */
+  llmMaxReplans?: number
 }

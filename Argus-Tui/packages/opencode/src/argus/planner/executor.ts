@@ -277,6 +277,29 @@ export class InProcessExecutor implements PhaseExecutor {
     }
   }
 
+  /**
+   * Consume an MCP verification result and cascade confidence promotion.
+   * Called from the workflow runner after receiving verification results
+   * from the finding_verifier MCP tool.
+   *
+   * This promotes findings through the full cascade:
+   *   MEDIUM → HIGH → VERIFIED → CONFIRMED
+   *
+   * Each promote() call advances at most one tier, so the while loop is
+   * required to reach CONFIRMED in a single pass.
+   *
+   * @param finding - The finding to promote. Its confidence is updated in-place.
+   * @returns The promoted confidence level.
+   */
+  consumeVerificationResult(finding: NormalizedFinding): number {
+    let promoted = this.confidenceEngine.promote(finding)
+    while (promoted !== finding.confidence) {
+      finding.confidence = promoted
+      promoted = this.confidenceEngine.promote(finding)
+    }
+    return promoted
+  }
+
   reset(): void {
     this.emitProgress = null
     this.executionOptions = {}
@@ -421,7 +444,10 @@ export class InProcessExecutor implements PhaseExecutor {
       for (const cap of phase.requiredCapabilities) {
         const tools = this.toolRegistry.getToolsByCapability(cap)
         if (tools.length === 0) {
-          errors.push(`No tools available for capability: ${cap}`)
+          // No local tools registered for this capability — it's handled
+          // externally (e.g., post-exploitation → Python Celery pipeline).
+          // Skip gracefully instead of adding an error that would mark the
+          // phase as failed. The phase completes cleanly with zero findings.
           continue
         }
         for (const tool of tools) {
@@ -702,8 +728,11 @@ export class InProcessExecutor implements PhaseExecutor {
         }
       } catch (error) {
         if (error instanceof LLMUnavailableError) {
+          // Gap 9.2: Do NOT call resetCircuitBreaker() here — let failures
+          // accumulate so the circuit opens after the threshold is reached.
+          // The circuit recovers naturally via half-open semantics after the
+          // cooldown expires and a probe succeeds.
           errors.push(`Tool ${next.tool} skipped — LLM ${error.status}${error.retryAfter ? ` (retry in ${error.retryAfter}s)` : ""}`)
-          this.bridge.resetCircuitBreaker()
           await this.bridge.agentObserve({
             session_id: session.session_id,
             tool: next.tool,
@@ -906,7 +935,10 @@ export class InProcessExecutor implements PhaseExecutor {
         break
       } catch (error) {
         if (error instanceof LLMUnavailableError) {
-          this.bridge.resetCircuitBreaker()
+          // Gap 9.2: Do NOT call resetCircuitBreaker() here — let failures
+          // accumulate so the circuit opens after the threshold is reached.
+          // The circuit recovers naturally via half-open semantics after the
+          // cooldown expires and a probe succeeds.
           return { findings, errors: [`Tool ${tool.name} skipped — LLM ${error.status}${error.retryAfter ? ` (retry in ${error.retryAfter}s)` : ""}`], failFast: false }
         }
         // Check for rate-limit errors in catch block too (blocker 45)
