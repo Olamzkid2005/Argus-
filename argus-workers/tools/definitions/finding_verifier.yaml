@@ -1,0 +1,39 @@
+name: finding_verifier
+command: python3
+args:
+  - argus-workers/tools/scripts/run_finding_verifier.py
+description: "Verify findings by re-testing with independent HTTP-based methods — validates SQLi, XSS, and Open Redirect via httpx"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL to verify"
+    required: true
+    flag: "--target"
+  - name: finding_type
+    type: string
+    description: "Type of finding to verify (sqli, xss, open_redirect)"
+    required: true
+    flag: "--finding-type"
+  - name: payload
+    type: string
+    description: "Payload used in the original finding (for sqli and xss verification)"
+    required: false
+    flag: "--payload"
+  - name: endpoint
+    type: string
+    description: "Specific endpoint URL where the finding was detected (defaults to target)"
+    required: false
+    flag: "--endpoint"
+  - name: engagement_id
+    type: string
+    description: "Engagement ID for logging"
+    required: false
+    flag: "--engagement-id"
+capabilities:
+  - finding_verification
+signal_quality: CONFIRMED
+risk_level: low
+priority: 85
+cost: low
+enabled: true
+timeout: 60
