@@ -177,6 +177,43 @@ class FindingBuilder:
             "WP_VULNERABILITY_CORE",
             "WP_VULNERABILITY_PLUGIN",
             "WP_VULNERABILITY_THEME",
+            # Web scanner checks (web_scanner.py)
+            "POST_PARAMETER_REFLECTION",
+            # WebSocket scanner
+            "WEBSOCKET_RATE_LIMITED",
+            # Browser security operator
+            "FILE_UPLOAD_FORM",
+            "MISSING_CSRF_TOKEN",
+            "AUTH_DETECTED",
+            "MISSING_X_FRAME_OPTIONS",
+            "MISSING_X_CONTENT_TYPE_OPTIONS",
+            # Infrastructure security analyzer
+            "INFRA_SERVER_HEADER",
+            "INFRA_VIA_HEADER",
+            "INFRA_INFO_DISCLOSURE",
+            "INFRA_WEB_SERVER",
+            "TF_PUBLIC_ACL",
+            "TF_OPEN_SG",
+            "K8S_PRIVILEGED",
+            "K8S_HOST_NETWORK",
+            "DOCKER_LATEST_TAG",
+            "DOCKER_SECRETS_IN_ENV",
+            # Threat intelligence
+            "DOMAIN_NOT_RESOLVED",
+            "CERTIFICATE",
+            # Orchestration/status events
+            "ORCHESTRATION_PLAN",
+            "PHASE_STARTED",
+            "PHASE_COMPLETE",
+            "VERIFICATION_RECOMMENDED",
+            "ORCHESTRATION_COMPLETE",
+            "VERIFICATION_SUMMARY",
+            "ATTACK_PATHS",
+            "REPORT_GENERATED",
+            "ENGAGEMENT_ANALYTICS",
+            "EVIDENCE_SUMMARY",
+            "CWE_KNOWLEDGE",
+            "OWASP_MAPPING",
         }
     )
 
