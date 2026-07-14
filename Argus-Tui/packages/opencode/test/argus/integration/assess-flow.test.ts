@@ -131,6 +131,7 @@ describe("Assess Flow", () => {
       getTools: async () => [],
       detectDrift: async () => ({ missing_from_registry: [], missing_from_mcp: [], capability_gaps: [] }),
       quickDriftCheck: async () => true,
+      acquireEngagementLock: async () => ({ acquired: false }),
       killChild: () => {},
       restartWorker: async () => {},
       resetCircuitBreaker: () => {},
@@ -176,6 +177,7 @@ describe("Assess Flow", () => {
       getTools: async () => [],
       detectDrift: async () => ({ missing_from_registry: [], missing_from_mcp: [], capability_gaps: [] }),
       quickDriftCheck: async () => true,
+      acquireEngagementLock: async () => ({ acquired: false }),
       killChild: () => {},
       restartWorker: async () => {},
       resetCircuitBreaker: () => {},
@@ -221,6 +223,7 @@ describe("Assess Flow", () => {
       getTools: async () => [],
       detectDrift: async () => ({ missing_from_registry: [], missing_from_mcp: [], capability_gaps: [] }),
       quickDriftCheck: async () => true,
+      acquireEngagementLock: async () => ({ acquired: false }),
       killChild: () => {},
       restartWorker: async () => {},
       resetCircuitBreaker: () => {},
@@ -297,10 +300,15 @@ describe("Assess Flow", () => {
       getTools: async () => [],
       detectDrift: async () => ({ missing_from_registry: [], missing_from_mcp: [], capability_gaps: [] }),
       quickDriftCheck: async () => true,
+      acquireEngagementLock: async () => ({ acquired: false }),
+      agentInit: async () => ({ session_id: "mock-session", hypotheses: [] }),
+      agentNext: async () => ({ tool: null, done: true }),
       killChild: () => {},
       restartWorker: async () => {},
       resetCircuitBreaker: () => {},
       setRegistryTools: () => {},
+      phaseComplete: async () => ({ stop: false, next_capabilities: [], reasoning: "mock", fallback: true }),
+      getAttackGraph: async () => ({ chains: [], chain_plans: [] }),
     } as any
 
     const runner = new WorkflowRunner({
@@ -311,7 +319,10 @@ describe("Assess Flow", () => {
       bridge: mockBridge,
     })
 
-    await runner.run({ target: "https://lifecycle-test.com" })
+    await runner.run({
+      target: "https://lifecycle-test.com",
+      features: { approval_gates: false },
+    })
 
     // Find the engagement that was created
     const engagements = store.listEngagements()

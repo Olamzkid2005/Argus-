@@ -91,6 +91,11 @@ const ROOT_TABLE_SQL = `CREATE TABLE IF NOT EXISTS engagements (
  *  already exists, so this is safe to run on existing databases. */
 const ADD_VERSION_COLUMN_SQL = `ALTER TABLE engagements ADD COLUMN version INTEGER NOT NULL DEFAULT 1`
 
+/** Migration: add storage_version column to existing engagements table.
+ *  Safe to run on existing databases — ALTER TABLE ADD COLUMN is a no-op
+ *  if the column already exists. */
+const ADD_STORAGE_VERSION_COLUMN_SQL = `ALTER TABLE engagements ADD COLUMN storage_version INTEGER NOT NULL DEFAULT ${STORAGE_VERSION_LEGACY}`
+
 /**
  * Per-engagement DB schema — all tables except engagements.
  * These are plain SQL strings passed directly to bun:sqlite's exec()
@@ -725,6 +730,12 @@ export class EngagementStore implements IEngagementStore {
     // Phase 4.4.3: Add version column migration (safe to run on existing DBs)
     try {
       this._rootSqlite.exec(ADD_VERSION_COLUMN_SQL)
+    } catch {
+      // Column already exists — safe to ignore
+    }
+    // Migration: add storage_version column for Engagements created by older schema
+    try {
+      this._rootSqlite.exec(ADD_STORAGE_VERSION_COLUMN_SQL)
     } catch {
       // Column already exists — safe to ignore
     }

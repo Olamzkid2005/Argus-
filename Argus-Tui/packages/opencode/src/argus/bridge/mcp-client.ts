@@ -303,7 +303,6 @@ export class WorkersBridge {
   }
 
   async restartWorker(): Promise<void> {
-    this.supervisor.resetAttempts()
     await this.supervisor.restartWorker()
   }
 

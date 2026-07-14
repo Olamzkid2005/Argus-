@@ -95,11 +95,11 @@ describe("assess handler", () => {
       cmdDefs.assess.handler({ target: "https://example.com" })
         .then(() => "completed")
         .catch(() => "caught"),
-      new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 5000)),
+      new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 15000)),
     ])
     // "completed" = handler ran successfully (MCP worker was available)
     // "caught"    = handler caught an error internally
-    // "timeout"   = handler was still running after 5s (no worker)
+    // "timeout"   = handler was still running after 15s (no worker)
     expect(["completed", "caught", "timeout"]).toContain(result)
   })
 })
@@ -116,10 +116,10 @@ describe("doctor handler", () => {
       // playwright) that may time out in environments without those deps.
       const result = await Promise.race([
         cmdDefs.doctor.handler({}),
-        new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 8000)),
+        new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 30000)),
       ])
       if (result === "timeout") {
-        // Doctor handler didn't finish within 8s — that's acceptable (some checks
+        // Doctor handler didn't finish within 30s — that's acceptable (some checks
         // like MCP worker, Playwright, or DNS may hang). Test passes since no crash.
         return
       }
@@ -261,12 +261,12 @@ describe("tools handler", () => {
       cmdDefs.tools.handler({})
         .then(() => "completed")
         .catch(() => "caught"),
-      new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 8000)),
+      new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 30000)),
     ])
     process.stdout.write = orig
     // "completed" = handler ran successfully (MCP worker available)
     // "caught"    = handler threw but was caught internally
-    // "timeout"   = handler was still trying to connect after 8s
+    // "timeout"   = handler was still trying to connect after 30s
     expect(["completed", "caught", "timeout"]).toContain(result)
   })
 })
