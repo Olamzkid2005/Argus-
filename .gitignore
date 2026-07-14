@@ -81,3 +81,7 @@ redis/*.dll
 # Windows reserved device names — accidental artifacts from piped output
 nul
 NUL
+
+# Accidental version artifacts from pip freeze or similar commands
+=*
+argus-workers/=*
