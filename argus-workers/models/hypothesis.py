@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import NotRequired, TypedDict
+from typing import TypedDict
 
-from tool_core._compat import StrEnum
+from tool_core._compat import NotRequired, StrEnum
 
 
 class HypothesisStatus(StrEnum):

@@ -70,3 +70,12 @@ else:
         ) -> str:
             """Default to lowercase name when using ``auto()``."""
             return name.lower()
+
+
+# ── NotRequired compat (Python 3.11+) ───────────────────────────────────────
+# ``typing.NotRequired`` was added in Python 3.11 (PEP 655). On 3.10 it is
+# available from the ``typing_extensions`` third-party package.
+try:
+    from typing import NotRequired  # type: ignore[no-redef]
+except ImportError:
+    from typing_extensions import NotRequired  # type: ignore[no-redef,assignment]
