@@ -95,7 +95,7 @@ class TestLLMClientCircuitBreaker:
 
     def test_is_available_false_when_circuit_open(self):
         client = LLMClient(api_key="sk-test-key-12345")
-        # Must exceed _circuit_threshold (5) for the circuit to be open
+        # Must exceed _circuit_threshold (default: max_retries + 1 = 3) for the circuit to be open
         client._circuit_failures = 5
         client._circuit_open_until = 9999999999.0
         assert client.is_available() is False

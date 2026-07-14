@@ -936,7 +936,7 @@ Based on these findings, what capabilities should the next phase use?
 
         next_caps = list(phase_to_next_capabilities.get(phase_lower, ["VULN_SCAN"]))
 
-        if has_critical and phase_lower in ("recon", "scan"):
+        if has_critical and phase_lower in ("recon", "scan", "deep_scan", "analyze"):
             # Add exploit/post-exploit capabilities when critical findings exist
             if "EXPLOIT_CHAIN" not in next_caps:
                 next_caps.append("EXPLOIT_CHAIN")

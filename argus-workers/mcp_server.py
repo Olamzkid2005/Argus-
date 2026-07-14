@@ -1259,7 +1259,7 @@ class MCPServer:
 
         next_caps = list(phase_map.get(phase_lower, ["VULN_SCAN"]))
 
-        if has_critical and phase_lower in ("recon", "scan"):
+        if has_critical and phase_lower in ("recon", "scan", "deep_scan", "analyze"):
             if "EXPLOIT_CHAIN" not in next_caps:
                 next_caps.append("EXPLOIT_CHAIN")
             if "POST_EXPLOIT" not in next_caps:
