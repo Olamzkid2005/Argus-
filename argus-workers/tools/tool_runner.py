@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 from datetime import datetime
+from tool_core._compat import UTC
 from pathlib import Path
 
 from cache import CacheMode, cache

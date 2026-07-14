@@ -10,7 +10,7 @@ Covers:
 from __future__ import annotations
 
 from datetime import datetime
-from tool_core._compat import utc
+from tool_core._compat import UTC
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 

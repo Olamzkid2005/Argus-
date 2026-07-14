@@ -5,7 +5,7 @@ feature-flag + timestamp gate.
 
 import os
 from datetime import datetime, timedelta
-from tool_core._compat import utc
+from tool_core._compat import UTC
 from unittest.mock import MagicMock, patch
 
 
@@ -267,7 +267,7 @@ class TestHelperFunctions:
 
         with patch.dict(
             os.environ,
-            {"ARGUS_FF_ROLLOUT_TIMESTAMP": "2026-06-01T00:00:00Z"},
+            {"ARGUS_FF_ROLLOUT_TIMESTAMP": "2026-06-01T00:00:00+00:00"},
         ):
             ts = _get_rollout_timestamp()
             assert ts is not None

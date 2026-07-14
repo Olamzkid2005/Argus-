@@ -21,7 +21,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
-from tool_core._compat import utc
+from tool_core._compat import UTC
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ def _get_rollout_timestamp() -> datetime | None:
     raw = os.environ.get("ARGUS_FF_ROLLOUT_TIMESTAMP")
     if raw:
         try:
-            dt = datetime.fromisoformat(raw)
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=UTC)
             _ROLLOUT_TIMESTAMP_CACHE = dt
