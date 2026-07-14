@@ -6,7 +6,7 @@
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS org_quotas (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
     max_scans INTEGER NOT NULL DEFAULT 10,
     max_storage_mb INTEGER NOT NULL DEFAULT 1024,
@@ -86,7 +86,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS org_rate_limits (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     endpoint_pattern VARCHAR(255) NOT NULL, -- e.g., '/api/engagement/*'
     max_requests INTEGER NOT NULL DEFAULT 100,
@@ -138,7 +138,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS org_resource_usage (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     resource_type VARCHAR(50) NOT NULL, -- 'scan', 'storage', 'api_call'
     amount INTEGER NOT NULL DEFAULT 1,

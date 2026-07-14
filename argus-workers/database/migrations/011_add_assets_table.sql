@@ -2,7 +2,7 @@
 -- Requirements: Asset Inventory page
 
 CREATE TABLE IF NOT EXISTS assets (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     engagement_id UUID REFERENCES engagements(id) ON DELETE SET NULL,
     asset_type VARCHAR(100) NOT NULL,

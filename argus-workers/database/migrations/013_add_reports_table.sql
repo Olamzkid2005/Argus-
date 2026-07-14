@@ -5,7 +5,7 @@
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS reports (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     engagement_id UUID NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
     generated_by VARCHAR(50) NOT NULL DEFAULT 'llm',
     executive_summary TEXT,

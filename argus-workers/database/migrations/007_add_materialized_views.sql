@@ -133,7 +133,7 @@ FOR EACH STATEMENT EXECUTE FUNCTION trigger_refresh_findings_views();
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS query_performance_log (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     query_hash VARCHAR(64) NOT NULL,
     query_text TEXT,
     execution_time_ms INTEGER NOT NULL,
