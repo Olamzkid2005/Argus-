@@ -45,8 +45,9 @@ describe("ToolConfig", () => {
     test("returns default values when no config provided", () => {
       const config = new ToolConfig()
       const cb = config.getCircuitBreakerConfig()
-      expect(cb.maxFailures).toBe(5)
-      expect(cb.cooldownMs).toBe(300_000)
+      // Blocker 22: defaults relaxed from 5/300000 to 8/120000
+      expect(cb.maxFailures).toBe(8)
+      expect(cb.cooldownMs).toBe(120_000)
     })
 
     test("custom circuit breaker values", () => {
@@ -60,7 +61,7 @@ describe("ToolConfig", () => {
       const config = new ToolConfig({ circuit_breaker: { max_failures: 10 } })
       const cb = config.getCircuitBreakerConfig()
       expect(cb.maxFailures).toBe(10)
-      expect(cb.cooldownMs).toBe(300_000)
+      expect(cb.cooldownMs).toBe(120_000)
     })
   })
 })
