@@ -113,11 +113,11 @@ export class FindingAnalyzer {
     )
     // Redact common credential patterns: password=, secret=, api_key=, token=
     text = text.replace(
-      /(?i)(password|passwd|pwd)\s*[:=]\s*["']?[^\s"'&,;){]+["']?/g,
+      /(password|passwd|pwd)\s*[:=]\s*["']?[^\s"'&,;){]+["']?/gi,
       "$1=__REDACTED__"
     )
     text = text.replace(
-      /(?i)(secret|api[_-]?key|api[_-]?token|access[_-]?token)\s*[:=]\s*["']?[^\s"'&,;){]+["']?/g,
+      /(secret|api[_-]?key|api[_-]?token|access[_-]?token)\s*[:=]\s*["']?[^\s"'&,;){]+["']?/gi,
       "$1=__REDACTED__"
     )
     // Redact private keys (RSA, EC, OPENSSH, PGP)
