@@ -6,6 +6,20 @@
 # images with ~400MB of browser binaries and test-only packages.
 #
 # Pinned for reproducible CI runs. Update versions with care.
+#
+# ── Optional browser automation ─────────────────────────────────────────────
+# Playwright is required for browser-based scanning tests
+# (test__browser_scan_worker.py). It is NOT listed here because the pip
+# package alone is not enough — you also need to download browser binaries
+# (~400MB). Install with:
+#
+#   pip install playwright
+#   python -m playwright install chromium      # ~150MB, covers all browser tests
+#   # OR for all browsers:
+#   python -m playwright install               # ~400MB total
+#
+# CI installs playwright + chromium in a dedicated step (see
+# .github/workflows/python-full-suite.yml).
 
 pytest>=8.3.4
 pytest-asyncio>=0.25.2
@@ -19,3 +33,26 @@ psutil>=6.1.0
 
 # Test fixture web apps (flask test apps used in fixture smoke/full matrix tests)
 flask>=3.1.0
+
+# ── Full dependency reference ───────────────────────────────────────────────
+# To run the complete test suite (4,064 tests), install BOTH requirement files
+# plus the optional packages listed below:
+#
+#   1. pip install -r requirements.txt -r requirements-dev.txt
+#   2. pip install playwright
+#   3. python -m playwright install chromium
+#
+# The following packages from requirements.txt are needed for test collection:
+#   - celery[redis]       (task queue — tests import celery_app)
+#   - opentelemetry-*     (tracing — tests import tracing/__init__.py)
+#   - openai, anthropic   (LLM SDKs — ai_explainer, llm_synthesizer)
+#   - cryptography        (settings encryption — test_settings_repository)
+#   - pydantic            (data validation — many modules)
+#   - python-dotenv       (env loading — celery_app, mcp_server)
+#   - defusedxml, jinja2, structlog, beautifulsoup4, lxml, websockets
+#
+# Python 3.10 note: typing.NotRequired is imported via tool_core._compat
+# which falls back to typing_extensions if needed (automatically installed
+# as a dependency of playwright).
+#
+# See docs/PYTHON_VERSION_COMPAT.md for version compatibility details.
