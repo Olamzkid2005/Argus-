@@ -86,9 +86,11 @@ def _patch_ctx(mock_ctx):
 
 
 def _run(mock_task, mock_ctx, eng_state="analyzing", **extra_kw):
+    import tasks.utils as _tu_mod
+
     restore = _patch_ctx(mock_ctx)
     try:
-        with patch("tasks.utils.get_engagement_state", return_value=eng_state):
+        with patch.object(_tu_mod, "get_engagement_state", return_value=eng_state):
             # Directly set send_task on the module-level app to avoid patch wiring issues
             _ta_mod.app.send_task = MagicMock()
             ms = _ta_mod.app.send_task

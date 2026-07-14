@@ -76,7 +76,8 @@ class TestLLMClientInit:
 
     def test_gemini_auto_detect(self):
         """AIzaSy prefix should set provider to generic with Gemini URL."""
-        client = LLMClient(api_key="AIzaSyTestKey12345")
+        with patch.dict(os.environ, {}, clear=True):
+            client = LLMClient(api_key="AIzaSyTestKey12345")
         assert client.provider == "generic"
         assert "generativelanguage.googleapis.com" in client.api_url
         assert client.model == "gemini-2.0-flash"
