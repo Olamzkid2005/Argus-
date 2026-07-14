@@ -43,6 +43,8 @@ mock.module("playwright", () => {
     newPage: async () => mockPage,
     close: async () => {},
     addCookies: async () => {},
+    setExtraHTTPHeaders: async () => {},
+    addInitScript: async () => {},
   }
 
   const mockBrowser = {
@@ -127,7 +129,11 @@ describe("PlaywrightEngine", () => {
     await engine.createContext()
     
     expect(lastCreateContextOptions).not.toBeNull()
-    expect(lastCreateContextOptions!.viewport).toEqual({ width: 1280, height: 720 })
+    // Viewport is randomly selected from a pool and jittered by ±2px
+    expect(lastCreateContextOptions!.viewport).toHaveProperty("width")
+    expect(lastCreateContextOptions!.viewport).toHaveProperty("height")
+    expect(lastCreateContextOptions!.viewport.width).toBeGreaterThan(0)
+    expect(lastCreateContextOptions!.viewport.height).toBeGreaterThan(0)
     expect(lastCreateContextOptions!.locale).toBe("en-US")
     expect(lastCreateContextOptions!.timezoneId).toBe("America/New_York")
     expect(lastCreateContextOptions!.geolocation).toEqual({ latitude: 40.7128, longitude: -74.006 })
@@ -137,7 +143,7 @@ describe("PlaywrightEngine", () => {
     // User-Agent should be a realistic modern Chrome string
     const ua = lastCreateContextOptions!.userAgent as string
     expect(ua).toContain("Mozilla/5.0")
-    expect(ua).toContain("Chrome/125")
+    expect(ua).toMatch(/Chrome\/12[5-9]/)
     expect(ua).not.toContain("HeadlessChrome")
     
     await engine.close()
@@ -153,6 +159,7 @@ describe("PlaywrightEngine", () => {
       userAgent: "Custom-UA/1.0",
       locale: "fr-FR",
       timezoneId: "Europe/Paris",
+      disableViewportJitter: true,  // Disable jitter so exact values are preserved
     })
     
     expect(lastCreateContextOptions!.viewport).toEqual({ width: 1920, height: 1080 })

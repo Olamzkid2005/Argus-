@@ -43,6 +43,7 @@ const mockPage = {
 const mockContext = {
   newPage: mock(async () => mockPage),
   close: mock(async () => {}),
+  setExtraHTTPHeaders: mock(async () => {}),
 }
 
 const mockEngine: any = {
