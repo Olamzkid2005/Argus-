@@ -31,9 +31,9 @@ class TestWorkerHealthMonitor:
         with (
             patch("health_monitor.redis.from_url", return_value=mock_redis),
             patch("os.getpid", return_value=12345),
-            patch("os.uname", create=True) as mock_uname,
+            patch("health_monitor._platform.uname") as mock_uname,
         ):
-            mock_uname.return_value = Mock(nodename="testhost")
+            mock_uname.return_value = Mock(node="testhost")
             m = WorkerHealthMonitor(worker_id="worker-1", redis_url="redis://mock:6379")
             m._redis = mock_redis
             yield m
@@ -327,8 +327,8 @@ class TestSingleton:
         old = hm_mod._health_monitor
         hm_mod._health_monitor = None
         try:
-            with patch("os.uname", create=True) as mock_uname:
-                mock_uname.return_value = Mock(nodename="testhost")
+            with patch("health_monitor._platform.uname") as mock_uname:
+                mock_uname.return_value = Mock(node="testhost")
                 hm1 = get_health_monitor()
                 hm2 = get_health_monitor()
                 assert hm1 is hm2
@@ -342,8 +342,8 @@ class TestSingleton:
         old = hm_mod._health_monitor
         hm_mod._health_monitor = None
         try:
-            with patch("os.uname", create=True) as mock_uname:
-                mock_uname.return_value = Mock(nodename="testhost")
+            with patch("health_monitor._platform.uname") as mock_uname:
+                mock_uname.return_value = Mock(node="testhost")
                 hm = get_health_monitor()
                 assert isinstance(hm, WorkerHealthMonitor)
         finally:
