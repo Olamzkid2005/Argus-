@@ -94,7 +94,7 @@ class WorkerHealthMonitor:
                 "memory_percent": process.memory_percent(),
                 "memory_mb": process.memory_info().rss / (1024 * 1024),
                 "open_files": len(process.open_files()),
-                "connections": len(process.connections()),
+                "connections": len(process.connections(kind="all")),
             }
         except Exception as e:
             logger.warning("Failed to get system metrics: %s", e)

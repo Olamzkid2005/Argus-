@@ -8,6 +8,8 @@ Restored from M-05 dead code removal — still used by tests.
 import json
 import logging
 from datetime import datetime
+
+from tool_core._compat import utc
 from typing import Any
 
 import redis as _redis_module
@@ -48,8 +50,8 @@ class ProgressTracker:
             "current_step": 0,
             "percent_complete": 0,
             "current_activity": "Initializing...",
-            "started_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            "started_at": datetime.now(utc).isoformat(),
+            "updated_at": datetime.now(utc).isoformat(),
         }
         self.redis.setex(f"task:progress:{task_id}", PROGRESS_TTL, json.dumps(data))
 
@@ -80,7 +82,7 @@ class ProgressTracker:
                 data["current_activity"] = activity
             if metadata is not None:
                 data.setdefault("metadata", {}).update(metadata)
-            data["updated_at"] = datetime.utcnow().isoformat()
+            data["updated_at"] = datetime.now(utc).isoformat()
             self.redis.setex(f"task:progress:{task_id}", PROGRESS_TTL, json.dumps(data))
         except Exception:
             logger.exception("Failed to update progress for task %s", task_id)
@@ -97,10 +99,10 @@ class ProgressTracker:
             data["current_step"] = data.get("total_steps", 100)
             data["percent_complete"] = 100
             data["current_activity"] = "Complete"
-            data["completed_at"] = datetime.utcnow().isoformat()
+            data["completed_at"] = datetime.now(utc).isoformat()
             if result:
                 data["result"] = result
-            data["updated_at"] = datetime.utcnow().isoformat()
+            data["updated_at"] = datetime.now(utc).isoformat()
             self.redis.setex(f"task:progress:{task_id}", PROGRESS_TTL, json.dumps(data))
         except Exception:
             logger.exception("Failed to complete task %s", task_id)
@@ -115,7 +117,7 @@ class ProgressTracker:
             data = json.loads(raw)
             data["status"] = "failed"
             data["error_message"] = error_message
-            data["updated_at"] = datetime.utcnow().isoformat()
+            data["updated_at"] = datetime.now(utc).isoformat()
             self.redis.setex(f"task:progress:{task_id}", PROGRESS_TTL, json.dumps(data))
         except Exception:
             logger.exception("Failed to fail task %s", task_id)
@@ -128,7 +130,7 @@ class ProgressTracker:
                 return False
             data = json.loads(raw)
             data["status"] = "cancelled"
-            data["updated_at"] = datetime.utcnow().isoformat()
+            data["updated_at"] = datetime.now(utc).isoformat()
             self.redis.setex(f"task:progress:{task_id}", PROGRESS_TTL, json.dumps(data))
             return True
         except Exception:
