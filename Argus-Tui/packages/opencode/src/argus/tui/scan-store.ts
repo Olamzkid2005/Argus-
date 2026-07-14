@@ -237,4 +237,7 @@ export async function handleProgressEvent(event: ProgressEvent, engagementId?: s
     }
   }).catch(() => {})
   _eventQueues.set(targetId, next)
+  // Await the chain so callers can await handleProgressEvent and be sure
+  // the event has been processed before continuing.
+  await next
 }

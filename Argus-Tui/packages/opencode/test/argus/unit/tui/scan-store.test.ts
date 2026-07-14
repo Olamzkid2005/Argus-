@@ -244,77 +244,77 @@ describe("scan-store", () => {
   })
 
   describe("handleProgressEvent", () => {
-    it("phase_start adds a phase", () => {
+    it("phase_start adds a phase", async () => {
       initScan("https://test.com", "eng-1")
-      handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 3, phaseIndex: 0 })
+      await handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 3, phaseIndex: 0 })
       const state = getScanState()
       expect(state.phases).toHaveLength(1)
       expect(state.phases[0].name).toBe("recon")
     })
 
-    it("phase_complete marks phase as completed", () => {
+    it("phase_complete marks phase as completed", async () => {
       initScan("https://test.com", "eng-1")
-      handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 3, phaseIndex: 0 })
-      handleProgressEvent({ type: "phase_complete", phaseId: "p1", name: "recon", findings: 5, status: "COMPLETED" })
+      await handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 3, phaseIndex: 0 })
+      await handleProgressEvent({ type: "phase_complete", phaseId: "p1", name: "recon", findings: 5, status: "COMPLETED" })
       expect(getScanState().phases[0].status).toBe("completed")
       expect(getScanState().phases[0].findings).toBe(5)
     })
 
-    it("phase_complete with PARTIAL status marks phase as partial", () => {
+    it("phase_complete with PARTIAL status marks phase as partial", async () => {
       initScan("https://test.com", "eng-1")
-      handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 3, phaseIndex: 0 })
-      handleProgressEvent({ type: "phase_complete", phaseId: "p1", name: "recon", findings: 3, status: "PARTIAL" })
+      await handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 3, phaseIndex: 0 })
+      await handleProgressEvent({ type: "phase_complete", phaseId: "p1", name: "recon", findings: 3, status: "PARTIAL" })
       expect(getScanState().phases[0].status).toBe("partial")
     })
 
-    it("phase_error marks phase as failed with error", () => {
+    it("phase_error marks phase as failed with error", async () => {
       initScan("https://test.com", "eng-1")
-      handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 3, phaseIndex: 0 })
-      handleProgressEvent({ type: "phase_error", phaseId: "p1", name: "recon", error: "connection failed" })
+      await handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 3, phaseIndex: 0 })
+      await handleProgressEvent({ type: "phase_error", phaseId: "p1", name: "recon", error: "connection failed" })
       expect(getScanState().phases[0].status).toBe("failed")
       expect(getScanState().phases[0].errors[0]).toBe("connection failed")
     })
 
-    it("finding event appends log entry", () => {
+    it("finding event appends log entry", async () => {
       initScan("https://test.com", "eng-1")
-      handleProgressEvent({ type: "finding", phaseId: "p1", severity: "HIGH", title: "SQL injection" })
+      await handleProgressEvent({ type: "finding", phaseId: "p1", severity: "HIGH", title: "SQL injection" })
       expect(getScanState().log[0]).toContain("SQL injection")
     })
 
-    it("scan_complete sets status to completed", () => {
+    it("scan_complete sets status to completed", async () => {
       initScan("https://test.com", "eng-1")
-      handleProgressEvent({ type: "scan_complete", totalFindings: 10 })
+      await handleProgressEvent({ type: "scan_complete", totalFindings: 10 })
       expect(getScanState().status).toBe("completed")
     })
 
-    it("analysis_progress updates analysis counters", () => {
+    it("analysis_progress updates analysis counters", async () => {
       initScan("https://test.com", "eng-1")
-      handleProgressEvent({ type: "analysis_progress", current: 3, total: 10 })
+      await handleProgressEvent({ type: "analysis_progress", current: 3, total: 10 })
       expect(getScanState().analysisCurrent).toBe(3)
       expect(getScanState().analysisTotal).toBe(10)
     })
 
-    it("tool_start and tool_complete append log entries", () => {
+    it("tool_start and tool_complete append log entries", async () => {
       initScan("https://test.com", "eng-1")
-      handleProgressEvent({ type: "tool_start", phaseId: "p1", tool: "nuclei" })
-      handleProgressEvent({ type: "tool_complete", phaseId: "p1", tool: "nuclei", findings: 5 })
+      await handleProgressEvent({ type: "tool_start", phaseId: "p1", tool: "nuclei" })
+      await handleProgressEvent({ type: "tool_complete", phaseId: "p1", tool: "nuclei", findings: 5 })
       const log = getScanState().log
       expect(log[0]).toContain("nuclei")
       expect(log[1]).toContain("nuclei")
     })
 
-    it("error_hint adds error hint and log entry", () => {
+    it("error_hint adds error hint and log entry", async () => {
       initScan("https://test.com", "eng-1")
-      handleProgressEvent({ type: "error_hint", tool: "nuclei", summary: "rate limited", detail: "API limit reached", docsUrl: "https://docs.example.com" })
+      await handleProgressEvent({ type: "error_hint", tool: "nuclei", summary: "rate limited", detail: "API limit reached", docsUrl: "https://docs.example.com" })
       expect(getScanState().errorHints).toHaveLength(1)
       expect(getScanState().errorHints[0].tool).toBe("nuclei")
       expect(getScanState().errorHints[0].summary).toBe("rate limited")
       expect(getScanState().log[0]).toContain("rate limited")
     })
 
-    it("handles progress events with engagementId scoping", () => {
+    it("handles progress events with engagementId scoping", async () => {
       initScan("https://a.com", "eng-a")
-      handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 1, phaseIndex: 0 }, "eng-a")
+      await handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 1, phaseIndex: 0 }, "eng-a")
       expect(getScanState().engagementId).toBe("eng-a")
       expect(getScanState().phases).toHaveLength(1)
     })
