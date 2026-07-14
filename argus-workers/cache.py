@@ -180,7 +180,8 @@ class WorkerCache:
                 # No-expiry sentinel — use SET instead of SETEX
                 client.set(self._key(key), serialized)
             else:
-                client.setex(self._key(key), ttl, serialized)
+                # Use set() with ex=ttl instead of setex() — redis 5+ deprecates setex
+                client.set(self._key(key), serialized, ex=ttl)
             return True
         except Exception as e:
             logger.error("Cache set error: %s", e)

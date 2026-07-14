@@ -62,8 +62,8 @@ class TestWorkerCacheTTLSentinel:
         mock_client.setex.assert_not_called()
 
     @patch("cache._get_redis")
-    def test_set_with_positive_ttl_uses_setex(self, mock_get_redis):
-        """Positive TTL uses Redis SETEX."""
+    def test_set_with_positive_ttl_uses_set_with_ex(self, mock_get_redis):
+        """Positive TTL uses Redis SET with ex= parameter."""
         mock_client = MagicMock()
         mock_get_redis.return_value = mock_client
         wc = WorkerCache(ttl=300)
@@ -71,8 +71,12 @@ class TestWorkerCacheTTLSentinel:
         result = wc.set("test_key", {"data": "ephemeral"}, ttl=300)
 
         assert result is True
-        mock_client.setex.assert_called_once()
-        mock_client.set.assert_not_called()
+        # setex() was deprecated in redis-py 5+; set(key, value, ex=ttl) is the replacement
+        mock_client.set.assert_called_once()
+        # Verify the ex=ttl kwarg was passed
+        call_kwargs = mock_client.set.call_args.kwargs
+        assert "ex" in call_kwargs
+        assert call_kwargs["ex"] == 300
 
 
 class TestWorkerCacheMetrics:

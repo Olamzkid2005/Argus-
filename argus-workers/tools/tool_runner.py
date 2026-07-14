@@ -181,15 +181,92 @@ class ToolRunner:
         except Exception:
             return None
 
+    # File extensions that appear in tool args but are NOT valid TLDs.
+    # Used by _extract_target to filter out non-target args like .nse scripts,
+    # .txt wordlists, .json configs, .yaml templates, etc.
+    _NON_TARGET_EXTENSIONS: frozenset = frozenset({
+        ".nse", ".txt", ".json", ".yaml", ".yml", ".xml",
+        ".csv", ".py", ".js", ".ts", ".md", ".conf", ".cfg",
+        ".toml", ".ini", ".php", ".html", ".css", ".pdf",
+        ".png", ".jpg", ".gif", ".svg", ".zip", ".tar.gz",
+        ".gz", ".bz2", ".xz", ".so", ".dll", ".exe",
+        ".pem", ".key", ".crt", ".cert",
+        ".nmap", ".gnmap",
+    })
+
+    # Flags that indicate the next argument is a target URL/hostname.
+    # Used by _extract_target to extract targets even when they don't
+    # contain dots or look like URLs (e.g. "-u localhost").
+    _TARGET_FLAGS: frozenset = frozenset({
+        "-u", "--url",
+        "-host",
+        "--target",
+    })
+
     def _extract_target(self, args: list[str]) -> str | None:
-        """Extract a target URL/hostname from tool arguments."""
+        """
+        Extract a target URL/hostname from tool arguments.
+
+        Uses a priority-based approach:
+        1. ``http://`` or ``https://`` URLs are always treated as targets
+        2. Flag-aware: values following known target flags (``-u``,
+           ``--url``, ``-host``, ``--target``) are extracted regardless
+           of their format — handles ``-u localhost``, ``--url=example.com``
+        3. Positional args (not flags) containing dots are inspected:
+           - Filtered out if they have known non-TLD file extensions
+             (``.nse``, ``.txt``, ``.json``, etc.)
+           - Filtered out if they contain path separators (``/``, ``\ ``)
+           - Filtered out if they are a bare ``.`` (current directory)
+           - Remaining args with dots are treated as hostnames/targets
+
+        Returns:
+            The first recognised target string, or ``None`` if no target found.
+        """
+        # First pass: URLs are always targets
         for arg in args:
             lowered = arg.lower()
             if lowered.startswith(("http://", "https://")):
                 return arg
-            if "." in arg and not arg.startswith("-"):
-                # Likely a hostname/domain; prefer ones with a slash or known TLD
-                return arg
+
+        # Second pass: flag-aware — extract values after known target flags
+        i = 0
+        while i < len(args):
+            arg = args[i]
+            # Handle --flag=value combined format
+            if "=" in arg:
+                flag_part = arg.split("=", 1)[0]
+                if flag_part in self._TARGET_FLAGS:
+                    value = arg.split("=", 1)[1]
+                    if value:
+                        return value
+            # Handle -flag value separate format
+            elif arg in self._TARGET_FLAGS:
+                if i + 1 < len(args) and not args[i + 1].startswith("-"):
+                    return args[i + 1]
+            i += 1
+
+        # Third pass: look for hostnames/IPs, filtering out non-target patterns
+        for arg in args:
+            if arg.startswith("-"):
+                continue  # Skip flags/options
+            if "." not in arg:
+                continue  # Must contain a dot (hostname, IP, or file ref)
+            if arg == ".":
+                continue  # Bare "." is a current-directory reference
+
+            lowered = arg.lower()
+
+            # Filter out values that are clearly file paths (contain path separators)
+            if "/" in arg or "\\" in arg:
+                continue
+
+            # Filter out values with known non-TLD file extensions
+            if any(lowered.endswith(ext) for ext in self._NON_TARGET_EXTENSIONS):
+                continue
+
+            # Likely a hostname/domain or IP address
+            return arg
+
         return None
 
     def is_dangerous(self, tool: str, args: list[str]) -> bool:
@@ -456,6 +533,28 @@ class ToolRunner:
             SecurityError: If dangerous payload detected
             subprocess.TimeoutExpired: If execution times out
         """
+        # Scope validation — keep LLM-selected tools within authorized boundaries
+        # MUST run before cache check to prevent stale-cached results from
+        # bypassing scope enforcement when the authorized scope changes.
+        target = self._extract_target(args)
+        if target:
+            from tools.scope_validator import ScopeValidator, ScopeViolationError
+
+            scope = self._load_authorized_scope()
+            validator = ScopeValidator(self.engagement_id or "", scope)
+            try:
+                validator.validate_target(target)
+            except ScopeViolationError as e:
+                result = UnifiedToolResult(
+                    tool_name=tool,
+                    stdout="",
+                    stderr=str(e),
+                    exit_code=1,
+                    status=ToolStatus.SCOPE_ERROR,
+                )
+                result.mark_finished()
+                return result
+
         # Cache check — skip on NO_CACHE and REFRESH modes
         import hashlib
 
@@ -478,27 +577,6 @@ class ToolRunner:
                 tool,
                 cache_mode.value,
             )
-
-        # Scope validation — keep LLM-selected tools within authorized boundaries
-        target = self._extract_target(args)
-        if target:
-            from tools.scope_validator import ScopeValidator, ScopeViolationError
-
-            scope = self._load_authorized_scope()
-            validator = ScopeValidator(self.engagement_id or "", scope)
-            try:
-                validator.validate_target(target)
-            except ScopeViolationError as e:
-                result = UnifiedToolResult(
-                    tool_name=tool,
-                    stdout="",
-                    stderr=str(e),
-                    exit_code=1,
-                    status=ToolStatus.SCOPE_ERROR,
-                )
-                result.mark_finished()
-                return result
-
         # Safety check
         if self.is_dangerous(tool, args):
             raise SecurityError(f"Blocked dangerous payload: {tool} {' '.join(args)}")
