@@ -32,9 +32,10 @@ export class CrossToolRateLimiter {
 
   constructor() {
     const rawLimit = process.env.ARGUS_CROSS_TOOL_RATE_LIMIT
-    this.maxRequests = rawLimit ? (Number(rawLimit) || 50) : 50
-    const rawWindow = process.env.ARGUS_CROSS_TOOL_RATE_WINDOW_MS
-    this.windowMs = rawWindow ? (Number(rawWindow) || 1000) : 1000
+    const parsedLimit = rawLimit ? Number(rawLimit) : NaN
+    this.maxRequests = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 50
+    const parsedWindow = Number(process.env.ARGUS_CROSS_TOOL_RATE_WINDOW_MS)
+    this.windowMs = Number.isFinite(parsedWindow) && parsedWindow > 0 ? parsedWindow : 1000
   }
 
   /** Acquire a slot for the given target. Returns delay needed (ms), or 0 if allowed. */
@@ -87,9 +88,10 @@ export class ThrottleTracker {
 
   constructor() {
     const rawBase = process.env.ARGUS_THROTTLE_BASE_DELAY_MS
-    this.baseDelayMs = rawBase ? (Number(rawBase) || 2000) : 2000
-    const rawMax = process.env.ARGUS_THROTTLE_MAX_DELAY_MS
-    this.maxDelayMs = rawMax ? (Number(rawMax) || 60000) : 60000
+    const parsedBase = Number(rawBase)
+    this.baseDelayMs = Number.isFinite(parsedBase) && parsedBase > 0 ? parsedBase : 2000
+    const parsedMax = Number(process.env.ARGUS_THROTTLE_MAX_DELAY_MS)
+    this.maxDelayMs = Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : 60000
   }
 
   /** Returns true if the target is currently throttled. */
@@ -121,7 +123,7 @@ export class ThrottleTracker {
       || /\b503\b/.test(lower)
       || /rate.?limit/i.test(lower)
       || /too many requests/i.test(lower)
-      || /retry after/i.test(lower)
+      || /retry[\s-]after/i.test(lower)
       || /throttl/i.test(lower)
   }
 

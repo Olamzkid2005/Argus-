@@ -847,7 +847,8 @@ describe("InProcessExecutor", () => {
         mockWorkflowRegistry as any,
       )
       exec.loadGates("test")
-      ;(exec as any).assessmentStartTime = Date.now() - (2 * 3600 * 1000)
+      // Set assessmentStartTime to exceed maxAssessmentDurationMs (must be >, not >=)
+      ;(exec as any).assessmentStartTime = Date.now() - (2 * 3600 * 1000 + 1)
       const result = await exec.execute(makePhase())
       expect(result.status).toBe("failed")
       expect(result.errors[0]).toContain("global circuit breaker tripped")
@@ -911,8 +912,12 @@ describe("InProcessExecutor", () => {
         mockWorkflowRegistry as any,
       )
       exec.loadGates("test")
-      ;(exec as any).phaseDeadline = Date.now() - 1  // already expired
-      const result = await exec.execute(makePhase())
+      // Execute once to set up the executor state, then override maxPhaseDurationMs
+      // so the phaseDeadline computed on the next execute call is already expired.
+      await exec.execute(makePhase({ phaseId: "phase-setup" }))
+      ;(exec as any).maxPhaseDurationMs = -1  // forces phaseDeadline = Date.now() - 1
+      ;(exec as any).assessmentStartTime = Date.now() - 100  // set but not expired for global breaker
+      const result = await exec.execute(makePhase({ phaseId: "phase-timeout-test" }))
       expect(result.errors.some(e => e.includes("timeout"))).toBe(true)
     })
   })
@@ -1111,7 +1116,7 @@ describe("InProcessExecutor", () => {
       exec.loadGates("test")
       exec.setScopeConfig({ mode: "allowlist", allowed_targets: ["internal.com"] })
       const result = await exec.execute(makePhase({ target: "https://evil.com/api" }))
-      expect(result.status).toBe("completed")  // No findings is valid completion
+      expect(result.status).toBe("failed")  // All tools skipped = phase failed
       expect(result.errors.some(e => e.includes("out of scope"))).toBe(true)
       expect(result.findings).toHaveLength(0)
     })

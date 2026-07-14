@@ -227,7 +227,7 @@ describe("enhanceReportWithAnalysis", () => {
       // 6. console.warn was called for the failure
       expect(
         warnCalls.some(
-          (args) => args.some((a) => typeof a === "string" && a.includes("Analysis failed"))
+          (args) => args.some((a) => typeof a === "string" && a.toLowerCase().includes("analysis failed"))
         )
       ).toBe(true)
 
