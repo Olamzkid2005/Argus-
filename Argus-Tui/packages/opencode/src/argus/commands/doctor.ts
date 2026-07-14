@@ -511,7 +511,7 @@ export function loadToolVersionChecks(definitionsPath?: string): Map<string, Too
   const map = new Map<string, ToolVersionDef>()
   try {
     const registry = new ToolRegistry()
-    const defsPath = definitionsPath ?? join(PROJECT_ROOT, "packages/opencode/src/argus/workflows/tool-definitions.yaml")
+    const defsPath = definitionsPath ?? join(PROJECT_ROOT, "Argus-Tui/packages/opencode/src/argus/workflows/tool-definitions.yaml")
     registry.load(defsPath)
     for (const tool of registry.listTools()) {
       if (tool.version_cmd) {
