@@ -752,6 +752,24 @@ class ToolRunner:
         """Stream tool output line by line, calling on_line() for each."""
         tool_path = self._resolve_tool_path(tool)
 
+        # Scope validation — mirror run()'s scope guard
+        target = self._extract_target(args)
+        if target:
+            from tools.scope_validator import ScopeValidator, ScopeViolationError
+
+            scope = self._load_authorized_scope()
+            validator = ScopeValidator(self.engagement_id or "", scope)
+            try:
+                validator.validate_target(target)
+            except ScopeViolationError as e:
+                return UnifiedToolResult(
+                    tool_name=tool,
+                    stdout="",
+                    stderr=str(e),
+                    exit_code=1,
+                    status=ToolStatus.SCOPE_ERROR,
+                )
+
         # Safety check — mirror run()'s is_dangerous guard
         if self.is_dangerous(tool, args):
             raise SecurityError(f"Blocked dangerous payload: {tool} {' '.join(args)}")
