@@ -62,16 +62,7 @@ describe("WorkerSupervisor", () => {
       expect(supervisor.attemptsRemaining()).toBe(3)
     })
 
-    test("throws after maxRestarts (3) when connect fails", async () => {
-      const { supervisor } = makeDefaultSupervisor()
-      // Simulate connection failure by making connect throw
-      let attemptCount = 0
-      // Manually set attempts to 2 so next call reaches maxRestarts
-      for (let i = 0; i < 3; i++) {
-        await supervisor.restartWorker()
-      }
-      // After 3 successful restarts, attempts is 0 each time
-      // To trigger the throw, we make connect fail repeatedly
+    test("sets degraded after maxRestarts (3) when connect fails", async () => {
       const bridge = {
         restartWorker: async () => {},
         killChild: () => {},
@@ -79,10 +70,18 @@ describe("WorkerSupervisor", () => {
         isHealthy: async () => true,
       }
       const failingSupervisor = new WorkerSupervisor(bridge, 0)
+
+      // First 3 calls: attempts < maxRestarts, connect() throws
       await expect(failingSupervisor.restartWorker()).rejects.toThrow()
+      expect(failingSupervisor.degraded).toBe(false)
       await expect(failingSupervisor.restartWorker()).rejects.toThrow()
+      expect(failingSupervisor.degraded).toBe(false)
       await expect(failingSupervisor.restartWorker()).rejects.toThrow()
-      await expect(failingSupervisor.restartWorker()).rejects.toThrow(/too many times/)
+      expect(failingSupervisor.degraded).toBe(false)
+
+      // 4th call: attempts(3) >= maxRestarts(3) → sets degraded, returns without error
+      await failingSupervisor.restartWorker()
+      expect(failingSupervisor.degraded).toBe(true)
     })
   })
 
