@@ -189,6 +189,7 @@ export class WorkersBridge {
 
   private cleanup(): void {
     this._stopHealthProbes()
+    this.supervisor.cancelRecovery()
     this.disableSignalForwarding()
     if (this.rl) {
       this.rl.removeAllListeners()
@@ -344,13 +345,20 @@ export class WorkersBridge {
 
   /** Start periodic health probes every 30s while connected (blocker 15).
    *  If probeHealth() returns false, logs a warning and kicks off worker
-   *  restart via the supervisor. Uses unref() so the timer doesn't keep
-   *  the process alive. */
+   *  restart via the supervisor. The supervisor handles its own recovery
+   *  from degraded mode, so this probe only triggers restarts when the
+   *  worker is NOT already in degraded mode. Uses unref() so the timer
+   *  doesn't keep the process alive. */
   private _startHealthProbes(): void {
     this._stopHealthProbes()
     this._healthProbeTimer = setInterval(async () => {
       const healthy = await this.probeHealth()
       if (!healthy) {
+        if (this.supervisor.degraded) {
+          // Supervisor is handling recovery autonomously via _scheduleRecovery
+          // after the degraded cooldown. No need to trigger restarts from here.
+          return
+        }
         console.warn(`[MCP] Health probe failed — worker unresponsive, initiating restart`)
         this.setLLMStatus("UNAVAILABLE")
         if (!this._disconnecting) {
@@ -733,6 +741,8 @@ export class WorkersBridge {
 
   async disconnect(): Promise<void> {
     this._disconnecting = true
+    this.supervisor.cancelRecovery()
+    this.supervisor.resetAttempts()
     this.killChild()
     this.cleanup()
   }
