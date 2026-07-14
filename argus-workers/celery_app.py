@@ -490,6 +490,14 @@ class BaseTask(app.Task):  # type: ignore[name-defined]
 
     def __call__(self, *args, **kwargs):
         """Wrap task execution with shutdown checking and lazy migration"""
+        # Reset the _failed_transition_done flag at the start of each task
+        # invocation. This flag is set by task_context() when a failure
+        # transition is handled. Without this reset, a previous invocation's
+        # flag leak would cause the next invocation to skip its failure
+        # transition, leaving engagements stuck in non-terminal states.
+        # See: autonomous-red-team-readiness-review.md Part 3 §3
+        self._failed_transition_done = False
+
         # Gap 11.1: Run migrations on first task execution (not at module import)
         if not _migrations_applied_this_process:
             try:
