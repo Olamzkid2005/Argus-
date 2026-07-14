@@ -242,9 +242,10 @@ class WebSocketEventPublisher:
     def _add_to_batch(self, event: dict[str, Any]) -> None:
         engagement_id = event.get("engagement_id")
         safe_id: str = engagement_id or ""
-        if safe_id not in self._batch_buffer:
-            self._batch_buffer[safe_id] = []
-        self._batch_buffer[safe_id].append(event)
+        with self._flush_lock:
+            if safe_id not in self._batch_buffer:
+                self._batch_buffer[safe_id] = []
+            self._batch_buffer[safe_id].append(event)
         self._schedule_auto_flush()
 
     def _schedule_auto_flush(self) -> None:
@@ -259,10 +260,9 @@ class WebSocketEventPublisher:
             self._flush_timer.start()
 
     def flush_batches(self, min_severity: str | None = None) -> None:
-        if not self._batch_buffer:
-            return
-
         with self._flush_lock:
+            if not self._batch_buffer:
+                return
             buffer = self._batch_buffer
             self._batch_buffer = {}
 
@@ -329,7 +329,10 @@ class WebSocketEventPublisher:
         if use_batch:
             self._add_to_batch(event)
             # Auto-flush if batch is large enough
-            if len(self._batch_buffer.get(engagement_id, [])) >= self.BATCH_SIZE:
+            # Snapshot the buffer under the lock to avoid TOCTOU (C-v4-05)
+            with self._flush_lock:
+                batch_size = len(self._batch_buffer.get(engagement_id, []))
+            if batch_size >= self.BATCH_SIZE:
                 self.flush_batches()
         else:
             self._publish_event(event)
