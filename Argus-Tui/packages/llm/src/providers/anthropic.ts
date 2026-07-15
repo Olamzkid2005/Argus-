@@ -32,4 +32,8 @@ export const configure = (input: Config = {}) => {
 }
 
 export const provider = configure()
+
+// Named alias for importing as `import { anthropic } from "@opencode-ai/llm/providers/anthropic"`
+export { provider as anthropic }
+
 export const model = provider.model
