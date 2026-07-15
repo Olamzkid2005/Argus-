@@ -16,7 +16,7 @@ evidence:
 
 storage:
   encryption:
-    enabled: false  # Encrypt engagement databases at rest (requires: argus encryption init)
+    enabled: true  # Encrypt engagement databases at rest (key auto-generated on first use if missing)
 
 security:
   allowed_git_hosts: []

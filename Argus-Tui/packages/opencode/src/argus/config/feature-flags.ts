@@ -30,7 +30,7 @@ export enum Feature {
 const DEFAULT_FEATURES: Record<Feature, boolean> = {
   [Feature.WORKFLOW_REGISTRY]: true,
   [Feature.ENGAGEMENT_STORE]: true,
-  [Feature.DETERMINISTIC_FALLBACK]: false,       // Opt-in (was true pre-v5)
+  [Feature.DETERMINISTIC_FALLBACK]: true,        // Auto-fallback when no LLM key available
   [Feature.APPROVAL_GATES]: true,
   [Feature.LLM_FINDING_ANALYSIS]: true,
   [Feature.ENCRYPTION_AT_REST]: false,

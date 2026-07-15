@@ -35,11 +35,11 @@ const EvidenceConfigSchema = z.object({
 const FeaturesConfigSchema = z.record(z.string(), z.boolean())
 
 const EncryptionConfigSchema = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
 })
 
 const StorageConfigSchema = z.object({
-  encryption: EncryptionConfigSchema.default({ enabled: false }),
+  encryption: EncryptionConfigSchema.default({ enabled: true }),
 })
 
 const ScopeConfigSchema = z.object({

@@ -255,13 +255,17 @@ export class EngagementStore implements IEngagementStore {
    * When set to true, all per-engagement databases will be encrypted at rest
    * using AES-256-GCM. Existing plaintext DBs are migrated on first access.
    *
+   * Defaults to true. Controlled by `storage.encryption.enabled` in config.
+   * When enabled and no master key exists, one is auto-generated on first use
+   * via EncryptionManager.ensureKeySync().
+   *
    * Set this from the CLI handler after checking `storage.encryption.enabled`
    * in config and confirming the master key is loaded.
    *
    * This is automatically synced from config on construction (project + user
    * config). You can also call syncEncryptionFromConfig() manually.
    */
-  static encryptionEnabled = false
+  static encryptionEnabled = true
 
   /**
    * Sync the encryptionEnabled flag from user and project config files.
@@ -288,7 +292,12 @@ export class EngagementStore implements IEngagementStore {
     } else if (userEnabled !== undefined) {
       EngagementStore.encryptionEnabled = userEnabled
     }
-    // If neither is set, remains at default (false)
+    // If neither is set, remains at default (true)
+
+    // Auto-initialize master key when encryption is enabled
+    if (EngagementStore.encryptionEnabled) {
+      EncryptionManager.ensureKeySync()
+    }
   }
 
   private static finalizer = new FinalizationRegistry((sqlite: { close(): void }) => {
