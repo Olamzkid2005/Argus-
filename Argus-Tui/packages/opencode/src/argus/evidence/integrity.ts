@@ -17,15 +17,22 @@ function hashFile(filePath: string): Promise<string> {
 
 /**
  * Validate that an artifact path is safe — does not escape the package directory.
- * Rejects paths containing "..", absolute paths, and paths with null bytes.
+ *
+ * On Windows, path.join() produces paths with backslash (\\) separators,
+ * which are valid and safe. The check normalizes backslashes to forward slashes
+ * so that path traversal detection works consistently across platforms.
+ *
+ * Rejects paths containing "..", absolute paths, null bytes, or forbidden
+ * Windows filename characters.
  */
 function isValidArtifactPath(artifactPath: string): boolean {
   if (!artifactPath || typeof artifactPath !== "string") return false
-  if (artifactPath.includes("..")) return false
-  if (artifactPath.startsWith("/")) return false
-  if (artifactPath.includes("\\")) return false
-  if (artifactPath.includes("\0")) return false
-  if (/[<>"|?*]/.test(artifactPath)) return false
+  // Normalize backslashes to forward slashes for consistent path traversal checks
+  const normalized = artifactPath.replace(/\\/g, "/")
+  if (normalized.includes("..")) return false
+  if (normalized.startsWith("/")) return false
+  if (normalized.includes("\0")) return false
+  if (/[<>"|?*]/.test(normalized)) return false
   return true
 }
 

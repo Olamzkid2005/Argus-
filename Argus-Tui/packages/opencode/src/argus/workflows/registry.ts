@@ -1,9 +1,10 @@
-import { join } from "path"
+import { join, dirname } from "path"
+import { fileURLToPath } from "url"
 import { loadAllWorkflows, loadWorkflowYaml } from "./loader"
 import type { WorkflowDefinition } from "./types"
 import { Capability } from "../shared/capabilities"
 
-const _dirname = decodeURIComponent(new URL(".", import.meta.url).pathname)
+const _dirname = dirname(fileURLToPath(import.meta.url))
 
 export class WorkflowRegistry {
   private workflows = new Map<string, WorkflowDefinition>()

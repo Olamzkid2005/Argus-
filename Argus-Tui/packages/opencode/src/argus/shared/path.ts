@@ -11,16 +11,17 @@
  *
  * From src/argus/shared/ to project root: 6 levels up.
  */
-import { resolve } from "path"
+import { resolve, dirname } from "path"
+import { fileURLToPath } from "url"
 
-const _dirname = new URL(".", import.meta.url).pathname
+const _dirname = dirname(fileURLToPath(import.meta.url))
 
 /**
  * Absolute path to the repository root (parent of Argus-Tui/ and argus-workers/).
- * Uses decodeURIComponent to handle spaces in the path.
+ * Uses fileURLToPath for cross-platform compatibility (Windows drive letters).
  */
 export const PROJECT_ROOT: string = resolve(
-  decodeURIComponent(_dirname),
+  _dirname,
   "../../../../../..",
 )
 

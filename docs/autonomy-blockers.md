@@ -586,17 +586,17 @@ redis:
 | `scope.mode` | `warn` | In autonomous mode, fails hard if `warn` or `open` — must be `allowlist` | ✅ Fixed — TUI guard + Python default |
 | `git_host_policy` | `allowlist` | Blocks git repos from unlisted hosts | ✅ Fixed — errors propagate from from_config() |
 | `approval_gates` | `true` | Stdin prompts unless `ARGUS_AUTO_APPROVE=1` | ✅ See blocker 2 |
-| `storage.encryption.enabled` | `false` | Credentials stored in plaintext | ❌ Not fixed |
-| `disabled` | `[sqlmap]` | One tool pre-disabled | ❌ Not fixed |
+| `storage.encryption.enabled` | `false` | Credentials stored in plaintext | ✅ Fixed — now defaults to `true` with auto key generation |
+| `disabled` | `[sqlmap]` | One tool pre-disabled | ✅ Fixed — removed from default disabled list |
 | `LLM_API_KEY` | empty | Hybrid mode fails | ❌ Operational |
 | `ARGUS_AUTO_APPROVE` | not set | Approval gates block | ✅ Now works for destructive gates |
 | `ARGUS_AUTONOMOUS` | not set | No autonomy profile | ✅ Documented |
-| `DETERMINISTIC_FALLBACK` | `false` (opt-in) | LLM planning used even when LLM key missing | ❌ Not fixed |
-| `tools.circuit_breaker.max_failures` | `5` | Tools go dark for 5 min after 5 failures | ❌ Not fixed |
-| `tools.circuit_breaker.cooldown_ms` | `300000` (5 min) | No half-open probe in TS-side circuit breaker | ❌ Not fixed |
+| `DETERMINISTIC_FALLBACK` | `false` (opt-in) | LLM planning used even when LLM key missing | ✅ Fixed — now defaults to `true` (auto-fallback to deterministic) |
+| `tools.circuit_breaker.max_failures` | `5` | Tools go dark for 5 min after 5 failures | ✅ Fixed — code default is 8, YAML synced |
+| `tools.circuit_breaker.cooldown_ms` | `300000` (5 min) | No half-open probe in TS-side circuit breaker | ✅ Fixed — half-open probe implemented, code default 120s |
 | `ARGUS_MAX_ASSESSMENT_DURATION_MS` | `7200000` (2h) | Global timer was dead code | ✅ Fixed — timer now starts at first phase via `=== 0` guard |
 | `ARGUS_HYBRID_MAX_ITERATIONS` | `50` | No safety net for runaway LLM loops | ✅ Per-phase + global breakers |
-| `storage.encryption.enabled` | `false` | Engagement DBs stored as plaintext SQLite | ❌ Not fixed |
+| `storage.encryption.enabled` | `false` | Engagement DBs stored as plaintext SQLite | ✅ Fixed — now defaults to `true` with auto key generation |
 
 ---
 
@@ -611,15 +611,16 @@ redis:
 | P2 — Robustness | 6 | 6 | 0 | 0 |
 | P3 — Config/Polish (incl. #36 TUI scope guard) | 5 | 5 | 0 | 0 |
 | P4 — Edge Cases | 5 | 5 | 0 | 0 |
-| Other blockers | 40+ | 24 | 0 | ~16 operational |
-| **Total** | **66** | **50** | **0** | **~16** |
+| Config traps (storage.encryption, DETERMINISTIC_FALLBACK, circuit_breaker, disabled) | 5 | 5 | 0 | 0 |
+| Other blockers | 40+ | 24 | 0 | ~10 operational |
+| **Total** | **74** | **58** | **0** | **~10** |
 
-**Net change:** #20 (global timer now actively enforced — `assessmentStartTime = Date.now()` set in `execute()` with `=== 0` guard), #36 (TUI-side autonomous-mode scope guard — `workflow-runner.ts` fails hard when `scope.mode` is `warn`/`open`). Also: #37 (ThreadPoolExecutor bounds), #46 (Docker health checks — already existed), #49 (state truncation coordination — shared import), #57 (health/metrics endpoint), #65 (Git SSRF allowlist propagation), and #66 (orphaned backoff key) resolved. Plus: redirect SSRF hardening (dual_auth_scanner, ai_vuln_scanner, llm_review, auth_manager), migration SQL fixes (017, 006, 008), webhook SSRF (post_finding_hooks.py), CWE/OWASP column consolidation (025). **50 total fixed**, 0 partial, ~16 unfixed.
+**Net change (July 15):** `storage.encryption.enabled` defaults to `true` with auto key generation; `DETERMINISTIC_FALLBACK` defaults to `true` for safe no-LLM operation; `sqlmap` removed from default disabled list; circuit_breaker YAML synced to 8 failures / 120s cooldown; tool-health.ts fallback defaults synced; LLM provider import aliases added; Windows `C:\C:\` double drive letter fixed in 3 path files; `isValidArtifactPath` now handles Windows backslashes. **58 total fixed**, 0 partial, ~10 unfixed (all operational/inherent/by-design).
 
 ### What Must Be True for Autonomous Mode (Updated)
 
 1. `ARGUS_AUTONOMOUS=1` and `ARGUS_AUTO_APPROVE=1` env vars set
-2. `LLM_API_KEY` set in env (for LLM-driven features)
+2. `LLM_API_KEY` set in env (for LLM-driven features) — or leave unset; `DETERMINISTIC_FALLBACK` defaults to `true` so system runs without LLM
 3. All ~60 security tool binaries installed on PATH
 4. Python MCP worker environment set up for Python-based tools
 5. `credentials.json` with target login credentials (if browser testing needed)
@@ -629,7 +630,7 @@ redis:
 9. Bun runtime (not Node.js) — `bun:sqlite` is required by `EngagementStore`
 10. Playwright browsers installed (`npx playwright install`) for verification
 11. `argus.config.yaml` must be valid YAML — **now fails hard with clear error in autonomous mode**
-12. `DETERMINISTIC_FALLBACK` should be set to `true` if no LLM key is available
+12. `DETERMINISTIC_FALLBACK` defaults to `true` — no LLM key required for autonomous mode
 
 ### Blocker Matrix (Updated)
 
@@ -660,7 +661,7 @@ redis:
 
 ### Action Items (Updated)
 
-#### ✅ Completed Fixes (28 blockers)
+#### ✅ Completed Fixes (55 blockers)
 
 | # | Blocker | Fix |
 |---|---|---|
@@ -714,6 +715,14 @@ redis:
 | 62 | Stdin heartbeat | `select.select()` with configurable timeout |
 | 64 | Threshold race | Aligned `zero_finding_stop` > `low_signal_threshold` |
 | 66 | Orphaned config key | `backoff_multiplier` removed |
+| 67 | Storage encryption default | Changed to `true` with auto key generation via `EncryptionManager.ensureKeySync()` |
+| 68 | DETERMINISTIC_FALLBACK default | Changed to `true` — system auto-falls back to deterministic mode without LLM key |
+| 69 | sqlmap pre-disabled | Removed from default `disabled` list; removed dependency on CLI passphrase for auto-init |
+| 70 | Circuit breaker YAML sync | Updated `argus.config.yaml` to match code defaults (8 failures / 120s cooldown) |
+| 71 | tool-health.ts fallback sync | Updated `DEFAULT_CONFIG` from 5/300000 to 8/120000 to stay in sync with tool-config.ts |
+| 72 | LLM provider import alias | Added `export { provider as openai }` / `export { provider as anthropic }` in provider files |
+| 73 | Windows C:\C:\ drive letter duplication | Replaced `URL.pathname` with `fileURLToPath` in shared/path.ts, workflows/registry.ts, reporting/generator.ts |
+| 74 | verifyPackage Windows path rejection | Fixed `isValidArtifactPath` to normalize backslashes to forward slashes before path traversal check |
 
 #### ❌ Remaining Unfixed
 
