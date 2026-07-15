@@ -47,6 +47,7 @@ const {
   clearErrorHints,
   resetScan,
   handleProgressEvent,
+  setPlannerModel,
 } = await import("../../../../src/argus/tui/scan-store")
 
 describe("scan-store", () => {
@@ -65,6 +66,14 @@ describe("scan-store", () => {
     expect(state.log).toEqual([])
     expect(state.startTime).toBe(0)
     expect(state.durationMs).toBe(0)
+    expect(state.llmPlanningStatus).toBe("idle")
+    expect(state.llmPlanningTargetAnalysis).toBe("")
+    expect(state.llmPlanningSuggestions).toEqual([])
+    expect(state.llmPlanningError).toBe("")
+    expect(state.llmReplanEntries).toEqual([])
+    expect(state.llmReplanStatus).toBe("idle")
+    expect(state.llmPlanningModel).toBe("")
+    expect(state.llmPlanningModelConfig).toBe("")
   })
 
   it("initScan() sets target, engagementId, status=running, startTime", () => {
@@ -243,6 +252,27 @@ describe("scan-store", () => {
     expect(state.log).toEqual([])
   })
 
+  it("setPlannerModel() updates llmPlanningModel and llmPlanningModelConfig", () => {
+    initScan("https://test.com", "eng-1")
+    expect(getScanState().llmPlanningModel).toBe("")
+    expect(getScanState().llmPlanningModelConfig).toBe("")
+
+    setPlannerModel("anthropic/claude-sonnet-4", "ARGUS_PLANNER_MODEL=claude-sonnet-4 (switched)")
+
+    expect(getScanState().llmPlanningModel).toBe("anthropic/claude-sonnet-4")
+    expect(getScanState().llmPlanningModelConfig).toBe("ARGUS_PLANNER_MODEL=claude-sonnet-4 (switched)")
+  })
+
+  it("setPlannerModel() can be called multiple times to update model", () => {
+    initScan("https://test.com", "eng-1")
+    setPlannerModel("openai/gpt-4o-mini", "config-a")
+    expect(getScanState().llmPlanningModel).toBe("openai/gpt-4o-mini")
+
+    setPlannerModel("openai/gpt-4o", "config-b")
+    expect(getScanState().llmPlanningModel).toBe("openai/gpt-4o")
+    expect(getScanState().llmPlanningModelConfig).toBe("config-b")
+  })
+
   describe("handleProgressEvent", () => {
     it("phase_start adds a phase", async () => {
       initScan("https://test.com", "eng-1")
@@ -312,11 +342,251 @@ describe("scan-store", () => {
       expect(getScanState().log[0]).toContain("rate limited")
     })
 
+    it("verification_start sets verification status to running", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({ type: "verification_start", phaseId: "p1", total: 5 })
+      const state = getScanState()
+      expect(state.verificationStatus).toBe("running")
+      expect(state.verificationTotal).toBe(5)
+      expect(state.verificationCurrent).toBe(0)
+      expect(state.verificationPassed).toBe(0)
+      expect(state.verificationFailed).toBe(0)
+    })
+
+    it("verification_progress updates verification counters", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({ type: "verification_start", phaseId: "p1", total: 3 })
+      await handleProgressEvent({ type: "verification_progress", phaseId: "p1", current: 1, total: 3, findingTitle: "XSS", findingSubtype: "xss" })
+      const state = getScanState()
+      expect(state.verificationCurrent).toBe(1)
+      expect(state.verificationTotal).toBe(3)
+      expect(state.log.some(l => l.includes("XSS"))).toBe(true)
+    })
+
+    it("verification_complete sets verification status and results", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({ type: "verification_start", phaseId: "p1", total: 3 })
+      await handleProgressEvent({ type: "verification_complete", phaseId: "p1", passed: 2, failed: 1, total: 3 })
+      const state = getScanState()
+      expect(state.verificationStatus).toBe("completed")
+      expect(state.verificationPassed).toBe(2)
+      expect(state.verificationFailed).toBe(1)
+      expect(state.log.some(l => l.includes("passed"))).toBe(true)
+    })
+
     it("handles progress events with engagementId scoping", async () => {
       initScan("https://a.com", "eng-a")
       await handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 1, phaseIndex: 0 }, "eng-a")
       expect(getScanState().engagementId).toBe("eng-a")
       expect(getScanState().phases).toHaveLength(1)
+    })
+
+    // ── LLM Planning events ────────────────────────────────────────
+
+    it("llm_planning_start sets status=running, clears previous state, appends log", async () => {
+      initScan("https://test.com", "eng-1")
+      // Set some pre-existing state to verify it gets cleared
+      await handleProgressEvent({ type: "llm_planning_complete", phase: "initial", targetAnalysis: "old analysis", suggestions: [{ capabilities: ["web_recon"], reasoning: "old reason" }], llmModel: "openai/gpt-4o-old", modelEnvDescription: "old config" })
+      expect(getScanState().llmPlanningStatus).toBe("completed")
+
+      await handleProgressEvent({ type: "llm_planning_start", phase: "initial" })
+      const state = getScanState()
+      expect(state.llmPlanningStatus).toBe("running")
+      expect(state.llmPlanningTargetAnalysis).toBe("")
+      expect(state.llmPlanningSuggestions).toEqual([])
+      expect(state.llmPlanningError).toBe("")
+      expect(state.log.some(l => l.includes("LLM analysis started"))).toBe(true)
+    })
+
+    it("llm_planning_start with replan phase appends correct log", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({ type: "llm_planning_start", phase: "replan" })
+      expect(getScanState().llmPlanningStatus).toBe("running")
+      expect(getScanState().log.some(l => l.includes("replan planning"))).toBe(true)
+    })
+
+    it("llm_planning_complete sets status=completed, stores analysis and suggestions", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({ type: "llm_planning_start", phase: "initial" })
+      await handleProgressEvent({
+        type: "llm_planning_complete",
+        phase: "initial",
+        llmModel: "openai/gpt-4o-mini",
+        modelEnvDescription: "ARGUS_PLANNER_MODEL=gpt-4o-mini (default)",
+        targetAnalysis: "Web application with login form. Recommend standard assessment phases.",
+        suggestions: [
+          { capabilities: ["web_recon", "technology_detection"], reasoning: "Identify tech stack and attack surface." },
+          { capabilities: ["vulnerability_scanning", "template_scanning"], reasoning: "Automated vulnerability detection." },
+          { capabilities: ["browser_verification"], reasoning: "Browser-based exploit verification." },
+        ],
+      })
+      const state = getScanState()
+      expect(state.llmPlanningStatus).toBe("completed")
+      expect(state.llmPlanningTargetAnalysis).toBe("Web application with login form. Recommend standard assessment phases.")
+      expect(state.llmPlanningSuggestions).toHaveLength(3)
+      expect(state.llmPlanningSuggestions[0].capabilities).toEqual(["web_recon", "technology_detection"])
+      expect(state.llmPlanningSuggestions[0].reasoning).toBe("Identify tech stack and attack surface.")
+      expect(state.llmPlanningSuggestions[1].capabilities).toEqual(["vulnerability_scanning", "template_scanning"])
+      expect(state.llmPlanningSuggestions[2].capabilities).toEqual(["browser_verification"])
+      // Verify llmPlanningModel and llmPlanningModelConfig are stored from event fields
+      expect(state.llmPlanningModel).toBe("openai/gpt-4o-mini")
+      expect(state.llmPlanningModelConfig).toBe("ARGUS_PLANNER_MODEL=gpt-4o-mini (default)")
+      expect(state.log.some(l => l.includes("3 phase suggestion(s)"))).toBe(true)
+    })
+
+    it("llm_planning_complete with empty suggestions still updates state", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({ type: "llm_planning_start", phase: "initial" })
+      await handleProgressEvent({
+        type: "llm_planning_complete",
+        phase: "initial",
+        llmModel: "openai/gpt-4o-mini",
+        modelEnvDescription: "",
+        targetAnalysis: "",
+        suggestions: [],
+      })
+      const state = getScanState()
+      expect(state.llmPlanningStatus).toBe("completed")
+      expect(state.llmPlanningTargetAnalysis).toBe("")
+      expect(state.llmPlanningSuggestions).toEqual([])
+      expect(state.log.some(l => l.includes("0 phase suggestion(s)"))).toBe(true)
+    })
+
+    it("llm_planning_error sets status=failed, stores error message", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({ type: "llm_planning_start", phase: "initial" })
+      await handleProgressEvent({
+        type: "llm_planning_error",
+        phase: "initial",
+        error: "API rate limit exceeded",
+      })
+      const state = getScanState()
+      expect(state.llmPlanningStatus).toBe("failed")
+      expect(state.llmPlanningError).toBe("API rate limit exceeded")
+      expect(state.log.some(l => l.includes("API rate limit exceeded"))).toBe(true)
+    })
+
+    it("llm_planning_error is non-blocking — other state unaffected", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 3, phaseIndex: 0 })
+      await handleProgressEvent({
+        type: "llm_planning_error",
+        phase: "initial",
+        error: "LLM unavailable",
+      })
+      const state = getScanState()
+      expect(state.llmPlanningStatus).toBe("failed")
+      expect(state.phases).toHaveLength(1)  // phases still intact
+      expect(state.phases[0].name).toBe("recon")
+    })
+
+    // ── LLM Replan events ───────────────────────────────────────────
+
+    it("llm_replan_analysis with capabilities appends entry and log", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({
+        type: "llm_replan_analysis",
+        label: "https://test.com",
+        reasoning: "SQL injection found in login form. Recommend deeper testing.",
+        suggestedCapabilities: ["sqli_detection", "post_exploitation"],
+        stopAssessment: false,
+        llmModel: "openai/gpt-4o-mini",
+      })
+      const state = getScanState()
+      expect(state.llmReplanStatus).toBe("completed")
+      expect(state.llmReplanEntries).toHaveLength(1)
+      expect(state.llmReplanEntries[0].phaseName).toBe("https://test.com")
+      expect(state.llmReplanEntries[0].reasoning).toBe("SQL injection found in login form. Recommend deeper testing.")
+      expect(state.llmReplanEntries[0].suggestedCapabilities).toEqual(["sqli_detection", "post_exploitation"])
+      expect(state.llmReplanEntries[0].stopAssessment).toBe(false)
+      expect(state.llmReplanEntries[0].llmModel).toBe("openai/gpt-4o-mini")
+      expect(state.log.some(l => l.includes("sqli_detection, post_exploitation"))).toBe(true)
+    })
+
+    it("llm_replan_analysis with stopAssessment=true logs stop recommendation", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({
+        type: "llm_replan_analysis",
+        label: "https://test.com",
+        reasoning: "All critical findings have been identified and verified. Assessment is complete.",
+        suggestedCapabilities: [],
+        stopAssessment: true,
+        llmModel: "openai/gpt-4o-mini",
+      })
+      const state = getScanState()
+      expect(state.llmReplanEntries).toHaveLength(1)
+      expect(state.llmReplanEntries[0].stopAssessment).toBe(true)
+      expect(state.log.some(l => l.includes("stopping assessment"))).toBe(true)
+    })
+
+    it("llm_replan_analysis with empty capabilities does not log capabilities line", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({
+        type: "llm_replan_analysis",
+        label: "https://test.com",
+        reasoning: "No additional capabilities needed.",
+        suggestedCapabilities: [],
+        stopAssessment: false,
+        llmModel: "openai/gpt-4o-mini",
+      })
+      const state = getScanState()
+      expect(state.llmReplanEntries).toHaveLength(1)
+      // When stopAssessment=false and capabilities is empty, neither log branch fires
+      expect(state.log.some(l => l.includes("stopping assessment"))).toBe(false)
+      expect(state.log.some(l => l.includes("suggests next capabilities"))).toBe(false)
+    })
+
+    it("multiple llm_replan_analysis events accumulate entries", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({
+        type: "llm_replan_analysis",
+        label: "phase-recon",
+        reasoning: "Found open ports, recommend scanning.",
+        suggestedCapabilities: ["port_scanning"],
+        stopAssessment: false,
+        llmModel: "openai/gpt-4o-mini",
+      })
+      await handleProgressEvent({
+        type: "llm_replan_analysis",
+        label: "phase-scan",
+        reasoning: "Found SQL injection, recommend exploitation.",
+        suggestedCapabilities: ["sqli_detection", "post_exploitation"],
+        stopAssessment: false,
+        llmModel: "anthropic/claude-sonnet-4",
+      })
+      await handleProgressEvent({
+        type: "llm_replan_analysis",
+        label: "phase-exploit",
+        reasoning: "All findings addressed.",
+        suggestedCapabilities: [],
+        stopAssessment: true,
+        llmModel: "openai/gpt-4o-mini",
+      })
+      const state = getScanState()
+      expect(state.llmReplanEntries).toHaveLength(3)
+      expect(state.llmReplanEntries[0].phaseName).toBe("phase-recon")
+      expect(state.llmReplanEntries[1].phaseName).toBe("phase-scan")
+      expect(state.llmReplanEntries[2].phaseName).toBe("phase-exploit")
+      expect(state.llmReplanEntries[2].stopAssessment).toBe(true)
+      // Latest status is "completed" (set by the last event)
+      expect(state.llmReplanStatus).toBe("completed")
+    })
+
+    it("llm_replan_analysis does not interfere with other scan state", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 3, phaseIndex: 0 })
+      await handleProgressEvent({
+        type: "llm_replan_analysis",
+        label: "phase-recon",
+        reasoning: "Continue with scanning.",
+        suggestedCapabilities: ["vulnerability_scanning"],
+        stopAssessment: false,
+        llmModel: "openai/gpt-4o-mini",
+      })
+      const state = getScanState()
+      expect(state.phases).toHaveLength(1) // phases unchanged
+      expect(state.phases[0].status).toBe("running")
+      expect(state.llmReplanEntries).toHaveLength(1)
     })
   })
 

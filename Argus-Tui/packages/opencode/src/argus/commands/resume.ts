@@ -221,7 +221,7 @@ export async function resumeCommand(
             return Number.isFinite(n) && n >= 0 ? n : undefined
           })(),
         }
-        const replanPhases = planner.replan(replanCtx)
+        const replanPhases = await planner.replan(replanCtx)
         replanCount = replanCtx.replanCount
 
         if (replanPhases && replanPhases.length > 0) {

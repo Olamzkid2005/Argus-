@@ -51,10 +51,9 @@ rate_limiting:
 
 tools:
   enabled: []
-  disabled:
-    - sqlmap
+  disabled: []  # No tools pre-disabled by default
   paths: {}
   timeouts: {}
   circuit_breaker:
-    max_failures: 5
-    cooldown_ms: 300000
+    max_failures: 8
+    cooldown_ms: 120000

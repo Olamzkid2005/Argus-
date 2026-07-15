@@ -8,6 +8,12 @@ import { createSignal, onMount, For, Show, createResource } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useRoute } from "@tui/context/route"
 import { Toast, useToast } from "@tui/ui/toast"
+import { Tooltip } from "@tui/ui/tooltip"
+
+/** Read the current planner model from env vars — same pattern as the inline reads in the status bar. */
+function getCurrentModel(): string {
+  return process.env.ARGUS_PLANNER_MODEL?.trim() || process.env.OPENCODE_MODEL?.trim() || "gpt-4o-mini"
+}
 
 interface EngagementSummary {
   id: string
@@ -15,6 +21,7 @@ interface EngagementSummary {
   status: string
   findingCount: number
   updatedAt: number
+  plannerModel: string
 }
 
 interface DashboardData {
@@ -68,7 +75,7 @@ export function ArgusDashboard() {
         const counts = countsByEngId.get(e.id)
         const findingCount = counts?.total ?? 0
         confirmedFindings += counts?.confirmed ?? 0
-        return { id: e.id, target: e.target, status: e.status, findingCount, updatedAt: +e.updatedAt }
+        return { id: e.id, target: e.target, status: e.status, findingCount, updatedAt: +e.updatedAt, plannerModel: getCurrentModel() }
       })
       setData({ totalTargets, openEngagements, confirmedFindings, recent })
       setLoading(false)
@@ -149,6 +156,21 @@ export function ArgusDashboard() {
                 <text fg={theme.text}>{eng.target}</text>
                 <text fg={statusColor(eng.status)}>{eng.status.toLowerCase()}</text>
                 <text fg={theme.textMuted}>({eng.findingCount} findings)</text>
+                {/* Model used for this assessment */}
+                <Show when={process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENCODE_API_KEY}>
+                  <Tooltip
+                    value={
+                      <box flexDirection="column" gap={1}>
+                        <text fg={theme.text}><b>Assessment Model</b></text>
+                        <text fg={theme.textMuted}>{`ARGUS_PLANNER_MODEL=${eng.plannerModel}`}</text>
+                      </box>
+                    }
+                    placement="bottom"
+                    gutter={4}
+                  >
+                    <text fg={theme.textMuted}>{eng.plannerModel}</text>
+                  </Tooltip>
+                </Show>
               </box>
             )}
           </For>
@@ -157,7 +179,24 @@ export function ArgusDashboard() {
         {/* Status bar */}
         <box flexGrow={1} />
         <box flexDirection="row" justifyContent="space-between" border={["top"]} borderColor={theme.textMuted} paddingTop={1}>
-          <text fg={theme.textMuted}>ARGUS v5</text>
+          <box flexDirection="row" gap={2}>
+            <text fg={theme.textMuted}>ARGUS v5</text>
+            {/* Subtle LLM model indicator — shows configured planner model when API key is present, with hover tooltip for full env config */}
+            <Show when={process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENCODE_API_KEY}>
+              <Tooltip
+                value={
+                  <box flexDirection="column" gap={1}>
+                    <text fg={theme.text}><b>Planner Model</b></text>
+                    <text fg={theme.textMuted}>{`ARGUS_PLANNER_MODEL=${getCurrentModel()} (default: gpt-4o-mini, supports OpenAI-compatible and Anthropic models)`}</text>
+                  </box>
+                }
+                placement="bottom"
+                gutter={4}
+              >
+                <text fg={theme.textMuted}>{getCurrentModel()}</text>
+              </Tooltip>
+            </Show>
+          </box>
           <box flexDirection="row" gap={2}>
             {/* Encryption indicator — uses isInitialized() only, avoids OS keychain auth prompt */}
             <Show when={encryptionStatus() !== undefined}>

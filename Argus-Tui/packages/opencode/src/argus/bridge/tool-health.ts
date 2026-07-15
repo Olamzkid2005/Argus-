@@ -39,9 +39,12 @@ export interface ToolHealthConfig {
   cooldownMs: number
 }
 
+// Blocker 22: Must stay in sync with tool-config.ts DEFAULT_CIRCUIT_BREAKER.
+// The executor always passes explicit config, so this is only a fallback
+// for tests and direct ToolHealthMonitor construction.
 const DEFAULT_CONFIG: ToolHealthConfig = {
-  maxConsecutiveFailures: 5,
-  cooldownMs: 300_000,
+  maxConsecutiveFailures: 8,
+  cooldownMs: 120_000,
 }
 
 export class ToolHealthMonitor {

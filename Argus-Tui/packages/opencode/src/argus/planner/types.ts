@@ -11,6 +11,7 @@ import type {
   ArtifactRef,
   ArtifactType,
 } from "../shared/types"
+import type { ProgressEvent } from "../shared/progress"
 
 export { Severity, Confidence }
 export type {
@@ -141,4 +142,6 @@ export interface PlannerContext {
    * Defaults to MAX_REPLANS (10) if not set.
    */
   llmMaxReplans?: number
+  /** Optional progress callback for emitting structured events to the TUI. */
+  onProgress?: (event: ProgressEvent) => void
 }

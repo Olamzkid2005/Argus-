@@ -43,6 +43,35 @@ describe("ProgressEvent types", () => {
     expect(event.totalFindings).toBe(42)
   })
 
+  test("verification_start event has correct shape", () => {
+    const event: ProgressEvent = { type: "verification_start", phaseId: "p1", total: 5 }
+    expect(event.type).toBe("verification_start")
+    expect(event.phaseId).toBe("p1")
+    expect(event.total).toBe(5)
+  })
+
+  test("verification_progress event has correct shape", () => {
+    const event: ProgressEvent = { type: "verification_progress", phaseId: "p1", current: 2, total: 5, findingTitle: "XSS", findingSubtype: "xss" }
+    expect(event.current).toBe(2)
+    expect(event.total).toBe(5)
+    expect(event.findingTitle).toBe("XSS")
+    expect(event.findingSubtype).toBe("xss")
+  })
+
+  test("verification_progress event works without optional fields", () => {
+    const event: ProgressEvent = { type: "verification_progress", phaseId: "p1", current: 1, total: 3 }
+    expect(event.current).toBe(1)
+    expect(event.total).toBe(3)
+    expect(event.findingTitle).toBeUndefined()
+  })
+
+  test("verification_complete event has correct shape", () => {
+    const event: ProgressEvent = { type: "verification_complete", phaseId: "p1", passed: 3, failed: 1, total: 4 }
+    expect(event.passed).toBe(3)
+    expect(event.failed).toBe(1)
+    expect(event.total).toBe(4)
+  })
+
   test("ProgressCallback is assignable", () => {
     const cb: ProgressCallback = (event: ProgressEvent) => {
       if (event.type === "scan_complete") {
