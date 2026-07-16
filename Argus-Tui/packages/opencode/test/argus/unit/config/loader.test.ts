@@ -77,11 +77,18 @@ describe("ConfigLoader", () => {
     expect(result.storage?.encryption?.enabled).toBe(true)
   })
 
-  it("loadFrom() defaults storage.encryption.enabled to false", () => {
+  it("loadFrom() defaults storage to undefined when not in config", () => {
     const dir = makeDir()
     const filePath = makeFile(dir, 'features:\n  x: true')
     const result = ConfigLoader.loadFrom(filePath)
     expect(result.storage).toBeUndefined()
+  })
+
+  it("loadFrom() defaults storage.encryption.enabled to true", () => {
+    const dir = makeDir()
+    const filePath = makeFile(dir, 'storage: {}')
+    const result = ConfigLoader.loadFrom(filePath)
+    expect(result.storage?.encryption?.enabled).toBe(true)
   })
 
   it("loadProjectConfig() returns valid config matching loadFrom result", () => {

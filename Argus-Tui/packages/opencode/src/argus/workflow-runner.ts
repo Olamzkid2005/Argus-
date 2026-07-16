@@ -252,9 +252,15 @@ export class WorkflowRunner {
         )
     if (toVerify.length === 0) return findings
 
+    // Emit verification_start event for TUI display
+    emit({ type: "verification_start", phaseId: "", total: toVerify.length })
+
     const runner = new VerificationRunner()
     const engine = new PlaywrightEngine()
     const updated: NormalizedFinding[] = []
+    let verifierPassed = 0
+    let verifierFailed = 0
+    let verifierCurrent = 0
 
     for (const finding of findings) {
       if (!toVerify.includes(finding)) {
@@ -262,6 +268,7 @@ export class WorkflowRunner {
         continue
       }
 
+      verifierCurrent++
       let scenario
       try {
         switch (finding.subtype) {
@@ -379,13 +386,27 @@ export class WorkflowRunner {
             continue
         }
 
-        emit(`⠋ Verifying ${finding.subtype} finding: ${finding.title}`)
+        // Emit verification_progress event for TUI display
+        emit({
+          type: "verification_progress",
+          phaseId: "",
+          current: verifierCurrent,
+          total: toVerify.length,
+          findingTitle: finding.title,
+          findingSubtype: finding.subtype,
+        })
         const result = await runner.run(scenario)
         const verificationResult: VerificationResult = {
           passed: result.passed,
           summary: result.summary,
           verifier: scenario.name,
           verifiedAt: new Date().toISOString(),
+        }
+
+        if (result.passed) {
+          verifierPassed++
+        } else {
+          verifierFailed++
         }
 
         // Store verification evidence on the finding so the confidence engine's
@@ -405,10 +426,20 @@ export class WorkflowRunner {
         })
         emit(`✓ Verification ${result.passed ? "passed" : "failed"} for ${finding.title}`)
       } catch (error) {
+        verifierFailed++
         updated.push(finding)
         emit(`⚠ Verification error for ${finding.title}: ${(error as Error).message}`)
       }
     }
+
+    // Emit verification_complete event for TUI display
+    emit({
+      type: "verification_complete",
+      phaseId: "",
+      passed: verifierPassed,
+      failed: verifierFailed,
+      total: toVerify.length,
+    })
 
     try {
       await engine.close()
@@ -474,6 +505,7 @@ export class WorkflowRunner {
       return { verified: 0, passed: 0, failed: 0, findings: [] }
     }
 
+    emit({ type: "verification_start", phaseId: "", total: allFindings.length })
     emit(`✓ Loaded ${allFindings.length} findings — running browser verification...`)
 
     // Load credentials
@@ -515,6 +547,13 @@ export class WorkflowRunner {
 
     store.saveFindings(engagementId, verifiedFindings)
 
+    emit({
+      type: "verification_complete",
+      phaseId: "",
+      passed: passedCount,
+      failed: failedCount,
+      total: verifiedCount,
+    })
     emit(`✓ Verification complete: ${passedCount} passed, ${failedCount} failed (${verifiedCount} total verified)`)
 
     return { verified: verifiedCount, passed: passedCount, failed: failedCount, findings: verifiedFindings }
@@ -561,9 +600,25 @@ export class WorkflowRunner {
     // MCP call is best-effort — failures don't block the assessment.
     const finderResult = { verifiedCount: 0 }
 
+    // Emit MCP verification start event
+    emit({
+      type: "verification_start",
+      phaseId: "mcp",
+      total: toVerify.length,
+    })
+
     await Promise.all(
-      toVerify.map(async (finding) => {
+      toVerify.map(async (finding, idx) => {
         try {
+          // Emit MCP verification progress
+          emit({
+            type: "verification_progress",
+            phaseId: "mcp",
+            current: idx + 1,
+            total: toVerify.length,
+            findingTitle: finding.title,
+            findingSubtype: finding.subtype,
+          })
           emit(`⠋ MCP-verifying ${finding.subtype} finding: ${finding.title}`)
 
           const endpoint = finding.url ?? finding.description?.match(/(https?:\/\/[^\s]+)/)?.[1] ?? target
@@ -613,6 +668,15 @@ export class WorkflowRunner {
         }
       }),
     )
+
+    // Emit MCP verification complete event
+    emit({
+      type: "verification_complete",
+      phaseId: "mcp",
+      passed: finderResult.verifiedCount,
+      failed: toVerify.length - finderResult.verifiedCount,
+      total: toVerify.length,
+    })
 
     if (finderResult.verifiedCount > 0) {
       emit(`✓ MCP verification: ${finderResult.verifiedCount} finding(s) confirmed`)
@@ -893,7 +957,10 @@ export class WorkflowRunner {
     const useLLM = options.useLLM !== undefined
       ? options.useLLM
       : !featureFlags.isEnabled(Feature.DETERMINISTIC_FALLBACK)
-    const plan = await planner.plan(target, defaultCreds ? { authState: "basic" } : undefined, { useLLM })
+    const plan = await planner.plan(target, defaultCreds ? { authState: "basic" } : undefined, {
+      useLLM,
+      onProgress: (event) => { if (typeof event !== "string") emit(event) },
+    })
     emit(`✓ Plan created: ${plan.phases.length} phase(s)`)
     if (defaultCreds) {
       for (const phase of plan.phases) {
@@ -1194,8 +1261,9 @@ export class WorkflowRunner {
             chainPlans,
             llmSuggestedCapabilities,
             llmReasoning: llmReasoningText,
+            onProgress: (event) => { if (typeof event !== "string") emit(event) },
           }
-          const replanPhases = planner.replan(replanCtx)
+          const replanPhases = await planner.replan(replanCtx)
           replanCount = replanCtx.replanCount
           llmReplanCount = replanCtx.llmReplanCount ?? 0
 

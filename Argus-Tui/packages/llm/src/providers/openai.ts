@@ -57,6 +57,9 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 
+// Named alias for importing as `import { openai } from "@opencode-ai/llm/providers/openai"`
+export { provider as openai }
+
 export const model = provider.model
 export const responses = provider.responses
 export const responsesWebSocket = provider.responsesWebSocket

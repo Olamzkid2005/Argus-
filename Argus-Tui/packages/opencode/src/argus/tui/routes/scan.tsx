@@ -11,8 +11,9 @@
 import { createMemo, createSignal, onMount, For, Show, onCleanup } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { Toast } from "@tui/ui/toast"
+import { DropdownMenu } from "@tui/ui/dropdown-menu"
 import { useRouteData } from "@tui/context/route"
-import { getScanState, initScan, addPhase, completePhase, resetScan } from "../scan-store"
+import { getScanState, initScan, addPhase, completePhase, resetScan, setPlannerModel, appendLog } from "../scan-store"
 import { responsiveBarWidth } from "../../shared/terminal"
 
 const SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -118,6 +119,40 @@ export function ScanDashboard() {
   })
   const spinner = createMemo(() => SPINNER_CHARS[spinnerIdx()])
 
+  // Available models for the model selector dropdown (lazy-loaded from LLMPlannerService)
+  const [availableModels, setAvailableModels] = createSignal<string[]>([])
+  const [modelsLoading, setModelsLoading] = createSignal(false)
+
+  let modelsRefreshPromise: Promise<void> | null = null
+
+  function refreshAvailableModels(): void {
+    if (modelsLoading()) return
+    setModelsLoading(true)
+    modelsRefreshPromise = import("../../planner/llm-service")
+      .then(({ LLMPlannerService }) => {
+        setAvailableModels(LLMPlannerService.getAvailableModels())
+      })
+      .catch(() => {})
+      .finally(() => {
+        setModelsLoading(false)
+        modelsRefreshPromise = null
+      })
+  }
+
+  function selectModel(model: string): void {
+    const refresh = modelsRefreshPromise ?? Promise.resolve()
+    refresh.then(() => {
+      import("../../planner/llm-service").then(({ LLMPlannerService }) => {
+        LLMPlannerService.switchModel(model)
+        setPlannerModel(
+          `${model.includes("claude") ? "anthropic" : "openai"}/${model}`,
+          `ARGUS_PLANNER_MODEL=${model}`,
+        )
+        appendLog(`🔁 Switched planner model to ${model}`)
+      }).catch(() => {})
+    })
+  }
+
   // Progress bar characters
   const barWidth = createMemo(() => responsiveBarWidth())
   const filledBars = createMemo(() => Math.round((progressPct() / 100) * barWidth()))
@@ -132,10 +167,40 @@ export function ScanDashboard() {
 
   return (
     <box flexDirection="column" paddingX={2} paddingTop={1} flexGrow={1}>
-      {/* Header row: assessment title + status */}
+      {/* Header row: assessment title + model + status */}
       <box flexDirection="row" gap={1} paddingBottom={1}>
         <text fg={theme.text}><b>Assessment</b></text>
         <text fg={theme.textMuted}>{scanState.target || route.target}</text>
+        {/* LLM model selector — dropdown with inline list of available models */}
+        <Show when={scanState.llmPlanningModel && scanState.llmPlanningStatus === "completed"}>
+          <DropdownMenu onOpenChange={(open) => { if (open) refreshAvailableModels() }}>
+            <DropdownMenu.Trigger>
+              <text fg={theme.textMuted}>{scanState.llmPlanningModel}</text>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content>
+                <DropdownMenu.Group>
+                  <DropdownMenu.GroupLabel>Planner Model (env: {scanState.llmPlanningModelConfig || scanState.llmPlanningModel})</DropdownMenu.GroupLabel>
+                  <Show
+                    when={!modelsLoading()}
+                    fallback={<DropdownMenu.Item><DropdownMenu.ItemLabel>Loading...</DropdownMenu.ItemLabel></DropdownMenu.Item>}
+                  >
+                    <For each={availableModels()}>
+                      {(model) => (
+                        <DropdownMenu.RadioItem
+                          value={model}
+                          onSelect={() => selectModel(model)}
+                        >
+                          <DropdownMenu.ItemLabel>{model}</DropdownMenu.ItemLabel>
+                        </DropdownMenu.RadioItem>
+                      )}
+                    </For>
+                  </Show>
+                </DropdownMenu.Group>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu>
+        </Show>
         <Show when={scanState.status === "running"}>
           <text fg={theme.primary}>{spinner()} Running</text>
         </Show>
@@ -178,6 +243,36 @@ export function ScanDashboard() {
           </box>
         </box>
 
+        {/* Verification progress indicator */}
+        <Show when={scanState.verificationTotal > 0}>
+          <box flexDirection="row" gap={1} paddingBottom={1}>
+            <Show
+              when={scanState.verificationStatus === "completed"}
+              fallback={
+                <box flexDirection="row" gap={1}>
+                  <text fg={theme.primary}>{spinner()}</text>
+                  <text fg={theme.text}>Verifying findings: {scanState.verificationCurrent}/{scanState.verificationTotal}</text>
+                </box>
+              }
+            >
+              <box flexDirection="row" gap={1}>
+                <Show when={scanState.verificationFailed === 0}>
+                  <text fg={theme.success}>✓</text>
+                </Show>
+                <Show when={scanState.verificationFailed > 0}>
+                  <text fg={theme.warning}>⚠</text>
+                </Show>
+                <text fg={theme.text}>
+                  Verification complete: <text fg={theme.success}>{scanState.verificationPassed} passed</text>
+                  <Show when={scanState.verificationFailed > 0}>
+                    <text fg={theme.error}>, {scanState.verificationFailed} failed</text>
+                  </Show>
+                </text>
+              </box>
+            </Show>
+          </box>
+        </Show>
+
         {/* AI Analysis progress indicator */}
         <Show when={scanState.analysisTotal > 0}>
           <box flexDirection="row" gap={1} paddingBottom={1}>
@@ -189,6 +284,88 @@ export function ScanDashboard() {
             >
               <text fg={theme.primary}>{spinner()} Analyzing findings: {scanState.analysisCurrent}/{scanState.analysisTotal}</text>
             </Show>
+          </box>
+        </Show>
+
+        {/* ── LLM Planning Analysis ── */}
+        <Show when={scanState.llmPlanningStatus !== "idle"}>
+          <box
+            borderStyle="rounded"
+            border
+            borderColor={scanState.llmPlanningStatus === "running" ? theme.primary : scanState.llmPlanningStatus === "failed" ? theme.error : theme.success}
+            paddingX={1}
+            paddingY={1}
+            marginBottom={1}
+          >
+            <box flexDirection="column" gap={1}>
+              <box flexDirection="row" gap={1}>
+                <Show when={scanState.llmPlanningStatus === "running"}>
+                  <text fg={theme.primary}>{spinner()} LLM Analysis</text>
+                </Show>
+                <Show when={scanState.llmPlanningStatus === "completed"}>
+                  <text fg={theme.success}>✓ LLM Analysis</text>
+                </Show>
+                <Show when={scanState.llmPlanningStatus === "failed"}>
+                  <text fg={theme.error}>✗ LLM Analysis failed</text>
+                </Show>
+                <Show when={scanState.llmPlanningSuggestions.length > 0}>
+                  <text fg={theme.textMuted}>({scanState.llmPlanningSuggestions.length} suggestions)</text>
+                </Show>
+              </box>
+              <Show when={scanState.llmPlanningTargetAnalysis && scanState.llmPlanningTargetAnalysis.length > 0}>
+                <text fg={theme.textMuted}>{scanState.llmPlanningTargetAnalysis}</text>
+              </Show>
+              <Show when={scanState.llmPlanningError}>
+                <text fg={theme.error}>{scanState.llmPlanningError}</text>
+              </Show>
+              <Show when={scanState.llmPlanningSuggestions.length > 0}>
+                <For each={scanState.llmPlanningSuggestions}>
+                  {(suggestion) => (
+                    <box flexDirection="row" gap={1}>
+                      <text fg={theme.primary}>→</text>
+                      <text fg={theme.text}>{suggestion.capabilities.join(", ")}</text>
+                    </box>
+                  )}
+                </For>
+              </Show>
+            </box>
+          </box>
+        </Show>
+
+        {/* ── LLM Replan Analysis ── */}
+        <Show when={scanState.llmReplanEntries.length > 0}>
+          <box
+            borderStyle="rounded"
+            border
+            borderColor={theme.warning}
+            paddingX={1}
+            paddingY={1}
+            marginBottom={1}
+          >
+            <box flexDirection="column" gap={1}>
+              <box flexDirection="row" gap={1}>
+                <text fg={theme.warning}>⟳ LLM Replan</text>
+                <text fg={theme.textMuted}>({scanState.llmReplanEntries.length} analysis)</text>
+              </box>
+              <For each={scanState.llmReplanEntries}>
+                {(entry, idx) => (
+                  <box flexDirection="column" gap={1}>
+                    <Show when={entry.stopAssessment}>
+                      <box flexDirection="row" gap={1}>
+                        <text fg={theme.success}>■ Stop recommended</text>
+                        <text fg={theme.textMuted}>{entry.reasoning}</text>
+                      </box>
+                    </Show>
+                    <Show when={!entry.stopAssessment && entry.suggestedCapabilities.length > 0}>
+                      <box flexDirection="row" gap={1}>
+                        <text fg={theme.primary}>→ {entry.suggestedCapabilities.join(", ")}</text>
+                        <text fg={theme.textMuted}>{entry.reasoning}</text>
+                      </box>
+                    </Show>
+                  </box>
+                )}
+              </For>
+            </box>
           </box>
         </Show>
 

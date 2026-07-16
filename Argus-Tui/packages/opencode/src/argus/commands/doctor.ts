@@ -11,6 +11,7 @@ import { CredentialStore } from "../engagement/credentials"
 import { WorkersBridge } from "../bridge/mcp-client"
 import { PROJECT_ROOT } from "../shared/path"
 import { ToolRegistry } from "../workflows/tool-registry"
+import { LLMPlannerService } from "../planner/llm-service"
 
 /**
  * Read provider credentials from OpenCode's own auth.json (stored in XDG data dir).
@@ -71,6 +72,7 @@ export async function doctorCommand(options?: {
   results.push(credCheck())
   results.push(envCheck())
   results.push(scopeCheck())
+  results.push(plannerLLMCheck())
   results.push(await dnsCheck())
   results.push(configValidationCheck())
   results.push(toolchainCheck())
@@ -369,6 +371,46 @@ function envCheck(): CheckResult {
     name: "Configuration",
     status: "WARN",
     message: "No .env file, OpenCode provider registry, or env var API key found. Deterministic mode will still work.",
+  }
+}
+
+/**
+ * Check the planner LLM configuration (ARGUS_PLANNER_MODEL + API key).
+ * This is a lightweight env-var check — it does NOT make an actual LLM
+ * call (use --online for connectivity tests).
+ */
+function plannerLLMCheck(): CheckResult {
+  const modelDesc = LLMPlannerService.getModelEnvVarDescription()
+
+  const apiKey =
+    process.env.OPENAI_API_KEY ||
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.OPENCODE_API_KEY ||
+    process.env.LLM_API_KEY
+
+  if (!apiKey) {
+    return {
+      name: "Planner LLM",
+      status: "WARN",
+      message: `${modelDesc} — No API key found. Planner will use deterministic mode. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.`,
+    }
+  }
+
+  const modelStr =
+    process.env.ARGUS_PLANNER_MODEL?.trim() ||
+    process.env.OPENCODE_MODEL?.trim() ||
+    "gpt-4o-mini (default)"
+
+  const source =
+    process.env.OPENAI_API_KEY ? "OPENAI_API_KEY" :
+    process.env.ANTHROPIC_API_KEY ? "ANTHROPIC_API_KEY" :
+    process.env.OPENCODE_API_KEY ? "OPENCODE_API_KEY" :
+    "LLM_API_KEY"
+
+  return {
+    name: "Planner LLM",
+    status: "PASS",
+    message: `Model: ${modelStr} — API key from ${source}`,
   }
 }
 

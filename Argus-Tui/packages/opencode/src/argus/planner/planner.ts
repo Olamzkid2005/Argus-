@@ -8,6 +8,8 @@ import { determineNewCapabilities, REPLAN_INSERTABLE } from "./replan-rules"
 import { planDeterministic } from "./planDeterministic"
 import { resolvePipeline, formatPipelineGaps } from "./pipeline"
 import { getTargetValidator } from "../shared/target-validator"
+import { LLMPlannerService } from "./llm-service"
+import type { ProgressEvent } from "../shared/progress"
 
 export const MAX_REPLANS = (() => {
   const raw = process.env.ARGUS_MAX_REPLANS
@@ -25,6 +27,8 @@ export const LLM_MAX_REPLANS = (() => {
 
 interface PlanOptions {
   useLLM?: boolean
+  /** Optional progress callback for emitting structured events to the TUI */
+  onProgress?: (event: ProgressEvent) => void
 }
 
 export class WorkflowPlanner {
@@ -34,6 +38,7 @@ export class WorkflowPlanner {
   ) {}
 
   async plan(target: string, context?: Partial<PlannerContext>, options?: PlanOptions): Promise<AssessmentPlan> {
+    const emitProgress = options?.onProgress
     const targetType = detectTargetType(target)
     const authState = detectAuthState(target)
 
@@ -111,7 +116,58 @@ export class WorkflowPlanner {
       return plan
     }
 
-    const requiredCaps = determineRequiredCapabilities(targetType, authState, plannerContext.techStack)
+    // ── Phase 1: LLM-assisted capability suggestion ──
+    // Use the OpenCode Session LLM to suggest additional capabilities
+    // beyond the deterministic baseline. LLM suggestions are merged
+    // with the deterministic set — duplicates are removed.
+    const deterministicCaps = determineRequiredCapabilities(targetType, authState, plannerContext.techStack)
+
+    // If LLM is enabled, ask it for phase suggestions
+    let llmSuggested: string[] = []
+    if (options?.useLLM !== false) {
+      emitProgress?.({ type: "llm_planning_start", phase: "initial" })
+      try {
+        const llmSvc = LLMPlannerService.lazy()
+        const result = await llmSvc.suggestPhases(target, targetType, plannerContext.techStack)
+        if (result.suggestedPhases.length > 0) {
+          for (const phase of result.suggestedPhases) {
+            llmSuggested.push(...phase.capabilities)
+          }
+          process.stderr.write(
+            `[planner] LLM suggested ${result.suggestedPhases.length} additional phase(s) for ${target}\n`,
+          )
+        }
+        // Emit LLM analysis results for TUI display
+        emitProgress?.({
+          type: "llm_planning_complete",
+          phase: "initial",
+          targetAnalysis: result.targetAnalysis,
+          suggestions: result.suggestedPhases.map((p) => ({
+            capabilities: p.capabilities,
+            reasoning: p.reasoning,
+          })),
+          llmModel: llmSvc.getModelId(),
+          modelEnvDescription: LLMPlannerService.getModelEnvVarDescription(),
+        })
+      } catch (e) {
+        emitProgress?.({
+          type: "llm_planning_error",
+          phase: "initial",
+          error: (e as Error).message,
+        })
+        // LLM failure is non-blocking — fall back to deterministic planning
+      }
+    }
+
+    // Merge LLM suggestions into deterministic capabilities
+    const requiredCaps = [...deterministicCaps]
+    for (const raw of llmSuggested) {
+      const cap = guessCapability(raw)
+      if (cap !== undefined && !requiredCaps.includes(cap)) {
+        requiredCaps.push(cap)
+      }
+    }
+
     const workflow = this.workflowRegistry.findByCapabilities(requiredCaps)
 
     if (!workflow) {
@@ -188,7 +244,8 @@ export class WorkflowPlanner {
     }
   }
 
-  replan(context: PlannerContext): PhaseExecutionRequest[] | null {
+  async replan(context: PlannerContext): Promise<PhaseExecutionRequest[] | null> {
+    const emitProgress = context.onProgress
     // ── Independent budgets for LLM and rule-based replanning ──
     // LLM suggestions and rule-based capabilities each have their own counter
     // and max. This prevents LLM replanning from starving rule-based replanning
@@ -216,10 +273,14 @@ export class WorkflowPlanner {
     }
 
     // ── Merge LLM-suggested capabilities (independent budget) ──
-    // The Python MCP worker runs LLM analysis on accumulated findings and returns
-    // suggested next capabilities. These have their own budget so the LLM can
-    // still suggest phases even after rule-based replanning is exhausted.
+    // Two LLM sources feed into replanning:
+    //   1. Python MCP worker (via bridge.phaseComplete) — existing, kept for
+    //      backward compatibility
+    //   2. OpenCode Session LLM (local, via @opencode-ai/llm) — NEW, runs
+    //      alongside the MCP path for richer analysis
     let llmProducedPhases = false
+
+    // Source 1: Python MCP bridge (existing) — external LLM analysis
     if (!llmBudgetExhausted && context.llmSuggestedCapabilities && context.llmSuggestedCapabilities.length > 0) {
       for (const raw of context.llmSuggestedCapabilities) {
         const cap = guessCapability(raw)
@@ -227,6 +288,42 @@ export class WorkflowPlanner {
           newCapabilities.add(cap)
           llmProducedPhases = true
         }
+      }
+    }
+
+    // Source 2: OpenCode Session LLM (local) — runs alongside MCP path
+    if (!llmBudgetExhausted && context.findings.length > 0) {
+      try {
+        const llmSvc = LLMPlannerService.lazy()
+        const llmReplan = await llmSvc.suggestReplan(context.target, context.findings)
+        if (llmReplan && !llmReplan.stopAssessment) {
+          for (const raw of llmReplan.nextCapabilities) {
+            const cap = guessCapability(raw)
+            if (cap !== undefined && !context.executedCapabilities.has(cap) && !newCapabilities.has(cap)) {
+              newCapabilities.add(cap)
+              llmProducedPhases = true
+            }
+          }
+        }
+        // Emit LLM replan analysis for TUI display
+        if (llmReplan) {
+          emitProgress?.({
+            type: "llm_replan_analysis",
+            label: context.target,
+            reasoning: llmReplan.reasoning,
+            suggestedCapabilities: llmReplan.nextCapabilities,
+            stopAssessment: llmReplan.stopAssessment,
+            llmModel: llmSvc.getModelId(),
+          })
+        }
+      } catch (e) {
+        emitProgress?.({
+          type: "llm_planning_error",
+          phase: "replan",
+          error: (e as Error).message,
+        })
+        // Local LLM failure is non-blocking — rule-based replanning continues
+        console.warn(`[planner] Local LLM replan failed: ${(e as Error).message}`)
       }
     }
 

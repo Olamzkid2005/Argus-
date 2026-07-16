@@ -19,6 +19,19 @@ export interface ScanPhase {
   errors: string[]
 }
 
+export interface LLMAnalysisSuggestion {
+  capabilities: string[]
+  reasoning: string
+}
+
+export interface LLMReplanEntry {
+  phaseName: string
+  reasoning: string
+  suggestedCapabilities: string[]
+  stopAssessment: boolean
+  llmModel: string
+}
+
 export interface ScanState {
   target: string
   engagementId: string
@@ -32,6 +45,24 @@ export interface ScanState {
   analysisCurrent: number
   analysisTotal: number
   errorHints: ErrorHintData[]
+  // Verification tracking state
+  verificationStatus: "idle" | "running" | "completed"
+  verificationCurrent: number
+  verificationTotal: number
+  verificationPassed: number
+  verificationFailed: number
+  // LLM planning analysis state
+  llmPlanningStatus: "idle" | "running" | "completed" | "failed"
+  llmPlanningTargetAnalysis: string
+  llmPlanningSuggestions: LLMAnalysisSuggestion[]
+  llmPlanningError: string
+  /** Model identifier used by the planner (e.g. "openai/gpt-4o-mini") */
+  llmPlanningModel: string
+  /** Full env var config description for model tooltip display */
+  llmPlanningModelConfig: string
+  // LLM replan analysis history
+  llmReplanEntries: LLMReplanEntry[]
+  llmReplanStatus: "idle" | "running" | "completed"
 }
 
 const initialState: ScanState = {
@@ -47,6 +78,19 @@ const initialState: ScanState = {
   analysisCurrent: 0,
   analysisTotal: 0,
   errorHints: [] as ErrorHintData[],
+  verificationStatus: "idle",
+  verificationCurrent: 0,
+  verificationTotal: 0,
+  verificationPassed: 0,
+  verificationFailed: 0,
+  llmPlanningStatus: "idle",
+  llmPlanningTargetAnalysis: "",
+  llmPlanningSuggestions: [] as LLMAnalysisSuggestion[],
+  llmPlanningError: "",
+  llmPlanningModel: "",
+  llmPlanningModelConfig: "",
+  llmReplanEntries: [] as LLMReplanEntry[],
+  llmReplanStatus: "idle",
 }
 
 const [scanState, setScanState] = createStore<ScanState>({ ...initialState })
@@ -70,6 +114,19 @@ function snapshot(): ScanState {
     analysisCurrent: scanState.analysisCurrent,
     analysisTotal: scanState.analysisTotal,
     errorHints: [...scanState.errorHints],
+    verificationStatus: scanState.verificationStatus,
+    verificationCurrent: scanState.verificationCurrent,
+    verificationTotal: scanState.verificationTotal,
+    verificationPassed: scanState.verificationPassed,
+    verificationFailed: scanState.verificationFailed,
+    llmPlanningStatus: scanState.llmPlanningStatus,
+    llmPlanningTargetAnalysis: scanState.llmPlanningTargetAnalysis,
+    llmPlanningSuggestions: [...scanState.llmPlanningSuggestions],
+    llmPlanningError: scanState.llmPlanningError,
+    llmPlanningModel: scanState.llmPlanningModel,
+    llmPlanningModelConfig: scanState.llmPlanningModelConfig,
+    llmReplanEntries: [...scanState.llmReplanEntries],
+    llmReplanStatus: scanState.llmReplanStatus,
   }
 }
 
@@ -160,6 +217,17 @@ export function clearErrorHints() {
   setScanState("errorHints", [])
 }
 
+/**
+ * Update the planner model displayed in the scan dashboard.
+ * Called after LLMPlannerService.switchModel() to keep the
+ * scan-store in sync with the newly selected model.
+ */
+export function setPlannerModel(modelId: string, modelConfig: string) {
+  persistActive()
+  setScanState("llmPlanningModel", modelId)
+  setScanState("llmPlanningModelConfig", modelConfig)
+}
+
 export function resetScan() {
   persistActive()
   setScanState({ ...initialState })
@@ -211,6 +279,66 @@ function processEventInner(event: ProgressEvent, engagementId?: string) {
         errorId: event.errorId,
       })
       appendLog(`[!] ${event.summary}`)
+      break
+    case "verification_start":
+      setScanState("verificationStatus", "running")
+      setScanState("verificationCurrent", 0)
+      setScanState("verificationTotal", event.total)
+      setScanState("verificationPassed", 0)
+      setScanState("verificationFailed", 0)
+      appendLog(`Verification starting: ${event.total} finding(s)`)
+      break
+    case "verification_progress": {
+      setScanState("verificationCurrent", event.current)
+      setScanState("verificationTotal", event.total)
+      if (event.findingTitle) {
+        appendLog(`Verifying: ${event.findingSubtype ?? "finding"} — ${event.findingTitle}`)
+      }
+      break
+    }
+    case "verification_complete":
+      setScanState("verificationStatus", "completed")
+      setScanState("verificationPassed", event.passed)
+      setScanState("verificationFailed", event.failed)
+      appendLog(`Verification complete: ${event.passed} passed, ${event.failed} failed`)
+      break
+    case "llm_planning_start":
+      setScanState("llmPlanningStatus", "running")
+      setScanState("llmPlanningTargetAnalysis", "")
+      setScanState("llmPlanningSuggestions", [])
+      setScanState("llmPlanningError", "")
+      appendLog(`LLM analysis started: ${event.phase} planning`)
+      break
+    case "llm_planning_complete":
+      setScanState("llmPlanningStatus", "completed")
+      setScanState("llmPlanningTargetAnalysis", event.targetAnalysis)
+      setScanState("llmPlanningSuggestions", event.suggestions.map((s) => ({ capabilities: s.capabilities, reasoning: s.reasoning })))
+      setScanState("llmPlanningModel", event.llmModel)
+      setScanState("llmPlanningModelConfig", event.modelEnvDescription)
+      appendLog(`LLM analysis complete: ${event.suggestions.length} phase suggestion(s) for ${event.phase} planning`)
+      break
+    case "llm_planning_error":
+      setScanState("llmPlanningStatus", "failed")
+      setScanState("llmPlanningError", event.error)
+      appendLog(`LLM analysis failed: ${event.error}`)
+      break
+    case "llm_replan_analysis":
+      setScanState("llmReplanStatus", "completed")
+      setScanState("llmReplanEntries", (prev) => [
+        ...prev,
+        {
+          phaseName: event.label,
+          reasoning: event.reasoning,
+          suggestedCapabilities: event.suggestedCapabilities,
+          stopAssessment: event.stopAssessment,
+          llmModel: event.llmModel,
+        },
+      ])
+      if (event.stopAssessment) {
+        appendLog(`LLM suggests stopping assessment: ${event.reasoning}`)
+      } else if (event.suggestedCapabilities.length > 0) {
+        appendLog(`LLM suggests next capabilities: ${event.suggestedCapabilities.join(", ")}`)
+      }
       break
     default:
       break

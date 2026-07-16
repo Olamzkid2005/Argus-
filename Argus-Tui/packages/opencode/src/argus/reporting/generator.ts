@@ -7,9 +7,8 @@ import type { Report, ReportFormat, ReportSummary } from "./types"
 import { EngagementStore } from "../engagement/store"
 import type { IEngagementStore } from "../engagement/types"
 
-/** Resolve the current file's directory, compatible with both Bun and Node ESM.
- *  Uses decodeURIComponent to handle percent-encoded spaces in file:// paths on macOS. */
-const _dirname = decodeURIComponent(new URL(".", import.meta.url).pathname)
+/** Resolve the current file's directory, compatible with both Bun and Node ESM. */
+const _dirname = dirname(fileURLToPath(import.meta.url))
 
 function escapeMarkdown(text: string): string {
   // Only escape characters that are meaningful markdown syntax.

@@ -135,10 +135,8 @@ export async function encryptionCommand(
           return [
             `✓ Master key generated and ${storageDesc}`,
             "",
-            "  To enable encryption-at-rest for new engagements, set:",
-            "    storage.encryption.enabled: true",
-            "  in your argus.config.yaml or run:",
-            "    argus encryption on",
+          "  Encryption-at-rest is enabled by default for new engagements.",
+          "  To disable it, run: argus encryption off",
             "",
             "  To export a backup of this key (RECOMMENDED):",
             "    argus encryption export --passphrase <your-passphrase>",
@@ -208,6 +206,8 @@ export async function encryptionCommand(
         "  Existing encrypted engagements remain encrypted on disk.",
         "  To make them readable again, re-enable encryption with `argus encryption on`.",
         "",
+        "  Note: Encryption is enabled by default in new configs.",
+        "  To make this permanent, set `storage.encryption.enabled: false` in config.",
         "  Setting persisted to: ~/.argus/config.yaml",
       ].join("\n")
     }
@@ -253,8 +253,7 @@ export async function encryptionCommand(
           `  Key storage:     ${storageDesc}`,
           `  Key cache:       5-minute in-memory TTL`,
           "",
-          "  To enable encryption for new assessments:",
-          "    Set `storage.encryption.enabled: true` in argus.config.yaml",
+          "  Encryption is enabled by default for new assessments.",
           "",
           "  To encrypt existing engagement data:",
             "    Enable the flag and re-access each engagement to trigger migration.",
@@ -417,7 +416,7 @@ export async function encryptionCommand(
           "",
           "  The key has been stored in the macOS Keychain.",
           "  Encryption-at-rest is now available.",
-          "  Set `storage.encryption.enabled: true` to activate it.",
+          "  Encryption is enabled by default — no further action needed.",
         ].join("\n")
       } catch (err) {
         if (err instanceof EncryptionError) {

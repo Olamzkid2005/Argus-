@@ -875,6 +875,98 @@ export class EncryptionManager {
   }
 
   /**
+   * Ensure a master key exists, auto-generating one if needed.
+   *
+   * Designed for the case where `storage.encryption.enabled` defaults to `true`
+   * but no master key has been initialized yet. Generates a random 256-bit
+   * key and stores it in the OS keychain (macOS) or encrypted file (Linux/Windows).
+   *
+   * On file-based platforms without a configured passphrase, this method:
+   * 1. First checks for an existing auto-passphrase file (`~/.argus/.auto-passphrase`)
+   * 2. If found, loads the passphrase and attempts to decrypt the existing key
+   * 3. If none found, generates a fresh auto-passphrase, stores it, and creates
+   *    a new master key
+   *
+   * @returns true if a key is available (existing or newly created), false if
+   *          auto-generation is impossible (e.g., file-based but can't create
+   *          the passphrase file)
+   */
+  static ensureKeySync(): boolean {
+    // ── File-based platform: ensure passphrase is available BEFORE key lookup ──
+    // Must happen first because fileKeychainGet() needs the passphrase to decrypt
+    // the existing key file. On process restart, the auto-passphrase file is the
+    // only way to recover the passphrase.
+    if (currentPlatform !== "macos" && !this.getPassphrase()) {
+      const autoPassPath = join(StoragePaths.basePath, ".auto-passphrase")
+      if (existsSync(autoPassPath)) {
+        try {
+          const storedPassphrase = readFileSync(autoPassPath, "utf-8").trim()
+          if (storedPassphrase) {
+            this.setPassphrase(storedPassphrase)
+          }
+        } catch (err) {
+          console.warn(
+            `[encryption] Failed to read auto-passphrase file: ${(err as Error).message}. ` +
+            "Will attempt to generate a new key."
+          )
+        }
+      }
+    }
+
+    // ── Check if key already exists (passphrase now loaded if needed) ──
+    let existingHex: string | null = null
+    try {
+      existingHex = keychainGet(SERVICE_NAME, ACCOUNT_NAME)
+    } catch {
+      // keychainGet may throw if passphrase is wrong or file is corrupted.
+      // Fall through to key generation to recover.
+    }
+    if (existingHex !== null) {
+      try {
+        const key = Buffer.from(existingHex, "hex")
+        this.cachedKey = { key, obtainedAt: Date.now() }
+        return true
+      } catch {
+        // Invalid hex — fall through to re-generate
+      }
+    }
+
+    // ── File-based platform: generate auto-passphrase if still missing ──
+    if (currentPlatform !== "macos" && !this.getPassphrase()) {
+      try {
+        const autoPassphrase = crypto.randomBytes(32).toString("hex")
+        const dir = StoragePaths.basePath
+        if (!existsSync(dir)) {
+          mkdirSync(dir, { recursive: true })
+        }
+        writeFileSync(join(dir, ".auto-passphrase"), autoPassphrase, { mode: 0o600 })
+        this.setPassphrase(autoPassphrase)
+      } catch (err) {
+        console.warn(
+          `[encryption] Failed to create auto-passphrase file: ${(err as Error).message}. ` +
+          "Encryption at rest will not be available."
+        )
+        return false
+      }
+    }
+
+    // ── Generate and store master key ──
+    try {
+      const masterKey = crypto.randomBytes(KEY_LEN)
+      const hex = masterKey.toString("hex")
+      keychainSet(SERVICE_NAME, ACCOUNT_NAME, hex)
+      this.cachedKey = { key: masterKey, obtainedAt: Date.now() }
+      return true
+    } catch (err) {
+      console.warn(
+        `[encryption] Failed to auto-generate master key: ${(err as Error).message}. ` +
+        "Encryption at rest will not be available."
+      )
+      return false
+    }
+  }
+
+  /**
    * Clear the in-memory key cache.
    * Call this when the user logs out or the session ends.
    */

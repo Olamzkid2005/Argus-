@@ -17,8 +17,8 @@ describe("FeatureFlags", () => {
     expect(flags.isEnabled(Feature.ENCRYPTION_AT_REST)).toBe(false)
   })
 
-  test("DETERMINISTIC_FALLBACK defaults to false (opt-in)", () => {
-    expect(flags.isEnabled(Feature.DETERMINISTIC_FALLBACK)).toBe(false)
+  test("DETERMINISTIC_FALLBACK defaults to true (auto-fallback)", () => {
+    expect(flags.isEnabled(Feature.DETERMINISTIC_FALLBACK)).toBe(true)
   })
 
   test("constructor overrides enable features", () => {
