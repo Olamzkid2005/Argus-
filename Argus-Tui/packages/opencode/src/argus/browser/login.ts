@@ -97,6 +97,15 @@ async function loginWithLocators(
   creds: Credentials,
 ): Promise<boolean | null> {
   try {
+    // Capture session cookies before any form interaction so
+    // detectAuthSuccess() can use Check 2 (cookie comparison).
+    // Gap 2.1: Without beforeCookies, the cookie comparison check
+    // is skipped entirely, weakening auth verification.
+    let beforeCookies: Array<{ name: string; value: string }> = []
+    try {
+      beforeCookies = await page.context().cookies()
+    } catch { /* context may not be available */ }
+
     // 1. Try to find password field via getByLabel (most reliable for form fields)
     const passwordByLabel = page.getByLabel(/password/i)
     const hasPasswordByLabel = (await passwordByLabel.count()) > 0
@@ -151,11 +160,12 @@ async function loginWithLocators(
       // Network may not stabilize — proceed anyway
     }
 
-    // Verify login success using positive confirmation
+    // Verify login success using positive confirmation (all 3 checks)
     const postLoginUrl = page.url()
     const stillOnLogin = /\/login\b|\/signin\b|\/auth\b/i.test(postLoginUrl)
     if (!stillOnLogin) return true
     return detectAuthSuccess(page, {
+      beforeCookies,
       targetUrl: page.url(),
     })
   } catch {
@@ -239,6 +249,13 @@ async function loginMultiStep(
   creds: Credentials,
   onChallenge?: AuthChallengeCallback,
 ): Promise<boolean> {
+  // Capture session cookies before any form interaction so
+  // detectAuthSuccess() can use the cookie comparison check.
+  let beforeCookies: Array<{ name: string; value: string }> = []
+  try {
+    beforeCookies = await page.context().cookies()
+  } catch { /* context may not be available */ }
+
   // Check if this looks like a multi-step flow:
   // - There's an email/username field but no visible password field
   // - There's a submit/continue button
@@ -313,14 +330,19 @@ async function loginMultiStep(
     // Network may not stabilize
   }
 
-  // Check if login succeeded
-  const postLoginUrl = page.url()
-  const stillOnLogin = /\/login\b|\/signin\b|\/auth\b/i.test(postLoginUrl)
-  if (!stillOnLogin) {
+  // Gap 2.1: Use detectAuthSuccess() with positive confirmation
+  // instead of the original URL-only check. This enables all 3 positive
+  // checks: DOM elements, cookie comparison, and API endpoint probing.
+  const authSuccess = await detectAuthSuccess(page, {
+    beforeCookies,
+    targetUrl: page.url(),
+  })
+
+  if (authSuccess) {
     return true
   }
 
-  // Check for auth challenges
+  // Check for auth challenges on failure
   const challenge = await detectAuthChallenge(page)
   if (challenge) onChallenge?.(challenge)
   return false
@@ -777,14 +799,30 @@ export interface AuthTokens {
 
 /**
  * Verify that the session is working after token/cookie injection by
- * navigating to the current URL and checking we're not redirected to a login page.
+ * navigating to the target URL and using the 3 positive checks from
+ * detectAuthSuccess() instead of a simple URL pattern check.
+ *
+ * Gap 2.1 fix: Previously only checked if the URL didn't contain "/login",
+ * which was a weak absence-based check. Now uses positive confirmation:
+ * 1. Authenticated DOM elements (logout button, avatar, profile link)
+ * 2. Session cookie changes (requires beforeCookies)
+ * 3. Authenticated API endpoint probe (/api/me, /profile, etc.)
+ *
+ * Still uses page.goto() to navigate to the target URL so the injected
+ * session takes effect and the page renders in its authenticated state.
+ *
+ * @param page - The Playwright page to check.
+ * @param verifyUrl - URL to navigate to for verification. Defaults to current URL.
+ * @returns True if session is confirmed working via positive checks.
  */
 async function verifySession(page: Page, verifyUrl?: string): Promise<boolean> {
   try {
     await page.goto(verifyUrl ?? page.url(), { waitUntil: "networkidle", timeout: 10000 })
-    const url = page.url()
-    // If we end up on a login page, the session didn't work
-    return !/\/login\b|\/signin\b|\/auth\b/i.test(url)
+    // Use the full positive detection pipeline from detectAuthSuccess()
+    // instead of the original weak URL pattern check.
+    return await detectAuthSuccess(page, {
+      targetUrl: page.url(),
+    })
   } catch {
     return false
   }

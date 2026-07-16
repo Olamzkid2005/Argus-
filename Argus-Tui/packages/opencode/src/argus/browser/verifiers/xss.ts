@@ -1,7 +1,6 @@
 import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
 import { Confidence } from "../../shared/types"
-import { loginIfFormPresent } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
 import { randomUUID, createHash } from "crypto"
 import { tmpdir } from "os"

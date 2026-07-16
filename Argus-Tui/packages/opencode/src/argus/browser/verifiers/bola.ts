@@ -2,7 +2,9 @@ import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
 import { Confidence } from "../../shared/types"
 import { authenticateSession, isAccessDenied, detectAuthChallenge, logAuthChallenge } from "../login"
+import type { AuthTokens } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
+import type { CredentialEntry } from "../../engagement/credentials"
 import { randomUUID, createHash } from "crypto"
 import { tmpdir } from "os"
 import { join } from "path"
@@ -27,8 +29,8 @@ export class BOLAVerifier implements VerificationScenario {
     private engine: BrowserEngine,
     private targetUrl: string,
     private resourcePath: string,
-    private userACreds: { username: string; password: string },
-    private userBCreds: { username: string; password: string },
+    private userACreds: CredentialEntry,
+    private userBCreds: CredentialEntry,
     private collector?: EvidenceCollector,
     private engagementId?: string,
     private findingId?: string,
@@ -180,7 +182,7 @@ export class BOLAVerifier implements VerificationScenario {
     }
   }
 
-  private async checkAccess(resourceUrl: string, creds: { username: string; password: string }, label: string): Promise<boolean> {
+  private async checkAccess(resourceUrl: string, creds: CredentialEntry, label: string): Promise<boolean> {
     this.logs.push(`Attempting to access ${resourceUrl} as ${label} (${creds.username})`)
     const context = await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
     const page = await context.newPage()
@@ -188,13 +190,25 @@ export class BOLAVerifier implements VerificationScenario {
       await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30000 })
       this.capturedRequests.push(`GET ${this.targetUrl} [${label} login]`)
 
+      // Build AuthTokens from the full CredentialEntry for OAuth/SSO fallback.
+      // Gap 2.6: When the credential file includes authToken or authCookies,
+      // they are passed to authenticateSession() so it can fall through to
+      // token/cookie injection when form-based login hits an OAuth/SSO page.
+      const authTokens: AuthTokens | undefined =
+        creds.authToken || (creds.authCookies && creds.authCookies.length > 0)
+          ? {
+              bearerToken: creds.authToken,
+              cookies: creds.authCookies,
+            }
+          : undefined
+
       // Phase 3.4.2: Capture auth challenges during login.
       // Uses authenticateSession() which tries form login first, then falls
       // back to token/cookie injection for OAuth/SSO pages (Gap 2.6).
       const loginSuccess = await authenticateSession(
         page,
         creds,
-        undefined, // authTokens — injected from CredentialStore when available
+        authTokens,
         context,
         (challenge) => {
           logAuthChallenge(challenge, (line) => this.logs.push(line))

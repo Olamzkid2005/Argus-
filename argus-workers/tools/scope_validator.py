@@ -18,6 +18,7 @@ _BLOCKED_METADATA_HOSTNAMES: frozenset = frozenset({
     "localhost",
     "127.0.0.1",
     "::1",
+    "::",  # IPv6 unspecified address
     "0.0.0.0",
     "169.254.169.254",  # AWS metadata endpoint
     "metadata.google.internal",  # GCP metadata
@@ -130,6 +131,39 @@ class ScopeValidator:
             return False
 
     @staticmethod
+    def _is_additional_blocked_ip(ip_str: str) -> bool:
+        """Check additional IP ranges not covered by `ipaddress` properties.
+
+        Python 3.10's ``ipaddress`` module does not flag CGNAT (RFC 6598,
+        100.64.0.0/10) or benchmarking (RFC 2544, 198.18.0.0/15) as private.
+        These ranges should still be blocked for SSRF prevention (fail-closed).
+        Consolidated from the former ``utils/validation.py:is_private_ip()``
+        which had hand-rolled checks for these ranges.
+
+        Args:
+            ip_str: Bare IP address string (IPv4 or IPv6)
+
+        Returns:
+            True if the IP is in a blocked range that ``ipaddress`` misses
+        """
+        import ipaddress
+
+        try:
+            ip = ipaddress.ip_address(ip_str)
+            if isinstance(ip, ipaddress.IPv4Address):
+                octets = str(ip).split(".")
+                if len(octets) == 4:
+                    # CGNAT (RFC 6598): 100.64.0.0/10
+                    if octets[0] == "100" and 64 <= int(octets[1]) <= 127:
+                        return True
+                    # Benchmarking (RFC 2544): 198.18.0.0/15
+                    if octets[0] == "198" and octets[1] in ("18", "19"):
+                        return True
+        except ValueError:
+            pass
+        return False
+
+    @staticmethod
     def is_internal_address(hostname: str, resolved_ip: str | None = None) -> bool:
         """Check if a hostname resolves to a private/internal/SSRF target.
 
@@ -137,6 +171,8 @@ class ScopeValidator:
         _browser_scan_worker._validate_url() -- covers:
         - Known cloud metadata hostnames (AWS, GCP, Azure, Alibaba)
         - Private IPv4 ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+        - CGNAT (100.64.0.0/10, RFC 6598)
+        - Benchmarking (198.18.0.0/15, RFC 2544)
         - Loopback (127.0.0.1, ::1)
         - Link-local (169.254.0.0/16, fe80::/10)
         - Multicast (224.0.0.0/4)
@@ -180,6 +216,12 @@ class ScopeValidator:
                     hostname, ip.is_private, ip.is_loopback, ip.is_link_local, ip.is_multicast,
                 )
                 return True
+            # Check additional ranges not covered by ipaddress module (CGNAT, benchmarking)
+            if ScopeValidator._is_additional_blocked_ip(hostname):
+                logger.warning(
+                    "Blocked additional SSRF IP: %s (CGNAT/benchmarking)", hostname,
+                )
+                return True
             # Check IPv4-mapped IPv6 addresses (e.g. ::ffff:10.0.0.1)
             if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
                 mapped = ipaddress.ip_address(ip.ipv4_mapped)
@@ -212,6 +254,13 @@ class ScopeValidator:
                     hostname, resolved_ip,
                 )
                 return True
+            # Check additional ranges not covered by ipaddress module
+            if ScopeValidator._is_additional_blocked_ip(resolved_ip):
+                logger.warning(
+                    "Blocked hostname %s -- resolved to additional blocked IP %s",
+                    hostname, resolved_ip,
+                )
+                return True
             if resolved_ip == "169.254.169.254":
                 logger.warning(
                     "Blocked hostname %s -- resolved to cloud metadata endpoint %s",
@@ -239,6 +288,13 @@ class ScopeValidator:
                     if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
                         logger.warning(
                             "Blocked hostname %s -- resolved to internal IP %s (DNS rebinding protection)",
+                            hostname, ip_str,
+                        )
+                        return True
+                    # Check additional ranges not covered by ipaddress module
+                    if ScopeValidator._is_additional_blocked_ip(ip_str):
+                        logger.warning(
+                            "Blocked hostname %s -- resolved to additional blocked IP %s",
                             hostname, ip_str,
                         )
                         return True

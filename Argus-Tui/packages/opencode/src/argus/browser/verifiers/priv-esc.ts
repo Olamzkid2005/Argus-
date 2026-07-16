@@ -2,7 +2,9 @@ import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
 import { Confidence } from "../../shared/types"
 import { authenticateSession, isAccessDenied, detectAuthChallenge, logAuthChallenge } from "../login"
+import type { AuthTokens } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
+import type { CredentialEntry } from "../../engagement/credentials"
 import { tmpdir } from "os"
 import { join } from "path"
 import { existsSync, mkdirSync, rmSync } from "fs"
@@ -23,7 +25,7 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
     private engine: BrowserEngine,
     private targetUrl: string,
     private highPrivEndpoints: string[],
-    private lowPrivCreds: { username: string; password: string },
+    private lowPrivCreds: CredentialEntry,
     private collector?: EvidenceCollector,
     private engagementId?: string,
     private findingId?: string,
@@ -73,13 +75,25 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
     // Step 1: Baseline checks — each endpoint without auth
     // Step 2: Login once, then check all endpoints with session shared
     const page = await this.engine.navigate(this.targetUrl)
+    // Build AuthTokens from the full CredentialEntry for OAuth/SSO fallback.
+    // Gap 2.6: When the credential file includes authToken or authCookies,
+    // they are passed to authenticateSession() so it can fall through to
+    // token/cookie injection when form-based login hits an OAuth/SSO page.
+    const authTokens: AuthTokens | undefined =
+      this.lowPrivCreds.authToken || (this.lowPrivCreds.authCookies && this.lowPrivCreds.authCookies.length > 0)
+        ? {
+            bearerToken: this.lowPrivCreds.authToken,
+            cookies: this.lowPrivCreds.authCookies,
+          }
+        : undefined
+
     // Phase 3.4.2: Capture auth challenges during login.
     // Uses authenticateSession() which tries form login first, then falls
     // back to token/cookie injection for OAuth/SSO pages (Gap 2.6).
     const loginSuccess = await authenticateSession(
       page,
       this.lowPrivCreds,
-      undefined, // authTokens — injected from CredentialStore when available
+      authTokens,
       undefined, // context — passed when cookies are available
       (challenge) => {
         logAuthChallenge(challenge, (line) => this.logs.push(line))

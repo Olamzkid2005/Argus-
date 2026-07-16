@@ -64,7 +64,15 @@ def is_private_ip(ip: str) -> bool:
     Check if an IP address is private, loopback, link-local, or otherwise
     internal (RFC 1918, RFC 4193, RFC 4291, RFC 6598, etc.).
 
-    Used for SSRF prevention across the codebase.
+    Gap 13.1: Delegates to ``ScopeValidator.is_internal_address()`` from
+    ``tools/scope_validator.py`` — the single source of truth for ALL
+    SSRF/private-IP/internal-target validation. Previously had its own
+    hand-rolled IP range parsing (IPv4 octet splitting + IPv6 prefix
+    checks) that could drift from the canonical implementation.
+
+    The callers of this function (``post_finding_hooks.py``,
+    ``llm_review.py``, ``repo_scan.py``) pass bare IP addresses, so
+    no hostname resolution is needed — the IP is passed directly.
 
     Args:
         ip: IP address string (IPv4 or IPv6)
@@ -72,54 +80,13 @@ def is_private_ip(ip: str) -> bool:
     Returns:
         True if the IP is a private/internal address
     """
-    # IPv4 check
-    parts = ip.split(".")
-    if len(parts) == 4 and all(p.isdigit() for p in parts):
-        if parts[0] == "10":
-            return True  # RFC 1918 Class A
-        if parts[0] == "127":
-            return True  # Loopback
-        if parts[0] == "169" and parts[1] == "254":
-            return True  # Link-local / cloud metadata
-        if parts[0] == "0":
-            return True  # Current network
-        if parts[0] == "172" and 16 <= int(parts[1]) <= 31:
-            return True  # RFC 1918 Class B
-        if parts[0] == "192" and parts[1] == "168":
-            return True  # RFC 1918 Class C
-        if parts[0] == "100" and 64 <= int(parts[1]) <= 127:
-            return True  # CGNAT (RFC 6598)
-        if parts[0] == "198" and parts[1] == "18":
-            return True  # Benchmarking (RFC 2544)
-        if parts[0] == "198" and parts[1] == "19":
-            return True  # Benchmarking (RFC 2544)
+    from tools.scope_validator import ScopeValidator
 
-    # IPv6 check — normalize to lowercase first
-    ip_lower = ip.lower()
-
-    # Loopback
-    if ip_lower == "::1":
-        return True
-    if ip_lower == "::":
-        return True
-
-    # IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1)
-    if "::ffff:" in ip_lower:
-        ipv4_part = ip_lower.rsplit(":", 1)[-1]
-        return is_private_ip(ipv4_part)
-    if "::" in ip_lower and "." in ip_lower:
-        # Other IPv4-compatible/compat formats
-        ipv4_part = ip_lower.rsplit(":", 1)[-1]
-        if "." in ipv4_part:
-            return is_private_ip(ipv4_part)
-
-    # IPv6 Unique Local Address (ULA, RFC 4193): fc00::/7
-    if ip_lower.startswith("fc") or ip_lower.startswith("fd"):
-        return True
-
-    # IPv6 Link-Local (fe80::/10)
-    if ip_lower.startswith("fe80"):
-        return True
-
-    # IPv6 Documentation (2001:db8::/32)
-    return bool(ip_lower.startswith("2001:db8"))
+    # ScopeValidator.is_internal_address() handles:
+    # - Static cloud metadata hostnames
+    # - Bare IP address checks (private, loopback, link-local, multicast)
+    # - IPv4-mapped IPv6 addresses
+    # - DNS resolution for hostname inputs
+    # Since callers pass bare IPs, the fast path (static check + bare IP)
+    # is used, avoiding DNS resolution.
+    return ScopeValidator.is_internal_address(ip)
