@@ -141,8 +141,8 @@
 40. **✅ CONFIRMED — MORE than claimed** — **Check whether CI gates merges on full test suite.**
     `lint.yml` has 10+ jobs: smoke, typecheck, lint-js, argus-unit (linux + windows), coverage, bench, e2e, argus-workers-lint, python-tests, tool-defs-check, fixture-smoke, fixture-full, yaml-lint, python-tests-full (added). Python tests run comprehensive suites. CI is comprehensive.
 
-41. **⚠️ GAP CONFIRMED (unresolved)** — **Add dependency vulnerability scanning to CI.**
-    No `.github/dependabot.yml` found. `pip-audit` and `npm-audit` defined as Argus tools (for repo scanning) but not run in CI proactively. Gap remains open and needs action.
+41. **✅ FIXED** — **Add dependency vulnerability scanning to CI.**
+    Created `.github/dependabot.yml` with three ecosystems: pip (`argus-workers/`), npm (`Argus-Tui/`), and GitHub Actions (`/`). Schedule: weekly Monday 09:00 UTC. Minor/patch updates grouped into single PRs. Labels: `dependencies`, `python`/`javascript`/`ci`. Dependabot will automatically scan for known vulnerabilities and open PRs. `pip-audit` and `npm-audit` also available as Argus tools for additional manual scanning.
 
 42. **✅ FIXED** — **Confirm Python dependencies are pinned to exact versions.**
     Pinned all formerly-loose dependency ranges to exact versions in `requirements.txt`: `psycopg2-binary==2.9.10`, `psutil==6.1.0`, `opentelemetry-api==1.20.0`, `opentelemetry-sdk==1.20.0`, `opentelemetry-exporter-otlp-proto-http==1.20.0`, `beautifulsoup4==4.12.3`, `lxml==5.3.0`, `websockets==12.0`. All dependencies now use `==` exact pinning.

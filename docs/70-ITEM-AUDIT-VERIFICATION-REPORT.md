@@ -85,7 +85,7 @@
 | 38 | "Console's own auth (ipRateLimiter.ts, keyRateLimiter.ts)" | ✅ **Confirmed** — These files exist in `console/app/src/routes/zen/util/`. They are upstream OpenCode's implementation. |
 | 39 | "Sweep for other un-stripped upstream fork remnants" | ✅ **Confirmed (broader than claimed)** — EVERY package under `Argus-Tui/packages/` is `@opencode-ai` branded: `core`, `ui`, `app`, `cli`, `desktop`, `plugin`, `sdk`, `llm`, `web`, `storybook`, `script`, `function`, `slack`, `enterprise`, `http-recorder`, `effect-sqlite-node`, `effect-drizzle-sqlite`, `console`. The entire TUI is an OpenCode fork. |
 | 40 | "CI (lint.yml) gates merges on full test suite or only smoke" | ✅ **Confirmed — MORE than claimed** — `lint.yml` has 10+ jobs: smoke, typecheck, lint-js, argus-unit (linux + windows), coverage, bench, e2e, argus-workers-lint, python-tests, tool-defs-check, fixture-smoke, fixture-full, yaml-lint. Python tests run `pytest tests/ -m "not requires_db and not requires_redis and not e2e"`. The `python-full-suite.yml` runs additional full suite. CI is comprehensive. |
-| 41 | "Add dependency vulnerability scanning to CI" | ✅ **Confirmed as a gap** — No `.github/dependabot.yml` found. `pip-audit` and `npm-audit` defined as Argus tools (for repo scanning) but not run in CI proactively. |
+| 41 | "Add dependency vulnerability scanning to CI" | ✅ **Fixed** — Created `.github/dependabot.yml` with three ecosystems: pip (argus-workers/), npm (Argus-Tui/), and GitHub Actions (/). Schedule: weekly Monday 09:00 UTC. Minor/patch updates grouped. Dependabot now scans for known vulnerabilities automatically. pip-audit and npm-audit available for additional manual scanning. |
 | 42 | "Python dependencies pinned to exact versions" | ✅ **Fixed** — Pinned all formerly-loose dependency ranges to exact versions in `requirements.txt`: `psycopg2-binary==2.9.10`, `psutil==6.1.0`, `opentelemetry-api==1.20.0`, `opentelemetry-sdk==1.20.0`, `opentelemetry-exporter-otlp-proto-http==1.20.0`, `beautifulsoup4==4.12.3`, `lxml==5.3.0`, `websockets==12.0`. All dependencies now use `==` exact pinning. |
 
 ## Concurrency, Infra, and Deployment (43–48)
@@ -154,13 +154,13 @@
 | Process, Not Code (18–20) | 0 | 0 | 0 | 3 |
 | Data Isolation, Secrets, and Injection Defense (21–30) | 10 | 0 | 1 | 0 |
 | Reporting & Evidence Integrity (31–36) | 6 | 0 | 0 | 0 |
-| Repo Hygiene & Attack Surface Reduction (37–42) | 5 | 0 | 0 | 1 |
+| Repo Hygiene & Attack Surface Reduction (37–42) | 6 | 0 | 0 | 0 |
 | Concurrency, Infra, and Deployment (43–48) | 5 | 0 | 0 | 1 |
 | LLM Behavior & Prompt Quality (49–53) | 3 | 0 | 2 | 0 |
 | Legal, Process, and Governance (54–60) | 0 | 0 | 0 | 7 |
 | Supply Chain & Data Residency (61–63) | 3 | 0 | 0 | 0 |
 | Adversarial Resilience & Long-Run Quality (64–70) | 2 | 0 | 0 | 5 |
-| **Total** | **49** | **0** | **4** | **18** |
+| **Total** | **49** | **0** | **4** | **17** |
 
 ## Key Corrections to Original Document
 

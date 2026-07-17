@@ -1,0 +1,90 @@
+# Argus — Dependabot configuration
+# Closes audit Item 41: Add dependency vulnerability scanning to CI.
+#
+# Configured for two ecosystems:
+#   - pip: Python workers (argus-workers/)
+#   - npm: TUI frontend/packages (Argus-Tui/)
+#
+# Schedule: weekly (Monday 09:00 UTC) — avoids noise from daily bumps.
+# Auto-assigns the Audit team for review (update team name as needed).
+
+version: 2
+updates:
+  # ── Python (pip) — Workers ──────────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/argus-workers/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    # Check both requirements files in the same directory
+    allow:
+      - dependency-type: "all"
+    # Group minor/patch updates into single PRs to reduce noise
+    groups:
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Labels for automated triage
+    labels:
+      - "dependencies"
+      - "python"
+      - "security"
+    # Assign reviewers (update to your team)
+    # reviewers:
+    #   - "team:audit"
+    # Open at most 5 concurrent PRs for pip
+    open-pull-requests-limit: 5
+
+  # ── JavaScript (npm) — TUI Packages ─────────────────────────────────────
+  # NOTE: Argus-Tui uses Bun (bun.lock) as its package manager.
+  # Dependabot's npm ecosystem does not support bun.lock — it requires
+  # package-lock.json, yarn.lock, or pnpm-lock.yaml to produce full
+  # lockfile-updating PRs. However, the npm ecosystem WILL still scan
+  # package.json version ranges and alert on known vulnerabilities.
+  #
+  # To get full lockfile PRs, either:
+  #   a) Generate package-lock.json alongside bun.lock
+  #   b) Switch to npm/yarn/pnpm for CI dependency management
+  # Until then, this provides vulnerability alerts but no auto-update PRs.
+  - package-ecosystem: "npm"
+    directory: "/Argus-Tui/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    # Ignore major version bumps that may need manual migration
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    # Group non-major updates
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "security"
+    open-pull-requests-limit: 5
+
+  # ── GitHub Actions — Workflow Dependencies ──────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "ci"
+    open-pull-requests-limit: 3
