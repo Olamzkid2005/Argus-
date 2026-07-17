@@ -6,15 +6,15 @@
   "type": "module",
   "license": "MIT",
   "dependencies": {
-    "@aws-sdk/client-sts": "3.782.0",
+    "@aws-sdk/client-sts": "3.1089.0",
     "@jsx-email/render": "1.1.1",
     "@opencode-ai/console-mail": "workspace:*",
     "@opencode-ai/console-resource": "workspace:*",
-    "@planetscale/database": "1.19.0",
+    "@planetscale/database": "1.20.1",
     "aws4fetch": "1.0.20",
     "drizzle-orm": "catalog:",
-    "postgres": "3.4.7",
-    "stripe": "18.0.0",
+    "postgres": "3.4.9",
+    "stripe": "18.5.0",
     "ulid": "catalog:",
     "zod": "catalog:"
   },
@@ -42,11 +42,11 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
-    "@tsconfig/node22": "22.0.2",
+    "@tsconfig/node22": "22.0.5",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "drizzle-kit": "catalog:",
-    "mysql2": "3.14.4",
+    "mysql2": "3.23.0",
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:"
   }

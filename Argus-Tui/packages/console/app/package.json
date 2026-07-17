@@ -11,7 +11,7 @@
     "start": "vite start"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "1.15.2",
+    "@cloudflare/vite-plugin": "1.45.1",
     "@ibm/plex": "6.4.1",
     "@jsx-email/render": "1.1.1",
     "@kobalte/core": "catalog:",
@@ -20,12 +20,12 @@
     "@opencode-ai/console-mail": "workspace:*",
     "@opencode-ai/console-resource": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
-    "@smithy/eventstream-codec": "4.2.7",
-    "@smithy/util-utf8": "4.2.0",
+    "@smithy/eventstream-codec": "4.4.10",
+    "@smithy/util-utf8": "4.4.10",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
-    "@stripe/stripe-js": "8.6.1",
+    "@stripe/stripe-js": "8.11.0",
     "@upstash/redis": "1.38.0",
     "chart.js": "4.5.1",
     "nitro": "3.0.1-alpha.1",
@@ -38,9 +38,9 @@
   "devDependencies": {
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
-    "@webgpu/types": "0.1.54",
+    "@webgpu/types": "0.1.71",
     "typescript": "catalog:",
-    "wrangler": "4.50.0"
+    "wrangler": "4.112.0"
   },
   "engines": {
     "node": ">=22"
