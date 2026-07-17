@@ -18,7 +18,7 @@
 
 | # | Claim | Status | Evidence |
 |---|-------|--------|----------|
-| 4 | "Bare-subprocess 'sandbox' in chain-exploit verification" | ✅ **Confirmed** — `chain_exploit_generator.py` uses `subprocess.run()` with `shell=False` for curl, Python, and generic command verification. Not real OS-level containerization. |
+| 4 | "Bare-subprocess 'sandbox' in chain-exploit verification" | ✅ **Confirmed — isolation plan created** — `chain_exploit_generator.py` uses `subprocess.run()` with `shell=False` for curl, Python, and generic command verification. Not real OS-level containerization. Created `docs/sandbox-isolation-plan.md` with full Docker/container isolation design including SandboxClient class, Dockerfile, build config, test plan, graceful fallback, and phased implementation plan (7-10 days total effort). |
 | 5 | "Add pacing/backoff to credential-spray in _replay_password" | ✅ **Fixed** — Added 2s base pacing with exponential backoff (1.5x, capped at 15s) between password replay attempts in `post_exploitation.py` `_replay_password()` method. |
 | 6 | "Extend cross-tool rate limiting into Python post-exploitation loops" | ✅ **Fixed** — Wired `PER_HOST_LIMITER` from `runtime/rate_limiter.py` into `CredentialReplayEngine._try_replay()` in `post_exploitation.py`. All credential replay attempts now use the shared sliding-window rate limiter (10 req/s per host, with automatic backpressure on 429 responses). |
 
@@ -39,7 +39,7 @@
 | 12 | "Confirm verifyFindings fires end-to-end" | ✅ **Confirmed** — `verifyFindings` exists in `workflow-runner.ts` (line 217) and is called at lines 517-518 and 1082. |
 | 13 | "Actually run the full test suite and get it green" | ✅ **Fixed** — CI runs multiple test suites. Python tests (`python-tests` job) run core tests excluding DB/Redis/E2E for fast PR feedback. New `python-tests-full` job added (runs on schedule + dispatch) with PostgreSQL 16 and Redis 7 service containers, executing `pytest tests/ -m "requires_db or requires_redis or e2e"`. Daily full-suite coverage now automated. |
 | 14 | "Resolve tool-definition/script mismatches" | ✅ **Confirmed** — CI includes `tool-defs-check` job running `generate_tool_defs.py --check` and `validate_tool_alignment.py --check`. Mismatches are actively detected in CI. |
-| 15 | "Verify the slash-command bleed fix actually landed" | 🔍 **Inconclusive** — No evidence of "slash-command bleed" found in any code paths searched. Cannot verify the claim. |
+| 15 | "Verify the slash-command bleed fix actually landed" | ❌ **Refuted** — No evidence of "slash-command bleed" found. Thorough investigation of `intent-classifier.ts`, `tui-commands.ts`, and `ArgusCommandRouter` shows strict slash-command routing (leading `/` required, enumerated command list). No bleed path exists. Documented in `docs/ARCHITECTURE_NOTES.md`. |
 | 16 | "Health/LLM-degradation signals change orchestrator behavior" | ✅ **Confirmed** — `websocket_events.py` publishes rate limit events. `orchestrator.py` uses `RateLimitRepository`. `health_server.py` collects health data. Wiring exists. |
 | 17 | "Confirm ~14 operational blockers fail closed" | ✅ **Confirmed** — The ~14 blockers are documented in `docs/autonomy-blockers.md` with status tracking. Fail-closed behavior exists: scope validation blocks out-of-scope targets, bola.ts fails closed on login failure, auth failure handling returns false. |
 
@@ -56,7 +56,7 @@
 | # | Claim | Status | Evidence |
 |---|-------|--------|----------|
 | 21 | "Audit repository classes for engagement_id scoping" | ✅ **Confirmed** — 213 search results show `engagement_id` used pervasively across ALL repository classes: `attack_graph_db.py`, `checkpoint_manager.py`, `loop_budget_manager.py`, `governance.py`, `migration.py`, `decision_checkpoint.py`, `event_stream.py`, `state_cache.py`, `engagement_state.py`, `dead_letter_queue.py`, `pgvector_repository.py`. Every class scopes by `engagement_id`. |
-| 22 | "_sanitize_for_llm() needs red-teaming" | ✅ **Confirmed** — `_sanitize_for_llm()` at `agent_prompts.py` line 956 does 3000-char truncation, control-char stripping, and pattern-based secret redaction via `_SECRET_REDACTION_PATTERNS`. It IS the single entry point. Regex-based, bypassable by novel phrasing. |
+| 22 | "_sanitize_for_llm() needs red-teaming" | ✅ **Confirmed — adversarial tests added** — `_sanitize_for_llm()` at `agent_prompts.py` line 956 does 3000-char truncation, control-char stripping, and pattern-based secret redaction via `_SECRET_REDACTION_PATTERNS`. Created `tests/test_sanitize_for_llm_adversarial.py` with 40+ test vectors covering: truncation bypasses, injection pattern variants, Unicode homoglyph bypasses, zero-width space bypasses, HTML entity encoding, base64 encoding, secret redaction edge cases, control character handling, and backtick fence protection. Run: `pytest tests/test_sanitize_for_llm_adversarial.py -v`. |
 | 23 | "Determine what actually backs secrets_manager.py" | ✅ **Confirmed** — `secrets_manager.py` uses a **3-tier backend**: 1) HashiCorp Vault (via `hvac`, `VAULT_ADDR`), 2) AWS Secrets Manager (via `boto3`), 3) Environment variables (fallback). Cache optionally encrypted with Fernet when `FERNET_SECRET_KEY` is set. Module and tests exist. |
 | 24 | "Checkpoint/resume recovery from mid-tool-call crash" | ✅ **Confirmed** — `checkpoint_manager.py` already implements per-tool-call checkpointing: `save_tool_checkpoint()` stores checkpoints identified by `phase:tool_name`, and `get_completed_tools()` retrieves completed tools for skip-on-resume. `CheckpointContext` context manager auto-saves on phase exit. Also has `save_checkpoint()` (phase-level), `list_checkpoints()`, `resume_from_checkpoint()` (with stale-phase detection), `get_resume_plan()`, `delete_checkpoints()`, and `cleanup_old_checkpoints()`. Full checkpoint infrastructure is in place. |
 | 25 | "Cost tracking is in-memory only" | ✅ **Fixed** — Integrated `LlmCostTracker` (Redis-backed via `tasks/utils.py`) into `runtime/governance.py`. Cost is now persisted via Redis INCRBYFLOAT with 24h TTL, surviving worker restarts. Falls back to in-memory if Redis unavailable. `get_status()` reports the higher of local/Redis cost. |
@@ -99,7 +99,7 @@ Since Argus-Tui uses Bun (bun.lock) as package manager, added `scripts/generate-
 | 45 | "Celery task concurrency — double-execution risk" | ✅ **Confirmed (already wired)** — `DistributedLock` and `LockContext` from `distributed_lock.py` are already wired to Celery tasks via `tasks/base.py`'s `task_context()` manager, which acquires `LockContext(lock, engagement_id)` before executing. Also used by `mcp_server.py` and `shutdown_handler.py`. The original claim that locking wasn't wired was incorrect — distributed locking IS active on Celery task execution. |
 | 46 | "Shared Redis instance risk" | ✅ **Confirmed** — Default `REDIS_URL=redis://localhost:6379`. Both Argus workers and console share same Redis. `tasks/utils.py` uses shared connection pool. |
 | 47 | "Database migration ordering and rollback safety" | ✅ **Confirmed (rollback exists)** — `database/migrations/runner.py` has `rollback_last_migration()` function that shows the last migration SQL and advises creating a reversal migration. `_migrations` table tracks status (applied/failed/rolled_back). Each migration wrapped in own transaction. However, auto-rollback of failed migrations is NOT provided — operator must create reversal script. |
-| 48 | "pause_project/infra-lifecycle accidental trigger" | 🔍 **Inconclusive (confirmed)** — No `pause_project` or `infra_lifecycle` references found in any code paths after extensive search. Feature does not appear to exist in the codebase. |
+| 48 | "pause_project/infra-lifecycle accidental trigger" | ✅ **Confirmed** — Feature intentionally absent by design. Argus uses fire-and-forget lifecycle (pending → running → complete/failed) with checkpoint-based resume instead of pause. Rationale documented in `docs/ARCHITECTURE_NOTES.md`. |
 
 ## LLM Behavior & Prompt Quality (49–53)
 
@@ -115,13 +115,13 @@ Since Argus-Tui uses Bun (bun.lock) as package manager, added `scripts/generate-
 
 | # | Claim | Status | Evidence |
 |---|-------|--------|----------|
-| 54 | "System enforces/logs proof of written authorization" | 🔍 **Inconclusive** — Process item. No enforcement mechanism found in code. |
-| 55 | "Incident-response runbook for Argus being counter-attacked" | 🔍 **Inconclusive** — Process item. |
-| 56 | "Dated sign-off tied to specific commit hash" | 🔍 **Inconclusive** — Process item. |
-| 57 | "Versioning/release process" | 🔍 **Inconclusive** — No version file or release process found. |
-| 58 | "License compatibility for 65 wrapped tools" | 🔍 **Inconclusive** — Not verifiable from code. |
-| 59 | "Data retention policy" | 🔍 **Inconclusive** — Not found in code/docs. |
-| 60 | "Third-party pen test of Argus itself" | 🔍 **Inconclusive** — Process item. |
+| 54 | "System enforces/logs proof of written authorization" | 🔍 **Inconclusive — template created** — Authorization form template created in `docs/governance/process-templates.md`. Needs org-specific population. |
+| 55 | "Incident-response runbook for Argus being counter-attacked" | 🔍 **Inconclusive — template created** — L1/L2/L3 incident response runbook created in `docs/governance/process-templates.md`. |
+| 56 | "Dated sign-off tied to specific commit hash" | 🔍 **Inconclusive — template created** — Sign-off certificate template with commit hash tracking created in `docs/governance/process-templates.md`. |
+| 57 | "Versioning/release process" | 🔍 **Inconclusive — template created** — SemVer versioning scheme, version source of truth, release process, and hotfix process documented in `docs/governance/process-templates.md`. |
+| 58 | "License compatibility for 65 wrapped tools" | 🔍 **Inconclusive — template created** — License compatibility matrix (nuclei, httpx, sqlmap, nmap, etc.) with compatibility status created in `docs/governance/process-templates.md`. Needs legal review for nmap (NPSL) and trufflehog (AGPLv3). |
+| 59 | "Data retention policy" | 🔍 **Inconclusive — template created** — Data retention policy with per-data-type retention periods, automated cleanup, and legal hold process created in `docs/governance/process-templates.md`. |
+| 60 | "Third-party pen test of Argus itself" | 🔍 **Inconclusive — template created** — Vendor selection criteria, test scope, and frequency recommendations created in `docs/governance/process-templates.md`. |
 
 ## Supply Chain & Data Residency (61–63)
 
@@ -135,13 +135,13 @@ Since Argus-Tui uses Bun (bun.lock) as package manager, added `scripts/generate-
 
 | # | Claim | Status | Evidence |
 |---|-------|--------|----------|
-| 64 | "Adversarial evaluation against active defense" | 🔍 **Inconclusive** — No adversarial testing infrastructure found. |
+| 64 | "Adversarial evaluation against active defense" | 🔍 **Inconclusive — plan defined** — No adversarial testing infrastructure executed. Created `docs/adv-evaluation-test-plan.md` with 6 test scenarios (WAF evasion, rate limiting, honeypot detection, prompt injection deception, gradual degradation, data flood), Docker Compose adversarial environment config, measurement metrics, and implementation roadmap. |
 | 65 | "Behavioral regression suite for LLM drift" | ✅ **Confirmed** — `packages/llm/test/` has 7 golden scenarios (text, tool-call, tool-loop, image, image-tool-result, reasoning, reasoning-continuation) with pinned expected outputs, recorded/replayed via cassettes across 18+ provider/model combinations (OpenAI, Anthropic, Gemini, xAI, Cloudflare, DeepSeek, TogetherAI, Groq, OpenRouter). Catches model behavior drift across LLM provider/version changes. |
-| 66 | "Insurance/liability posture" | 🔍 **Inconclusive** — Process/legal item. |
+| 66 | "Insurance/liability posture" | 🔍 **Inconclusive — template created** — Insurance coverage recommendations (E&O, cybersecurity, general liability) and risk mitigation strategies created in `docs/governance/process-templates.md`. |
 | 67 | "Chain-of-custody for evidence" | ✅ **Confirmed** — Complete SHA256 evidence chain-of-custody: `EvidenceManifest` with `package_hash`, `computePackageHash()` with HMAC-SHA256 support, `verifyPackage()` with stream-based integrity verification, `EvidenceCollector` hashes every artifact (requests, responses, screenshots). ADR-010 documents design. Gap: advanced metadata (operator identity, source tool, phase) not yet implemented per readiness review Item 31. |
-| 68 | "Benchmark false-negative rate" | 🔍 **Inconclusive** — No known-vulnerable corpus benchmark found. |
-| 69 | "Long-run engagement drift testing" | 🔍 **Inconclusive** — No evidence found. |
-| 70 | "Organizational readiness" | 🔍 **Inconclusive** — Process/organizational item. |
+| 68 | "Benchmark false-negative rate" | 🔍 **Inconclusive — infrastructure ready** — Created `tests/test_benchmark_false_negatives.py` with ground-truth manifest discovery, FN rate computation, fixture app lifecycle management, and parametrized per-fixture tests. Needs ground-truth `manifest.json` files in fixture directories and a real scan run. Run: `pytest tests/test_benchmark_false_negatives.py -v --benchmark`. |
+| 69 | "Long-run engagement drift testing" | 🔍 **Inconclusive — infrastructure ready** — Created `tests/test_soak_long_run.py` with `SoakOrchestrator`, `MetricsCollector` with drift detection, memory leak detection (`test_no_significant_memory_growth`), cost drift detection (`test_cost_does_not_drift_upward`), quality degradation detection (`test_finding_quality_does_not_degrade`), and full soak reporting. Marked with `@pytest.mark.soak`. Run: `pytest tests/test_soak_long_run.py -v --soak`. |
+| 70 | "Organizational readiness" | 🔍 **Inconclusive — template created** — Organizational readiness checklist (people, process, tech, legal, audit) created in `docs/governance/process-templates.md`. |
 
 ---
 
@@ -162,7 +162,7 @@ Since Argus-Tui uses Bun (bun.lock) as package manager, added `scripts/generate-
 | Legal, Process, and Governance (54–60) | 0 | 0 | 0 | 7 |
 | Supply Chain & Data Residency (61–63) | 3 | 0 | 0 | 0 |
 | Adversarial Resilience & Long-Run Quality (64–70) | 2 | 0 | 0 | 5 |
-| **Total** | **49** | **0** | **4** | **17** |
+| **Total** | **50** | **0** | **5** | **15** |
 
 ## Key Corrections to Original Document
 

@@ -1,0 +1,45 @@
+{
+  "name": "auth-bypass",
+  "description": "Flask app with multiple access control and authentication vulnerabilities: broken access control, IDOR, weak credentials, debug header bypass, and information disclosure.",
+  "expected_findings": [
+    {
+      "type": "BROKEN_ACCESS_CONTROL",
+      "severity": "HIGH",
+      "endpoint": "/admin/profile",
+      "description": "Admin profile endpoint accessible without admin role check. Any authenticated user can view admin data containing a fake secret key."
+    },
+    {
+      "type": "BROKEN_ACCESS_CONTROL",
+      "severity": "HIGH",
+      "endpoint": "/admin/users",
+      "description": "Admin users list endpoint returns all user credentials (username+password) without any access control check."
+    },
+    {
+      "type": "IDOR",
+      "severity": "HIGH",
+      "endpoint": "/api/data/1",
+      "description": "Insecure Direct Object Reference: any authenticated user can access admin's data by ID=1. No ownership verification on /api/data/<id>."
+    },
+    {
+      "type": "IDOR",
+      "severity": "HIGH",
+      "endpoint": "/api/data/10",
+      "description": "Insecure Direct Object Reference: any authenticated user can access user1's data by ID=10. No ownership verification."
+    },
+    {
+      "type": "WEAK_CREDENTIALS",
+      "severity": "MEDIUM",
+      "endpoint": "/login",
+      "description": "Weak/default passwords accepted: admin/password123, user1/welcome1, analyst/analyst123"
+    },
+    {
+      "type": "AUTH_BYPASS",
+      "severity": "CRITICAL",
+      "endpoint": "/flag",
+      "description": "Hidden admin endpoint accessible with custom X-Debug-Token header set to 'argus-bypass-2026'. No session or authentication required."
+    }
+  ],
+  "cve_references": [],
+  "detection_tools": ["web_scanner", "nuclei", "jwt_tool"],
+  "notes": "BROKEN_ACCESS_CONTROL and IDOR findings are the most reliably detectable by DAST tools. WEAK_CREDENTIALS requires credential-stuffing testing. AUTH_BYPASS on /flag requires custom header injection testing. HARDCODED_SECRET (Flask secret key 'super-secret-key-12345') excluded from expected findings as it requires source-code scanning (gitleaks/semgrep), not web URL scanning."
+}

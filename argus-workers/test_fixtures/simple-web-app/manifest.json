@@ -1,0 +1,17 @@
+{
+  "name": "simple-web-app",
+  "description": "Minimal Flask app with a SQL injection vulnerability on the /user endpoint. Designed for E2E smoke testing of the Argus scan pipeline.",
+  "expected_findings": [
+    {
+      "type": "SQL_INJECTION",
+      "severity": "CRITICAL",
+      "endpoint": "/user",
+      "description": "String interpolation of user-supplied 'id' parameter into SQL query: SELECT * FROM users WHERE id={user_id}",
+      "cve": "",
+      "evidence_pattern": "SELECT * FROM users WHERE id="
+    }
+  ],
+  "cve_references": [],
+  "detection_tools": ["sqlmap", "nuclei", "web_scanner"],
+  "notes": "Only one vulnerable endpoint. Primarily tests sqlmap detection. False-negative if sqlmap/sqli tool doesn't detect string interpolation in query parameter."
+}

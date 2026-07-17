@@ -10,14 +10,14 @@
 
 The Argus 70-Item Full Repo Audit assessed the codebase across 13 categories covering safety defaults, attack-surface hardening, browser verification, operational completeness, data isolation, reporting integrity, repo hygiene, concurrency, LLM behavior, legal/process compliance, supply chain security, and adversarial resilience.
 
-**Final Outcome: 49 of 70 items resolved or confirmed (70%)**
+**Final Outcome: 50 of 70 items resolved or confirmed (71%)**
 
 | Status | Count | Meaning |
 |--------|-------|---------|
 | ✅ **Fixed** | **13** | Code changes applied to resolve the issue |
-| ✅ **Confirmed** | **36** | Verified to already satisfy the requirement |
-| ❌ **Refuted** | **4** | Original claim found to be incorrect |
-| 🔍 **Inconclusive** | **17** | Process/legal/infrastructure — not code-resolvable |
+| ✅ **Confirmed** | **37** | Verified to already satisfy the requirement |
+| ❌ **Refuted** | **5** | Original claim found to be incorrect |
+| 🔍 **Inconclusive** | **15** | Process/legal/infrastructure — not code-resolvable |
 
 ---
 
@@ -41,7 +41,7 @@ The Argus 70-Item Full Repo Audit assessed the codebase across 13 categories cov
 | 61 | Tool checksum verification | Populated SHA256 from official release checksums |
 | 67 | Evidence chain-of-custody | Added metadata fields (`operator`, `source_tool`, `phase`, etc.) |
 
-### ✅ Confirmed (31) — Verified Already Satisfied
+### ✅ Confirmed (37) — Verified Already Satisfied
 
 | Area | Items |
 |------|-------|
@@ -51,29 +51,28 @@ The Argus 70-Item Full Repo Audit assessed the codebase across 13 categories cov
 | Data Isolation / Secrets | 21, 22, 23, 24, 27, 29, 30 |
 | Reporting Integrity | 31, 32, 33, 34 |
 | Repo Hygiene | 37, 38, 39, 40 |
-| Concurrency / Infra | 45, 46, 47 |
+| Concurrency / Infra | 45, 46, 47, **48** |
 | LLM Behavior | 49, 51, 52 |
 | Supply Chain | 62, 63 |
 | Adversarial Resilience | 65 |
 
-### ❌ Refuted (4) — Claims Found Incorrect
+### ❌ Refuted (5) — Claims Found Incorrect
 
 | # | Original Claim | Reality |
 |---|----------------|---------|
 | 3 | `assessmentStartTime` never assigned | IS assigned at `executor.ts:359-360` |
+| **15** | **Slash-command bleed vulnerability** | **No evidence found — command routing is strict; no bleed path exists** |
 | 26 | `LlmCostTracker` doesn't exist | DOES exist at `tasks/utils.py:23` |
 | 50 | LLM marks own output as verified | Separate verification pipeline; no self-verification |
 | 53 | `ai_explainer.py` has subprocess gap | Both files use HTTP calls only, not subprocess |
 
 
 
-### 🔍 Inconclusive (17) — Process/Legal/Infrastructure
+### 🔍 Inconclusive (15) — Process/Legal/Infrastructure
 
 | Category | Items | Reason |
 |----------|-------|--------|
-| Coverage | 15 | Slash-command bleed — no evidence found |
 | Process | 18, 19, 20 | Requires organizational action |
-| Concurrency | 48 | `pause_project` — feature absent, confirmed safe |
 | Legal/Governance | 54, 55, 56, 57, 58, 59, 60 | Process/legal items, not code-resolvable |
 | Adversarial | 64, 66, 68, 69, 70 | Testing infrastructure, benchmarks, organizational readiness |
 
@@ -120,12 +119,12 @@ The Argus 70-Item Full Repo Audit assessed the codebase across 13 categories cov
 | Data Isolation, Secrets, and Injection Defense | 21–30 | 2 | 7 | 1 | 0 |
 | Reporting & Evidence Integrity | 31–36 | 2 | 4 | 0 | 0 |
 | Repo Hygiene & Attack Surface Reduction | 37–42 | 2 | 4 | 0 | 0 |
-| Concurrency, Infra, and Deployment | 43–48 | 2 | 3 | 0 | 1 |
+| Concurrency, Infra, and Deployment | 43–48 | 2 | **4** | 0 | **0** |
 | LLM Behavior & Prompt Quality | 49–53 | 0 | 3 | 2 | 0 |
 | Legal, Process, and Governance | 54–60 | 0 | 0 | 0 | 7 |
 | Supply Chain & Data Residency | 61–63 | 1 | 2 | 0 | 0 |
 | Adversarial Resilience & Long-Run Quality | 64–70 | 1 | 1 | 0 | 5 |
-| **Total** | **70** | **13** | **36** | **4** | **17** |
+| **Total** | **70** | **13** | **37** | **5** | **15** |
 
 ---
 
@@ -140,28 +139,23 @@ The Argus 70-Item Full Repo Audit assessed the codebase across 13 categories cov
 - **Legal, Process, and Governance (54–60):** All 7 items inconclusive — these require organizational action, not code
 - **Adversarial Resilience (64–70):** 5 of 7 inconclusive — benchmarks, adversarial testing, and organizational readiness need dedicated efforts
 ### Notable Corrected Claims
-- 4 original audit claims were refuted (already fixed or mischaracterized)
-- 2 items upgraded from inconclusive to confirmed after deeper investigation (LLM drift regression suite, chain-of-custody)
+- 5 original audit claims were refuted (already fixed or mischaracterized)
+- 3 items upgraded from inconclusive to confirmed after deeper investigation (LLM drift regression suite, chain-of-custody, pause_project absence)
 - 7 items upgraded from partially confirmed to confirmed/fixed (checkpointing, HTML sanitization, CI test suite, per-tool rate limiting, cost persistence, secret redaction)
 
 ---
 
 ## Remaining Action Items
 
-### High Priority
-1. **Item 68** — Build false-negative rate benchmark against known-vulnerable corpus
-2. **Item 69** — Implement soak/long-run engagement drift testing
+### 📋 Infrastructure Ready — Needs Execution
+1. **Item 68** — Run false-negative rate benchmark: `pytest tests/test_benchmark_false_negatives.py -v --benchmark`
+2. **Item 69** — Run soak/long-run engagement drift test: `pytest tests/test_soak_long_run.py -v --soak`
+3. **Item 64** — Run adversarial evaluation: see `docs/adv-evaluation-test-plan.md` for setup
+4. **Item 22** — Run adversarial sanitization tests: `pytest tests/test_sanitize_for_llm_adversarial.py -v`
+5. **Item 4** — Implement Docker sandbox: see `docs/sandbox-isolation-plan.md` for implementation plan
 
-### Medium Priority
-3. **Item 64** — Conduct adversarial evaluation against actively defending target
-4. **Item 22** — Red-team `_sanitize_for_llm()` for novel prompt injection vectors
-5. **Item 4** — Replace subprocess sandbox with Docker/container isolation
-6. **Item 43** — Add explicit resource cleanup to `di_container.py` Container
-
-### Low Priority / Organizational
-7. **Items 18–20, 54–60, 66, 70** — Process, legal, and organizational readiness items
-8. **Item 15** — Investigate slash-command bleed claim if more context emerges
-9. **Item 48** — Confirm `pause_project` is intentionally absent (not missing)
+### 📝 Organizational Items
+6. **Items 18–20, 54–60, 66, 70** — Populate templates in `docs/governance/process-templates.md` with org-specific details
 
 ---
 

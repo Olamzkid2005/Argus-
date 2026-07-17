@@ -97,6 +97,8 @@ markers = [
     "e2e: marks tests as end-to-end tests",
     "full: marks tests as part of the comprehensive fixture matrix (run in nightly CI)",
     "smoke: marks tests as smoke tests (fast, critical-path verification)",
+    "benchmark: False-negative rate benchmark tests against known-vulnerable fixtures",
+    "soak: Long-run soak / drift detection tests for memory leak, cost drift, quality degradation",
     "requires_db: marks tests that require psycopg2 database connection",
     "requires_redis: marks tests that require redis connection",
 ]

@@ -92,6 +92,9 @@ class Container:
 
     NOTE: AuditSession-like stateful objects are NOT stored here.
     They are passed per-step to support parallel execution safety.
+
+    Call ``close()`` when the engagement completes to release resources.
+    On garbage collection, ``__del__`` will attempt cleanup as a safety net.
     """
 
     def __init__(self, deps: ContainerDependencies) -> None:
@@ -111,13 +114,88 @@ class Container:
         self._tool_runner = None
         self._llm_client = None
         self._checkpoint_manager = None
+        # Tear-down guard
+        self._closed = False
+
+    def close(self) -> None:
+        """Release all lazily-initialized resources.
+
+        Safe to call multiple times — idempotent after first call.
+        Called automatically by ``remove_container()``.
+        """
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+
+            # Collect and release resources outside the lock to avoid
+            # potential deadlocks from service teardown.
+            tool_runner = self._tool_runner
+            llm_client = self._llm_client
+            checkpoint_mgr = self._checkpoint_manager
+
+            self._tool_runner = None
+            self._llm_client = None
+            self._checkpoint_manager = None
+
+        # ── Release resources ──
+        if tool_runner is not None:
+            try:
+                close_attr = getattr(tool_runner, "close", None)
+                if close_attr:
+                    close_attr()
+            except Exception:
+                logger.exception(
+                    "Error closing tool_runner for engagement %s",
+                    self.engagement_id,
+                )
+
+        if checkpoint_mgr is not None:
+            try:
+                close_attr = getattr(checkpoint_mgr, "close", None)
+                if close_attr:
+                    close_attr()
+            except Exception:
+                logger.exception(
+                    "Error closing checkpoint_manager for engagement %s",
+                    self.engagement_id,
+                )
+
+        if llm_client is not None:
+            try:
+                close_attr = getattr(llm_client, "close", None)
+                if close_attr:
+                    close_attr()
+            except Exception:
+                logger.exception(
+                    "Error closing llm_client for engagement %s",
+                    self.engagement_id,
+                )
+
+        logger.debug("Container closed for engagement %s", self.engagement_id)
+
+    def __del__(self) -> None:
+        """Safety net — release resources if ``close()`` was not called explicitly."""
+        try:
+            self.close()
+        except Exception:
+            pass
 
     @property
     def tool_runner(self):
         """Get or create ToolRunner instance (thread-safe)."""
+        if self._closed:
+            raise RuntimeError(
+                f"Container for engagement {self.engagement_id} is already closed"
+            )
         if self._tool_runner is None:
             with self._lock:
                 if self._tool_runner is None:
+                    if self._closed:
+                        raise RuntimeError(
+                            f"Container for engagement {self.engagement_id} "
+                            "is already closed"
+                        )
                     from tools.tool_runner import ToolRunner
 
                     self._tool_runner = ToolRunner(
@@ -129,9 +207,18 @@ class Container:
     @property
     def llm_client(self):
         """Get or create LLMClient instance (thread-safe)."""
+        if self._closed:
+            raise RuntimeError(
+                f"Container for engagement {self.engagement_id} is already closed"
+            )
         if self._llm_client is None:
             with self._lock:
                 if self._llm_client is None:
+                    if self._closed:
+                        raise RuntimeError(
+                            f"Container for engagement {self.engagement_id} "
+                            "is already closed"
+                        )
                     try:
                         from llm_client import LLMClient
 
@@ -145,9 +232,18 @@ class Container:
     @property
     def checkpoint_manager(self):
         """Get or create CheckpointManager instance (thread-safe)."""
+        if self._closed:
+            raise RuntimeError(
+                f"Container for engagement {self.engagement_id} is already closed"
+            )
         if self._checkpoint_manager is None and self.db_url:
             with self._lock:
                 if self._checkpoint_manager is None and self.db_url:
+                    if self._closed:
+                        raise RuntimeError(
+                            f"Container for engagement {self.engagement_id} "
+                            "is already closed"
+                        )
                     from checkpoint_manager import CheckpointManager
 
                     self._checkpoint_manager = CheckpointManager(self.db_url)
@@ -233,8 +329,15 @@ def get_container(engagement_id: str) -> Container | None:
 def remove_container(engagement_id: str) -> None:
     """Remove a Container when an engagement completes (thread-safe).
 
+    Calls ``container.close()`` before removing from the registry to
+    release lazily-initialized resources such as database connections,
+    HTTP clients, and checkpoint managers.
+
     Args:
         engagement_id: Engagement ID to remove.
     """
+    container = None
     with _containers_lock:
-        _containers.pop(engagement_id, None)
+        container = _containers.pop(engagement_id, None)
+    if container is not None:
+        container.close()
