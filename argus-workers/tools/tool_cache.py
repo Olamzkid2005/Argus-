@@ -54,13 +54,35 @@ PIP_ALLOWLIST = frozenset(
 # Tool versions for security
 TOOL_VERSIONS = {
     "nuclei": "3.2.0",
+    # SHA256 checksums for supply-chain integrity verification.
+    # Retrieved from official GitHub release assets on 2026-07-17.
+    # Linux amd64 binaries; other archs would need their own entries.
+    # Sources:
+    #   nuclei: https://github.com/projectdiscovery/nuclei/releases/tag/v3.2.0
+    #   httpx:  https://github.com/projectdiscovery/httpx/releases/tag/v1.6.0
+    #   katana: https://github.com/projectdiscovery/katana/releases/tag/v1.1.0
+    #   subfinder: https://github.com/projectdiscovery/subfinder/releases/tag/v2.6.6
+    #   ffuf:   https://github.com/ffuf/ffuf/releases/tag/v2.1.0
+    #   dalfox: https://github.com/hahwul/dalfox/releases/tag/v2.10.0
+    #   sqlmap: pip-only (Python tool), no binary release hashes
+    #   semgrep: pip/npm-only, no binary release hashes
+    "nuclei_sha256": "8351b05772f37268fd172476de3f0c831ca9d9b9b1a6c64bacd38ef055e5d052",
     "httpx": "1.6.0",
+    "httpx_sha256": "a209fbf6eb95cdfb3be9a90a1a57463c6dd1879a56ca32bb4a39cc55d9b0754d",
     "katana": "1.1.0",
+    "katana_sha256": "a3af74515c79b0a3e877eab280987b7247161978c49fcad428f00f9452c5bd56",
     "subfinder": "2.6.6",
+    "subfinder_sha256": "6fda32fe1f5750e63fa07c112b1b615d033e425c6dc6659ed8ec61035eb8eba2",
     "ffuf": "2.1.0",
+    "ffuf_sha256": "fc2c82736c14dcbea4daf3d3cf3878c1c4773008ba45c2bc0fceba7d17b40bb5",
     "sqlmap": "1.8",
+    # sqlmap is a Python tool installed via pip — no binary release hashes available
+    "sqlmap_sha256": "",
     "dalfox": "2.10.0",
+    "dalfox_sha256": "dc11d28cdd6479fe7659084d5cdbda965b8b134c2a530fd5c056733a22954e76",
     "semgrep": "1.59.0",
+    # semgrep is installed via pip/npm — no binary release hashes available
+    "semgrep_sha256": "",
 }
 
 
@@ -74,6 +96,9 @@ class ToolCache:
     def _ensure_tools_directory(self):
         """Ensure tool directories exist."""
         for tool_name in TOOL_VERSIONS:
+            # Skip _sha256 keys (used for supply-chain integrity, not tool directories)
+            if tool_name.endswith("_sha256"):
+                continue
             tool_path = self.tools_dir / tool_name
             tool_path.mkdir(exist_ok=True)
 

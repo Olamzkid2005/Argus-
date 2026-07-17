@@ -62,6 +62,16 @@ export interface EvidencePackage {
   artifacts: ArtifactRef[]
   packageHash: string
   createdAt: string
+  /** Operator identity who collected this evidence. Part of chain-of-custody. */
+  operator?: string
+  /** Source tool/verifier that generated this evidence. */
+  sourceTool?: string
+  /** The assessment phase during collection. */
+  phase?: string
+  /** Target URL the evidence relates to. */
+  targetUrl?: string
+  /** Previous package_id hash for chain-of-custody linkage. */
+  previousPackageHash?: string
 }
 
 export type ArtifactType = "screenshot" | "request" | "response" | "har" | "log"

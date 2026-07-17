@@ -929,9 +929,55 @@ _SECRET_REDACTION_PATTERNS: list[tuple[str, str]] = [
     (r"ghu_[A-Za-z0-9]{36}", r"__REDACTED_GITHUB_TOKEN__"),
     (r"ghs_[A-Za-z0-9]{36}", r"__REDACTED_GITHUB_TOKEN__"),
     (r"ghr_[A-Za-z0-9]{36}", r"__REDACTED_GITHUB_TOKEN__"),
+    # GitLab tokens (personal, project, group access tokens)
+    (r"glpat-[A-Za-z0-9_-]{20,}", r"__REDACTED_GITLAB_TOKEN__"),
+    (r"glptt-[A-Za-z0-9_-]{20,}", r"__REDACTED_GITLAB_TOKEN__"),
     # Slack tokens
     (r"xox[baprs]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-z0-9]{32}",
      r"__REDACTED_SLACK_TOKEN__"),
+    # Slack webhook URLs
+    (r"https://hooks\.slack\.com/services/[A-Za-z0-9]+/[A-Za-z0-9]+/[A-Za-z0-9]+\b",
+     r"__REDACTED_SLACK_WEBHOOK__"),
+    # Stripe API keys (live/test secret keys, restricted keys)
+    (r"(?i)(sk_live|sk_test|rk_live|rk_test|pk_live|pk_test)_[A-Za-z0-9]{24,}",
+     r"__REDACTED_STRIPE_KEY__"),
+    # Google Cloud service account keys (JSON with project_id/private_key)
+    (r"(?i)\"type\":\s*\"service_account\"", r"__REDACTED_GCP_SA_KEY_JSON__"),
+    (r"(?i)-----BEGIN\s+ENCRYPTED\s+PRIVATE\s+KEY-----",
+     r"__REDACTED_ENCRYPTED_PRIVATE_KEY__"),
+    # Google OAuth client secrets
+    (r"[0-9]+-[A-Za-z0-9_]{32}\.apps\.googleusercontent\.com",
+     r"__REDACTED_GOOGLE_CLIENT_ID__"),
+    # HuggingFace tokens
+    (r"hf_[A-Za-z0-9]{30,}", r"__REDACTED_HF_TOKEN__"),
+    # NPM tokens
+    (r"npm_[A-Za-z0-9]{36,}", r"__REDACTED_NPM_TOKEN__"),
+    # Azure keys (storage account keys, connection strings, app config keys)
+    (r"(?i)DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[A-Za-z0-9+/=]{40,}",
+     r"__REDACTED_AZURE_CONNECTION_STRING__"),
+    (r"(?i)Azure\s*(Storage|Cosmos|Cognitive)[^\s]*\s*(Key|Account)\s*[:=]\s*[A-Za-z0-9+/=]{40,}",
+     r"__REDACTED_AZURE_KEY__"),
+    # Telegram bot tokens
+    (r"[0-9]{8,10}:[A-Za-z0-9_-]{35}", r"__REDACTED_TELEGRAM_TOKEN__"),
+    # SendGrid API keys
+    (r"SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}", r"__REDACTED_SENDGRID_KEY__"),
+    # Twilio API keys
+    (r"SK[A-Za-z0-9]{32}", r"__REDACTED_TWILIO_KEY__"),
+    # Docker Hub tokens
+    (r"dckr_pat_[A-Za-z0-9_-]{40,}", r"__REDACTED_DOCKER_TOKEN__"),
+    # Pulumi access tokens
+    (r"pul-[A-Fa-f0-9]{40}", r"__REDACTED_PULUMI_TOKEN__"),
+    # Terraform Cloud / Vault tokens
+    (r"(?i)(terraform|vault)[_-]token\s*[:=]\s*[\"']?[A-Za-z0-9.]{20,}[\"']?",
+     r"\g<1>_token=__REDACTED__"),
+    # .npmrc _authToken / .netrc credentials
+    (r"_authToken\s*=\s*[\"']?[A-Za-z0-9]{20,}[\"']?",
+     r"_authToken=__REDACTED__"),
+    (r"(?i)(machine|login|password)\s+\S+\s+(password|login)\s+\S+",
+     r"\g<1> __REDACTED_NETRC__"),
+    # AWS session tokens (temporary STS credentials)
+    (r"(?i)(aws[_-]?session[_-]?token|AWSAccessSessionToken)\s*[:=]\s*[\"']?[A-Za-z0-9+/=]{40,}[\"']?",
+     r"\g<1>=__REDACTED_AWS_SESSION__"),
     # Generic password / secret / token patterns in key=value form
     (r"(?i)(password|passwd|pwd)\s*[:=]\s*[\"']?[^\s\"'&,;){]+[\"']?",
      r"\g<1>=__REDACTED_PASSWORD__"),

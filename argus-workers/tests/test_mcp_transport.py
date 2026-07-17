@@ -123,3 +123,43 @@ class TestMCPTransport:
     def test_create_ping_handler_returns_pong(self):
         handler = create_ping_handler()
         assert handler({}) == "pong"
+
+    # ── Transport mode guard tests ──
+
+    def test_transport_mode_is_stdio(self):
+        """_TRANSPORT_MODE must be stdio — no network transport allowed.
+
+        This is an explicit assertion against adding network support to
+        this transport class. If you need network MCP, create a SEPARATE
+        transport class with its own security review. See docstring.
+        """
+        assert (
+            MCPTransport._TRANSPORT_MODE == "stdio"
+        ), "This transport is stdio-only. Do NOT add network mode."
+
+    def test_assert_stdio_only_does_not_raise_for_pipe_fds(self):
+        """_assert_stdio_only should not raise when stdin/stdout are pipes."""
+        # In test context, stdin/stdout are typically pipes or StringIO.
+        # This should complete without error.
+        transport = MCPTransport()
+        # _assert_stdio_only is called in __init__, so just creating
+        # the transport validates it. If it raised, the test would fail.
+        assert transport._TRANSPORT_MODE == "stdio"
+
+    @patch("mcp_transport.logger")
+    @patch("mcp_transport.os.fstat")
+    def test_assert_stdio_only_warns_for_socket_fds(self, mock_fstat, mock_logger):
+        """_assert_stdio_only should log a warning for socket FDs."""
+        import stat
+
+        # Mock os.fstat to return a socket mode
+        mock_stat = MagicMock()
+        mock_stat.st_mode = stat.S_IFSOCK | 0o644
+        mock_fstat.return_value = mock_stat
+
+        transport = MCPTransport()
+        # Warning should be logged for socket FDs
+        assert mock_logger.warning.called
+        assert "network socket" in str(mock_logger.warning.call_args)
+        # Transport still creates successfully
+        assert transport._TRANSPORT_MODE == "stdio"

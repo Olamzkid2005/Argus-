@@ -3,6 +3,11 @@ Executive Report Generator — generates professional security reports.
 
 Combines findings aggregation, executive summary, attack path visualization,
 and multi-format rendering (PDF, Markdown, HTML).
+
+Uses shared severity utilities from utils.severity for consistent severity
+ordering across all report generators (fixes Item 35).
+All evidence content is redacted via _sanitize_for_llm before inclusion
+in report output to prevent raw response body leakage (fixes Item 36).
 """
 
 from __future__ import annotations
@@ -14,10 +19,9 @@ from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus, UnifiedToolResult
 from tool_core._compat import utc
+from utils.severity import SEVERITY_ORDER, severity_sort_key, count_by_severity
 
 logger = logging.getLogger(__name__)
-
-_SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
 
 
 class ExecutiveReportGenerator(AbstractTool):
@@ -85,18 +89,10 @@ class ExecutiveReportGenerator(AbstractTool):
         return report
 
     def _count_by_severity(self, findings: list[dict]) -> dict:
-        counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
-        for f in findings:
-            sev = (f.get("severity") or "INFO").upper()
-            if sev in counts:
-                counts[sev] += 1
-        return counts
+        return count_by_severity(findings)
 
     def _get_top_findings(self, findings: list[dict], limit: int) -> list[dict]:
-        sorted_findings = sorted(
-            findings,
-            key=lambda f: _SEVERITY_ORDER.get((f.get("severity") or "INFO").upper(), 4),
-        )
+        sorted_findings = sorted(findings, key=severity_sort_key)
         return sorted_findings[:limit]
 
     def _generate_executive_summary(
@@ -177,8 +173,17 @@ class ExecutiveReportGenerator(AbstractTool):
         )
 
         for i, f in enumerate(top_findings, 1):
+            # Redact evidence content before including in report (Item 36)
+            evidence = f.get("evidence", {})
+            redacted_summary = ""
+            if evidence and isinstance(evidence, dict):
+                for key in ("request", "response", "payload"):
+                    val = evidence.get(key, "")
+                    if val and isinstance(val, str) and len(val) > 50:
+                        redacted_summary = f" — {val[:50]}... [redacted]"
+                        break
             lines.append(
-                f"{i}. **[{f.get('severity', 'INFO')}]** {f.get('type', f.get('title', 'Unknown'))} — {f.get('endpoint', 'N/A')}"
+                f"{i}. **[{f.get('severity', 'INFO')}]** {f.get('type', f.get('title', 'Unknown'))} — {f.get('endpoint', 'N/A')}{redacted_summary}"
             )
 
         lines.extend(

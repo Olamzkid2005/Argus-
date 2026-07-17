@@ -8,7 +8,7 @@ redis==5.2.1
 # psycopg2-binary avoids the libpq-dev build dependency.
 # Trade-off: may segfault under libpq version mismatch and lags security patches.
 # Switch to psycopg2 if deploying in a controlled environment with libpq-dev available.
-psycopg2-binary>=2.9.10,<3
+psycopg2-binary==2.9.10
 sqlalchemy==2.0.36
 
 # HTTP Clients
@@ -34,15 +34,15 @@ jinja2==3.1.5
 cryptography==44.0.2
 
 # Process management (orphaned subprocess cleanup)
-psutil>=6.1.0,<7
+psutil==6.1.0
 
 # Logging and Monitoring
 structlog==24.4.0
 
 # OpenTelemetry
-opentelemetry-api>=1.20.0
-opentelemetry-sdk>=1.20.0
-opentelemetry-exporter-otlp-proto-http>=1.20.0
+opentelemetry-api==1.20.0
+opentelemetry-sdk==1.20.0
+opentelemetry-exporter-otlp-proto-http==1.20.0
 
 # M-35: Test dependencies moved to requirements-dev.txt to avoid bloating
 # production images with ~400MB of browser binaries.
@@ -54,8 +54,8 @@ opentelemetry-exporter-otlp-proto-http>=1.20.0
 # playwright>=1.59.0
 
 # HTML Parsing (form discovery for auth)
-beautifulsoup4>=4.12
-lxml>=5.0
+beautifulsoup4==4.12.3
+lxml==5.3.0
 
 # WebSocket scanning
-websockets>=12.0
+websockets==12.0

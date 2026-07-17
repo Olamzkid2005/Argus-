@@ -324,6 +324,73 @@ jobs:
           retention-days: 14
           path: argus-workers/python-test-results.xml
 
+  python-tests-full:
+    name: Python Workers (DB/Redis/E2E full suite)
+    # Runs on schedule (nightly) and on workflow_dispatch to avoid blocking PRs
+    # on infrastructure-dependent tests. Requires PostgreSQL and Redis service containers.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: argus_test
+          POSTGRES_USER: argus
+          POSTGRES_PASSWORD: argus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libpq-dev
+
+      - name: Install test dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt -q
+
+      - name: Run DB/Redis/E2E test suite
+        env:
+          ARGUS_DB_URL: postgresql://argus:argus_test@localhost:5432/argus_test
+          ARGUS_REDIS_URL: redis://localhost:6379/0
+        run: |
+          python -m pytest tests/ \
+            -m "requires_db or requires_redis or e2e" \
+            -v --timeout=180 --tb=long \
+            --junit-xml=python-full-test-results.xml 2>&1 | tee /tmp/pytest-full-output.txt; exit_code=${PIPESTATUS[0]}
+          echo "---PYTEST EXIT CODE: $exit_code---"
+          tail -100 /tmp/pytest-full-output.txt
+          exit $exit_code
+
+      - name: Upload full test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-full-test-results-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: argus-workers/python-full-test-results.xml
+
   tool-defs-check:
     name: Tool definitions consistency check
     runs-on: ubuntu-latest

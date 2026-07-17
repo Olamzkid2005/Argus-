@@ -3,14 +3,16 @@ Governance — Unified safety controls for the agent runtime.
 
 Centralizes all runtime safety controls that were previously fragmented across:
 - LoopBudgetManager (cycle/depth/LLM limits)
-- LlmCostTracker (dollar cost tracking)
+- LlmCostTracker (dollar cost tracking via Redis for cross-worker persistence)
 - HardTimeoutSeconds (wall-clock timeout)
-- Low-signal detection (NEW)
+- Low-signal detection
 
 Architecture:
   Governance wraps these components and provides a single check() method
   that the agent loop calls before each action. The orchestrator calls
   governance.check() rather than managing each limit independently.
+  Cost tracking is persisted via LlmCostTracker (Redis-backed) so spend
+  is not lost across worker restarts (fixes item 25).
 
 Usage:
     governance = Governance(engagement_id, connection_string)
@@ -23,6 +25,8 @@ Usage:
 import logging
 import time
 from typing import Any
+
+from tasks.utils import LlmCostTracker
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +79,18 @@ class Governance:
         self._last_tool_results: list[dict] = []
         self._is_shutdown = False
         self._shutdown_reason = ""
+
+        # LlmCostTracker for cross-worker persistent cost tracking (item 25)
+        # Falls back to in-process counting if Redis is unavailable.
+        self._cost_tracker: LlmCostTracker | None = None
+        try:
+            self._cost_tracker = LlmCostTracker(engagement_id, max_cost=max_cost_usd)
+        except Exception as e:
+            logger.warning(
+                "Failed to create LlmCostTracker for %s: %s — using in-memory cost tracking only",
+                engagement_id,
+                e,
+            )
         # Active execution time tracking (blocker 58): accumulated seconds spent
         # actively executing tool calls, excluding idle/waiting time.
         self._active_time_accumulated: float = 0.0
@@ -158,13 +174,16 @@ class Governance:
         if self._is_shutdown:
             return
 
-        # Track cost
+        # Track cost — persist via LlmCostTracker when available (item 25)
         if action is not None:
             if isinstance(action, dict):
                 cost = action.get("cost_usd", 0.0) or 0.0
             else:
                 cost = getattr(action, "cost_usd", 0.0) or 0.0
-            self._total_cost_usd += float(cost)
+            cost_float = float(cost)
+            self._total_cost_usd += cost_float
+            if self._cost_tracker is not None:
+                self._cost_tracker.record_llm_call(cost_float)
 
         # Track tokens — use actual counts when available (blocker 48)
         tool_name = ""
@@ -244,12 +263,16 @@ class Governance:
         """Return current governance status for observation building."""
         wall_elapsed = time.time() - self._start_time
         active_elapsed = self.get_active_runtime_seconds()
+        # Use persisted cost from LlmCostTracker when available (item 25)
+        persisted_cost = 0.0
+        if self._cost_tracker is not None:
+            persisted_cost = self._cost_tracker.total
         return {
             "engagement_id": self.engagement_id,
             "runtime_elapsed_seconds": round(wall_elapsed, 1),
             "active_runtime_seconds": active_elapsed,
             "max_runtime_seconds": self.max_runtime_seconds,
-            "total_cost_usd": round(self._total_cost_usd, 6),
+            "total_cost_usd": round(max(self._total_cost_usd, persisted_cost), 6),
             "max_cost_usd": self.max_cost_usd,
             "total_tokens_estimated": self._total_tokens_used,
             "max_tokens": self.max_tokens,
@@ -258,6 +281,7 @@ class Governance:
             "is_shutdown": self._is_shutdown,
             "shutdown_reason": self._shutdown_reason,
             "recent_tool_count": len(self._last_tool_results),
+            "cost_tracker_available": self._cost_tracker is not None,
         }
 
     def is_shutdown(self) -> bool:

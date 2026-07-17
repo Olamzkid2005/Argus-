@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import select
+import stat
 import sys
 import time as _time
 import traceback
@@ -69,10 +70,54 @@ class MCPTransport:
         except (ValueError, TypeError):
             return MCPTransport._HEARTBEAT_FALLBACK_TIMEOUT_SECS
 
+    # SECURITY: This transport is STRICTLY stdio-only.
+    # No network listener, no socket support, no TCP mode.
+    # If you need network-based MCP, create a SEPARATE transport class
+    # with its own security review — do NOT modify this one.
+    _TRANSPORT_MODE = "stdio"
+
     def __init__(self):
         self.handlers: dict[str, Callable] = {}
         self._running = False
         self._last_activity: float = 0.0
+
+        # Guard: verify stdin/stdout are not network sockets.
+        # This is a belt-and-suspenders check alongside the purely stdio design.
+        # If either handle has a socket peer, log a warning so an operator
+        # can detect accidental network exposure.
+        self._assert_stdio_only()
+
+    @staticmethod
+    def _assert_stdio_only() -> None:
+        """Assert that stdin and stdout are not network sockets.
+
+        Uses os.fstat() + stat.S_ISSOCK to detect whether stdin/stdout
+        file descriptors are network sockets. Logs a warning if either
+        FD is a socket — alerts the operator of accidental network exposure.
+
+        This is a defense-in-depth check. The transport is designed to be
+        stdio-only; this catches misconfiguration at startup.
+
+        Raises:
+            RuntimeError: If stdin or stdout is a socket AND the env var
+                          ARGUS_MCP_BLOCK_SOCKET is set to "1" — hard-fail
+                          mode for CI/deployment guard.
+        """
+        for fd_name, fd in [("stdin", sys.stdin), ("stdout", sys.stdout)]:
+            try:
+                fileno = fd.fileno()
+                mode = os.fstat(fileno).st_mode
+                if stat.S_ISSOCK(mode):
+                    msg = (
+                        f"MCP {fd_name} (fd={fileno}) is a network socket! "
+                        f"This transport is stdio-only. "
+                        f"Do NOT expose MCP over the network without auth."
+                    )
+                    logger.warning(msg)
+                    if os.environ.get("ARGUS_MCP_BLOCK_SOCKET", "") == "1":
+                        raise RuntimeError(msg)
+            except (OSError, TypeError, AttributeError, ValueError):
+                pass  # Not a valid FD, can't determine type - proceed
 
     def register(self, method: str, handler: Callable):
         self.handlers[method] = handler

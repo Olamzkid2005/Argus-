@@ -106,44 +106,51 @@ class Container:
         self.output_provider = deps.output_provider or OutputProvider()
         self.template_provider = deps.template_provider or TemplateProvider()
 
-        # Lazily initialized services
+        # Lazily initialized services — thread-safe via per-container lock
+        self._lock = threading.Lock()
         self._tool_runner = None
         self._llm_client = None
         self._checkpoint_manager = None
 
     @property
     def tool_runner(self):
-        """Get or create ToolRunner instance."""
+        """Get or create ToolRunner instance (thread-safe)."""
         if self._tool_runner is None:
-            from tools.tool_runner import ToolRunner
+            with self._lock:
+                if self._tool_runner is None:
+                    from tools.tool_runner import ToolRunner
 
-            self._tool_runner = ToolRunner(
-                connection_string=self.db_url,
-                engagement_id=self.engagement_id,
-            )
+                    self._tool_runner = ToolRunner(
+                        connection_string=self.db_url,
+                        engagement_id=self.engagement_id,
+                    )
         return self._tool_runner
 
     @property
     def llm_client(self):
-        """Get or create LLMClient instance."""
+        """Get or create LLMClient instance (thread-safe)."""
         if self._llm_client is None:
-            try:
-                from llm_client import LLMClient
+            with self._lock:
+                if self._llm_client is None:
+                    try:
+                        from llm_client import LLMClient
 
-                redis_url = self.redis_url or "redis://localhost:6379"
-                self._llm_client = LLMClient(redis_url=redis_url)
-            except Exception as e:
-                logger.warning("LLM client not available: %s", e)
-                self._llm_client = None
+                        redis_url = self.redis_url or "redis://localhost:6379"
+                        self._llm_client = LLMClient(redis_url=redis_url)
+                    except Exception as e:
+                        logger.warning("LLM client not available: %s", e)
+                        self._llm_client = None
         return self._llm_client
 
     @property
     def checkpoint_manager(self):
-        """Get or create CheckpointManager instance."""
+        """Get or create CheckpointManager instance (thread-safe)."""
         if self._checkpoint_manager is None and self.db_url:
-            from checkpoint_manager import CheckpointManager
+            with self._lock:
+                if self._checkpoint_manager is None and self.db_url:
+                    from checkpoint_manager import CheckpointManager
 
-            self._checkpoint_manager = CheckpointManager(self.db_url)
+                    self._checkpoint_manager = CheckpointManager(self.db_url)
         return self._checkpoint_manager
 
 
