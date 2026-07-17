@@ -15,6 +15,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Some tests exercise the tool_runner property which transitively imports
+# opentelemetry. If it's not available (or broken in the test env), skip
+# those tests rather than failing with an import error.
+try:
+    from opentelemetry import trace  # noqa: F401
+
+    _HAS_OPENTELEMETRY = True
+except ImportError:
+    _HAS_OPENTELEMETRY = False
+
+skipif_no_opentelemetry = pytest.mark.skipif(
+    not _HAS_OPENTELEMETRY,
+    reason="opentelemetry not available — tool_runner tests require it",
+)
+
 from di_container import (
     Container,
     ContainerDependencies,
@@ -90,6 +105,7 @@ class TestContainer:
         assert isinstance(container.output_provider, OutputProvider)
         assert isinstance(container.template_provider, TemplateProvider)
 
+    @skipif_no_opentelemetry
     def test_lazy_tool_runner(self):
         deps = ContainerDependencies(
             engagement_id="eng-001", db_url="postgresql://localhost/db"
@@ -125,10 +141,17 @@ class TestContainerRegistry:
     """Tests for container registry functions."""
 
     def setup_method(self):
-        # Clean registry before each test
-        from di_container import _containers
-
+        # Clean registry and capture original factory before each test
+        from di_container import _containers, _factory as default_factory
         _containers.clear()
+        self._original_factory = default_factory
+
+    def teardown_method(self):
+        # Restore factory to avoid polluting other tests
+        from di_container import _containers, set_container_factory
+        _containers.clear()
+        if hasattr(self, '_original_factory'):
+            set_container_factory(self._original_factory)
 
     def test_get_or_create_container(self):
         container = get_or_create_container(
@@ -200,6 +223,7 @@ class TestConcurrency:
         set_container_factory(self._original_factory if hasattr(self, '_original_factory')
                               else lambda deps: Container(deps))
 
+    @skipif_no_opentelemetry
     def test_concurrent_tool_runner_creates_single_instance(self):
         """Multiple threads accessing tool_runner concurrently should all get
         the same instance, with only one creation call."""
@@ -288,6 +312,7 @@ class TestConcurrency:
         assert len(results) == num_threads
         assert all(r is results[0] for r in results), "Not all threads got the same checkpoint_manager"
 
+    @skipif_no_opentelemetry
     def test_concurrent_all_properties_isolated(self):
         """Multiple threads accessing different lazy properties concurrently
         should not interfere with each other."""
