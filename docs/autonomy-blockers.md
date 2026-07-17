@@ -1,740 +1,627 @@
-# Autonomy Blockers — Full Audit
+# Autonomy Blockers Analysis — Argus Codebase
 
-What prevents Argus from running fully autonomously (no human in the loop).
-
-**Status key:** ✅ Fixed · 🟡 Partial fix · ❌ Not fixed · 🟢 Not a blocker (already handled)
-
----
-
-## 🔴 DEADLOCKS — Execution Halts Indefinitely
-
-### 1. Question Tool Has No Auto-Answer ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/tool/question.ts:14-41`** — Fixed by adding `ARGUS_AUTO_ANSWER` env var.
-
-The `autoAnswer()` function (line 14) checks `process.env.ARGUS_AUTO_ANSWER` and returns default answers for all questions when set, bypassing stdin entirely.
-
-Set `ARGUS_AUTO_ANSWER=continue` (or any string) to auto-answer all LLM questions with that value.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `Argus-Tui/packages/opencode/src/tool/question.ts`
-- **What changed:** Added `autoAnswer()` function (lines 16–25) that generates default answers when `ARGUS_AUTO_ANSWER` is set. The executor checks for auto-answers first (lines 34–47) and returns immediately with a metadata message instead of calling `question.ask()`.
-- **Env var:** `ARGUS_AUTO_ANSWER` — set to any string to enable auto-answering.
-</details>
-
-### 2. Approval Gates Block Without TTY ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/workflows/approval.ts`** — Fixed to respect `ARGUS_AUTO_APPROVE=1` for destructive gates in non-TTY mode.
-
-Previously, destructive gates were **silently skipped** (denied) in non-TTY mode regardless of `ARGUS_AUTO_APPROVE`. Now, when `ARGUS_AUTO_APPROVE=1`, destructive gates are auto-approved even in non-TTY.
-
-Combined with `ARGUS_AUTONOMOUS=1`, this enables all phases (including `destructive_tools` gated phases like `web_exploitation` and `api_exploitation`) to execute fully autonomously.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `Argus-Tui/packages/opencode/src/argus/workflows/approval.ts`
-- **What changed:** The non-TTY path now checks `ARGUS_AUTO_APPROVE` before skipping destructive gates. When `ARGUS_AUTO_APPROVE=1`, the destructive gate auto-approves. Without it, destructive gates still auto-skip in non-TTY as before (safe default).
-- **Env var:** `ARGUS_AUTO_APPROVE=1` — now required for destructive gate auto-approval in autonomous mode.
-</details>
-
-### 3. Target Confirmation Blocks 🟢 NOT A BLOCKER
-
-**`Argus-Tui/packages/opencode/src/argus/workflow-runner.ts:376-408`** — Already handled. Non-TTY auto-confirms, and `ARGUS_AUTO_APPROVE=1` also skips confirmation. Only blocks when `security.scope.require_confirmation` is set AND running in TTY without `ARGUS_AUTO_APPROVE`.
-
-When `ARGUS_AUTONOMOUS=1`, non-TTY is the expected runtime mode, so this never blocks.
+> **Date:** 2026-07-18  
+> **Scope:** Full analysis of `argus-workers/` Python codebase  
+> **Methodology:** Code-reading across all major modules (agent loop, runtime, orchestrator, pipeline, config, LLM client, tasks, dead letter queue, error handling, shadow mode, swarm, governance)  
+> **Total blockers identified:** 30
 
 ---
 
-## 🟡 SILENT SKIPS — Capability Lost Without Notice
+## How to Read This Document
 
-### 4. ~60 External Binaries Must Be Pre-Installed ❌ NOT FIXED (operational)
+Each blocker has:
+- **Severity**: 🚫 Fatal / ⚠️ Critical / 🔶 Moderate
+- **Location**: Specific file(s) and line numbers where the blocker manifests
+- **Evidence**: Direct code quotes showing the problem
+- **Why it blocks autonomy**: What specifically prevents self-directed operation
 
-**`argus-workers/mcp_server.py:312-317`** — This is an operational requirement. Every security tool binary must be installed on PATH. The MCP server logs warnings for missing binaries but assessment proceeds with zero tools.
+The blockers are ordered by severity, then by logical dependency (upstream blockers first).
 
-**Mitigation:** `argus doctor` lists missing tools. Phase 4.5.6 (Zero-tools fail) now throws in autonomous mode when all phases have zero tools (see blocker 19), so this won't go unnoticed.
+---
 
-### 5. Non-TTY Destructive Gates Auto-Skip ✅ FIXED
+## 🚫 TIER 1 — FATAL BLOCKERS (3)
 
-Same as blocker 2. See above.
+These prevent sustained autonomous operation regardless of other fixes.
 
-### 6. Tool Health Monitor — Circuit-Breaker Skips ✅ FIXED
+### 1. No Meta-Cognition Layer
 
-**`Argus-Tui/packages/opencode/src/argus/bridge/tool-health.ts`, `Argus-Tui/packages/opencode/src/argus/planner/executor.ts:494-495`** — Added `findFallbackTool()` in executor.ts. When a tool is circuit-broken, the executor now searches for alternative tools covering the same capability. Defaults relaxed to 8 failures / 120s cooldown.
+**Location**: `react_agent.py:832` (`_deterministic_plan`), `react_agent.py:1222` (`_fallback_phase_complete`),
+`mcp_server.py:SignalQuality`
 
-### 7. Degraded Mode Caches Stale Results ✅ FIXED
+**Evidence**: The system has zero self-awareness. When the LLM fails, `_deterministic_plan()` iterates
+tools sequentially with no adaptation to target characteristics. Signal quality tiers (`CONFIRMED`,
+`PROBABLE`, `CANDIDATE`) are defined as **static class constants** in `mcp_server.py` but are never
+dynamically adjusted based on actual per-target tool performance.
 
-**`Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts:44-49`, `Argus-Tui/packages/opencode/src/argus/bridge/supervisor.ts:25`** — Added per-entry `hitCount` tracking. When a cached result has been served 3+ times, a warning is logged. Cache TTL is now configurable via `ARGUS_DEGRADED_CACHE_TTL_MS`.
-
-### 13. Config File Loading Errors Silently Fall Back ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/workflow-runner.ts:542-549`** — Fixed to fail hard in autonomous mode.
-
-When `ARGUS_AUTONOMOUS=1` and config file parsing fails, the workflow-runner now throws a clear error instead of silently using defaults:
-
+```python
+# react_agent.py:832 — the entire "intelligence" of deterministic fallback:
+for tool_name in phase_tools:
+    if tool_name not in tried_tools:
+        return AgentAction(tool_name, {"target": task}, f"Phase tool: {tool_name}")
 ```
-[Argus] ARGUS_AUTONOMOUS=1: config file 'argus.config.yaml' is missing or malformed.
-A valid config file is required in autonomous mode.
+
+```python
+# react_agent.py:1222-1228 — fallback phase progression returns a degraded signal
+# that TypeScript consumes but the Python side never acts on:
+def _fallback_phase_complete(phase, findings=None):
+    """Fallback phase progression when LLM is unavailable."""
+    ...
+    return {"fallback": True, ...}  # Signal to TypeScript, not to self
 ```
 
-<details>
-<summary>Fix details</summary>
+**Why it blocks autonomy**: An autonomous system must know when it's operating in degraded mode
+and adapt. Argus logs the fallback and moves on, but with no compensatory behavior — no reduced
+scope, no different strategy, no "try harder to get the LLM back." It just runs dumber tools.
 
-- **File:** `Argus-Tui/packages/opencode/src/argus/workflow-runner.ts`
-- **What changed:** Added `isAutonomous` check in the config catch block (lines 557–562). Also added `validateKeys()` to `feature-flags.ts` and unknown-key warnings in `loader.ts`.
-- **Scope:** Only the workflow-runner config path was hardened. `feature-flags.ts:220-227` and `tool-config.ts:39-40` still silently degrade.
-</details>
+---
 
-### 14. MCP Worker Ready-Timeout Too Short ✅ FIXED
+### 2. No Cross-Scan Learning
 
-**`Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts:270-281`** — Fixed by making timeout configurable via `ARGUS_MCP_READY_TIMEOUT_MS`.
+**Location**: `runtime/memory.py:215` (`_get_long_term`), `feature_flags.py:70` (`MEMORY_RETRIEVAL`),
+`orchestrator_pkg/reporting.py` (`TargetProfileService`)
 
-Default remains 10s for backward compatibility. Set `ARGUS_MCP_READY_TIMEOUT_MS=30000` for 30s on cold-start environments.
+**Evidence**: The `MemoryRetriever` exists and supports 3-tier memory (short/medium/long-term),
+but `_get_long_term()` queries `get_by_engagement_id()` — **not** by target URL. This means every
+scan of the same target starts from zero.
 
-<details>
-<summary>Fix details</summary>
+```python
+# runtime/memory.py:215 — looks up by engagement_id, not target URL
+profile = repo.get_by_engagement_id(engagement_id)
+```
 
-- **File:** `Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts`
-- **What changed:** `waitForReady()` (line 296) reads `ARGUS_MCP_READY_TIMEOUT_MS` with fallback to the original 10000ms default.
-</details>
+The `MEMORY_RETRIEVAL` feature flag defaults to `False`. When enabled, it only provides context
+to the *current* LLM prompt — it doesn't change tool selection strategy or optimize future scans.
 
-### 15. No MCP Worker Health Probe During Assessment ✅ FIXED
+`TargetProfileService` stores profiles but only uses them for **report generation context**,
+not for strategic optimization of tool ordering.
 
-**`Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts:81-83,174,337-354`** — `_startHealthProbes()` is called from `connect()` when the assessment starts. It runs a 30s `setInterval` that calls `probeHealth()` and initiates worker restart when unresponsive. The timer uses `.unref()` so it doesn't keep the process alive on shutdown.
+**Why it blocks autonomy**: A system that cannot learn from experience cannot become more
+autonomous over time. Every scan is a groundhog day — same tools, same order, same blind spots.
 
-<details>
-<summary>Fix details</summary>
+---
 
-- **File:** `Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts`
-- **What changed:** `connect()` calls `this._startHealthProbes()` (line 174). The probe runs every `HEALTH_PROBE_INTERVAL_MS` (30s), logs a warning on failure, sets LLM status to UNAVAILABLE, and triggers worker restart.
-- **Verified:** Wired into assessment lifecycle — `connect()` is called in `workflow-runner.ts` before phase execution.
-</details>
+### 3. Shadow Mode Cannot Converge Across Workers
 
-### 16. Phase Complete LLM Feedback Silently Degrades ✅ FIXED
+**Location**: `runtime/shadow_mode.py:7-10`
 
-**`Argus-Tui/packages/opencode/src/argus/workflow-runner.ts:679-683`** — `phaseCompleteResult.fallback` is checked after each phase completes. When the LLM is unavailable on the Python side, `fallback: True` is returned, and the workflow-runner emits a visible warning and appends an audit log entry.
+**Evidence**: The shadow comparison system uses `threading.Lock()` which is explicitly documented
+as **not cross-process**. In a Celery multi-worker deployment, each worker process has its own
+counter. The stated requirement of "100 consecutive successful comparisons before flipping a flag"
+can never be reached when different workers are writing to different counters.
 
-<details>
-<summary>Fix details</summary>
+```python
+# NOTE: threading.Lock() does NOT synchronize across Celery worker processes.
+# In multi-worker deployments, these counters are per-process only.
+# For cross-process synchronization, use Redis or DB-backed counters.
+```
 
-- **File (TS):** `Argus-Tui/packages/opencode/src/argus/workflow-runner.ts`
-- **What changed:** Added `if (phaseCompleteResult.fallback)` check (line 679) that emits `⚠ LLM unavailable for phase analysis — using fallback phase progression` and logs to the audit trail.
-- **File (Python):** `argus-workers/mcp_server.py` — `_fallback_phase_complete()` returns `"fallback": True`.
-- **Verified:** The flag is consumed immediately after the `phaseComplete()` call in the assessment loop.
-</details>
+**Why it blocks autonomy**: The shadow mode was designed as the safety mechanism for rolling out
+new autonomous features. If it cannot converge, no new feature can be safely promoted from
+"feature-flagged off" to "on by default" without manual operator intervention.
 
-### 17. Structured Findings From MCP Path Are Lost ✅ FIXED
+---
 
-**`argus-workers/mcp_server.py:701-717`, `Argus-Tui/packages/opencode/src/argus/planner/executor.ts:502-535`** — Fixed.
+## ⚠️ TIER 2 — CRITICAL BLOCKERS (8)
 
-The executor now consumes the `structured` key from MCP responses in hybrid mode (line ~430-440):
-```typescript
-const structuredData = (result.data as any).structured
-if (structuredData && Array.isArray(structuredData) && structuredData.length > 0) {
-  for (const finding of structuredData) {
-    findings.push({ ...finding, confidence: promoted })
-  }
+These cause silent degradation or failure in common scenarios.
+
+### 4. Hardcoded Cost Caps Kill Autonomy Mid-Scan
+
+**Location**: `config/constants.py:269` (`max_cost_per_engagement: float = 0.50`),
+`config/constants.py:346` (`max_cost_usd: float = 0.25`)
+
+**Evidence**: Two separate hard cost caps exist, and they're very low:
+- `LLM_MAX_COST_PER_ENGAGEMENT = $0.50` (general LLM features)
+- `LLM_AGENT_MAX_COST_USD = $0.25` (agent tool selection)
+
+The `Governance` class has `_DEFAULT_MAX_COST_USD = $10.0` but this only applies when
+`GOVERNANCE_V2` feature flag AND `ARGUS_AUTONOMOUS=1` are both enabled. Without those,
+the `$0.25` cap from `LLMCostConfig` applies.
+
+For any real-world engagement with 10+ tool selections at ~$0.0002 each, the agent hits the
+cost cap after roughly 1,250 LLM calls and silently switches to deterministic-mode tool ordering.
+The operator never knows the agent went "dumb."
+
+```python
+# config/constants.py:346
+max_cost_usd: float = 0.25
+```
+
+**Why it blocks autonomy**: An autonomous system that stops reasoning mid-scan and silently
+switches to brute-force tool iteration is not autonomous. The cost caps are safety guards
+that become execution limiters in practice.
+
+---
+
+### 5. DeterministicRuntime Has Zero Intelligence
+
+**Location**: `runtime/deterministic_runtime.py:35-55`
+
+**Evidence**: When the LLM is unavailable or cost-capped, `DeterministicRuntime` is the fallback.
+Its entire logic is:
+
+```python
+return execute_scan_pipeline(self.ctx, targets, budget, ...)
+```
+
+A direct passthrough to `execute_scan_pipeline` with no adaptation, no target-awareness,
+no signal-based tool selection. The pipeline runs tools in a fixed order regardless of
+recon findings. A static HTML site gets sqlmap. A WordPress site gets dalfox before wpscan.
+
+**Why it blocks autonomy**: The fallback represents a catastrophic IQ drop — from LLM-driven
+reasoning to "for loop over tool list." There's no middle ground, no progressive degradation.
+
+---
+
+### 6. Governance Token Estimates Are Placebo Values
+
+**Location**: `runtime/governance.py:247-262`
+
+**Evidence**: `Governance._estimate_token_usage()` assigns hardcoded per-tool estimates:
+
+```python
+estimates = {
+    "nuclei": 200,        # Real usage: could be 5,000+ with 100 templates
+    "web_scanner": 300,   # Real usage: could be 10,000+ with full scan
+    "port_scanner": 100,
+    ...
 }
+return estimates.get(tool_name.lower(), 150)
 ```
 
-Structured findings with proper severity, CWE, and evidence are now normalized. The `else if` guard prevents double-counting when both `structured` and raw arrays are present.
-
-### 18. Attack Graph Silently Skips Invalid Findings ✅ FIXED
-
-**`argus-workers/mcp_server.py:1188`** — Now logs the count of skipped invalid findings with `logger.warning` so operators can detect incomplete attack graphs.
-
-### 19. Planner Silently Drops Phases With Zero Tools ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/planner/planner.ts:79,114`** — Fixed to throw in autonomous mode.
-
-When all phases have zero tools in autonomous mode, the planner now throws:
-```
-[Argus] ARGUS_AUTONOMOUS=1: All phases have zero available tools.
-```
-This prevents assessments that silently complete with zero findings.
-
-### 20. Runaway Phase Execution In Hybrid Mode ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/planner/executor.ts:231-234`** — Fixed with two circuit breakers:
-
-1. **Per-phase timeout:** `ARGUS_MAX_PHASE_DURATION_MS` (default 30 min, line 88)
-2. **Global max assessment duration:** `ARGUS_MAX_ASSESSMENT_DURATION_MS` (default 2 hours, line 96)
-
-The global circuit breaker is checked at the start of `execute()` (line ~164). The per-phase timeout is checked before each hybrid iteration (line ~410) and after each tool result (line ~505).
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `Argus-Tui/packages/opencode/src/argus/planner/executor.ts`
-- **Env vars:** `ARGUS_MAX_PHASE_DURATION_MS` (default 1800000), `ARGUS_MAX_ASSESSMENT_DURATION_MS` (default 7200000)
-- **Note:** The global timer (`assessmentStartTime`) is now set to `Date.now()` at the start of the first phase execution via an `if (=== 0)` guard in `execute()`. Both the global 2-hour ceiling and per-phase 30-min timeout are now actively enforced.
-</details>
-
-### 21. Best-Effort try/catch Everywhere Masks Failures ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/workflow-runner.ts:519,561,643,679,706`** — Config loading and engine close catch blocks now log actual error messages instead of swallowing them silently.
-
-### 22. Circuit Breaker Defaults Kill Tools Too Aggressively ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/config/tool-config.ts:72-76`, `Argus-Tui/packages/opencode/src/argus/bridge/tool-health.ts:17-19`** — Defaults relaxed from 5 failures / 5 min cooldown to 8 failures / 120s cooldown. Reduces false positives for tools with transient errors (network jitter, MCP worker restarts).
-
-### 23. Engagement Lock Acquisition Silently Skipped ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/workflow-runner.ts:561-565`** — Now throws in autonomous mode.
-
-When `ARGUS_AUTONOMOUS=1` and lock acquisition fails (Redis unavailable), the runner throws a clear error:
-```
-[Argus] ARGUS_AUTONOMOUS=1: Could not acquire distributed lock for engagement {id}.
-Distributed locking is required in autonomous mode to prevent concurrent assessments
-on the same target. Ensure Redis is running or disable autonomous mode.
-```
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `Argus-Tui/packages/opencode/src/argus/workflow-runner.ts`
-- **What changed:** Added `isAutonomous` check in the lock catch block (lines 567–575).
-</details>
-
-### 24. Per-Engagement DB Resource Leak On Close Failure ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/engagement/store.ts:645,657`** — Encrypted handle close now retries 3x with exponential backoff (100ms, 200ms, 400ms).
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `Argus-Tui/packages/opencode/src/argus/engagement/store.ts`
-- **What changed:** Added `_closeEncryptedHandleWithRetry()` (lines 340–360) with 3 retry attempts and exponential backoff. Falls back to `console.error` after final failure.
-</details>
-
-### 25. Semgrep/Bandit Findings-Bearing Exit Codes Missed on MCP Path ✅ FIXED
-
-**`argus-workers/mcp_server.py:685-690,701-717`** — Added cross-reference comment warning maintainers to keep `FINDINGS_EXIT_CODES` in sync with `ToolRunner.FINDINGS_EXIT_CODES`. Both dicts verified to contain the same 8 tools.
-
-### 29. ReActAgent Has Unbounded LLM Cost In Autonomous Mode ✅ FIXED
-
-**`argus-workers/agent/react_agent.py:859-885`** — Cost guard now applies in ALL modes including `GOVERNANCE_V2`.
-
-Previously, the cost guard only ran in the legacy branch. When `GOVERNANCE_V2` was enabled (default for autonomous mode), cost was tracked but not enforced. Now the cost check runs immediately after the mode check, covering both legacy and V2 paths.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `argus-workers/agent/react_agent.py`
-- **What changed:** Added cost check at top of `_choose_action()` method, before mode routing. Removed duplicate legacy-only cost block.
-</details>
-
-### 30. Agent History Silently Truncated At 50 Entries ✅ FIXED
-
-**`argus-workers/agent/react_agent.py:421-427`** — Warning logged when entries are dropped.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `argus-workers/agent/react_agent.py`
-- **What changed:** Added `logger.warning` when history truncation occurs (50+ entries). Warns: `"Agent history truncated at 50 entries — oldest entries dropped"`.
-</details>
-
-### 31. LLM Tool Selection Silently Falls Back To Deterministic ✅ FIXED
-
-**`argus-workers/agent/react_agent.py:560-563,607-610`** — When the LLM is available but returns `None` (failed/fallback), a `logger.warning` is now emitted with context about the task. Gated by `recon_context` to avoid false positives.
-
-### 32. ReActAgent Max Iterations Not Configurable From TypeScript Side ✅ FIXED
-
-**`argus-workers/agent/react_agent.py:19,1052-1054`** — TS now passes `max_iterations` (from `ARGUS_HYBRID_MAX_ITERATIONS`) via `agentNext()` params. Python stores it via `set_ts_max_iterations()` and caps iteration limit with `min()`. Both sides share the same `execution_iteration` counter.
-
-### 33. Auth Checkpoint Restore Threads Leak On Success ✅ FIXED
-
-**`argus-workers/agent/react_agent.py:1153-1183`** — `shutdown(wait=False, cancel_futures=True)` ensures the executor's worker threads are interrupted immediately rather than lingering until garbage collection. Covers both success and failure paths.
-
-### 35. No Per-Phase Timeout In Workflows ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/planner/executor.ts`** — Added `ARGUS_MAX_PHASE_DURATION_MS` with per-iteration checks in both `execute()` and `executeHybrid()`.
-
-Each phase now has a configurable deadline (default 30 min). The deadline is checked:
-- Before each hybrid loop iteration (line ~410)
-- After each tool result in the deterministic path (line ~505)
-- At the start of `execute()` via the global circuit breaker
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `Argus-Tui/packages/opencode/src/argus/planner/executor.ts`
-- **Env var:** `ARGUS_MAX_PHASE_DURATION_MS` (default 1800000 = 30 min)
-- **New field:** `phaseDeadline` set at start of each phase.
-</details>
-
-### 37. ThreadPoolExecutor Resources Not Bounded Across Concurrent Assessments ✅ FIXED
-
-**`argus-workers/orchestrator_pkg/recon.py:274`**, **`orchestrator_pkg/scan.py:868`**, **`agent/swarm.py:630`**, **`tools/attack_surface_mapper.py:49`** — All four ThreadPoolExecutors already have `max_workers` limits:
-- `recon.py`: `max_workers=8`
-- `scan.py`: `max_workers=5`
-- `swarm.py`: `max_workers=len(active)` (bounded by max 3 active agents)
-- `attack_surface_mapper.py`: `max_workers=3`
-
-These were verified in the code-fix campaign (July 5, 2026). No unbounded pools remain.
-
-### 38. No Cancellation Propagation From TypeScript To Python Agent ✅ FIXED
-
-**`argus-workers/agent/session_store.py:305-318`, `argus-workers/mcp_server.py:1368-1412`** — `AgentSessionStore.cancel()` exists and sets `_cancelled` on the session under lock. `handle_agent_next()` and `handle_agent_observe()` both check `hasattr(session, '_cancelled')` and return `done=True` immediately if set.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `argus-workers/agent/session_store.py` — `cancel(session_id)` method (line 305) sets `session._cancelled = True` under lock. Returns `False` if session not found (no-op).
-- **File:** `argus-workers/mcp_server.py` — `handle_cancel` calls `server.session_store.cancel(session_id)`. `handle_agent_next()` (line ~937) and `handle_agent_observe()` (line ~1017) check `hasattr(session, '_cancelled')` and short-circuit.
-- **File (TS):** `Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts` — `cancelAgent()` sends `"cancel"` RPC.
-- **Verified:** Full propagation chain: TS → RPC → cancel() → _cancelled flag → agent loop termination.
-</details>
-
-### 39. MCP Transport Has No Message Size Limit ✅ FIXED
-
-**`argus-workers/mcp_transport.py`** — Message size limits enforced: 10MB input (stdin reads), 50MB output (stdin writes).
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `argus-workers/mcp_transport.py`
-- **What changed:** Added `_MAX_MESSAGE_SIZE` (10MB) and `_MAX_OUTPUT_SIZE` (50MB) constants. Input validation rejects oversized messages with `MCPError`. Output validation truncates oversized responses.
-</details>
-
-### 40. Worker Cleanup On Abnormal Exit Leaks Child Processes ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts:108-122`** — `killChild()` now uses process-group signal: `process.kill(-proc.pid, "SIGTERM")`.
-
-The negative PID sends the signal to the entire process group, ensuring grandchild processes (nuclei, nmap, sqlmap) are terminated alongside the parent MCP worker. Falls back to parent-only kill on platforms that don't support negative PID signals.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts`
-- **What changed:** `killChild()` (lines 121-139) now sends `SIGTERM` to the process group (`-proc.pid`) followed by `SIGKILL` after 3s timeout.
-</details>
-
-### 41. SQLite Finalizer May Never Run ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/workflow-runner.ts:423`** — `store.registerExitHandler()` is called immediately after `new EngagementStore()` at the start of every assessment run. FinalizationRegistry also provides best-effort cleanup via GC.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `Argus-Tui/packages/opencode/src/argus/workflow-runner.ts`
-- **What changed:** Added `store.registerExitHandler()` at line 423, right after store construction.
-- **File:** `Argus-Tui/packages/opencode/src/argus/engagement/store.ts` — `registerExitHandler()` registers `process.on("exit")`, `SIGINT`, `SIGTERM` handlers that call `this.close()`.
-- **Verified:** Called at the top of `run()`, so it's active for the entire assessment lifecycle.
-</details>
-
-### 42. Evidence Pruning Failures Silently Ignored ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/evidence/collector.ts`** — All bare `catch { }` blocks in `pruneEngagement()` now log the error message via `console.warn` instead of swallowing silently.
-
-### 43. Report LLM Enhancement Has No Hard Timeout ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/commands/report.ts:39`** — Added 60-second hard timeout per LLM analysis call.
-
-Each individual LLM analysis now has a `Promise.race` with a 60-second timeout. Hanging LLM calls don't block report generation.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `Argus-Tui/packages/opencode/src/argus/commands/report.ts`
-- **What changed:** Individual analysis calls wrapped in `Promise.race` with 60s timeout.
-</details>
-
-### 44. No Cross-Tool Rate Limiting For Parallel Tool Execution ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/planner/executor.ts:251-263`** — New `CrossToolRateLimiter` class with per-target sliding window. Configurable via `ARGUS_CROSS_TOOL_RATE_LIMIT` (default 50) and `ARGUS_CROSS_TOOL_RATE_WINDOW_MS` (default 1000). Prevents tools like nuclei + ffuf from overloading targets simultaneously.
-
-### 45. No Self-Throttling When Target Responds With 429/503 ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/planner/executor.ts`, `argus-workers/tools/tool_runner.py`** — New `ThrottleTracker` class with per-target exponential backoff (base 2s, max 60s). Detects 429, 503, "rate limit", "too many requests" patterns in both `result.error` responses and catch-block exceptions. Configurable via `ARGUS_THROTTLE_BASE_DELAY_MS` and `ARGUS_THROTTLE_MAX_DELAY_MS`.
-
-### 47. Worker Cannot Recover From Database Connection Loss Mid-Assessment ✅ FIXED
-
-**`argus-workers/database/connection.py`** — When the connection pool is exhausted (all connections stale after network flap), the pool is automatically closed and reinitialized. Stale connections are detected via the existing `SELECT 1` health check and replaced inline.
-
-### 48. Governance Token Budget Is Estimated (Not Actual) ✅ FIXED
-
-**`argus-workers/runtime/governance.py:115-119,238-249`** — `record_result()` now accepts `actual_input_tokens` and `actual_output_tokens` params from the LLM response. When available, these are used instead of the static estimate. Fallback estimate remains for non-LLM tool calls.
-
-### 49. EngagementState and ReActAgent Independently Truncate (Different Data) ✅ FIXED
-
-**`argus-workers/runtime/engagement_state.py:22`**, **`argus-workers/agent/react_agent.py`** — `react_agent.py` now imports `OBSERVATION_TRUNCATION_LIMIT` directly from `engagement_state.py` instead of hardcoding 50. Both layers are coordinated via a single import. When `OBSERVATION_TRUNCATION_LIMIT` is changed in `engagement_state.py`, `react_agent.py` automatically stays in sync.
-
-### 50. LLM Agent `max_iterations` Mismatch Between Python and TypeScript ✅ FIXED
-
-**`argus-workers/config/constants.py:257-258`** (default: 10), **`Argus-Tui/packages/opencode/src/argus/planner/executor.ts:233`** (default: 50) — TS now passes its `ARGUS_HYBRID_MAX_ITERATIONS` (default 50) to Python via `agentNext()` params. Python stores it via `set_ts_max_iterations()` and uses `min(ts_value, py_value)` to coordinate. The defaults remain 50 vs 10 but are now coordinated.
-
-### 51. [RETRACTED — timeout IS passed to tool_runner.run()] 🟢 RETRACTED
-
-### 52. Connection Pool Not Registered for atexit Cleanup ✅ FIXED
-
-**`argus-workers/database/connection.py:317-325`** — `atexit.register()` now called for database connection pool cleanup.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `argus-workers/database/connection.py`
-- **What changed:** Added `atexit.register(get_db().close)` to ensure the pool is cleaned up on process exit (SIGTERM, normal exit).
-</details>
-
-### 53. Docker Compose Override Enables Host Network Mode (Mitigated by Profiles) ❌ NOT FIXED (design)
-
-**`docker-compose.override.yml`** — Profiles scoping already mitigates this. Code change would be removing the override entirely.
-
-### 54. Distributed Semaphore Has TOCTOU Race Condition ✅ FIXED
-
-**`argus-workers/runtime/concurrency.py:61-83`** — Replaced non-atomic `GET` + `INCR` pattern with an atomic Lua script that atomically checks the current count and increments only if under the limit. Eliminates the TOCTOU window between check and increment.
-
-### 55. LLM Provider Auto-Detect From Key Prefix Is Fragile ✅ FIXED
-
-**`argus-workers/llm_client.py:76-114`** — Added known prefix validation (recognizes `sk-or-` for OpenRouter, `sk-proj-`/`sk-` for OpenAI, `AIzaSy`/`AQ.` for Gemini). Logs a `logger.warning` when the key prefix doesn't match any known pattern. `sk-ant-` (Anthropic) is recognized but NOT auto-configured since its API is not OpenAI-compatible.
-
-### 56. LLM Agent Model Env Var Name Mismatch With .env.example ✅ FIXED
-
-- **`.env.example`** — Updated to document `LLM_AGENT_MODEL` (the correct variable used by the code), replacing `LLM_MODEL` (which is unused by the agent code).
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `.env.example`
-- **What changed:** Changed `LLM_MODEL` to `LLM_AGENT_MODEL` in the example and added documentation for `ARGUS_AUTO_ANSWER`, `ARGUS_AUTONOMOUS`, and `ARGUS_AUTO_APPROVE` env vars.
-</details>
-
-### 57. No Metrics or Health Endpoint Exposed By Workers ✅ FIXED
-
-**`argus-workers/health_server.py`**, **`argus-workers/mcp_server.py`** — New `health_server.py` module with two HTTP endpoints:
-- `GET /health` — liveness check: status, uptime, LLM availability, tool counts, active sessions
-- `GET /metrics` — detailed metrics: per-tool stats, aggregate success rates, connection pool state, system info
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `argus-workers/health_server.py` (new)
-- **What changed:** Added lightweight HTTP server using Python's built-in `socketserver.ThreadingHTTPServer`. Two endpoints:
-  - `/health` — returns 200/503 with status, uptime, LLM availability, tool totals, session count
-  - `/metrics` — returns detailed JSON with per-tool execution stats, aggregate success rates, connection pool metrics (best-effort), and system info
-- **File:** `argus-workers/mcp_server.py` — `main()` now calls `start_health_server_from_env()` before `transport.run()`
-- **Config:** `ARGUS_METRICS_PORT` (default 9090), `ARGUS_METRICS_HOST` (default 127.0.0.1). Set port to empty or 0 to disable.
-- **Safety:** Runs on a daemon thread. Uses public `get_tools()` API. Port clamped to 1-65535.
-</details>
-
-### 58. Governance Uses Wall Clock, Not Active Time ✅ FIXED
-
-**`argus-workers/runtime/governance.py:104-108`** — Added `start_active_timer()` / `stop_active_timer()` and `get_active_runtime_seconds()`. The `check()` method now uses accumulated active execution time instead of wall-clock for the timeout budget. React agent wraps `registry.call()` in try/finally with the active timer.
-
-### 59. Config Schema Is Not Validated At Startup ✅ FIXED
-
-**`argus.config.yaml`**, **`Argus-Tui/packages/opencode/src/argus/config/loader.ts`** — Unknown config keys now emit warnings at load time.
-
-In autonomous mode, unknown keys cause the same hard-fail behavior as malformed config (blocker 13).
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `Argus-Tui/packages/opencode/src/argus/config/loader.ts`
-- **What changed:** Iterates parsed config keys and warns on unknown keys.
-- **Still missing:** Full schema validation against the Zod schema — currently only uses a hardcoded key list.
-</details>
-
-### 60. Pool Connections Never Validated Before Use ✅ FIXED
-
-**`argus-workers/database/connection.py:107-132`** — `SELECT 1` ping performed before returning connections from the pool.
-
-Stale connections (idle for hours, network middleboxes, `idle_in_transaction_session_timeout`) are now detected and automatically replaced.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `argus-workers/database/connection.py`
-- **What changed:** Added connection validation before returning from `get_connection()`. If `SELECT 1` fails, the stale connection is discarded and a fresh one is obtained from the pool.
-</details>
-
-### 61. Evidence `pruneEngagement()` Exists But Is Never Called Automatically ✅ FIXED
-
-**`Argus-Tui/packages/opencode/src/argus/evidence/collector.ts:113-124,131-178`** — `pruneEngagement()` now called at assessment end in `workflow-runner.ts`.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `Argus-Tui/packages/opencode/src/argus/workflow-runner.ts`
-- **What changed:** Added `pruneEngagement()` call in the `finally` block (lines 717–727) after assessment completes. Logs the number of pruned files.
-</details>
-
-### 62. MCP Transport Has No Stdin Heartbeat ✅ FIXED
-
-**`argus-workers/mcp_transport.py:109-132,134-171`** — Added `_wait_for_stdin()` method using `select.select()` with a configurable timeout. When no data arrives within the window, the worker logs a warning and shuts down gracefully via `self.stop()`.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `argus-workers/mcp_transport.py`
-- **What changed:** Added `_wait_for_stdin()` method that uses `select.select([sys.stdin], [], [], timeout)` before the blocking `readline()` call. On timeout, logs "Stdin heartbeat timed out after Ns" and calls `self.stop()`.
-- **Config:** `ARGUS_MCP_HEARTBEAT_TIMEOUT_SECS` env var (default 60s). Set to 0 to disable.
-- **Safety:** Catches `(ValueError, TypeError, OSError)` from select() and falls back to proceeding with readline, so a transient FD issue doesn't kill the worker.
-</details>
-
-### 63. NET_RAW Capability + no-new-privileges Is an Undocumented Security Profile ❌ NOT FIXED (design)
-
-**`docker-compose.yml:72,82,93`** — By design for nmap SYN scans.
-
-### 64. `zero_finding_stop` and `low_signal_threshold` Race ✅ FIXED
-
-**`argus-workers/config/constants.py:269`** (`LLM_AGENT_ZERO_FINDING_STOP = 4`), **`argus-workers/runtime/governance.py:22`** (`_DEFAULT_LOW_SIGNAL_THRESHOLD = 3`) — Added cross-reference comments at both locations ensuring `zero_finding_stop` stays > `low_signal_threshold`. This guarantees Governance's low-signal detection fires first with an informative reason.
-
-### 65. Git SSRF Allowlist: YAML Config Only Applied Through `from_config()` Path ✅ FIXED
-
-**`argus-workers/config/constants.py:201-234`** — `from_config()` now propagates `ImportError` and `RuntimeError` instead of catching them silently. A module-level factory wrapper (`_git_ssrf_factory()`) catches failures at ERROR severity (not WARNING) so the CONFIG singleton can still be constructed, but direct callers of `from_config()` will see the error.
-
-### 66. Rate Limiter Config Key `backoff_multiplier` Is Unused ✅ FIXED
-
-**`argus-workers/config/config_manager.py:34`** — Removed `backoff_multiplier: 2.0` from default config.
-
-<details>
-<summary>Fix details</summary>
-
-- **File:** `argus-workers/config/config_manager.py`
-- **What changed:** Removed orphaned `backoff_multiplier` key from `DEFAULT_CONFIG`.
-</details>
+These aren't real token counts. A nuclei scan with 100 templates returning 50 findings
+could use 5,000+ tokens in context. The token budget check is a placebo that never fires
+when it should.
+
+**Why it blocks autonomy**: A governance system that can't accurately track resources cannot
+make informed decisions about when to stop or continue. This creates a security theater
+around resource management.
 
 ---
 
-## 🔴 DEADLOCKS (Continued)
+### 7. MemoryRetriever Long-Term Memory Is Same-Engagement Only
 
-### 34. LLM-Driven Phases Require Destructive Gate Bypass ✅ FIXED
+**Location**: `runtime/memory.py:215`
 
-Addressed by blocker 2. `ARGUS_AUTO_APPROVE=1` now auto-approves destructive gates in non-TTY mode, enabling phases like `web_exploitation` and `api_exploitation` to execute in autonomous mode.
+**Evidence**: Cross-scan learning cannot work because the long-term memory query is scoped
+to the current engagement, not the target URL:
 
-### 43. Report LLM Enhancement Has No Hard Timeout ✅ FIXED
+```python
+# Retrieves profile for the CURRENT engagement only
+profile = repo.get_by_engagement_id(engagement_id)
+```
 
-See blocker 43 above.
+A target scanned 5 times has 5 different engagement IDs. The system never retrieves
+historical data across engagements for the same target URL.
+
+**Why it blocks autonomy**: The system cannot learn "this tool is noisy on this target type"
+or "this target had XSS before — prioritize XSS tools" because it has no cross-scan view.
 
 ---
 
-## 🟠 CONFIG TRAPS — Defaults That Sabotage Autonomy (Continued)
+### 8. DLQ Has No Autonomous Replay Strategy
 
-### 36. `scope.mode: warn` Allows Out-Of-Scope Access In Autonomous Mode ✅ FIXED
+**Location**: `tasks/replay.py:replay_dlq_task`, `dead_letter_queue.py`
 
-**`argus-workers/tools/scope_validator.py:214`** — Default mode changed from `"warn"` to `"allowlist"` so out-of-scope targets are **rejected** instead of warned. This applies to both the deterministic scan pipeline (`orchestrator_pkg/scan.py`) and all call sites that don't explicitly pass a mode. When no `allowed_targets` are configured, the validator logs a clear message (`"allowlist mode with no allowed_targets configured"`) and blocks all targets (fail-closed).
+**Evidence**: The `DeadLetterQueue` stores failed tasks for later inspection and manual replay.
+But there's no automated retry with strategy adaptation:
 
-**`Argus-Tui/packages/opencode/src/argus/workflow-runner.ts`** — Added autonomous-mode guard: when `ARGUS_AUTONOMOUS=1` and `security.scope.mode` is `"warn"` or `"open"`, the runner throws a hard error instead of proceeding with an implicit scope. This mirrors the existing pattern (blockers #13, #23, #28) of failing hard in autonomous mode rather than silently degrading. Users must explicitly set `scope.mode: allowlist` with `allowed_targets` in `argus.config.yaml` before running autonomously.
+- DLQ replay re-dispatches the exact same task with the exact same parameters
+- No pattern analysis on DLQ entries ("sqlmap keeps failing — maybe the target isn't MySQL")
+- No adaptation when 3+ tools fail in sequence
 
-### 46. Docker Compose Has No Health Checks ✅ FIXED (already had them)
+```python
+# tasks/replay.py:17 — DLQ replay is a verbatim re-dispatch
+def replay_dlq_task(self, task_id: str) -> bool:
+    """Find a failed task in the DLQ and re-dispatch it to Celery."""
+    ...
+    # No strategy modification — same args, same task name
+```
 
-**`docker-compose.yml`** — Verified: both PostgreSQL and Redis already have ``healthcheck:`` blocks with ``pg_isready`` and ``redis-cli ping``. The ``worker`` and ``celery-beat`` services already use ``depends_on: condition: service_healthy``. No code change needed — this blocker was already resolved.
+**Why it blocks autonomy**: A dead letter queue with only manual replay is a graveyard,
+not a recovery mechanism. Autonomous systems must detect failure patterns and adapt.
 
-```yaml
-postgres:
-  healthcheck:
-    test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-argus_user} -d ${POSTGRES_DB:-argus_pentest}"]
-    interval: 10s
-    timeout: 5s
-    retries: 5
+---
 
-redis:
-  healthcheck:
-    test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD:-change_me_in_production}\" ping"]
-    interval: 10s
-    timeout: 5s
-    retries: 5
+### 9. No Diminishing Returns Detection
+
+**Location**: `react_agent.py:run()`, `runtime/governance.py`
+
+**Evidence**: The agent stops either when it runs out of tools or when
+`empty_output_consecutive >= LLM_AGENT_ZERO_FINDING_STOP` (default 4). There is no:
+
+- Finding rate tracking ("findings per tool call" curve)
+- Coverage calculation ("what % of attack surface has been tested")
+- Diminishing returns model ("last 5 tools found nothing, but first 3 found critical vulns")
+
+```python
+# react_agent.py — the only stopping criteria
+if empty_output_consecutive >= LLM_AGENT_ZERO_FINDING_STOP and len(tried_tools) >= 4:
+    break
+```
+
+**Why it blocks autonomy**: The system doesn't know when it's done vs. when it's stuck.
+This is the most basic requirement for autonomous task completion — knowing when to stop.
+
+---
+
+### 10. No Graceful Degradation on Partial Tool Failure
+
+**Location**: `react_agent.py:run()`, `orchestrator.py`
+
+**Evidence**: When a tool fails (e.g., nuclei crashes mid-scan):
+
+1. The agent marks it as `tried_tools.add(action.tool)`
+2. Moves to the next tool
+3. The crashed tool is considered "done" and won't be retried
+
+There is no intermediate strategy — no "try with reduced template set," no "increase timeout
+by 2x," no "fall back to alternative tool covering same vulnerability class."
+
+```python
+# react_agent.py — tool failure handling
+tried_tools.add(action.tool)
+results.append(result)
+# That's it. No compensatory action.
+```
+
+**Why it blocks autonomy**: A single failing tool creates a permanent blind spot in coverage
+for the entire engagement. An autonomous system should adapt around failures, not accept them
+as final.
+
+---
+
+### 11. Context Window Fragmentation
+
+**Location**: `runtime/engagement_state.py:10` (`OBSERVATION_TRUNCATION_LIMIT = 50`),
+`react_agent.py:307` (`get_context`), `config/constants.py:303` (`context_max_tokens = 3500`)
+
+**Evidence**: The agent truncates history to 50 entries, caps each observation at 2000 chars,
+and passes only **last 6 observations** to the LLM for tool selection:
+
+```python
+# react_agent.py:307
+def get_context(self, max_tokens=LLM_AGENT_CONTEXT_MAX_TOKENS):
+    recent = self.history[-6:]  # last 6 entries
+```
+
+Findings from early tools (e.g., nuclei results showing 50 endpoints) are invisible to the
+LLM when making later decisions (e.g., which auth tool to run).
+
+**Why it blocks autonomy**: The LLM makes tool selection decisions with only 6 most-recent
+results visible. It cannot reason about the full scan picture or detect patterns across
+the entire engagement.
+
+---
+
+### 12. The Feature Flag Dependency Graph Is a DAG of Death
+
+**Location**: `feature_flags.py:70-84` (`AUTONOMOUS_FEATURES`), `orchestrator.py`,
+`react_agent.py`
+
+**Evidence**: The autonomous feature flags form a hard dependency chain:
+
+```
+ARGUS_AUTONOMOUS=1
+  → TRUE_REACT_LOOP (requires ENGAGEMENT_STATE)
+  → ENGAGEMENT_STATE (requires CLEAN_ORCHESTRATOR)
+  → CLEAN_ORCHESTRATOR (requires EXECUTION_ENGINE)
+  → GOVERNANCE_V2
+  → MEMORY_RETRIEVAL
+  → FEEDBACK_LOOP
+  → HYPOTHESIS_ENGINE
+  → ATTACK_GRAPH_V2
+```
+
+If ANY flag in the chain is off, downstream features silently degrade. But the startup log
+just says "14 autonomous features activated" — no indication of which are truly functional
+or which dependencies are missing.
+
+```python
+# feature_flags.py:237 — misleading log message
+logger.info("Feature flags: ARGUS_AUTONOMOUS is enabled — %d autonomous features activated",
+            len(AUTONOMOUS_FEATURES))
+```
+
+**Why it blocks autonomy**: An operator enabling `ARGUS_AUTONOMOUS=1` gets a false sense
+of capability. Many features are only partially implemented or silently gated behind
+unmet dependencies.
+
+---
+
+### 13. Celery Task Re-entrancy Is Fragile
+
+**Location**: `tasks/recon.py:82`, `tasks/analyze.py:67`, `tasks/scan.py`
+
+**Evidence**: Tasks check for duplicate execution via Redis keys but only detect
+full-duplicate (same task ID), not partial re-execution:
+
+```python
+# tasks/recon.py:82 — only checks for exact duplicate
+# (e.g. Celery retry delivered duplicate task), skip immediately.
+```
+
+If a scan phase already saved 5 findings and the worker crashes, the retry starts from
+scratch and creates duplicate findings. The `snapshot_manager.py` uses SERIALIZABLE
+isolation level and retries on serialization failures, but the orchestrator phases
+are not wrapped in a single serializable transaction.
+
+**Why it blocks autonomy**: Partial re-execution leading to duplicate data means the
+system's outputs are not deterministic. An autonomous system needs reliable
+exactly-once semantics for its findings.
+
+---
+
+## 🔶 TIER 3 — MODERATE BLOCKERS (17)
+
+These create gaps that compound in edge cases or long-running engagements.
+
+### 14. Error Classification Import Is Silently Broken
+
+**Location**: `exceptions.py:27-31`
+
+**Evidence**: `ArgusError.__init__` tries to call `tag_error()` but silently swallows
+import failures:
+
+```python
+try:
+    from error_classifier import tag_error
+    tag_error(self, self.error_code)
+except ImportError:
+    pass  # Silently swallows — ErrorCode never tagged
+```
+
+When this import fails, `classify_error()` falls back to unreliable string-pattern
+matching instead of deterministic code-based classification.
+
+---
+
+### 15. Pipeline Router Retry Has No Strategy Change
+
+**Location**: `pipeline_router.py:84-101`
+
+**Evidence**: When retrying a transient pipeline failure, it retries the identical
+operation with the same parameters — just with exponential backoff:
+
+```python
+for attempt in range(_MAX_RETRIES + 1):
+    try:
+        return execute_recon_tools(ctx, target, budget, ...)
+    except Exception as e:
+        if _is_transient_error(e):
+            time.sleep(backoff)
+            # Retries IDENTICAL operation — no strategy change
+```
+
+There's no fallback to simpler tools, reduced aggressiveness, or different approach.
+
+---
+
+### 16. Attack Graph Is Static, Not Adaptive
+
+**Location**: `attack_graph.py`, `attack_graph_db.py`, `orchestrator.py:run_analysis`
+
+**Evidence**: The attack graph is built from findings **after scanning completes**.
+It never influences tool selection during the scan, never prioritizes remaining tools
+based on emerging attack chains, and is purely a reporting artifact.
+
+```python
+# orchestrator.py: — attack graph is build in analysis phase, not during scanning
+# (attack graph generation happens after all scanning is done)
 ```
 
 ---
 
-## 🔵 HARD DEPENDENCIES — Require Manual Setup
+### 17. No A/B Testing of Scanning Strategies
 
-### 8. LLM API Key Required ❌ NOT FIXED (operational)
+**Location**: `runtime/shadow_mode.py`
 
-**`.env.example:52`** — `LLM_API_KEY` must be set in environment.
-
-### 9. Browser MFA/CAPTCHA Cannot Be Automated ❌ NOT FIXED (inherent)
-
-**`Argus-Tui/packages/opencode/src/argus/browser/login.ts:164-191`** — MFA/CAPTCHA cannot be automated.
-
-### 10. 17 Sensitive Env Vars Stripped From Subprocesses ❌ NOT FIXED (by design)
-
-**`argus-workers/mcp_server.py:661-683`** — Security feature by design.
-
-### 11. Credential Store Requires Manual Setup ❌ NOT FIXED (operational)
-
-**`Argus-Tui/packages/opencode/src/argus/engagement/credentials.ts`** — `credentials.json` must be created manually.
-
-### 12. PostgreSQL + Redis Required ❌ NOT FIXED (infrastructure)
-
-**`docker-compose.yml`, `.env.example`** — Both must be running.
-
-### 26. Bun Runtime Required (bun:sqlite) ❌ NOT FIXED (inherent)
-
-**`Argus-Tui/packages/opencode/src/argus/engagement/store.ts:1-14`** — No Node.js polyfill exists.
-
-### 27. Playwright Browsers Required for Browser Verification ❌ NOT FIXED (operational)
-
-**`Argus-Tui/packages/opencode/src/argus/browser/engine.ts`** — `npx playwright install` must be run manually.
-
-### 28. Startup Credential Guard Only Warns ✅ FIXED
-
-**`argus-workers/mcp_server.py:55-61`** — In autonomous mode (`ARGUS_AUTONOMOUS=1`), placeholder credentials now raise `RuntimeError` instead of just logging a warning. Manual/interactive mode still warns only.
+**Evidence**: Shadow mode exists for code refactoring verification (comparing new code
+vs old code outputs), but there is no operational A/B testing — no ability to run
+two different scanning strategies in parallel and compare effectiveness.
 
 ---
 
-## 🟠 CONFIG TRAPS — Defaults That Sabotage Autonomy
+### 18. Swarm Agents Don't Share Learnings
 
-| Config Key | Default | Autonomous Impact | Fix Status |
-|---|---|---|---|
-| `scope.mode` | `warn` | In autonomous mode, fails hard if `warn` or `open` — must be `allowlist` | ✅ Fixed — TUI guard + Python default |
-| `git_host_policy` | `allowlist` | Blocks git repos from unlisted hosts | ✅ Fixed — errors propagate from from_config() |
-| `approval_gates` | `true` | Stdin prompts unless `ARGUS_AUTO_APPROVE=1` | ✅ See blocker 2 |
-| `storage.encryption.enabled` | `false` | Credentials stored in plaintext | ✅ Fixed — now defaults to `true` with auto key generation |
-| `disabled` | `[sqlmap]` | One tool pre-disabled | ✅ Fixed — removed from default disabled list |
-| `LLM_API_KEY` | empty | Hybrid mode fails | ❌ Operational |
-| `ARGUS_AUTO_APPROVE` | not set | Approval gates block | ✅ Now works for destructive gates |
-| `ARGUS_AUTONOMOUS` | not set | No autonomy profile | ✅ Documented |
-| `DETERMINISTIC_FALLBACK` | `false` (opt-in) | LLM planning used even when LLM key missing | ✅ Fixed — now defaults to `true` (auto-fallback to deterministic) |
-| `tools.circuit_breaker.max_failures` | `5` | Tools go dark for 5 min after 5 failures | ✅ Fixed — code default is 8, YAML synced |
-| `tools.circuit_breaker.cooldown_ms` | `300000` (5 min) | No half-open probe in TS-side circuit breaker | ✅ Fixed — half-open probe implemented, code default 120s |
-| `ARGUS_MAX_ASSESSMENT_DURATION_MS` | `7200000` (2h) | Global timer was dead code | ✅ Fixed — timer now starts at first phase via `=== 0` guard |
-| `ARGUS_HYBRID_MAX_ITERATIONS` | `50` | No safety net for runaway LLM loops | ✅ Per-phase + global breakers |
-| `storage.encryption.enabled` | `false` | Engagement DBs stored as plaintext SQLite | ✅ Fixed — now defaults to `true` with auto key generation |
+**Location**: `agent/swarm.py` (`SpecialistAgent.__init__`)
+
+**Evidence**: The `SwarmOrchestrator` deep-copies recon context for each specialist agent
+(IDORAgent, AuthAgent, APIAgent). While this prevents shared mutable state, it also prevents:
+
+- Cross-agent learning (if IDORAgent finds an auth bypass, AuthAgent doesn't know)
+- Intelligent prioritization (agents run in fixed order, not by likelihood of findings)
+- Confidence merging (findings from different agents aren't cross-referenced)
+
+```python
+# agent/swarm.py — each agent gets an isolated copy
+self.recon_context = copy.deepcopy(recon_context) if recon_context else None
+```
 
 ---
 
-## SUMMARY
+### 19. MCP Bridge Fallback Removes Safety Controls
 
-### Fix Status Overview (Updated)
+**Location**: `orchestrator.py:128-148`
 
-| Category | Total | ✅ Fixed | 🟡 Partial | ❌ Unfixed |
-|---|---|---|---|---|
-| P0 — Deadlocks/Stops (incl. #20 timer now active) | 5 | 5 | 0 | 0 |
-| P1 — Reliability | 5 | 5 | 0 | 0 |
-| P2 — Robustness | 6 | 6 | 0 | 0 |
-| P3 — Config/Polish (incl. #36 TUI scope guard) | 5 | 5 | 0 | 0 |
-| P4 — Edge Cases | 5 | 5 | 0 | 0 |
-| Config traps (storage.encryption, DETERMINISTIC_FALLBACK, circuit_breaker, disabled) | 5 | 5 | 0 | 0 |
-| Other blockers | 40+ | 24 | 0 | ~10 operational |
-| **Total** | **74** | **58** | **0** | **~10** |
+**Evidence**: When `MCPToolBridge` fails to initialize, the orchestrator falls back to
+registering tools **without sandboxing, circuit breakers, or metrics**:
 
-**Net change (July 15):** `storage.encryption.enabled` defaults to `true` with auto key generation; `DETERMINISTIC_FALLBACK` defaults to `true` for safe no-LLM operation; `sqlmap` removed from default disabled list; circuit_breaker YAML synced to 8 failures / 120s cooldown; tool-health.ts fallback defaults synced; LLM provider import aliases added; Windows `C:\C:\` double drive letter fixed in 3 path files; `isValidArtifactPath` now handles Windows backslashes. **58 total fixed**, 0 partial, ~10 unfixed (all operational/inherent/by-design).
+```python
+except Exception as e:
+    self.mcp_bridge = None
+    for tool in build_mcp_tool_definitions():
+        self.mcp.register_tool(tool)  # Direct registration — no sandboxing
+```
 
-### What Must Be True for Autonomous Mode (Updated)
+---
 
-1. `ARGUS_AUTONOMOUS=1` and `ARGUS_AUTO_APPROVE=1` env vars set
-2. `LLM_API_KEY` set in env (for LLM-driven features) — or leave unset; `DETERMINISTIC_FALLBACK` defaults to `true` so system runs without LLM
-3. All ~60 security tool binaries installed on PATH
-4. Python MCP worker environment set up for Python-based tools
-5. `credentials.json` with target login credentials (if browser testing needed)
-6. `scope.mode` set to `"allowlist"` in `argus.config.yaml` with `allowed_targets` configured — **autonomous mode now fails hard** if scope is `"warn"` or `"open"`
-7. Browser-verifiable targets must not use MFA/CAPTCHA/OAuth
-8. PostgreSQL and Redis running
-9. Bun runtime (not Node.js) — `bun:sqlite` is required by `EngagementStore`
-10. Playwright browsers installed (`npx playwright install`) for verification
-11. `argus.config.yaml` must be valid YAML — **now fails hard with clear error in autonomous mode**
-12. `DETERMINISTIC_FALLBACK` defaults to `true` — no LLM key required for autonomous mode
+### 20. Auth Checkpoint Has No Re-authentication Cycle
 
-### Blocker Matrix (Updated)
+**Location**: `agent/auth_checkpoint.py`, `react_agent.py:1250-1312`
 
-| Blocker | Type | Fixable via Env Var? | Fix Status |
-|---|---|---|---|
-| Question tool hang | deadlock | **Yes** (`ARGUS_AUTO_ANSWER`) | ✅ Fixed |
-| Destructive gate silent skip | silent skip | **Yes** (`ARGUS_AUTO_APPROVE`) | ✅ Fixed |
-| ~60 missing binaries | silent skip | No | ❌ Install them |
-| No LLM key | hard fail | Yes | ❌ Operational |
-| MFA/CAPTCHA | hard fail | No | ❌ Inherent |
-| Approval gates | deadlock | Yes | ✅ `ARGUS_AUTO_APPROVE=1` |
-| Target confirmation | deadlock | Yes | 🟢 Already handled |
-| PostgreSQL/Redis | hard fail | No | ❌ Must run infra |
-| **Silent config fallback** | **silent skip** | **No** | **✅ Fail hard in autonomous** |
-| **MCP worker ready timeout** | **hard fail** | **Yes** (`ARGUS_MCP_READY_TIMEOUT_MS`) | **✅ Fixed** |
-| **No health probe** | **silent skip** | **No** | **✅ 30s interval wired in connect()** |
-| **LLM feedback degrades silently** | **silent skip** | **No** | **✅ Flag consumed, warns + audit log** |
-| **Structured findings lost** | **silent skip** | **No** | **✅ Fixed** |
-| **Phase drop with zero tools** | **silent skip** | **No** | **✅ Fixed** |
-| **Runaway hybrid loop** | **deadlock** | **Yes** (env vars) | **✅ Per-phase + global breakers** |
-| **Best-effort failures masked** | **silent skip** | **No** | **✅ Fixed** |
-| **Circuit breaker kills tools** | **silent skip** | **No** | **✅ Fixed** — fallback tools + relaxed defaults |
-| **Lock skip on Redis down** | **silent skip** | **Yes** (autonomous mode) | **✅ Fail hard in autonomous** |
-| **Encrypted DB handle leak** | **security** | **No** | **✅ 3x retry + backoff** |
-| **Bun runtime required** | **hard fail** | **No** | ❌ Not fixed |
-| **Playwright browsers** | **hard fail** | **No** | ❌ Not fixed |
-| **Placeholder credentials** | **silent skip** | **Yes** | **✅ Hard block in autonomous mode** |
+**Evidence**: On Celery retry, the auth checkpoint is loaded but:
+- Doesn't verify credentials are still valid before use
+- Doesn't attempt re-registration if login fails
+- If the session is expired, the agent silently continues without auth
+- No "credentials expired → re-authenticate → retry" loop
 
-### Action Items (Updated)
+---
 
-#### ✅ Completed Fixes (55 blockers)
+### 21. Bug Bounty Knowledge Files May Not Exist
 
-| # | Blocker | Fix |
-|---|---|---|
-| 1 | Question tool hang | `ARGUS_AUTO_ANSWER` env var |
-| 2 | Destructive gate auto-skip | `ARGUS_AUTO_APPROVE` now applies in non-TTY |
-| 5 | Non-TTY destructive skip | Same as #2 |
-| 6 | Circuit breaker fallback | `findFallbackTool()` in executor.ts |
-| 7 | Degraded cache staleness | Hit-count tracking + stale warning |
-| 13 | Config silent fallback | Fails hard in autonomous mode |
-| 14 | MCP ready timeout | Configurable via `ARGUS_MCP_READY_TIMEOUT_MS` |
-| 15 | Health probes | 30s interval wired in `connect()` |
-| 16 | LLM feedback flag | Consumed in workflow-runner, warns + audit log |
-| 17 | Structured findings lost | Consumed `data.structured` in executor |
-| 18 | Attack graph logging | Skipped finding count reported |
-| 19 | Zero-tools phase | Throws error in autonomous mode |
-| 20 | Runaway hybrid loop | Per-phase + global max-duration circuit breakers (global timer now active — `assessmentStartTime` set at first phase via `=== 0` guard) |
-| 21 | try/catch masking | 4 silent catches now log errors |
-| 22 | Circuit breaker defaults | Relaxed to 8 failures / 120s cooldown |
-| 23 | Lock skip | Fails hard in autonomous mode |
-| 24 | DB resource leak | 3x retry with exponential backoff |
-| 25 | Exit code sync | Cross-reference comment added |
-| 28 | Credential guard | Hard block in autonomous mode |
-| 29 | Unbounded LLM cost | Cost guard applies in all modes |
-| 30 | History truncation loss | Warning logged on truncation |
-| 31 | LLM fallback silence | Warning logged with recon_context guard |
-| 32 | Max iterations mismatch | TS passes max_iterations to Python |
-| 33 | Thread pool cleanup | `cancel_futures=True` on shutdown |
-| 34 | Destructive gate bypass | Same as #2 |
-| 35 | Per-phase timeout | `ARGUS_MAX_PHASE_DURATION_MS` |
-| 38 | Cancel propagation | `AgentSessionStore.cancel()` + agent loop check |
-| 39 | Message size limit | 10MB input / 50MB output |
-| 40 | Orphaned processes | Process group kill |
-| 41 | SQLite finalizer | `registerExitHandler()` called in workflow-runner |
-| 42 | Evidence prune silence | catch→warn in collector.ts |
-| 43 | Report LLM timeout | 60s hard timeout per analysis |
-| 44 | Cross-tool rate limiting | `CrossToolRateLimiter` sliding window |
-| 45 | Self-throttling 429/503 | `ThrottleTracker` expo backoff |
-| 47 | DB connection recovery | Pool reinit on exhaustion |
-| 48 | Token budget estimates | Actual token counts accepted |
-| 49 | Truncation coordination | Shared constant + cross-ref comments |
-| 50 | Iteration mismatch | TS passes max_iterations to Python |
-| 52 | atexit cleanup | Registered for DB pool |
-| 54 | TOCTOU semaphore | Lua script for atomic acquire |
-| 55 | LLM prefix validation | Known prefixes + unknown-key warning |
-| 56 | Env var name mismatch | `.env.example` updated |
-| 57 | Health/metrics endpoint | HTTP server on daemon thread, port 9090 |
-| 58 | Active time tracking | `start/stop_active_timer()` in governance |
-| 59 | Config schema validation | Unknown key warnings |
-| 60 | Connection pool validation | SELECT 1 ping |
-| 61 | Evidence prune never called | Auto-prune at assessment end |
-| 62 | Stdin heartbeat | `select.select()` with configurable timeout |
-| 64 | Threshold race | Aligned `zero_finding_stop` > `low_signal_threshold` |
-| 66 | Orphaned config key | `backoff_multiplier` removed |
-| 67 | Storage encryption default | Changed to `true` with auto key generation via `EncryptionManager.ensureKeySync()` |
-| 68 | DETERMINISTIC_FALLBACK default | Changed to `true` — system auto-falls back to deterministic mode without LLM key |
-| 69 | sqlmap pre-disabled | Removed from default `disabled` list; removed dependency on CLI passphrase for auto-init |
-| 70 | Circuit breaker YAML sync | Updated `argus.config.yaml` to match code defaults (8 failures / 120s cooldown) |
-| 71 | tool-health.ts fallback sync | Updated `DEFAULT_CONFIG` from 5/300000 to 8/120000 to stay in sync with tool-config.ts |
-| 72 | LLM provider import alias | Added `export { provider as openai }` / `export { provider as anthropic }` in provider files |
-| 73 | Windows C:\C:\ drive letter duplication | Replaced `URL.pathname` with `fileURLToPath` in shared/path.ts, workflows/registry.ts, reporting/generator.ts |
-| 74 | verifyPackage Windows path rejection | Fixed `isValidArtifactPath` to normalize backslashes to forward slashes before path traversal check |
+**Location**: `agent/agent_prompts.py:_load_bugbounty_context`
 
-#### ❌ Remaining Unfixed
+**Evidence**: The `_load_bugbounty_context()` function tries to load `.md` methodology
+files from `agent/bugbounty_knowledge/vulnerabilities/`:
 
-| # | Blocker | Category | Reason |
-|---|---|---|---|
-| 4 | ~60 external binaries | Operational | Must be installed manually |
-| 8 | LLM API key | Operational | Must be set in `.env` |
-| 9 | Browser MFA/CAPTCHA | Inherent | Cannot be automated |
-| 10 | Sensitive env vars stripped | By design | Security feature |
-| 11 | Credential store | Operational | `credentials.json` manual setup |
-| 12 | PostgreSQL + Redis | Infrastructure | Must be running |
-| 26 | Bun runtime | Inherent | `bun:sqlite` — no Node polyfill |
-| 27 | Playwright browsers | Operational | `npx playwright install` |
-| 53 | Host network mode | Design | Required for nmap SYN scans |
-| 63 | NET_RAW capability | Design | Intentional security profile |
+```python
+ref_file = kb_root / "vulnerabilities" / f"{vuln_class}.md"
+if ref_file.exists():
+    content = ref_file.read_text(encoding="utf-8")
+```
+
+If these files don't exist (fresh checkout, new deployment), the bug bounty mode
+silently falls back to empty methodology context. The LLM gets no Bug-Reaper
+methodology and operates blind.
+
+---
+
+### 22. Git Host Allowlist Blocks Private Git Hosts
+
+**Location**: `config/constants.py:185-200`
+
+**Evidence**: The `GitSSRFConfig` has a hardcoded allowlist of 13 public git hosts.
+Private self-hosted GitLab/GitHub Enterprise instances are blocked by default.
+While configurable via `ARGUS_ALLOWED_GIT_HOSTS` or `argus.config.yaml`, this requires
+manual operator action — an autonomous system cannot adapt to unlisted hosts.
+
+---
+
+### 23. Orbited Lock Release on Shutdown Is Best-Effort
+
+**Location**: `shutdown_handler.py:171-190`
+
+**Evidence**: The `GracefulShutdownHandler` tries to release distributed locks and flush
+DLQ entries during shutdown, but all operations are wrapped in `try/except` with `pass`:
+
+```python
+try:
+    lock.release(eng_id)
+except Exception as lock_err:
+    logger.warning("Failed to release lock %s on shutdown: %s", eng_id, lock_err)
+```
+
+---
+
+### 24. No Cross-Provider LLM Fallback
+
+**Location**: `llm_client.py`
+
+**Evidence**: The `LLMClient` supports auto-detection of OpenAI, OpenRouter, Gemini,
+and Anthropic providers — but only one at a time. There's no fallback chain:
+"try OpenAI → if unavailable, try Anthropic → if unavailable, try local model."
+When the single configured provider is down, the entire system degrades.
+
+---
+
+### 25. No Streaming / Partial Results for Long-Running Tools
+
+**Location**: `streaming.py`, `tool_core/result.py`
+
+**Evidence**: Tool results are collected as complete outputs before being fed back
+to the agent. There's no partial-result streaming — if nuclei takes 5 minutes on
+500 targets, the agent sits idle for the entire duration before learning any results.
+
+---
+
+### 26. Auth Token Rotation Is Not Handled
+
+**Location**: `agent/auth_context.py`, `tools/auth_manager.py`
+
+**Evidence**: The system captures session tokens/cookies during authentication but has
+no mechanism for detecting token expiration mid-scan or rotating expired tokens.
+A session that expires during a 30-minute scan causes all subsequent tools to fail
+silently.
+
+---
+
+### 27. LLM Prompt Sanitization May Over-Redact
+
+**Location**: `agent/agent_prompts.py:_sanitize_for_llm`
+
+**Evidence**: The `_sanitize_for_llm()` function truncates all external data to 3000 chars.
+This means long tool outputs (nuclei with 200 findings, full scan results) are aggressively
+truncated before reaching the LLM. The first 3000 chars may be headers/metadata while the
+actual findings are in the truncated portion.
+
+---
+
+### 28. No Session Stickiness for Multi-Phase Workflows
+
+**Location**: `celery_app.py`, `tasks/`
+
+**Evidence**: Celery tasks for different phases of the same engagement (recon → scan → analyze)
+may run on different workers. While the state machine and checkpoints handle this, there's
+no worker affinity — causing unnecessary Redis/DB round-trips to re-sync state on every phase
+transition.
+
+---
+
+### 29. No Observability of Degradation State
+
+**Location**: `health_server.py`, `health_monitor.py`
+
+**Evidence**: The health endpoint (`GET /health`) reports `status: "healthy" | "degraded" | "down"`
+but the degraded determination is based on system resources (memory, CPU) and tool availability,
+not on the agent's cognitive state. There's no metric for "LLM fallback rate" or
+"deterministic mode percentage" — operators can't tell if the agent is operating in degraded
+mode from the health checks alone.
+
+---
+
+### 30. No Operator Feedback Loop for Scan Results
+
+**Location**: `models/feedback.py`
+
+**Evidence**: The `Feedback` model exists (feature-flagged as `FEEDBACK_LOOP`, default `False`)
+but has no integration with any actual feedback collection mechanism. There's no endpoint
+for operators to mark findings as true/false positives, no UI for scan quality ratings,
+and no mechanism for operator feedback to influence future scan strategy.
+
+```python
+# models/feedback.py:62
+if not _ff_enabled("FEEDBACK_LOOP"):
+    logger.debug("Feedback loop disabled (set ARGUS_FF_FEEDBACK_LOOP=1)")
+```
+
+---
+
+## Summary: The Three Hardest Problems
+
+| Rank | Problem | Why It's Hard |
+|------|---------|---------------|
+| 🥇 | **No meta-cognition** | The system can't distinguish "I found nothing because the target is clean" from "I found nothing because my LLM is down." Requires confidence calibration, uncertainty estimation, and self-diagnosis — open AI/ML research problems. |
+| 🥈 | **No cross-scan learning** | Every scan starts from zero. Target profiles exist but aren't used to improve strategy. Requires persistent state management across engagements, learning from past outcomes, and adaptive strategy evolution — a data engineering + ML problem. |
+| 🥉 | **Feature flag dependency tangle** | 14+ interdependent autonomy features, half partially implemented, all gated behind flags. The flags were meant for gradual rollout but became a permanent dependency graph where disabling one flag breaks downstream features silently. A software architecture problem. |
+
+## Quick Reference by File
+
+| File | Critical Blockers |
+|------|-------------------|
+| `react_agent.py` | #1 (meta-cognition), #9 (diminishing returns), #10 (partial failure), #11 (context fragmentation) |
+| `runtime/shadow_mode.py` | #3 (per-process counters cannot converge) |
+| `runtime/memory.py` | #2 (same-engagement memory), #7 (no cross-scan learning) |
+| `runtime/governance.py` | #6 (placebo token estimates) |
+| `runtime/deterministic_runtime.py` | #5 (zero-intelligence fallback) |
+| `config/constants.py` | #4 (cost caps kill mid-scan) |
+| `feature_flags.py` | #12 (DAG of death) |
+| `dead_letter_queue.py` / `tasks/replay.py` | #8 (no autonomous replay) |
+| `exceptions.py` | #14 (broken ErrorCode import) |
+| `orchestrator.py` | #19 (MCP bridge fallback unsafe) |
+| `agent/swarm.py` | #18 (no cross-agent learning) |
+| `agent/auth_checkpoint.py` | #20 (no re-auth cycle) |
+| `agent/agent_prompts.py` | #21 (missing knowledge files), #27 (over-redaction) |
+| `attack_graph.py` | #16 (static, not adaptive) |
+| `pipeline_router.py` | #15 (retry no strategy change) |
+| `llm_client.py` | #24 (no cross-provider fallback) |
