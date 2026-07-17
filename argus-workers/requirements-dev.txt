@@ -28,7 +28,7 @@ pytest-mock>=3.14.0
 pytest-cov>=6.1.1
 
 # Runtime dependencies needed to import and test production code
-PyYAML>=6.0.2
+PyYAML>=6.0.3
 psutil>=6.1.0
 
 # Test fixture web apps (flask test apps used in fixture smoke/full matrix tests)
