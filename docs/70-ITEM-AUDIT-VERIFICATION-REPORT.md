@@ -152,7 +152,7 @@
 | Browser Verification Correctness (7–11) | 5 | 0 | 0 | 0 |
 | Coverage & Operational Completeness (12–17) | 5 | 0 | 0 | 1 |
 | Process, Not Code (18–20) | 0 | 0 | 0 | 3 |
-| Data Isolation, Secrets, and Injection Defense (21–30) | 10 | 0 | 1 | 0 |
+| Data Isolation, Secrets, and Injection Defense (21–30) | 9 | 0 | 1 | 0 |
 | Reporting & Evidence Integrity (31–36) | 6 | 0 | 0 | 0 |
 | Repo Hygiene & Attack Surface Reduction (37–42) | 6 | 0 | 0 | 0 |
 | Concurrency, Infra, and Deployment (43–48) | 5 | 0 | 0 | 1 |
