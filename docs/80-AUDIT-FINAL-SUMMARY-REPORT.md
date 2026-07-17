@@ -34,12 +34,12 @@ The Argus 70-Item Full Repo Audit assessed the codebase across 13 categories cov
 | 28 | LLM API key redaction | Broadened `_SECRET_REDACTION_PATTERNS` with 20+ patterns |
 | 35 | Contradictory severity | Created `utils/severity.py` shared utility |
 | 36 | Raw response bodies in reports | Evidence truncated to 50 chars with `[redacted]` |
+| 41 | Dependency scanning CI | `.github/dependabot.yml` + `scripts/generate-npm-lockfile.mjs` for Bun ↔ npm lockfile compatibility. `lockfile-sync` CI job validates in-sync. |
 | 42 | Python dependency pinning | Pinned all ranges to exact versions |
 | 43 | Thread-safe DI container | Added per-container `Lock` with double-checked locking |
 | 44 | MCP network exposure guard | Added `_assert_stdio_only()` + 3 tests |
 | 61 | Tool checksum verification | Populated SHA256 from official release checksums |
 | 67 | Evidence chain-of-custody | Added metadata fields (`operator`, `source_tool`, `phase`, etc.) |
-| 41 | Dependency scanning CI | Created `.github/dependabot.yml` (pip, npm, GitHub Actions) |
 
 ### ✅ Confirmed (31) — Verified Already Satisfied
 
@@ -65,11 +65,7 @@ The Argus 70-Item Full Repo Audit assessed the codebase across 13 categories cov
 | 50 | LLM marks own output as verified | Separate verification pipeline; no self-verification |
 | 53 | `ai_explainer.py` has subprocess gap | Both files use HTTP calls only, not subprocess |
 
-### ⚠️ Gap Confirmed (1) — Unresolved
 
-| # | Item | Status |
-|---|------|--------|
-| 41 | Dependency vulnerability scanning in CI | No Dependabot; pip-audit/npm-audit not in CI |
 
 ### 🔍 Inconclusive (17) — Process/Legal/Infrastructure
 
@@ -143,8 +139,6 @@ The Argus 70-Item Full Repo Audit assessed the codebase across 13 categories cov
 ### Areas with Gaps
 - **Legal, Process, and Governance (54–60):** All 7 items inconclusive — these require organizational action, not code
 - **Adversarial Resilience (64–70):** 5 of 7 inconclusive — benchmarks, adversarial testing, and organizational readiness need dedicated efforts
-- **Dependency Scanning (41):** Confirmed open gap — no CI dependency scanning (Dependabot/pip-audit)
-
 ### Notable Corrected Claims
 - 4 original audit claims were refuted (already fixed or mischaracterized)
 - 2 items upgraded from inconclusive to confirmed after deeper investigation (LLM drift regression suite, chain-of-custody)
@@ -155,19 +149,19 @@ The Argus 70-Item Full Repo Audit assessed the codebase across 13 categories cov
 ## Remaining Action Items
 
 ### High Priority
-2. **Item 68** — Build false-negative rate benchmark against known-vulnerable corpus
-3. **Item 69** — Implement soak/long-run engagement drift testing
+1. **Item 68** — Build false-negative rate benchmark against known-vulnerable corpus
+2. **Item 69** — Implement soak/long-run engagement drift testing
 
 ### Medium Priority
-4. **Item 64** — Conduct adversarial evaluation against actively defending target
-5. **Item 22** — Red-team `_sanitize_for_llm()` for novel prompt injection vectors
-6. **Item 4** — Replace subprocess sandbox with Docker/container isolation
-7. **Item 43** — Add explicit resource cleanup to `di_container.py` Container
+3. **Item 64** — Conduct adversarial evaluation against actively defending target
+4. **Item 22** — Red-team `_sanitize_for_llm()` for novel prompt injection vectors
+5. **Item 4** — Replace subprocess sandbox with Docker/container isolation
+6. **Item 43** — Add explicit resource cleanup to `di_container.py` Container
 
 ### Low Priority / Organizational
-8. **Items 18–20, 54–60, 66, 70** — Process, legal, and organizational readiness items
-9. **Item 15** — Investigate slash-command bleed claim if more context emerges
-10. **Item 48** — Confirm `pause_project` is intentionally absent (not missing)
+7. **Items 18–20, 54–60, 66, 70** — Process, legal, and organizational readiness items
+8. **Item 15** — Investigate slash-command bleed claim if more context emerges
+9. **Item 48** — Confirm `pause_project` is intentionally absent (not missing)
 
 ---
 
