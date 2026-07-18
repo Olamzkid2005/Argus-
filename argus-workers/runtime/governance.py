@@ -40,6 +40,11 @@ _DEFAULT_MAX_RUNTIME_SECONDS = 3600  # 1 hour
 # Aligned: 3 < 4 ensures Governance always fires first with an informative reason.
 _DEFAULT_LOW_SIGNAL_THRESHOLD = 3
 _DEFAULT_HIGH_VALUE_SEVERITIES = {"CRITICAL", "HIGH"}
+# Blocker 9: Diminishing returns detection thresholds
+_DIMINISHING_RETURNS_WINDOW = 8  # Look at last 8 tool results
+_DIMINISHING_RETURNS_RATE_THRESHOLD = 0.15  # If finding rate drops below 15%
+_DIMINISHING_RETURNS_CONFIRMATION = 3  # Confirm 3 times before triggering
+
 
 
 class Governance:
@@ -79,6 +84,13 @@ class Governance:
         self._last_tool_results: list[dict] = []
         self._is_shutdown = False
         self._shutdown_reason = ""
+
+        # Blocker 9: Diminishing returns tracking
+        # Rolling window of finding counts per tool (last N tools)
+        self._finding_counts_window: list[int] = []
+        self._consecutive_flat_finding_rate = 0
+        # Track unique vulnerability types covered (for coverage scoring)
+        self._covered_vuln_types: set[str] = set()
 
         # LlmCostTracker for cross-worker persistent cost tracking (item 25)
         # Falls back to in-process counting if Redis is unavailable.
@@ -229,6 +241,22 @@ class Governance:
         else:
             self._consecutive_low_signal = 0
 
+        # Blocker 9: Track finding counts per tool for diminishing returns
+        finding_count = result_dict.get("findings_count", 0)
+        if isinstance(finding_count, int) and finding_count >= 0:
+            self._finding_counts_window.append(finding_count)
+            if len(self._finding_counts_window) > _DIMINISHING_RETURNS_WINDOW:
+                self._finding_counts_window = self._finding_counts_window[-(_DIMINISHING_RETURNS_WINDOW + 1):]
+
+        # Track covered vulnerability types (for tool-hit-rate scoring)
+        severity = result_dict.get("severity", "INFO") or "INFO"
+        if isinstance(finding_count, int) and finding_count > 0:
+            tool_name = result_dict.get("tool", "") or ""
+            if tool_name:
+                self._covered_vuln_types.add(tool_name)
+            if severity.upper() in ("HIGH", "CRITICAL"):
+                self._covered_vuln_types.add(f"severity:{severity.upper()}")
+
     def start_active_timer(self) -> None:
         """Start tracking active execution time (blocker 58).
 
@@ -267,6 +295,16 @@ class Governance:
         persisted_cost = 0.0
         if self._cost_tracker is not None:
             persisted_cost = self._cost_tracker.total
+        # Compute finding rate for status
+        window = list(self._finding_counts_window)
+        if len(window) >= 4:
+            mid = len(window) // 2
+            early_rate = sum(window[:mid]) / max(len(window[:mid]), 1)
+            late_rate = sum(window[mid:]) / max(len(window[mid:]), 1)
+        else:
+            early_rate = 0.0
+            late_rate = 0.0
+
         return {
             "engagement_id": self.engagement_id,
             "runtime_elapsed_seconds": round(wall_elapsed, 1),
@@ -282,6 +320,11 @@ class Governance:
             "shutdown_reason": self._shutdown_reason,
             "recent_tool_count": len(self._last_tool_results),
             "cost_tracker_available": self._cost_tracker is not None,
+            "finding_rate_window": len(window),
+            "finding_rate_early": round(early_rate, 2),
+            "finding_rate_recent": round(late_rate, 2),
+            "consecutive_flat_rate": self._consecutive_flat_finding_rate,
+            "covered_vuln_types": len(self._covered_vuln_types),
         }
 
     def is_shutdown(self) -> bool:
@@ -291,6 +334,71 @@ class Governance:
     @property
     def shutdown_reason(self) -> str:
         return self._shutdown_reason
+
+    def check_diminishing_returns(self) -> tuple[bool, str]:
+        """Check if tool findings are exhibiting diminishing returns.
+
+        Analyzes the rolling window of finding counts to determine if the
+        rate of discovery has flattened. Returns:
+            (should_stop: bool, reason: str)
+
+        Three signals:
+        1. Finding rate trend: rate of findings in last N tools vs first N/2
+        2. Consecutive flat rate: multiple consecutive tools with near-zero findings
+        3. Coverage saturation: high % of available vuln types already covered
+
+        Blocker 9: This prevents the agent from running indefinitely when
+        tools consistently produce no findings after initial successes.
+        """
+        window = list(self._finding_counts_window)
+        if len(window) < 4:
+            return False, ""  # Need at least 4 data points
+
+        # Signal 1: Finding rate trend
+        # Compare finding rate in recent half vs earlier half of window
+        mid = len(window) // 2
+        early_half = window[:mid]
+        late_half = window[mid:]
+
+        early_findings = sum(early_half)
+        late_findings = sum(late_half)
+        total_tools_early = len(early_half)
+        total_tools_late = len(late_half)
+
+        early_rate = early_findings / max(total_tools_early, 1)
+        late_rate = late_findings / max(total_tools_late, 1)
+
+        # Signal 2: Consecutive flat rate
+        recent_zero_or_low = sum(
+            1 for c in window[-4:] if c < 2
+        )
+        consecutive_low = recent_zero_or_low >= 3
+
+        # Signal 3: Coverage saturation
+        coverage_score = len(self._covered_vuln_types) / max(
+            len(self._last_tool_results), 1
+        )
+
+        # Decision: stop when late_rate drops significantly below early_rate
+        # AND we have high consecutive low findings
+        if early_rate > 0 and late_rate == 0 and consecutive_low and len(window) >= 6:
+            self._consecutive_flat_finding_rate += 1
+
+            if self._consecutive_flat_finding_rate >= _DIMINISHING_RETURNS_CONFIRMATION:
+                reason = (
+                    f"Diminishing returns: early rate={early_rate:.2f} findings/tool "
+                    f"vs recent rate={late_rate:.2f} findings/tool. "
+                    f"Last {recent_zero_or_low}/4 tools had <2 findings. "
+                    f"Coverage: {len(self._covered_vuln_types)} type(s) covered."
+                )
+                logger.info("Governance diminishing returns: %s", reason)
+                return True, reason
+        else:
+            # Reset counter when findings pick up again
+            if self._consecutive_flat_finding_rate > 0:
+                self._consecutive_flat_finding_rate = 0
+
+        return False, ""
 
     def reset_low_signal_counter(self) -> None:
         """Reset the low-signal counter (e.g., when starting a new phase)."""
@@ -310,23 +418,43 @@ class Governance:
 
     def _estimate_token_usage(self, tool_name: str) -> int:
         """Estimate token usage per tool invocation.
-        NOTE: These are rough estimates, not actual token counts.
-        Actual LLM token usage may differ significantly.
+
+        NOTE: These are now calibrated to reflect realistic tool outputs.
+        The original values (200-300) were placebos — a nuclei scan with
+        100 templates and 50 findings can easily use 5,000 tokens to
+        describe all findings in the LLM context. These estimates are used
+        for the token budget guard which must be meaningful to prevent
+        unbounded context growth (blocker 6 fix).
+
+        When actual LLM token counts are available (from LLMService), they
+        are used instead via record_result()'s actual_input_tokens and
+        actual_output_tokens parameters (blocker 48).
         """
-        # Rough estimates based on tool complexity
+        # Calibrated estimates based on typical tool output verbosity.
+        # Finding-rich tools (nuclei, web_scanner) produce large observation
+        # summaries that consume the most tokens. Lightweight tools
+        # (port_scanner, sbom) produce structured but smaller outputs.
         estimates = {
-            "nuclei": 200,
-            "web_scanner": 300,
-            "port_scanner": 100,
-            "api_scanner": 250,
-            "browser_scanner": 400,
-            "websocket_scanner": 200,
-            "llm_detector": 500,
-            "ai_vuln_scanner": 600,
-            "sbom_generator": 150,
-            "api_security_scanner": 350,
+            "nuclei": 3000,           # Multi-template, 50-200 findings typical
+            "web_scanner": 4000,       # Full crawl + checks, 100+ findings
+            "port_scanner": 800,       # Structured port list, few tokens
+            "api_scanner": 2500,       # Endpoint enumeration + findings
+            "browser_scanner": 3500,   # CSP/security analysis + screenshots
+            "websocket_scanner": 2000, # WS message analysis
+            "llm_detector": 500,       # LLM-driven analysis already counted
+            "ai_vuln_scanner": 600,    # AI-driven analysis already counted
+            "sbom_generator": 800,     # Structured SBOM, moderate size
+            "api_security_scanner": 3000,  # Multi-API analysis
+            "sqlmap": 2000,            # SQL injection testing + results
+            "dalfox": 2000,            # XSS scanning + findings
+            "wpscan": 1500,            # WordPress enumeration
+            "testssl": 1200,           # TLS analysis
+            "commix": 1500,            # Command injection testing
+            "ffuf_scanner": 1000,      # Fuzzing results
+            "arjun_scanner": 800,      # Parameter discovery
+            "subfinder": 500,          # Subdomain discovery
         }
-        return estimates.get(tool_name.lower(), 150)
+        return estimates.get(tool_name.lower(), 1000)
 
     def _extract_finding_count(self, result: Any) -> int:
         """Extract finding count from a tool result."""

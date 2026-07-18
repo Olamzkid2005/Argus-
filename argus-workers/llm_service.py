@@ -34,7 +34,7 @@ class CostTracker:
     processed in full (the overshoot pattern).
     """
 
-    def __init__(self, max_cost_usd: float = 0.25):
+    def __init__(self, max_cost_usd: float = 5.00):  # Blocker 4: raised from $0.25
         self.total = 0.0
         self.max_cost = max_cost_usd
 
@@ -61,7 +61,7 @@ class LLMServiceConfig:
 
     temperature: float = LLM_AGENT_TEMPERATURE
     timeout: int = LLM_AGENT_TIMEOUT_SECONDS
-    max_cost_usd: float = 0.25
+    max_cost_usd: float = 5.00  # Blocker 4: raised from $0.25
 
 
 class LLMService:

@@ -507,6 +507,120 @@ class DeadLetterQueue:
             return 0
 
 
+    # ── Autonomous replay tracking (Blocker 8 fix) ──
+    # Uses Redis sorted sets to track replay attempts per task.
+    # Prevents infinite re-replay loops when a task persistently fails.
+
+    REPLAY_COUNTER_KEY = "dlq:replay_count"  # Hash: task_id → int
+    REPLAY_ELIGIBLE_MIN_AGE_SECONDS = 600  # 10 minutes before first replay
+    MAX_AUTO_REPLAYS = 2  # Max autonomous replays per task
+    MAX_TASKS_PER_ENGAGEMENT_PER_CYCLE = 2  # Gradual recovery per engagement
+
+    def get_replay_count(self, task_id: str) -> int:
+        """Get the number of times a task has been autonomously replayed.
+
+        Args:
+            task_id: The task ID to check.
+
+        Returns:
+            Replay count (0 if never replayed).
+        """
+        try:
+            raw = cast(bytes | None, self.redis.hget(self.REPLAY_COUNTER_KEY, task_id))
+            if raw is not None:
+                return int(raw)
+            return 0
+        except Exception as e:
+            logger.debug("Failed to get replay count for %s: %s", task_id, e)
+            return 0
+
+    def increment_replay_count(self, task_id: str) -> int:
+        """Increment and return the replay count for a task.
+
+        Args:
+            task_id: The task ID to increment.
+
+        Returns:
+            New replay count.
+        """
+        try:
+            new_count = self.redis.hincrby(self.REPLAY_COUNTER_KEY, task_id, 1)
+            self.redis.expire(self.REPLAY_COUNTER_KEY, 86400 * 7)  # 7 day TTL
+            return cast(int, new_count)
+        except Exception as e:
+            logger.debug("Failed to increment replay count for %s: %s", task_id, e)
+            return 1
+
+    def get_all_failed_tasks(self, limit: int = 200) -> list[dict[str, Any]]:
+        """Get ALL failed tasks from the DLQ for bulk processing.
+
+        Retrieves tasks from the global DLQ sorted set, fetches full
+        task data from the index hash.
+
+        Blocker 8 fix: Used by the autonomous replay strategy to scan
+        all eligible tasks for conditional replay.
+
+        Args:
+            limit: Maximum number of tasks to return (default 200).
+
+        Returns:
+            List of failed task dicts, newest first.
+        """
+        try:
+            key = f"{self.REDIS_KEY_PREFIX}:tasks"
+            raw_ids = cast(list[bytes], self.redis.zrevrange(key, 0, limit - 1))
+            if not raw_ids:
+                return []
+
+            decoded_ids = [
+                tid.decode("utf-8") if isinstance(tid, bytes) else tid
+                for tid in raw_ids
+            ]
+            raw_data = cast(
+                list[bytes | None],
+                self.redis.hmget(self.TASK_INDEX_KEY, decoded_ids),
+            )
+            tasks: list[dict[str, Any]] = []
+            for raw in raw_data:
+                if raw:
+                    try:
+                        tasks.append(json.loads(raw))
+                    except (json.JSONDecodeError, TypeError):
+                        logger.debug(
+                            "Failed to decode DLQ task data", exc_info=True
+                        )
+            return tasks
+        except Exception as e:
+            logger.error("Failed to retrieve all DLQ tasks: %s", e)
+            return []
+
+    def remove_from_dlq(self, task_id: str) -> bool:
+        """Remove a specific task from the DLQ after successful replay.
+
+        Cleans up both the global sorted set and the index hash.
+
+        Blocker 8 fix: Called after a task has been successfully replayed
+        and completed, to prevent duplicate processing.
+
+        Args:
+            task_id: The task ID to remove.
+
+        Returns:
+            True if removed (or already absent).
+        """
+        try:
+            main_key = f"{self.REDIS_KEY_PREFIX}:tasks"
+            self.redis.zrem(main_key, task_id)
+            self.redis.hdel(self.TASK_INDEX_KEY, task_id)
+            # Also clean up from engagement-specific keys
+            for key in self.redis.scan_iter(match=f"{self.REDIS_KEY_PREFIX}:engagement:*"):
+                self.redis.zrem(key, task_id)
+            return True
+        except Exception as e:
+            logger.debug("Failed to remove task %s from DLQ: %s", task_id, e)
+            return False
+
+
 # Singleton instance
 _dlq: DeadLetterQueue | None = None
 _dlq_lock = threading.Lock()

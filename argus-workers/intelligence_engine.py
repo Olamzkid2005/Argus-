@@ -122,6 +122,19 @@ class IntelligenceEngine:
             # Assign confidence scores (with learned FP rates if org_id provided)
             scored_findings = self.assign_confidence_scores(findings, org_id=org_id)
 
+            # ── Compute and persist per-tool accuracy from scored findings ──
+            # Aggregates fp_likelihood from scored findings by source_tool and
+            # persists to the tool_accuracy table. These rates are consumed by
+            # TargetProfileService.update() during the reporting phase and fed
+            # into upsert_from_engagement() for noisy_tool tracking.
+            if org_id:
+                try:
+                    self._compute_tool_accuracy(scored_findings, org_id)
+                except Exception as e:
+                    logger.warning(
+                        "Tool accuracy computation failed (non-fatal): %s", e
+                    )
+
             # Enrich findings with threat intelligence (CVE data, EPSS scores,
             # threat feed hits, FP assessment) before analysis so
             # high-exploitability CVEs can influence risk assessment.
@@ -462,6 +475,84 @@ class IntelligenceEngine:
             groups[key].append(finding)
 
         return groups
+
+    # ── Tool accuracy computation (Blocker #2 Phase 3) ──
+
+    def _compute_tool_accuracy(
+        self,
+        scored_findings: list[dict],
+        org_id: str,
+    ) -> dict[str, float]:
+        """Aggregate per-tool false positive rates from scored findings.
+
+        Groups scored findings (each with fp_likelihood from
+        assign_confidence_scores()) by source_tool, computes average
+        fp_likelihood per tool, and persists to the tool_accuracy table.
+
+        These aggregated rates are consumed by TargetProfileService.update()
+        during the reporting phase, which passes them to
+        TargetProfileRepository.upsert_from_engagement() for the noisy_tools
+        and best_tools fields in the target profile.
+
+        Args:
+            scored_findings: Findings with fp_likelihood and source_tool
+            org_id: Organization ID for the tool_accuracy table
+
+        Returns:
+            {source_tool: avg_fp_rate} dict, persisted to DB
+        """
+        if not org_id or not scored_findings:
+            return {}
+
+        # Group fp_likelihood values by source_tool
+        tool_fp_values: dict[str, list[float]] = {}
+        for f in scored_findings:
+            tool = (f.get("source_tool") or "").strip()
+            fp = f.get("fp_likelihood")
+            if not tool or fp is None:
+                continue
+            try:
+                fp_val = float(fp)
+                if 0.0 <= fp_val <= 1.0:
+                    tool_fp_values.setdefault(tool, []).append(fp_val)
+            except (ValueError, TypeError):
+                continue
+
+        if not tool_fp_values:
+            logger.debug(
+                "Tool accuracy: no scored findings with fp_likelihood for org %s",
+                org_id,
+            )
+            return {}
+
+        # Compute average fp_likelihood per tool
+        tool_fp_rates: dict[str, float] = {
+            tool: sum(values) / len(values)
+            for tool, values in tool_fp_values.items()
+        }
+
+        # Persist to tool_accuracy table
+        try:
+            from database.repositories.tool_accuracy_repository import (
+                ToolAccuracyRepository,
+            )
+
+            repo = ToolAccuracyRepository()
+            repo.save_fp_rates(org_id, tool_fp_rates)
+            logger.info(
+                "Computed and saved tool accuracy for %d tools (org %s): %s",
+                len(tool_fp_rates),
+                org_id,
+                {t: round(r, 3) for t, r in tool_fp_rates.items()},
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to persist tool accuracy for org %s (non-fatal): %s",
+                org_id,
+                e,
+            )
+
+        return tool_fp_rates
 
     def _build_and_persist_attack_graph(
         self, enriched_findings: list[dict], context: dict

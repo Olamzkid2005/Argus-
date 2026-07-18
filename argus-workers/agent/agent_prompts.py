@@ -814,6 +814,36 @@ def build_tool_selection_prompt(
         if paragraph:
             prompt_parts.append(paragraph)
 
+        # ── Section 0a: Strategic Tool Priority from Past Scans ──
+        # (Blocker #2 Phase 4 — explicit priority ordering based on
+        #  which tools produced findings or were noisy in past scans)
+        best_tools = target_profile.get("best_tools", [])
+        noisy_tools = target_profile.get("noisy_tools", [])
+        if best_tools or noisy_tools:
+            strategy_lines = ["=== STRATEGY FROM PAST SCANS ==="]
+            if best_tools:
+                best_names = [
+                    t["tool"] if isinstance(t, dict) else str(t)
+                    for t in best_tools[:5]
+                ]
+                strategy_lines.append(
+                    f"Tools that found real issues before: "
+                    f"{_sanitize_for_prompt(', '.join(best_names))}. "
+                    f"RUN THESE FIRST."
+                )
+            if noisy_tools:
+                noisy_names = [
+                    t if isinstance(t, str) else str(t)
+                    for t in noisy_tools[:5]
+                ]
+                strategy_lines.append(
+                    f"Tools that were noisy / produced false positives "
+                    f"on this target: "
+                    f"{_sanitize_for_prompt(', '.join(noisy_names))}. "
+                    f"Run these LAST or skip if coverage is already sufficient."
+                )
+            prompt_parts.append("\n".join(strategy_lines))
+
     # ── Section 0.1: Retrieved Memory Context (Phase 5) ────────────
     if memory_context:
         sanitized_memory = _sanitize_for_llm(str(memory_context))

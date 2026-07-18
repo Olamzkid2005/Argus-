@@ -82,6 +82,8 @@ class _MetricsHandler(BaseHTTPRequestHandler):
             self._handle_health()
         elif self.path == "/metrics":
             self._handle_metrics()
+        elif self.path == "/shadow-stats":
+            self._handle_shadow_stats()
         else:
             self._send_json({"error": "Not found"}, 404)
 
@@ -207,6 +209,30 @@ class _MetricsHandler(BaseHTTPRequestHandler):
             "platform": sys.platform,
         }
 
+        # DegradationAwareness metrics for all active engagements
+        degradation_metrics: dict[str, Any] | None = None
+        try:
+            from runtime.degradation_awareness import (
+                get_all_degradation_statuses,
+                get_worst_degradation_status,
+            )
+            all_statuses = get_all_degradation_statuses()
+            worst = get_worst_degradation_status()
+            if all_statuses:
+                degradation_metrics = {
+                    "total_engagements": len(all_statuses),
+                    "worst_overall": worst,
+                    "engagements": all_statuses,
+                }
+        except Exception:
+            logger.debug("Failed to collect degradation metrics", exc_info=True)
+
+        # If any engagement is degraded or critical, reflect in overall status
+        if degradation_metrics and degradation_metrics.get("worst_overall"):
+            worst_level = degradation_metrics["worst_overall"].get("level", "")
+            if worst_level in ("critical", "degraded") and status == "ok":
+                status = "degraded"
+
         return {
             "status": status,
             "uptime_seconds": round(uptime, 1),
@@ -229,12 +255,31 @@ class _MetricsHandler(BaseHTTPRequestHandler):
             },
             "connection_pool": pool_metrics,
             "system": system_info,
+            "degradation": degradation_metrics,
         }
 
     def _handle_metrics(self) -> None:
         data = self._collect_metrics()
         http_status = 200 if data["status"] == "ok" else 503
         self._send_json(data, http_status)
+
+    # ── /shadow-stats endpoint ──
+
+    def _handle_shadow_stats(self) -> None:
+        """Return shadow-mode convergence statistics."""
+        try:
+            from runtime.shadow_mode import get_shadow_stats
+            from runtime.shadow_flipper import SHADOW_TO_FLAG_MAP, CONVERGENCE_THRESHOLD
+
+            stats = get_shadow_stats()
+            result = {
+                "convergence_threshold": CONVERGENCE_THRESHOLD,
+                "phase_map": SHADOW_TO_FLAG_MAP,
+                "phases": stats,
+            }
+            self._send_json(result)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
 
 
 def log_startup_health() -> dict[str, Any]:

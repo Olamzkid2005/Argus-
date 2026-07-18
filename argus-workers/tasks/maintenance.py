@@ -177,6 +177,43 @@ def cleanup_checkpoints(self):
         return {"status": "error", "error": str(e)}
 
 
+@app.task(bind=True, name="tasks.maintenance.check_shadow_convergence")
+def check_shadow_convergence(self):
+    """
+    Check shadow-mode convergence for all tracked phases and auto-flip
+    feature flags when convergence criteria are met.
+
+    This task is invoked by Celery Beat every 5 minutes. For each phase
+    in the shadow-to-flag mapping, it checks if consecutive_successes
+    >= CONVERGENCE_THRESHOLD (100). If so, the corresponding feature flag
+    is set to True in the database, enabling the feature permanently.
+    """
+    try:
+        from runtime.shadow_flipper import SHADOW_TO_FLAG_MAP, check_and_auto_flip
+
+        flipped = []
+        for phase in SHADOW_TO_FLAG_MAP:
+            if check_and_auto_flip(phase):
+                flipped.append(phase)
+
+        if flipped:
+            logger.info(
+                "Shadow convergence check: auto-flipped %d phase(s): %s",
+                len(flipped), ", ".join(flipped),
+            )
+        else:
+            logger.debug("Shadow convergence check: no phases ready for flip")
+
+        return {
+            "status": "ok",
+            "phases_checked": list(SHADOW_TO_FLAG_MAP.keys()),
+            "phases_flipped": flipped,
+        }
+    except Exception as e:
+        logger.error("check_shadow_convergence failed: %s", e)
+        return {"status": "error", "error": str(e)}
+
+
 @app.task(bind=True, name="tasks.maintenance.worker_health_check")
 def worker_health_check(self):
     """

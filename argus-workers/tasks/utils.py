@@ -31,7 +31,7 @@ class LlmCostTracker:
         max_cost: Maximum LLM spend in USD (default 0.50)
     """
 
-    def __init__(self, engagement_id: str, max_cost: float = 0.50):
+    def __init__(self, engagement_id: str, max_cost: float = 10.00):  # Blocker 4: raised from $0.50
         self.engagement_id = engagement_id
         self.max_cost = max_cost
         self._local_spend = 0.0

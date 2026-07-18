@@ -112,6 +112,56 @@ class ToolAccuracyRepository:
             logger.warning("Could not load tool_accuracy: %s", e)
             return {}
 
+    # ── Save ML-estimated FP rates ──────────────────────────────────
+
+    def save_fp_rates(self, org_id: str, tool_fp_rates: dict[str, float]) -> bool:
+        """Save aggregated per-tool FP rates from Intelligence Engine estimates.
+
+        Uses INSERT ... ON CONFLICT (upsert) so concurrent calls are serialized
+        at the row level. Only updates the fp_rate column — verdict counts from
+        record_verdict() remain intact and are not modified.
+
+        The fp_rate acts as a shared signal: ML estimates from the intelligence
+        engine set it directly, and analyst verdicts via record_verdict() compute
+        a Bayesian prior that overwrites it on each verdict. The last-writer wins.
+
+        Args:
+            org_id: Organization ID
+            tool_fp_rates: {source_tool: fp_likelihood} mapping from scored findings
+
+        Returns:
+            True if all rates were saved successfully
+        """
+        if not org_id or not tool_fp_rates:
+            return False
+
+        try:
+            with db_cursor(commit=True) as cursor:
+                for source_tool, fp_rate in tool_fp_rates.items():
+                    if not source_tool:
+                        continue
+                    # Clamp fp_rate to [0.0, 1.0] for DB safety
+                    clamped_rate = max(0.0, min(1.0, float(fp_rate)))
+
+                    cursor.execute(
+                        """
+                        INSERT INTO tool_accuracy
+                            (org_id, source_tool, total_verdicts,
+                             true_positives, false_positives,
+                             fp_rate, last_updated)
+                        VALUES
+                            (%s, %s, 0, 0, 0, %s, NOW())
+                        ON CONFLICT (org_id, source_tool) DO UPDATE SET
+                            fp_rate = %s,
+                            last_updated = NOW()
+                        """,
+                        (org_id, source_tool, clamped_rate, clamped_rate),
+                    )
+            return True
+        except Exception as e:
+            logger.error("tool_accuracy save_fp_rates failed: %s", e)
+            return False
+
     def get_tool_fp_rate(self, org_id: str, source_tool: str) -> float | None:
         """Get fp_rate for a single tool. Returns None if no row exists.
 

@@ -260,7 +260,10 @@ class TLSConfig:
 @dataclass(frozen=True)
 class LLMGeneralConfig:
     max_retries: int = 2
-    max_cost_per_engagement: float = 0.50  # $0.50 max LLM spend per engagement
+    max_cost_per_engagement: float = 10.00  # $10.00 max LLM spend per engagement (raised from $0.50)
+    # Blocker 4 fix: The original $0.50 cap caused the agent to silently switch to
+    # deterministic mode mid-engagement. A nuclei scan with 100 templates alone can
+    # cost $0.05-$0.15. With tool selection + analysis, a real engagement needs $5-10.
 
 
 # ──────────────────────────────────────────────
@@ -300,7 +303,12 @@ class LLMAgentConfig:
     max_tokens_plan: int = 300  # tokens per tool selection call
     max_tokens_synth: int = 2000  # tokens for findings synthesis
     max_tokens_report: int = 3000  # tokens for final report
-    context_max_tokens: int = 3500  # max context passed to LLM
+    context_max_tokens: int = 6000  # max context passed to LLM (raised from 3500)
+    # Blocker 11 fix: The original 3500 token limit caused get_context() to
+    # drop from 6 observations to just 3 when tool outputs were verbose.
+    # Combined with the new cumulative findings summary, 6000 tokens gives
+    # the LLM both the big-picture view AND detailed recent observations.
+    # Modern LLM context windows (128K+) handle this easily.
     # Blocker 64: zero_finding_stop (4) must be > Governance low_signal_threshold (3).
     # This ensures Governance's low-signal detection fires FIRST, providing an
     # informative stop reason instead of a generic "empty output" stop.
@@ -322,14 +330,18 @@ class LLMAgentConfig:
 # ──────────────────────────────────────────────
 @dataclass(frozen=True)
 class LLMCostConfig:
-    max_cost_usd: float = 0.25
+    max_cost_usd: float = 5.00  # $5.00 max agent LLM spend (raised from $0.25)
+    # Blocker 4 fix: The original $0.25 cap was designed for gpt-4o-mini at ~$0.0002/call.
+    # At 1250 calls, this gives 125 tool selections — enough for most engagements.
+    # But the cap didn't account for multi-token responses (analysis, report) or
+    # retries. $5.00 provides headroom for real-world engagements with 10-50 tools.
     cost_per_1k_input: float = 0.000150  # gpt-4o-mini input cost
     cost_per_1k_output: float = 0.000600  # gpt-4o-mini output cost
 
     @classmethod
     def from_env(cls) -> "LLMCostConfig":
         return cls(
-            max_cost_usd=float(os.getenv("LLM_AGENT_MAX_COST_USD", "0.25")),
+            max_cost_usd=float(os.getenv("LLM_AGENT_MAX_COST_USD", "5.00")),
             cost_per_1k_input=float(
                 os.getenv("LLM_AGENT_COST_PER_1K_INPUT", "0.000150")
             ),

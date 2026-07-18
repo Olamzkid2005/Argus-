@@ -20,6 +20,8 @@ from .engagement_state import EngagementState, ToolExecutionRecord
 from .execution_engine import ExecutionEngine
 from .governance import Governance
 from .memory import MemoryRetriever
+from .degradation_awareness import DegradationAwareness, DegradationLevel, DegradationStatus
+from .shadow_flipper import check_and_auto_flip
 from .shadow_mode import (
     get_shadow_stats,
     reset_shadow_stats,
@@ -35,6 +37,10 @@ __all__ = [
     "DeterministicRuntime",
     "MemoryRetriever",
     "Governance",
+    "DegradationAwareness",
+    "DegradationLevel",
+    "DegradationStatus",
+    "check_and_auto_flip",
     "shadow_compare",
     "get_shadow_stats",
     "reset_shadow_stats",

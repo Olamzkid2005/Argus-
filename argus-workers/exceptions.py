@@ -12,7 +12,7 @@ by the error_classifier subsystem.
 """
 
 
-from error_classifier import ErrorCode
+from error_classifier import ErrorCode, tag_error
 
 
 class ArgusError(Exception):
@@ -45,16 +45,11 @@ class ArgusError(Exception):
         self.error_code: ErrorCode | None = error_code or self.default_code
         self.original: Exception | None = original
 
-        # When we have a concrete ErrorCode, tag the exception so that
-        # error_classifier.classify_error prefers code-based classification.
+        # Tag the exception with ErrorCode for code-based classification.
+        # The module-level import of tag_error ensures fast-fail at startup
+        # if the error_classifier subsystem cannot be loaded.
         if self.error_code is not None:
-            try:
-                # error_classifier.tag_error attaches .error_code as an attribute
-                from error_classifier import tag_error
-
-                tag_error(self, self.error_code)
-            except ImportError:
-                pass  # best-effort during bootstrap
+            tag_error(self, self.error_code)
 
     def __str__(self) -> str:
         parts = [self.message or ""]

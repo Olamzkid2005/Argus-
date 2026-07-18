@@ -15,6 +15,7 @@ Key design decisions:
 """
 
 import logging
+import re
 import time
 from typing import Any
 
@@ -32,6 +33,8 @@ from runtime.engagement_state import OBSERVATION_TRUNCATION_LIMIT
 from streaming import emit_error_hint
 from utils.error_hints import ErrorHint
 from utils.logging_utils import ScanLogger
+
+from runtime.degradation_awareness import DegradationAwareness, DegradationLevel
 
 from .agent_action import AgentAction
 from .agent_prompts import (
@@ -124,6 +127,7 @@ class ReActAgent:
         governance=None,
         memory_retriever=None,
         engagement_state=None,
+        degradation_awareness=None,
     ) -> "ReActAgent":
         """
         Create a ReActAgent for a specific phase with tools pre-registered.
@@ -138,6 +142,7 @@ class ReActAgent:
             governance: Optional Governance instance for safety controls
             memory_retriever: Optional MemoryRetriever for context retrieval
             engagement_state: Optional EngagementState for canonical state
+            degradation_awareness: Optional DegradationAwareness for self-diagnosis
 
         Returns:
             Configured ReActAgent
@@ -203,7 +208,7 @@ class ReActAgent:
                     },
                 )
 
-        return cls(
+        agent = cls(
             registry,
             llm_client=llm_client,
             decision_repo=decision_repo,
@@ -213,7 +218,9 @@ class ReActAgent:
             governance=governance,
             memory_retriever=memory_retriever,
             engagement_state=engagement_state,
+            degradation_awareness=degradation_awareness,
         )
+        return agent
 
     def __init__(
         self,
@@ -227,6 +234,7 @@ class ReActAgent:
         governance: Any = None,
         memory_retriever: Any = None,
         engagement_state: Any = None,
+        degradation_awareness: Any = None,
     ):
         self.registry = registry
         self.max_iterations = max_iterations
@@ -245,6 +253,13 @@ class ReActAgent:
         self._auth_context: AuthContext | None = None
         # Tracks consecutive LLM tool selection failures for alerting
         self._llm_failure_count = 0
+        # DegradationAwareness — the system's sense of self
+        self._degradation_awareness = degradation_awareness
+        if self._degradation_awareness is None and engagement_id:
+            try:
+                self._degradation_awareness = DegradationAwareness(engagement_id)
+            except Exception:
+                self._degradation_awareness = None
 
     def set_candidate_list(self, candidate_list) -> None:
         """Accept a CandidateList from the scan phase for agent reasoning."""
@@ -304,10 +319,129 @@ class ReActAgent:
                 )
                 self.history = self.history[-OBSERVATION_TRUNCATION_LIMIT:]
 
+    def _summarize_historical_findings(self) -> str:
+        """
+        Build a compact summary of ALL findings across the full engagement history.
+
+        Blocker 11 fix: Instead of only showing the last 6 observations,
+        this scans every history entry for severity markers, finding counts,
+        and failure signals to give the LLM a big-picture view.
+
+        Returns a short 2-4 line summary string, or empty string if no data.
+        """
+        re_severity = re.compile(
+            r"(CRITICAL|HIGH|MEDIUM|LOW|INFO|FAILED|found\s+(\d+)\s+result)",
+            re.IGNORECASE,
+        )
+
+        source = self.history
+        if (
+            _ff_enabled("ENGAGEMENT_STATE", default=False)
+            and self.engagement_state is not None
+            and hasattr(self.engagement_state, "observations")
+        ):
+            try:
+                source = self.engagement_state.observations
+            except Exception:
+                pass
+
+        severity_counts: dict[str, int] = {
+            "CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0,
+        }
+        total_results = 0
+        tools_run = 0
+        tools_failed = 0
+        tools_clean = 0
+        tool_names_run: list[str] = []
+
+        for entry in source:
+            content = ""
+            if isinstance(entry, dict):
+                content = str(entry.get("content", ""))
+            elif isinstance(entry, str):
+                content = entry
+            else:
+                continue
+
+            # Count tool runs from observation role entries
+            if (
+                isinstance(entry, dict)
+                and entry.get("role") == "observation"
+            ):
+                tools_run += 1
+
+            # Extract "found N result(s)" from observation text
+            result_match = re.search(r"found (\d+) result", content, re.IGNORECASE)
+            if result_match:
+                count = int(result_match.group(1))
+                total_results += count
+
+            # Extract failed tools
+            if "FAILED" in content.upper():
+                tools_failed += 1
+                # Extract tool name from prefix
+                if ":" in content[:60]:
+                    tool_name = content.split(":", 1)[0].strip()
+                    if tool_name:
+                        tool_names_run.append(f"{tool_name}[failed]")
+
+            # Detect clean runs
+            if "no output produced" in content.lower():
+                tools_clean += 1
+                if ":" in content[:60]:
+                    tool_name = content.split(":", 1)[0].strip()
+                    if tool_name:
+                        tool_names_run.append(f"{tool_name}[clean]")
+
+            # Count severity mentions in content
+            for sev in severity_counts:
+                # Count occurrences of severity label
+                count = len(re.findall(rf"\b{sev}\b", content.upper()))
+                severity_counts[sev] += count
+
+        parts: list[str] = []
+
+        # Total findings count
+        if total_results > 0 or sum(severity_counts.values()) > 0:
+            sev_str = ", ".join(
+                f"{k}={v}" for k, v in severity_counts.items() if v > 0
+            )
+            parts.append(
+                f"Cumulative results: {total_results} tool finding(s) "
+                f"({sev_str})"
+            )
+
+        # Tools summary
+        if tools_run > 0:
+            parts.append(
+                f"Tools run: {tools_run} total "
+                f"({tools_failed} failed, {tools_clean} clean, "
+                f"{tools_run - tools_failed - tools_clean} had output)"
+            )
+
+        # Tool names with status (compact, max 5)
+        if tool_names_run:
+            names_str = ", ".join(tool_names_run[:10])
+            if len(tool_names_run) > 10:
+                names_str += f" ... and {len(tool_names_run) - 10} more"
+            parts.append(f"Tools: {names_str}")
+
+        if not parts:
+            return ""
+
+        result = "=== CUMULATIVE FINDINGS SUMMARY (all observations) ===\n"
+        result += "\n".join(parts)
+        return result
+
     def get_context(self, max_tokens: int = LLM_AGENT_CONTEXT_MAX_TOKENS) -> str:
         """
         Build observation history string from tool results.
         Trims to stay under token budget — keeps most recent entries.
+
+        Blocker 11 fix: Prepends a cumulative findings summary from ALL
+        history entries so the LLM can see CRITICAL/HIGH findings regardless
+        of how many tools have run since. Falls back to recent-only truncation
+        only when the token budget is exhausted.
 
         When EngagementState is available, reads from state.observations
         for canonical state tracking. Falls back to self.history.
@@ -319,13 +453,42 @@ class ReActAgent:
         ):
             return self.engagement_state.get_context(max_entries=6)
 
+        # Build cumulative summary from full history (Blocker 11 fix)
+        summary = self._summarize_historical_findings()
+
         recent = self.history[-6:]  # last 6 entries (up from 5)
         parts = [f"[{e['role']}]: {e['content']}" for e in recent]
         context = "\n".join(parts)
 
-        if len(context) / 4 > max_tokens:
-            parts = [f"[{e['role']}]: {e['content']}" for e in self.history[-3:]]
-            context = "\n".join(parts)
+        # Prepend summary if we have one
+        if summary:
+            context = summary + "\n\n" + "=== DETAILED OBSERVATIONS (most recent) ===\n" + context
+
+        # Token budget enforcement: keep summary + as many recent entries as fit
+        approx_chars = max_tokens * 4
+        if len(context) > approx_chars:
+            # Keep summary always, then add as many recent observations as fit
+            visible = [summary] if summary else []
+            budget_remaining = approx_chars - len("\n\n".join(visible)) if visible else approx_chars
+
+            fitted: list[str] = []
+            for entry in reversed(self.history[:]):
+                entry_str = f"[{entry['role']}]: {entry['content']}"
+                if len("\n".join(fitted)) + len(entry_str) + len("\n".join(visible)) <= approx_chars:
+                    fitted.insert(0, entry_str)
+                else:
+                    break
+
+            if fitted:
+                obs_block = "=== DETAILED OBSERVATIONS (most recent) ===\n" + "\n".join(fitted)
+                if visible:
+                    context = visible[0] + "\n\n" + obs_block
+                else:
+                    context = obs_block
+            elif visible:
+                context = visible[0]
+            else:
+                context = ""
 
         return context
 
@@ -976,12 +1139,14 @@ Based on these findings, what capabilities should the next phase use?
         tried_tools = tried_tools or set()
         llm_client = llm_client or self.llm_client
 
+        llm_attempted = False
         if (
             llm_client
             and hasattr(llm_client, "is_available")
             and llm_client.is_available()
             and recon_context
         ):
+            llm_attempted = True
             llm_service = LLMService(llm_client=llm_client)
             action = self._call_llm_for_action(
                 task,
@@ -992,10 +1157,16 @@ Based on these findings, what capabilities should the next phase use?
                 hypotheses=hypotheses,
             )
             if isinstance(action, _DoneSentinel):
+                # LLM correctly determined work is complete — record as success
+                if self._degradation_awareness is not None:
+                    self._degradation_awareness.record_llm_result(success=True)
                 return None
             if action is not None:
                 # LLM succeeded — reset failure counter
                 self._llm_failure_count = 0
+                # Record LLM success for DegradationAwareness
+                if self._degradation_awareness is not None:
+                    self._degradation_awareness.record_llm_result(success=True)
                 # Attach actual LLM token counts to the action for governance (blocker 48)
                 # These are read from the LLMService which tracks them from the LLMResponse.
                 if (
@@ -1007,6 +1178,10 @@ Based on these findings, what capabilities should the next phase use?
                     action.output_tokens = llm_service.last_output_tokens
                 assert isinstance(action, AgentAction)
                 return action
+            else:
+                # LLM was attempted but returned None — record failure
+                if self._degradation_awareness is not None:
+                    self._degradation_awareness.record_llm_result(success=False)
 
         # Blocker 31: LLM → deterministic fallback should not be silent.
         # When the LLM is available but returned None (failed/fallback),
@@ -1198,6 +1373,182 @@ Based on these findings, what capabilities should the next phase use?
             logger.debug("Failed to persist DecisionCheckpoint: %s", e)
             return None
 
+    def _execute_with_recovery(self, action: AgentAction) -> AgentResult:
+        """Execute a tool with graceful degradation on failure.
+
+        Blocker 10 fix: When a tool fails, try recovery strategies before
+        marking it as permanently failed:
+        - Timeout: retry with 2x timeout
+        - Generic failure: retry once
+        - Persistent failure: return failure result (no blind spot)
+
+        Args:
+            action: The AgentAction containing tool and arguments.
+
+        Returns:
+            AgentResult with execution outcome.
+        """
+        from config.constants import TOOL_TIMEOUT_DEFAULT
+
+        tool = action.tool
+        args = action.arguments.copy()
+        original_timeout = args.pop("timeout", TOOL_TIMEOUT_DEFAULT)
+        max_retries = 2
+
+        last_error = ""
+        for attempt in range(max_retries + 1):
+            timeout = original_timeout * (2 ** attempt) if attempt > 0 else original_timeout
+
+            _retry_args = args.copy()
+            try:
+                result = self.registry.call(tool, timeout=timeout, **_retry_args)
+
+                # Check if the result indicates success
+                if getattr(result, "success", False):
+                    return result
+
+                # Tool ran but failed — check if retryable
+                error_msg = getattr(result, "error", "") or getattr(result, "stderr", "") or ""
+                last_error = error_msg[:200]
+
+                if attempt >= max_retries:
+                    logger.warning(
+                        "Tool '%s' failed after %d attempts (last error: %s) — "
+                        "creating blind spot result",
+                        tool, attempt + 1, last_error,
+                    )
+                    return AgentResult(
+                        tool=tool,
+                        success=False,
+                        error=f"Failed after {attempt + 1} attempt(s): {last_error}",
+                    )
+
+                # Check if this failure type is retryable
+                if self._is_retryable_failure(error_msg):
+                    logger.info(
+                        "Tool '%s' attempt %d failed (retryable: %s) — "
+                        "retrying with timeout=%ds",
+                        tool, attempt + 1, last_error[:80], timeout,
+                    )
+                    continue
+                else:
+                    # Non-retryable failure (scope, security, etc.)
+                    logger.warning(
+                        "Tool '%s' failed with non-retryable error: %s",
+                        tool, last_error[:120],
+                    )
+                    return AgentResult(
+                        tool=tool,
+                        success=False,
+                        error=f"Non-retryable: {last_error}",
+                    )
+
+            except Exception as exc:
+                exc_msg = str(exc)[:200]
+                last_error = exc_msg
+
+                if attempt >= max_retries:
+                    logger.warning(
+                        "Tool '%s' raised exception after %d attempts: %s",
+                        tool, attempt + 1, exc_msg,
+                    )
+                    return AgentResult(
+                        tool=tool,
+                        success=False,
+                        error=f"Exception after {attempt + 1} attempt(s): {exc_msg}",
+                    )
+
+                if self._is_retryable_exception(exc):
+                    logger.info(
+                        "Tool '%s' exception on attempt %d (retryable: %s) — "
+                        "retrying with timeout=%ds",
+                        tool, attempt + 1, exc_msg[:80], timeout,
+                    )
+                    continue
+                else:
+                    raise
+
+        # Should not reach here, but safeguard
+        return AgentResult(
+            tool=tool,
+            success=False,
+            error=f"Fatal after {max_retries + 1} attempts: {last_error}",
+        )
+
+    @staticmethod
+    def _is_retryable_failure(error_msg: str) -> bool:
+        """Check if a tool failure is transient/retryable."""
+        err = error_msg.lower()
+        retryable_patterns = [
+            "timeout", "timed out",
+            "connection", "reset",
+            "temporary", "unavailable",
+            "too many", "rate limit",
+            "503", "502", "504",
+            "interrupted", "broken pipe",
+            "empty response",
+        ]
+        return any(p in err for p in retryable_patterns)
+
+    @staticmethod
+    def _is_retryable_exception(exc: Exception) -> bool:
+        """Check if an exception from tool execution is retryable."""
+        exc_name = type(exc).__name__.lower()
+        exc_str = str(exc).lower()
+
+        retryable_types = [
+            "timeout", "connection", "interrupted",
+            "temporary", "unavailable",
+        ]
+        if any(t in exc_name or t in exc_str for t in retryable_types):
+            return True
+
+        retryable_exceptions = (
+            TimeoutError,
+            ConnectionError,
+            ConnectionResetError,
+            ConnectionRefusedError,
+            ConnectionAbortedError,
+        )
+        if isinstance(exc, retryable_exceptions):
+            return True
+
+        return False
+
+    @staticmethod
+    def _extract_finding_count(result: Any) -> int:
+        """Extract finding count from an AgentResult.
+
+        Inspects result.findings first (most direct), then falls back
+        to parsing result.output as JSON for tools that produce
+        structured output without explicit finding objects.
+
+        Args:
+            result: AgentResult from tool execution.
+
+        Returns:
+            Number of findings (0 if none or can't determine).
+        """
+        # Most direct: result.findings attribute
+        findings = getattr(result, "findings", None)
+        if findings:
+            return len(findings)
+
+        # Fallback: parse output as JSON
+        output = getattr(result, "output", None)
+        if output:
+            try:
+                import json
+                data = json.loads(output)
+                if isinstance(data, list):
+                    return len(data)
+                if isinstance(data, dict):
+                    return len(data.get("findings", data.get("results", [])) or [])
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+
+        return 0
+
     def run(
         self,
         task: str,
@@ -1233,7 +1584,6 @@ Based on these findings, what capabilities should the next phase use?
 
         self._ensure_phase_tools()
 
-        self.add_to_history("system", f"Task: {task}")
         # Parse initial_target robustly: only split on first colon if the prefix
         # is a known phase name. Otherwise treat the whole task as the target,
         # avoiding mangling URLs like "https://example.com:8080" → "//example.com:8080".
@@ -1330,6 +1680,18 @@ Based on these findings, what capabilities should the next phase use?
                     self.engagement_id,
                 )
                 break
+
+            # Check DegradationAwareness — CRITICAL level means stop engagement
+            if self._degradation_awareness is not None:
+                da_status = self._degradation_awareness.get_status()
+                if da_status.level == DegradationLevel.CRITICAL:
+                    logger.warning(
+                        "DegradationAwareness: %s — stopping agent for engagement %s",
+                        da_status.recommended_action,
+                        self.engagement_id,
+                    )
+                    break
+
             plan_kwargs: dict[str, Any] = {"tried_tools": tried_tools}
             if recon_context is not None:
                 plan_kwargs["recon_context"] = recon_context
@@ -1396,27 +1758,34 @@ Based on these findings, what capabilities should the next phase use?
                             results.append(result)
                     break
 
-            # Blocker 29 fix: Cost guard applies in ALL modes, not just legacy.
-            # This prevents unbounded LLM cost accumulation in GOVERNANCE_V2 mode.
-            # (The legacy cost guard block was removed — this single check covers all modes.)
-            if total_cost_usd > LLM_AGENT_MAX_COST_USD:
-                logger.warning(
-                    "Cost guard: $%.4f exceeds $%.4f (engagement %s). "
-                    "Switching to deterministic for remaining tools.",
-                    total_cost_usd,
-                    LLM_AGENT_MAX_COST_USD,
-                    self.engagement_id,
-                )
-                for tool_name in self.PHASE_TOOLS.get(self._phase, []):
-                    if (
-                        tool_name not in tried_tools
-                        and self.registry.get_tool(tool_name) is not None
-                    ):
-                        result = self.registry.call(
-                            tool_name, target=initial_target
-                        )
-                        results.append(result)
-                break
+            # Blocker 4/29 fix: Cost guard applies when Governance is NOT active.
+            # When GOVERNANCE_V2 is enabled, Governance.check() already handles the
+            # cost check with its own (configurable) max_cost_usd. This ad-hoc guard
+            # is the fallback for the legacy path where Governance is not in use.
+            # The cap was raised from $0.25 to $5.00 because the original caused the
+            # agent to silently switch to deterministic mode mid-engagement.
+            if not (
+                _ff_enabled("GOVERNANCE_V2", default=False)
+                and self.governance is not None
+            ):
+                if total_cost_usd > LLM_AGENT_MAX_COST_USD:
+                    logger.warning(
+                        "Cost guard: $%.4f exceeds $%.4f (engagement %s). "
+                        "Switching to deterministic for remaining tools.",
+                        total_cost_usd,
+                        LLM_AGENT_MAX_COST_USD,
+                        self.engagement_id,
+                    )
+                    for tool_name in self.PHASE_TOOLS.get(self._phase, []):
+                        if (
+                            tool_name not in tried_tools
+                            and self.registry.get_tool(tool_name) is not None
+                        ):
+                            result = self.registry.call(
+                                tool_name, target=initial_target
+                            )
+                            results.append(result)
+                    break
 
             slog.agent_iteration(
                 iteration,
@@ -1472,18 +1841,20 @@ Based on these findings, what capabilities should the next phase use?
                 tried_tools.add(action.tool)
                 results.append(result)
                 continue
-            # ── Active time tracking (blocker 58) ──
-            # Wrap tool execution with governance timer so that only active
-            # execution time counts against the runtime budget, not idle time
-            # between tool calls. Uses try/finally to ensure the timer is
-            # stopped even if registry.call() raises an exception.
+            # ── Execute tool with graceful degradation recovery ──
+            # Blocker 10 fix: When a tool fails (timeout, exception, empty output),
+            # try recovery strategies before marking it as permanently failed:
+            # 1. Timeout → retry with 2x timeout
+            # 2. Generic failure → retry once
+            # 3. Persistent failure → mark as tried and continue
+            # This prevents a single tool failure from creating a permanent blind spot.
             if (
                 _ff_enabled("GOVERNANCE_V2", default=False)
                 and self.governance is not None
             ):
                 self.governance.start_active_timer()
             try:
-                result = self.registry.call(action.tool, **action.arguments)
+                result = self._execute_with_recovery(action)
             finally:
                 if (
                     _ff_enabled("GOVERNANCE_V2", default=False)
@@ -1492,6 +1863,16 @@ Based on these findings, what capabilities should the next phase use?
                     self.governance.stop_active_timer()
             tried_tools.add(action.tool)
             results.append(result)
+
+            # ── Record tool result with DegradationAwareness (Blocker #1 Phase 3) ──
+            # Feeds finding counts into the rolling window so the system can
+            # detect degraded tool performance (e.g., tools consistently
+            # producing zero findings despite functioning normally).
+            if self._degradation_awareness is not None:
+                finding_count = self._extract_finding_count(result)
+                self._degradation_awareness.record_tool_result(
+                    action.tool, finding_count
+                )
 
             # ── Record tool execution in EngagementState ──
             if (
@@ -1559,7 +1940,23 @@ Based on these findings, what capabilities should the next phase use?
                     )
                     break
 
-            # Legacy empty-output detection (only when governance is not active)
+                # Blocker 9: Check diminishing returns
+                should_stop_dr, dr_reason = self.governance.check_diminishing_returns()
+                if should_stop_dr:
+                    logger.warning(
+                        "Governance: %s — stopping agent for engagement %s",
+                        dr_reason,
+                        self.engagement_id,
+                    )
+                    break
+
+            # ── Adaptive stop criteria (Blocker #1 Phase 3) ──
+            # When GOVERNANCE_V2 is active, Governance handles stop decisions
+            # via check_low_signal() and check_diminishing_returns().
+            # When not active, use DegradationAwareness to adjust thresholds:
+            # - HEALTHY: use configured LLM_AGENT_ZERO_FINDING_STOP (4)
+            # - DEGRADED: require more evidence (6+ consecutive empty, 8+ tools)
+            # - No DegradationAwareness: original hardcoded behavior
             if not (
                 _ff_enabled("GOVERNANCE_V2", default=False)
                 and self.governance is not None
@@ -1592,18 +1989,48 @@ Based on these findings, what capabilities should the next phase use?
                     else:
                         empty_output_consecutive = 0
 
-                # Only stop on empty output if we've already run at least 4 tools
-                # This prevents stopping before critical tools (nuclei, web_scanner) run
-                if (
-                    empty_output_consecutive >= LLM_AGENT_ZERO_FINDING_STOP
-                    and len(tried_tools) >= 4
-                ):
-                    logger.info(
-                        "Agent: %d consecutive empty tools after %d runs — stopping",
-                        empty_output_consecutive,
-                        len(tried_tools),
-                    )
-                    break
+                # Adaptive thresholds based on system health
+                if self._degradation_awareness is not None:
+                    da_status = self._degradation_awareness.get_status()
+                    if da_status.level == DegradationLevel.DEGRADED:
+                        # Degraded mode: be more forgiving — don't stop early
+                        degraded_threshold = max(LLM_AGENT_ZERO_FINDING_STOP + 2, 6)
+                        degraded_min_tools = 8
+                        if (
+                            empty_output_consecutive >= degraded_threshold
+                            and len(tried_tools) >= degraded_min_tools
+                        ):
+                            logger.info(
+                                "Agent (degraded mode): %d consecutive empty tools "
+                                "after %d runs — stopping",
+                                empty_output_consecutive,
+                                len(tried_tools),
+                            )
+                            break
+                    else:
+                        # Healthy mode: use configured threshold
+                        if (
+                            empty_output_consecutive >= LLM_AGENT_ZERO_FINDING_STOP
+                            and len(tried_tools) >= 4
+                        ):
+                            logger.info(
+                                "Agent: %d consecutive empty tools after %d runs — stopping",
+                                empty_output_consecutive,
+                                len(tried_tools),
+                            )
+                            break
+                else:
+                    # No DegradationAwareness: original hardcoded behavior
+                    if (
+                        empty_output_consecutive >= LLM_AGENT_ZERO_FINDING_STOP
+                        and len(tried_tools) >= 4
+                    ):
+                        logger.info(
+                            "Agent: %d consecutive empty tools after %d runs — stopping",
+                            empty_output_consecutive,
+                            len(tried_tools),
+                        )
+                        break
 
             # FIX: build meaningful observation from actual output content
             observation = build_observation_summary(action.tool, result)

@@ -178,7 +178,13 @@ class MemoryRetriever:
             return []
 
     def _get_long_term(self, state: Any) -> dict:
-        """Long-term: target profile from target_profiles table."""
+        """Long-term: target profile from target_profiles table.
+
+        Cross-engagement learning: queries by target domain/hostname
+        across ALL engagements, not just the current engagement_id.
+        This allows the agent to learn from previous scans of the
+        same target even when they have different engagement IDs.
+        """
         engagement_id = getattr(state, "engagement_id", "")
         if not engagement_id or not self.connection_string:
             return {}
@@ -188,11 +194,88 @@ class MemoryRetriever:
             )
 
             repo = TargetProfileRepository()
-            profile = repo.get_by_engagement_id(engagement_id)  # type: ignore[attr-defined]
+
+            # Phase 1: Try strict engagement_id match (fast path)
+            profile = repo.get_by_engagement_id(engagement_id)
             if profile and hasattr(profile, "to_dict"):
-                return profile.to_dict()
+                profile_dict = profile.to_dict()
+                if profile_dict.get("total_scans", 0) > 0:
+                    return profile_dict
+
+            # Phase 2: Cross-engagement lookup by target domain/hostname
+            # Extract target domain from the engagement state and query
+            # across all org engagements for this target.
+            org_id = getattr(state, "org_id", None) or getattr(
+                getattr(state, "engagement_state", None), "org_id", None
+            )
+            target_domain = self._extract_target_domain(state, engagement_id)
+            if target_domain and org_id:
+                cross_profile = repo.get_profile(org_id, target_domain)
+                if cross_profile and cross_profile.get("total_scans", 0) > 0:
+                    cross_profile["_cross_engagement"] = True
+                    cross_profile["_source_engagement"] = engagement_id
+                    return cross_profile
+
+            # Phase 3: Fallback to engagement-specific profile
             if isinstance(profile, dict):
                 return profile
         except Exception as e:
             logger.debug("Long-term memory retrieval failed: %s", e)
         return {}
+
+    @staticmethod
+    def _extract_target_domain(state: Any, engagement_id: str) -> str | None:
+        """Extract the target domain from engagement context.
+
+        Resolution order:
+        1. recon_context.target_host or target_url (from EngagementState)
+        2. engagements table target_url field
+        3. Any target_* attribute on state
+
+        Returns:
+            Domain string (e.g. "example.com") or None.
+        """
+        import re
+        from urllib.parse import urlparse
+
+        def _parse_domain(url_or_host: str) -> str | None:
+            """Extract a clean domain from a URL or hostname."""
+            url_or_host = url_or_host.strip().lower()
+            # Strip protocol if present
+            if "://" in url_or_host:
+                parsed = urlparse(url_or_host)
+                hostname = parsed.hostname
+            else:
+                hostname = url_or_host.split("/")[0].split(":")[0]
+            if hostname and re.match(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$", hostname):
+                return hostname
+            return None
+
+        # Check recon_context on state
+        recon_ctx = getattr(state, "recon_context", None) or getattr(state, "_recon_context", None)
+        if recon_ctx:
+            for attr in ("target_host", "target_url", "host", "domain"):
+                val = getattr(recon_ctx, attr, None)
+                if val:
+                    domain = _parse_domain(str(val))
+                    if domain:
+                        return domain
+
+        # Query engagements table
+        if engagement_id:
+            try:
+                from database.connection import db_cursor
+                with db_cursor() as cursor:
+                    cursor.execute(
+                        "SELECT target_url FROM engagements WHERE id = %s",
+                        (engagement_id,),
+                    )
+                    row = cursor.fetchone()
+                    if row and row[0]:
+                        domain = _parse_domain(str(row[0]))
+                        if domain:
+                            return domain
+            except Exception:
+                pass
+
+        return None

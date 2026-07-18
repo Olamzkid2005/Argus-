@@ -319,6 +319,16 @@ app.conf.update(
             "task": "tasks.maintenance.cleanup_dlq",
             "schedule": 43200.0,  # every 12 hours
         },
+        # Check shadow-mode convergence every 5 minutes
+        "check-shadow-convergence": {
+            "task": "tasks.maintenance.check_shadow_convergence",
+            "schedule": 300.0,  # every 5 minutes
+        },
+        # Autonomous DLQ replay every 10 minutes
+        "replay-eligible-dlq-tasks": {
+            "task": "tasks.replay.replay_eligible_dlq_tasks",
+            "schedule": 600.0,  # every 10 minutes — matches ELIGIBILITY_MIN_AGE
+        },
     },
 )
 
@@ -485,8 +495,33 @@ class BaseTask(app.Task):  # type: ignore[name-defined]
             )
 
     def on_success(self, _retval, task_id, _args, _kwargs):
-        """Called when task succeeds"""
+        """Called when task succeeds.
+
+        If the task was previously replayed from the DLQ (meaning it has an
+        entry in the dead letter queue), clean it up so it won't be replayed
+        again. Uses get_task_by_id() O(1) hash lookup to avoid the expensive
+        scan_iter-based cleanup for tasks that were never in the DLQ.
+        """
+        # Always log success
         logger.info("Task %s succeeded", task_id)
+
+        # Clean up from DLQ if this was a replayed task
+        try:
+            from dead_letter_queue import get_dlq
+
+            dlq = get_dlq()
+            if dlq.get_task_by_id(task_id) is not None:
+                dlq.remove_from_dlq(task_id)
+                logger.info(
+                    "Task %s removed from DLQ after successful completion",
+                    task_id,
+                )
+        except Exception:
+            logger.debug(
+                "Failed to clean up task %s from DLQ on success (non-fatal)",
+                task_id,
+                exc_info=True,
+            )
 
     def __call__(self, *args, **kwargs):
         """Wrap task execution with shutdown checking and lazy migration"""
