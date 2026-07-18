@@ -30,6 +30,9 @@ from streaming import (
 from tools.scope_validator import ScopeValidator, validate_target_scope
 from utils.logging_utils import ScanLogger
 
+# In-flight cross-agent learning: thread-safe shared memory for signal exchange
+from agent.swarm_memory import SwarmMemory
+
 logger = logging.getLogger(__name__)
 
 TOOL_TIMEOUT_DEFAULT = 180
@@ -55,6 +58,7 @@ class SpecialistAgent(ABC):
         decision_repo: Any = None,
         auth_config: dict | None = None,
         bug_bounty_mode: bool = False,
+        swarm_memory: SwarmMemory | None = None,
     ):
         # IMPORTANT: deep copy — never share mutable state across agents
         self.recon_context = copy.deepcopy(recon_context) if recon_context else None
@@ -67,6 +71,8 @@ class SpecialistAgent(ABC):
         self.findings: list[dict] = []
         self._parser = None
         self.tools_attempted: set[str] = set()
+        # In-flight cross-agent learning: shared signal store
+        self.swarm_memory = swarm_memory
 
     @abstractmethod
     def should_activate(self) -> bool:
@@ -196,6 +202,137 @@ class SpecialistAgent(ABC):
             or (hasattr(rc, "has_api") and rc.has_api)
         )
 
+    # ── In-flight cross-agent learning ──────────────────────────
+
+    def _gather_peer_intel(self) -> dict:
+        """Gather signals from peer agents via shared SwarmMemory.
+
+        Returns dict with:
+            endpoints: newly discovered endpoints from peers
+            parameters: newly discovered parameters from peers
+            tech: tech stack signals from peers
+            auth: aggregated auth context from peers
+        """
+        if not self.swarm_memory:
+            return {"endpoints": [], "parameters": [], "tech": [], "auth": {}}
+        return {
+            "endpoints": self.swarm_memory.get_new_endpoints(self.DOMAIN),
+            "parameters": self.swarm_memory.get_new_parameters(self.DOMAIN),
+            "tech": self.swarm_memory.get_tech_signals(self.DOMAIN),
+            "auth": self.swarm_memory.get_auth_context(),
+        }
+
+    def _publish_findings_signals(self, findings: list[dict]) -> None:
+        """Extract and publish signals from tool findings to peer agents.
+
+        Published signals:
+        - New endpoints (from finding endpoint fields)
+        - Tech stack signals (from tech_stack or framework mentions)
+        - Auth context (from auth-related findings)
+        - Parameters (from parameter-bearing URLs)
+        """
+        if not self.swarm_memory or not findings:
+            return
+
+        from urllib.parse import urlparse
+
+        endpoints: set[str] = set()
+        params: set[str] = set()
+        tech_signals: list[tuple[str, str]] = []
+
+        for f in findings:
+            # Extract endpoint from finding
+            endpoint = f.get("endpoint", "") or f.get("url", "") or ""
+            if endpoint and isinstance(endpoint, str):
+                endpoint = endpoint.rstrip("/")
+                if endpoint.startswith("http"):
+                    endpoints.add(endpoint)
+                    # Extract parameters from URL
+                    parsed = urlparse(endpoint)
+                    if parsed.query:
+                        for param in parsed.query.split("&"):
+                            if "=" in param:
+                                params.add(param.split("=")[0])
+
+            # Extract evidence-based endpoints
+            evidence = f.get("evidence", {}) or {}
+            if isinstance(evidence, dict):
+                for val in evidence.values():
+                    if isinstance(val, str) and val.startswith("http"):
+                        endpoints.add(val.rstrip("/"))
+
+            # Extract tech signals from finding metadata
+            if "framework" in f:
+                tech_signals.append(("framework", str(f["framework"])))
+            if "tech_stack" in f:
+                for tech in (f["tech_stack"] if isinstance(f["tech_stack"], list) else [str(f["tech_stack"])]):
+                    if isinstance(tech, str):
+                        tech_signals.append(("library", tech))
+            finding_type = (f.get("type", "") or "").upper()
+            if finding_type in ("JWT", "OAUTH", "SESSION"):
+                self.swarm_memory.publish_auth_context(
+                    self.DOMAIN,
+                    {"auth_type": finding_type.lower()},
+                )
+
+            # Extract source_tool tech info
+            tool = f.get("source_tool", "") or ""
+            if tool in ("nuclei", "wpscan", "testssl", "jwt_tool"):
+                tech_signals.append(("tool_used", tool))
+
+        # Batch publish endpoints
+        if endpoints:
+            self.swarm_memory.publish_endpoints(self.DOMAIN, list(endpoints))
+        if params:
+            self.swarm_memory.publish_parameters(self.DOMAIN, list(params))
+        for category, value in tech_signals:
+            self.swarm_memory.publish_tech_signal(self.DOMAIN, category, value)
+
+    def _enrich_targets_with_peer_intel(
+        self, targets: list[str]
+    ) -> list[str]:
+        """Extend the target list with endpoints discovered by peer agents.
+
+        Merges peer-discovered endpoints with the agent's own targets,
+        respecting scope validation and SSRF prevention.
+        """
+        if not self.swarm_memory:
+            return targets
+        peer_intel = self._gather_peer_intel()
+        new_endpoints = peer_intel.get("endpoints", [])
+        if not new_endpoints:
+            return targets
+
+        # Deduplicate and merge
+        existing = {t.rstrip("/") for t in targets}
+        # Validate scope for peer-discovered endpoints
+        safe_new: list[str] = []
+        for ep in new_endpoints:
+            ep_clean = ep.rstrip("/")
+            if ep_clean in existing:
+                continue
+            from urllib.parse import urlparse
+            hostname = urlparse(ep_clean).hostname
+            if hostname and ScopeValidator.is_internal_address(hostname):
+                continue
+            if validate_target_scope(ep_clean, self.engagement_id):
+                safe_new.append(ep_clean)
+                existing.add(ep_clean)
+
+        if safe_new:
+            logger.info(
+                "%s: enriched with %d peer-discovered endpoint(s) from swarm memory",
+                self.DOMAIN,
+                len(safe_new),
+            )
+        return targets + safe_new
+
+    def _collect_peer_tech_context(self) -> str:
+        """Build a one-line tech summary from peer signals for logging."""
+        if not self.swarm_memory:
+            return ""
+        return self.swarm_memory.get_tech_summary()
+
     def _tag_findings(self, findings: list[dict]) -> list[dict]:
         """Tag all findings with this agent's domain for traceability."""
         for f in findings:
@@ -232,7 +369,16 @@ class IDORAgent(SpecialistAgent):
     def run(self) -> list[dict]:
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
         all_findings: list[dict] = []
+
+        # In-flight cross-agent learning: check what peers have discovered
         targets = self._get_targets()
+        targets = self._enrich_targets_with_peer_intel(targets)
+
+        # Log peer intel summary (enrich_targets_with_peer_intel already calls
+        # _gather_peer_intel internally)
+        tech_ctx = self._collect_peer_tech_context()
+        if tech_ctx:
+            logger.info("[IDOR] Peer tech context: %s", tech_ctx)
 
         for target in targets:
             # 1. Arjun parameter discovery on API endpoints
@@ -258,6 +404,8 @@ class IDORAgent(SpecialistAgent):
                     timeout=TOOL_TIMEOUT_DEFAULT,
                 )
                 all_findings.extend(arjun_findings)
+                # Publish arjun-discovered endpoints/params to peers
+                self._publish_findings_signals(arjun_findings)
                 # M-v5-04: Clean up temp file if not using sandbox (sandbox cleaned by atexit)
                 if not sandbox:
                     try:
@@ -277,6 +425,7 @@ class IDORAgent(SpecialistAgent):
                     timeout=120,
                 )
                 all_findings.extend(jwt_findings)
+                self._publish_findings_signals(jwt_findings)
             except Exception as e:
                 logger.warning("[IDOR] jwt_tool failed for %s: %s", target, e)
 
@@ -289,6 +438,14 @@ class IDORAgent(SpecialistAgent):
                     "web_scanner", [target], timeout=TOOL_TIMEOUT_LONG
                 )
                 all_findings.extend(web_findings)
+                self._publish_findings_signals(web_findings)
+
+        # Publish completion summary for peer agents
+        if self.swarm_memory:
+            summary = (
+                f"IDOR: {len(all_findings)} findings across {len(targets)} targets"
+            )
+            self.swarm_memory.publish_summary(self.DOMAIN, summary)
 
         logger.info("[IDOR] Total findings: %d", len(all_findings))
         return self._tag_findings(all_findings)
@@ -320,7 +477,10 @@ class AuthAgent(SpecialistAgent):
     def run(self) -> list[dict]:
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
         all_findings: list[dict] = []
+
+        # In-flight cross-agent learning: incorporate peer-discovered endpoints
         targets = self._get_targets()
+        targets = self._enrich_targets_with_peer_intel(targets)
         auth_endpoints = (
             self.recon_context.auth_endpoints
             if self.recon_context and hasattr(self.recon_context, "auth_endpoints")
@@ -345,6 +505,7 @@ class AuthAgent(SpecialistAgent):
                     timeout=120,
                 )
                 all_findings.extend(jwt_findings)
+                self._publish_findings_signals(jwt_findings)
             except Exception as e:
                 logger.warning("[Auth] jwt_tool failed for %s: %s", target, e)
 
@@ -376,6 +537,7 @@ class AuthAgent(SpecialistAgent):
                     timeout=TOOL_TIMEOUT_LONG,
                 )
                 all_findings.extend(nuclei_findings)
+                self._publish_findings_signals(nuclei_findings)
             except Exception as e:
                 logger.warning("[Auth] nuclei failed for %s: %s", target, e)
 
@@ -388,6 +550,19 @@ class AuthAgent(SpecialistAgent):
                     "web_scanner", [target], timeout=TOOL_TIMEOUT_LONG
                 )
                 all_findings.extend(web_findings)
+                self._publish_findings_signals(web_findings)
+
+        # Publish auth context to peers
+        if self.swarm_memory:
+            self.swarm_memory.publish_auth_context(
+                self.DOMAIN, {"auth_type": "jwt" if any(
+                    f.get("type", "") == "JWT" for f in all_findings
+                ) else "session"}
+            )
+            summary = (
+                f"Auth: {len(all_findings)} findings across {len(scan_targets)} targets"
+            )
+            self.swarm_memory.publish_summary(self.DOMAIN, summary)
 
         logger.info("[Auth] Total findings: %d", len(all_findings))
         return self._tag_findings(all_findings)
@@ -430,7 +605,16 @@ class APIAgent(SpecialistAgent):
     def run(self) -> list[dict]:
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
         all_findings: list[dict] = []
+
+        # In-flight cross-agent learning: incorporate peer-discovered endpoints
         targets = self._get_targets()
+        targets = self._enrich_targets_with_peer_intel(targets)
+
+        # Log peer tech context summary (enrich_targets_with_peer_intel already
+        # calls _gather_peer_intel internally for endpoint enrichment)
+        tech_ctx = self._collect_peer_tech_context()
+        if tech_ctx:
+            logger.info("[API] Peer tech context: %s", tech_ctx)
         api_endpoints = (
             self.recon_context.api_endpoints
             if self.recon_context and hasattr(self.recon_context, "api_endpoints")
@@ -469,6 +653,7 @@ class APIAgent(SpecialistAgent):
                     timeout=TOOL_TIMEOUT_DEFAULT,
                 )
                 all_findings.extend(arjun_findings)
+                self._publish_findings_signals(arjun_findings)
                 # M-v5-04: Clean up temp file if not using sandbox
                 if not sandbox:
                     try:
@@ -507,6 +692,7 @@ class APIAgent(SpecialistAgent):
                     timeout=TOOL_TIMEOUT_LONG,
                 )
                 all_findings.extend(nuclei_findings)
+                self._publish_findings_signals(nuclei_findings)
             except Exception as e:
                 logger.warning("[API] nuclei failed for %s: %s", target, e)
 
@@ -519,6 +705,7 @@ class APIAgent(SpecialistAgent):
                     timeout=TOOL_TIMEOUT_LONG,
                 )
                 all_findings.extend(dalfox_findings)
+                self._publish_findings_signals(dalfox_findings)
             except Exception as e:
                 logger.warning("[API] dalfox failed for %s: %s", target, e)
 
@@ -560,6 +747,7 @@ class APIAgent(SpecialistAgent):
                     timeout=TOOL_TIMEOUT_LONG,
                 )
                 all_findings.extend(sqlmap_findings)
+                self._publish_findings_signals(sqlmap_findings)
                 # M-v5-04: Clean up temp file if not using sandbox
                 if not sandbox:
                     try:
@@ -569,6 +757,13 @@ class APIAgent(SpecialistAgent):
                         logger.debug("Failed to clean up temp file: %s", sqlmap_out)
             except Exception as e:
                 logger.warning("[API] sqlmap failed for %s: %s", target, e)
+
+        # Publish completion summary for peer agents
+        if self.swarm_memory:
+            summary = (
+                f"API: {len(all_findings)} findings across {len(scan_targets)} targets"
+            )
+            self.swarm_memory.publish_summary(self.DOMAIN, summary)
 
         logger.info("[API] Total findings: %d", len(all_findings))
         return self._tag_findings(all_findings)
@@ -595,6 +790,8 @@ class SwarmOrchestrator:
         bug_bounty_mode: bool = False,
     ):
         self.bug_bounty_mode = bug_bounty_mode
+        # In-flight cross-agent learning: shared memory for signal exchange
+        self.swarm_memory = SwarmMemory()
         # Deep copy happens inside each agent's __init__
         self.agents = [
             cls(  # type: ignore[abstract]
@@ -605,6 +802,7 @@ class SwarmOrchestrator:
                 decision_repo=decision_repo,
                 auth_config=auth_config,
                 bug_bounty_mode=self.bug_bounty_mode,
+                swarm_memory=self.swarm_memory,
             )
             for cls in self.SPECIALIST_CLASSES
         ]
