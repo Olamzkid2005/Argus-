@@ -54,7 +54,7 @@ class SwarmMemory:
 
         Thread-safe. Deduplicated by endpoint string across all agents.
         """
-        if not endpoint or not isinstance(endpoint, str):
+        if not endpoint or not isinstance(endpoint, str) or not endpoint.strip():
             return
         endpoint = endpoint.rstrip("/")
         with self._lock:
@@ -74,7 +74,7 @@ class SwarmMemory:
         """Get all endpoints discovered by agents OTHER than the consumer.
 
         Returns:
-            List of endpoint strings (newest first by insertion order).
+            List of endpoint strings (sorted alphabetically).
         """
         with self._lock:
             others = {
@@ -191,7 +191,7 @@ class SwarmMemory:
 
     def publish_parameter(self, source_agent: str, param: str) -> None:
         """Publish a newly discovered parameter name."""
-        if not param or not isinstance(param, str):
+        if not param or not isinstance(param, str) or not param.strip():
             return
         with self._lock:
             if source_agent not in self._discovered_parameters:
@@ -243,6 +243,19 @@ class SwarmMemory:
         """Get list of agent domains that have published summaries."""
         with self._lock:
             return list(self._agent_summaries.keys())
+
+    def get_endpoints_by_agent(self, consuming_agent: str) -> dict[str, list[str]]:
+        """Get all endpoints grouped by discovering agent, excluding the consumer.
+
+        Returns:
+            Dict mapping agent_domain -> list of endpoint strings.
+        """
+        with self._lock:
+            return {
+                agent: sorted(eps)
+                for agent, eps in self._discovered_endpoints.items()
+                if agent != consuming_agent
+            }
 
     # ── Snapshot (for orchestrator) ─────────────────────────────────
 

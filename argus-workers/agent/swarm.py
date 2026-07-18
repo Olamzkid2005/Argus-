@@ -226,7 +226,7 @@ class SpecialistAgent(ABC):
         """Extract and publish signals from tool findings to peer agents.
 
         Published signals:
-        - New endpoints (from finding endpoint fields)
+        - New endpoints (from finding endpoint, url, and evidence fields)
         - Tech stack signals (from tech_stack or framework mentions)
         - Auth context (from auth-related findings)
         - Parameters (from parameter-bearing URLs)
@@ -239,6 +239,20 @@ class SpecialistAgent(ABC):
         endpoints: set[str] = set()
         params: set[str] = set()
         tech_signals: list[tuple[str, str]] = []
+
+        def _extract_urls_from_value(val: object) -> list[str]:
+            """Recursively extract http(s) URLs from nested dicts, lists, or strings."""
+            results: list[str] = []
+            if isinstance(val, str):
+                if val.startswith("http"):
+                    results.append(val.rstrip("/"))
+            elif isinstance(val, dict):
+                for v in val.values():
+                    results.extend(_extract_urls_from_value(v))
+            elif isinstance(val, list):
+                for item in val:
+                    results.extend(_extract_urls_from_value(item))
+            return results
 
         for f in findings:
             # Extract endpoint from finding
@@ -254,12 +268,10 @@ class SpecialistAgent(ABC):
                             if "=" in param:
                                 params.add(param.split("=")[0])
 
-            # Extract evidence-based endpoints
+            # Recursively extract URLs from evidence (handles nested dicts/lists)
             evidence = f.get("evidence", {}) or {}
-            if isinstance(evidence, dict):
-                for val in evidence.values():
-                    if isinstance(val, str) and val.startswith("http"):
-                        endpoints.add(val.rstrip("/"))
+            for evidence_url in _extract_urls_from_value(evidence):
+                endpoints.add(evidence_url)
 
             # Extract tech signals from finding metadata
             if "framework" in f:
@@ -304,6 +316,8 @@ class SpecialistAgent(ABC):
             return targets
 
         # Deduplicate and merge
+        from urllib.parse import urlparse
+
         existing = {t.rstrip("/") for t in targets}
         # Validate scope for peer-discovered endpoints
         safe_new: list[str] = []
@@ -311,7 +325,6 @@ class SpecialistAgent(ABC):
             ep_clean = ep.rstrip("/")
             if ep_clean in existing:
                 continue
-            from urllib.parse import urlparse
             hostname = urlparse(ep_clean).hostname
             if hostname and ScopeValidator.is_internal_address(hostname):
                 continue
@@ -332,6 +345,33 @@ class SpecialistAgent(ABC):
         if not self.swarm_memory:
             return ""
         return self.swarm_memory.get_tech_summary()
+
+    def _get_new_peer_targets(self, processed: set[str]) -> list[str]:
+        """Get peer-discovered endpoints that haven't been processed yet.
+
+        Validates scope and filters out internal/SSRF targets.
+
+        Args:
+            processed: Set of endpoint strings already processed by this agent.
+
+        Returns:
+            List of new, scope-valid endpoint URLs.
+        """
+        if not self.swarm_memory:
+            return []
+        from urllib.parse import urlparse
+
+        peer_eps = self.swarm_memory.get_new_endpoints(self.DOMAIN)
+        new_targets: list[str] = []
+        for ep in peer_eps:
+            if ep in processed:
+                continue
+            hostname = urlparse(ep).hostname
+            if hostname and ScopeValidator.is_internal_address(hostname):
+                continue
+            if validate_target_scope(ep, self.engagement_id):
+                new_targets.append(ep)
+        return new_targets
 
     def _tag_findings(self, findings: list[dict]) -> list[dict]:
         """Tag all findings with this agent's domain for traceability."""
@@ -370,12 +410,12 @@ class IDORAgent(SpecialistAgent):
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
         all_findings: list[dict] = []
 
-        # In-flight cross-agent learning: check what peers have discovered
+        # ── Phase 1: Initial targets ──
         targets = self._get_targets()
         targets = self._enrich_targets_with_peer_intel(targets)
+        processed_targets: set[str] = set(targets) if targets else set()
 
-        # Log peer intel summary (enrich_targets_with_peer_intel already calls
-        # _gather_peer_intel internally)
+        # Log peer intel summary
         tech_ctx = self._collect_peer_tech_context()
         if tech_ctx:
             logger.info("[IDOR] Peer tech context: %s", tech_ctx)
@@ -404,7 +444,6 @@ class IDORAgent(SpecialistAgent):
                     timeout=TOOL_TIMEOUT_DEFAULT,
                 )
                 all_findings.extend(arjun_findings)
-                # Publish arjun-discovered endpoints/params to peers
                 self._publish_findings_signals(arjun_findings)
                 # M-v5-04: Clean up temp file if not using sandbox (sandbox cleaned by atexit)
                 if not sandbox:
@@ -429,7 +468,7 @@ class IDORAgent(SpecialistAgent):
             except Exception as e:
                 logger.warning("[IDOR] jwt_tool failed for %s: %s", target, e)
 
-        # 3. web_scanner IDOR-focused checks on all targets
+        # ── Phase 2: web_scanner on initial targets ──
         if targets:
             self.tools_attempted.add("web_scanner")
             logger.info("[IDOR] Running web_scanner on %d targets", len(targets))
@@ -440,10 +479,26 @@ class IDORAgent(SpecialistAgent):
                 all_findings.extend(web_findings)
                 self._publish_findings_signals(web_findings)
 
+        # ── Phase 3: Mid-run peer intel — process peer-discovered endpoints ──
+        new_peer_targets = self._get_new_peer_targets(processed_targets)
+        if new_peer_targets:
+            logger.info(
+                "[IDOR] Processing %d mid-run peer-discovered endpoint(s)",
+                len(new_peer_targets),
+            )
+            self.tools_attempted.add("web_scanner")
+            for target in new_peer_targets:
+                processed_targets.add(target)
+                web_findings = self._run_tool(
+                    "web_scanner", [target], timeout=TOOL_TIMEOUT_LONG
+                )
+                all_findings.extend(web_findings)
+                self._publish_findings_signals(web_findings)
+
         # Publish completion summary for peer agents
         if self.swarm_memory:
             summary = (
-                f"IDOR: {len(all_findings)} findings across {len(targets)} targets"
+                f"IDOR: {len(all_findings)} findings across {len(processed_targets)} targets"
             )
             self.swarm_memory.publish_summary(self.DOMAIN, summary)
 
@@ -478,7 +533,7 @@ class AuthAgent(SpecialistAgent):
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
         all_findings: list[dict] = []
 
-        # In-flight cross-agent learning: incorporate peer-discovered endpoints
+        # ── Phase 1: Initial targets ──
         targets = self._get_targets()
         targets = self._enrich_targets_with_peer_intel(targets)
         auth_endpoints = (
@@ -494,6 +549,13 @@ class AuthAgent(SpecialistAgent):
             and hasattr(self.recon_context, "target_url")
         ):
             scan_targets = [self.recon_context.target_url]
+
+        processed_targets: set[str] = set(scan_targets) if scan_targets else set()
+
+        # Log peer tech context
+        tech_ctx = self._collect_peer_tech_context()
+        if tech_ctx:
+            logger.info("[Auth] Peer tech context: %s", tech_ctx)
 
         for target in scan_targets:
             # 1. jwt_tool checks on auth endpoints
@@ -541,11 +603,27 @@ class AuthAgent(SpecialistAgent):
             except Exception as e:
                 logger.warning("[Auth] nuclei failed for %s: %s", target, e)
 
-        # 3. Password reset / login flow testing via web_scanner
+        # ── Phase 2: web_scanner on initial targets ──
         if scan_targets:
             self.tools_attempted.add("web_scanner")
             logger.info("[Auth] Running web_scanner on %d targets", len(scan_targets))
             for target in scan_targets:
+                web_findings = self._run_tool(
+                    "web_scanner", [target], timeout=TOOL_TIMEOUT_LONG
+                )
+                all_findings.extend(web_findings)
+                self._publish_findings_signals(web_findings)
+
+        # ── Phase 3: Mid-run peer intel — process peer-discovered endpoints ──
+        new_peer_targets = self._get_new_peer_targets(processed_targets)
+        if new_peer_targets:
+            logger.info(
+                "[Auth] Processing %d mid-run peer-discovered endpoint(s)",
+                len(new_peer_targets),
+            )
+            self.tools_attempted.add("web_scanner")
+            for target in new_peer_targets:
+                processed_targets.add(target)
                 web_findings = self._run_tool(
                     "web_scanner", [target], timeout=TOOL_TIMEOUT_LONG
                 )
@@ -560,7 +638,7 @@ class AuthAgent(SpecialistAgent):
                 ) else "session"}
             )
             summary = (
-                f"Auth: {len(all_findings)} findings across {len(scan_targets)} targets"
+                f"Auth: {len(all_findings)} findings across {len(processed_targets)} targets"
             )
             self.swarm_memory.publish_summary(self.DOMAIN, summary)
 
@@ -606,12 +684,11 @@ class APIAgent(SpecialistAgent):
         emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
         all_findings: list[dict] = []
 
-        # In-flight cross-agent learning: incorporate peer-discovered endpoints
+        # ── Phase 1: Initial targets ──
         targets = self._get_targets()
         targets = self._enrich_targets_with_peer_intel(targets)
 
-        # Log peer tech context summary (enrich_targets_with_peer_intel already
-        # calls _gather_peer_intel internally for endpoint enrichment)
+        # Log peer tech context summary
         tech_ctx = self._collect_peer_tech_context()
         if tech_ctx:
             logger.info("[API] Peer tech context: %s", tech_ctx)
@@ -628,6 +705,8 @@ class APIAgent(SpecialistAgent):
             and hasattr(self.recon_context, "target_url")
         ):
             scan_targets = [self.recon_context.target_url]
+
+        processed_targets: set[str] = set(scan_targets) if scan_targets else set()
 
         for target in scan_targets:
             # 1. arjun parameter discovery on API paths
@@ -758,10 +837,77 @@ class APIAgent(SpecialistAgent):
             except Exception as e:
                 logger.warning("[API] sqlmap failed for %s: %s", target, e)
 
+        # ── Phase 2: Mid-run peer intel — process peer-discovered endpoints ──
+        new_peer_targets = self._get_new_peer_targets(processed_targets)
+        if new_peer_targets:
+            logger.info(
+                "[API] Processing %d mid-run peer-discovered endpoint(s)",
+                len(new_peer_targets),
+            )
+            for target in new_peer_targets:
+                processed_targets.add(target)
+
+                # Run remaining tools (nuclei, dalfox, sqlmap) against new target
+                # Re-validate target before tool runs
+                from urllib.parse import urlparse
+                hostname = urlparse(target).hostname or target.split("/")[0].split(":")[0]
+                if hostname and ScopeValidator.is_internal_address(hostname):
+                    continue
+                if not validate_target_scope(target, self.engagement_id):
+                    continue
+
+                # Nuclei
+                try:
+                    from orchestrator_pkg.utils import get_nuclei_templates_path
+                    templates_path = get_nuclei_templates_path()
+                    nuclei_cmd = ["-u", target, "-jsonl", "-silent", "-severity", "medium,high,critical"]
+                    if templates_path.exists():
+                        nuclei_cmd.extend(["-t", str(templates_path)])
+                    nuclei_cmd.extend(["-tags", "api,graphql,swagger,openapi,rest,injection,idor,ssrf"])
+                    nuclei_findings = self._run_tool("nuclei", nuclei_cmd, timeout=TOOL_TIMEOUT_LONG)
+                    all_findings.extend(nuclei_findings)
+                    self._publish_findings_signals(nuclei_findings)
+                except Exception as e:
+                    logger.warning("[API] nuclei on peer target %s failed: %s", target, e)
+
+                # Dalfox
+                try:
+                    dalfox_findings = self._run_tool("dalfox", ["url", target, "--json"], timeout=TOOL_TIMEOUT_LONG)
+                    all_findings.extend(dalfox_findings)
+                    self._publish_findings_signals(dalfox_findings)
+                except Exception as e:
+                    logger.warning("[API] dalfox on peer target %s failed: %s", target, e)
+
+                # Sqlmap
+                try:
+                    sandbox = (
+                        self.tool_runner.sandbox_dir
+                        if hasattr(self.tool_runner, "sandbox_dir") and self.tool_runner.sandbox_dir
+                        else None
+                    )
+                    if sandbox:
+                        sqlmap_out = str(sandbox / "tmp" / f"sqlmap_api_peer_{self.engagement_id}.json")
+                    else:
+                        sqlmap_out = os.path.join(tempfile.gettempdir(), f"sqlmap_api_peer_{self.engagement_id}.json")
+                    sqlmap_findings = self._run_tool(
+                        "sqlmap", ["-u", target, "--batch", "--json-output", sqlmap_out],
+                        timeout=TOOL_TIMEOUT_LONG,
+                    )
+                    all_findings.extend(sqlmap_findings)
+                    self._publish_findings_signals(sqlmap_findings)
+                    if not sandbox:
+                        try:
+                            if os.path.exists(sqlmap_out):
+                                os.remove(sqlmap_out)
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.warning("[API] sqlmap on peer target %s failed: %s", target, e)
+
         # Publish completion summary for peer agents
         if self.swarm_memory:
             summary = (
-                f"API: {len(all_findings)} findings across {len(scan_targets)} targets"
+                f"API: {len(all_findings)} findings across {len(processed_targets)} targets"
             )
             self.swarm_memory.publish_summary(self.DOMAIN, summary)
 
