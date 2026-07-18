@@ -10,7 +10,7 @@ import logging
 from collections.abc import Generator
 from typing import Any
 
-from agent.agent_prompts import REPORT_SYSTEM_PROMPT, build_report_prompt
+from agent.agent_prompts import REPORT_SYSTEM_PROMPT, _sanitize_for_llm, build_report_prompt
 from config.constants import LLM_AGENT_MAX_TOKENS_REPORT
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,11 @@ class LLMReportGenerator:
                 if hasattr(recon_context, "to_llm_summary")
                 else str(recon_context)
             )
+
+        # Sanitize user-controlled data before LLM prompt construction.
+        # build_report_prompt() also sanitizes via _sanitize_for_llm, but we
+        # apply it at the call site too for defense-in-depth.
+        recon_summary = _sanitize_for_llm(recon_summary) if recon_summary else ""
 
         prompt = build_report_prompt(
             synthesis, scored_findings, engagement, recon_summary
@@ -71,6 +76,11 @@ class LLMReportGenerator:
                 if hasattr(recon_context, "to_llm_summary")
                 else str(recon_context)
             )
+
+        # Sanitize user-controlled data before LLM prompt construction.
+        # build_report_prompt() also sanitizes via _sanitize_for_llm, but we
+        # apply it at the call site too for defense-in-depth.
+        recon_summary = _sanitize_for_llm(recon_summary) if recon_summary else ""
 
         prompt = build_report_prompt(
             synthesis, scored_findings, engagement, recon_summary
