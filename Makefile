@@ -105,6 +105,9 @@ test-v5: ## Run V5 CLI tests (689+ tests)
 test-v5-ci: ## Run V5 CLI tests with JUnit output
 	cd Argus-Tui/packages/opencode && bun test test/argus/ --timeout 30000 --reporter=junit
 
+validate-scope: ## Run scope threading smoke test (standalone, no DB needed)
+	cd argus-workers && test -f venv/bin/activate || { echo "venv not found - run 'make install-backend' first"; exit 1; } && . venv/bin/activate && python ../scripts/livefire/validate-scope-threading.py
+
 assess-v5: ## Run V5 assessment against a target (usage: make assess-v5 TARGET=https://example.com)
 	cd Argus-Tui/packages/opencode && bun run src/argus/index.ts assess $(TARGET)
 

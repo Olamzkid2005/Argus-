@@ -21,7 +21,6 @@ except ImportError:
 # dependencies (tool_runner, llm_client, mcp). We mock them out to keep
 # the test fast and focused on the scope extraction logic.
 _BASE_PATCHES = [
-    "os.getenv",
     "orchestrator_pkg.orchestrator.ToolRunner",
     "orchestrator_pkg.orchestrator.LLMClient",
     "orchestrator_pkg.orchestrator.get_mcp_server",
@@ -35,6 +34,9 @@ _BASE_PATCHES = [
     "orchestrator_pkg.orchestrator.FindingRepository",
     "orchestrator_pkg.orchestrator.RateLimitRepository",
     "orchestrator_pkg.orchestrator.ScanLogger",
+    "orchestrator_pkg.orchestrator.emit_thinking",
+    "orchestrator_pkg.custom_rules.CustomRulesService",
+    "orchestrator_pkg.orchestrator.load_recon_context",
 ]
 
 # Base job dicts shared across tests (scope key is overridden per test)
@@ -71,16 +73,24 @@ class TestOrchestratorScope:
     @pytest.fixture(autouse=True)
     def _patch_orchestrator_deps(self):
         """Patch Orchestrator constructor dependencies so we can instantiate it."""
-        patches = []
+        def _getenv_side_effect(key, default=None):
+            if key == "DATABASE_URL":
+                return "postgresql://test:test@localhost:5432/test"
+            return os.environ.get(key, default)
+
+        patchers = []
         for target in _BASE_PATCHES:
-            patcher = patch(target)
-            mock = patcher.start()
-            patches.append((target, mock))
-        # Ensure DATABASE_URL is set to avoid early exit
-        os.environ["DATABASE_URL"] = "postgresql://test:test@localhost:5432/test"
+            p = patch(target)
+            p.start()
+            patchers.append(p)
+        # Patch os.getenv with side_effect so it returns real values for known keys
+        # instead of MagicMock (which causes TCP connection timeouts elsewhere).
+        p_env = patch("os.getenv", side_effect=_getenv_side_effect)
+        p_env.start()
+        patchers.append(p_env)
         yield
-        for _, patcher in patches:
-            patcher.stop()
+        for p in reversed(patchers):
+            p.stop()
 
     @pytest.fixture
     def orchestrator(self):

@@ -307,7 +307,7 @@ class Orchestrator:
 
         # Thread scope from job payload onto self for execute_scan_tools()
         _scope = job.get("scope")
-        if _scope and isinstance(_scope, dict):
+        if _scope is not None and isinstance(_scope, dict):
             self.scope_mode = _scope.get("mode", "allowlist")
             self.allowed_targets = _scope.get("allowed_targets")
             self.blocked_targets = _scope.get("blocked_targets")
@@ -614,7 +614,7 @@ class Orchestrator:
 
         # Thread scope from job payload onto self for execute_scan_tools()
         _scope = job.get("scope")
-        if _scope and isinstance(_scope, dict):
+        if _scope is not None and isinstance(_scope, dict):
             self.scope_mode = _scope.get("mode", "allowlist")
             self.allowed_targets = _scope.get("allowed_targets")
             self.blocked_targets = _scope.get("blocked_targets")

@@ -308,6 +308,9 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt -q
 
+      - name: Run scope threading smoke test
+        run: python ../scripts/livefire/validate-scope-threading.py
+
       - name: Run existing test suite (excluding DB/Redis/E2E)
         run: |
           python -m pytest tests/ -m "not requires_db and not requires_redis and not e2e" -v --timeout=120 --tb=long --junit-xml=python-test-results.xml 2>&1 | tee /tmp/pytest-output.txt; exit_code=${PIPESTATUS[0]}
