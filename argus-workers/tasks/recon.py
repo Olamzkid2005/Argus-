@@ -31,6 +31,7 @@ def run_recon(
     prev_engagement_id: str | None = None,
     auth_config: dict | None = None,
     dual_auth_config: dict | None = None,
+    scope: dict | None = None,
 ):
     """
     Execute reconnaissance phase for an engagement
@@ -69,6 +70,8 @@ def run_recon(
         job_extra["auth_config"] = auth_config
     if dual_auth_config is not None:
         job_extra["dual_auth_config"] = dual_auth_config
+    if scope is not None:
+        job_extra["scope"] = scope
 
     with task_context(
         self,
@@ -148,6 +151,13 @@ def run_recon(
         # Dispatch scan AFTER saving context. If dispatch fails the
         # engagement transitions directly to "failed" — no orphaned state.
         try:
+            _scan_kwargs = {}
+            if ctx.job.get("auth_config"):
+                _scan_kwargs["auth_config"] = ctx.job["auth_config"]
+            if ctx.job.get("dual_auth_config"):
+                _scan_kwargs["dual_auth_config"] = ctx.job["dual_auth_config"]
+            if ctx.job.get("scope"):
+                _scan_kwargs["scope"] = ctx.job["scope"]
             scan_task = app.send_task(
                 "tasks.scan.run_scan",
                 args=[
@@ -160,12 +170,7 @@ def run_recon(
                     aggressiveness,
                     bug_bounty_mode,
                 ],
-                kwargs={
-                    "auth_config": ctx.job.get("auth_config"),
-                    "dual_auth_config": ctx.job.get("dual_auth_config"),
-                }
-                if ctx.job.get("auth_config") or ctx.job.get("dual_auth_config")
-                else {},
+                kwargs=_scan_kwargs,
             )
             slog.dispatch("scan", task_id=scan_task.id)
         except Exception as e:
@@ -348,10 +353,13 @@ def expand_recon(
             _scan_kwargs = {}
             _auth = opts.get("auth_config") or ctx.job.get("auth_config")
             _dual = opts.get("dual_auth_config") or ctx.job.get("dual_auth_config")
+            _scope = ctx.job.get("scope")
             if _auth:
                 _scan_kwargs["auth_config"] = _auth
             if _dual:
                 _scan_kwargs["dual_auth_config"] = _dual
+            if _scope:
+                _scan_kwargs["scope"] = _scope
             scan_task = app.send_task(
                 "tasks.scan.run_scan",
                 args=[

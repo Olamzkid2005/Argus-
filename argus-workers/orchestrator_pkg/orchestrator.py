@@ -29,6 +29,7 @@ from parsers.parser import Parser
 from pipeline_router import execute_recon_pipeline, execute_scan_pipeline
 from streaming import (
     StreamingFindingEmitter,
+    emit_scan_metrics,
     emit_thinking,
     emit_tool_complete,
     emit_tool_start,
@@ -303,6 +304,25 @@ class Orchestrator:
             job_type="recon", engagement_id=self.engagement_id, target=target
         )
         logger.debug("Recon starting for engagement %s", self.engagement_id)
+
+        # Thread scope from job payload onto self for execute_scan_tools()
+        _scope = job.get("scope")
+        if _scope and isinstance(_scope, dict):
+            self.scope_mode = _scope.get("mode", "allowlist")
+            self.allowed_targets = _scope.get("allowed_targets")
+            self.blocked_targets = _scope.get("blocked_targets")
+            logger.info(
+                "Scope loaded from job: mode=%s, allowed=%s, blocked=%s",
+                self.scope_mode, self.allowed_targets, self.blocked_targets,
+            )
+            # Persist scope to engagement record so it survives worker restarts
+            # between recon and scan phases (or across secondary task paths like
+            # deep_scan / auth_focused_scan).
+            try:
+                from orchestrator_pkg.engagement import EngagementService
+                EngagementService.store_scope_config(self.engagement_id, _scope)
+            except Exception:
+                logger.debug("Failed to persist scope config (non-fatal)")
 
         aggressiveness = job.get("aggressiveness", DEFAULT_AGGRESSIVENESS)
         cache_mode = job.get("cache_mode")
@@ -592,6 +612,38 @@ class Orchestrator:
         )  # None = not provided; {} = explicitly empty
         bug_bounty_mode = job.get("bug_bounty_mode", False)
 
+        # Thread scope from job payload onto self for execute_scan_tools()
+        _scope = job.get("scope")
+        if _scope and isinstance(_scope, dict):
+            self.scope_mode = _scope.get("mode", "allowlist")
+            self.allowed_targets = _scope.get("allowed_targets")
+            self.blocked_targets = _scope.get("blocked_targets")
+            logger.info(
+                "Scope loaded from job: mode=%s, allowed=%s, blocked=%s",
+                self.scope_mode, self.allowed_targets, self.blocked_targets,
+            )
+        else:
+            # Fallback: try loading scope config from engagement record for
+            # secondary task paths (deep_scan, auth_focused_scan) or after
+            # worker restart between phases. The scope was persisted by
+            # run_recon() via store_scope_config(). Prevents silent
+            # allowlist-with-no-rules default that would block ALL targets.
+            try:
+                from orchestrator_pkg.engagement import EngagementService
+                _scope_config = EngagementService.load_scope_config(
+                    self.engagement_id
+                )
+                if _scope_config and isinstance(_scope_config, dict):
+                    self.scope_mode = _scope_config.get("mode", "allowlist")
+                    self.allowed_targets = _scope_config.get("allowed_targets")
+                    self.blocked_targets = _scope_config.get("blocked_targets")
+                    logger.info(
+                        "Scope loaded from engagement record: mode=%s, allowed=%s, blocked=%s",
+                        self.scope_mode, self.allowed_targets, self.blocked_targets,
+                    )
+            except Exception:
+                pass
+
         # Respect user-configured scan mode and agent mode.
         # Priority: explicit scan_mode > agent_mode flag > default (agent-first with fallback)
         scan_mode = job.get("scan_mode", "agent")
@@ -716,10 +768,22 @@ class Orchestrator:
         EngagementState (when available) OR from the scan result metadata
         returned by run_scan_with_agent to prevent the safety net from
         duplicating findings the agent already produced.
+
+        Metrics: On completion, emits a structured SCAN_METRICS event and
+        INFO log line with fallback rates, per-target outcomes, and tool counts.
         """
         slog = ScanLogger("orchestrator", engagement_id=self.engagement_id)
         slog.phase_header("SCAN WITH FALLBACK", targets=f"{len(targets)} target(s)")
         emit_thinking(self.engagement_id, "Running agent-driven scan...")
+
+        # Metrics counters
+        total_targets = len(targets)
+        agent_success_count = 0
+        agent_full_fallback_count = 0  # DeterministicRuntime fallback
+        agent_tried_tools_count = 0
+        safety_net_findings = 0
+        agent_findings_count = 0
+
         try:
             findings = self.run_scan_with_agent(
                 targets,
@@ -730,6 +794,8 @@ class Orchestrator:
                 bug_bounty_mode=bug_bounty_mode,
                 budget=budget,
             )
+            agent_success_count = total_targets
+            agent_findings_count = len(findings)
             from feature_flags import is_enabled as _ff_enabled
 
             agent_tried: set[str] = set()
@@ -743,6 +809,7 @@ class Orchestrator:
             # tools the agent already ran even when ENGAGEMENT_STATE is off.
             if hasattr(self, "_agent_tried_tools") and self._agent_tried_tools:
                 agent_tried = agent_tried | self._agent_tried_tools
+            agent_tried_tools_count = len(agent_tried)
             logger.info(
                 "Agent scan complete — safety net skipping agent tools: %s", agent_tried
             )
@@ -759,6 +826,7 @@ class Orchestrator:
                 recon_context=recon_context,
                 cache_mode=cache_mode,
             )
+            safety_net_findings = len(deterministic_findings)
             # Normalize deterministic findings before extending — they are raw
             # dicts from execute_scan_pipeline, not normalized via _normalize_finding().
             # Without this, downstream persistence/storage receives findings with
@@ -770,6 +838,19 @@ class Orchestrator:
             slog.tool_complete(
                 "scan_with_fallback", success=True, findings=len(findings)
             )
+
+            # Emit scan metrics
+            _emit_scan_metrics(
+                engagement_id=self.engagement_id,
+                total_targets=total_targets,
+                agent_success=agent_success_count,
+                agent_full_fallback=agent_full_fallback_count,
+                agent_findings=agent_findings_count,
+                safety_net_findings=safety_net_findings,
+                total_findings=len(findings),
+                agent_tried_tools=agent_tried_tools_count,
+            )
+
             return findings
         except Exception as agent_err:
             slog.warning(
@@ -777,6 +858,7 @@ class Orchestrator:
                 self.engagement_id,
                 agent_err,
             )
+            agent_full_fallback_count = total_targets
             # Full deterministic fallback via DeterministicRuntime
             from runtime import DeterministicRuntime
 
@@ -802,6 +884,19 @@ class Orchestrator:
             slog.tool_complete(
                 "deterministic_fallback", success=True, findings=len(result)
             )
+
+            # Emit scan metrics even on fallback
+            _emit_scan_metrics(
+                engagement_id=self.engagement_id,
+                total_targets=total_targets,
+                agent_success=0,
+                agent_full_fallback=agent_full_fallback_count,
+                agent_findings=0,
+                safety_net_findings=0,
+                total_findings=len(result),
+                agent_tried_tools=0,
+            )
+
             return result
 
     def _maybe_run_browser_scanner(
@@ -1563,3 +1658,47 @@ class Orchestrator:
     def get_remaining_time(self) -> float:
         elapsed = self.get_elapsed_time()
         return max(0.0, HARD_TIMEOUT_SECONDS - elapsed)
+
+
+# ── Module-level helpers ───────────────────────────────────────────────
+
+
+def _emit_scan_metrics(
+    engagement_id: str,
+    total_targets: int,
+    agent_success: int,
+    agent_full_fallback: int,
+    agent_findings: int,
+    safety_net_findings: int,
+    total_findings: int,
+    agent_tried_tools: int,
+) -> None:
+    """Emit structured scan-phase metrics for fallback-rate tracking.
+
+    Logs a structured INFO line prefixed with [SCAN_METRICS] and emits
+    an SSE event for real-time consumption by the live-fire runbook.
+
+    Args:
+        engagement_id: Engagement UUID
+        total_targets: Number of targets in the scan
+        agent_success: Number of targets where the agent succeeded
+        agent_fallback: Number of per-target agent fallbacks (per-target error in run_scan_with_agent)
+        agent_full_fallback: Number of targets where full DeterministicRuntime fallback triggered
+        agent_findings: Number of findings from the agent phase
+        safety_net_findings: Number of findings from the safety-net deterministic pass
+        total_findings: Total findings after merging agent + safety-net
+        agent_tried_tools: Number of unique tools the agent attempted
+    """
+    metrics = {
+        "total_targets": total_targets,
+        "agent_success": agent_success,
+        "agent_full_fallback": agent_full_fallback,
+        "agent_success_rate": round(agent_success / max(total_targets, 1), 3),
+        "agent_full_fallback_rate": round(agent_full_fallback / max(total_targets, 1), 3),
+        "agent_findings": agent_findings,
+        "safety_net_findings": safety_net_findings,
+        "total_findings": total_findings,
+        "agent_tried_tools": agent_tried_tools,
+    }
+    logger.info("[SCAN_METRICS] %s", metrics)
+    emit_scan_metrics(engagement_id, metrics)

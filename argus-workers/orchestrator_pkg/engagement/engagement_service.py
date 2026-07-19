@@ -101,6 +101,93 @@ class EngagementService:
             return None
 
     @staticmethod
+    def store_scope_config(engagement_id: str, scope_config: dict) -> None:
+        """Persist scope config to the engagement record.
+
+        Stores the scope payload dict as ``metadata->'scope_config'`` in the
+        engagements JSONB column. This is a separate key from the legacy
+        ``metadata->'authorized_scope'`` (which stores ``domains``/``ipRanges``
+        for the ScopeValidator agent path).
+
+        The stored format matches the job payload::
+
+            {"mode": "allowlist", "allowed_targets": [...], "blocked_targets": [...]}
+
+        Once persisted, ``load_scope_config()`` can retrieve it across worker
+        restarts and phase boundaries (recon → scan).
+
+        Args:
+            engagement_id: Engagement UUID
+            scope_config: Scope dict from the job payload
+        """
+        if not scope_config or not isinstance(scope_config, dict):
+            return
+        from database.connection import db_cursor
+        import json
+
+        try:
+            with db_cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE engagements
+                    SET metadata = jsonb_set(
+                        COALESCE(metadata, '{}'::jsonb),
+                        '{scope_config}',
+                        %s::jsonb
+                    )
+                    WHERE id = %s
+                    """,
+                    (json.dumps(scope_config), engagement_id),
+                )
+                logger.info(
+                    "Scope config persisted for engagement %s: mode=%s",
+                    engagement_id,
+                    scope_config.get("mode", "unknown"),
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to persist scope config for %s: %s",
+                engagement_id,
+                e,
+            )
+
+    @staticmethod
+    def load_scope_config(engagement_id: str) -> dict | None:
+        """Load the scope config from the engagement record.
+
+        Reads ``metadata->'scope_config'`` from the engagements JSONB column.
+        This is the scope payload format (``mode``/``allowed_targets``/``blocked_targets``),
+        distinct from the legacy ``authorized_scope`` format (``domains``/``ipRanges``).
+
+        Returns the parsed scope dict or ``None`` if no scope config was stored.
+        """
+        from database.connection import db_cursor
+
+        try:
+            with db_cursor() as cursor:
+                cursor.execute(
+                    "SELECT metadata->'scope_config' FROM engagements WHERE id = %s",
+                    (engagement_id,),
+                )
+                row = cursor.fetchone()
+                if row and row[0] is not None:
+                    import json
+
+                    raw = row[0]
+                    if isinstance(raw, str):
+                        return json.loads(raw)
+                    if isinstance(raw, dict):
+                        return dict(raw)
+                return None
+        except Exception as e:
+            logger.warning(
+                "Failed to load scope config for %s: %s",
+                engagement_id,
+                e,
+            )
+            return None
+
+    @staticmethod
     def log_timeout_event(engagement_id: str, elapsed_seconds: float) -> None:
         """Log a hard timeout event for the engagement."""
         logger.warning(

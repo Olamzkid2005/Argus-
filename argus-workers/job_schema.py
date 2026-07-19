@@ -46,7 +46,7 @@ def build_task_args(
         agent_mode = True
     repo_url = kwargs.get("repo_url") or target
     args_map = {
-        # tasks.recon.run_recon(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None, auth_config=None, dual_auth_config=None)
+        # tasks.recon.run_recon(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None, auth_config=None, dual_auth_config=None, scope=None)
         "recon": [
             engagement_id,
             target,
@@ -58,8 +58,9 @@ def build_task_args(
             kwargs.get("bug_bounty_mode"),
             kwargs.get("auth_config"),
             kwargs.get("dual_auth_config"),
+            kwargs.get("scope"),
         ],
-        # tasks.scan.run_scan(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None, auth_config=None, dual_auth_config=None)
+        # tasks.scan.run_scan(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None, auth_config=None, dual_auth_config=None, scope=None)
         "scan": [
             engagement_id,
             [target],
@@ -71,6 +72,7 @@ def build_task_args(
             kwargs.get("bug_bounty_mode"),
             kwargs.get("auth_config"),
             kwargs.get("dual_auth_config"),
+            kwargs.get("scope"),
         ],
         # tasks.analyze.run_analysis(self, engagement_id, budget, trace_id=None, generate_chain_exploits=None)
         "analyze": [
@@ -127,6 +129,7 @@ class JobMessage:
     output_path: str = ""
     generate_chain_exploits: bool | None = None
     priority_vuln_classes: list[str] | None = None
+    scope: dict | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "JobMessage":
@@ -176,4 +179,5 @@ class JobMessage:
             report_id=self.report_id,
             org_id=self.org_id,
             generate_chain_exploits=self.generate_chain_exploits,
+            scope=self.scope,
         )

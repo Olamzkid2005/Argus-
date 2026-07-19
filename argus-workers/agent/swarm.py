@@ -20,12 +20,15 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from dataclasses import dataclass, field
+
 from scan_diff_engine import ScanDiffEngine
 from streaming import (
     emit_swarm_agent_action,
     emit_swarm_agent_complete,
     emit_swarm_agent_started,
     emit_swarm_merge_complete,
+    emit_swarm_metrics,
 )
 from tools.scope_validator import ScopeValidator, validate_target_scope
 from utils.logging_utils import ScanLogger
@@ -37,6 +40,60 @@ logger = logging.getLogger(__name__)
 
 TOOL_TIMEOUT_DEFAULT = 180
 TOOL_TIMEOUT_LONG = 600
+
+# ── Structured Swarm Metrics ──────────────────────────────────────────────
+
+
+@dataclass
+class SwarmMetrics:
+    """Structured metrics collected during a single SwarmOrchestrator.run().
+
+    Automatically emitted as a structured INFO log line + SSE event
+    at the end of every swarm run for live-fire observability.
+    """
+
+    # Agent activation
+    total_agents: int = 0
+    activated_agents: list[str] = field(default_factory=list)
+    inactive_agents: list[dict] = field(default_factory=list)
+    # Inactive agents stored as [{"domain": str, "reason": str}, ...]
+
+    # Per-agent results
+    per_agent_findings: dict[str, int] = field(default_factory=dict)
+    per_agent_tools: dict[str, list[str]] = field(default_factory=dict)
+    per_agent_errors: dict[str, int] = field(default_factory=dict)
+    per_agent_timeouts: dict[str, int] = field(default_factory=dict)
+
+    # Dedup
+    raw_findings_total: int = 0
+    deduped_findings_total: int = 0
+    dedup_removed: int = 0
+    dedup_ratio: float = 0.0
+
+    # Peer intel
+    peer_intel_exchanges: int = 0
+
+    # Orphan cleanup
+    orphan_cleanup_ran: bool = False
+    orphans_killed: int = 0
+
+    def to_dict(self) -> dict:
+        return {
+            "total_agents": self.total_agents,
+            "activated_agents": self.activated_agents,
+            "inactive_agents": self.inactive_agents,
+            "per_agent_findings": self.per_agent_findings,
+            "per_agent_tools": self.per_agent_tools,
+            "per_agent_errors": self.per_agent_errors,
+            "per_agent_timeouts": self.per_agent_timeouts,
+            "raw_findings_total": self.raw_findings_total,
+            "deduped_findings_total": self.deduped_findings_total,
+            "dedup_removed": self.dedup_removed,
+            "dedup_ratio": round(self.dedup_ratio, 3),
+            "peer_intel_exchanges": self.peer_intel_exchanges,
+            "orphan_cleanup_ran": self.orphan_cleanup_ran,
+            "orphans_killed": self.orphans_killed,
+        }
 
 
 class SpecialistAgent(ABC):
@@ -963,14 +1020,34 @@ class SwarmOrchestrator:
         Returns:
             (deduplicated findings list, set of all tools executed)
         """
+        # ── Metrics initialization ──
+        metrics = SwarmMetrics()
+        engagement_id = self.agents[0].engagement_id if self.agents else ""
+
         active = [a for a in self.agents if a.should_activate()]
         slog = ScanLogger(
             "swarm", engagement_id=active[0].engagement_id if active else ""
         )
 
+        # Record activation / inactivity
+        metrics.total_agents = len(self.agents)
+        for agent in self.agents:
+            if agent in active:
+                metrics.activated_agents.append(agent.DOMAIN)
+            else:
+                rc = agent.recon_context
+                reason = _diagnose_inactivity(agent.DOMAIN, rc)
+                metrics.inactive_agents.append({
+                    "domain": agent.DOMAIN,
+                    "reason": reason,
+                })
+
         if not active:
             logger.info("Swarm: no specialists activated")
+            logger.info("[SWARM_METRICS] %s", metrics.to_dict())
             slog.info("No specialists activated")
+            if engagement_id:
+                emit_swarm_metrics(engagement_id, metrics.to_dict())
             return [], set()
 
         slog.swarm_activate([a.DOMAIN for a in active])
@@ -985,6 +1062,12 @@ class SwarmOrchestrator:
         all_findings: list[dict] = []
         all_findings_lock = threading.Lock()
         completed: set[str] = set()
+        # Track per-agent findings/errors/timeouts for metrics
+        # (tools_attempted is extracted from agent.tools_attempted after completion)
+        agent_findings_count: dict[str, int] = {}
+        agent_errors: dict[str, int] = {}
+        agent_timeouts: dict[str, int] = {}
+
         per_agent_timeout = max(
             timeout // max(len(active), 1), 300
         )  # at least 5 min per agent
@@ -1015,6 +1098,7 @@ class SwarmOrchestrator:
                                 domain,
                                 findings_count=len(result),
                             )
+                            agent_findings_count[domain] = len(result)
                             with all_findings_lock:
                                 all_findings.extend(result)
                             completed.add(domain)
@@ -1025,6 +1109,7 @@ class SwarmOrchestrator:
                                 domain,
                                 findings_count=0,
                             )
+                            agent_findings_count[domain] = 0
                             completed.add(domain)
                     # Mark domain as completed even on error.
                     # Without this, the kill-loop guard (len(completed) < len(futures_map))
@@ -1040,12 +1125,16 @@ class SwarmOrchestrator:
                         emit_swarm_agent_complete(
                             active[0].engagement_id, domain, findings_count=0
                         )
+                        agent_findings_count[domain] = 0
+                        agent_timeouts[domain] = agent_timeouts.get(domain, 0) + 1
                         completed.add(domain)
                     except Exception as e:
                         logger.warning("Swarm agent %s failed: %s", domain, e)
                         emit_swarm_agent_complete(
                             active[0].engagement_id, domain, findings_count=0
                         )
+                        agent_findings_count[domain] = 0
+                        agent_errors[domain] = agent_errors.get(domain, 0) + 1
                         completed.add(domain)
             except concurrent.futures.TimeoutError:
                 remaining = set(futures_map.values()) - completed
@@ -1056,6 +1145,8 @@ class SwarmOrchestrator:
                     emit_swarm_agent_complete(
                         active[0].engagement_id, domain, findings_count=0
                     )
+                    agent_findings_count[domain] = 0
+                    agent_timeouts[domain] = agent_timeouts.get(domain, 0) + 1
 
             # Cancel remaining futures and actively terminate any running tool subprocesses.
             for future, domain in futures_map.items():
@@ -1072,6 +1163,7 @@ class SwarmOrchestrator:
             # completion and could kill subprocesses belonging to CONCURRENT tasks in
             # the same Celery worker process (e.g., a nuclei running for another
             # engagement would be killed by this swarm's cleanup).
+            metrics.orphan_cleanup_ran = len(completed) < len(futures_map)
             if len(completed) < len(futures_map):
                 _KNOWN_TOOL_PROCS = {
                     "nuclei",
@@ -1102,6 +1194,7 @@ class SwarmOrchestrator:
                                         child.pid,
                                     )
                                     child.kill()
+                                    metrics.orphans_killed += 1
                             except (psutil.NoSuchProcess, psutil.AccessDenied):
                                 pass
                 except ImportError:
@@ -1131,6 +1224,28 @@ class SwarmOrchestrator:
             dedup_removed=dedup_removed,
         )
 
+        # Collect per-agent tool usage
+        for agent in self.agents:
+            tools: set[str] = getattr(agent, "tools_attempted", set())
+            metrics.per_agent_tools[agent.DOMAIN] = sorted(tools)
+
+        # Populate metrics struct
+        metrics.per_agent_findings = agent_findings_count
+        metrics.per_agent_errors = agent_errors
+        metrics.per_agent_timeouts = agent_timeouts
+        metrics.raw_findings_total = len(all_findings)
+        metrics.deduped_findings_total = len(deduped)
+        metrics.dedup_removed = dedup_removed
+        metrics.dedup_ratio = (
+            dedup_removed / max(len(all_findings), 1)
+            if len(all_findings) > 0
+            else 0.0
+        )
+
+        # Emit structured metrics
+        logger.info("[SWARM_METRICS] %s", metrics.to_dict())
+        emit_swarm_metrics(active[0].engagement_id, metrics.to_dict())
+
         all_tools_attempted: set[str] = set()
         for agent in self.agents:
             tools: set[str] = getattr(agent, "tools_attempted", set())
@@ -1138,8 +1253,71 @@ class SwarmOrchestrator:
 
         return deduped, all_tools_attempted
 
+
     @staticmethod
     def _deduplicate(findings: list[dict]) -> list[dict]:
+
+
+# ── Helper: diagnose why an agent did not activate ──
+
+
+def _diagnose_inactivity(domain: str, rc) -> str:
+    """Return a human-readable reason why a specialist agent did not activate.
+
+    Checks domain-specific signal fields on ReconContext and returns the
+    first missing prerequisite.
+    """
+    if rc is None:
+        return "no recon_context (None)"
+
+    if domain == "idor":
+        if not (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0):
+            if not (hasattr(rc, "has_api") and rc.has_api):
+                if not (hasattr(rc, "api_endpoints") and len(rc.api_endpoints) > 0):
+                    crawled = len(rc.crawled_paths) if hasattr(rc, "crawled_paths") and rc.crawled_paths else 0
+                    dynamic = (
+                        (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0)
+                        or (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0)
+                        or (hasattr(rc, "has_api") and rc.has_api)
+                    )
+                    if crawled < 25:
+                        return f"insufficient crawled_paths ({crawled}/25)"
+                    if not dynamic:
+                        return "no dynamic surface (params, auth, or API)"
+                    return "thresholds not met"
+        return "activated (IDOR)"  # fallthrough shouldn't happen
+
+    if domain == "auth":
+        if not (hasattr(rc, "has_login_page") and rc.has_login_page):
+            if not (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0):
+                if not (hasattr(rc, "has_api") and rc.has_api):
+                    crawled = len(rc.crawled_paths) if hasattr(rc, "crawled_paths") and rc.crawled_paths else 0
+                    dynamic = (
+                        (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0)
+                        or (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0)
+                        or (hasattr(rc, "has_api") and rc.has_api)
+                    )
+                    if crawled < 25:
+                        return f"insufficient crawled_paths ({crawled}/25)"
+                    if not dynamic:
+                        return "no dynamic surface (auth or API)"
+                    return "thresholds not met"
+        return "activated (Auth)"
+
+    if domain == "api":
+        api_endpoints = len(rc.api_endpoints) if hasattr(rc, "api_endpoints") and rc.api_endpoints else 0
+        has_api = hasattr(rc, "has_api") and rc.has_api
+        if not (has_api and api_endpoints > 1) and not (api_endpoints > 5):
+            live = [ep for ep in (rc.live_endpoints or []) if "/api/" in (ep or "").lower()]
+            crawled = len(rc.crawled_paths) if hasattr(rc, "crawled_paths") and rc.crawled_paths else 0
+            if len(live) < 2:
+                return f"insufficient API signal (has_api={has_api}, api_endpoints={api_endpoints}, live_api_paths={len(live)})"
+            if crawled < 5:
+                return f"insufficient crawled_paths ({crawled}/5)"
+            return "thresholds not met"
+        return "activated (API)"
+
+    return "unknown domain"
         """Deduplicate findings by type + endpoint (fallback fingerprint).
 
         Uses ScanDiffEngine._fallback_fingerprint() which only considers

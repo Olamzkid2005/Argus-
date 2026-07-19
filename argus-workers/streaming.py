@@ -120,6 +120,8 @@ class EventType:
     SWARM_AGENT_ACTION = "swarm_agent_action"
     SWARM_AGENT_COMPLETE = "swarm_agent_complete"
     SWARM_MERGE_COMPLETE = "swarm_merge_complete"
+    SWARM_METRICS = "swarm_metrics"
+    SCAN_METRICS = "scan_metrics"
     POSTURE_UPDATE = "posture_update"
     SCANNER_ACTIVITY = "scanner_activity"
 
@@ -548,6 +550,38 @@ def emit_swarm_merge_complete(
     """Emit a swarm merge complete event."""
     data = {"total_findings": total_findings, "dedup_removed": dedup_removed}
     emit_event(engagement_id, EventType.SWARM_MERGE_COMPLETE, data)
+
+
+def emit_swarm_metrics(
+    engagement_id: str,
+    metrics: dict,
+) -> None:
+    """Emit structured swarm metrics summary for observability.
+
+    Payload includes per-agent activation/findings/errors, dedup ratios,
+    and tool-usage counts. Consumed by the live-fire runbook and monitoring.
+
+    Args:
+        engagement_id: Engagement UUID
+        metrics: SwarmMetrics dataclass serialized via to_dict()
+    """
+    emit_event(engagement_id, EventType.SWARM_METRICS, metrics)
+
+
+def emit_scan_metrics(
+    engagement_id: str,
+    metrics: dict,
+) -> None:
+    """Emit structured scan-phase metrics for fallback-rate tracking.
+
+    Payload includes agent success vs fallback counts, per-target outcomes,
+    and safety-net tool-skip stats.
+
+    Args:
+        engagement_id: Engagement UUID
+        metrics: ScanMetrics dict
+    """
+    emit_event(engagement_id, EventType.SCAN_METRICS, metrics)
 
 
 def emit_posture_update(

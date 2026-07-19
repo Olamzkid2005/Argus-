@@ -26,6 +26,7 @@ def run_scan(
     bug_bounty_mode: bool | None = None,
     auth_config: dict | None = None,
     dual_auth_config: dict | None = None,
+    scope: dict | None = None,
 ):
     """
     Execute scanning phase for an engagement
@@ -97,6 +98,8 @@ def run_scan(
         job_extra["aggressiveness"] = aggressiveness
     if bug_bounty_mode is not None:
         job_extra["bug_bounty_mode"] = bug_bounty_mode
+    if scope is not None:
+        job_extra["scope"] = scope
 
     with task_context(
         self, engagement_id, "scan", job_extra=job_extra, trace_id=trace_id
