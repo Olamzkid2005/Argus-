@@ -18,10 +18,11 @@ import tempfile
 import threading
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from typing import Any
 
-from dataclasses import dataclass, field
-
+# In-flight cross-agent learning: thread-safe shared memory for signal exchange
+from agent.swarm_memory import SwarmMemory
 from scan_diff_engine import ScanDiffEngine
 from streaming import (
     emit_swarm_agent_action,
@@ -32,9 +33,6 @@ from streaming import (
 )
 from tools.scope_validator import ScopeValidator, validate_target_scope
 from utils.logging_utils import ScanLogger
-
-# In-flight cross-agent learning: thread-safe shared memory for signal exchange
-from agent.swarm_memory import SwarmMemory
 
 logger = logging.getLogger(__name__)
 
@@ -1256,68 +1254,6 @@ class SwarmOrchestrator:
 
     @staticmethod
     def _deduplicate(findings: list[dict]) -> list[dict]:
-
-
-# ── Helper: diagnose why an agent did not activate ──
-
-
-def _diagnose_inactivity(domain: str, rc) -> str:
-    """Return a human-readable reason why a specialist agent did not activate.
-
-    Checks domain-specific signal fields on ReconContext and returns the
-    first missing prerequisite.
-    """
-    if rc is None:
-        return "no recon_context (None)"
-
-    if domain == "idor":
-        if not (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0):
-            if not (hasattr(rc, "has_api") and rc.has_api):
-                if not (hasattr(rc, "api_endpoints") and len(rc.api_endpoints) > 0):
-                    crawled = len(rc.crawled_paths) if hasattr(rc, "crawled_paths") and rc.crawled_paths else 0
-                    dynamic = (
-                        (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0)
-                        or (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0)
-                        or (hasattr(rc, "has_api") and rc.has_api)
-                    )
-                    if crawled < 25:
-                        return f"insufficient crawled_paths ({crawled}/25)"
-                    if not dynamic:
-                        return "no dynamic surface (params, auth, or API)"
-                    return "thresholds not met"
-        return "activated (IDOR)"  # fallthrough shouldn't happen
-
-    if domain == "auth":
-        if not (hasattr(rc, "has_login_page") and rc.has_login_page):
-            if not (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0):
-                if not (hasattr(rc, "has_api") and rc.has_api):
-                    crawled = len(rc.crawled_paths) if hasattr(rc, "crawled_paths") and rc.crawled_paths else 0
-                    dynamic = (
-                        (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0)
-                        or (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0)
-                        or (hasattr(rc, "has_api") and rc.has_api)
-                    )
-                    if crawled < 25:
-                        return f"insufficient crawled_paths ({crawled}/25)"
-                    if not dynamic:
-                        return "no dynamic surface (auth or API)"
-                    return "thresholds not met"
-        return "activated (Auth)"
-
-    if domain == "api":
-        api_endpoints = len(rc.api_endpoints) if hasattr(rc, "api_endpoints") and rc.api_endpoints else 0
-        has_api = hasattr(rc, "has_api") and rc.has_api
-        if not (has_api and api_endpoints > 1) and not (api_endpoints > 5):
-            live = [ep for ep in (rc.live_endpoints or []) if "/api/" in (ep or "").lower()]
-            crawled = len(rc.crawled_paths) if hasattr(rc, "crawled_paths") and rc.crawled_paths else 0
-            if len(live) < 2:
-                return f"insufficient API signal (has_api={has_api}, api_endpoints={api_endpoints}, live_api_paths={len(live)})"
-            if crawled < 5:
-                return f"insufficient crawled_paths ({crawled}/5)"
-            return "thresholds not met"
-        return "activated (API)"
-
-    return "unknown domain"
         """Deduplicate findings by type + endpoint (fallback fingerprint).
 
         Uses ScanDiffEngine._fallback_fingerprint() which only considers
@@ -1393,3 +1329,65 @@ def _diagnose_inactivity(domain: str, rc) -> str:
                     existing["source_agents"] = list(existing_agents)
 
         return list(seen.values())
+
+
+# ── Helper: diagnose why an agent did not activate ──
+
+
+def _diagnose_inactivity(domain: str, rc) -> str:
+    """Return a human-readable reason why a specialist agent did not activate.
+
+    Checks domain-specific signal fields on ReconContext and returns the
+    first missing prerequisite.
+    """
+    if rc is None:
+        return "no recon_context (None)"
+
+    if domain == "idor":
+        if not (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0):
+            if not (hasattr(rc, "has_api") and rc.has_api):
+                if not (hasattr(rc, "api_endpoints") and len(rc.api_endpoints) > 0):
+                    crawled = len(rc.crawled_paths) if hasattr(rc, "crawled_paths") and rc.crawled_paths else 0
+                    dynamic = (
+                        (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0)
+                        or (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0)
+                        or (hasattr(rc, "has_api") and rc.has_api)
+                    )
+                    if crawled < 25:
+                        return f"insufficient crawled_paths ({crawled}/25)"
+                    if not dynamic:
+                        return "no dynamic surface (params, auth, or API)"
+                    return "thresholds not met"
+        return "activated (IDOR)"  # fallthrough shouldn't happen
+
+    if domain == "auth":
+        if not (hasattr(rc, "has_login_page") and rc.has_login_page):
+            if not (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0):
+                if not (hasattr(rc, "has_api") and rc.has_api):
+                    crawled = len(rc.crawled_paths) if hasattr(rc, "crawled_paths") and rc.crawled_paths else 0
+                    dynamic = (
+                        (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0)
+                        or (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0)
+                        or (hasattr(rc, "has_api") and rc.has_api)
+                    )
+                    if crawled < 25:
+                        return f"insufficient crawled_paths ({crawled}/25)"
+                    if not dynamic:
+                        return "no dynamic surface (auth or API)"
+                    return "thresholds not met"
+        return "activated (Auth)"
+
+    if domain == "api":
+        api_endpoints = len(rc.api_endpoints) if hasattr(rc, "api_endpoints") and rc.api_endpoints else 0
+        has_api = hasattr(rc, "has_api") and rc.has_api
+        if not (has_api and api_endpoints > 1) and not (api_endpoints > 5):
+            live = [ep for ep in (rc.live_endpoints or []) if "/api/" in (ep or "").lower()]
+            crawled = len(rc.crawled_paths) if hasattr(rc, "crawled_paths") and rc.crawled_paths else 0
+            if len(live) < 2:
+                return f"insufficient API signal (has_api={has_api}, api_endpoints={api_endpoints}, live_api_paths={len(live)})"
+            if crawled < 5:
+                return f"insufficient crawled_paths ({crawled}/5)"
+            return "thresholds not met"
+        return "activated (API)"
+
+    return "unknown domain"
