@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import uuid
+from datetime import UTC
 
 from celery_app import app
 from tasks.recon import run_recon
@@ -269,7 +270,7 @@ def _spawn_engagement(
 
         from croniter import croniter
 
-        now = datetime.now(utc)
+        now = datetime.now(UTC)
         next_run = croniter(cron_expression, now).get_next(datetime)
 
         # Update scheduled engagement with next run and last engagement reference
