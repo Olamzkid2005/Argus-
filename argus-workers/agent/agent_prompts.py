@@ -785,6 +785,7 @@ def build_tool_selection_prompt(
     candidate_list=None,
     memory_context: str = "",
     hypotheses: list[dict] | None = None,
+    adaptive_plan: str = "",
 ) -> str:
     """
     Build the user prompt for tool selection.
@@ -864,6 +865,16 @@ def build_tool_selection_prompt(
             f"Run tools for these vulnerability classes before all others.\n"
             f"Skip tools unrelated to these classes unless coverage is "
             f"otherwise insufficient."
+        )
+
+    # ── Section 1.5: Adaptive Testing Plan (from recon signals) ────
+    if adaptive_plan:
+        prompt_parts.append(
+            f"=== ADAPTIVE TESTING PLAN ===\n"
+            f"The adaptive planner analyzed recon signals and recommends this "
+            f"ordered testing strategy. Follow the phases below, running tools "
+            f"relevant to the active phase before moving to subsequent phases.\n"
+            f"{adaptive_plan}"
         )
 
     # ── Section 2: Bug-Reaper methodology context ──────────────────

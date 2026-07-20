@@ -529,9 +529,17 @@ class Orchestrator:
                     self.engagement_id,
                     f"LLM agent selecting scan tools for {target}...",
                 )
+                # Build initial context, including adaptive plan if available
+                _initial_ctx: dict = {
+                    "recon_context": recon_context,
+                    "target": target,
+                }
+                if hasattr(self, "_adaptive_plan_text") and self._adaptive_plan_text:
+                    _initial_ctx["adaptive_plan"] = self._adaptive_plan_text
+
                 results = agent.run(
                     task=f"scan: {target}",
-                    initial_context={"recon_context": recon_context, "target": target},
+                    initial_context=_initial_ctx,
                     recon_context=recon_context,
                 )
 
@@ -606,6 +614,49 @@ class Orchestrator:
         recon_context = job.get("recon_context") or load_recon_context(
             self.engagement_id
         )
+
+        # ── Adaptive Workflow Planning ──
+        # Build a WorkflowPlan from recon signals to guide the scan phase.
+        # The plan recommends which testing phases to run (auth, API, access
+        # control, etc.) based on what recon discovered. It is passed to the
+        # LLM agent as context and used for observability/metrics.
+        try:
+            from orchestrator_pkg.planning import AdaptiveWorkflowPlanner
+            _planner = AdaptiveWorkflowPlanner()
+            self._adaptive_plan = _planner.build_plan(
+                recon_context, engagement_id=self.engagement_id
+            )
+            # Deduplicate tools across phases to avoid redundant runs
+            self._adaptive_plan = AdaptiveWorkflowPlanner.deduplicate_tools(
+                self._adaptive_plan
+            )
+            # Pre-format the plan text for LLM agent consumption
+            self._adaptive_plan_text = _planner.format_plan_for_agent(
+                self._adaptive_plan
+            ) if self._adaptive_plan else ""
+            if self._adaptive_plan and self._adaptive_plan.phases:
+                slog.info(
+                    "Adaptive plan: %d/%d phases activated — %s",
+                    self._adaptive_plan.activated_phases,
+                    self._adaptive_plan.total_phases,
+                    self._adaptive_plan.summary,
+                )
+                for phase in self._adaptive_plan.phases:
+                    slog.info(
+                        "  Phase: %s (%s) — %s",
+                        phase.name,
+                        phase.description,
+                        phase.activation_reason,
+                    )
+            else:
+                slog.info(
+                    "Adaptive plan: no phases activated — running standard scan"
+                )
+        except Exception as _plan_err:
+            logger.debug(
+                "Adaptive workflow planning failed (non-fatal): %s", _plan_err
+            )
+            self._adaptive_plan = None
         auth_config = job.get("auth_config", {})
         dual_auth_config = job.get(
             "dual_auth_config"

@@ -255,6 +255,8 @@ class ReActAgent:
         self._llm_failure_count = 0
         # DegradationAwareness — the system's sense of self
         self._degradation_awareness = degradation_awareness
+        # Adaptive plan text from the orchestrator's WorkflowPlanner
+        self._adaptive_plan_text: str = ""
         if self._degradation_awareness is None and engagement_id:
             try:
                 self._degradation_awareness = DegradationAwareness(engagement_id)
@@ -745,6 +747,7 @@ class ReActAgent:
             candidate_list=self._candidate_list,
             memory_context=_memory_context,
             hypotheses=_hypotheses,
+            adaptive_plan=self._adaptive_plan_text,
         )
 
         system_prompt = self._get_system_prompt(recon_context)
@@ -1574,9 +1577,13 @@ Based on these findings, what capabilities should the next phase use?
         slog.phase_header(f"AGENT RUN: {task[:80]}")
         if _reset_history:
             self.history = []
-        # Incorporate initial context into history if provided
+        # Extract and store adaptive plan text from initial context
         if initial_context:
-            self.add_to_history("system", f"Initial context: {initial_context}")
+            self._adaptive_plan_text = initial_context.get("adaptive_plan", "")
+            # Incorporate remaining initial context into history (sans plan)
+            remaining = {k: v for k, v in initial_context.items() if k != "adaptive_plan"}
+            if remaining:
+                self.add_to_history("system", f"Initial context: {remaining}")
         results = []
         tried_tools: set[str] = set()
         total_cost_usd = 0.0
