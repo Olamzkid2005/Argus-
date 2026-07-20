@@ -1005,7 +1005,7 @@ describe("InProcessExecutor", () => {
     })
 
     test("successful callTool resets throttle on target", async () => {
-      const results: Array<{ success: boolean; error?: string }> = [
+      const results: Array<{ success: boolean; error?: string; data?: Array<{ id: string; title: string; severity: number; confidence: number }>; durationMs?: number }> = [
         { success: false, error: "rate limited" },
         { success: true, data: [{ id: "f1", title: "ok", severity: 2, confidence: 0 }], durationMs: 5 },
       ]

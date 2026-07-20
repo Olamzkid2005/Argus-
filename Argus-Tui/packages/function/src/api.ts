@@ -36,9 +36,9 @@ export class SyncServer extends DurableObject<Env> {
     })
   }
 
-  async webSocketMessage(_ws, _message) {}
+  async webSocketMessage(_ws: WebSocket, _message: string | ArrayBuffer) {}
 
-  async webSocketClose(ws, code, _reason, _wasClean) {
+  async webSocketClose(ws: WebSocket, code: number, _reason: string, _wasClean: boolean) {
     ws.close(code, "Durable Object is closing WebSocket")
   }
 
@@ -76,11 +76,11 @@ export class SyncServer extends DurableObject<Env> {
     return secret
   }
 
-  public async getData() {
+  public async getData(): Promise<Array<{ key: string; content: any }>> {
     const data = (await this.ctx.storage.list()) as Map<string, any>
     return Array.from(data.entries())
       .filter(([key, _]) => key.startsWith("session/"))
-      .map(([key, content]) => ({ key, content }))
+      .map(([key, content]) => ({ key, content })) as Array<{ key: string; content: any }>
   }
 
   public async assertSecret(secret: string) {
@@ -177,9 +177,11 @@ export default new Hono<{ Bindings: Env }>()
     console.log("share_data", id)
     if (!id) return c.text("Error: Share ID is required", { status: 400 })
     const stub = c.env.SYNC_SERVER.get(c.env.SYNC_SERVER.idFromName(id))
-    const data = await stub.getData()
+    // TS2589 guard: DurableObject stub proxy triggers deep inference; any breaks the chain
+    const raw = await stub.getData()
+    const data: Array<{ key: string; content: any }> = raw as any
 
-    let info
+    let info: any
     const messages: Record<string, any> = {}
     data.forEach((d) => {
       const [root, type] = d.key.split("/")
@@ -276,6 +278,9 @@ export default new Hono<{ Bindings: Env }>()
         audience: EXPECTED_AUDIENCE,
       })
       const sub = payload.sub // e.g. 'repo:my-org/my-repo:ref:refs/heads/main'
+      if (!sub) {
+        return c.json({ error: "Token is missing 'sub' claim" }, { status: 403 })
+      }
       const parts = sub.split(":")[1].split("/")
       owner = parts[0]
       repo = parts[1]
@@ -323,7 +328,7 @@ export default new Hono<{ Bindings: Env }>()
       // Verify permissions
       const userClient = new Octokit({ auth: token })
       const { data: repoData } = await userClient.repos.get({ owner, repo })
-      if (!repoData.permissions.admin && !repoData.permissions.push && !repoData.permissions.maintain)
+      if (!repoData.permissions?.admin && !repoData.permissions?.push && !repoData.permissions?.maintain)
         throw new Error("User does not have write permissions")
 
       // Get installation token
@@ -362,6 +367,9 @@ export default new Hono<{ Bindings: Env }>()
   .get("/get_github_app_installation", async (c) => {
     const owner = c.req.query("owner")
     const repo = c.req.query("repo")
+    if (!owner || !repo) {
+      return c.json({ error: "owner and repo query parameters are required" }, { status: 400 })
+    }
 
     const auth = createAppAuth({
       appId: Resource.GITHUB_APP_ID.value,
@@ -370,7 +378,7 @@ export default new Hono<{ Bindings: Env }>()
     const appAuth = await auth({ type: "app" })
 
     // Lookup installation
-    const octokit = new Octokit({ auth: appAuth.token })
+    const octokit = new Octokit({ auth: appAuth.token ?? "" })
     let installation
     try {
       const ret = await octokit.apps.getRepoInstallation({ owner, repo })

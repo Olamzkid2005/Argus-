@@ -122,10 +122,9 @@ export class WorkflowPlanner {
     // with the deterministic set — duplicates are removed.
     const deterministicCaps = determineRequiredCapabilities(targetType, authState, plannerContext.techStack)
 
-    // If LLM is enabled, ask it for phase suggestions
+    // LLM-assisted phase suggestions (explicit false handled by early return above)
     let llmSuggested: string[] = []
-    if (options?.useLLM !== false) {
-      emitProgress?.({ type: "llm_planning_start", phase: "initial" })
+    emitProgress?.({ type: "llm_planning_start", phase: "initial" })
       try {
         const llmSvc = LLMPlannerService.lazy()
         const result = await llmSvc.suggestPhases(target, targetType, plannerContext.techStack)
@@ -157,7 +156,6 @@ export class WorkflowPlanner {
         })
         // LLM failure is non-blocking — fall back to deterministic planning
       }
-    }
 
     // Merge LLM suggestions into deterministic capabilities
     const requiredCaps = [...deterministicCaps]

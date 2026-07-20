@@ -15,6 +15,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "bun:test"
+import { join } from "path"
 import { startTargets, stopTargets, JUICE_SHOP, DVWA } from "./docker-helpers"
 
 const STARTUP_TIMEOUT = 180_000 // 3 min for Docker pull + startup
@@ -368,6 +369,7 @@ describe("E2E: Report generation", () => {
       result.allFindings,
       result.engagementId,
       "http://127.0.0.1:3001",
+      "assessment",
     )
 
     expect(sarif).toContain("sarif")
@@ -385,6 +387,7 @@ describe("E2E: Report generation", () => {
       result.allFindings,
       result.engagementId,
       "http://127.0.0.1:3001",
+      "assessment",
     )
 
     const parsed = JSON.parse(json)
@@ -405,7 +408,7 @@ describe("E2E: Evidence collection", () => {
     try {
       const collector = new EvidenceCollector(baseDir, {}, "ENG-e2e-test-001")
       const artifact = await collector.saveRequest("ENG-e2e-test-001", "test-finding", "GET /test HTTP/1.1")
-      expect(artifact.id).toBeTruthy()
+      expect(artifact.path).toBeTruthy()
       expect(artifact.hash).toBeTruthy()
       expect(existsSync(artifact.path)).toBe(true)
     } finally {

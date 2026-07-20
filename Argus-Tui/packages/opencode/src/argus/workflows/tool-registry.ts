@@ -1,3 +1,21 @@
+/**
+ * TypeScript-side tool registry for the Argus planner.
+ *
+ * This is INTENTIONALLY SEPARATE from the Python-side TOOLS dict in
+ * argus-workers/tool_definitions.py. Different schema, different purpose:
+ *   - TS side (this file): planning metadata (capabilities, scoring,
+ *     consumes/provides for dependency resolution, auth gating)
+ *   - Python side: execution metadata (phases, params, commands, timeouts,
+ *     signal quality, risk levels, exploit categories)
+ *
+ * Python source of truth: argus-workers/tool_definitions.py
+ *   - YAML source: argus-workers/tools/definitions/*.yaml
+ *   - Inline overrides: tool_definitions.py itself
+ *
+ * Data is loaded from tool-definitions.yaml (same directory).
+ * When adding a tool here, also add its execution metadata to the Python side.
+ */
+
 import { readFileSync } from "fs"
 import YAML from "yaml"
 import { Capability } from "../shared/capabilities"

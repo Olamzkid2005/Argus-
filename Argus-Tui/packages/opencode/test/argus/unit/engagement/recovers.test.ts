@@ -8,6 +8,7 @@ function makeEngagement(overrides?: Partial<EngagementState>): EngagementState {
     target: "https://example.com",
     workflow: "test-workflow",
     workflowVersion: 1,
+    version: 1,
     status: "CREATED",
     schemaVersion: 1,
     storageVersion: 2,

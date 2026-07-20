@@ -1,3 +1,13 @@
+# TypeScript-side tool definitions for the Argus planner.
+# INTENTIONALLY SEPARATE from the Python-side definitions in
+# argus-workers/tool_definitions.py (different schema, different purpose).
+# Python side: execution metadata (phases, params, commands, timeouts, signal quality)
+# TS side (this file): planning metadata (capabilities, scoring, consumes/provides, auth gating)
+#
+# When adding a tool here, also add its execution metadata to:
+#   argus-workers/tools/definitions/<tool>.yaml
+
+
 tools:
   - name: nuclei
     label: Nuclei Vulnerability Scanner

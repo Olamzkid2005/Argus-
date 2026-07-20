@@ -482,16 +482,12 @@ export class LLMPlannerService {
     ) {
       const modelId = modelStr || "claude-sonnet-4-20250514"
       console.warn(`[LLMPlanner] Using Anthropic model: ${modelId}`)
-      return anthropic.model(modelId, {
-        apiKey,
-      }) as unknown as Model
+      return anthropic.model(modelId) as unknown as Model
     }
 
     // Default: OpenAI-compatible (OpenAI, Azure, Fireworks, etc.)
     const modelId = modelStr || "gpt-4o-mini"
     console.warn(`[LLMPlanner] Using OpenAI-compatible model: ${modelId}`)
-    return openai.model(modelId, {
-      apiKey,
-    }) as unknown as Model
+    return openai.model(modelId) as unknown as Model
   }
 }

@@ -737,7 +737,7 @@ describe("formatFindingsSummary", () => {
       // Create runner without deps — executorBridge starts as null
       const runner = new WorkflowRunner()
 
-      const onProgress = mock(() => {})
+      const onProgress = mock((_msg: string) => {})
       const emit = (event: any) => {
         if (typeof event === "string") onProgress(event)
       }
@@ -884,7 +884,7 @@ describe("formatFindingsSummary", () => {
       // browser verification via runner.run(), which requires a real browser).
       const runner = new WorkflowRunner(deps)
       ;(runner as any).executorBridge = deps.bridge
-      const onProgress = mock(() => {})
+      const onProgress = mock((_msg: string) => {})
       const emit = (event: any) => {
         if (typeof event === "string") onProgress(event)
       }

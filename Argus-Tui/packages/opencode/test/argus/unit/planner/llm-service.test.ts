@@ -40,12 +40,12 @@ let defaultReplanResponse: object = {}
 // The mocked LLM.generateObject returns Effect.succeed() which requires
 // no services, so the provided layers are silently ignored.
 const noopClientLayer = Layer.effect(
-  Context.GenericTag<any>("@opencode/LLMClient"),
+  (Context as any).GenericTag<any>("@opencode/LLMClient"),
   Effect.succeed({} as any),
 )
 
 const noopExecutorLayer = Layer.effect(
-  Context.GenericTag<any>("@opencode/RequestExecutor"),
+  (Context as any).GenericTag<any>("@opencode/RequestExecutor"),
   Effect.succeed({} as any),
 )// ── Module Mocks (set up once, controlled via flags) ─────────────────
 // These must be created BEFORE the service is imported.

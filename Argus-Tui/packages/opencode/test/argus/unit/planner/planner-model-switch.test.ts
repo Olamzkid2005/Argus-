@@ -154,7 +154,7 @@ describe("planner model switch integration", () => {
       withCleanEnv(() => {
         delete process.env.ARGUS_PLANNER_MODEL
         mockSwitchModel("gpt-4o")
-        expect(process.env.ARGUS_PLANNER_MODEL).toBe("gpt-4o")
+        expect(process.env.ARGUS_PLANNER_MODEL as string).toBe("gpt-4o")
       })
     })
 
@@ -179,7 +179,7 @@ describe("planner model switch integration", () => {
         delete process.env.ARGUS_PLANNER_MODEL
         _mockInstance = null
         mockSwitchModel("gpt-4o-mini")
-        expect(process.env.ARGUS_PLANNER_MODEL).toBe("gpt-4o-mini")
+        expect(process.env.ARGUS_PLANNER_MODEL as string).toBe("gpt-4o-mini")
       })
     })
   })
@@ -306,7 +306,7 @@ describe("planner model switch integration", () => {
         appendLog(`🔁 Switched planner model to ${nextModel}`)
 
         // Verify env var updated
-        expect(process.env.ARGUS_PLANNER_MODEL).toBe("gpt-4o")
+        expect(process.env.ARGUS_PLANNER_MODEL as string).toBe("gpt-4o")
         // Verify scan-store updates
         const state = getScanState()
         expect(state.llmPlanningModel).toBe("openai/gpt-4o")
@@ -349,7 +349,7 @@ describe("planner model switch integration", () => {
 
         const state = getScanState()
         // After 5 clicks (full cycle) we're back to gpt-4o-mini
-        expect(process.env.ARGUS_PLANNER_MODEL).toBe("gpt-4o-mini")
+        expect(process.env.ARGUS_PLANNER_MODEL as string).toBe("gpt-4o-mini")
         expect(state.log.filter((l: string) => l.includes("Switched")).length).toBe(5)
       })
     })
@@ -381,7 +381,7 @@ describe("planner model switch integration", () => {
           `ARGUS_PLANNER_MODEL=${nextModel} (wrap)`,
         )
 
-        expect(process.env.ARGUS_PLANNER_MODEL).toBe("gpt-4o-mini")
+        expect(process.env.ARGUS_PLANNER_MODEL as string).toBe("gpt-4o-mini")
         expect(getScanState().llmPlanningModel).toBe("openai/gpt-4o-mini")
       })
     })
@@ -399,7 +399,7 @@ describe("planner model switch integration", () => {
         // Click handler returns early when available.length <= 1
         expect(available.length <= 1).toBe(true)
         // Nothing should change
-        expect(process.env.ARGUS_PLANNER_MODEL).toBe("custom-model")
+        expect(process.env.ARGUS_PLANNER_MODEL as string).toBe("custom-model")
       })
     })
 
@@ -418,7 +418,7 @@ describe("planner model switch integration", () => {
         const state = getScanState()
 
         // Env var
-        expect(process.env.ARGUS_PLANNER_MODEL).toBe("claude-sonnet-4-20250514")
+        expect(process.env.ARGUS_PLANNER_MODEL as string).toBe("claude-sonnet-4-20250514")
         // Store
         expect(state.llmPlanningModel).toBe("anthropic/claude-sonnet-4-20250514")
         expect(state.llmPlanningModelConfig).toBe("ARGUS_PLANNER_MODEL=claude-sonnet-4-20250514 (switched)")

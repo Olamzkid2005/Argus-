@@ -99,7 +99,7 @@ describe("WorkflowPlanner", () => {
   })
 
   describe("replan()", () => {
-    test("returns null when replanCount equals MAX_REPLANS", () => {
+    test("returns null when replanCount equals MAX_REPLANS", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         replanCount: MAX_REPLANS,
@@ -119,12 +119,12 @@ describe("WorkflowPlanner", () => {
           },
         ],
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).toBeNull()
     })
 
-    test("returns null when replanCount exceeds MAX_REPLANS", () => {
+    test("returns null when replanCount exceeds MAX_REPLANS", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         replanCount: MAX_REPLANS + 1,
@@ -144,20 +144,20 @@ describe("WorkflowPlanner", () => {
           },
         ],
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).toBeNull()
     })
 
-    test("returns null when no new capabilities found", () => {
+    test("returns null when no new capabilities found", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({ findings: [] })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).toBeNull()
     })
 
-    test("returns new phases for unhandled capabilities", () => {
+    test("returns new phases for unhandled capabilities", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         findings: [
@@ -177,7 +177,7 @@ describe("WorkflowPlanner", () => {
         ],
         executedCapabilities: new Set([Capability.WEB_RECON]),
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).not.toBeNull()
       expect(result).toHaveLength(1)
@@ -188,7 +188,7 @@ describe("WorkflowPlanner", () => {
       expect(result![0].phaseId).toMatch(/^replan-\d+-/)
     })
 
-    test("writes back incremented replanCount to context", () => {
+    test("writes back incremented replanCount to context", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         findings: [
@@ -208,13 +208,13 @@ describe("WorkflowPlanner", () => {
         ],
         executedCapabilities: new Set([Capability.WEB_RECON]),
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).not.toBeNull()
       expect(result![0].replanCycle).toBe(true)
     })
 
-    test("uses maxReplans from context when provided", () => {
+    test("uses maxReplans from context when provided", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         replanCount: 1,
@@ -236,7 +236,7 @@ describe("WorkflowPlanner", () => {
         ],
         executedCapabilities: new Set([Capability.WEB_RECON]),
       })
-      expect(planner.replan(ctx)).toBeNull()
+      expect(await planner.replan(ctx)).toBeNull()
 
       const ctx2 = makeContext({
         replanCount: 0,
@@ -258,12 +258,12 @@ describe("WorkflowPlanner", () => {
         ],
         executedCapabilities: new Set([Capability.WEB_RECON]),
       })
-      const result = planner.replan(ctx2)
+      const result = await planner.replan(ctx2)
       expect(result).not.toBeNull()
       expect(result).toHaveLength(1)
     })
 
-    test("returns null when all new capabilities are already executed", () => {
+    test("returns null when all new capabilities are already executed", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         findings: [
@@ -283,13 +283,13 @@ describe("WorkflowPlanner", () => {
         ],
         executedCapabilities: new Set([Capability.JWT_ANALYSIS]),
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).toBeNull()
     })
 
     // ── Independent budget logic ──
-    test("returns null when both rule and LLM budgets are exhausted", () => {
+    test("returns null when both rule and LLM budgets are exhausted", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         replanCount: MAX_REPLANS,
@@ -311,19 +311,19 @@ describe("WorkflowPlanner", () => {
         ],
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).toBeNull()
     })
 
-    test("LLM suggestions produce phases when rule budget exhausted", () => {
+    test("LLM suggestions produce phases when rule budget exhausted", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         replanCount: MAX_REPLANS,  // rule budget exhausted
         llmReplanCount: 0,          // LLM budget still available
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).not.toBeNull()
       expect(result).toHaveLength(1)
@@ -331,7 +331,7 @@ describe("WorkflowPlanner", () => {
       expect(result![0].workflowName).toBe("replan")
     })
 
-    test("rule-based findings produce phases when LLM budget exhausted", () => {
+    test("rule-based findings produce phases when LLM budget exhausted", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         llmReplanCount: MAX_REPLANS,  // LLM budget exhausted
@@ -353,7 +353,7 @@ describe("WorkflowPlanner", () => {
         ],
         executedCapabilities: new Set([Capability.WEB_RECON]),
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       // LLM suggestions are skipped (budget exhausted), but rule-based finding still produces a phase
       expect(result).not.toBeNull()
@@ -361,21 +361,21 @@ describe("WorkflowPlanner", () => {
       expect(result![0].requiredCapabilities).toContain(Capability.GRAPHQL_ASSESSMENT)
     })
 
-    test("LLM-only suggestions produce phases without rule findings", () => {
+    test("LLM-only suggestions produce phases without rule findings", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
         llmReplanCount: 0,
         // No findings — purely LLM-driven
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).not.toBeNull()
       expect(result).toHaveLength(1)
       expect(result![0].requiredCapabilities).toContain(Capability.POST_EXPLOITATION)
     })
 
-    test("both LLM and rule-based suggestions combine when both budgets available", () => {
+    test("both LLM and rule-based suggestions combine when both budgets available", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         findings: [
@@ -396,7 +396,7 @@ describe("WorkflowPlanner", () => {
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
         executedCapabilities: new Set([Capability.WEB_RECON]),
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).not.toBeNull()
       // Should include BOTH the LLM-suggested POST_EXPLOITATION and rule-based GRAPHQL_ASSESSMENT
@@ -405,33 +405,33 @@ describe("WorkflowPlanner", () => {
       expect(caps).toContain(Capability.GRAPHQL_ASSESSMENT)
     })
 
-    test("llmReplanCount increments when LLM produces phases", () => {
+    test("llmReplanCount increments when LLM produces phases", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         llmReplanCount: 0,
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).not.toBeNull()
       expect(ctx.llmReplanCount).toBe(1)
       expect(ctx.replanCount).toBe(1)  // also incremented (LLM caps became regularPhases)
     })
 
-    test("llmReplanCount does not increment when all LLM suggestions already executed", () => {
+    test("llmReplanCount does not increment when all LLM suggestions already executed", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         llmReplanCount: 0,
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
         executedCapabilities: new Set([Capability.POST_EXPLOITATION]),
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       expect(result).toBeNull()
       expect(ctx.llmReplanCount).toBe(0)
     })
 
-    test("llmMaxReplans from context caps LLM-driven replanning", () => {
+    test("llmMaxReplans from context caps LLM-driven replanning", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         llmReplanCount: 2,
@@ -439,31 +439,31 @@ describe("WorkflowPlanner", () => {
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
       })
       // LLM budget exhausted (2 >= 2), even though rule budget is available
-      expect(planner.replan(ctx)).toBeNull()
+      expect(await planner.replan(ctx)).toBeNull()
 
       const ctx2 = makeContext({
         llmReplanCount: 1,
         llmMaxReplans: 2,
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
       })
-      const result = planner.replan(ctx2)
+      const result = await planner.replan(ctx2)
       expect(result).not.toBeNull()
       expect(result).toHaveLength(1)
       expect(result![0].requiredCapabilities).toContain(Capability.POST_EXPLOITATION)
     })
 
-    test("LLM suggestions with unknown capabilities are silently skipped", () => {
+    test("LLM suggestions with unknown capabilities are silently skipped", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         llmSuggestedCapabilities: ["UNKNOWN_CAP_X99"],
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       // Unknown capability maps to undefined — no phases produced
       expect(result).toBeNull()
     })
 
-    test("rule budget exhausted but LLM suggestions still produce phases — verifies replanCount not incremented for rule", () => {
+    test("rule budget exhausted but LLM suggestions still produce phases — verifies replanCount not incremented for rule", async () => {
       const planner = new WorkflowPlanner({} as any, {} as any)
       const ctx = makeContext({
         replanCount: MAX_REPLANS,
@@ -485,7 +485,7 @@ describe("WorkflowPlanner", () => {
           },
         ],
       })
-      const result = planner.replan(ctx)
+      const result = await planner.replan(ctx)
 
       // Only LLM phases produced (rule budget exhausted)
       expect(result).not.toBeNull()

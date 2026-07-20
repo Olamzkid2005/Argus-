@@ -1316,7 +1316,7 @@ export class WorkflowRunner {
       try {
         const { EvidenceCollector } = await import("./evidence/collector")
         const { StoragePaths } = await import("./storage/paths")
-        const collector = new EvidenceCollector(StoragePaths.evidence)
+        const collector = new EvidenceCollector(StoragePaths.evidenceDir)
         const pruned = await collector.pruneEngagement(engagementId)
         if (pruned > 0) {
           emit(`✓ Pruned ${pruned} stale evidence file(s)`)

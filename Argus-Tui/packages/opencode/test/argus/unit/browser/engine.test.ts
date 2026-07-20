@@ -130,10 +130,11 @@ describe("PlaywrightEngine", () => {
     
     expect(lastCreateContextOptions).not.toBeNull()
     // Viewport is randomly selected from a pool and jittered by ±2px
-    expect(lastCreateContextOptions!.viewport).toHaveProperty("width")
-    expect(lastCreateContextOptions!.viewport).toHaveProperty("height")
-    expect(lastCreateContextOptions!.viewport.width).toBeGreaterThan(0)
-    expect(lastCreateContextOptions!.viewport.height).toBeGreaterThan(0)
+    const vp = lastCreateContextOptions!.viewport as { width: number; height: number }
+    expect(vp).toHaveProperty("width")
+    expect(vp).toHaveProperty("height")
+    expect(vp.width).toBeGreaterThan(0)
+    expect(vp.height).toBeGreaterThan(0)
     expect(lastCreateContextOptions!.locale).toBe("en-US")
     expect(lastCreateContextOptions!.timezoneId).toBe("America/New_York")
     expect(lastCreateContextOptions!.geolocation).toEqual({ latitude: 40.7128, longitude: -74.006 })
