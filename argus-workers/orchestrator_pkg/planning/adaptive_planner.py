@@ -43,8 +43,9 @@ Add new phases by appending to PHASE_DEFINITIONS. Each definition requires:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 # Convenience type alias for ReconContext-like objects
 _ReconCtx = Any
@@ -121,6 +122,43 @@ class WorkflowPlan:
     activated_phases: int = 0
     skipped_phases: list[dict[str, str]] = field(default_factory=list)
 
+    def get_coverage_report(self) -> dict:
+        """Return a structured coverage report comparing planned vs executed phases.
+
+        Shows which phases were activated, which were skipped (with reasons),
+        and what percentage of the potential attack surface was covered.
+
+        Returns:
+            Dict with coverage_gaps (list of skipped phases), activated (list of
+            active phases), activated_count, skipped_count, total_phases, and
+            coverage_pct (float 0.0-1.0).
+        """
+        if not self.phases and not self.skipped_phases:
+            return {
+                "coverage_gaps": [],
+                "activated": [],
+                "activated_count": 0,
+                "skipped_count": 0,
+                "total_phases": self.total_phases,
+                "coverage_pct": 0.0,
+                "summary": self.summary,
+            }
+        activated_names = [p.name for p in self.phases]
+        skipped_info = [
+            {"name": s.get("name", "unknown"), "reason": s.get("reason", "")}
+            for s in self.skipped_phases
+        ]
+        evaluable = self.total_phases or (len(self.phases) + len(self.skipped_phases))
+        coverage_pct = self.activated_phases / max(evaluable, 1)
+        return {
+            "coverage_gaps": skipped_info,
+            "activated": activated_names,
+            "activated_count": self.activated_phases,
+            "skipped_count": len(self.skipped_phases),
+            "total_phases": evaluable,
+            "coverage_pct": round(coverage_pct, 3),
+            "summary": self.summary,
+        }
 
 # ── Phase Definitions ──────────────────────────────────────────────────
 
@@ -974,6 +1012,106 @@ def _cors_testing_tools(recon_context) -> list[ToolTask]:
     ]
 
 
+# ── Phase: CSRF Testing ───────────────────────────────────────────────────
+
+
+def _activate_csrf_testing(rc) -> tuple[bool, str]:
+    """Activate when form endpoints or session-based auth are detected.
+
+    Cross-Site Request Forgery (CSRF) occurs when an attacker tricks a
+    user's browser into executing unwanted actions on an authenticated
+    session. Any state-changing operation (POST, PUT, DELETE) without
+    anti-CSRF tokens is potentially vulnerable.
+
+    Activates when:
+      - ``has_csrf`` flag is set on ReconContext (forward-compatible)
+      - ``form_endpoints`` list is populated (forward-compatible)
+      - Auth endpoints are present (login, registration, password reset)
+      - Login page is detected
+      - API endpoints are present (CSRF on APIs)
+      - Session-related keywords appear in tech_stack
+      - Form submissions detected in crawled paths
+    """
+    # Forward-compatible: check for dedicated CSRF attribute
+    has_csrf = _get_attr(rc, "has_csrf", False)
+    if has_csrf:
+        return True, "CSRF signals detected in recon"
+
+    form_eps = _get_attr(rc, "form_endpoints", [])
+    if form_eps and len(form_eps) > 0:
+        return True, f"{len(form_eps)} form endpoint(s) found"
+
+    reasons = []
+
+    # Auth endpoints are CSRF-prone (login, password reset, etc.)
+    auth_eps = _get_attr(rc, "auth_endpoints", [])
+    has_login = _get_attr(rc, "has_login_page", False)
+    if auth_eps and len(auth_eps) > 0:
+        reasons.append(f"{len(auth_eps)} auth endpoint(s)")
+    if has_login:
+        reasons.append("login page")
+
+    # API endpoints can be vulnerable to CSRF
+    has_api = _get_attr(rc, "has_api", False)
+    api_eps = _get_attr(rc, "api_endpoints", [])
+    if has_api:
+        reasons.append("API detected")
+    if api_eps and len(api_eps) > 0:
+        reasons.append(f"{len(api_eps)} API endpoint(s)")
+
+    # Check tech_stack for session/auth-related keywords
+    tech = _get_tech_stack(rc)
+    if tech:
+        tech_lower = " ".join(t.lower() for t in tech)
+        csrf_keywords = {"csrf", "csrf token", "session", "cookie",
+                         "auth token", "jwt", "antiforgery",
+                         "antiforgerytoken", "x-csrf-token",
+                         "__requestverificationtoken"}
+        matched = [kw for kw in csrf_keywords if kw in tech_lower]
+        if matched:
+            reasons.append(f"security tech: {', '.join(matched[:2])}")
+
+    if reasons:
+        return True, "; ".join(reasons[:3])
+
+    return False, "no form endpoints or session-based auth detected"
+
+
+def _csrf_testing_tools(recon_context) -> list[ToolTask]:
+    """Build tool tasks for CSRF vulnerability testing.
+
+    Tests for:
+      - Missing CSRF tokens on state-changing endpoints (POST, PUT, DELETE)
+      - Weak/guessable CSRF token generation
+      - CSRF token validation bypass (referer, origin, custom header)
+      - CSRF on JSON endpoints (content-type switching)
+      - SameSite cookie bypass for CSRF
+      - Anti-CSRF token reuse/replay
+      - Anti-CSRF token leakage via referer/response headers
+    """
+    tools: list[ToolTask] = [
+        ToolTask(
+            tool_name="nuclei",
+            description="CSRF vulnerability scanning (missing tokens, weak validation, SameSite bypass)",
+            priority=10,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "csrf,samesite,cookie,exposure,bypass"],
+        ),
+        ToolTask(
+            tool_name="nuclei",
+            description="CSRF token analysis and anti-forgery protection scanning",
+            priority=20,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "csrf,bypass,antiforgery,header,referer"],
+        ),
+    ]
+    return tools
+
+
 # ── Phase: Rate Limit Testing ────────────────────────────────────────────
 
 
@@ -1152,14 +1290,14 @@ def _has_redirect_params(param_urls: list[str]) -> bool:
     """
     if not param_urls:
         return False
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import parse_qs, urlparse
     for url in param_urls:
         try:
             parsed = urlparse(url)
             params = parse_qs(parsed.query)
             param_names_lower = {p.lower() for p in params}
             if param_names_lower & _REDIRECT_PARAM_PATTERNS:
-                matched = param_names_lower & _REDIRECT_PARAM_PATTERNS
+                param_names_lower & _REDIRECT_PARAM_PATTERNS
                 return True
         except Exception:
             continue
@@ -1170,7 +1308,7 @@ def _count_redirect_params(param_urls: list[str]) -> int:
     """Count how many parameter-bearing URLs have redirect parameters."""
     if not param_urls:
         return 0
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import parse_qs, urlparse
     count = 0
     for url in param_urls:
         try:
@@ -1188,7 +1326,7 @@ def _get_redirect_param_names(param_urls: list[str]) -> list[str]:
     """Get the matched redirect parameter names found in URLs."""
     if not param_urls:
         return []
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import parse_qs, urlparse
     matched: set[str] = set()
     for url in param_urls:
         try:
@@ -1299,8 +1437,8 @@ _XML_PROCESSORS: set[str] = {
     "system.xml", "xmltextreader", "xmlreader",
     "xmldocument", "xpathdocument", "linq to xml",
     # PHP
-    "simplexml", "domdocument", "xmlreader", "xmlwriter",
-    "libxml", "soapclient", "simplexmlelement",
+    "simplexml", "domdocument", "xmlwriter",
+    "soapclient", "simplexmlelement",
     # Ruby
     "nokogiri", "rexml", "libxml-ruby", "ox",
     # JavaScript / TypeScript
@@ -1309,8 +1447,7 @@ _XML_PROCESSORS: set[str] = {
     # HTTP/SOAP
     "soap", "soapui", "xml-rpc", "wsdl",
     # Frameworks with XML processing
-    "spring-web-services", "cxf", "axis", "soap",
-    "xml-rpc", "wsdl",
+    "spring-web-services", "cxf", "axis",
 }
 
 
@@ -1400,6 +1537,142 @@ def _xxe_testing_tools(recon_context) -> list[ToolTask]:
             args_template=["-u", "{target}", "-jsonl", "-silent",
                            "-severity", "medium,high,critical",
                            "-tags", "xxe,ssrf,oast,injection,xinclude"],
+        ),
+    ]
+    return tools
+
+
+# ── Phase: Path Traversal Testing ─────────────────────────────────────────
+
+# File access functions and path-related keywords by language
+_FILE_ACCESS_FUNCTIONS: set[str] = {
+    # Python
+    "open", "io.open", "os.path", "pathlib",
+    "pathlib.path", "pathlib.read_text",
+    # PHP
+    "file_get_contents", "readfile", "fopen", "fread",
+    "file", "include", "require", "include_once",
+    "require_once", "file_put_contents", "fwrite",
+    "fputs", "file_exists",
+    # Java
+    "filereader", "fileinputstream", "filechannel",
+    "files.readallbytes", "files.readalllines",
+    "paths.get", "new file", # .NET
+    "file.readalltext", "file.readallbytes",
+    "file.readalllines", "filestream",
+    "streamreader", "file.openread",
+    # Ruby
+    "file.read", "file.open", "io.read",
+    "pathname", "open-uri",
+    # JavaScript / Node.js
+    "fs.readfile", "fs.readfilesync",
+    "fs.createreadstream", "fs.readdir",
+    "fs.readdirsync", "fs.stat",
+    # Go
+    "os.readfile", "ioutil.readfile",
+    "ioutil.readdir", "os.open",
+    # Path traversal parameter names (recon signals)
+    "page", "path", "dir", "directory",
+    "document", "template", "load",
+    "read", "show", "view", "display",
+}
+
+
+def _activate_path_traversal(rc) -> tuple[bool, str]:
+    """Activate when file access functions are detected in tech_stack.
+
+    Path traversal (directory traversal) allows attackers to access
+    files and directories outside the web root by manipulating path
+    references in user-controlled input. Common in file retrieval,
+    template rendering, and document viewing functionality.
+
+    Activates when:
+      - ``has_path_traversal`` flag is set (forward-compatible)
+      - ``path_traversal_endpoints`` list is populated (forward-compatible)
+      - File access function keywords appear in tech_stack
+      - Parameter-bearing URLs have path-traversal-like parameters
+        (file, page, path, dir, document, template, include, etc.)
+      - File upload is present (traversal via upload paths)
+    """
+    # Forward-compatible: check for dedicated path traversal attribute
+    has_pt = _get_attr(rc, "has_path_traversal", False)
+    if has_pt:
+        return True, "path traversal signals detected in recon"
+
+    pt_eps = _get_attr(rc, "path_traversal_endpoints", [])
+    if pt_eps and len(pt_eps) > 0:
+        return True, f"{len(pt_eps)} path traversal endpoint(s) found"
+
+    # Check tech_stack for file access function keywords
+    tech = _get_tech_stack(rc)
+    if tech:
+        tech_lower = " ".join(t.lower() for t in tech)
+        matched = [kw for kw in _FILE_ACCESS_FUNCTIONS if kw in tech_lower]
+        if matched:
+            return True, f"file access function detected: {', '.join(matched[:3])}"
+
+    # Parameter-bearing URLs with path traversal parameter names
+    param_urls = _get_attr(rc, "parameter_bearing_urls", [])
+    reasons = []
+    if param_urls:
+        traversal_params = {"file", "page", "path", "dir", "directory",
+                           "document", "template", "include", "load",
+                           "read", "show", "view", "display",
+                           "folder", "root", "base", "href"}
+        from urllib.parse import parse_qs, urlparse
+        for url in param_urls:
+            try:
+                parsed = urlparse(url)
+                params = parse_qs(parsed.query)
+                param_names_lower = {p.lower() for p in params}
+                if param_names_lower & traversal_params:
+                    matched = param_names_lower & traversal_params
+                    reasons.append(f"{len(param_urls)} URL(s) with traversal params")
+                    break
+            except Exception:
+                continue
+
+    # File upload can involve path traversal via upload paths
+    has_upload = _get_attr(rc, "has_file_upload", False)
+    if has_upload:
+        reasons.append("file upload present")
+
+    if reasons:
+        return True, "possible path traversal context: " + "; ".join(reasons)
+
+    return False, "no path traversal signals detected"
+
+
+def _path_traversal_tools(recon_context) -> list[ToolTask]:
+    """Build tool tasks for path traversal vulnerability testing.
+
+    Tests for:
+      - Directory traversal via ../ patterns (../etc/passwd, ..\\windows\\)
+      - Path traversal via URL-encoded variants (%2e%2e/, ..\\;/, ....//)
+      - Blind path traversal via file existence detection
+      - Path traversal via file upload filenames
+      - File disclosure via traversal (config files, source code)
+      - Local File Inclusion (LFI) via path traversal
+      - Remote File Inclusion (RFI) via traversal patterns
+    """
+    tools: list[ToolTask] = [
+        ToolTask(
+            tool_name="nuclei",
+            description="Path traversal and LFI scanning (dot-dot-slash, encoded variants, config disclosure)",
+            priority=10,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "lfi,path-traversal,traversal,disclosure"],
+        ),
+        ToolTask(
+            tool_name="nuclei",
+            description="Path traversal via file upload and RFI scanning",
+            priority=20,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "lfi,rfi,file-inclusion,upload,exposure"],
         ),
     ]
     return tools
@@ -1648,8 +1921,7 @@ _LDAP_KEYWORDS: set[str] = {
     "active directory", "ad ds", "ad lds", "ad fs",
     "apache directory", "apacheds", "fedora directory",
     "unboundid", "novell edirectory", "oracle internet directory",
-    "sun directory", "openam", "opendj", "opendj",
-    "pensieve ldap", "ldapjs", "spring-ldap", "spring data ldap",
+    "sun directory", "openam", "opendj", "pensieve ldap", "ldapjs", "spring-ldap", "spring data ldap",
     "ldaptive", "ldap3", "python-ldap", "ldapauthenticator",
     "django-auth-ldap", "flask-ldap", "php ldap",
 }
@@ -1880,6 +2152,15 @@ PHASE_DEFINITIONS: list[_PhaseDefinition] = [
         depends_on=["auth_testing"],
     ),
     _PhaseDefinition(
+        name="csrf_testing",
+        description="Cross-Site Request Forgery testing (missing tokens, SameSite bypass, referer validation)",
+        order=42,
+        activate_fn=_activate_csrf_testing,
+        tools_fn=_csrf_testing_tools,
+        depends_on=["auth_testing", "access_control"],
+        triggers=["session_analysis"],
+    ),
+    _PhaseDefinition(
         name="graphql_introspection",
         description="GraphQL introspection and schema exposure testing (introspection query, schema dump, playground)",
         order=48,
@@ -1936,7 +2217,7 @@ PHASE_DEFINITIONS: list[_PhaseDefinition] = [
         order=60,
         activate_fn=_activate_input_validation,
         tools_fn=_input_validation_tools,
-        triggers=["ssrf_testing", "template_injection", "open_redirect", "ldap_injection", "xxe_testing", "no_sql_injection", "command_injection"],
+        triggers=["ssrf_testing", "template_injection", "open_redirect", "ldap_injection", "xxe_testing", "no_sql_injection", "command_injection", "path_traversal"],
     ),
     _PhaseDefinition(
         name="xxe_testing",
@@ -1973,6 +2254,15 @@ PHASE_DEFINITIONS: list[_PhaseDefinition] = [
         tools_fn=_ldap_injection_tools,
         depends_on=["input_validation"],
         triggers=["access_control"],
+    ),
+    _PhaseDefinition(
+        name="path_traversal",
+        description="Path traversal and LFI testing (dot-dot-slash, encoded variants, file disclosure)",
+        order=68,
+        activate_fn=_activate_path_traversal,
+        tools_fn=_path_traversal_tools,
+        depends_on=["input_validation"],
+        triggers=["access_control", "file_upload_scan"],
     ),
     _PhaseDefinition(
         name="command_injection",
@@ -2272,6 +2562,76 @@ class AdaptiveWorkflowPlanner:
             for arg in task.args_template
         ]
 
+    def should_continue(
+        self,
+        plan: WorkflowPlan,
+        phase_results: list[dict],
+        hypotheses: list[dict] | None = None,
+        budget_remaining: dict | None = None,
+    ) -> bool:
+        """Determine whether the assessment should continue to the next phase.
+
+        Called after each phase completes. Returns False if:
+        - The current phase produced zero findings (fruitless path)
+        - Budget is exhausted (time or phase limit reached)
+        - All planned phases have been executed
+
+        Returns True if:
+        - There are pending hypothesis-driven phases (hypotheses exist)
+        - Budget allows continued execution
+        - There are unexecuted phases in the plan
+
+        Args:
+            plan: The current WorkflowPlan.
+            phase_results: List of phase result dicts from completed phases.
+                Each should have: phase, status, findings_count.
+            hypotheses: Optional list of active hypotheses with suggested_tools.
+            budget_remaining: Optional dict with remaining_budget_seconds and
+                remaining_phases.
+
+        Returns:
+            True if the assessment should continue, False if it should stop.
+        """
+        # Check 1: No plan -> cannot continue
+        if not plan or not plan.phases:
+            return False
+
+        # Check 2: All planned phases already executed
+        executed_count = len(phase_results)
+        if executed_count >= plan.total_phases:
+            return False
+
+        # Check 3: Budget exhaustion
+        if budget_remaining:
+            remaining_sec = budget_remaining.get("remaining_budget_seconds", None)
+            if remaining_sec is not None and remaining_sec <= 0:
+                return False
+            remaining_phases = budget_remaining.get("remaining_phases", None)
+            if remaining_phases is not None and remaining_phases <= 0:
+                return False
+
+        # Check 4: Zero-finding detection
+        if phase_results:
+            last_result = phase_results[-1]
+            last_findings = last_result.get("findings_count", 0)
+
+            if last_findings == 0:
+                has_pending_hypotheses = bool(hypotheses and len(hypotheses) > 0)
+                if not has_pending_hypotheses:
+                    return False
+
+            # Last 2 consecutive phases with zero findings = hard stop
+            if len(phase_results) >= 2:
+                second_last = phase_results[-2]
+                if (
+                    last_findings == 0
+                    and second_last.get("findings_count", 0) == 0
+                ):
+                    return False
+
+        # Default: continue
+        return True
+
     def update_plan_from_results(
         self,
         plan: WorkflowPlan,
@@ -2387,6 +2747,59 @@ class AdaptiveWorkflowPlanner:
             deduped_phases.append(phase)
 
         plan.phases = deduped_phases
+        return plan
+
+    def apply_hypotheses_to_plan(
+        self,
+        plan: WorkflowPlan,
+        hypotheses: list[dict],
+    ) -> WorkflowPlan:
+        """Mark phases as hypothesis-driven based on predicted vulnerabilities.
+
+        Examines each hypothesis's ``suggested_tools`` to find phases whose
+        tool names overlap with hypothesis tools, then appends a note to those
+        phases' ``activation_reason``. This makes the plan reflect predicted
+        attack vectors in the LLM agent context.
+
+        Currently only updates already-active phases (does not activate
+        previously-skipped phases). If deeper hypothesis-to-phase activation
+        is needed, extend this method to create new ``TestingPhase`` instances
+        from ``self.phase_defs`` for matching skipped phases.
+
+        Args:
+            plan: The current WorkflowPlan to update.
+            hypotheses: List of hypothesis dicts from HypothesisEngine.
+                Each dict should have ``suggested_tools`` (list[str]).
+
+        Returns:
+            Updated WorkflowPlan with hypothesis-driven markers on phases.
+        """
+        if not plan or not hypotheses:
+            return plan
+
+        # Build a set of tool names mentioned across all hypotheses
+        hypothesis_tools: set[str] = set()
+        for h in hypotheses:
+            suggested = h.get("suggested_tools", [])
+            if isinstance(suggested, list):
+                hypothesis_tools.update(suggested)
+
+        if not hypothesis_tools:
+            return plan
+
+        # Mark any phase whose tool names overlap with hypothesis tools
+        for phase in plan.phases:
+            phase_tool_names = {t.tool_name for t in phase.tools}
+            if phase_tool_names & hypothesis_tools:
+                if not phase.activation_reason.endswith(" (hypothesis-driven)"):
+                    phase.activation_reason += " (hypothesis-driven)"
+
+        logger.info(
+            "[AdaptivePlanner] apply_hypotheses_to_plan: %d hypothesis tool(s) "
+            "matched against %d active phase(s)",
+            len(hypothesis_tools),
+            len(plan.phases),
+        )
         return plan
 
     def get_plan_summary(self, plan: WorkflowPlan) -> dict:
