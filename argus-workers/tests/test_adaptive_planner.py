@@ -616,6 +616,232 @@ class TestRateLimitTesting:
         assert "auth_testing" in activated
 
 
+# ── Template Injection (SSTI) Tests ─────────────────────────────────────────
+
+
+class TestTemplateInjection:
+    """Test the template_injection phase activation and tool generation."""
+
+    def test_has_template_injection_flag_activates(self):
+        """has_template_injection=True activates template_injection."""
+        rc = _make_mock_recon(has_template_injection=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "template_injection" for p in plan.phases), (
+            f"Expected template_injection in phases: {[p.name for p in plan.phases]}"
+        )
+
+    def test_template_engines_list_activates(self):
+        """template_engines list on ReconContext activates template_injection."""
+        rc = _make_mock_recon(template_engines=["Jinja2", "Twig"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "template_injection" for p in plan.phases)
+
+    def test_jinja_tech_activates_ssti(self):
+        """Jinja/Jinja2 in tech_stack activates template_injection."""
+        rc = _make_mock_recon(tech_stack=["Flask", "Jinja2", "Python"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "template_injection" for p in plan.phases)
+
+    def test_twig_tech_activates_ssti(self):
+        """Twig in tech_stack activates template_injection."""
+        rc = _make_mock_recon(tech_stack=["Symfony", "Twig", "PHP"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "template_injection" for p in plan.phases)
+
+    def test_blade_tech_activates_ssti(self):
+        """Blade in tech_stack activates template_injection."""
+        rc = _make_mock_recon(tech_stack=["Laravel", "Blade", "PHP"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "template_injection" for p in plan.phases)
+
+    def test_pug_tech_activates_ssti(self):
+        """Pug in tech_stack activates template_injection."""
+        rc = _make_mock_recon(tech_stack=["Express", "Pug", "Node.js"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "template_injection" for p in plan.phases)
+
+    def test_velocity_tech_activates_ssti(self):
+        """Velocity in tech_stack activates template_injection."""
+        rc = _make_mock_recon(tech_stack=["Spring", "Velocity", "Java"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "template_injection" for p in plan.phases)
+
+    def test_parameter_urls_activate_ssti(self):
+        """Parameter-bearing URLs activate template_injection (SSTI vector)."""
+        rc = _make_mock_recon(parameter_bearing_urls=["/page?name=test"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "template_injection" for p in plan.phases)
+
+    def test_no_ssti_signals_no_activation(self):
+        """No template signals does NOT activate template_injection."""
+        rc = _make_mock_recon(target_url="https://example.com")
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert not any(p.name == "template_injection" for p in plan.phases)
+
+    def test_ssti_has_tools(self):
+        """Activated template_injection phase has tool tasks."""
+        rc = _make_mock_recon(tech_stack=["Flask", "Jinja2"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        ssti_phase = next(p for p in plan.phases if p.name == "template_injection")
+        assert len(ssti_phase.tools) >= 2, (
+            f"Expected 2+ SSTI testing tools, got {len(ssti_phase.tools)}"
+        )
+
+    def test_ssti_depends_on_input_validation(self):
+        """template_injection depends_on input_validation, so input_validation comes first."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/page?name=test"],
+            tech_stack=["Flask", "Jinja2"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        names = [p.name for p in plan.phases]
+        assert "input_validation" in names
+        assert "template_injection" in names
+        assert names.index("input_validation") < names.index("template_injection"), (
+            f"input_validation should come before template_injection: {names}"
+        )
+
+    def test_input_validation_triggers_ssti(self):
+        """input_validation has template_injection in its triggers."""
+        rc = _make_mock_recon(parameter_bearing_urls=["/page?id=1"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        iv_phase = next(p for p in plan.phases if p.name == "input_validation")
+        assert "template_injection" in iv_phase.triggers
+
+    def test_ssti_triggers_access_control(self):
+        """template_injection triggers include access_control."""
+        rc = _make_mock_recon(tech_stack=["Flask", "Jinja2"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        ssti_phase = next(p for p in plan.phases if p.name == "template_injection")
+        assert "access_control" in ssti_phase.triggers
+
+
+# ── Deserialization Testing Tests ───────────────────────────────────────────
+
+
+class TestDeserializationTesting:
+    """Test the deserialization_testing phase activation and tool generation."""
+
+    def test_has_deserialization_flag_activates(self):
+        """has_deserialization=True activates deserialization_testing."""
+        rc = _make_mock_recon(has_deserialization=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "deserialization_testing" for p in plan.phases), (
+            f"Expected deserialization_testing in phases: {[p.name for p in plan.phases]}"
+        )
+
+    def test_deserialization_libs_list_activates(self):
+        """deserialization_libs list activates deserialization_testing."""
+        rc = _make_mock_recon(deserialization_libs=["pickle", "PyYAML"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "deserialization_testing" for p in plan.phases)
+
+    def test_pickle_tech_activates_deser(self):
+        """Pickle in tech_stack activates deserialization_testing."""
+        rc = _make_mock_recon(tech_stack=["Python", "pickle", "Flask"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "deserialization_testing" for p in plan.phases)
+
+    def test_jackson_tech_activates_deser(self):
+        """Jackson in tech_stack activates deserialization_testing."""
+        rc = _make_mock_recon(tech_stack=["Spring", "Jackson", "Java"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "deserialization_testing" for p in plan.phases)
+
+    def test_xstream_tech_activates_deser(self):
+        """XStream in tech_stack activates deserialization_testing."""
+        rc = _make_mock_recon(tech_stack=["Java", "XStream"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "deserialization_testing" for p in plan.phases)
+
+    def test_fastjson_tech_activates_deser(self):
+        """Fastjson in tech_stack activates deserialization_testing."""
+        rc = _make_mock_recon(tech_stack=["Java", "Fastjson", "Spring Boot"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "deserialization_testing" for p in plan.phases)
+
+    def test_api_endpoint_activates_deser(self):
+        """API endpoints trigger deserialization_testing (deserialization is common via APIs)."""
+        rc = _make_mock_recon(has_api=True, api_endpoints=["/api/v1/data"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "deserialization_testing" for p in plan.phases)
+
+    def test_parameter_urls_activate_deser(self):
+        """Parameter-bearing URLs activate deserialization_testing."""
+        rc = _make_mock_recon(parameter_bearing_urls=["/api/data?payload=test"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "deserialization_testing" for p in plan.phases)
+
+    def test_no_deser_signals_no_activation(self):
+        """No deserialization signals does NOT activate deserialization_testing."""
+        rc = _make_mock_recon(target_url="https://example.com")
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert not any(p.name == "deserialization_testing" for p in plan.phases)
+
+    def test_deser_has_tools(self):
+        """Activated deserialization_testing phase has tool tasks."""
+        rc = _make_mock_recon(tech_stack=["Java", "Jackson"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        deser_phase = next(p for p in plan.phases if p.name == "deserialization_testing")
+        assert len(deser_phase.tools) >= 2, (
+            f"Expected 2+ deserialization testing tools, got {len(deser_phase.tools)}"
+        )
+
+    def test_deser_depends_on_input_validation(self):
+        """deserialization_testing depends_on input_validation, which comes first."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/api/data?payload=test"],
+            has_api=True,
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        names = [p.name for p in plan.phases]
+        assert "input_validation" in names
+        assert "deserialization_testing" in names
+        assert names.index("input_validation") < names.index("deserialization_testing"), (
+            f"input_validation should come before deserialization_testing: {names}"
+        )
+
+    def test_deser_triggers_access_control(self):
+        """deserialization_testing triggers include access_control."""
+        rc = _make_mock_recon(tech_stack=["Java", "Jackson"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        deser_phase = next(p for p in plan.phases if p.name == "deserialization_testing")
+        assert "access_control" in deser_phase.triggers
+
+    def test_deser_triggers_cloud_metadata(self):
+        """deserialization_testing triggers include cloud_metadata_probe."""
+        rc = _make_mock_recon(tech_stack=["Java", "Jackson"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        deser_phase = next(p for p in plan.phases if p.name == "deserialization_testing")
+        assert "cloud_metadata_probe" in deser_phase.triggers
+
+
 # ── SSRF Testing Tests ─────────────────────────────────────────────────────
 
 
@@ -713,6 +939,733 @@ class TestSsrfTesting:
         plan = planner.build_plan(rc)
         ssrf_phase = next(p for p in plan.phases if p.name == "ssrf_testing")
         assert "cloud_metadata_probe" in ssrf_phase.triggers
+
+
+# ── Open Redirect Testing Tests ────────────────────────────────────────────
+
+
+class TestOpenRedirect:
+    """Test the open_redirect phase activation and tool generation."""
+
+    def test_has_open_redirect_flag_activates(self):
+        """has_open_redirect=True on ReconContext activates open_redirect."""
+        rc = _make_mock_recon(has_open_redirect=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "open_redirect" for p in plan.phases), (
+            f"Expected open_redirect in phases: {[p.name for p in plan.phases]}"
+        )
+
+    def test_redirect_endpoints_list_activates(self):
+        """redirect_endpoints list on ReconContext activates open_redirect."""
+        rc = _make_mock_recon(redirect_endpoints=["/redirect", "/goto"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "open_redirect" for p in plan.phases)
+
+    def test_param_urls_with_redirect_activates(self):
+        """Parameter-bearing URLs with 'redirect' param name activate open_redirect."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/page?redirect=http://evil.com"]
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "open_redirect" for p in plan.phases)
+
+    def test_param_urls_with_url_param_activates(self):
+        """Parameter-bearing URLs with 'url' param name activate open_redirect."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/page?url=http://evil.com"]
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "open_redirect" for p in plan.phases)
+
+    def test_param_urls_with_next_param_activates(self):
+        """Parameter-bearing URLs with 'next' param name activate open_redirect."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/login?next=/admin"]
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "open_redirect" for p in plan.phases)
+
+    def test_param_urls_with_goto_param_activates(self):
+        """Parameter-bearing URLs with 'goto' param name activate open_redirect."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/page?goto=http://evil.com"]
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "open_redirect" for p in plan.phases)
+
+    def test_param_urls_with_return_param_activates(self):
+        """Parameter-bearing URLs with 'return' param name activate open_redirect."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/checkout?return=/cart"]
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "open_redirect" for p in plan.phases)
+
+    def test_param_urls_with_redirect_uri_activates(self):
+        """Parameter-bearing URLs with 'redirect_uri' param name activate open_redirect."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/oauth/callback?redirect_uri=http://evil.com"]
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "open_redirect" for p in plan.phases)
+
+    def test_redirect_tech_keyword_activates(self):
+        """Redirect-related keywords in tech_stack activate open_redirect."""
+        rc = _make_mock_recon(tech_stack=["Apache", "mod_rewrite", "PHP"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "open_redirect" for p in plan.phases)
+
+    def test_forward_tech_keyword_activates(self):
+        """'forward' keyword in tech_stack activates open_redirect."""
+        rc = _make_mock_recon(tech_stack=["Spring Boot", "forward", "Java"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "open_redirect" for p in plan.phases)
+
+    def test_param_urls_without_redirect_no_activation(self):
+        """Parameter-bearing URLs without redirect params do NOT activate open_redirect."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/page?id=1&name=test", "/search?q=hello"]
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert not any(p.name == "open_redirect" for p in plan.phases)
+
+    def test_no_redirect_signals_no_activation(self):
+        """No redirect signals does NOT activate open_redirect."""
+        rc = _make_mock_recon(target_url="https://example.com")
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert not any(p.name == "open_redirect" for p in plan.phases)
+
+    def test_open_redirect_has_tools(self):
+        """Activated open_redirect phase has tool tasks."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/page?redirect=http://evil.com"]
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        or_phase = next(p for p in plan.phases if p.name == "open_redirect")
+        assert len(or_phase.tools) >= 2, (
+            f"Expected 2+ open redirect testing tools, got {len(or_phase.tools)}"
+        )
+
+    def test_open_redirect_depends_on_input_validation(self):
+        """open_redirect depends_on input_validation, so input_validation comes first."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/page?redirect=http://evil.com", "/page?id=1"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        names = [p.name for p in plan.phases]
+        assert "input_validation" in names
+        assert "open_redirect" in names
+        assert names.index("input_validation") < names.index("open_redirect"), (
+            f"input_validation should come before open_redirect: {names}"
+        )
+
+    def test_input_validation_triggers_open_redirect(self):
+        """input_validation has open_redirect in its triggers."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/page?redirect=http://evil.com", "/page?id=1"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        iv_phase = next(p for p in plan.phases if p.name == "input_validation")
+        assert "open_redirect" in iv_phase.triggers
+
+    def test_open_redirect_triggers_access_control(self):
+        """open_redirect triggers include access_control."""
+        rc = _make_mock_recon(
+            parameter_bearing_urls=["/page?redirect=http://evil.com"]
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        or_phase = next(p for p in plan.phases if p.name == "open_redirect")
+        assert "access_control" in or_phase.triggers
+
+
+# ── XXE (XML External Entity) Testing Tests ────────────────────────────────
+
+
+class TestXxeTesting:
+    """Test the xxe_testing phase activation and tool generation."""
+
+    def test_has_xxe_flag_activates(self):
+        """has_xxe=True on ReconContext activates xxe_testing."""
+        rc = _make_mock_recon(has_xxe=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "xxe_testing" for p in plan.phases), (
+            f"Expected xxe_testing in phases: {[p.name for p in plan.phases]}"
+        )
+
+    def test_xml_endpoints_list_activates(self):
+        """xml_endpoints list on ReconContext activates xxe_testing."""
+        rc = _make_mock_recon(xml_endpoints=["/xml/parse", "/soap/endpoint"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "xxe_testing" for p in plan.phases)
+
+    def test_libxml_tech_activates(self):
+        """libxml in tech_stack activates xxe_testing."""
+        rc = _make_mock_recon(tech_stack=["PHP", "libxml", "SimpleXML"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "xxe_testing" for p in plan.phases)
+
+    def test_lxml_tech_activates(self):
+        """lxml in tech_stack activates xxe_testing."""
+        rc = _make_mock_recon(tech_stack=["Python", "lxml", "Flask"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "xxe_testing" for p in plan.phases)
+
+    def test_xerces_tech_activates(self):
+        """Xerces in tech_stack activates xxe_testing."""
+        rc = _make_mock_recon(tech_stack=["Java", "Xerces", "Spring"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "xxe_testing" for p in plan.phases)
+
+    def test_nokogiri_tech_activates(self):
+        """Nokogiri in tech_stack activates xxe_testing."""
+        rc = _make_mock_recon(tech_stack=["Ruby", "Nokogiri", "Rails"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "xxe_testing" for p in plan.phases)
+
+    def test_soap_tech_activates(self):
+        """SOAP in tech_stack activates xxe_testing."""
+        rc = _make_mock_recon(tech_stack=[".NET", "SOAP", "IIS"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "xxe_testing" for p in plan.phases)
+
+    def test_file_upload_activates_xxe(self):
+        """File upload presence activates xxe_testing (XML file upload vector)."""
+        rc = _make_mock_recon(has_file_upload=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "xxe_testing" for p in plan.phases)
+
+    def test_api_endpoint_activates_xxe(self):
+        """API endpoints activate xxe_testing (SOAP/XML APIs)."""
+        rc = _make_mock_recon(has_api=True, api_endpoints=["/api/v1/soap"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "xxe_testing" for p in plan.phases)
+
+    def test_parameter_urls_activate_xxe(self):
+        """Parameter-bearing URLs activate xxe_testing (XXE injection vector)."""
+        rc = _make_mock_recon(parameter_bearing_urls=["/xml/parse?doc=data"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "xxe_testing" for p in plan.phases)
+
+    def test_no_xxe_signals_no_activation(self):
+        """No XXE signals does NOT activate xxe_testing."""
+        rc = _make_mock_recon(target_url="https://example.com")
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert not any(p.name == "xxe_testing" for p in plan.phases)
+
+    def test_xxe_has_tools(self):
+        """Activated xxe_testing phase has tool tasks."""
+        rc = _make_mock_recon(has_xxe=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        xxe_phase = next(p for p in plan.phases if p.name == "xxe_testing")
+        assert len(xxe_phase.tools) >= 2, (
+            f"Expected 2+ XXE testing tools, got {len(xxe_phase.tools)}"
+        )
+
+    def test_xxe_depends_on_input_validation(self):
+        """xxe_testing depends_on input_validation, so input_validation comes first."""
+        rc = _make_mock_recon(
+            has_xxe=True,
+            parameter_bearing_urls=["/xml/parse?doc=data"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        names = [p.name for p in plan.phases]
+        assert "input_validation" in names
+        assert "xxe_testing" in names
+        assert names.index("input_validation") < names.index("xxe_testing"), (
+            f"input_validation should come before xxe_testing: {names}"
+        )
+
+    def test_input_validation_triggers_xxe(self):
+        """input_validation has xxe_testing in its triggers."""
+        rc = _make_mock_recon(
+            has_xxe=True,
+            parameter_bearing_urls=["/xml/parse?doc=data"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        iv_phase = next(p for p in plan.phases if p.name == "input_validation")
+        assert "xxe_testing" in iv_phase.triggers
+
+    def test_xxe_triggers_access_control(self):
+        """xxe_testing triggers include access_control."""
+        rc = _make_mock_recon(has_xxe=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        xxe_phase = next(p for p in plan.phases if p.name == "xxe_testing")
+        assert "access_control" in xxe_phase.triggers
+
+    def test_xxe_triggers_ssrf(self):
+        """xxe_testing triggers include ssrf_testing (XXE can do SSRF)."""
+        rc = _make_mock_recon(has_xxe=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        xxe_phase = next(p for p in plan.phases if p.name == "xxe_testing")
+        assert "ssrf_testing" in xxe_phase.triggers
+
+    def test_xxe_ordered_before_template_injection(self):
+        """xxe_testing at order=61 comes before template_injection at order=62."""
+        rc = _make_mock_recon(
+            has_xxe=True,
+            tech_stack=["Flask", "Jinja2"],
+            parameter_bearing_urls=["/xml/parse?doc=data", "/page?name=test"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        names = [p.name for p in plan.phases]
+        assert "xxe_testing" in names
+        assert "template_injection" in names
+        assert names.index("xxe_testing") < names.index("template_injection"), (
+            f"xxe_testing should come before template_injection: {names}"
+        )
+
+
+# ── Command Injection Testing Tests ────────────────────────────────────────
+
+
+class TestCommandInjection:
+    """Test the command_injection phase activation and tool generation."""
+
+    def test_has_command_injection_flag_activates(self):
+        """has_command_injection=True on ReconContext activates command_injection."""
+        rc = _make_mock_recon(has_command_injection=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "command_injection" for p in plan.phases), (
+            f"Expected command_injection in phases: {[p.name for p in plan.phases]}"
+        )
+
+    def test_cmd_injection_endpoints_list_activates(self):
+        """cmd_injection_endpoints list on ReconContext activates command_injection."""
+        rc = _make_mock_recon(cmd_injection_endpoints=["/cgi-bin/ping", "/exec/cmd"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "command_injection" for p in plan.phases)
+
+    def test_subprocess_tech_activates(self):
+        """subprocess in tech_stack activates command_injection."""
+        rc = _make_mock_recon(tech_stack=["Python", "subprocess", "Flask"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "command_injection" for p in plan.phases)
+
+    def test_exec_php_tech_activates(self):
+        """exec (PHP) in tech_stack activates command_injection."""
+        rc = _make_mock_recon(tech_stack=["PHP", "exec", "shell_exec"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "command_injection" for p in plan.phases)
+
+    def test_runtime_exec_tech_activates(self):
+        """runtime.exec in tech_stack activates command_injection."""
+        rc = _make_mock_recon(tech_stack=["Java", "Runtime.exec", "Spring"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "command_injection" for p in plan.phases)
+
+    def test_processbuilder_tech_activates(self):
+        """ProcessBuilder in tech_stack activates command_injection."""
+        rc = _make_mock_recon(tech_stack=["Java", "ProcessBuilder", "Tomcat"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "command_injection" for p in plan.phases)
+
+    def test_child_process_tech_activates(self):
+        """child_process in tech_stack activates command_injection."""
+        rc = _make_mock_recon(tech_stack=["Node.js", "child_process.exec", "Express"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "command_injection" for p in plan.phases)
+
+    def test_process_start_tech_activates(self):
+        """process.start (.NET) in tech_stack activates command_injection."""
+        rc = _make_mock_recon(tech_stack=[".NET", "process.start", "IIS"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "command_injection" for p in plan.phases)
+
+    def test_parameter_urls_activate_cmd_injection(self):
+        """Parameter-bearing URLs activate command_injection (injection vector)."""
+        rc = _make_mock_recon(parameter_bearing_urls=["/ping?host=example.com"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "command_injection" for p in plan.phases)
+
+    def test_file_upload_activates_cmd_injection(self):
+        """File upload presence activates command_injection (filename-based injection)."""
+        rc = _make_mock_recon(has_file_upload=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "command_injection" for p in plan.phases)
+
+    def test_no_cmd_injection_signals_no_activation(self):
+        """No command injection signals does NOT activate command_injection."""
+        rc = _make_mock_recon(target_url="https://example.com")
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert not any(p.name == "command_injection" for p in plan.phases)
+
+    def test_cmd_injection_has_tools(self):
+        """Activated command_injection phase has tool tasks."""
+        rc = _make_mock_recon(has_command_injection=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        cmdi_phase = next(p for p in plan.phases if p.name == "command_injection")
+        assert len(cmdi_phase.tools) >= 2, (
+            f"Expected 2+ command injection testing tools, got {len(cmdi_phase.tools)}"
+        )
+
+    def test_cmd_injection_depends_on_input_validation(self):
+        """command_injection depends_on input_validation, so input_validation comes first."""
+        rc = _make_mock_recon(
+            has_command_injection=True,
+            parameter_bearing_urls=["/ping?host=example.com"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        names = [p.name for p in plan.phases]
+        assert "input_validation" in names
+        assert "command_injection" in names
+        assert names.index("input_validation") < names.index("command_injection"), (
+            f"input_validation should come before command_injection: {names}"
+        )
+
+    def test_input_validation_triggers_cmd_injection(self):
+        """input_validation has command_injection in its triggers."""
+        rc = _make_mock_recon(
+            has_command_injection=True,
+            parameter_bearing_urls=["/ping?host=example.com"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        iv_phase = next(p for p in plan.phases if p.name == "input_validation")
+        assert "command_injection" in iv_phase.triggers
+
+    def test_cmd_injection_triggers_access_control(self):
+        """command_injection triggers include access_control."""
+        rc = _make_mock_recon(has_command_injection=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        cmdi_phase = next(p for p in plan.phases if p.name == "command_injection")
+        assert "access_control" in cmdi_phase.triggers
+
+    def test_cmd_injection_ordered_after_no_sql(self):
+        """command_injection at order=67 comes after no_sql_injection at order=66."""
+        rc = _make_mock_recon(
+            has_command_injection=True,
+            has_nosql=True,
+            parameter_bearing_urls=["/ping?host=example.com", "/api/data?$where=true"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        names = [p.name for p in plan.phases]
+        assert "no_sql_injection" in names
+        assert "command_injection" in names
+        assert names.index("no_sql_injection") < names.index("command_injection"), (
+            f"no_sql_injection should come before command_injection: {names}"
+        )
+
+
+# ── NoSQL Injection Testing Tests ──────────────────────────────────────────
+
+
+class TestNoSqlInjection:
+    """Test the no_sql_injection phase activation and tool generation."""
+
+    def test_has_nosql_flag_activates(self):
+        """has_nosql=True on ReconContext activates no_sql_injection."""
+        rc = _make_mock_recon(has_nosql=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases), (
+            f"Expected no_sql_injection in phases: {[p.name for p in plan.phases]}"
+        )
+
+    def test_nosql_endpoints_list_activates(self):
+        """nosql_endpoints list on ReconContext activates no_sql_injection."""
+        rc = _make_mock_recon(nosql_endpoints=["/mongo/query", "/nosql/find"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_mongodb_tech_activates(self):
+        """MongoDB in tech_stack activates no_sql_injection."""
+        rc = _make_mock_recon(tech_stack=["MongoDB", "Node.js", "Express"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_mongoose_tech_activates(self):
+        """Mongoose in tech_stack activates no_sql_injection."""
+        rc = _make_mock_recon(tech_stack=["Mongoose", "Node.js"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_firebase_tech_activates(self):
+        """Firebase in tech_stack activates no_sql_injection."""
+        rc = _make_mock_recon(tech_stack=["Firebase", "Firestore", "React"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_elasticsearch_tech_activates(self):
+        """Elasticsearch in tech_stack activates no_sql_injection."""
+        rc = _make_mock_recon(tech_stack=["Elasticsearch", "Kibana", "Python"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_cassandra_tech_activates(self):
+        """Cassandra in tech_stack activates no_sql_injection."""
+        rc = _make_mock_recon(tech_stack=["Cassandra", "Java", "Spring"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_redis_tech_activates(self):
+        """Redis in tech_stack activates no_sql_injection."""
+        rc = _make_mock_recon(tech_stack=["Redis", "Python", "Flask"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_dynamodb_tech_activates(self):
+        """DynamoDB in tech_stack activates no_sql_injection."""
+        rc = _make_mock_recon(tech_stack=["AWS", "DynamoDB", "Lambda"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_neo4j_tech_activates(self):
+        """Neo4j in tech_stack activates no_sql_injection."""
+        rc = _make_mock_recon(tech_stack=["Neo4j", "GraphQL", "Node.js"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_prisma_tech_activates(self):
+        """Prisma in tech_stack activates no_sql_injection."""
+        rc = _make_mock_recon(tech_stack=["Prisma", "PostgreSQL", "Next.js"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_api_endpoint_activates_nosql(self):
+        """API endpoints activate no_sql_injection (NoSQL queried via API params)."""
+        rc = _make_mock_recon(has_api=True, api_endpoints=["/api/v1/users"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_parameter_urls_activate_nosql(self):
+        """Parameter-bearing URLs activate no_sql_injection (injection vector)."""
+        rc = _make_mock_recon(parameter_bearing_urls=["/api/data?$where=true"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_no_nosql_signals_no_activation(self):
+        """No NoSQL signals does NOT activate no_sql_injection."""
+        rc = _make_mock_recon(target_url="https://example.com")
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert not any(p.name == "no_sql_injection" for p in plan.phases)
+
+    def test_nosql_has_tools(self):
+        """Activated no_sql_injection phase has tool tasks."""
+        rc = _make_mock_recon(has_nosql=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        nosql_phase = next(p for p in plan.phases if p.name == "no_sql_injection")
+        assert len(nosql_phase.tools) >= 2, (
+            f"Expected 2+ NoSQL testing tools, got {len(nosql_phase.tools)}"
+        )
+
+    def test_nosql_depends_on_input_validation(self):
+        """no_sql_injection depends_on input_validation, so input_validation comes first."""
+        rc = _make_mock_recon(
+            has_nosql=True,
+            parameter_bearing_urls=["/api/data?$where=true"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        names = [p.name for p in plan.phases]
+        assert "input_validation" in names
+        assert "no_sql_injection" in names
+        assert names.index("input_validation") < names.index("no_sql_injection"), (
+            f"input_validation should come before no_sql_injection: {names}"
+        )
+
+    def test_input_validation_triggers_nosql(self):
+        """input_validation has no_sql_injection in its triggers."""
+        rc = _make_mock_recon(
+            has_nosql=True,
+            parameter_bearing_urls=["/api/data?$where=true"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        iv_phase = next(p for p in plan.phases if p.name == "input_validation")
+        assert "no_sql_injection" in iv_phase.triggers
+
+    def test_nosql_triggers_access_control(self):
+        """no_sql_injection triggers include access_control."""
+        rc = _make_mock_recon(has_nosql=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        nosql_phase = next(p for p in plan.phases if p.name == "no_sql_injection")
+        assert "access_control" in nosql_phase.triggers
+
+
+# ── LDAP Injection Testing Tests ─────────────────────────────────────────
+
+
+class TestLdapInjection:
+    """Test the ldap_injection phase activation and tool generation."""
+
+    def test_has_ldap_flag_activates(self):
+        """has_ldap=True on ReconContext activates ldap_injection."""
+        rc = _make_mock_recon(has_ldap=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "ldap_injection" for p in plan.phases), (
+            f"Expected ldap_injection in phases: {[p.name for p in plan.phases]}"
+        )
+
+    def test_ldap_endpoints_list_activates(self):
+        """ldap_endpoints list on ReconContext activates ldap_injection."""
+        rc = _make_mock_recon(ldap_endpoints=["/ldap/search", "/ldap/authenticate"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "ldap_injection" for p in plan.phases)
+
+    def test_openldap_tech_activates(self):
+        """OpenLDAP in tech_stack activates ldap_injection."""
+        rc = _make_mock_recon(tech_stack=["OpenLDAP", "Linux", "Apache"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "ldap_injection" for p in plan.phases)
+
+    def test_active_directory_tech_activates(self):
+        """Active Directory in tech_stack activates ldap_injection."""
+        rc = _make_mock_recon(tech_stack=["Active Directory", "IIS", ".NET"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "ldap_injection" for p in plan.phases)
+
+    def test_spring_ldap_tech_activates(self):
+        """spring-ldap in tech_stack activates ldap_injection."""
+        rc = _make_mock_recon(tech_stack=["Spring Boot", "spring-ldap", "Java"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "ldap_injection" for p in plan.phases)
+
+    def test_python_ldap_tech_activates(self):
+        """python-ldap in tech_stack activates ldap_injection."""
+        rc = _make_mock_recon(tech_stack=["Django", "python-ldap", "Python"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "ldap_injection" for p in plan.phases)
+
+    def test_auth_endpoints_activate_ldap(self):
+        """Auth endpoints activate ldap_injection (LDAP is commonly used for auth)."""
+        rc = _make_mock_recon(auth_endpoints=["/login"], has_login_page=False)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "ldap_injection" for p in plan.phases)
+
+    def test_login_page_activates_ldap(self):
+        """Login page presence activates ldap_injection (LDAP auth context)."""
+        rc = _make_mock_recon(has_login_page=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "ldap_injection" for p in plan.phases)
+
+    def test_parameter_urls_activate_ldap(self):
+        """Parameter-bearing URLs activate ldap_injection (LDAP injection vector)."""
+        rc = _make_mock_recon(parameter_bearing_urls=["/search?username=admin"])
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert any(p.name == "ldap_injection" for p in plan.phases)
+
+    def test_no_ldap_signals_no_activation(self):
+        """No LDAP signals does NOT activate ldap_injection."""
+        rc = _make_mock_recon(target_url="https://example.com")
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        assert not any(p.name == "ldap_injection" for p in plan.phases)
+
+    def test_ldap_has_tools(self):
+        """Activated ldap_injection phase has tool tasks."""
+        rc = _make_mock_recon(has_ldap=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        ldap_phase = next(p for p in plan.phases if p.name == "ldap_injection")
+        assert len(ldap_phase.tools) >= 2, (
+            f"Expected 2+ LDAP testing tools, got {len(ldap_phase.tools)}"
+        )
+
+    def test_ldap_depends_on_input_validation(self):
+        """ldap_injection depends_on input_validation, so input_validation comes first."""
+        rc = _make_mock_recon(
+            has_ldap=True,
+            parameter_bearing_urls=["/search?username=admin"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        names = [p.name for p in plan.phases]
+        assert "input_validation" in names
+        assert "ldap_injection" in names
+        assert names.index("input_validation") < names.index("ldap_injection"), (
+            f"input_validation should come before ldap_injection: {names}"
+        )
+
+    def test_input_validation_triggers_ldap(self):
+        """input_validation has ldap_injection in its triggers."""
+        rc = _make_mock_recon(
+            has_ldap=True,
+            parameter_bearing_urls=["/search?username=admin"],
+        )
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        iv_phase = next(p for p in plan.phases if p.name == "input_validation")
+        assert "ldap_injection" in iv_phase.triggers
+
+    def test_ldap_triggers_access_control(self):
+        """ldap_injection triggers include access_control."""
+        rc = _make_mock_recon(has_ldap=True)
+        planner = AdaptiveWorkflowPlanner()
+        plan = planner.build_plan(rc)
+        ldap_phase = next(p for p in plan.phases if p.name == "ldap_injection")
+        assert "access_control" in ldap_phase.triggers
 
 
 # ── Cloud Metadata Probe Tests ────────────────────────────────────────────

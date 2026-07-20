@@ -549,8 +549,209 @@ def _input_validation_tools(recon_context) -> list[ToolTask]:
                            "-tags", "injection,sqli,lfi,ssrf,ssti"],
         ),
     ]
-    return tools# ── Phase: SSRF Testing ────────────────────────────────────────────────
+    return tools# ── Phase: Template Injection (SSTI) Testing ──────────────────────────
 
+# Recognized templating engines and their framework/language associations
+_TEMPLATE_ENGINES: set[str] = {
+    # Python
+    "jinja", "jinja2", "mako", "tornado", "django template",
+    # PHP
+    "twig", "smarty", "blade", "latte", "plates",
+    # JavaScript / TypeScript
+    "pug", "jade", "handlebars", "mustache", "ejs",
+    "nunjucks", "liquid", "eta", "hogan.js",
+    # Ruby
+    "erb", "haml", "slim",
+    # Java
+    "velocity", "freemarker", "thymeleaf", "jsp",
+    "apache tiles", "groovy template",
+    # Go
+    "go template", "html/template",
+    # .NET
+    "razor", "dotliquid",
+}
+
+
+def _activate_template_injection(rc) -> tuple[bool, str]:
+    """Activate when recognized templating engines are detected in tech_stack.
+
+    Server-Side Template Injection (SSTI) occurs when user input is
+    embedded in template expressions without proper sanitization.
+    Impact ranges from information disclosure to remote code execution
+    depending on the template engine.
+
+    Activates when:
+      - ``has_template_injection`` flag is set (forward-compatible)
+      - ``template_engines`` list is populated (forward-compatible)
+      - Known templating engines appear in tech_stack
+      - Parameter-bearing URLs are present (SSTI vector)
+    """
+    # Forward-compatible: check for dedicated SSTI attribute
+    has_ssti = _get_attr(rc, "has_template_injection", False)
+    if has_ssti:
+        return True, "template injection signals detected in recon"
+
+    tpl_engines = _get_attr(rc, "template_engines", [])
+    if tpl_engines and len(tpl_engines) > 0:
+        return True, f"{len(tpl_engines)} template engine(s) detected: {', '.join(tpl_engines[:3])}"
+
+    # Check tech_stack for known templating engines
+    tech = _get_tech_stack(rc)
+    if tech:
+        tech_lower = " ".join(t.lower() for t in tech)
+        matched = [eng for eng in _TEMPLATE_ENGINES if eng in tech_lower]
+        if matched:
+            return True, f"templating engine detected: {', '.join(matched[:3])}"
+
+    # Parameter-bearing URLs can be SSTI vectors
+    param_urls = _get_attr(rc, "parameter_bearing_urls", [])
+    if param_urls and len(param_urls) > 0:
+        return True, f"{len(param_urls)} parameter-bearing URL(s) — potential SSTI vector"
+
+    return False, "no templating engines or SSTI signals detected"
+
+
+def _template_injection_tools(recon_context) -> list[ToolTask]:
+    """Build tool tasks for server-side template injection testing.
+
+    Tests for SSTI in:
+      - Jinja2 / Django (Python) — {{ }} syntax
+      - Twig / Smarty / Blade (PHP) — {{ }} / {$ } syntax
+      - Pug / Handlebars / EJS (JS) — #{ } / {{ }} syntax
+      - Velocity / FreeMarker (Java) — ${{ }} / ${ } syntax
+      - ERB / HAML (Ruby) — <%= %> syntax
+      - Generic template syntax detection
+    """
+    tools: list[ToolTask] = [
+        ToolTask(
+            tool_name="nuclei",
+            description="Server-Side Template Injection scanning (multi-engine)",
+            priority=10,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "ssti,template-injection,injection"],
+        ),
+        ToolTask(
+            tool_name="nuclei",
+            description="SSTI polyglot detection and engine-specific probes",
+            priority=20,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "ssti,tech,rce,exposure"],
+        ),
+    ]
+    return tools
+
+
+# ── Phase: Deserialization Testing ────────────────────────────────────
+
+# Recognized deserialization libraries/frameworks by language
+_DESERIALIZATION_LIBS: set[str] = {
+    # Python
+    "pickle", "yaml", "pyyaml", "ruamel.yaml", "jsonpickle",
+    "cPickle", "dill", "cloudpickle", "shelve",
+    # Java
+    "xstream", "jackson", "fastjson", "jboss", "weblogic",
+    "hessian", "kryo", "snakeyaml", "jodd", "json-io",
+    "flexjson", "genson", "logback", "jndi",
+    # PHP
+    "php unserialize", "php serialization", "phpobject",
+    # Ruby
+    "ruby marshal", "oj.load", "ruby yaml load",
+    # .NET
+    "binaryformatter", "soapformatter", "losformatter",
+    "datacontractserializer", "javascriptserializer",
+    "netdatacontractserializer", "jsonnet",
+    # Node.js / JavaScript
+    "node-serialize", "serialize-javascript", "funcster",
+    "node serialize", "javascript serialize",
+}
+
+
+def _activate_deserialization_testing(rc) -> tuple[bool, str]:
+    """Activate when insecure deserialization libraries are detected.
+
+    Insecure deserialization can lead to remote code execution (RCE),
+    authentication bypass, and privilege escalation. The risk exists
+    across all major languages that handle serialized data.
+
+    Activates when:
+      - ``has_deserialization`` flag is set (forward-compatible)
+      - ``deserialization_libs`` list is populated (forward-compatible)
+      - Known deserialization libraries appear in tech_stack
+      - API endpoints are present (deserialization is common in APIs)
+      - Parameter-bearing URLs are present (deserialization vector)
+    """
+    # Forward-compatible: check for dedicated deserialization attribute
+    has_deser = _get_attr(rc, "has_deserialization", False)
+    if has_deser:
+        return True, "insecure deserialization signals detected in recon"
+
+    deser_libs = _get_attr(rc, "deserialization_libs", [])
+    if deser_libs and len(deser_libs) > 0:
+        return True, f"{len(deser_libs)} deserialization library(ies) found: {', '.join(deser_libs[:3])}"
+
+    # Check tech_stack for known deserialization libraries
+    tech = _get_tech_stack(rc)
+    if tech:
+        tech_lower = " ".join(t.lower() for t in tech)
+        matched = [lib for lib in _DESERIALIZATION_LIBS if lib in tech_lower]
+        if matched:
+            return True, f"deserialization library detected: {', '.join(matched[:3])}"
+
+    # Deserialization is common via API request bodies
+    has_api = _get_attr(rc, "has_api", False)
+    api_eps = _get_attr(rc, "api_endpoints", [])
+    if has_api:
+        return True, "API detected — deserialization attack surface present"
+    if api_eps and len(api_eps) > 0:
+        return True, f"{len(api_eps)} API endpoint(s) — deserialization testing recommended"
+
+    # Parameter-bearing URLs can carry serialized data
+    param_urls = _get_attr(rc, "parameter_bearing_urls", [])
+    if param_urls and len(param_urls) > 0:
+        return True, f"{len(param_urls)} parameter-bearing URL(s) — potential deserialization vector"
+
+    return False, "no deserialization signals detected"
+
+
+def _deserialization_testing_tools(recon_context) -> list[ToolTask]:
+    """Build tool tasks for insecure deserialization testing.
+
+    Tests for deserialization vulnerabilities in:
+      - Java: Jackson, Fastjson, XStream, JNDI injection via log4j
+      - Python: Pickle, PyYAML, JSON Pickle
+      - PHP: PHP object injection via unserialize()
+      - .NET: BinaryFormatter, SoapFormatter, LosFormatter
+      - Node.js: node-serialize, serialize-javascript
+      - Ruby: Marshal.load, YAML.load
+    """
+    tools: list[ToolTask] = [
+        ToolTask(
+            tool_name="nuclei",
+            description="Insecure deserialization scanning (Java, Python, PHP, .NET)",
+            priority=10,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "deserialization,rce,oob,injection"],
+        ),
+        ToolTask(
+            tool_name="nuclei",
+            description="JNDI injection and log4shell detection (deserialization vector)",
+            priority=20,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "jndi,log4shell,log4j,rce,oast"],
+        ),
+    ]
+    return tools
+
+
+# ── Phase: SSRF Testing ────────────────────────────────────────────────
 
 def _activate_ssrf_testing(rc) -> tuple[bool, str]:
     """Activate when SSRF-prone patterns are detected in recon.
@@ -922,6 +1123,624 @@ def _websocket_testing_tools(recon_context) -> list[ToolTask]:
     ]
 
 
+# ── Phase: Open Redirect Testing ────────────────────────────────────────────
+
+# Redirect parameter patterns commonly found in URL parameters
+_REDIRECT_PARAM_PATTERNS: set[str] = {
+    "redirect", "redirect_url", "redirect_uri", "redirect_to",
+    "url", "uri", "u", "next", "next_url", "return",
+    "return_to", "return_url", "return_uri", "goto",
+    "dest", "destination", "target", "continue",
+    "continue_url", "forward", "forward_url",
+    "href", "ref", "referrer", "link", "out",
+    "view", "load", "file", "page", "document",
+}
+
+
+def _has_redirect_params(param_urls: list[str]) -> bool:
+    """Check if any parameter-bearing URL contains redirect-like parameters.
+
+    Examines query parameters in the URL for known redirect parameter names
+    (e.g., ``redirect``, ``url``, ``next``, ``goto``, ``return``). These are
+    common sinks for open redirect vulnerabilities.
+
+    Args:
+        param_urls: List of parameter-bearing URLs.
+
+    Returns:
+        True if at least one redirect parameter pattern is found.
+    """
+    if not param_urls:
+        return False
+    from urllib.parse import urlparse, parse_qs
+    for url in param_urls:
+        try:
+            parsed = urlparse(url)
+            params = parse_qs(parsed.query)
+            param_names_lower = {p.lower() for p in params}
+            if param_names_lower & _REDIRECT_PARAM_PATTERNS:
+                matched = param_names_lower & _REDIRECT_PARAM_PATTERNS
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _count_redirect_params(param_urls: list[str]) -> int:
+    """Count how many parameter-bearing URLs have redirect parameters."""
+    if not param_urls:
+        return 0
+    from urllib.parse import urlparse, parse_qs
+    count = 0
+    for url in param_urls:
+        try:
+            parsed = urlparse(url)
+            params = parse_qs(parsed.query)
+            param_names_lower = {p.lower() for p in params}
+            if param_names_lower & _REDIRECT_PARAM_PATTERNS:
+                count += 1
+        except Exception:
+            continue
+    return count
+
+
+def _get_redirect_param_names(param_urls: list[str]) -> list[str]:
+    """Get the matched redirect parameter names found in URLs."""
+    if not param_urls:
+        return []
+    from urllib.parse import urlparse, parse_qs
+    matched: set[str] = set()
+    for url in param_urls:
+        try:
+            parsed = urlparse(url)
+            params = parse_qs(parsed.query)
+            param_names_lower = {p.lower() for p in params}
+            matched.update(param_names_lower & _REDIRECT_PARAM_PATTERNS)
+        except Exception:
+            continue
+    return sorted(matched)[:5]
+
+
+def _activate_open_redirect(rc) -> tuple[bool, str]:
+    """Activate when parameter-bearing URLs contain redirect patterns.
+
+    Open redirect vulnerabilities allow attackers to redirect users to
+    arbitrary external URLs via the target's redirect parameters.
+    While often considered low-severity, open redirects are frequently
+    chained with phishing campaigns and can bypass URL validation in
+    SSO/OAuth flows.
+
+    Activates when:
+      - ``has_open_redirect`` flag is set on ReconContext (forward-compatible)
+      - ``redirect_endpoints`` list is populated (forward-compatible)
+      - Parameter-bearing URLs contain redirect-like parameter names
+        (redirect, url, next, goto, return, etc.)
+      - Redirect-related keywords appear in tech_stack
+    """
+    # Forward-compatible: check for dedicated open redirect attribute
+    has_oredirect = _get_attr(rc, "has_open_redirect", False)
+    if has_oredirect:
+        return True, "open redirect signals detected in recon"
+
+    redirect_eps = _get_attr(rc, "redirect_endpoints", [])
+    if redirect_eps and len(redirect_eps) > 0:
+        return True, f"{len(redirect_eps)} redirect endpoint(s) found"
+
+    # Check tech_stack for redirect-related technologies
+    tech = _get_tech_stack(rc)
+    if tech:
+        tech_lower = " ".join(t.lower() for t in tech)
+        redirect_keywords = {"redirect", "forward", "rewrite",
+                             "mod_rewrite", "url-rewrite", "route-redirect"}
+        matched = [kw for kw in redirect_keywords if kw in tech_lower]
+        if matched:
+            return True, f"redirect-related tech detected: {', '.join(matched)}"
+
+    # Parameter-bearing URLs with redirect parameter names
+    param_urls = _get_attr(rc, "parameter_bearing_urls", [])
+    if param_urls and _has_redirect_params(param_urls):
+        redirect_count = _count_redirect_params(param_urls)
+        matched_params = _get_redirect_param_names(param_urls)
+        suffix = f" (params: {', '.join(matched_params)})" if matched_params else ""
+        return True, f"{redirect_count} URL(s) with redirect parameters{suffix}"
+
+    return False, "no open redirect signals detected"
+
+
+def _open_redirect_tools(recon_context) -> list[ToolTask]:
+    """Build tool tasks for open redirect vulnerability testing.
+
+    Tests for:
+      - Open redirect via common parameter names (redirect, url, next, goto)
+      - Blind open redirect via multiple parameter injection
+      - XSS chaining via redirect (javascript:/data: URIs in redirect params)
+      - OAuth/SSO redirect_uri validation bypass
+      - Host header injection combined with redirect parameters
+    """
+    tools: list[ToolTask] = [
+        ToolTask(
+            tool_name="nuclei",
+            description="Open redirect vulnerability scanning (common parameters)",
+            priority=10,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "redirect,open-redirect,oast,exposure"],
+        ),
+        ToolTask(
+            tool_name="nuclei",
+            description="Open redirect chaining and parameter injection scanning",
+            priority=20,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "redirect,ssrf,oast,url-injection,parameter"],
+        ),
+    ]
+    return tools
+
+
+# ── Phase: XXE (XML External Entity) Testing ───────────────────────────────
+
+# XML processing libraries and technologies for tech_stack matching
+_XML_PROCESSORS: set[str] = {
+    # Core C/C++ libraries
+    "libxml", "libxml2", "xmlsec",
+    # Python
+    "lxml", "xml.etree", "xml.dom", "xml.sax", "xml.parsers",
+    "defusedxml", "xmltodict", "untangle", "xmlschema",
+    # Java
+    "javax.xml", "org.w3c.dom", "org.xml.sax",
+    "documentbuilder", "documentbuilderfactory",
+    "saxparser", "saxparserfactory",
+    "xerces", "xalan", "jaxb", "jaxp", "jdom", "dom4j",
+    "castor", "xmlbeans",
+    # .NET
+    "system.xml", "xmltextreader", "xmlreader",
+    "xmldocument", "xpathdocument", "linq to xml",
+    # PHP
+    "simplexml", "domdocument", "xmlreader", "xmlwriter",
+    "libxml", "soapclient", "simplexmlelement",
+    # Ruby
+    "nokogiri", "rexml", "libxml-ruby", "ox",
+    # JavaScript / TypeScript
+    "xmldom", "xpath", "sax-js", "node-xml",
+    "fast-xml-parser", "xml2js",
+    # HTTP/SOAP
+    "soap", "soapui", "xml-rpc", "wsdl",
+    # Frameworks with XML processing
+    "spring-web-services", "cxf", "axis", "soap",
+    "xml-rpc", "wsdl",
+}
+
+
+def _activate_xxe_testing(rc) -> tuple[bool, str]:
+    """Activate when XML processing libraries are detected in tech_stack.
+
+    XML External Entity (XXE) injection occurs when XML parsers are
+    configured to process external entities, allowing attackers to:
+    - Read local files (/etc/passwd, config files) via entity references
+    - Perform SSRF by referencing internal URLs
+    - Denial of Service via Billion Laughs / entity expansion
+
+    Activates when:
+      - ``has_xxe`` flag is set on ReconContext (forward-compatible)
+      - ``xml_endpoints`` list is populated (forward-compatible)
+      - XML processing keywords appear in tech_stack
+      - File upload is present (XML file upload vector)
+      - API endpoints are present (SOAP/XML APIs)
+      - Parameter-bearing URLs are present (XXE injection vector)
+    """
+    # Forward-compatible: check for dedicated XXE attribute
+    has_xxe = _get_attr(rc, "has_xxe", False)
+    if has_xxe:
+        return True, "XXE signals detected in recon"
+
+    xml_eps = _get_attr(rc, "xml_endpoints", [])
+    if xml_eps and len(xml_eps) > 0:
+        return True, f"{len(xml_eps)} XML endpoint(s) found"
+
+    # Check tech_stack for XML processing keywords
+    tech = _get_tech_stack(rc)
+    if tech:
+        tech_lower = " ".join(t.lower() for t in tech)
+        matched = [kw for kw in _XML_PROCESSORS if kw in tech_lower]
+        if matched:
+            return True, f"XML processing library detected: {', '.join(matched[:3])}"
+
+    # File upload can include XML files
+    has_upload = _get_attr(rc, "has_file_upload", False)
+    if has_upload:
+        return True, "file upload present — XML file upload is an XXE vector"
+
+    # API endpoints may use XML (SOAP, XML-RPC)
+    has_api = _get_attr(rc, "has_api", False)
+    api_eps = _get_attr(rc, "api_endpoints", [])
+    if has_api:
+        return True, "API detected — XML/SOAP endpoints may be vulnerable to XXE"
+    if api_eps and len(api_eps) > 0:
+        return True, f"{len(api_eps)} API endpoint(s) — XXE testing recommended"
+
+    # Parameter-bearing URLs as XXE vector
+    param_urls = _get_attr(rc, "parameter_bearing_urls", [])
+    if param_urls and len(param_urls) > 0:
+        return True, f"{len(param_urls)} parameter-bearing URL(s) — potential XXE vector"
+
+    return False, "no XML processing or XXE signals detected"
+
+
+def _xxe_testing_tools(recon_context) -> list[ToolTask]:
+    """Build tool tasks for XXE vulnerability testing.
+
+    Tests for:
+      - Classic XXE (file disclosure via external entities)
+      - Blind XXE (out-of-band exfiltration via DTD)
+      - XXE via SOAP/XML-RPC endpoints
+      - XXE via file upload (SVG, XML, DOCX)
+      - XXE with SSRF chaining (internal port scanning)
+      - Billion Laughs / entity expansion DoS detection
+      - Parameter entity injection
+      - XInclude attack detection
+    """
+    tools: list[ToolTask] = [
+        ToolTask(
+            tool_name="nuclei",
+            description="XXE vulnerability scanning (classic, blind, OOB, file disclosure)",
+            priority=10,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "xxe,xml,oob,exposure,disclosure"],
+        ),
+        ToolTask(
+            tool_name="nuclei",
+            description="XXE with SSRF chaining and entity injection scanning",
+            priority=20,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "xxe,ssrf,oast,injection,xinclude"],
+        ),
+    ]
+    return tools
+
+
+# ── Phase: Command Injection Testing ─────────────────────────────────────
+
+# Shell-execution functions and OS command interfaces by language
+_CMD_EXECUTION_FUNCTIONS: set[str] = {
+    # Python
+    "os.system", "subprocess", "os.popen", "pty.spawn",
+    "commands.getoutput", "subprocess.popen",
+    # PHP
+    "exec", "shell_exec", "system", "passthru", "popen",
+    "proc_open", "pcntl_exec",
+    # Java
+    "runtime.exec", "runtime.getruntime.exec",
+    "processbuilder", "processbuilder.start",
+    # JavaScript / Node.js
+    "child_process.exec", "child_process.execsync",
+    "child_process.spawn", "child_process.execfile",
+    "execSync", "execFileSync", "spawnSync",
+    # Ruby
+    "io.popen", "open3.popen3", "open3.capture3",
+    "kernel.exec", "kernel.system",
+    # .NET
+    "process.start", "system.diagnostics.process",
+    "cmd.exe", "powershell.exe",
+    # Go
+    "exec.command", "os/exec", "golang exec",
+    # Perl
+    "perl system", "perl exec", "perl backtick",
+    # Shared concepts
+    "cmd", "command", "shell", "sh",
+    "bash", "powershell", "pwsh",
+}
+
+
+def _activate_command_injection(rc) -> tuple[bool, str]:
+    """Activate when shell-execution functions are detected in tech_stack.
+
+    Command injection (also known as OS command injection) allows an
+    attacker to execute arbitrary operating system commands via a
+    vulnerable application. It is one of the most critical web
+    application vulnerabilities (OWASP Top 3) and typically leads
+    to full server compromise.
+
+    Activates when:
+      - ``has_command_injection`` flag is set (forward-compatible)
+      - ``cmd_injection_endpoints`` list is populated (forward-compatible)
+      - Shell-execution function keywords appear in tech_stack
+      - Parameter-bearing URLs are present (command injection vector)
+      - File upload is present (filename-based command injection)
+    """
+    # Forward-compatible: check for dedicated command injection attribute
+    has_cmdi = _get_attr(rc, "has_command_injection", False)
+    if has_cmdi:
+        return True, "command injection signals detected in recon"
+
+    cmdi_eps = _get_attr(rc, "cmd_injection_endpoints", [])
+    if cmdi_eps and len(cmdi_eps) > 0:
+        return True, f"{len(cmdi_eps)} command injection endpoint(s) found"
+
+    # Check tech_stack for shell-execution function keywords
+    tech = _get_tech_stack(rc)
+    if tech:
+        tech_lower = " ".join(t.lower() for t in tech)
+        matched = [kw for kw in _CMD_EXECUTION_FUNCTIONS if kw in tech_lower]
+        if matched:
+            return True, f"shell execution function detected: {', '.join(matched[:3])}"
+
+    # Parameter-bearing URLs are a common command injection vector
+    param_urls = _get_attr(rc, "parameter_bearing_urls", [])
+    reasons = []
+    if param_urls and len(param_urls) > 0:
+        reasons.append(f"{len(param_urls)} parameter URL(s)")
+
+    # File upload can involve command injection via filename processing
+    has_upload = _get_attr(rc, "has_file_upload", False)
+    if has_upload:
+        reasons.append("file upload present")
+
+    if reasons:
+        return True, "possible command injection context: " + "; ".join(reasons)
+
+    return False, "no command injection signals detected"
+
+
+def _command_injection_tools(recon_context) -> list[ToolTask]:
+    """Build tool tasks for OS command injection vulnerability testing.
+
+    Tests for:
+      - Command injection via URL parameters (ping, host, nslookup)
+      - Blind command injection (time-based, OOB/DNS)
+      - Command injection via HTTP headers (User-Agent, X-Forwarded-For)
+      - Command injection via file upload filenames
+      - OS command chaining (; | && || `)
+      - Blind payload delivery via OOB/out-of-band channels
+      - Time-based command injection detection
+    """
+    tools: list[ToolTask] = [
+        ToolTask(
+            tool_name="nuclei",
+            description="OS command injection scanning (parameter-based, blind, time-based)",
+            priority=10,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "cmd-injection,rce,command,oast,blind"],
+        ),
+        ToolTask(
+            tool_name="nuclei",
+            description="OS command injection via headers and chaining techniques",
+            priority=20,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "cmd-injection,oast,time-based,chaining,exposure"],
+        ),
+    ]
+    return tools
+
+
+# ── Phase: NoSQL Injection Testing ─────────────────────────────────────────
+
+# NoSQL databases and related technologies for tech_stack matching
+_NOSQL_DATABASES: set[str] = {
+    # Document stores
+    "mongodb", "mongo", "mongoose", "mongos", "mongosh",
+    "couchdb", "couchbase", "pouchdb",
+    "ravendb", "litedb", "sphinx",
+    # Key-value stores
+    "redis", "redis-rack", "redis-py",
+    "dynamodb", "amazon dynamodb", "aws dynamodb",
+    "riak", "etcd", "consul",
+    # Wide-column stores
+    "cassandra", "datastax", "scylla", "scylladb",
+    "apache cassandra", "hbase", "apache hbase",
+    # Graph databases
+    "neo4j", "neo4j-ogm", "sparql",
+    "orientdb", "arangodb", "janusgraph",
+    # Search/document engines
+    "elasticsearch", "elastic", "opensearch",
+    "meilisearch", "algolia", "typesense",
+    # Real-time / Firebase
+    "firebase", "firestore", "realtime database",
+    "supabase", "appwrite", "nhost",
+    # Other NoSQL
+    "cockroachdb", "rethinkdb", "leveldb",
+    "rocksdb", "badgerdb", "boltdb",
+    # ORM/ODM abstractions
+    "prisma", "typeorm", "sequelize",
+    "django mongodb", "flask-pymongo",
+}
+
+
+def _activate_nosql_injection(rc) -> tuple[bool, str]:
+    """Activate when NoSQL databases are detected in tech_stack.
+
+    NoSQL injection occurs when user input is embedded in NoSQL query
+    operators ($where, $gt, $ne, etc.) without proper sanitization.
+    Unlike SQL injection, NoSQL injection can use JSON-structured queries
+    and operator injection, making detection more nuanced.
+
+    Activates when:
+      - ``has_nosql`` flag is set on ReconContext (forward-compatible)
+      - ``nosql_endpoints`` list is populated (forward-compatible)
+      - NoSQL database keywords appear in tech_stack
+      - API endpoints are present (NoSQL databases often queried via APIs)
+      - Parameter-bearing URLs are present (NoSQL injection vector)
+    """
+    # Forward-compatible: check for dedicated NoSQL attribute
+    has_nosql = _get_attr(rc, "has_nosql", False)
+    if has_nosql:
+        return True, "NoSQL injection signals detected in recon"
+
+    nosql_eps = _get_attr(rc, "nosql_endpoints", [])
+    if nosql_eps and len(nosql_eps) > 0:
+        return True, f"{len(nosql_eps)} NoSQL endpoint(s) found"
+
+    # Check tech_stack for NoSQL database keywords
+    tech = _get_tech_stack(rc)
+    if tech:
+        tech_lower = " ".join(t.lower() for t in tech)
+        matched = [kw for kw in _NOSQL_DATABASES if kw in tech_lower]
+        if matched:
+            return True, f"NoSQL database detected: {', '.join(matched[:3])}"
+
+    # API endpoints often query NoSQL databases
+    has_api = _get_attr(rc, "has_api", False)
+    api_eps = _get_attr(rc, "api_endpoints", [])
+    if has_api:
+        return True, "API detected — NoSQL databases may be queried via API parameters"
+    if api_eps and len(api_eps) > 0:
+        return True, f"{len(api_eps)} API endpoint(s) — NoSQL injection testing recommended"
+
+    # Parameter-bearing URLs as NoSQL injection vector
+    param_urls = _get_attr(rc, "parameter_bearing_urls", [])
+    if param_urls and len(param_urls) > 0:
+        return True, f"{len(param_urls)} parameter-bearing URL(s) — potential NoSQL injection vector"
+
+    return False, "no NoSQL database or injection signals detected"
+
+
+def _nosql_injection_tools(recon_context) -> list[ToolTask]:
+    """Build tool tasks for NoSQL injection vulnerability testing.
+
+    Tests for:
+      - MongoDB $where / $gt / $ne operator injection
+      - MongoDB JSON query parameter injection
+      - CouchDB document query injection
+      - Firebase Realtime Database rules injection
+      - Elasticsearch query DSL injection
+      - Cassandra CQL injection
+      - Redis command injection via parameters
+      - NoSQL blind injection (boolean-based, time-based)
+    """
+    tools: list[ToolTask] = [
+        ToolTask(
+            tool_name="nuclei",
+            description="NoSQL injection vulnerability scanning (MongoDB, CouchDB, Elasticsearch)",
+            priority=10,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "nosql,injection,mongodb,couchdb,esql"],
+        ),
+        ToolTask(
+            tool_name="nuclei",
+            description="NoSQL operator injection and blind injection scanning",
+            priority=20,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "nosql,injection,blind,operator,exposure"],
+        ),
+    ]
+    return tools
+
+
+# ── Phase: LDAP Injection Testing ─────────────────────────────────────────
+
+# LDAP-related keywords and technologies for tech_stack matching
+_LDAP_KEYWORDS: set[str] = {
+    "ldap", "ldap injection", "openldap", "389ds",
+    "active directory", "ad ds", "ad lds", "ad fs",
+    "apache directory", "apacheds", "fedora directory",
+    "unboundid", "novell edirectory", "oracle internet directory",
+    "sun directory", "openam", "opendj", "opendj",
+    "pensieve ldap", "ldapjs", "spring-ldap", "spring data ldap",
+    "ldaptive", "ldap3", "python-ldap", "ldapauthenticator",
+    "django-auth-ldap", "flask-ldap", "php ldap",
+}
+
+
+def _activate_ldap_injection(rc) -> tuple[bool, str]:
+    """Activate when LDAP-related keywords are detected in tech_stack.
+
+    LDAP injection occurs when user input is embedded in LDAP query
+    filters without proper sanitization. Impact ranges from authentication
+    bypass to information disclosure (querying arbitrary directory entries).
+    Common in enterprise applications using Active Directory for auth.
+
+    Activates when:
+      - ``has_ldap`` flag is set on ReconContext (forward-compatible)
+      - ``ldap_endpoints`` list is populated (forward-compatible)
+      - LDAP-related keywords appear in tech_stack
+      - Auth endpoints are present (LDAP is frequently used for authentication)
+      - Parameter-bearing URLs are present (LDAP injection vector)
+    """
+    # Forward-compatible: check for dedicated LDAP attribute
+    has_ldap = _get_attr(rc, "has_ldap", False)
+    if has_ldap:
+        return True, "LDAP signals detected in recon"
+
+    ldap_eps = _get_attr(rc, "ldap_endpoints", [])
+    if ldap_eps and len(ldap_eps) > 0:
+        return True, f"{len(ldap_eps)} LDAP endpoint(s) found"
+
+    # Check tech_stack for LDAP-related keywords
+    tech = _get_tech_stack(rc)
+    if tech:
+        tech_lower = " ".join(t.lower() for t in tech)
+        matched = [kw for kw in _LDAP_KEYWORDS if kw in tech_lower]
+        if matched:
+            return True, f"LDAP technology detected: {', '.join(matched[:3])}"
+
+    # LDAP is commonly used for authentication
+    auth_eps = _get_attr(rc, "auth_endpoints", [])
+    has_login = _get_attr(rc, "has_login_page", False)
+    reasons = []
+    if auth_eps and len(auth_eps) > 0:
+        reasons.append(f"{len(auth_eps)} auth endpoint(s)")
+    if has_login:
+        reasons.append("login page")
+
+    # Parameter-bearing URLs can be LDAP injection vectors
+    param_urls = _get_attr(rc, "parameter_bearing_urls", [])
+    if param_urls and len(param_urls) > 0:
+        reasons.append(f"{len(param_urls)} parameter URL(s)")
+
+    if reasons:
+        return True, "possible LDAP context: " + "; ".join(reasons)
+
+    return False, "no LDAP signals detected"
+
+
+def _ldap_injection_tools(recon_context) -> list[ToolTask]:
+    """Build tool tasks for LDAP injection vulnerability testing.
+
+    Tests for:
+      - LDAP filter injection via login/username parameters
+      - Blind LDAP injection via boolean-based inference
+      - LDAP search filter manipulation
+      - Active Directory-specific LDAP injection patterns
+      - Authentication bypass via LDAP filter tampering
+      - Information disclosure via crafted LDAP queries
+    """
+    tools: list[ToolTask] = [
+        ToolTask(
+            tool_name="nuclei",
+            description="LDAP injection vulnerability scanning (filter-based, auth bypass)",
+            priority=10,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "ldap,injection,ldapi,auth-bypass"],
+        ),
+        ToolTask(
+            tool_name="nuclei",
+            description="Active Directory and directory service exposure scanning",
+            priority=20,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical",
+                           "-tags", "ldap,active-directory,exposure,disclosure"],
+        ),
+    ]
+    return tools
+
+
 # ── Phase: Cloud Metadata Probe ────────────────────────────────────────────
 
 # Cloud provider keywords for matching against tech_stack
@@ -1095,6 +1914,15 @@ PHASE_DEFINITIONS: list[_PhaseDefinition] = [
         triggers=["access_control"],
     ),
     _PhaseDefinition(
+        name="open_redirect",
+        description="Open redirect vulnerability testing (redirect, url, next, goto parameters)",
+        order=58,
+        activate_fn=_activate_open_redirect,
+        tools_fn=_open_redirect_tools,
+        depends_on=["input_validation"],
+        triggers=["access_control"],
+    ),
+    _PhaseDefinition(
         name="rate_limit_testing",
         description="Rate limiting and brute-force protection analysis (login, API, password reset)",
         order=45,
@@ -1108,7 +1936,61 @@ PHASE_DEFINITIONS: list[_PhaseDefinition] = [
         order=60,
         activate_fn=_activate_input_validation,
         tools_fn=_input_validation_tools,
-        triggers=["ssrf_testing"],
+        triggers=["ssrf_testing", "template_injection", "open_redirect", "ldap_injection", "xxe_testing", "no_sql_injection", "command_injection"],
+    ),
+    _PhaseDefinition(
+        name="xxe_testing",
+        description="XML External Entity injection testing (file disclosure, SSRF chaining, OOB)",
+        order=61,
+        activate_fn=_activate_xxe_testing,
+        tools_fn=_xxe_testing_tools,
+        depends_on=["input_validation"],
+        triggers=["access_control", "ssrf_testing"],
+    ),
+    _PhaseDefinition(
+        name="template_injection",
+        description="Server-Side Template Injection testing (Jinja2, Twig, Blade, Pug, Velocity, FreeMarker)",
+        order=62,
+        activate_fn=_activate_template_injection,
+        tools_fn=_template_injection_tools,
+        depends_on=["input_validation"],
+        triggers=["access_control"],
+    ),
+    _PhaseDefinition(
+        name="deserialization_testing",
+        description="Insecure deserialization testing (Java, Python, PHP, .NET, Node.js, Ruby)",
+        order=63,
+        activate_fn=_activate_deserialization_testing,
+        tools_fn=_deserialization_testing_tools,
+        depends_on=["input_validation"],
+        triggers=["access_control", "cloud_metadata_probe"],
+    ),
+    _PhaseDefinition(
+        name="ldap_injection",
+        description="LDAP injection and directory service testing (filter injection, auth bypass)",
+        order=64,
+        activate_fn=_activate_ldap_injection,
+        tools_fn=_ldap_injection_tools,
+        depends_on=["input_validation"],
+        triggers=["access_control"],
+    ),
+    _PhaseDefinition(
+        name="command_injection",
+        description="OS command injection testing (parameter-based, blind, OOB, chaining)",
+        order=67,
+        activate_fn=_activate_command_injection,
+        tools_fn=_command_injection_tools,
+        depends_on=["input_validation"],
+        triggers=["access_control"],
+    ),
+    _PhaseDefinition(
+        name="no_sql_injection",
+        description="NoSQL injection testing (MongoDB, CouchDB, Firebase, Elasticsearch)",
+        order=66,
+        activate_fn=_activate_nosql_injection,
+        tools_fn=_nosql_injection_tools,
+        depends_on=["input_validation"],
+        triggers=["access_control"],
     ),
     _PhaseDefinition(
         name="ssrf_testing",
