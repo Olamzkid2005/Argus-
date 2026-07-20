@@ -25,14 +25,13 @@ Environment variables:
 
 from __future__ import annotations
 
-import json
 import logging
 import os
+import subprocess
 import sys
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 import pytest
 
@@ -90,7 +89,7 @@ class MetricsCollector:
             **metrics: Key-value pairs to record.
         """
         self._snapshots[category].append({
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "elapsed_seconds": time.monotonic() - self._start_time,
             **metrics,
         })
@@ -309,7 +308,6 @@ class SoakOrchestrator:
             Dict with 'duration_ms', 'cost', 'memory_mb', 'quality'.
         """
         import random
-        import shutil
 
         start = time.monotonic()
 
@@ -353,8 +351,6 @@ class SoakOrchestrator:
             Dict with 'tool', 'output', 'findings', 'cost', 'quality'
             or None if no tools available.
         """
-        import random
-        import shutil
 
         # Cycle through tools for variety
         tools = ["httpx", "nuclei", "web_scanner"]
