@@ -30,8 +30,10 @@ def test_build_task_args_recon_includes_trace_agent_scan_flags():
         "swarm",
         "high",
         True,
+        None,  # prev_engagement_id
         None,  # auth_config
         None,  # dual_auth_config
+        None,  # scope
     ]
 
 

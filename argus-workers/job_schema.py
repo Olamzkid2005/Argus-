@@ -46,7 +46,7 @@ def build_task_args(
         agent_mode = True
     repo_url = kwargs.get("repo_url") or target
     args_map = {
-        # tasks.recon.run_recon(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None, auth_config=None, dual_auth_config=None, scope=None)
+        # tasks.recon.run_recon(..., trace_id=None, agent_mode=True, scan_mode=None, aggressiveness=None, bug_bounty_mode=None, prev_engagement_id=None, auth_config=None, dual_auth_config=None, scope=None)
         "recon": [
             engagement_id,
             target,
@@ -56,6 +56,7 @@ def build_task_args(
             kwargs.get("scan_mode"),
             kwargs.get("aggressiveness"),
             kwargs.get("bug_bounty_mode"),
+            kwargs.get("prev_engagement_id"),
             kwargs.get("auth_config"),
             kwargs.get("dual_auth_config"),
             kwargs.get("scope"),

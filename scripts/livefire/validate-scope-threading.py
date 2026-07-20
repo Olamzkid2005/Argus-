@@ -46,7 +46,6 @@ def test(name: str, fn):
     try:
         fn()
         passed += 1
-        passed += 1
         print(f"  [PASS] {name}")
     except SkipTest:
         skipped += 1
@@ -93,23 +92,23 @@ def layer1_jobmessage():
     # 1c. scope is a known dataclass field (not dropped as unknown)
     assert "scope" in type(job).__dataclass_fields__
 
-    # 1d. build_task_args includes scope for recon (index 10)
+    # 1d. build_task_args includes scope for recon (index 11)
     args = build_task_args("recon", "e-1", "http://t", {}, "trace-1", scope=scope)
-    assert len(args) >= 11, f"Expected at least 11 args, got {len(args)}"
-    assert args[10] == scope, f"Expected scope at index 10, got {args[10]}"
+    assert len(args) >= 12, f"Expected at least 12 args, got {len(args)}"
+    assert args[11] == scope, f"Expected scope at index 11, got {args[11]}"
 
-    # 1e. build_task_args includes scope for scan (index 10)
+    # 1e. build_task_args includes scope for scan (index 10 — scan has no prev_engagement_id)
     args = build_task_args("scan", "e-1", "http://t", {}, "trace-1", scope=scope)
     assert len(args) >= 11, f"Expected at least 11 args, got {len(args)}"
     assert args[10] == scope, f"Expected scope at index 10, got {args[10]}"
 
-    # 1f. to_celery_args includes scope
+    # 1f. to_celery_args includes scope (recon type)
     job3 = JobMessage(
         type="recon", engagement_id="eng-001", target="http://t",
         budget={}, trace_id="trace-1", scope=scope,
     )
     celery_args = job3.to_celery_args()
-    assert celery_args[10] == scope, f"Expected scope at index 10, got {celery_args[10]}"
+    assert celery_args[11] == scope, f"Expected scope at index 11, got {celery_args[11]}"
 
 
 # ═══════════════════════════════════════════════════════════════════════

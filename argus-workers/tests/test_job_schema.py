@@ -84,11 +84,12 @@ class TestJobMessage:
             scope=scope_payload,
         )
         args = job.to_celery_args()
-        # The scope is the 11th positional arg in build_task_args for "recon"
+        # The scope is the 12th positional arg (index 11) in build_task_args for "recon"
         # Format: [engagement_id, target, budget, trace_id, agent_mode, scan_mode,
-        #          aggressiveness, bug_bounty_mode, auth_config, dual_auth_config, scope]
-        assert len(args) >= 11
-        assert args[10] == scope_payload
+        #          aggressiveness, bug_bounty_mode, prev_engagement_id, auth_config,
+        #          dual_auth_config, scope]
+        assert len(args) >= 12
+        assert args[11] == scope_payload
 
     def test_to_celery_args_scan_includes_scope(self):
         """to_celery_args() passes scope through build_task_args for scan type."""
