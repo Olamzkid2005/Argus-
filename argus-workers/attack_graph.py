@@ -8,9 +8,8 @@ high-value attack chains that escalate individual findings to critical severity.
 import math
 from typing import Any
 
-from tool_core._compat import StrEnum
-
 from models.finding import VulnerabilityFinding
+from tool_core._compat import StrEnum
 
 
 class RelationshipType(StrEnum):

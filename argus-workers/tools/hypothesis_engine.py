@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from tool_core._compat import utc
 from uuid import uuid4
 
 from models.finding_types import TYPE_TO_FAMILY, VERIFICATION_TOOL_MAP
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class HypothesisEngine:
         """
         from feature_flags import is_enabled as _ff_enabled
 
-        if not _ff_enabled("HYPOTHESIS_ENGINE", default=False):
+        if not _ff_enabled("HYPOTHESIS_ENGINE", default=True):
             return []
 
         try:

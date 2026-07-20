@@ -6,9 +6,9 @@ This parser extracts open ports, their service information, and host details
 from the XML output.
 """
 
-from typing import Any
 import logging
 import xml.etree.ElementTree as ET
+from typing import Any
 
 from parsers.parsers.base import BaseParser
 

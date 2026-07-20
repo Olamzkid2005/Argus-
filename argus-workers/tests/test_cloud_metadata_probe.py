@@ -11,12 +11,12 @@ Tests the CloudMetadataProbe tool's ability to:
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tools.cloud_metadata_probe import CLOUD_METADATA_ENDPOINTS, CloudMetadataProbe
 from tool_core.base import ToolContext
+from tools.cloud_metadata_probe import CLOUD_METADATA_ENDPOINTS, CloudMetadataProbe
 
 
 class MockResponse:
@@ -142,7 +142,7 @@ class TestCloudMetadataProbe:
         self, probe: CloudMetadataProbe, ctx: ToolContext
     ):
         """AWS IAM role credential extraction generates CRITICAL finding."""
-        aws_endpoints = CLOUD_METADATA_ENDPOINTS["aws"]
+        CLOUD_METADATA_ENDPOINTS["aws"]
 
         with patch("httpx.Client") as mock_client_class:
             mock_instance = MagicMock()

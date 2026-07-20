@@ -167,6 +167,7 @@ class TestRenderHtmlReport:
     def test_auto_generates_scan_date(self):
         """Auto-generated scan date when not provided."""
         import datetime
+
         from tool_core._compat import utc
 
         html = render_html_report()

@@ -164,12 +164,12 @@ class TestAsyncToolRunnerUnaffected:
     """Verify AsyncToolRunner is not broken."""
 
     def test_async_tool_runner_imports(self):
-        from tool_core.sandbox import AsyncToolRunner
+        from tool_core.async_runner import AsyncToolRunner
 
         assert AsyncToolRunner is not None
 
     def test_findings_exit_codes_unchanged(self):
-        from tool_core.sandbox import AsyncToolRunner
+        from tool_core.async_runner import AsyncToolRunner
 
         assert "semgrep" in AsyncToolRunner.FINDINGS_EXIT_CODES
         assert 1 in AsyncToolRunner.FINDINGS_EXIT_CODES["semgrep"]

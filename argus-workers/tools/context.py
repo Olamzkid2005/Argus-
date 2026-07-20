@@ -8,9 +8,9 @@ only the dependencies they need.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from tool_core._compat import utc
 from typing import Any, Protocol
 
+from tool_core._compat import utc
 from tools.tool_runner import ToolRunner
 
 

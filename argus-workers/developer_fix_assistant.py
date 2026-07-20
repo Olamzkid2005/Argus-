@@ -7,6 +7,7 @@ Budget-aware: respects per-engagement LLM cost limits via LlmCostTracker.
 
 import json
 import logging
+from datetime import UTC
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -137,7 +138,7 @@ class DeveloperFixAssistant:
                 if _record:
                     _record(0.005)
 
-            result["generated_at"] = datetime.now(utc).isoformat()
+            result["generated_at"] = datetime.now(UTC).isoformat()
             result["tech_stack"] = tech_stack[:5]
 
             return result

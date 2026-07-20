@@ -31,10 +31,11 @@ import os
 import threading
 import time
 from datetime import datetime
-from tool_core._compat import utc
 from typing import Any
 
 import redis
+
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

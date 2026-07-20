@@ -8,11 +8,11 @@ Restored from M-05 dead code removal — still used by tests.
 import json
 import logging
 from datetime import datetime
-
-from tool_core._compat import utc
 from typing import Any
 
 import redis as _redis_module
+
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

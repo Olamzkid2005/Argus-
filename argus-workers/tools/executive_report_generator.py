@@ -15,11 +15,11 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from tool_core._compat import utc
 from tool_core.base import AbstractTool, ToolContext
 from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus, UnifiedToolResult
-from tool_core._compat import utc
-from utils.severity import SEVERITY_ORDER, severity_sort_key, count_by_severity
+from utils.severity import count_by_severity, severity_sort_key
 
 logger = logging.getLogger(__name__)
 

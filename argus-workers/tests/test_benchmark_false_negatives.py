@@ -424,7 +424,6 @@ def _start_fixture_app(fixture_name: str) -> str | None:
     Returns:
         Base URL (e.g., "http://127.0.0.1:51234") or None if cannot start.
     """
-    import random
     import re
     import socket
     import time

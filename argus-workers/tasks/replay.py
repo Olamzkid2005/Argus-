@@ -9,7 +9,7 @@ all DLQ entries and replays eligible tasks with adaptive parameters.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from celery_app import app
@@ -84,7 +84,7 @@ def replay_eligible_dlq_tasks(self):
     if not all_tasks:
         logger.info("DLQ replay: no tasks found in DLQ — nothing to replay")
         return {"scanned": 0, "replayed": 0, "skipped": 0}
-    
+
     now = datetime.now(utc).timestamp()
     replayed: list[str] = []
     skipped: list[dict[str, Any]] = []
@@ -137,7 +137,7 @@ def replay_eligible_dlq_tasks(self):
 
         # ── Calculate adaptive countdown based on error type ──
         error_msg = (task_data.get("error_message", "") or "").lower()
-        error_class = (task_data.get("error_class", "") or "").lower()
+        (task_data.get("error_class", "") or "").lower()
 
         if "timeout" in error_msg or "time limit" in error_msg or "soft time" in error_msg:
             countdown = 300  # 5 min — give system time to recover

@@ -5,8 +5,9 @@ feature-flag + timestamp gate.
 
 import os
 from datetime import datetime, timedelta
-from tool_core._compat import UTC
 from unittest.mock import MagicMock, patch
+
+from tool_core._compat import UTC
 
 
 class TestMigrateEngagement:

@@ -164,7 +164,16 @@ class SafeEventEmitter:
 
         try:
             from streaming import (
+                EventType as _EventType,
+            )
+            from streaming import (
                 emit_agent_decision as _emit_agent_decision,
+            )
+            from streaming import (
+                emit_event as _emit_event,
+            )
+            from streaming import (
+                emit_state_change as _emit_state_change,
             )
             from streaming import (
                 emit_thinking as _emit_thinking,
@@ -174,11 +183,6 @@ class SafeEventEmitter:
             )
             from streaming import (
                 emit_tool_start as _emit_tool_start,
-            )
-            from streaming import (
-                emit_event as _emit_event,
-                emit_state_change as _emit_state_change,
-                EventType as _EventType,
             )
 
             for event in self._queue:

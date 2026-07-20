@@ -47,8 +47,9 @@ _heavy_deps = patch.dict(
     },
 )
 _heavy_deps.start()
-from tasks.analyze import run_analysis
 import tasks.analyze as _ta_mod
+from tasks.analyze import run_analysis
+
 _heavy_deps.stop()
 
 

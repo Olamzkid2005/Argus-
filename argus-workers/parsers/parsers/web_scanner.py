@@ -6,7 +6,6 @@ When run through the tool_runner subprocess path, findings are JSON-encoded.
 This parser handles both cases.
 """
 
-from typing import Any
 import json
 import logging
 

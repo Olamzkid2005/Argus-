@@ -1,9 +1,9 @@
 """Parser for gitleaks JSON output (gitleaks detect --json)."""
 
-from typing import Any
 import hashlib
 import json
 import logging
+from typing import Any
 
 from parsers.parsers.base import BaseParser
 

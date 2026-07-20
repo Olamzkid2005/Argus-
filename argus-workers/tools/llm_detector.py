@@ -14,9 +14,9 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from tool_core._compat import utc
 from typing import Any
 
+from tool_core._compat import utc
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)

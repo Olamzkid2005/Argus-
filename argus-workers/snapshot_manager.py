@@ -5,13 +5,13 @@ Snapshot Manager - Creates immutable state snapshots for decision-making
 import logging
 import uuid
 from datetime import datetime
-from tool_core._compat import utc
 from decimal import Decimal
 
 import psycopg2
 from psycopg2.extras import Json, RealDictCursor
 
 from database.connection import get_db
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,6 @@ class SnapshotManager:
         import time
 
         for attempt in range(max_retries):
-            last_error = None
             try:
                 conn = self._get_connection()
                 # Set SERIALIZABLE isolation level

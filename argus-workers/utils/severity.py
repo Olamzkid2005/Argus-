@@ -62,7 +62,7 @@ def count_by_severity(findings: list[dict]) -> dict[str, int]:
     Returns:
         Dict mapping severity level to count (all levels present)
     """
-    counts = {level: 0 for level in SEVERITY_LEVELS}
+    counts = dict.fromkeys(SEVERITY_LEVELS, 0)
     for f in findings:
         sev = normalize_severity(f.get("severity"))
         if sev in counts:

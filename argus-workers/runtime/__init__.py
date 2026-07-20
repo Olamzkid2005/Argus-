@@ -15,12 +15,16 @@ Provides the execution layer for the agent-first architecture:
 """
 
 from .decision_checkpoint import DecisionCheckpoint, DecisionCheckpointRepository
+from .degradation_awareness import (
+    DegradationAwareness,
+    DegradationLevel,
+    DegradationStatus,
+)
 from .deterministic_runtime import DeterministicRuntime
 from .engagement_state import EngagementState, ToolExecutionRecord
 from .execution_engine import ExecutionEngine
 from .governance import Governance
 from .memory import MemoryRetriever
-from .degradation_awareness import DegradationAwareness, DegradationLevel, DegradationStatus
 from .shadow_flipper import check_and_auto_flip
 from .shadow_mode import (
     get_shadow_stats,

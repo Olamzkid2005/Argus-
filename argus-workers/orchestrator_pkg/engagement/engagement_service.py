@@ -122,8 +122,9 @@ class EngagementService:
         """
         if not scope_config or not isinstance(scope_config, dict):
             return
-        from database.connection import db_cursor
         import json
+
+        from database.connection import db_cursor
 
         try:
             with db_cursor() as cursor:

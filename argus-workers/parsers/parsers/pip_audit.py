@@ -1,8 +1,8 @@
 """Parser for pip-audit JSON output (pip-audit --format json)."""
 
-from typing import Any
 import json
 import logging
+from typing import Any
 
 from parsers.parsers.base import BaseParser
 

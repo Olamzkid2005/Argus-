@@ -5,7 +5,6 @@ Validates: Health check recording, heartbeat, self-healing, dead worker cleanup
 """
 
 from datetime import datetime, timedelta
-from tool_core._compat import utc
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -15,6 +14,7 @@ from health_monitor import (
     WorkerHealthMonitor,
     get_health_monitor,
 )
+from tool_core._compat import utc
 
 
 class TestWorkerHealthMonitor:

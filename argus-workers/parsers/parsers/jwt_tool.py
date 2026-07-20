@@ -10,10 +10,10 @@ And text lines with indicators:
     [-] Nothing here (ignored)
 """
 
-from typing import Any
 import hashlib
 import json
 import logging
+from typing import Any
 
 from parsers.parsers.base import BaseParser
 

@@ -6,7 +6,6 @@ Requirements: 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 21.1, 21.2, 31.2, 31.3
 """
 
 import atexit
-import json
 import logging
 import os
 import time
@@ -45,8 +44,8 @@ from tracing import (
     get_trace_id,
 )
 from utils.logging_utils import ScanLogger
-# websocket_events import removed (Gap 10.1 — all events now use streaming.py SSE)
 
+# websocket_events import removed (Gap 10.1 — all events now use streaming.py SSE)
 from .repo_scan import execute_repo_scan
 
 logger = logging.getLogger(__name__)
@@ -370,10 +369,9 @@ class Orchestrator:
 
     @staticmethod
     def _classify_finding_type(finding_type: str) -> dict[str, str | None]:
-        from typing import cast
-        from parsers.normalizer import FindingNormalizer
-
         from typing import cast as _cast
+
+        from parsers.normalizer import FindingNormalizer
         result = _cast(
             "dict[str, str | None]",
             FindingNormalizer.TYPE_CLASSIFICATION_MAP.get(
@@ -478,7 +476,7 @@ class Orchestrator:
                                 name, args, kwargs = result
                         return _orig(name, **kwargs)
 
-                    setattr(agent.registry, 'call', _scoped_dispatch)
+                    agent.registry.call = _scoped_dispatch
                 else:
                     # Legacy scope validation wrapper (backward compatible)
                     if authorized_scope:
@@ -523,7 +521,7 @@ class Orchestrator:
                                         )
                             return _original_call(name, **kwargs)
 
-                        setattr(agent.registry, 'call', scoped_call)
+                        agent.registry.call = scoped_call
 
                 emit_thinking(
                     self.engagement_id,
@@ -620,10 +618,12 @@ class Orchestrator:
         # The plan recommends which testing phases to run (auth, API, access
         # control, etc.) based on what recon discovered. It is passed to the
         # LLM agent as context and used for observability/metrics.
+        # After scan findings are produced, update_plan_from_results() is
+        # called to activate any trigger phases based on discovered findings.
         try:
             from orchestrator_pkg.planning import AdaptiveWorkflowPlanner
-            _planner = AdaptiveWorkflowPlanner()
-            self._adaptive_plan = _planner.build_plan(
+            self._adaptive_planner = AdaptiveWorkflowPlanner()
+            self._adaptive_plan = self._adaptive_planner.build_plan(
                 recon_context, engagement_id=self.engagement_id
             )
             # Deduplicate tools across phases to avoid redundant runs
@@ -631,7 +631,7 @@ class Orchestrator:
                 self._adaptive_plan
             )
             # Pre-format the plan text for LLM agent consumption
-            self._adaptive_plan_text = _planner.format_plan_for_agent(
+            self._adaptive_plan_text = self._adaptive_planner.format_plan_for_agent(
                 self._adaptive_plan
             ) if self._adaptive_plan else ""
             if self._adaptive_plan and self._adaptive_plan.phases:
@@ -657,6 +657,7 @@ class Orchestrator:
                 "Adaptive workflow planning failed (non-fatal): %s", _plan_err
             )
             self._adaptive_plan = None
+            self._adaptive_planner = None
         auth_config = job.get("auth_config", {})
         dual_auth_config = job.get(
             "dual_auth_config"
@@ -748,6 +749,35 @@ class Orchestrator:
             )
 
         self._maybe_run_browser_scanner(targets, recon_context, findings)
+
+        # ── Adaptive Plan Update: Activate trigger phases from scan findings ──
+        # After scan produces findings, re-evaluate the plan to activate any
+        # phases that the initial recon might have missed (e.g., if scan found
+        # a login page that recon didn't detect, activate auth_testing).
+        # NOTE: update_plan_from_results() mutates the plan in-place via
+        # plan.phases.extend(), so we capture the old length before the call.
+        if hasattr(self, "_adaptive_plan") and hasattr(self, "_adaptive_planner") and self._adaptive_plan is not None and self._adaptive_planner is not None:
+            try:
+                completed_phase = job.get("phase", "scan")
+                old_phase_count = len(self._adaptive_plan.phases)
+                updated_plan = self._adaptive_planner.update_plan_from_results(
+                    plan=self._adaptive_plan,
+                    completed_phase_name=completed_phase,
+                    findings=findings,
+                )
+                # Check if any new phases were triggered (captured old length
+                # because update mutates in-place — same object, extended list)
+                if len(updated_plan.phases) > old_phase_count:
+                    new_phases = updated_plan.phases[old_phase_count:]
+                    slog.info(
+                        "Adaptive plan updated: %d new phase(s) triggered by findings — %s",
+                        len(new_phases),
+                        ", ".join(p.name for p in new_phases),
+                    )
+            except Exception as _update_err:
+                logger.debug(
+                    "Adaptive plan update failed (non-fatal): %s", _update_err
+                )
 
         slog.info("Scan complete — %d total findings", len(findings))
         findings_count = len(findings)
@@ -1031,7 +1061,7 @@ class Orchestrator:
         from feature_flags import is_enabled as _hyp_ff_enabled
 
         hypotheses: list[dict] = []
-        if _hyp_ff_enabled("HYPOTHESIS_ENGINE", default=False):
+        if _hyp_ff_enabled("HYPOTHESIS_ENGINE", default=True):
             try:
                 if self.finding_repo is not None:
                     top_findings = self.finding_repo.get_top_findings_for_hypothesis(
@@ -1083,6 +1113,31 @@ class Orchestrator:
                     "Hypothesis generation failed — pipeline continues without: %s",
                     e,
                     exc_info=True,
+                )
+
+        # ── Hypothesis-Driven Plan Update ──
+        # After hypotheses are generated, apply them to the adaptive plan so
+        # any phases whose tools match the predicted vulnerabilities are
+        # activated. This makes the plan reflect predicted attack vectors.
+        if (
+            hypotheses
+            and hasattr(self, "_adaptive_plan")
+            and hasattr(self, "_adaptive_planner")
+            and self._adaptive_plan is not None
+            and self._adaptive_planner is not None
+        ):
+            try:
+                self._adaptive_planner.apply_hypotheses_to_plan(
+                    plan=self._adaptive_plan,
+                    hypotheses=hypotheses,
+                )
+                slog.info(
+                    "Adaptive plan updated with %d hypothesis-driven phase activations",
+                    len(hypotheses),
+                )
+            except Exception as _hyp_err:
+                logger.debug(
+                    "Hypothesis-to-plan application failed (non-fatal): %s", _hyp_err
                 )
 
         # Attach hypotheses to snapshot so IntelligenceEngine can pass them through
@@ -1421,7 +1476,8 @@ class Orchestrator:
         # ── Phase 2: Emit SSE event so TypeScript can run Playwright verifiers ──
         findings_to_verify = len(to_verify)
         try:
-            from streaming import emit_event as _emit_event, EventType as _EventType
+            from streaming import EventType as _EventType
+            from streaming import emit_event as _emit_event
             _emit_event(
                 self.engagement_id,
                 _EventType.SCANNER_ACTIVITY,

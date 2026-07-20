@@ -12,11 +12,12 @@ import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
-from tool_core._compat import utc
+from typing import cast
 
 import psutil
 import redis
-from typing import cast
+
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

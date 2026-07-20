@@ -91,7 +91,8 @@ class ToolDefinition:
     Mirrors CyberStrikeAI's YAML tool definitions pattern.
     NOTE: Must stay in sync with tool_definitions.py ToolDefinition.
     Key fields shared by both:
-        name, description, capabilities, signal_quality, requires, priority, cost
+        name, description, capabilities, signal_quality, requires, priority, cost,
+        risk_level
     This class has additional execution fields (command, args, timeout, env, binary)
     that tool_definitions.py does not have. The two classes have diverged
     intentionally — this one is the runtime MCP server representation,
@@ -102,6 +103,7 @@ class ToolDefinition:
         requires       — gates that must pass before this tool is eligible
         priority       — ranking weight (0-100, higher = preferred)
         cost           — execution cost tier for scan-depth filtering
+        risk_level     — risk tier (low, medium, high, critical) for tool execution
     """
 
     def __init__(
@@ -121,6 +123,7 @@ class ToolDefinition:
         priority: int = None,
         cost: str = None,
         credential_roles: list[str] = None,
+        risk_level: str | None = None,
     ):
         self.name = name
         self.command = command
@@ -140,6 +143,7 @@ class ToolDefinition:
         self.priority = priority
         self.cost = cost
         self.credential_roles = credential_roles or []
+        self.risk_level = risk_level
 
     def to_dict(self) -> dict:
         """Serialize to MCP tool schema format (includes planner metadata)."""
@@ -165,6 +169,7 @@ class ToolDefinition:
             "priority": self.priority,
             "cost": self.cost,
             "credential_roles": self.credential_roles,
+            "risk_level": self.risk_level,
         }
         # Strip None values for cleaner output
         return {k: v for k, v in result.items() if v is not None and v != []}
@@ -483,6 +488,7 @@ class MCPServer:
                     requires=data.get("requires", {}),
                     priority=data.get("priority"),
                     cost=data.get("cost"),
+                    risk_level=data.get("risk_level"),
                 )
                 self.register_tool(tool)
                 logger.info("Loaded tool definition: %s", tool.name)

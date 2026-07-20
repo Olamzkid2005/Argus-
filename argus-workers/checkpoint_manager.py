@@ -5,12 +5,12 @@ Checkpoint Manager - Saves and recovers from checkpoints during long scans
 import logging
 import uuid
 from datetime import datetime, timedelta
-from tool_core._compat import utc
 from typing import Any
 
 from psycopg2.extras import Json, RealDictCursor
 
 from database.connection import DatabaseConnectionError, get_db
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

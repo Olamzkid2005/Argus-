@@ -8,10 +8,10 @@ Pure-function reads: the profile is a snapshot, not a live cursor.
 import json
 import logging
 from datetime import datetime
-from tool_core._compat import utc
 from urllib.parse import urlparse
 
 from database.connection import db_cursor
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

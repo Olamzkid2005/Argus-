@@ -12,15 +12,14 @@ These tests are excluded from default CI. Run manually:
 from __future__ import annotations
 
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
-from unittest.mock import Mock, PropertyMock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from runtime.engagement_state import EngagementState
 from runtime.workflows.bola import BolaWorkflow
-
 
 # ── Test Server ────────────────────────────────────────────────────────
 
@@ -97,9 +96,9 @@ def server_url() -> str:
 
 def _run_dual_auth_scanner(server_url: str) -> list[dict]:
     """Run the legacy DualAuthScanner against the server and return findings."""
-    from tools.dual_auth_scanner import DualAuthScanner
     from tool_core.base import ToolContext
     from tool_core.config.models import DualAuthConfig
+    from tools.dual_auth_scanner import DualAuthScanner
 
     scanner = DualAuthScanner()
     # Mock the auth_manager to avoid real auth flow
@@ -199,7 +198,7 @@ class TestBolaWorkflowRegression:
         da_findings = _run_dual_auth_scanner(server_url)
 
         bw_types = {f.get("type") for f in bw_findings}
-        da_types = {f.get("type") for f in da_findings}
+        {f.get("type") for f in da_findings}
 
         # BolaWorkflow should produce CONFIRMED_BOLA or POTENTIAL_BOLA
         assert bw_types.intersection({"CONFIRMED_BOLA", "POTENTIAL_BOLA"})

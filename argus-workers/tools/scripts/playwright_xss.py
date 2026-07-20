@@ -2,8 +2,8 @@
 """Stored XSS detection via Playwright. Called as a subprocess by MCP server."""
 
 import argparse
-from typing import Any
 import json
+from typing import Any
 
 from playwright.sync_api import sync_playwright
 

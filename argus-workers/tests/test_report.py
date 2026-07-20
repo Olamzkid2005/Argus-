@@ -12,7 +12,6 @@ from tasks.report import (
     generate_compliance_report,
     generate_full_report,
     generate_report,
-    generate_scheduled_reports,
     get_compliance_reports,
     get_findings_summary,
 )
@@ -295,6 +294,7 @@ class TestCalculateNextRun:
     def test_daily_returns_1_day(self):
         """Daily frequency adds 1 day."""
         from datetime import datetime, timedelta
+
         from tool_core._compat import utc
 
         result = _calculate_next_run("daily")
@@ -304,6 +304,7 @@ class TestCalculateNextRun:
     def test_weekly_returns_7_days(self):
         """Weekly frequency adds 7 days."""
         from datetime import datetime, timedelta
+
         from tool_core._compat import utc
 
         result = _calculate_next_run("weekly")
@@ -313,6 +314,7 @@ class TestCalculateNextRun:
     def test_monthly_returns_30_days(self):
         """Monthly frequency adds 30 days."""
         from datetime import datetime, timedelta
+
         from tool_core._compat import utc
 
         result = _calculate_next_run("monthly")
@@ -322,6 +324,7 @@ class TestCalculateNextRun:
     def test_quarterly_returns_90_days(self):
         """Quarterly frequency adds 90 days."""
         from datetime import datetime, timedelta
+
         from tool_core._compat import utc
 
         result = _calculate_next_run("quarterly")
@@ -331,6 +334,7 @@ class TestCalculateNextRun:
     def test_unknown_frequency_defaults_to_weekly(self):
         """Unknown frequency defaults to 7 days (weekly)."""
         from datetime import datetime, timedelta
+
         from tool_core._compat import utc
 
         result = _calculate_next_run("hourly")  # not a valid frequency

@@ -15,9 +15,9 @@ import subprocess
 import tempfile
 import uuid
 from datetime import datetime
-from tool_core._compat import utc
 
 from celery_app import app
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

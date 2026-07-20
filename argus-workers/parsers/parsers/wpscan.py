@@ -6,9 +6,9 @@ Covers: plugin/theme CVEs, weak passwords, user enumeration,
         xmlrpc abuse, backup file exposure.
 """
 
-from typing import Any
 import json
 import logging
+from typing import Any
 
 from .base import BaseParser
 

@@ -268,8 +268,8 @@ class _MetricsHandler(BaseHTTPRequestHandler):
     def _handle_shadow_stats(self) -> None:
         """Return shadow-mode convergence statistics."""
         try:
+            from runtime.shadow_flipper import CONVERGENCE_THRESHOLD, SHADOW_TO_FLAG_MAP
             from runtime.shadow_mode import get_shadow_stats
-            from runtime.shadow_flipper import SHADOW_TO_FLAG_MAP, CONVERGENCE_THRESHOLD
 
             stats = get_shadow_stats()
             result = {

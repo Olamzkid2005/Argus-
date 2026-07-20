@@ -116,7 +116,7 @@ class AgentRuntime:
                 return _orig(name, **kwargs)
 
             # Use setattr to avoid mypy "Cannot assign to a method" error
-            setattr(agent.registry, 'call', _scoped_dispatch)
+            agent.registry.call = _scoped_dispatch
 
         self._react_agent = agent
         return agent

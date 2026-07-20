@@ -7,8 +7,9 @@ Requirements: 27.4, 27.5
 import json
 import os
 from datetime import datetime
-from tool_core._compat import utc
 from pathlib import Path
+
+from tool_core._compat import utc
 
 
 class RuleRegistry:

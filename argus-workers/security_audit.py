@@ -10,8 +10,9 @@ import os
 import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from tool_core._compat import utc
 from typing import Any
+
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

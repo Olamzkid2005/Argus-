@@ -4,14 +4,14 @@ key normalization, and cache eviction.
 """
 
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from cve_cache import (
+    _IN_MEMORY_MAX_SIZE,
+    EPSS_CACHE_TTL,
+    NVD_CACHE_TTL,
     CveEpssCache,
     _normalize_cve_ids,
-    NVD_CACHE_TTL,
-    EPSS_CACHE_TTL,
-    _IN_MEMORY_MAX_SIZE,
 )
 
 
@@ -204,14 +204,14 @@ class TestCveEpssCacheConvenienceFunctions:
         mod._cve_cache = None
 
     def test_get_nvd_data_convenience(self):
-        from cve_cache import set_nvd_data, get_nvd_data
+        from cve_cache import get_nvd_data, set_nvd_data
 
         set_nvd_data(["CVE-2024-TEST"], {"CVE-2024-TEST": {"data": "test"}})
         result = get_nvd_data(["CVE-2024-TEST"])
         assert result == {"CVE-2024-TEST": {"data": "test"}}
 
     def test_get_epss_scores_convenience(self):
-        from cve_cache import set_epss_scores, get_epss_scores
+        from cve_cache import get_epss_scores, set_epss_scores
 
         set_epss_scores(["CVE-2024-TEST"], {"CVE-2024-TEST": 0.95})
         result = get_epss_scores(["CVE-2024-TEST"])

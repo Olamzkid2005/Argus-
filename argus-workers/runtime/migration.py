@@ -21,8 +21,9 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
-from tool_core._compat import UTC
 from typing import Any
+
+from tool_core._compat import UTC
 
 logger = logging.getLogger(__name__)
 

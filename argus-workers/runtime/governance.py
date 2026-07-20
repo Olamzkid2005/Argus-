@@ -375,7 +375,7 @@ class Governance:
         consecutive_low = recent_zero_or_low >= 3
 
         # Signal 3: Coverage saturation
-        coverage_score = len(self._covered_vuln_types) / max(
+        len(self._covered_vuln_types) / max(
             len(self._last_tool_results), 1
         )
 

@@ -7,7 +7,7 @@ results from early phases can trigger follow-up phases.
 
 Usage:
     from orchestrator_pkg.planning import AdaptiveWorkflowPlanner, WorkflowPlan
-    
+
     planner = AdaptiveWorkflowPlanner()
     plan = planner.build_plan(recon_context, engagement_id="eng-123")
     for phase in plan.phases:
@@ -16,8 +16,8 @@ Usage:
 
 from .adaptive_planner import (
     AdaptiveWorkflowPlanner,
-    ToolTask,
     TestingPhase,
+    ToolTask,
     WorkflowPlan,
 )
 

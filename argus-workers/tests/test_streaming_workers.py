@@ -3,7 +3,6 @@
 import queue
 import threading
 from datetime import datetime
-from tool_core._compat import utc
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -38,6 +37,7 @@ from streaming import (
     get_transactional_emitter,
     set_transactional_emitter,
 )
+from tool_core._compat import utc
 
 
 class TestEventType:

@@ -5,13 +5,11 @@ Verifies that every emit_* function produces the correct EventType constant
 and correctly structured data payload when published to the stream manager.
 """
 
-import queue
 
 import pytest
 
 from streaming import (
     ErrorHint,
-    Event,
     EventType,
     clear_transactional_emitter,
     emit_agent_decision,

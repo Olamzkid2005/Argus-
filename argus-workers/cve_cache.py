@@ -18,8 +18,8 @@ Usage:
 import json
 import logging
 import os
-import time as _time
 import threading
+import time as _time
 
 logger = logging.getLogger(__name__)
 

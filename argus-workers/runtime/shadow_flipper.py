@@ -13,7 +13,6 @@ Usage:
 """
 
 import logging
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +42,8 @@ def check_and_auto_flip(phase: str) -> bool:
     Returns:
         True if the flag was flipped, False otherwise.
     """
-    from runtime.shadow_mode import get_consecutive_successes
     from feature_flags import get_feature_flags
+    from runtime.shadow_mode import get_consecutive_successes
 
     consecutive = get_consecutive_successes(phase)
     if consecutive < CONVERGENCE_THRESHOLD:

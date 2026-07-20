@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tool_core.async_runner import AsyncToolRunner
 from tool_core.registry import ToolRegistry
 from tool_core.result import ToolStatus
-from tool_core.sandbox import AsyncToolRunner
 
 
 class TestAsyncToolRunnerInit:

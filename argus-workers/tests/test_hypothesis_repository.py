@@ -17,11 +17,12 @@ import os
 import re
 import sys
 from datetime import datetime
-from tool_core._compat import utc
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+
+from tool_core._compat import utc
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 

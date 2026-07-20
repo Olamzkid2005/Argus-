@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -219,7 +219,7 @@ class CloudMetadataProbe(AbstractTool):
 
         # Generate findings for each reachable provider
         for provider, results in reachable_providers.items():
-            provider_name = provider.upper()
+            provider.upper()
 
             # Collect all data from this provider
             all_data = {}
@@ -284,7 +284,7 @@ class CloudMetadataProbe(AbstractTool):
         result = UnifiedToolResult(
             tool_name=self.tool_name,
             target=target,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             findings=findings,
             status=ToolStatus.SUCCESS if findings else ToolStatus.SUCCESS_EMPTY,
         )

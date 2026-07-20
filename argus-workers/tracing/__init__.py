@@ -9,7 +9,6 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
-from tool_core._compat import utc
 from typing import Any
 
 from opentelemetry import trace
@@ -19,6 +18,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
 from exceptions import TracingError as TracingError
+from tool_core._compat import utc
 from utils.validation import validate_uuid
 
 logger = logging.getLogger(__name__)

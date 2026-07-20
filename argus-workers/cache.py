@@ -417,7 +417,6 @@ def cached_query(ttl: int = 300):
 
     def decorator(func: Callable):
         # Derive a prefix from the function name for scoped invalidation
-        func_prefix = f"cached_query:{func.__name__}"
 
         @wraps(func)
         def wrapper(*args, **kwargs):

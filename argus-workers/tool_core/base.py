@@ -13,7 +13,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from tool_core.config.models import DualAuthConfig
@@ -91,7 +91,7 @@ class AbstractTool(ABC):
         result = UnifiedToolResult(
             tool_name=self.tool_name,
             target=ctx.target,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
 
         try:
@@ -169,7 +169,7 @@ class AsyncTool(ABC):
         result = UnifiedToolResult(
             tool_name=self.tool_name,
             target=ctx.target,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
 
         try:

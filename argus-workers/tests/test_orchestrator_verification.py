@@ -50,6 +50,7 @@ _heavy_deps_patcher = patch.dict(
 )
 _heavy_deps_patcher.start()
 from orchestrator_pkg.orchestrator import Orchestrator
+
 _heavy_deps_patcher.stop()
 
 

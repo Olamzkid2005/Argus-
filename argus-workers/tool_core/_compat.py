@@ -18,17 +18,11 @@ Usage:
     now = datetime.now(utc)
 """
 
-import sys
-from datetime import timezone
 
 # ── datetime.UTC compat (Python 3.11+) ──────────────────────────────────────
 # `datetime.UTC` was added in Python 3.11 as a convenience alias for
 # `datetime.timezone.utc`. Provide it when running on 3.10.
-if sys.version_info >= (3, 11):
-    from datetime import UTC as utc  # noqa: F811
-else:
-    utc = timezone.utc  # type: ignore[assignment]
-
+from datetime import UTC as utc  # type: ignore[assignment]
 
 # Re-export as UTC for compatibility with ``from datetime import UTC`` pattern.
 # Files that used ``from datetime import UTC`` can use:
@@ -39,37 +33,23 @@ UTC = utc  # noqa: F811
 # ── StrEnum compat (Python 3.11+) ───────────────────────────────────────────
 # `enum.StrEnum` was added in Python 3.11 (PEP 663). On 3.10, create a
 # drop-in replacement by combining ``str`` and ``enum.Enum``.
-if sys.version_info >= (3, 11):
-    from enum import StrEnum  # noqa: F811
-else:
-    from enum import Enum
 
-    class StrEnum(str, Enum):  # type: ignore[no-redef]
-        """Backport of Python 3.11's ``enum.StrEnum``.
 
-        A string enum that serializes values as their string value.
-        All standard ``Enum`` features (auto(), aliases, members, etc.)
-        work as expected.
+# ── StrEnum compat (Python 3.11+) ───────────────────────────────────────────
+# `enum.StrEnum` was added in Python 3.11 (PEP 663). On 3.10, create a
+# drop-in replacement by combining ``str`` and ``enum.Enum``.
+try:
+    from enum import StrEnum  # type: ignore[no-redef]
+except ImportError:
+    import enum
 
-        Example::
+    class StrEnum(str, enum.Enum):  # type: ignore[no-redef]
+        """Backport of Python 3.11's ``enum.StrEnum``."""
 
-            class Status(StrEnum):
-                OK = "ok"
-                ERROR = "error"
-
-            assert Status.OK == "ok"
-            assert str(Status.OK) == "ok"
-        """
-
-        def __str__(self) -> str:
-            return self.value
-
-        @staticmethod
-        def _generate_next_value_(
-            name: str, start: int, count: int, last_values: list[str]
-        ) -> str:
-            """Default to lowercase name when using ``auto()``."""
-            return name.lower()
+        def __new__(cls, value: str) -> "StrEnum":
+            member = str.__new__(cls, value)
+            member._value_ = value
+            return member
 
 
 # ── NotRequired compat (Python 3.11+) ───────────────────────────────────────
@@ -78,4 +58,4 @@ else:
 try:
     from typing import NotRequired  # type: ignore[no-redef]
 except ImportError:
-    from typing_extensions import NotRequired  # type: ignore[no-redef,assignment]
+    pass  # type: ignore[no-redef,assignment]

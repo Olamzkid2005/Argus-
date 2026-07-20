@@ -142,7 +142,8 @@ class TestContainerRegistry:
 
     def setup_method(self):
         # Clean registry and capture original factory before each test
-        from di_container import _containers, _factory as default_factory
+        from di_container import _containers
+        from di_container import _factory as default_factory
         _containers.clear()
         self._original_factory = default_factory
 
@@ -207,7 +208,8 @@ class TestConcurrency:
 
     def setup_method(self):
         # Clean registry and reset factory before each test
-        from di_container import _containers, _factory as default_factory
+        from di_container import _containers
+        from di_container import _factory as default_factory
         _containers.clear()
         self._original_factory = default_factory
         self.deps = ContainerDependencies(

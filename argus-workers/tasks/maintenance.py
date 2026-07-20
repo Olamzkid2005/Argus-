@@ -6,10 +6,10 @@ Uses shared ConnectionManager for database access (H-23).
 
 import logging
 from datetime import datetime, timedelta
-from tool_core._compat import utc
 
 from celery_app import app
 from database.connection import db_cursor
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

@@ -13,9 +13,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from tool_core._compat import StrEnum
-
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from tool_core._compat import StrEnum
 
 logger = logging.getLogger(__name__)
 

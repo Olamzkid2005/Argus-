@@ -377,7 +377,8 @@ async def verify_finding(finding: dict, engagement_id: str = "") -> dict:
         }
         return finding
 
-    from typing import Any, cast, Callable
+    from collections.abc import Callable
+    from typing import Any, cast
 
     endpoint = finding.get("endpoint") or finding.get("url") or ""
     payload = finding.get("evidence", {}).get("payload") or finding.get("payload") or ""

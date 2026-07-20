@@ -8,10 +8,10 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from tool_core._compat import utc
 
 from database.connection import get_db
 from feature_flags import is_enabled
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

@@ -16,9 +16,9 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from tool_core._compat import utc
 
 from compliance_reporting import ComplianceMapper
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

@@ -31,14 +31,14 @@ import os
 import subprocess
 import sys
 import webbrowser
-
-from tool_core._compat import utc
 from pathlib import Path
 from typing import Literal
 
+from tool_core._compat import utc
+
 logger = logging.getLogger(__name__)
 
-ReportFormat = Literal["html", "markdown", "json"]
+ReportFormat = Literal["html", "markdown", "json", "pdf"]
 
 # Default output directory relative to CWD
 DEFAULT_REPORT_DIR = "reports"
@@ -112,6 +112,7 @@ def _generate_filename(
         "html": "html",
         "markdown": "md",
         "json": "json",
+        "pdf": "pdf",
     }
 
     if target_slug:
@@ -132,7 +133,7 @@ def _generate_filename(
 
 
 def save_report(
-    content: str,
+    content: str | bytes,
     path: str | None = None,
     *,
     fmt: ReportFormat = "html",
@@ -146,14 +147,15 @@ def save_report(
     It handles:
     - Directory creation (if needed)
     - File path resolution
-    - UTF-8 file writing
+    - UTF-8/binary file writing (str → write_text, bytes → write_bytes)
     - Optional browser launch
 
     Args:
-        content: The rendered report content (HTML string, Markdown, or JSON).
+        content: The rendered report content — str for text formats (HTML, Markdown, JSON),
+                 bytes for binary formats (PDF).
         path: Explicit output path. If None, generates a deterministic filename
               using target_slug and fmt.
-        fmt: Report format — "html", "markdown", or "json".
+        fmt: Report format — "html", "markdown", "json", or "pdf".
         target_slug: URL-safe target identifier for auto-generated filenames.
         report_dir: Output directory (default: "reports/" relative to CWD).
         open_browser: If True, open the saved file in the default browser.
@@ -185,9 +187,12 @@ def save_report(
     # Ensure parent directory exists (in case path includes subdirectories)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write file
+    # Write file — binary for PDF bytes, text for everything else
     try:
-        out_path.write_text(content, encoding="utf-8")
+        if isinstance(content, bytes):
+            out_path.write_bytes(content)
+        else:
+            out_path.write_text(content, encoding="utf-8")
     except OSError as e:
         raise OSError(f"Failed to write report to {out_path}: {e}") from e
 

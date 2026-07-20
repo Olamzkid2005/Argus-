@@ -5,9 +5,9 @@ Data models for vulnerability findings
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from tool_core._compat import StrEnum
 
 from exceptions import FindingValidationError as FindingValidationError  # re-exported
+from tool_core._compat import StrEnum
 
 
 class Severity(StrEnum):

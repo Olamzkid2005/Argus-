@@ -3,12 +3,12 @@ Tests for checkpoint_manager.py
 """
 
 from datetime import datetime
-from tool_core._compat import utc
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from checkpoint_manager import CheckpointContext, CheckpointManager
+from tool_core._compat import utc
 
 
 class TestCheckpointManager:

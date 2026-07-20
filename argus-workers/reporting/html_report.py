@@ -10,9 +10,9 @@ Architecture (ADR-007): Pure renderers at library layer; side effects at CLI bou
 
 import datetime
 from html import escape
+from typing import Any
 
 from tool_core._compat import utc
-from typing import Any
 
 # Severity colors (GitHub-dark inspired)
 _SEVERITY_STYLE: dict[str, dict[str, str]] = {

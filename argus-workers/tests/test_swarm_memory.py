@@ -1,6 +1,5 @@
 """Tests for agent.swarm_memory — SwarmMemory thread-safe shared store."""
 
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 

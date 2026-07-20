@@ -13,16 +13,15 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from datetime import datetime
-from tool_core._compat import UTC
 from pathlib import Path
+from typing import Any
 
 from cache import CacheMode, cache
 from config.constants import CIRCUIT_BREAKER_COOLDOWN, CIRCUIT_BREAKER_THRESHOLD
 from database.repositories.engagement_repository import EngagementRepository
 from database.repositories.tool_metrics_repository import ToolMetricsRepository
-from typing import Any, Callable
-
 from error_classifier import ErrorCode
 from exceptions import SecurityError
 from runtime.concurrency import (
@@ -32,8 +31,8 @@ from runtime.concurrency import (
 )
 from runtime.rate_limiter import PER_HOST_LIMITER, extract_host
 from streaming import emit_error_hint
+from tool_core._compat import UTC
 from tool_core.result import ToolStatus, UnifiedToolResult
-from tool_core._compat import utc
 from tools.circuit_breaker import (
     CircuitOpenError,
     ToolCircuitBreakerManager,
@@ -204,7 +203,7 @@ class ToolRunner:
     })
 
     def _extract_target(self, args: list[str]) -> str | None:
-        """
+        r"""
         Extract a target URL/hostname from tool arguments.
 
         Uses a priority-based approach:

@@ -101,6 +101,8 @@ markers = [
     "soak: Long-run soak / drift detection tests for memory leak, cost drift, quality degradation",
     "requires_db: marks tests that require psycopg2 database connection",
     "requires_redis: marks tests that require redis connection",
+    "timeout: marks tests that verify timeout behavior",
+    "docker: marks tests that require Docker daemon",
 ]
 
 [tool.mypy]

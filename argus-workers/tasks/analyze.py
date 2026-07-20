@@ -46,6 +46,7 @@ def run_analysis(
             regardless of foothold indicators (infinite loop guard).
     """
     from typing import Any
+
     from utils.logging_utils import ScanLogger
 
     slog = ScanLogger("analyze", engagement_id=engagement_id)

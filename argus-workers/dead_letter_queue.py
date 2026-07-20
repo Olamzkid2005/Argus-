@@ -12,13 +12,13 @@ import re
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from tool_core._compat import utc
-from typing import Any
+from typing import Any, cast
+from typing import Any as TAny
 
 import redis
-from typing import cast, Any as TAny
 
 from config.redis import REDIS_URL
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

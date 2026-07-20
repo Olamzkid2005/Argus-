@@ -8,7 +8,6 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta
-from tool_core._compat import utc
 from typing import Any
 
 import psycopg2.sql as pysql
@@ -16,8 +15,9 @@ from psycopg2.extras import RealDictCursor
 
 from celery_app import app
 from compliance_reporting import ComplianceReportGenerator
-from database.connection import connect, get_db
+from database.connection import get_db
 from tasks.base import task_context
+from tool_core._compat import utc
 from tracing import TracingManager
 
 logger = logging.getLogger(__name__)
@@ -483,8 +483,8 @@ def _send_report_email(
     sendgrid_key = os.getenv("SENDGRID_API_KEY")
     if sendgrid_key:
         try:
-            import urllib.request
             import json as _json
+            import urllib.request
 
             payload = _json.dumps({
                 "personalizations": [{"to": [{"email": r} for r in recipients]}],
@@ -851,7 +851,7 @@ def generate_full_report(
                 )
                 # Inline fallback template: generates a basic HTML report
                 # without Jinja2 dependency.
-                from jinja2 import Environment, BaseLoader
+                from jinja2 import BaseLoader, Environment
 
                 _fallback_template_str = """<!DOCTYPE html>
 <html lang="en">

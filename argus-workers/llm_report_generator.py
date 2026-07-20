@@ -10,7 +10,11 @@ import logging
 from collections.abc import Generator
 from typing import Any
 
-from agent.agent_prompts import REPORT_SYSTEM_PROMPT, _sanitize_for_llm, build_report_prompt
+from agent.agent_prompts import (
+    REPORT_SYSTEM_PROMPT,
+    _sanitize_for_llm,
+    build_report_prompt,
+)
 from config.constants import LLM_AGENT_MAX_TOKENS_REPORT
 
 logger = logging.getLogger(__name__)

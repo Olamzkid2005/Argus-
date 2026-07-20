@@ -1,5 +1,5 @@
-from typing import Any
 import json
+from typing import Any
 
 from parsers.parsers.base import BaseParser
 

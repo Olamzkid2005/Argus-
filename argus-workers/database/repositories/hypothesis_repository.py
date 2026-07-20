@@ -3,11 +3,11 @@
 import json
 import logging
 from datetime import datetime
-from tool_core._compat import utc
 
 from psycopg2.extras import Json, RealDictCursor
 
 from database.repositories.base import BaseRepository
+from tool_core._compat import utc
 
 logger = logging.getLogger(__name__)
 

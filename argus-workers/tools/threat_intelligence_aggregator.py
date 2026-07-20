@@ -11,7 +11,6 @@ import json
 import logging
 import ssl
 import urllib.request
-
 from typing import Any
 
 from tool_core.base import AbstractTool, ToolContext

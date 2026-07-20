@@ -22,9 +22,9 @@ import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from tool_core._compat import utc
 from typing import Any
 
+from tool_core._compat import utc
 from utils.error_hints import ErrorHint
 
 logger = logging.getLogger(__name__)

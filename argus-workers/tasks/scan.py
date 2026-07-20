@@ -133,7 +133,7 @@ def run_scan(
         if _findings_count > 0:
             try:
                 from mcp_server import get_mcp_server
-                
+
                 _mcp = get_mcp_server()
                 _attack_graph_result = _mcp.handle_get_attack_graph({
                     "engagement_id": engagement_id,
@@ -143,7 +143,7 @@ def run_scan(
                 if _chain_plans:
                     # Check if any chain plan is CRITICAL/HIGH severity
                     _critical_chains = [
-                        c for c in _chain_plans 
+                        c for c in _chain_plans
                         if c.get("severity", "") in ("CRITICAL", "HIGH")
                     ]
                     if _critical_chains:
@@ -172,7 +172,7 @@ def run_scan(
             try:
                 ctx.state.transition(
                     "exploitation",
-                    f"Attack chain(s) detected — dispatching exploitation phase",
+                    "Attack chain(s) detected — dispatching exploitation phase",
                 )
             except Exception as e:
                 logger.exception(

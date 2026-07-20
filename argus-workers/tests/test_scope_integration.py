@@ -346,7 +346,7 @@ class TestSandboxScope:
     @pytest.fixture
     def sandbox(self):
         """Create an AsyncToolRunner with minimal wiring."""
-        from tool_core.sandbox import AsyncToolRunner
+        from tool_core.async_runner import AsyncToolRunner
         runner = AsyncToolRunner(engagement_id="eng-test")
         mock_runner = mock.MagicMock()
         mock_runner.is_dangerous.return_value = False

@@ -401,9 +401,9 @@ class FindingNormalizer:
             return finding
 
         except ValidationError as e:
-            raise FindingValidationError("Validation failed: %s" % e) from e
+            raise FindingValidationError(f"Validation failed: {e}") from e
         except Exception as e:
-            raise FindingValidationError("Normalization failed: %s" % e) from e
+            raise FindingValidationError(f"Normalization failed: {e}") from e
 
     def _normalize_type(
         self, raw_type: str, _source_tool: str, raw_finding: dict = None

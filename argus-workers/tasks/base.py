@@ -208,7 +208,7 @@ def task_context(
                 slog.info("Lock acquired, state machine initialized")
 
                 orchestrator = Orchestrator(engagement_id, trace_id=trace_id)
-                setattr(orchestrator, "state", state)  # type: ignore[method-assign]
+                orchestrator.state = state  # type: ignore[method-assign]
                 ctx.orchestrator = orchestrator
 
                 # Check for operator-initiated cancellation before starting work

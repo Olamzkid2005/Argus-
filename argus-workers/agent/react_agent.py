@@ -29,12 +29,11 @@ from config.constants import (
 )
 from feature_flags import is_enabled as _ff_enabled
 from llm_service import LLMService
+from runtime.degradation_awareness import DegradationAwareness, DegradationLevel
 from runtime.engagement_state import OBSERVATION_TRUNCATION_LIMIT
 from streaming import emit_error_hint
 from utils.error_hints import ErrorHint
 from utils.logging_utils import ScanLogger
-
-from runtime.degradation_awareness import DegradationAwareness, DegradationLevel
 
 from .agent_action import AgentAction
 from .agent_prompts import (
@@ -331,7 +330,7 @@ class ReActAgent:
 
         Returns a short 2-4 line summary string, or empty string if no data.
         """
-        re_severity = re.compile(
+        re.compile(
             r"(CRITICAL|HIGH|MEDIUM|LOW|INFO|FAILED|found\s+(\d+)\s+result)",
             re.IGNORECASE,
         )
@@ -471,7 +470,7 @@ class ReActAgent:
         if len(context) > approx_chars:
             # Keep summary always, then add as many recent observations as fit
             visible = [summary] if summary else []
-            budget_remaining = approx_chars - len("\n\n".join(visible)) if visible else approx_chars
+            approx_chars - len("\n\n".join(visible)) if visible else approx_chars
 
             fitted: list[str] = []
             for entry in reversed(self.history[:]):
@@ -1142,14 +1141,12 @@ Based on these findings, what capabilities should the next phase use?
         tried_tools = tried_tools or set()
         llm_client = llm_client or self.llm_client
 
-        llm_attempted = False
         if (
             llm_client
             and hasattr(llm_client, "is_available")
             and llm_client.is_available()
             and recon_context
         ):
-            llm_attempted = True
             llm_service = LLMService(llm_client=llm_client)
             action = self._call_llm_for_action(
                 task,
@@ -1513,10 +1510,7 @@ Based on these findings, what capabilities should the next phase use?
             ConnectionRefusedError,
             ConnectionAbortedError,
         )
-        if isinstance(exc, retryable_exceptions):
-            return True
-
-        return False
+        return bool(isinstance(exc, retryable_exceptions))
 
     @staticmethod
     def _extract_finding_count(result: Any) -> int:
@@ -1774,25 +1768,24 @@ Based on these findings, what capabilities should the next phase use?
             if not (
                 _ff_enabled("GOVERNANCE_V2", default=False)
                 and self.governance is not None
-            ):
-                if total_cost_usd > LLM_AGENT_MAX_COST_USD:
-                    logger.warning(
-                        "Cost guard: $%.4f exceeds $%.4f (engagement %s). "
-                        "Switching to deterministic for remaining tools.",
-                        total_cost_usd,
-                        LLM_AGENT_MAX_COST_USD,
-                        self.engagement_id,
-                    )
-                    for tool_name in self.PHASE_TOOLS.get(self._phase, []):
-                        if (
-                            tool_name not in tried_tools
-                            and self.registry.get_tool(tool_name) is not None
-                        ):
-                            result = self.registry.call(
-                                tool_name, target=initial_target
-                            )
-                            results.append(result)
-                    break
+            ) and total_cost_usd > LLM_AGENT_MAX_COST_USD:
+                logger.warning(
+                    "Cost guard: $%.4f exceeds $%.4f (engagement %s). "
+                    "Switching to deterministic for remaining tools.",
+                    total_cost_usd,
+                    LLM_AGENT_MAX_COST_USD,
+                    self.engagement_id,
+                )
+                for tool_name in self.PHASE_TOOLS.get(self._phase, []):
+                    if (
+                        tool_name not in tried_tools
+                        and self.registry.get_tool(tool_name) is not None
+                    ):
+                        result = self.registry.call(
+                            tool_name, target=initial_target
+                        )
+                        results.append(result)
+                break
 
             slog.agent_iteration(
                 iteration,
@@ -2044,7 +2037,7 @@ Based on these findings, what capabilities should the next phase use?
             self.add_to_history("observation", observation)
 
             # ── Update hypothesis state after tool result ──
-            if _ff_enabled("HYPOTHESIS_ENGINE", default=False):
+            if _ff_enabled("HYPOTHESIS_ENGINE", default=True):
                 self._update_hypotheses_from_result(action.tool, result)
 
             # Track execution iteration in EngagementState

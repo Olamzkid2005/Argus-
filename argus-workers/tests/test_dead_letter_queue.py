@@ -4,12 +4,12 @@ Tests for dead_letter_queue.py
 
 import json
 from datetime import datetime
-from tool_core._compat import utc
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from dead_letter_queue import DeadLetterQueue, FailedTask, get_dlq
+from tool_core._compat import utc
 
 
 class TestDeadLetterQueue:

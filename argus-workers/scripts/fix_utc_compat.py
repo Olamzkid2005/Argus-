@@ -6,7 +6,6 @@ Usage: python3 scripts/fix_utc_compat.py
 """
 
 import os
-import re
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
