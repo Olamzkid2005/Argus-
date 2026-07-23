@@ -173,7 +173,7 @@ export function ScanDashboard() {
         <text fg={theme.textMuted}>{scanState.target || route.target}</text>
         {/* LLM model selector — dropdown with inline list of available models */}
         <Show when={scanState.llmPlanningModel && scanState.llmPlanningStatus === "completed"}>
-          <DropdownMenu onOpenChange={(open) => { if (open) refreshAvailableModels() }}>
+          <DropdownMenu onOpenChange={(open: boolean) => { if (open) refreshAvailableModels() }}>
             <DropdownMenu.Trigger>
               <text fg={theme.textMuted}>{scanState.llmPlanningModel}</text>
             </DropdownMenu.Trigger>

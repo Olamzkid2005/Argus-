@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer } from "effect"
 
 // ── Mock Control Flags ───────────────────────────────────────────────
 // These module-level flags control the mocked generateObject behavior
@@ -39,14 +39,19 @@ let defaultReplanResponse: object = {}
 // These are valid (empty) Layers that Effect.provide accepts without error.
 // The mocked LLM.generateObject returns Effect.succeed() which requires
 // no services, so the provided layers are silently ignored.
-const noopClientLayer = Layer.effect(
-  (Context as any).GenericTag<any>("@opencode/LLMClient"),
-  Effect.succeed({} as any),
+//
+// Note: GenericTag API differs between effect versions (Context.GenericTag
+// in some vs. direct GenericTag in others). We use a plain tag object to
+// avoid the mismatch — the mock layers are never actually invoked since
+// the mocked LLM.generateObject returns Effect.succeed() directly.
+const noopClientLayer = Layer.succeed(
+  "@opencode/LLMClient" as any,
+  {} as any,
 )
 
-const noopExecutorLayer = Layer.effect(
-  (Context as any).GenericTag<any>("@opencode/RequestExecutor"),
-  Effect.succeed({} as any),
+const noopExecutorLayer = Layer.succeed(
+  "@opencode/RequestExecutor" as any,
+  {} as any,
 )// ── Module Mocks (set up once, controlled via flags) ─────────────────
 // These must be created BEFORE the service is imported.
 

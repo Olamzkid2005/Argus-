@@ -90,7 +90,7 @@ function makeContext(overrides?: Partial<PlannerContext>): PlannerContext {
     targetType: "web_app",
     authState: "none",
     findings: [],
-    executedCapabilities: new Set<Capability>() as any,
+    executedCapabilities: new Set<typeof Capability[keyof typeof Capability]>() as any,
     insertedPhases: new Set<string>(),
     replanCount: 0,
     ...overrides,

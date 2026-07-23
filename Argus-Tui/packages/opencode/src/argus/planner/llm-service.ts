@@ -21,11 +21,10 @@
  */
 
 import { Effect, Schema } from "effect"
-import { LLM, type ToolSchema } from "@opencode-ai/llm"
+import { LLM, type Model, type ToolSchema } from "@opencode-ai/llm"
 import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { openai } from "@opencode-ai/llm/providers/openai"
 import { anthropic } from "@opencode-ai/llm/providers/anthropic"
-import type { Model } from "@opencode-ai/llm/schema"
 
 // ── Structured Output Schemas ────────────────────────────────────────
 // These Effect Schemas define the shape of data the LLM must return.
