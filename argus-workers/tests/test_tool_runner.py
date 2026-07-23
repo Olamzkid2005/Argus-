@@ -125,6 +125,7 @@ class TestToolRunnerStreamingScopeValidation:
         assert result.status == ToolStatus.SCOPE_ERROR
         assert "not in authorized scope" in result.stderr
 
+    @_windows_skip
     @patch.object(ToolRunner, "_load_authorized_scope")
     def test_streaming_scope_allows_in_scope_target(self, mock_load_scope):
         """run_streaming allows in-scope targets (scope check passes)."""
@@ -156,6 +157,7 @@ class TestToolRunnerStreamingScopeValidation:
 
     # ── No scope configured (no engagement) ───────────────────────────────
 
+    @_windows_skip
     def test_streaming_no_scope_when_args_have_no_target(self):
         """run_streaming skips scope when args have no recognizable target."""
         result = self.runner.run_streaming(
@@ -210,6 +212,7 @@ class TestToolRunnerScopeValidation:
         assert result.status == ToolStatus.SCOPE_ERROR
         assert "not in authorized scope" in result.stderr
 
+    @_windows_skip
     @patch.object(ToolRunner, "_load_authorized_scope")
     def test_scope_allows_in_scope_target(self, mock_load_scope):
         """Scope validation allows in-scope targets (tool proceeds to execution)."""
@@ -317,6 +320,7 @@ class TestToolRunnerScopeValidation:
 
     # ── No scope configured (no engagement) ───────────────────────────────
 
+    @_windows_skip
     def test_no_scope_when_args_have_no_target(self):
         """
         When args don't contain a recognizable target (no URL, no hostname

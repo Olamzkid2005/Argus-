@@ -62,11 +62,12 @@ class TestSnapshotManager:
         result = manager._to_jsonable(None)
         assert result is None
 
-    @pytest.mark.xfail(reason="Regex pattern mismatch", strict=True)
     def test_create_snapshot_db_error(self, manager):
         # snapshot_manager uses get_db() (pool-based), not connect() directly.
+        # When get_db() raises on the first attempt (before max_retries-1),
+        # the non-retryable else:raise path re-raises the original exception.
         with patch("snapshot_manager.get_db", side_effect=Exception("DB error")):
-            with pytest.raises(Exception, match="Failed to create snapshot"):
+            with pytest.raises(Exception, match="DB error"):
                 manager.create_snapshot("eng-001")
 
     def test_get_snapshot_not_found(self, manager):

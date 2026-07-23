@@ -76,7 +76,6 @@ class TestPlanNextAction:
 
         assert action is None
 
-    @pytest.mark.xfail(reason="Tool list mismatch", strict=True)
     def test_plan_next_action_llm_unknown_tool(self, agent, recon_context):
         mock_llm = Mock()
         mock_llm.is_available.return_value = True
@@ -94,7 +93,6 @@ class TestPlanNextAction:
         assert action is not None
         assert action.tool in ("nuclei", "dalfox")
 
-    @pytest.mark.xfail(reason="Tool list mismatch", strict=True)
     def test_plan_next_action_llm_exception(self, agent, recon_context):
         mock_llm = Mock()
         mock_llm.is_available.return_value = True
@@ -110,7 +108,6 @@ class TestPlanNextAction:
         assert action is not None
         assert action.tool in ("nuclei", "dalfox")
 
-    @pytest.mark.xfail(reason="Tool list mismatch", strict=True)
     def test_plan_next_action_no_llm(self, agent):
         action = agent.plan_next_action(
             task="scan: https://example.com",
@@ -120,7 +117,6 @@ class TestPlanNextAction:
         assert action is not None
         assert action.tool in ("nuclei", "dalfox")
 
-    @pytest.mark.xfail(reason="Tool list mismatch", strict=True)
     def test_plan_next_action_all_tools_tried(self, agent):
         action = agent.plan_next_action(
             task="scan: https://example.com",
