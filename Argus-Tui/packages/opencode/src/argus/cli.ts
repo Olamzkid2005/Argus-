@@ -33,10 +33,11 @@ export const ArgusAssessCommand = {
     const target = argv.target as string
     process.stderr.write(`[Argus] Starting assessment against: ${target}\n`)
 
-    // Autonomous mode: set env vars so downstream services (approval, feature flags) pick them up
+    // Autonomous mode: set env vars so downstream services (approval, feature flags, scope validator) pick them up
     if (argv.autonomous === true) {
       process.env["ARGUS_AUTONOMOUS"] = "1"
       process.env["ARGUS_AUTO_APPROVE"] = "1"
+      process.env["ARGUS_ALLOW_UNSCOPED"] = "1"
       process.stderr.write("[Argus] Autonomous mode enabled (ARGUS_AUTONOMOUS=1)\n")
     }
 
