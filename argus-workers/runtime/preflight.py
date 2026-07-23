@@ -361,9 +361,18 @@ def _check_scope_config() -> CheckResult:
     )
 
 
-def _check_dns() -> CheckResult:
-    """Check external DNS resolution."""
+def _check_dns(timeout: float = 5.0) -> CheckResult:
+    """Check external DNS resolution.
+
+    Uses a short socket timeout to avoid blocking indefinitely on systems
+    without internet access (common on Windows, container sandboxes, etc.).
+
+    Args:
+        timeout: Socket timeout in seconds. Default 5.0.
+    """
+    old_timeout = socket.getdefaulttimeout()
     try:
+        socket.setdefaulttimeout(timeout)
         socket.getaddrinfo("dns.google", 53)
         return CheckResult(
             name="dns_resolution",
@@ -378,12 +387,31 @@ def _check_dns() -> CheckResult:
             detail="DNS-reliant tools (subfinder, amass, dnsx) may not work. "
             "Check container DNS config or set --dns-servers 8.8.8.8",
         )
+    except socket.timeout:
+        return CheckResult(
+            name="dns_resolution",
+            severity=CheckSeverity.WARNING,
+            message=f"DNS timed out after {timeout}s",
+            detail="DNS-reliant tools (subfinder, amass, dnsx) may not work. "
+            "Check container DNS config or set --dns-servers 8.8.8.8",
+        )
+    except OSError as e:
+        # Include timeouts that manifest as OSError on some platforms
+        return CheckResult(
+            name="dns_resolution",
+            severity=CheckSeverity.WARNING,
+            message=f"DNS check failed: {e}",
+            detail="DNS-reliant tools (subfinder, amass, dnsx) may not work. "
+            "Check container DNS config or set --dns-servers 8.8.8.8",
+        )
     except Exception as e:
         return CheckResult(
             name="dns_resolution",
             severity=CheckSeverity.WARNING,
             message=f"DNS check failed: {e}",
         )
+    finally:
+        socket.setdefaulttimeout(old_timeout)
 
 
 def _check_llm_config() -> CheckResult:
