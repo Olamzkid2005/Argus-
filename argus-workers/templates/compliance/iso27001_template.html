@@ -276,7 +276,7 @@
                 <div class="criteria-id">{{ control_id }}</div>
                 <div class="criteria-name">{{ control_data.name }}</div>
                 {% if control_data.findings %}
-                <div class="findings">{{ control_data.findings|length }} finding(s): {{ control_data.findings|join(', ')[:50] }}...</div>
+                <div class="findings">{{ control_data.findings|length }} finding(s): {{ control_data.findings|join(', ')|truncate(50, True, '') }}...</div>
                 {% endif %}
             </div>
         </div>
