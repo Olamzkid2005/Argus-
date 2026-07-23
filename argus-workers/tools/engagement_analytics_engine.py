@@ -47,7 +47,7 @@ class EngagementAnalyticsEngine(AbstractTool):
         tool_counter: Counter = Counter()
 
         for f in all_findings:
-            cwe_counter[f.get("cwe_id") or "UNKNOWN"] += 1
+            cwe_counter[f.get("cwe") or f.get("cwe_id") or "UNKNOWN"] += 1
             type_counter[f.get("type", "UNKNOWN")] += 1
             severity_counter[f.get("severity", "INFO")] += 1
             tool_counter[f.get("source_tool", "unknown")] += 1

@@ -29,6 +29,8 @@ PHASE_DESCRIPTIONS = {
 }
 
 # Phase → pipeline tool IDs used to seed the planning engine
+_SEVERITY_MAP = {"CRITICAL": 5, "HIGH": 4, "MEDIUM": 3, "LOW": 2, "INFO": 1}
+
 PHASE_PIPELINE_TOOLS: dict[str, list[str]] = {
     "recon": ["subfinder", "httpx", "whatweb", "nmap", "gospider"],
     "scan": ["nuclei", "nikto", "dalfox", "wafw00f"],
@@ -205,7 +207,7 @@ class AssessmentOrchestrator(AbstractTool):
             _verification_threshold = getattr(ctx, "verification_threshold", 3)
             _high_crit = [
                 f for f in builder.findings
-                if f.get("severity", 0) >= _verification_threshold
+                if _SEVERITY_MAP.get(f.get("severity", "INFO"), 0) >= _verification_threshold
             ]
             if len(_high_crit) >= _verification_threshold:
                 builder.info(
