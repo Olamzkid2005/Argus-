@@ -1,304 +1,60 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ report.title }}</title>
-    <style>
-        :root {
-            --bg-void: #000000;
-            --bg-surface: #0A0A0F;
-            --border-structural: rgba(255, 255, 255, 0.08);
-            --text-primary: #F0F0F5;
-            --text-secondary: #8A8A9E;
-            --prism-cream: #FFFDD0;
-            --prism-cyan: #E9FFFF;
-            --pass: #00FF88;
-            --fail: #FF4444;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg-void);
-            color: var(--text-primary);
-            line-height: 1.6;
-            padding: 40px;
-        }
-        .header {
-            border-bottom: 1px solid var(--border-structural);
-            padding-bottom: 24px;
-            margin-bottom: 32px;
-        }
-        .header h1 {
-            font-size: 28px;
-            font-weight: 600;
-            letter-spacing: -0.5px;
-            margin-bottom: 8px;
-        }
-        .meta {
-            color: var(--text-secondary);
-            font-size: 13px;
-            font-family: 'SF Mono', monospace;
-        }
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
-            margin-bottom: 32px;
-        }
-        .summary-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-structural);
-            padding: 20px;
-            text-align: center;
-        }
-        .summary-card .value {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
-        .summary-card .label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-secondary);
-        }
-        .section {
-            margin-bottom: 32px;
-        }
-        .section h2 {
-            font-size: 16px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 16px;
-            color: var(--prism-cream);
-            border-left: 3px solid var(--prism-cream);
-            padding-left: 12px;
-        }
-        .section h3 {
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            margin-bottom: 12px;
-            margin-top: 24px;
-            color: var(--prism-cyan);
-            border-left: 2px solid var(--prism-cyan);
-            padding-left: 10px;
-        }
-        .criteria-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-            padding: 14px 16px;
-            background: var(--bg-surface);
-            border: 1px solid var(--border-structural);
-            margin-bottom: 8px;
-        }
-        .criteria-item .status-icon {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 700;
-            flex-shrink: 0;
-            margin-top: 2px;
-        }
-        .status-pass .status-icon {
-            background: rgba(0, 255, 136, 0.1);
-            color: var(--pass);
-            border: 1px solid rgba(0, 255, 136, 0.3);
-        }
-        .status-fail .status-icon {
-            background: rgba(255, 68, 68, 0.1);
-            color: var(--fail);
-            border: 1px solid rgba(255, 68, 68, 0.3);
-        }
-        .criteria-item .content {
-            flex: 1;
-        }
-        .criteria-item .criteria-id {
-            font-family: 'SF Mono', monospace;
-            font-size: 11px;
-            color: var(--prism-cyan);
-            margin-bottom: 2px;
-        }
-        .criteria-item .criteria-name {
-            font-size: 13px;
-            font-weight: 500;
-        }
-        .criteria-item .findings {
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin-top: 4px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
-        th {
-            text-align: left;
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border-structural);
-            color: var(--text-secondary);
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: 600;
-        }
-        td {
-            padding: 14px 16px;
-            border-bottom: 1px solid var(--border-structural);
-            vertical-align: top;
-        }
-        tr:hover td {
-            background: rgba(255, 255, 255, 0.02);
-        }
-        .severity {
-            display: inline-block;
-            padding: 2px 8px;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border: 1px solid var(--border-structural);
-        }
-        .severity-critical { color: #FF4444; border-color: rgba(255,68,68,0.3); }
-        .severity-high { color: #FF8800; border-color: rgba(255,136,0,0.3); }
-        .severity-medium { color: var(--prism-cream); border-color: rgba(255,253,208,0.3); }
-        .severity-low { color: var(--text-secondary); border-color: rgba(138,138,158,0.3); }
-        .compliance-ref {
-            font-family: 'SF Mono', monospace;
-            font-size: 11px;
-            color: var(--prism-cyan);
-            background: rgba(233, 255, 255, 0.05);
-            padding: 2px 6px;
-        }
-        .function-badge {
-            display: inline-block;
-            padding: 3px 10px;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            border-radius: 0;
-        }
-        .function-identify { background: rgba(103, 32, 255, 0.15); color: #B388FF; border: 1px solid rgba(103, 32, 255, 0.3); }
-        .function-protect { background: rgba(0, 200, 83, 0.15); color: #69F0AE; border: 1px solid rgba(0, 200, 83, 0.3); }
-        .function-detect { background: rgba(255, 193, 7, 0.15); color: #FFD54F; border: 1px solid rgba(255, 193, 7, 0.3); }
-        .function-respond { background: rgba(255, 87, 34, 0.15); color: #FF8A65; border: 1px solid rgba(255, 87, 34, 0.3); }
-        .function-recover { background: rgba(33, 150, 243, 0.15); color: #64B5F6; border: 1px solid rgba(33, 150, 243, 0.3); }
-        .description-box {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-structural);
-            padding: 16px;
-            margin-bottom: 24px;
-            font-size: 13px;
-            line-height: 1.7;
-            color: var(--text-secondary);
-        }
-        .score-box {
-            display: inline-block;
-            padding: 6px 16px;
-            font-size: 14px;
-            font-weight: 700;
-            border: 1px solid var(--border-structural);
-            margin-top: 8px;
-        }
-    </style>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{{ report.title }}</title>
+<style>
+  :root { --bg: #0d1117; --bg-card: #161b22; --border: #30363d; --text: #e6edf3; --text-muted: #8b949e; --success: #3fb950; --danger: #f85149; --accent: #58a6ff; --warning: #d29922; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; padding:32px 24px; max-width:1200px; margin:0 auto; }
+  h1 { font-size:28px; font-weight:600; } h2 { font-size:20px; font-weight:600; margin:32px 0 16px; border-bottom:1px solid var(--border); padding-bottom:8px; }
+  .meta { color:var(--text-muted); font-size:14px; margin-bottom:24px; } .meta span { margin-right:20px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:24px; }
+  .card { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center; }
+  .card .count { font-size:36px; font-weight:700; } .card .label { font-size:12px; color:var(--text-muted); text-transform:uppercase; margin-top:4px; }
+  .bar-track { height:6px; background:#21262d; border-radius:3px; margin-top:8px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:3px; transition:width 0.6s ease; }
+  .function { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:12px; }
+  .function .hdr { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .function .fn-name { font-weight:600; font-size:14px; } .function .fn-count { font-size:13px; color:var(--text-muted); }
+  table { width:100%; border-collapse:collapse; margin-top:12px; }
+  th { text-align:left; padding:10px 12px; font-size:12px; text-transform:uppercase; color:var(--text-muted); border-bottom:2px solid var(--border); }
+  td { padding:10px 12px; border-bottom:1px solid var(--border); font-size:14px; }
+  tr:hover td { background:var(--bg-hover); }
+  .sev-critical { color:var(--danger); } .sev-high { color:#d73a4a; }
+  footer { margin-top:48px; padding-top:16px; border-top:1px solid var(--border); font-size:12px; color:var(--text-muted); text-align:center; }
+  .tag-pass { background:#1a3a2a; color:var(--success); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+  .tag-fail { background:#3a1a1a; color:var(--danger); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+</style>
 </head>
 <body>
-    <div class="header">
-        <h1>NIST Cybersecurity Framework (CSF) v1.1 Compliance Report</h1>
-        <div class="meta">
-            Engagement: {{ report.engagement_id }} | Generated: {{ generated_at }}
-        </div>
-    </div>
+<h1>{{ report.title }}</h1>
+<div class="meta"><span>📋 NIST Cybersecurity Framework v1.1</span><span>📅 {{ generated_at }}</span><span>🔢 {{ report.summary.get('total_findings', 0) }} findings</span></div>
+{% set s = report.summary %}
+{% set total_fns = s.get('total_functions', 1) %}
+{% set pass_fns = s.get('passing_functions', 0) %}
+{% set score = (pass_fns / total_fns * 100) | round %}
 
-    <div class="description-box">
-        This report evaluates the target infrastructure against the NIST Cybersecurity Framework (CSF) v1.1.
-        The CSF organizes cybersecurity activities across five core functions: <strong>Identify</strong>,
-        <strong>Protect</strong>, <strong>Detect</strong>, <strong>Respond</strong>, and <strong>Recover</strong>.
-        Each function contains categories and subcategories that are assessed based on vulnerability findings
-        discovered during the engagement. Failing controls indicate areas requiring remediation to strengthen
-        the organization's cybersecurity posture.
-    </div>
-
-    <div class="summary-grid">
-        <div class="summary-card">
-            <div class="value" style="color: var(--pass)">{{ report.summary.passing_criteria }}</div>
-            <div class="label">Passing Controls</div>
-        </div>
-        <div class="summary-card">
-            <div class="value" style="color: var(--fail)">{{ report.summary.failing_criteria }}</div>
-            <div class="label">Failing Controls</div>
-        </div>
-        <div class="summary-card">
-            <div class="value" style="color: var(--text-primary)">{{ report.summary.total_criteria }}</div>
-            <div class="label">Total Controls</div>
-        </div>
-        <div class="summary-card">
-            <div class="value" style="color: var(--prism-cream)">{{ report.summary.composite_score }}%</div>
-            <div class="label">Composite Score</div>
-        </div>
-    </div>
-
-    <div class="section">
-        <h2>Core Functions Assessment</h2>
-
-        {% for function_id, function_data in report.summary.functions.items() %}
-        <h3>
-            <span class="function-badge function-{{ function_id.lower() }}">{{ function_id }}</span>
-            &mdash; {{ function_data.name }}
-            <span style="float: right; font-size: 13px; color: var(--text-secondary);">
-                {{ function_data.passing }}/{{ function_data.total }} passing
-            </span>
-        </h3>
-
-        {% for category_id, category_data in function_data.categories.items() %}
-        <div class="criteria-item status-{{ category_data.status }}">
-            <div class="status-icon">{% if category_data.status == 'pass' %}&#10003;{% else %}&#10007;{% endif %}</div>
-            <div class="content">
-                <div class="criteria-id">{{ category_id }}</div>
-                <div class="criteria-name">{{ category_data.name }}</div>
-                {% if category_data.findings %}
-                <div class="findings">{{ category_data.findings|length }} finding(s): {{ category_data.findings|join(', ')[:50] }}...</div>
-                {% endif %}
-            </div>
-        </div>
-        {% endfor %}
-        {% endfor %}
-    </div>
-
-    <div class="section">
-        <h2>Findings Detail</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Severity</th>
-                    <th>Type</th>
-                    <th>NIST Ref</th>
-                    <th>Function</th>
-                    <th>Endpoint</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for finding in report.findings %}
-                <tr>
-                    <td>{{ finding.finding_id[:8] }}</td>
-                    <td><span class="severity severity-{{ finding.severity.lower() }}">{{ finding.severity }}</span></td>
-                    <td>{{ finding.type }}</td>
-                    <td><span class="compliance-ref">{{ finding.compliance_ref }}</span></td>
-                    <td><span class="function-badge function-{{ finding.nist_function.lower() }}">{{ finding.nist_function }}</span></td>
-                    <td style="font-family: monospace; font-size: 11px; color: var(--text-secondary);">{{ finding.endpoint }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+<div class="cards">
+  <div class="card"><div class="count" style="color:var(--success)">{{ pass_fns }}</div><div class="label">Passing Functions</div></div>
+  <div class="card"><div class="count" style="color:var(--danger)">{{ s.get('failing_functions', 0) }}</div><div class="label">Failing Functions</div></div>
+  <div class="card"><div class="count" style="color:var(--accent)">{{ score }}%</div><div class="label">Compliance Score</div></div>
+</div>
+<h2>🏛️ NIST Functions</h2>
+{% set functions = s.get('functions', {}) %}
+{% set max_fc = functions.values() | map(attribute='finding_count') | max or 1 %}
+{% for fkey, fdata in functions | dictsort %}
+<div class="function">
+  <div class="hdr">
+    <span class="fn-name">{{ fkey }} — {{ fdata.name }}</span>
+    <span>{% if fdata.finding_count == 0 %}<span class="tag-pass">PASS</span>{% else %}<span class="tag-fail">{{ fdata.finding_count }} finding(s)</span>{% endif %}</span>
+  </div>
+  <div class="bar-track"><div class="bar-fill" style="width:{{ (fdata.finding_count / max_fc * 100) | round }}%;background:{% if fdata.finding_count == 0 %}#3fb950{% else %}#d29922{% endif %}"></div></div>
+</div>
+{% else %}<div style="text-align:center;padding:24px;color:var(--text-muted)">No NIST function data</div>{% endfor %}
+<h2>🔍 Findings</h2>
+<table><thead><tr><th>Type</th><th>Severity</th><th>Endpoint</th><th>NIST Reference</th></tr></thead>
+<tbody>{% for f in report.findings %}<tr><td>{{ f.type }}</td><td class="sev-{{ f.severity.lower() }}">{{ f.severity }}</td><td>{{ f.endpoint or '-' }}</td><td>{{ f.compliance_ref }}</td></tr>{% else %}<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">No findings</td></tr>{% endfor %}</tbody></table>
+<footer>Generated by <strong>Argus</strong></footer>
 </body>
 </html>

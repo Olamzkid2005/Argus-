@@ -1,237 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ report.title }}</title>
-    <style>
-        :root {
-            --bg-void: #000000;
-            --bg-surface: #0A0A0F;
-            --border-structural: rgba(255, 255, 255, 0.08);
-            --text-primary: #F0F0F5;
-            --text-secondary: #8A8A9E;
-            --prism-cream: #FFFDD0;
-            --prism-cyan: #E9FFFF;
-            --compliant: #00FF88;
-            --non-compliant: #FF4444;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg-void);
-            color: var(--text-primary);
-            line-height: 1.6;
-            padding: 40px;
-        }
-        .header {
-            border-bottom: 1px solid var(--border-structural);
-            padding-bottom: 24px;
-            margin-bottom: 32px;
-        }
-        .header h1 {
-            font-size: 28px;
-            font-weight: 600;
-            letter-spacing: -0.5px;
-            margin-bottom: 8px;
-        }
-        .meta {
-            color: var(--text-secondary);
-            font-size: 13px;
-            font-family: 'SF Mono', monospace;
-        }
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-bottom: 32px;
-        }
-        .summary-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-structural);
-            padding: 20px;
-            text-align: center;
-        }
-        .summary-card .value {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
-        .summary-card .label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-secondary);
-        }
-        .section {
-            margin-bottom: 32px;
-        }
-        .section h2 {
-            font-size: 16px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 16px;
-            color: var(--prism-cream);
-            border-left: 3px solid var(--prism-cream);
-            padding-left: 12px;
-        }
-        .checklist-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-            padding: 14px 16px;
-            background: var(--bg-surface);
-            border: 1px solid var(--border-structural);
-            margin-bottom: 8px;
-        }
-        .checklist-item .status-icon {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 700;
-            flex-shrink: 0;
-            margin-top: 2px;
-        }
-        .status-compliant .status-icon {
-            background: rgba(0, 255, 136, 0.1);
-            color: var(--compliant);
-            border: 1px solid rgba(0, 255, 136, 0.3);
-        }
-        .status-non-compliant .status-icon {
-            background: rgba(255, 68, 68, 0.1);
-            color: var(--non-compliant);
-            border: 1px solid rgba(255, 68, 68, 0.3);
-        }
-        .checklist-item .content {
-            flex: 1;
-        }
-        .checklist-item .req-id {
-            font-family: 'SF Mono', monospace;
-            font-size: 11px;
-            color: var(--prism-cyan);
-            margin-bottom: 2px;
-        }
-        .checklist-item .req-name {
-            font-size: 13px;
-            font-weight: 500;
-        }
-        .checklist-item .findings {
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin-top: 4px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
-        th {
-            text-align: left;
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border-structural);
-            color: var(--text-secondary);
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: 600;
-        }
-        td {
-            padding: 14px 16px;
-            border-bottom: 1px solid var(--border-structural);
-            vertical-align: top;
-        }
-        tr:hover td {
-            background: rgba(255, 255, 255, 0.02);
-        }
-        .severity {
-            display: inline-block;
-            padding: 2px 8px;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border: 1px solid var(--border-structural);
-        }
-        .severity-critical { color: #FF4444; border-color: rgba(255,68,68,0.3); }
-        .severity-high { color: #FF8800; border-color: rgba(255,136,0,0.3); }
-        .severity-medium { color: var(--prism-cream); border-color: rgba(255,253,208,0.3); }
-        .severity-low { color: var(--text-secondary); border-color: rgba(138,138,158,0.3); }
-        .compliance-ref {
-            font-family: 'SF Mono', monospace;
-            font-size: 11px;
-            color: var(--prism-cyan);
-            background: rgba(233, 255, 255, 0.05);
-            padding: 2px 6px;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ report.title }}</title>
+<style>
+  :root { --bg: #0d1117; --bg-card: #161b22; --bg-hover: #1c2128; --border: #30363d; --text: #e6edf3; --text-muted: #8b949e; --success: #3fb950; --warning: #d29922; --danger: #f85149; --accent: #58a6ff; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 32px 24px; max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 32px 0 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .meta { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+  .meta span { margin-right: 20px; }
+  .co-score { font-size: 48px; font-weight: 700; margin: 16px 0; }
+  .co-label { font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .bar-track { height: 12px; background: #21262d; border-radius: 6px; margin: 12px 0; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 6px; transition: width 0.6s ease; }
+  .req { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 16px; }
+  .req-icon { font-size: 24px; min-width: 32px; text-align: center; }
+  .req-body { flex: 1; }
+  .req-id { font-weight: 600; font-size: 14px; font-family: monospace; }
+  .req-name { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+  .req-status { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+  .status-compliant { color: var(--success); } .status-non-compliant { color: var(--danger); }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th { text-align: left; padding: 10px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  tr:hover td { background: var(--bg-hover); }
+  .sev-critical { color: var(--danger); } .sev-high { color: #d73a4a; } .sev-medium { color: var(--warning); }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); text-align: center; }
+</style>
 </head>
 <body>
-    <div class="header">
-        <h1>PCI DSS 4.0 Compliance Checklist</h1>
-        <div class="meta">
-            Engagement: {{ report.engagement_id }} | Generated: {{ generated_at }}
-        </div>
-    </div>
+<h1>{{ report.title }}</h1>
+<div class="meta">
+  <span>📋 PCI DSS 4.0</span>
+  <span>📅 Generated: <strong>{{ generated_at }}</strong></span>
+  <span>🔢 Total findings: <strong>{{ report.summary.get('total_findings', 0) }}</strong></span>
+</div>
 
-    <div class="summary-grid">
-        <div class="summary-card">
-            <div class="value" style="color: var(--compliant)">{{ report.summary.compliant_requirements }}</div>
-            <div class="label">Compliant</div>
-        </div>
-        <div class="summary-card">
-            <div class="value" style="color: var(--non-compliant)">{{ report.summary.non_compliant_requirements }}</div>
-            <div class="label">Non-Compliant</div>
-        </div>
-        <div class="summary-card">
-            <div class="value" style="color: var(--text-primary)">{{ report.summary.total_requirements }}</div>
-            <div class="label">Total Requirements</div>
-        </div>
-    </div>
+{% set s = report.summary %}
+{% set total_reqs = s.get('total_requirements', 1) %}
+{% set compliant = s.get('compliant_requirements', 0) %}
+{% set non_compliant = s.get('non_compliant_requirements', 0) %}
+{% set score = (compliant / total_reqs * 100) | round %}{% set s_color = '#3fb950' if score >= 80 else ('#d29922' if score >= 50 else '#f85149') %}
 
-    <div class="section">
-        <h2>Requirement Checklist</h2>
-        {% for req_id, req_data in report.summary.requirement_status.items() %}
-        <div class="checklist-item status-{{ req_data.status }}">
-            <div class="status-icon">{% if req_data.status == 'compliant' %}&#10003;{% else %}&#10007;{% endif %}</div>
-            <div class="content">
-                <div class="req-id">{{ req_id }}</div>
-                <div class="req-name">{{ req_data.name or report.summary.requirement_status[req_id].name }}</div>
-                {% if req_data.findings %}
-                <div class="findings">{{ req_data.findings|length }} finding(s): {{ req_data.findings|join(', ')[:50] }}...</div>
-                {% endif %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
+<h2>📊 Compliance Score</h2>
+<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:24px;text-align:center;margin-bottom:24px;">
+  <div class="co-label">PCI DSS 4.0 Compliance Score</div>
+  <div class="co-score" style="color:{{ s_color }}">{{ score }}%</div>
+  <div class="bar-track"><div class="bar-fill" style="width:{{ score }}%;background:{{ s_color }}"></div></div>
+  <div style="display:flex;justify-content:center;gap:32px;margin-top:12px;font-size:14px;">
+    <span>✅ Compliant: <strong style="color:var(--success)">{{ compliant }}</strong></span>
+    <span>❌ Non-Compliant: <strong style="color:var(--danger)">{{ non_compliant }}</strong></span>
+    <span>📋 Total Requirements: <strong>{{ total_reqs }}</strong></span>
+  </div>
+</div>
 
-    <div class="section">
-        <h2>Findings Detail</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Severity</th>
-                    <th>Type</th>
-                    <th>PCI Ref</th>
-                    <th>Endpoint</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for finding in report.findings %}
-                <tr>
-                    <td>{{ finding.finding_id[:8] }}</td>
-                    <td><span class="severity severity-{{ finding.severity.lower() }}">{{ finding.severity }}</span></td>
-                    <td>{{ finding.type }}</td>
-                    <td><span class="compliance-ref">{{ finding.compliance_ref }}</span></td>
-                    <td style="font-family: monospace; font-size: 11px; color: var(--text-secondary);">{{ finding.endpoint }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+<h2>📋 Requirement Checklist</h2>
+{% set req_status = s.get('requirement_status', {}) %}
+{% for req_id, req_data in req_status | dictsort %}
+<div class="req">
+  {% if req_data.status == 'compliant' %}
+  <div class="req-icon">✅</div>
+  <div class="req-body">
+    <div class="req-id">{{ req_id }}</div>
+    <div class="req-name">{{ req_data.name }}</div>
+  </div>
+  <div class="req-status status-compliant">Compliant</div>
+  {% else %}
+  <div class="req-icon">❌</div>
+  <div class="req-body">
+    <div class="req-id" style="color:var(--danger)">{{ req_id }}</div>
+    <div class="req-name">{{ req_data.name }}</div>
+  </div>
+  <div class="req-status status-non-compliant">Non-Compliant</div>
+  {% endif %}
+</div>
+{% else %}
+<div style="text-align:center;color:var(--text-muted);padding:24px;">No requirement data available</div>
+{% endfor %}
+
+<h2>🔍 Affected Findings</h2>
+<table>
+<thead><tr><th>Type</th><th>Severity</th><th>Endpoint</th><th>PCI Reference</th><th>Status</th></tr></thead>
+<tbody>
+{% for f in report.findings %}
+<tr>
+  <td>{{ f.type }}</td>
+  <td class="sev-{{ f.severity.lower() }}">{{ f.severity }}</td>
+  <td>{{ f.endpoint or '-' }}</td>
+  <td>{{ f.compliance_ref }}</td>
+  <td class="status-non-compliant">Non-Compliant</td>
+</tr>
+{% else %}
+<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px;">No findings mapped to PCI DSS</td></tr>
+{% endfor %}
+</tbody>
+</table>
+
+<footer>Report generated by <strong>Argus Security Assessment Platform</strong></footer>
 </body>
 </html>
