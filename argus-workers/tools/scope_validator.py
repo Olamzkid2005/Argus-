@@ -5,6 +5,7 @@ Prevents prompt injection from tricking the agent into scanning unauthorized tar
 
 import json
 import logging
+import os
 from urllib.parse import urlparse
 
 from exceptions import ScopeViolationError
@@ -62,19 +63,25 @@ class ScopeValidator:
         """
         self.engagement_id = engagement_id
         self._scope = self._parse_scope(authorized_scope)
+        self._unscoped_allowed = os.environ.get("ARGUS_ALLOW_UNSCOPED", "").lower() in ("1", "true")
         self._slog = ScanLogger("scope_validator", engagement_id=engagement_id)
         if self._scope["domains"] or self._scope["ipRanges"]:
             self._slog.info(
                 f"Scope loaded: {len(self._scope['domains'])} domains, {len(self._scope['ipRanges'])} IP ranges"
             )
         else:
-            # Gap 13.2 / 7.7: Warn when no scope is configured — all targets will be allowed
-            self._slog.warn(
-                "NO SCOPE CONFIGURED — all targets will be allowed. "
-                "Set 'authorized_scope' in the engagement configuration to scope scanning. "
-                "To explicitly allow unscoped scanning, pass authorize_scope={} (empty dict) "
-                "after acknowledging this warning."
-            )
+            if not self._unscoped_allowed:
+                self._slog.warn(
+                    "NO SCOPE CONFIGURED — ALL TARGETS WILL BE REJECTED. "
+                    "To allow scanning without a scope, set ARGUS_ALLOW_UNSCOPED=1 or "
+                    "configure 'authorized_scope' in the engagement configuration."
+                )
+            else:
+                self._slog.warn(
+                    "NO SCOPE CONFIGURED — all targets allowed (ARGUS_ALLOW_UNSCOPED=1). "
+                    "This is acceptable only for development/testing. "
+                    "For production, set 'authorized_scope' with domains/IP ranges."
+                )
 
     def _parse_scope(self, scope) -> dict:
         """Parse authorized scope from dict or JSON string."""
@@ -105,6 +112,24 @@ class ScopeValidator:
 
         if not target:
             return True
+
+        # Fail-closed: if no scope is configured and ARGUS_ALLOW_UNSCOPED is not set,
+        # reject all targets. This prevents accidental scanning of unauthorized targets
+        # when scope configuration is missing.
+        if not self._scope["domains"] and not self._scope["ipRanges"]:
+            if self._unscoped_allowed:
+                slog.info("Target %s allowed (unscoped mode via ARGUS_ALLOW_UNSCOPED=1)", target)
+                return True
+            slog.warn(
+                "Target %s REJECTED — no scope configured. "
+                "Set authorized_scope or ARGUS_ALLOW_UNSCOPED=1 to proceed.",
+                target,
+            )
+            raise ScopeViolationError(
+                f"Target '{target}' rejected: no authorized_scope configured. "
+                f"Set authorized_scope in engagement config or "
+                f"ARGUS_ALLOW_UNSCOPED=1 env var to allow unscoped scanning."
+            )
 
         hostname = self._extract_hostname(target)
 
@@ -542,12 +567,20 @@ def validate_target_scope(
     # -- Legacy DB-based path (caller provided authorized_scope explicitly) --
     if authorized_scope is not None:
         if not authorized_scope:
+            _unscoped = os.environ.get("ARGUS_ALLOW_UNSCOPED", "").lower() in ("1", "true")
+            if _unscoped:
+                logger.warning(
+                    "authorized_scope is empty — ALLOWING ALL TARGETS (ARGUS_ALLOW_UNSCOPED=1). "
+                    "This is acceptable only for development/testing. "
+                    "For production, set authorized_scope with domains/IP ranges."
+                )
+                return True
             logger.warning(
-                "authorized_scope is empty — ALLOWING ALL TARGETS. "
-                "This is acceptable only for development/testing. "
-                "For production, set authorized_scope with domains/IP ranges."
+                "authorized_scope is empty — REJECTING ALL TARGETS. "
+                "Set authorized_scope with domains/IP ranges, or set "
+                "ARGUS_ALLOW_UNSCOPED=1 to allow scanning without scope."
             )
-            return True
+            return False
 
         try:
             validator = ScopeValidator(engagement_id or "", authorized_scope)
