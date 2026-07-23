@@ -7,6 +7,7 @@ connections to prevent connection exhaustion (H-29).
 
 import logging
 import os
+import sys
 
 from cryptography.fernet import Fernet
 
@@ -22,8 +23,21 @@ def _get_cipher():
     if _SETTINGS_ENCRYPTION_KEY is None:
         key = os.environ.get("SETTINGS_ENCRYPTION_KEY")
         if not key:
+            logger.critical(
+                "SETTINGS_ENCRYPTION_KEY not set! Generated random key is EPHEMERAL — "
+                "stored API keys will be UNREADABLE after process restart. "
+                "Set SETTINGS_ENCRYPTION_KEY to a persistent Fernet key (32 url-safe base64 bytes)."
+            )
             key = Fernet.generate_key()
             os.environ["SETTINGS_ENCRYPTION_KEY"] = key.decode()
+            # Print to stderr instead of logger so the key does not persist in log files.
+            # The operator needs this value exactly once at startup to persist it.
+            print(
+                f"[SECURITY] Ephemeral encryption key generated: {key.decode()}. "
+                f"Save this key as SETTINGS_ENCRYPTION_KEY to persist stored secrets "
+                f"across restarts. Remove this line from logs after saving.",
+                file=sys.stderr,
+            )
         if isinstance(key, str):
             key = key.encode()
         _SETTINGS_ENCRYPTION_KEY = key
