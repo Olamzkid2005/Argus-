@@ -285,9 +285,8 @@ class _MetricsHandler(BaseHTTPRequestHandler):
 def log_startup_health() -> dict[str, Any]:
     """Run startup health diagnostics and log a structured summary.
 
-    Checks LLM availability, Celery worker status, tool registration,
-    and DNS resolution. Logs a consolidated JSON summary at INFO level
-    so operators can see the health state in the startup log output.
+    Delegates to the consolidated ``runtime.preflight.log_startup_preflight()``
+    but also preserves the original Celery-specific checks for backward compatibility.
 
     Returns:
         dict with all check results (same shape as /health endpoint).
@@ -296,32 +295,24 @@ def log_startup_health() -> dict[str, Any]:
 
     server = get_mcp_server()
 
-    # ── LLM check ──
-    llm_available = _MetricsHandler._check_llm_available()
+    # ── Run consolidated preflight check ──
+    try:
+        from runtime.preflight import run_preflight
 
-    # ── Celery check ──
+        preflight = run_preflight()
+        preflight.log_summary()
+    except Exception as e:
+        logger.warning("Consolidated preflight check failed (non-fatal): %s", e)
+        preflight = None
+
+    # ── Celery check (not part of preflight since it depends on server) ──
+    llm_available = _MetricsHandler._check_llm_available()
     celery = _MetricsHandler._check_celery_worker()
 
     # ── Tool registration check ──
     tools_list = server.get_tools()
     tools_total = len(server._tools)
     tools_enabled = len(tools_list)
-
-    # ── DNS check ──
-    dns_ok = True
-    try:
-        import socket
-        socket.getaddrinfo("dns.google", 53)
-    except Exception:
-        dns_ok = False
-
-    # ── Credential check ──
-    credential_issues = []
-    try:
-        from config.startup_guard import check_placeholder_credentials
-        credential_issues = check_placeholder_credentials()
-    except Exception:
-        pass
 
     # ── Determine overall status ──
     status = "ok"
@@ -331,15 +322,26 @@ def log_startup_health() -> dict[str, Any]:
         status = "degraded"
     if not celery["alive"]:
         status = "degraded"
-    if credential_issues:
+    if preflight and preflight.has_errors():
         status = "degraded"
+    if preflight and preflight.has_warnings():
+        # Warnings alone don't degrade status, but errors do
+        pass
+
+    # Build preflight summary for the result dict
+    preflight_result = preflight.to_dict() if preflight else {
+        "total": 0,
+        "ok": 0,
+        "warnings": 0,
+        "errors": 0,
+        "summary": "preflight not available",
+        "checks": [],
+    }
 
     result = {
         "status": status,
         "llm_available": llm_available,
         "celery_worker": celery,
-        "dns_resolution": dns_ok,
-        "credential_issues": len(credential_issues),
         "tools": {
             "total": tools_total,
             "available": tools_enabled,
@@ -349,18 +351,18 @@ def log_startup_health() -> dict[str, Any]:
                 if name not in server._tools
             ],
         },
+        "preflight": preflight_result,
     }
 
-    # Log as single-line JSON for structured log parsing
+    # Log summary line
     logger.info(
-        "Startup health: status=%s llm=%s celery=%s dns=%s tools=%d/%d credentials=%d",
+        "Startup health: status=%s llm=%s celery=%s tools=%d/%d preflight=%s",
         status,
         llm_available,
         celery["alive"],
-        dns_ok,
         tools_enabled,
         tools_total,
-        len(credential_issues),
+        preflight_result["summary"] if preflight else "N/A",
     )
     if tools_enabled < tools_total:
         disabled = [

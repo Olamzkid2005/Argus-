@@ -279,6 +279,27 @@ class MCPServer:
                 "Check container DNS config or set --dns-servers 8.8.8.8"
             )
 
+        # ── Consolidated startup preflight check ──
+        # Runs all preflight checks (critical tools, credentials, encryption keys,
+        # scope config, DNS, LLM, DB) and logs a structured report.
+        # Each check is optional — the worker always starts regardless of results.
+        # Set PREFLIGHT_BLOCK_ON_ERROR=1 to raise RuntimeError on ERROR checks.
+        try:
+            from runtime.preflight import log_startup_preflight
+
+            _preflight = log_startup_preflight()
+            if _preflight.has_errors():
+                _block_on_error = os.environ.get("PREFLIGHT_BLOCK_ON_ERROR", "").lower() in ("1", "true")
+                if _block_on_error:
+                    _error_msgs = "; ".join(c.message for c in _preflight.errors)
+                    raise RuntimeError(
+                        f"PREFLIGHT_BLOCK_ON_ERROR=1: {_preflight.error_count} preflight error(s): {_error_msgs}"
+                    )
+        except RuntimeError:
+            raise
+        except Exception as e:
+            logger.warning("Preflight check failed (non-fatal): %s", e)
+
     # Critical tools that must be available for full functionality.
     # Used by _check_critical_tools() to warn or enforce at startup.
     CRITICAL_TOOLS: frozenset = frozenset({

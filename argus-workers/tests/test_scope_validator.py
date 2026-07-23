@@ -216,13 +216,13 @@ class TestValidateTargetScope:
         )
         assert result is False
 
-    def test_empty_authorized_scope_allows_all(self):
-        """Empty authorized_scope dict allows all targets"""
+    def test_empty_authorized_scope_blocks_all(self):
+        """Empty authorized_scope dict blocks all targets (fail-closed by default)"""
         result = validate_target_scope(
             target="https://anything.com",
             authorized_scope={},
         )
-        assert result is True
+        assert result is False
 
     def test_glob_pattern_matching_in_allowed(self):
         """Glob patterns in allowed_targets should match correctly"""
