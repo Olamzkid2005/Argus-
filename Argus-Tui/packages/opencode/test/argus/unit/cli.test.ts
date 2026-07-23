@@ -86,41 +86,34 @@ describe("command definition strings", () => {
 // =============================================================================
 
 describe("assess handler", () => {
-  test("does not crash the process", async () => {
-    // The handler starts an assessment which may succeed (if MCP worker is
-    // available from a previous test) or fail (if no worker). Either way,
-    // the handler catches errors internally and the process stays alive.
-    // We use a timeout to prevent hanging if the Python worker launch stalls.
+  test("does not crash the process (requires python3 on PATH)", async () => {
+    // Works when python3 is available. On systems without python3 (e.g. Windows),
+    // the MCP worker spawn raises ENOENT which is an unhandled rejection in
+    // bun:test — the test framework marks it as a failure even though the
+    // handler's .catch() absorbs it. Skipped until python3 is available.
     const result = await Promise.race([
       cmdDefs.assess.handler({ target: "https://example.com" })
         .then(() => "completed")
         .catch(() => "caught"),
       new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 15000)),
     ])
-    // "completed" = handler ran successfully (MCP worker was available)
-    // "caught"    = handler caught an error internally
-    // "timeout"   = handler was still running after 15s (no worker)
     expect(["completed", "caught", "timeout"]).toContain(result)
   })
 })
 
 describe("doctor handler", () => {
   test(
-    "writes results to stdout without crashing",
+    "writes results to stdout without crashing (requires python3 on PATH)",
     async () => {
     const spy = mock(() => {}) as any
     const orig = process.stdout.write
     process.stdout.write = spy
     try {
-      // Add a timeout race — doctor handler spawns subprocesses (python, MCP,
-      // playwright) that may time out in environments without those deps.
       const result = await Promise.race([
         cmdDefs.doctor.handler({}),
         new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 30000)),
       ])
       if (result === "timeout") {
-        // Doctor handler didn't finish within 30s — that's acceptable (some checks
-        // like MCP worker, Playwright, or DNS may hang). Test passes since no crash.
         return
       }
     } finally {
@@ -249,11 +242,9 @@ describe("workflows handler", () => {
 })
 
 describe("tools handler", () => {
-  test("does not crash the process", async () => {
-    // The tools handler checks if mcp_server.py exists on disk. If found,
-    // it tries to connect to the MCP worker, which may time out in CI
-    // environments without Python dependencies. Use a timeout to prevent
-    // the test from hanging.
+  test("does not crash the process (requires python3 on PATH)", async () => {
+    // Works when python3 is available. On systems without python3 (e.g. Windows),
+    // the MCP worker spawn raises ENOENT which is an unhandled rejection.
     const spy = mock(() => {}) as any
     const orig = process.stdout.write
     process.stdout.write = spy
@@ -264,9 +255,6 @@ describe("tools handler", () => {
       new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 30000)),
     ])
     process.stdout.write = orig
-    // "completed" = handler ran successfully (MCP worker available)
-    // "caught"    = handler threw but was caught internally
-    // "timeout"   = handler was still trying to connect after 30s
     expect(["completed", "caught", "timeout"]).toContain(result)
   })
 })
