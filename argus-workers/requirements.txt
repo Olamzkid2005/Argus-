@@ -31,7 +31,7 @@ defusedxml==0.7.1
 jinja2==3.1.5
 
 # Encryption (settings/credentials)
-cryptography==44.0.2
+cryptography==49.0.0
 
 # Process management (orphaned subprocess cleanup)
 psutil==6.1.0
