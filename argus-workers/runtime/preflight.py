@@ -603,8 +603,44 @@ def log_startup_preflight(
 # ── Display formatter for CLI ───────────────────────────────────────────
 
 
+def _extract_remediation_tips(detail: str) -> list[str]:
+    """Extract copy-pasteable remediation commands from a check detail string.
+
+    Looks for known patterns like ``Generate one with:``, ``Set ... in your``,
+    ``Install ...``, and returns each as a separate tip line.
+    """
+    tips: list[str] = []
+    for line in detail.split(". "):
+        line = line.strip()
+        if not line:
+            continue
+        # Detect actionable commands
+        if line.startswith("Generate one with:") or line.startswith("Generate a valid key with:"):
+            # Extract the command from the line
+            cmd_start = line.find(":") + 1
+            cmd = line[cmd_start:].strip()
+            if cmd:
+                tips.append(f"  $ {cmd}")
+        elif line.startswith("Set "):
+            # Environment variable setting tip
+            tips.append(f"  {line}")
+        elif line.startswith("Install") or line.startswith("Check container"):
+            tips.append(f"  {line}")
+        elif line.startswith("Missing:"):
+            # Include missing items
+            tips.append(f"  {line}")
+        elif line.startswith("Without"):
+            tips.append(f"  {line}")
+        elif "Set ARGUS_EXTRA_PATH" in line:
+            tips.append(f"  {line}")
+    return tips
+
+
 def display_preflight_report(report: PreflightReport, verbose: bool = False) -> str:
     """Format a preflight report as a human-readable table for the CLI.
+
+    Includes a "Remediation" section below the summary that provides
+    actionable steps (copy-pasteable commands) for each issue found.
 
     Args:
         report: PreflightReport to format.
@@ -612,7 +648,7 @@ def display_preflight_report(report: PreflightReport, verbose: bool = False) -> 
             If False (default), only show warnings and errors.
 
     Returns:
-        Formatted string with the report table.
+        Formatted string with the report table and remediation tips.
     """
     lines: list[str] = []
     sep = "-" * 70
@@ -656,11 +692,22 @@ def display_preflight_report(report: PreflightReport, verbose: bool = False) -> 
     lines.append(f"  {sep}")
     lines.append(f"  {report.summary}")
 
-    # Add detail lines for non-verbose mode
-    if not verbose:
-        for check in checks_to_show:
-            if check.detail and len(check.detail) > 33:
-                lines.append(f"    {check.name}: {check.detail}")
+    # ── Remediation section ──
+    # For each non-OK check with detail, show actionable tips
+    remediation_checks = [c for c in checks_to_show if c.severity != CheckSeverity.OK and c.detail]
+    if remediation_checks:
+        lines.append("")
+        lines.append("  Remediation")
+        lines.append(f"  {sep}")
+        for check in remediation_checks:
+            tips = _extract_remediation_tips(check.detail)
+            if tips:
+                lines.append(f"  [{check.severity.upper()}] {check.name}:")
+                for tip in tips:
+                    lines.append(f"    {tip}")
+            else:
+                # Show full detail as fallback
+                lines.append(f"  [{check.severity.upper()}] {check.name}: {check.detail}")
 
     lines.append("")
     return "\n".join(lines)
