@@ -76,13 +76,7 @@ jobs:
 
       - name: Verify Playwright browser
         run: |
-          python -c "
-from playwright.sync_api import sync_playwright
-with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True)
-    print(f'Chromium version: {browser.version}')
-    browser.close()
-"
+          python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().__enter__(); b=p.chromium.launch(headless=True); print("Chromium version: " + b.version); b.close(); p.__exit__(None,None,None)'
 
       - name: Run full test suite (excluding DB/Redis-dependent tests)
         run: |
