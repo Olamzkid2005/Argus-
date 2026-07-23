@@ -883,20 +883,43 @@ def cmd_trends(args: argparse.Namespace) -> int:
 
 
 def cmd_health(args: argparse.Namespace) -> int:
-    """Check and display tool health status.
+    """Check and display tool health status and configuration health.
 
-    Probes all registered tool binaries to verify they are available
-    on PATH and responsive to version probes. Displays a table of
-    results grouped by status (healthy, degraded, unavailable).
+    Runs two sets of checks:
+    1. Tool health — probes all registered tool binaries on PATH for
+       availability and responsiveness to version probes.
+    2. Configuration health — checks environment variables, encryption keys,
+       scope config, DNS, LLM config, and database URL.
+
+    Displays both reports as tables, grouped by status.
     """
+    verbose = getattr(args, "verbose", False)
+    timeout = getattr(args, "timeout", None)
+    exit_code = 0
+
+    # ── Section 1: Preflight configuration checks ──
+    try:
+        from runtime.preflight import run_preflight, display_preflight_report
+
+        preflight = run_preflight()
+        print(display_preflight_report(preflight, verbose=verbose))
+
+        if preflight.has_errors():
+            exit_code = 1
+        if preflight.has_warnings():
+            # Warnings alone don't trigger non-zero exit
+            pass
+    except ImportError as e:
+        logger.debug("Preflight module not available: %s", e)
+    except Exception as e:
+        logger.warning("Preflight check failed: %s", e)
+
+    # ── Section 2: Tool health check ──
     try:
         from tool_core.health_checker import (
             ToolHealthChecker,
             display_health_report,
         )
-
-        verbose = getattr(args, "verbose", False)
-        timeout = getattr(args, "timeout", None)
 
         checker = ToolHealthChecker(probe_timeout=timeout)
 
@@ -925,18 +948,21 @@ def cmd_health(args: argparse.Namespace) -> int:
 
         # Exit with non-zero if any tools are degraded or unavailable
         if report.unavailable_count > 0 or report.degraded_count > 0:
-            return 1
-        return 0
+            exit_code = 1
 
     except ImportError as e:
-        logger.error("Health check module not available: %s", e)
+        logger.error("Tool health check module not available: %s", e)
         print(f"Error: Could not load health checker: {e}")
         print("Run 'pip install -r requirements.txt' first.")
-        return 1
+        if exit_code == 0:
+            exit_code = 1
     except Exception as e:
-        logger.error("Health check failed: %s", e)
+        logger.error("Tool health check failed: %s", e)
         print(f"Error: Health check failed: {e}")
-        return 1
+        if exit_code == 0:
+            exit_code = 1
+
+    return exit_code
 
 
 def _run_startup_health_check() -> None:

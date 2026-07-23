@@ -600,6 +600,72 @@ def log_startup_preflight(
     return report
 
 
+# ── Display formatter for CLI ───────────────────────────────────────────
+
+
+def display_preflight_report(report: PreflightReport, verbose: bool = False) -> str:
+    """Format a preflight report as a human-readable table for the CLI.
+
+    Args:
+        report: PreflightReport to format.
+        verbose: If True, show all checks including OK ones.
+            If False (default), only show warnings and errors.
+
+    Returns:
+        Formatted string with the report table.
+    """
+    lines: list[str] = []
+    sep = "-" * 70
+
+    lines.append("")
+    lines.append("  Preflight Configuration Check")
+    lines.append(f"  {sep}")
+    lines.append(f"  {'Check':<35} {'Status':<10} {'Message':<35}")
+    lines.append(f"  {sep}")
+
+    # Filter based on verbose
+    checks_to_show: list[CheckResult] = []
+    if verbose:
+        checks_to_show = list(report.checks)
+    else:
+        # Show only non-OK checks
+        checks_to_show = [
+            c for c in report.checks
+            if c.severity != CheckSeverity.OK
+        ]
+        if not checks_to_show:
+            lines.append(f"  All {report.total} preflight checks passed!")
+            lines.append(f"  {sep}")
+            lines.append(f"  {report.summary}")
+            lines.append("")
+            return "\n".join(lines)
+
+    # Sort: errors first, then warnings, then ok
+    severity_order = {
+        CheckSeverity.ERROR: 0,
+        CheckSeverity.WARNING: 1,
+        CheckSeverity.OK: 2,
+    }
+    checks_to_show.sort(key=lambda c: (severity_order.get(c.severity, 9), c.name))
+
+    for check in checks_to_show:
+        status_display = check.severity.upper()
+        display_message = check.message[:33] if not verbose else check.message
+        lines.append(f"  {check.name:<35} {status_display:<10} {display_message:<35}")
+
+    lines.append(f"  {sep}")
+    lines.append(f"  {report.summary}")
+
+    # Add detail lines for non-verbose mode
+    if not verbose:
+        for check in checks_to_show:
+            if check.detail and len(check.detail) > 33:
+                lines.append(f"    {check.name}: {check.detail}")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
 # ── Command-line usage ──────────────────────────────────────────────────
 
 
@@ -609,5 +675,6 @@ if __name__ == "__main__":
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
     report = log_startup_preflight()
+    print(display_preflight_report(report, verbose=True))
     print(f"\nPreflight complete: {report.summary}")
     print("Use log_startup_preflight() in production startup code.")
