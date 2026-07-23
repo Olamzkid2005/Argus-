@@ -144,12 +144,16 @@ class TestMCPServer:
 
     def test_call_tool_args_sanitized(self):
         """Shell metacharacters are safe with subprocess list form (no shell=True).
-        Only null bytes and control chars are blocked."""
+        Only null bytes and control chars are blocked.
+        Uses sys.executable (cross-platform) instead of 'echo' (Unix-only).
+        """
+        import sys
         server = MCPServer()
         td = ToolDefinition(
             name="test",
-            command="echo",
-            parameters=[{"name": "target", "type": "string", "flag": "-n"}],
+            command=sys.executable,
+            args=["-c", "import sys; print(sys.argv[1])"],
+            parameters=[{"name": "target", "type": "string"}],
         )
         server.register_tool(td)
         result = server.call_tool("test", {"target": "hello; rm -rf /"})
@@ -157,12 +161,16 @@ class TestMCPServer:
         assert result["isError"] is False
 
     def test_call_tool_blocks_null_bytes(self):
-        """Null bytes in args should be rejected."""
+        """Null bytes in args should be rejected.
+        Uses sys.executable (cross-platform) instead of 'echo' (Unix-only).
+        """
+        import sys
         server = MCPServer()
         td = ToolDefinition(
             name="test",
-            command="echo",
-            parameters=[{"name": "msg", "type": "string", "flag": "-n"}],
+            command=sys.executable,
+            args=["-c", "import sys; print(sys.argv[1])"],
+            parameters=[{"name": "msg", "type": "string"}],
         )
         server.register_tool(td)
         result = server.call_tool("test", {"msg": "cat\x00/etc/passwd"})

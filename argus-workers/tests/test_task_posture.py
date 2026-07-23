@@ -150,52 +150,42 @@ class TestRecomputePosture:
 class TestCheckComplianceAlerts:
     """Tests for _check_compliance_alerts()."""
 
-    @patch("websocket_events.get_websocket_publisher")
-    def test_emits_critical_alert_for_score_below_30(self, mock_get_publisher):
-        mock_publisher = MagicMock()
-        mock_get_publisher.return_value = mock_publisher
+    @patch("streaming.emit_error")
+    def test_emits_critical_alert_for_score_below_30(self, mock_emit_error):
         snapshot = FakePostureSnapshot(composite_score=25.0, trend="declining")
 
         _check_compliance_alerts("eng-001", snapshot, "org-42")
 
-        mock_publisher.publish_error.assert_called_once()
-        args, kwargs = mock_publisher.publish_error.call_args
-        assert "CRITICAL" in kwargs["error_message"]
-        assert kwargs["error_code"] == "compliance_alert"
-        assert kwargs["context"]["alert_level"] == "CRITICAL"
+        mock_emit_error.assert_called_once()
+        _, kwargs = mock_emit_error.call_args
+        assert "CRITICAL" in kwargs["error"]
+        assert kwargs["engagement_id"] == "eng-001"
+        assert kwargs["phase"] == "posture"
 
-    @patch("websocket_events.get_websocket_publisher")
-    def test_emits_warning_alert_for_score_below_50(self, mock_get_publisher):
-        mock_publisher = MagicMock()
-        mock_get_publisher.return_value = mock_publisher
+    @patch("streaming.emit_error")
+    def test_emits_warning_alert_for_score_below_50(self, mock_emit_error):
         snapshot = FakePostureSnapshot(composite_score=40.0, trend="stable")
 
         _check_compliance_alerts("eng-001", snapshot, "org-42")
 
-        mock_publisher.publish_error.assert_called_once()
-        _, kwargs = mock_publisher.publish_error.call_args
-        assert "WARNING" in kwargs["error_message"]
-        assert kwargs["context"]["alert_level"] == "WARNING"
+        mock_emit_error.assert_called_once()
+        _, kwargs = mock_emit_error.call_args
+        assert "WARNING" in kwargs["error"]
 
-    @patch("websocket_events.get_websocket_publisher")
-    def test_emits_info_alert_for_score_below_70(self, mock_get_publisher):
-        mock_publisher = MagicMock()
-        mock_get_publisher.return_value = mock_publisher
+    @patch("streaming.emit_error")
+    def test_emits_info_alert_for_score_below_70(self, mock_emit_error):
         snapshot = FakePostureSnapshot(composite_score=60.0, trend="improving")
 
         _check_compliance_alerts("eng-001", snapshot, "org-42")
 
-        mock_publisher.publish_error.assert_called_once()
-        _, kwargs = mock_publisher.publish_error.call_args
-        assert "INFO" in kwargs["error_message"]
-        assert kwargs["context"]["alert_level"] == "INFO"
+        mock_emit_error.assert_called_once()
+        _, kwargs = mock_emit_error.call_args
+        assert "INFO" in kwargs["error"]
 
-    @patch("websocket_events.get_websocket_publisher")
-    def test_does_nothing_for_score_above_70(self, mock_get_publisher):
-        mock_publisher = MagicMock()
-        mock_get_publisher.return_value = mock_publisher
+    @patch("streaming.emit_error")
+    def test_does_nothing_for_score_above_70(self, mock_emit_error):
         snapshot = FakePostureSnapshot(composite_score=85.0, trend="stable")
 
         _check_compliance_alerts("eng-001", snapshot, "org-42")
 
-        mock_publisher.publish_error.assert_not_called()
+        mock_emit_error.assert_not_called()
