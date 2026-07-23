@@ -2,7 +2,7 @@
 """Argus standalone CLI — run security assessments without Docker/Postgres/Redis.
 
 Usage:
-    # Full assessment (recon → scan → analyze → report)
+    # Full assessment (recon -> scan -> analyze -> report)
     argus assess https://example.com
     argus assess https://example.com --aggressiveness moderate
     argus assess https://example.com --local --output findings.json
@@ -11,13 +11,33 @@ Usage:
     argus scan https://example.com --local
     argus report <engagement_id> --format json
 
+    # Compliance reports
+    argus report <engagement_id> --compliance owasp_top10
+    argus report <engagement_id> --compliance pci_dss --output report.html
+
     # List engagements
     argus list
+    argus list --local
+
+    # Resume crashed assessment
+    argus resume <engagement_id> --local
+
+    # Cross-engagement trends
+    argus trends --domain example.com --last-n-days 90
+
+    # Tool health check
+    argus health --verbose
 
 Requires:
     - Python 3.11+
     - Assessment tools (nuclei, httpx, etc.) on PATH for full functionality
     - LLM API key for LLM-powered analysis (optional, degrades gracefully)
+
+Modes:
+    --local     Standalone mode using SQLite (no Docker/Postgres/Redis required).
+                Assessments are persisted to ~/.argus/assessments/assessments.db.
+    default     Uses in-memory SQLite (ephemeral, lost on exit). Use --db for
+                a persistent file path without enabling local mode.
 """
 
 from __future__ import annotations
@@ -64,6 +84,30 @@ def _setup_local_mode(db_path: str) -> tuple[Any, Any]:
     return eng_repo, finding_repo
 
 
+def _apply_local_mode(local: bool, db_path: str) -> str:
+    """Apply local/standalone mode environment configuration.
+
+    When --local is active:
+      1. ARGUS_LOCAL_MODE=1 is set so all components know Redis is unavailable
+      2. A persistent db_path is ensured (defaults to ~/.argus/assessments.db)
+
+    Args:
+        local: Whether --local flag was passed.
+        db_path: The current db_path (may be None).
+
+    Returns:
+        The resolved db_path to use.
+    """
+    if local:
+        os.environ["ARGUS_LOCAL_MODE"] = "1"
+        if not db_path:
+            db_dir = Path.home() / ".argus" / "assessments"
+            db_dir.mkdir(parents=True, exist_ok=True)
+            db_path = str(db_dir / "assessments.db")
+        logger.info("Local mode: assessments use SQLite at %s", db_path)
+    return db_path or ":memory:"
+
+
 def _get_orchestrator(
     engagement_id: str,
     db_path: str | None = None,
@@ -102,15 +146,250 @@ def _get_orchestrator(
     return orch
 
 
+def _run_phases(
+    orch: Any,
+    target: str,
+    *,
+    engagement_id: str,
+    finding_repo: Any,
+    aggressiveness: str,
+    output_format: str,
+    phases: tuple[str, ...] | list[str],
+    phase_results: list[dict] | None = None,
+    cp_mgr: Any | None = None,
+    llm_refine: bool = False,
+    trace_id: str | None = None,
+) -> tuple[int, list[dict]]:
+    """Run assessment phases with coverage gating, checkpointing, and LLM refiner.
+
+    Shared helper extracted from :func:`cmd_assess` and :func:`cmd_resume`.
+    Handles the core phase execution loop including:
+    - Coverage gate checks (skip phases with no findings)
+    - Job construction per phase
+    - Orchestrator dispatch
+    - Checkpoint save after each completed phase
+    - LLM-driven replanning between phases
+    - Graceful handling of phase failures
+
+    Args:
+        orch: Orchestrator instance (persists across all phases).
+        target: Target URL being assessed.
+        engagement_id: Engagement UUID.
+        finding_repo: Finding repository for saving/loading findings.
+        aggressiveness: Scan aggressiveness level.
+        output_format: Output format for the report phase.
+        phases: Ordered phases to run (e.g. ``("recon", "scan", "analyze", "report")``).
+        phase_results: Accumulated phase results from previous runs (for resume).
+        cp_mgr: Optional checkpoint manager for crash recovery.
+        llm_refine: Whether to run LLM-driven replanning after recon and scan.
+        trace_id: Optional trace ID for observability.
+
+    Returns:
+        Tuple of ``(exit_code, phase_results)`` where ``exit_code`` is 0 on
+        success and 1 if the recon phase failed (critical blocker).
+    """
+    phase_results = phase_results or []
+    _llm_next_caps: list[str] | None = None
+    _llm_refiner_available = False
+
+    try:
+        from reporting.llm_refiner import llm_replan_from_findings as _llm_refiner
+        _llm_refiner_available = True
+    except ImportError:
+        pass
+
+    for phase_name in phases:
+        # ── Coverage gate: check if we should continue ──────────
+        # Always run report phase regardless of previous results
+        if phase_results and phase_name != "report":
+            try:
+                planner = getattr(orch, "_adaptive_planner", None)
+                adaptive_plan = getattr(orch, "_adaptive_plan", None)
+                if planner and adaptive_plan and hasattr(planner, "should_continue"):
+                    if not planner.should_continue(
+                        plan=adaptive_plan,
+                        phase_results=phase_results,
+                    ):
+                        logger.info(
+                            "Coverage gate: stopping before %s "
+                            "(no findings from previous phase(s))",
+                            phase_name,
+                        )
+                        break
+            except Exception:
+                logger.debug("Coverage gate check failed", exc_info=True)
+
+        logger.info("=== Phase: %s ===", phase_name)
+
+        # Build job dict for the phase, injecting any LLM-suggested capabilities
+        job: dict[str, Any] = {
+            "type": phase_name,
+            "targets": [target],
+            "target": target,
+            "engagement_id": engagement_id,
+            "scope": {"mode": "allowlist", "allowed_targets": [target]},
+            "aggressiveness": aggressiveness,
+            "agent_mode": False,
+        }
+        if _llm_next_caps:
+            job["required_capabilities"] = _llm_next_caps
+            _llm_next_caps = None
+
+        if phase_name == "scan":
+            job["recon_context"] = getattr(orch, "_recon_context", None)
+            job["auth_config"] = {}
+            job["budget"] = {}
+
+        if phase_name == "analyze":
+            job["phase"] = "scan"
+
+        if phase_name == "report":
+            job["format"] = output_format
+
+        try:
+            result = orch.run(job)
+            status = result.get("status", "unknown")
+            findings_count = result.get("findings_count", 0)
+            phase_results.append({
+                "phase": phase_name,
+                "findings_count": findings_count,
+                "status": status,
+            })
+            logger.info(
+                "Phase %s: %s (%d findings)",
+                phase_name, status, findings_count,
+            )
+
+            # ── Save checkpoint after successful phase ─────────────
+            if cp_mgr is not None and status == "completed":
+                try:
+                    cp_mgr.save_checkpoint(
+                        engagement_id,
+                        phase_name,
+                        {
+                            "target": target,
+                            "engagement_id": engagement_id,
+                            "trace_id": trace_id,
+                            "aggressiveness": aggressiveness,
+                            "phase_results": phase_results,
+                            "findings_count": findings_count,
+                            "format": output_format,
+                        },
+                    )
+                except Exception:
+                    logger.debug("Checkpoint save failed (non-fatal)", exc_info=True)
+
+            # ── LLM refiner: suggest next capabilities ──────────────
+            if (
+                _llm_refiner_available
+                and llm_refine
+                and status == "completed"
+                and phase_name in ("recon", "scan")
+            ):
+                try:
+                    all_findings, _ = finding_repo.get_findings_by_engagement(
+                        engagement_id, limit=100
+                    )
+                    refiner_result = _llm_refiner(
+                        engagement_id=engagement_id,
+                        phase=phase_name,
+                        target=target,
+                        findings=all_findings,
+                    )
+                    if refiner_result.get("stop", False):
+                        logger.info(
+                            "LLM refiner suggests stopping: %s",
+                            refiner_result.get("reasoning", ""),
+                        )
+                        _llm_next_caps = []
+                    else:
+                        _llm_next_caps = refiner_result.get("next_capabilities", [])
+                        if _llm_next_caps:
+                            logger.info("LLM refiner suggests: %s", _llm_next_caps)
+                except Exception:
+                    logger.debug("LLM refiner failed", exc_info=True)
+
+        except Exception as e:
+            logger.error("Phase %s failed: %s", phase_name, e)
+            phase_results.append({
+                "phase": phase_name,
+                "findings_count": 0,
+                "status": "failed",
+            })
+            if phase_name == "recon":
+                logger.error("Cannot continue — recon phase failed")
+                return 1, phase_results
+            continue
+
+    return 0, phase_results
+
+
+def _output_results(engagement_id: str, target: str, finding_repo: Any, output_path: str | None) -> None:
+    """Fetch findings and print/save results."""
+    findings, total = finding_repo.get_findings_by_engagement(engagement_id, limit=1000)
+    summary = finding_repo.get_summary_by_engagement(engagement_id)
+
+    output = {
+        "engagement_id": engagement_id,
+        "target": target,
+        "status": "completed",
+        "total_findings": total,
+        "summary": summary,
+        "findings": findings,
+    }
+
+    if output_path:
+        with open(output_path, "w") as f:
+            json.dump(output, f, indent=2, default=str)
+        logger.info("Results written to %s", output_path)
+    else:
+        print(json.dumps(output, indent=2, default=str))
+
+
+def _store_coverage_report(orch: Any, eng_repo: Any, engagement_id: str) -> None:
+    """Capture and store adaptive plan coverage report in engagement metadata."""
+    try:
+        if (
+            hasattr(orch, "_adaptive_plan")
+            and orch._adaptive_plan is not None
+            and hasattr(orch._adaptive_plan, "get_coverage_report")
+        ):
+            coverage = orch._adaptive_plan.get_coverage_report()
+            existing_metadata: dict = {}
+            try:
+                existing = eng_repo.find_by_id(engagement_id)
+                if existing and existing.get("metadata"):
+                    raw = existing["metadata"]
+                    if isinstance(raw, str):
+                        existing_metadata = json.loads(raw)
+                    elif isinstance(raw, dict):
+                        existing_metadata = raw
+            except Exception:
+                pass
+            existing_metadata["coverage_report"] = coverage
+            eng_repo.update_by_id(engagement_id, {"metadata": existing_metadata})
+            pct = coverage.get("coverage_pct", 0) * 100
+            logger.info(
+                "Phase coverage: %d/%d activated (%.0f%%)",
+                coverage.get("activated_count", 0),
+                coverage.get("total_phases", 0),
+                pct,
+            )
+    except Exception:
+        logger.debug("Could not capture coverage report", exc_info=True)
+
+
 def cmd_assess(args: argparse.Namespace) -> int:
-    """Run a full assessment: recon → scan → analyze → report."""
+    """Run a full assessment: recon -> scan -> analyze -> report."""
     target = args.target
     engagement_id = str(uuid.uuid4())
     trace_id = str(uuid.uuid4())
-    db_path = args.db or ":memory:"
+    db_path = _apply_local_mode(getattr(args, "local", False), getattr(args, "db", None))
 
     logger.info("Starting assessment %s against %s", engagement_id[:8], target)
     logger.info("Storage: %s", "in-memory (ephemeral)" if db_path == ":memory:" else db_path)
+
+    _run_startup_health_check()
 
     # Step 1: Create engagement record
     eng_repo, finding_repo = _setup_local_mode(db_path)
@@ -123,204 +402,58 @@ def cmd_assess(args: argparse.Namespace) -> int:
     })
     logger.info("Created engagement %s", engagement.get("id", engagement_id)[:8])
 
-    # Override DATABASE_URL to None for synchronous local execution
-    # This forces the pipeline to run without Celery dispatch
-    os.environ["ARGUS_LOCAL_MODE"] = "1"
+    # Override DATABASE_URL for local execution
+    if os.environ.get("ARGUS_LOCAL_MODE", "") != "1":
+        os.environ["ARGUS_LOCAL_MODE"] = "1"
     old_db_url = os.environ.pop("DATABASE_URL", None)
 
-    # Create orchestrator once — persists across all phases so state
-    # (adaptive plan, planner instance, recon context) is preserved.
-    orch = _get_orchestrator(
-        engagement.get("id", engagement_id),
-        db_path=db_path,
-        trace_id=trace_id,
-    )
+    # Create orchestrator
+    eng_id = engagement.get("id", engagement_id)
+    orch = _get_orchestrator(eng_id, db_path=db_path, trace_id=trace_id)
     orch.engagement_repo = eng_repo
     orch.finding_repo = finding_repo
 
-    # Track phase results for coverage gating
-    phase_results: list[dict] = []
-    _llm_next_caps: list[str] | None = None
-    _llm_refiner_available = False
-    try:
-        from reporting.llm_refiner import llm_replan_from_findings as _llm_refiner
-        _llm_refiner_available = True
-    except ImportError:
-        pass
-
-    try:
-        for phase_name in ("recon", "scan", "analyze", "report"):
-            # ── Coverage gate: check if we should continue ──────────
-            # Always run report phase regardless of previous results
-            if phase_results and phase_name != "report":
-                try:
-                    planner = getattr(orch, "_adaptive_planner", None)
-                    adaptive_plan = getattr(orch, "_adaptive_plan", None)
-                    if planner and adaptive_plan and hasattr(planner, "should_continue"):
-                        if not planner.should_continue(
-                            plan=adaptive_plan,
-                            phase_results=phase_results,
-                        ):
-                            logger.info(
-                                "Coverage gate: stopping before %s "
-                                "(no findings from previous phase(s))",
-                                phase_name,
-                            )
-                            break
-                except Exception:
-                    logger.debug("Coverage gate check failed", exc_info=True)
-
-            logger.info("=== Phase: %s ===", phase_name)
-
-            # Build job dict for the phase, injecting any LLM-suggested capabilities
-            job: dict[str, Any] = {
-                "type": phase_name,
-                "targets": [target],
-                "target": target,
-                "engagement_id": engagement.get("id", engagement_id),
-                "scope": {"mode": "allowlist", "allowed_targets": [target]},
-                "aggressiveness": args.aggressiveness or "moderate",
-                "agent_mode": False,  # Deterministic only (no LLM agent loop)
-            }
-            if _llm_next_caps:
-                job["required_capabilities"] = _llm_next_caps
-                _llm_next_caps = None  # Consumed — reset for next phase
-
-            if phase_name == "scan":
-                # Recon context is stored on the orchestrator instance from run_recon()
-                job["recon_context"] = getattr(orch, "_recon_context", None)
-                job["auth_config"] = {}
-                job["budget"] = {}
-
-            if phase_name == "analyze":
-                job["phase"] = "scan"
-                # Findings loaded from repo by SnapshotService — no need to pass
-
-            if phase_name == "report":
-                job["format"] = args.format or "json"
-
-            try:
-                result = orch.run(job)
-                status = result.get("status", "unknown")
-                findings_count = result.get("findings_count", 0)
-                phase_results.append({
-                    "phase": phase_name,
-                    "findings_count": findings_count,
-                    "status": status,
-                })
-                logger.info(
-                    "Phase %s: %s (%d findings)",
-                    phase_name, status, findings_count,
-                )
-
-                # ── LLM refiner: suggest next capabilities ──────────
-                # Only run after recon and scan (not after analyze/report)
-                if (
-                    _llm_refiner_available
-                    and getattr(args, "llm_refine", False)
-                    and status == "completed"
-                    and phase_name in ("recon", "scan")
-                ):
-                    try:
-                        all_findings, _ = finding_repo.get_findings_by_engagement(
-                            engagement.get("id", engagement_id), limit=100
-                        )
-                        refiner_result = _llm_refiner(
-                            engagement_id=engagement.get("id", engagement_id),
-                            phase=phase_name,
-                            target=target,
-                            findings=all_findings,
-                        )
-                        if refiner_result.get("stop", False):
-                            logger.info(
-                                "LLM refiner suggests stopping: %s",
-                                refiner_result.get("reasoning", ""),
-                            )
-                            # Inject empty caps so next phase runs with default plan
-                            _llm_next_caps = []
-                        else:
-                            _llm_next_caps = refiner_result.get("next_capabilities", [])
-                            if _llm_next_caps:
-                                logger.info(
-                                    "LLM refiner suggests: %s", _llm_next_caps
-                                )
-                    except Exception:
-                        logger.debug("LLM refiner failed", exc_info=True)
-
-            except Exception as e:
-                logger.error("Phase %s failed: %s", phase_name, e)
-                phase_results.append({
-                    "phase": phase_name,
-                    "findings_count": 0,
-                    "status": "failed",
-                })
-                if phase_name == "recon":
-                    logger.error("Cannot continue — recon phase failed")
-                    return 1
-                # Coverage gate: failed phases count as zero findings
-                continue
-
-        # Step 4: Output results
-        findings, total = finding_repo.get_findings_by_engagement(
-            engagement.get("id", engagement_id), limit=1000
-        )
-        summary = finding_repo.get_summary_by_engagement(
-            engagement.get("id", engagement_id)
-        )
-
-        output = {
-            "engagement_id": engagement.get("id", engagement_id),
-            "target": target,
-            "status": "completed",
-            "total_findings": total,
-            "summary": summary,
-            "findings": findings,
-        }
-
-        if args.output:
-            with open(args.output, "w") as f:
-                json.dump(output, f, indent=2, default=str)
-            logger.info("Results written to %s", args.output)
-        else:
-            # Print JSON summary to stdout
-            print(json.dumps(output, indent=2, default=str))
-
-        # Step 5: Capture and store coverage report
+    # Checkpoint manager for crash recovery
+    cp_mgr = None
+    if db_path != ":memory:":
         try:
-            if (
-                hasattr(orch, "_adaptive_plan")
-                and orch._adaptive_plan is not None
-                and hasattr(orch._adaptive_plan, "get_coverage_report")
-            ):
-                coverage = orch._adaptive_plan.get_coverage_report()
-                # Merge with existing engagement metadata (don't overwrite)
-                existing_metadata: dict = {}
-                try:
-                    existing = eng_repo.find_by_id(engagement.get("id", engagement_id))
-                    if existing and existing.get("metadata"):
-                        raw = existing["metadata"]
-                        if isinstance(raw, str):
-                            existing_metadata = json.loads(raw)
-                        elif isinstance(raw, dict):
-                            existing_metadata = raw
-                except Exception:
-                    pass
-                existing_metadata["coverage_report"] = coverage
-                eng_repo.update_by_id(
-                    engagement.get("id", engagement_id),
-                    {"metadata": existing_metadata},
-                )
-                pct = coverage.get("coverage_pct", 0) * 100
-                logger.info(
-                    "Phase coverage: %d/%d activated (%.0f%%)",
-                    coverage.get("activated_count", 0),
-                    coverage.get("total_phases", 0),
-                    pct,
-                )
+            from database.sqlite_checkpoint import SQLiteCheckpointManager
+            cp_mgr = SQLiteCheckpointManager(db_path)
+            logger.info("Checkpoints enabled for crash recovery")
         except Exception:
-            logger.debug("Could not capture coverage report", exc_info=True)
+            logger.debug("Checkpoint manager not available", exc_info=True)
 
-        logger.info("Assessment complete: %d findings", total)
+    try:
+        # Run assessment phases using shared helper
+        exit_code, phase_results = _run_phases(
+            orch, target,
+            engagement_id=eng_id,
+            finding_repo=finding_repo,
+            aggressiveness=args.aggressiveness or "moderate",
+            output_format=args.format or "json",
+            phases=("recon", "scan", "analyze", "report"),
+            cp_mgr=cp_mgr,
+            llm_refine=getattr(args, "llm_refine", False),
+            trace_id=trace_id,
+        )
+
+        if exit_code != 0:
+            return exit_code
+
+        # Output results
+        _output_results(eng_id, target, finding_repo, args.output)
+
+        # Clean up checkpoints
+        if cp_mgr is not None:
+            try:
+                cp_mgr.delete_checkpoints(eng_id)
+            except Exception:
+                logger.debug("Checkpoint cleanup failed", exc_info=True)
+
+        # Store coverage report
+        _store_coverage_report(orch, eng_repo, eng_id)
+
+        logger.info("Assessment complete")
         return 0
 
     finally:
@@ -336,7 +469,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
     target = args.target
     engagement_id = str(uuid.uuid4())
-    db_path = args.db or ":memory:"
+    db_path = _apply_local_mode(getattr(args, "local", False), getattr(args, "db", None))
 
     eng_repo, finding_repo = _setup_local_mode(db_path)
     engagement = eng_repo.create({
@@ -406,7 +539,8 @@ def cmd_report(args: argparse.Namespace) -> int:
     """
     from database.sqlite_backend import SQLiteEngagementRepo, SQLiteFindingRepo
 
-    finding_repo = SQLiteFindingRepo(args.db or ":memory:")
+    db_path = _apply_local_mode(getattr(args, "local", False), getattr(args, "db", None))
+    finding_repo = SQLiteFindingRepo(db_path)
     findings, total = finding_repo.get_findings_by_engagement(
         args.engagement_id, limit=1000
     )
@@ -414,13 +548,12 @@ def cmd_report(args: argparse.Namespace) -> int:
 
     # ── Coverage report mode ────────────────────────────────────
     if getattr(args, "coverage", False):
-        eng_repo = SQLiteEngagementRepo(args.db or ":memory:")
+        eng_repo = SQLiteEngagementRepo(db_path)
         eng = eng_repo.find_by_id(args.engagement_id)
         if eng and eng.get("metadata"):
             metadata = eng["metadata"]
             if isinstance(metadata, str):
                 try:
-                    import json
                     metadata = json.loads(metadata)
                 except Exception:
                     metadata = {}
@@ -434,6 +567,48 @@ def cmd_report(args: argparse.Namespace) -> int:
                 return 1
         else:
             logger.warning("Engagement %s not found", args.engagement_id[:8])
+            return 1
+
+    # ── Compliance report mode ────────────────────────────────
+    compliance_standard = getattr(args, "compliance", None)
+    if compliance_standard:
+        try:
+            from compliance_reporting import generate_compliance_report
+            from reporting.exporter import save_report
+
+            result = generate_compliance_report(
+                standard=compliance_standard,
+                engagement_id=args.engagement_id,
+                findings=findings,
+            )
+
+            html = result["html"]
+            output = save_report(
+                html,
+                path=args.output,
+                fmt="html",
+                target_slug=summary.get("target_url", "") if summary else args.engagement_id,
+                open_browser=getattr(args, "open", False),
+            )
+            logger.info(
+                "%s compliance report saved: %s (%d bytes)",
+                compliance_standard.upper(), output.path, output.size_bytes,
+            )
+
+            # Print JSON summary to stdout unless output is going to a file
+            json_data = result["report"]
+            if not args.output:
+                print(json.dumps(json_data, indent=2, default=str))
+            return 0
+
+        except ImportError as e:
+            logger.error("Compliance reporting module not available: %s", e)
+            logger.info(
+                "Install jinja2: 'pip install jinja2' to enable compliance report rendering."
+            )
+            return 1
+        except Exception as e:
+            logger.error("Compliance report generation failed: %s", e)
             return 1
 
     fmt = (args.format or "json").lower()
@@ -536,7 +711,8 @@ def cmd_list(args: argparse.Namespace) -> int:
     """List recent engagements."""
     from database.sqlite_backend import SQLiteEngagementRepo
 
-    eng_repo = SQLiteEngagementRepo(args.db or ":memory:")
+    db_path = _apply_local_mode(getattr(args, "local", False), getattr(args, "db", None))
+    eng_repo = SQLiteEngagementRepo(db_path)
     engagements = eng_repo.find_by_org("local", limit=args.limit or 20)
 
     if not engagements:
@@ -555,6 +731,245 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_resume(args: argparse.Namespace) -> int:
+    """Resume a crashed assessment from its last checkpoint.
+
+    Loads the latest checkpoint for an engagement, determines which
+    phase to resume from, and runs the remaining phases using the
+    shared :func:`_run_phases` helper.
+
+    Usage:
+        argus resume <engagement_id> --local
+        argus resume <engagement_id> --db assessments.db
+    """
+    engagement_id = args.engagement_id
+    db_path = _apply_local_mode(getattr(args, "local", False), getattr(args, "db", None))
+
+    # Load checkpoint
+    try:
+        from database.sqlite_checkpoint import SQLiteCheckpointManager
+        cp_mgr = SQLiteCheckpointManager(db_path)
+    except ImportError as e:
+        logger.error("Checkpoint manager not available: %s", e)
+        return 1
+
+    plan = cp_mgr.get_resume_plan(engagement_id)
+    if plan is None:
+        logger.error(
+            "No checkpoint found for engagement %s. "
+            "Pass --local or --db <path> to locate the database.",
+            engagement_id[:8],
+        )
+        cp_mgr.close()
+        return 1
+
+    if not plan.can_resume:
+        logger.info("Engagement %s is already complete — nothing to resume", engagement_id[:8])
+        cp_mgr.close()
+        return 0
+
+    # Load repositories and engagement details
+    from database.sqlite_backend import SQLiteEngagementRepo, SQLiteFindingRepo
+
+    eng_repo = SQLiteEngagementRepo(db_path)
+    finding_repo = SQLiteFindingRepo(db_path)
+
+    eng = eng_repo.find_by_id(engagement_id)
+    if eng is None:
+        logger.error("Engagement %s not found", engagement_id[:8])
+        cp_mgr.close()
+        return 1
+
+    target = eng.get("target_url") or plan.partial_results.get("target", "")
+    trace_id = plan.partial_results.get("trace_id", str(uuid.uuid4()))
+    aggressiveness = plan.partial_results.get("aggressiveness", "moderate")
+    output_format = plan.partial_results.get("format", "json")
+    phase_results: list[dict] = plan.partial_results.get("phase_results", [])
+
+    logger.info("Resuming engagement %s from phase '%s'", engagement_id[:8], plan.next_phase)
+    logger.info("Remaining phases: %s", ", ".join(plan.remaining_phases))
+    logger.info("Last checkpoint: %s", plan.checkpoint_timestamp)
+
+    # Restore ARGUS_LOCAL_MODE
+    os.environ["ARGUS_LOCAL_MODE"] = "1"
+    old_db_url = os.environ.pop("DATABASE_URL", None)
+
+    # Create orchestrator
+    orch = _get_orchestrator(engagement_id, db_path=db_path, trace_id=trace_id)
+    orch.engagement_repo = eng_repo
+    orch.finding_repo = finding_repo
+
+    try:
+        # Run remaining phases using shared helper
+        exit_code, phase_results = _run_phases(
+            orch, target,
+            engagement_id=engagement_id,
+            finding_repo=finding_repo,
+            aggressiveness=aggressiveness,
+            output_format=output_format,
+            phases=plan.remaining_phases,
+            phase_results=phase_results,
+            cp_mgr=cp_mgr,
+            llm_refine=getattr(args, "llm_refine", False),
+            trace_id=trace_id,
+        )
+
+        if exit_code != 0:
+            return exit_code
+
+        # Output results
+        _output_results(engagement_id, target, finding_repo, args.output)
+
+        # Clean up checkpoints
+        try:
+            cp_mgr.delete_checkpoints(engagement_id)
+        except Exception:
+            pass
+
+        # Store coverage report
+        _store_coverage_report(orch, eng_repo, engagement_id)
+
+        logger.info("Resume complete")
+        return 0
+
+    finally:
+        cp_mgr.close()
+        if old_db_url is not None:
+            os.environ["DATABASE_URL"] = old_db_url
+        if "ARGUS_LOCAL_MODE" in os.environ:
+            del os.environ["ARGUS_LOCAL_MODE"]
+
+
+def cmd_trends(args: argparse.Namespace) -> int:
+    """Show cross-engagement trend analysis.
+
+    Aggregates findings across all engagements in the SQLite database
+    to surface portfolio-level insights: trending vulnerabilities, most
+    affected domains, CWE frequency, and risk scoring.
+
+    Usage:
+        argus trends
+        argus trends --domain example.com
+        argus trends --last-n-days 90
+        argus trends --min-severity HIGH
+        argus trends --verbose
+    """
+    db_path = _apply_local_mode(getattr(args, "local", False), getattr(args, "db", None))
+
+    try:
+        from database.sqlite_trends import SQLiteTrendRepository, display_trend_summary
+
+        repo = SQLiteTrendRepository(db_path)
+        trends = repo.get_trends(
+            domain=getattr(args, "domain", None),
+            last_n_days=getattr(args, "last_n_days", None),
+            min_severity=getattr(args, "min_severity", None),
+        )
+
+        output = display_trend_summary(
+            trends,
+            verbose=getattr(args, "verbose", False),
+        )
+        print(output)
+        repo.close()
+        return 0
+
+    except ImportError as e:
+        logger.error("Trend analysis module not available: %s", e)
+        return 1
+    except Exception as e:
+        logger.error("Trend analysis failed: %s", e)
+        return 1
+
+
+def cmd_health(args: argparse.Namespace) -> int:
+    """Check and display tool health status.
+
+    Probes all registered tool binaries to verify they are available
+    on PATH and responsive to version probes. Displays a table of
+    results grouped by status (healthy, degraded, unavailable).
+    """
+    try:
+        from tool_core.health_checker import (
+            ToolHealthChecker,
+            display_health_report,
+        )
+
+        verbose = getattr(args, "verbose", False)
+        timeout = getattr(args, "timeout", None)
+
+        checker = ToolHealthChecker(probe_timeout=timeout)
+
+        # Get tool names once, pass to check_all to avoid double-loading
+        tool_names = checker._get_all_tool_names()
+        logger.info("Probing %d tools (timeout=%ds, verbose=%s)...",
+                     len(tool_names),
+                     timeout or checker.PROBE_TIMEOUT,
+                     verbose)
+
+        report = checker.check_all(tool_names=tool_names)
+        output = display_health_report(report, verbose=verbose)
+        print(output)
+
+        # Warn if critical tools are unavailable
+        critical_missing = [
+            r.name for r in report.unavailable
+            if r.name in ("nuclei", "httpx", "nmap", "subfinder")
+        ]
+        if critical_missing:
+            logger.warning(
+                "Critical tools missing from PATH: %s. "
+                "Install them for full assessment capability.",
+                ", ".join(critical_missing),
+            )
+
+        # Exit with non-zero if any tools are degraded or unavailable
+        if report.unavailable_count > 0 or report.degraded_count > 0:
+            return 1
+        return 0
+
+    except ImportError as e:
+        logger.error("Health check module not available: %s", e)
+        print(f"Error: Could not load health checker: {e}")
+        print("Run 'pip install -r requirements.txt' first.")
+        return 1
+    except Exception as e:
+        logger.error("Health check failed: %s", e)
+        print(f"Error: Health check failed: {e}")
+        return 1
+
+
+def _run_startup_health_check() -> None:
+    """Run a lightweight startup health check for local mode.
+
+    Probes critical tools in parallel to warn if they're missing.
+    This is a best-effort warning only — it does not block execution.
+    Uses a shorter timeout (5s) than the full health command (10s).
+    """
+    try:
+        from tool_core.health_checker import ToolHealthChecker
+
+        checker = ToolHealthChecker(probe_timeout=5)
+
+        # Check critical tools in parallel (fast probe, max 5s)
+        critical_tools = ["nuclei", "httpx", "nmap", "subfinder", "katana", "whatweb"]
+        report = checker.check_all(tool_names=critical_tools, max_workers=6)
+        missing = [r.name for r in report.unavailable]
+
+        if missing:
+            logger.warning(
+                "Startup: %d critical tool(s) missing from PATH: %s. "
+                "Assessment will gracefully degrade. "
+                "Run 'argus health' for full tool status.",
+                len(missing),
+                ", ".join(missing),
+            )
+    except ImportError:
+        pass  # Health checker module not available
+    except Exception:
+        logger.debug("Startup health check failed", exc_info=True)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
@@ -567,7 +982,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # argus assess
     assess_parser = subparsers.add_parser(
-        "assess", help="Run a full assessment (recon → scan → analyze → report)"
+        "assess", help="Run a full assessment (recon -> scan -> analyze -> report)"
     )
     assess_parser.add_argument("target", help="Target URL to assess")
     assess_parser.add_argument(
@@ -579,9 +994,13 @@ def build_parser() -> argparse.ArgumentParser:
     # CLI always runs in local/SQLite mode — no Docker/Postgres needed.
     # The --local flag is implicit; remove DATABASE_URL to force offline mode.
     assess_parser.add_argument(
+        "--local", action="store_true",
+        help="Run in standalone mode (no Docker/Postgres/Redis required; uses SQLite)",
+    )
+    assess_parser.add_argument(
         "--db", "-d",
         default=None,
-        help="SQLite database path (default: in-memory, ephemeral)",
+        help="SQLite database path (default: in-memory, ephemeral; with --local: ~/.argus/assessments/assessments.db)",
     )
     assess_parser.add_argument(
         "--output", "-o",
@@ -608,6 +1027,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--aggressiveness", "-a",
         choices=["light", "moderate", "aggressive"],
         default="moderate",
+    )
+    scan_parser.add_argument(
+        "--local", action="store_true",
+        help="Run in standalone mode (no Docker/Postgres/Redis required; uses SQLite)",
     )
     scan_parser.add_argument(
         "--db", "-d", default=None,
@@ -640,6 +1063,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show phase coverage report (planned vs executed phases)",
     )
     report_parser.add_argument(
+        "--compliance", type=str, default=None,
+        choices=["owasp_top10", "pci_dss", "soc2", "nist_csf", "hipaa", "iso_27001"],
+        help="Generate a compliance-specific report (owasp_top10, pci_dss, soc2, nist_csf, hipaa, iso_27001)",
+    )
+    report_parser.add_argument(
+        "--local", action="store_true",
+        help="Use SQLite from local mode (reads from ~/.argus/assessments/assessments.db)",
+    )
+    report_parser.add_argument(
         "--db", "-d", default=None,
         help="SQLite database path",
     )
@@ -653,6 +1085,78 @@ def build_parser() -> argparse.ArgumentParser:
         help="Max engagements to show (default: 20)",
     )
     list_parser.add_argument(
+        "--local", action="store_true",
+        help="List engagements from local SQLite database (~/.argus/assessments/assessments.db)",
+    )
+    list_parser.add_argument(
+        "--db", "-d", default=None,
+        help="SQLite database path",
+    )
+
+    # argus health
+    health_parser = subparsers.add_parser(
+        "health", help="Check tool health and display status"
+    )
+    health_parser.add_argument(
+        "--verbose", "-v", action="store_true",
+        help="Show all tools including healthy ones (default: only degraded/unavailable)",
+    )
+    health_parser.add_argument(
+        "--timeout", "-t", type=int, default=None,
+        help="Probe timeout in seconds per tool (default: 10)",
+    )
+
+    # argus resume
+    resume_parser = subparsers.add_parser(
+        "resume", help="Resume a crashed assessment from its last checkpoint"
+    )
+    resume_parser.add_argument(
+        "engagement_id", help="Engagement UUID to resume"
+    )
+    resume_parser.add_argument(
+        "--local", action="store_true",
+        help="Resume from local SQLite database (~/.argus/assessments/assessments.db)",
+    )
+    resume_parser.add_argument(
+        "--db", "-d", default=None,
+        help="SQLite database path",
+    )
+    resume_parser.add_argument(
+        "--output", "-o",
+        default=None,
+        help="Output results to file (JSON)",
+    )
+    resume_parser.add_argument(
+        "--llm-refine", action="store_true",
+        help="Enable LLM-driven replanning between phases (requires LLM API key)",
+    )
+
+    # argus trends
+    trends_parser = subparsers.add_parser(
+        "trends", help="Show cross-engagement trend analysis"
+    )
+    trends_parser.add_argument(
+        "--domain", type=str, default=None,
+        help="Filter to engagements matching this domain",
+    )
+    trends_parser.add_argument(
+        "--last-n-days", type=int, default=None,
+        help="Only consider engagements from the last N days",
+    )
+    trends_parser.add_argument(
+        "--min-severity", type=str, default=None,
+        choices=["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+        help="Minimum severity to include (default: all)",
+    )
+    trends_parser.add_argument(
+        "--verbose", "-v", action="store_true",
+        help="Show additional detail (tools, findings over time)",
+    )
+    trends_parser.add_argument(
+        "--local", action="store_true",
+        help="Analyze local SQLite database (~/.argus/assessments/assessments.db)",
+    )
+    trends_parser.add_argument(
         "--db", "-d", default=None,
         help="SQLite database path",
     )
@@ -669,8 +1173,8 @@ def main() -> int:
         parser.print_help()
         return 0
 
-    # Set default database path
-    if not getattr(args, "db", None):
+    # Set default database path (unless --local is used, which manages its own path)
+    if not getattr(args, "db", None) and not getattr(args, "local", False):
         # Default: a temp file that persists across commands
         db_dir = Path(tempfile.gettempdir()) / "argus-local"
         db_dir.mkdir(parents=True, exist_ok=True)
@@ -681,6 +1185,9 @@ def main() -> int:
         "scan": cmd_scan,
         "report": cmd_report,
         "list": cmd_list,
+        "health": cmd_health,
+        "resume": cmd_resume,
+        "trends": cmd_trends,
     }
 
     cmd_fn = commands.get(args.command)
