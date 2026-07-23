@@ -566,7 +566,7 @@ def generate_compliance_report(
 
     Args:
         engagement_id: Engagement ID
-        standard: Compliance standard (owasp_top10, pci_dss, soc2)
+        standard: Compliance standard (owasp_top10, pci_dss, soc2, nist_csf, hipaa, iso_27001)
         trace_id: Optional trace_id for distributed tracing
     """
     db_conn_string = os.getenv("DATABASE_URL")
@@ -624,6 +624,12 @@ def generate_compliance_report(
                 report = generator.generate_pci_dss_checklist(engagement_id, findings)
             elif standard == "soc2":
                 report = generator.generate_soc2_template(engagement_id, findings)
+            elif standard == "nist_csf":
+                report = generator.generate_nist_csf_report(engagement_id, findings)
+            elif standard == "hipaa":
+                report = generator.generate_hipaa_report(engagement_id, findings)
+            elif standard == "iso_27001":
+                report = generator.generate_iso_27001_report(engagement_id, findings)
             else:
                 raise ValueError(f"Unknown compliance standard: {standard}")
 
