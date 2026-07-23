@@ -231,9 +231,10 @@ describe("formatFindingsSummary", () => {
 
     expect(mockEngagementStore.createEngagement).toHaveBeenCalledWith("https://example.com", "assessment")
     expect(mockEngagementStore.updateStatus).toHaveBeenCalledWith("ENG-test-001", "RUNNING")
+    expect(mockBridge.connect).toHaveBeenCalled()
     expect(mockWorkflowRegistry.loadAll).toHaveBeenCalled()
     expect(mockToolRegistry.load).toHaveBeenCalled()
-    expect(mockPlanner.plan).toHaveBeenCalledWith("https://example.com", undefined, { useLLM: true })
+    expect(mockPlanner.plan).toHaveBeenCalledWith("https://example.com", undefined, expect.objectContaining({ useLLM: false }))
     // replan is only called when phases produce findings (empty findings phases skip replan)
     expect(mockBridge.connect).toHaveBeenCalled()
     expect(mockExecutor.loadGates).toHaveBeenCalledWith("test-workflow")

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "fs"
+import { mkdtempSync, rmSync, existsSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { EngagementStore } from "../../../src/argus/engagement/store"
@@ -8,8 +8,8 @@ import type { FindingAnalysis } from "../../../src/argus/shared/types"
 let dbDir: string
 
 afterAll(() => {
-  if (dbDir) {
-    rmSync(dbDir, { recursive: true, force: true })
+  if (dbDir && existsSync(dbDir)) {
+    try { rmSync(dbDir, { recursive: true, force: true, maxRetries: 3 }) } catch {}
   }
 })
 
@@ -98,18 +98,15 @@ describe("EngagementStore — analysis methods", () => {
   test("getValidAnalysis returns null with stale data", () => {
     const { store, cleanup } = makeStore()
     const eng = store.createEngagement("https://test.com", "assessment")
-    const futureDate = new Date(Date.now() + 100000).toISOString()
     seedFinding(store, "find-4", eng.id)
-    // Manually update the finding's updated_at to be in the future
-    // In dual-DB mode, findings live in the per-engagement DB, not the root DB.
-    const { StoragePaths } = require("../../../src/argus/storage/paths")
-    const engDbPath = StoragePaths.engagementDbPath(eng.id)
-    const { Database } = require("bun:sqlite")
-    const sqlite = new Database(engDbPath)
-    sqlite.exec(`UPDATE findings SET updated_at = ${Date.now() + 100000} WHERE id = 'find-4'`)
-    sqlite.close()
-    const analysis = makeAnalysis("find-4", { findingUpdatedAt: Date.now() - 50000 })
+    // Save analysis with matching findingUpdatedAt
+    const analysis = makeAnalysis("find-4", { findingUpdatedAt: Date.now() })
     store.saveFindingAnalysis(analysis)
+    // Re-save the finding to bump its updated_at — makes analysis stale
+    const finding = store.getFinding("find-4")!
+    finding.updated_at = new Date(Date.now() + 100000).toISOString()
+    store.saveFindings(eng.id, [finding])
+    // Now getValidAnalysis should detect staleness
     const valid = store.getValidAnalysis("find-4")
     expect(valid).toBeNull()
     cleanup()
@@ -126,16 +123,14 @@ describe("EngagementStore — analysis methods", () => {
     const { store, cleanup } = makeStore()
     const eng = store.createEngagement("https://test.com", "assessment")
     seedFinding(store, "corrupt-id", eng.id)
-    // In dual-DB mode, finding_analysis lives in the per-engagement DB, not the root DB.
-    const { StoragePaths } = require("../../../src/argus/storage/paths")
-    const engDbPath = StoragePaths.engagementDbPath(eng.id)
-    const { Database } = require("bun:sqlite")
-    const sqlite = new Database(engDbPath)
-    sqlite.exec(`
-      INSERT OR REPLACE INTO finding_analysis (finding_id, explanation, impact, remediation, model, generated_at, finding_updated_at)
-      VALUES ('corrupt-id', 'explanation', 'not-valid-json', '["fix1"]', 'test', ${Date.now()}, ${Date.now()})
+    // Save a valid analysis first via the store API
+    const analysis = makeAnalysis("corrupt-id")
+    store.saveFindingAnalysis(analysis)
+    // Then corrupt the impact JSON via the store's own per-engagement DB connection
+    const pe = (store as any)._getEngagementDb(eng.id)
+    pe.db.exec(`
+      UPDATE finding_analysis SET impact = 'not-valid-json' WHERE finding_id = 'corrupt-id'
     `)
-    sqlite.close()
     const result = store.getFindingAnalysis("corrupt-id")
     expect(result).toBeNull()
     cleanup()
