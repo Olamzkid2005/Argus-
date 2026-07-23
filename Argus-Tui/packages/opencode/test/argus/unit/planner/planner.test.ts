@@ -1,8 +1,43 @@
-import { describe, expect, test } from "bun:test"
-import { WorkflowPlanner, MAX_REPLANS } from "../../../../src/argus/planner/planner"
-import { Capability } from "../../../../src/argus/planner/capabilities"
+/**
+ * WorkflowPlanner unit tests.
+ *
+ * Uses mock.module() to replace llm-service with a stub that always
+ * returns "unavailable" — this is REQUIRED because other test files
+ * (planner-progress.test.ts) also mock.module() the same module,
+ * and bun's mock.module() is process-global and cannot be unset.
+ * By providing our OWN mock, we override any leaked mock from other files.
+ */
+
+import { describe, expect, test, mock } from "bun:test"
 import type { PlannerContext } from "../../../../src/argus/planner/types"
 import type { WorkflowDefinition } from "../../../../src/argus/workflows/types"
+import type { Capability as CapabilityType } from "../../../../src/argus/planner/capabilities"
+
+// ── Override any leaked LLM mock from other test files ────────────────
+// bun's mock.module() is process-global. If planner-progress.test.ts runs
+// first, it mocks llm-service.ts with a version whose suggestReplan()
+// returns mock capabilities. We override that here with a stub that always
+// returns "unavailable" — the correct production behavior when no LLM is
+// configured. This MUST be at module level before the dynamic import.
+mock.module("../../../../src/argus/planner/llm-service.ts", () => ({
+  LLMPlannerService: {
+    lazy: () => ({
+      suggestPhases: async () => ({ targetAnalysis: "", suggestedPhases: [] }),
+      suggestReplan: async () => null,
+      getModelId: () => "unavailable",
+      isAvailable: async () => false,
+      getInitError: () => "Mock: No LLM API key",
+    }),
+    switchModel: () => {},
+    getCurrentModelId: () => undefined,
+    getAvailableModels: () => [],
+    getModelEnvVarDescription: () => "ARGUS_PLANNER_MODEL=not set (mock)",
+  },
+}))
+
+// Dynamic import so mock.module() runs BEFORE the planner module resolves
+const { WorkflowPlanner, MAX_REPLANS } = await import("../../../../src/argus/planner/planner")
+const { Capability } = await import("../../../../src/argus/planner/capabilities")
 
 function mockWorkflow(overrides?: Partial<WorkflowDefinition>): WorkflowDefinition {
   return {
@@ -33,7 +68,7 @@ function makeContext(overrides?: Partial<PlannerContext>): PlannerContext {
     targetType: "web_app",
     authState: "none",
     findings: [],
-    executedCapabilities: new Set<Capability>(),
+    executedCapabilities: new Set<CapabilityType>(),
     insertedPhases: new Set<string>(),
     replanCount: 0,
     ...overrides,
