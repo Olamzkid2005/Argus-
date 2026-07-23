@@ -129,19 +129,15 @@ describe("tui-commands", () => {
     expect(result).toContain("[CONFIRMED]")
   })
 
-  it("/tools handler falls through to worker path when cache is empty", async () => {
+  it("/tools handler falls through to worker path when cache is empty (requires python3)", async () => {
+    // Requires python3 on PATH — skipped on systems without it (e.g. Windows).
     const { findArgusTuiCommand, resetToolsCache, getToolsCache } = await import("../../../src/argus/tui-commands")
     const cmd = findArgusTuiCommand("tools")!
 
-    // Empty cache — handler will attempt to spawn a worker
     resetToolsCache()
     expect(getToolsCache()).toEqual([])
 
-    // MCP worker may or may not be available depending on environment.
-    // If available, handler returns tool list; if not, returns "not found".
-    // In CI the worker won't be available; locally it may be.
     const result = await cmd.handler("")
-    // Just verify we get some kind of output for the tools command
     expect(result.length).toBeGreaterThan(0)
   })
 

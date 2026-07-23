@@ -6,16 +6,39 @@ import { EngagementStore } from "../../../src/argus/engagement/store"
 import type { NormalizedFinding } from "../../../src/argus/shared/types"
 
 let dbDir: string
+const stores: EngagementStore[] = []
 
 afterAll(() => {
+  for (const s of stores) {
+    try { s.close() } catch { /* best-effort */ }
+  }
+  stores.length = 0
   if (dbDir) {
-    rmSync(dbDir, { recursive: true, force: true })
+    // Retry rmSync with backoff to handle transient EBUSY on Windows.
+    // After close(), SQLite WAL checkpoint + antivirus may briefly hold
+    // file handles. This matches the retry pattern in EngagementStore.
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        rmSync(dbDir, { recursive: true, force: true })
+        break
+      } catch (err) {
+        if (attempt < 5) {
+          // Synchronous busy-wait backoff (same as store.ts)
+          const deadline = Date.now() + 100 * Math.pow(2, attempt - 1)
+          while (Date.now() < deadline) { /* busy-wait */ }
+        } else {
+          console.warn(`Failed to remove temp dir ${dbDir}:`, (err as Error).message)
+        }
+      }
+    }
   }
 })
 
 function makeStore(): EngagementStore {
   if (!dbDir) dbDir = mkdtempSync(join(tmpdir(), "argus-finding-lookup-"))
-  return new EngagementStore(join(dbDir, `test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.db`))
+  const store = new EngagementStore(join(dbDir, `test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.db`))
+  stores.push(store)
+  return store
 }
 
 function makeFinding(overrides?: Partial<NormalizedFinding>): NormalizedFinding {
