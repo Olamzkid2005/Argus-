@@ -85,24 +85,29 @@ class TestHelp:
 
 
 class TestHealth:
-    """Test argus health command output."""
+    """Test argus health command output.
 
-    @pytest.mark.slow(reason="Probes real tool binaries via subprocess")
-    def test_health_displays_preflight_section(self):
-        """argus health shows the Preflight Configuration Check section."""
-        result = _run_argus("health", "--verbose", timeout=60)
-        assert "Preflight Configuration Check" in result.stdout
+    All checks are consolidated into a single test to avoid running multiple
+    subprocess invocations (each triggers a ~30s DNS resolution timeout on
+    systems without internet access).
+    """
 
-    @pytest.mark.slow
-    def test_health_displays_tool_section(self):
-        """argus health shows the Tool Health Report section."""
-        result = _run_argus("health", "--verbose", timeout=60)
-        assert "Tool Health Report" in result.stdout
+    @pytest.mark.slow(reason="DNS check + tool probes (~40s total)")
+    def test_health_output_all(self):
+        """argus health output includes preflight section, tool section, all 9 check names,
+        and varies with env vars (LLM key, encryption key, auth key)."""
+        # ── Run #1: --verbose (shows all checks) ──
+        result_v = _run_argus("health", "--verbose", "--timeout", "1", timeout=90)
+        assert result_v.returncode in (0, 1)
+        stdout_v = result_v.stdout
 
-    @pytest.mark.slow
-    def test_health_outputs_check_names(self):
-        """argus health --verbose lists all 9 check names."""
-        result = _run_argus("health", "--verbose", timeout=60)
+        # Check preflight section
+        assert "Preflight Configuration Check" in stdout_v
+
+        # Check tool health section
+        assert "Tool Health Report" in stdout_v
+
+        # Check all 9 check names appear in verbose output
         check_names = [
             "critical_tools",
             "settings_encryption_key",
@@ -115,19 +120,31 @@ class TestHealth:
             "tool_health",
         ]
         for name in check_names:
-            assert name in result.stdout, f"Check '{name}' not found in health output"
+            assert name in stdout_v, f"Check '{name}' not found in health --verbose output"
 
-    @pytest.mark.slow
-    def test_health_exit_code(self):
-        """argus health returns 0 or 1 (depending on environment)."""
-        result = _run_argus("health", timeout=60)
-        assert result.returncode in (0, 1)
+        # ── Run #2: without --verbose (only shows warnings/errors) ──
+        result_nv = _run_argus("health", "--timeout", "1", timeout=90)
+        assert result_nv.returncode in (0, 1)
+        assert "Preflight Configuration Check" in result_nv.stdout
 
-    @pytest.mark.slow
-    def test_health_non_verbose_shows_preflight(self):
-        """argus health (non-verbose) shows the preflight section."""
-        result = _run_argus("health", timeout=60)
-        assert "Preflight Configuration Check" in result.stdout
+        # ── Run #3: with OPENAI_API_KEY set (LLM check should change) ──
+        env_llm = os.environ.copy()
+        env_llm["OPENAI_API_KEY"] = "sk-test-integration-key-12345"
+        result_llm = _run_argus("health", "--verbose", "--timeout", "1", timeout=90, env=env_llm)
+        assert result_llm.returncode in (0, 1)
+        assert "Preflight Configuration Check" in result_llm.stdout
+
+        # ── Run #4: with SETTINGS_ENCRYPTION_KEY + AUTH_CHECKPOINT_KEY set ──
+        env_keys = os.environ.copy()
+        env_keys["SETTINGS_ENCRYPTION_KEY"] = "dGhpcyBpcyBhIHRlc3Qga2V5IGZvciBjaWVjcg=="
+        env_keys["AUTH_CHECKPOINT_KEY"] = "dGhpcyBpcyBhIHRlc3Qga2V5IGZvciBjaWVjcg=="
+        result_keys = _run_argus("health", "--verbose", "--timeout", "1", timeout=90, env=env_keys)
+        assert result_keys.returncode in (0, 1)
+        stdout_keys = result_keys.stdout
+        assert any(
+            phrase in stdout_keys.lower()
+            for phrase in ["encryption_key", "settings", "preflight"]
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -162,40 +179,6 @@ class TestInit:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-class TestHealthWithEnv:
-    """Test argus health output varies with environment variables."""
-
-    @pytest.mark.slow(reason="Probes real tool binaries via subprocess")
-    def test_health_with_llm_key_shows_llm_ok(self):
-        """Setting OPENAI_API_KEY should change LLM check from WARNING to OK."""
-        env = os.environ.copy()
-        env["OPENAI_API_KEY"] = "sk-test-integration-key-12345"
-        cli_path = os.path.join(os.path.dirname(__file__), "..", "cli.py")
-        result = subprocess.run(
-            [sys.executable, cli_path, "health", "--verbose"],
-            capture_output=True, text=True, timeout=60, env=env,
-        )
-        assert result.returncode in (0, 1)
-        assert "Preflight Configuration Check" in result.stdout
-
-    @pytest.mark.slow(reason="Probes real tool binaries via subprocess")
-    def test_health_with_all_keys_set(self):
-        """Setting multiple env vars should make more checks pass."""
-        env = os.environ.copy()
-        env["SETTINGS_ENCRYPTION_KEY"] = "dGhpcyBpcyBhIHRlc3Qga2V5IGZvciBjaWVjcg=="
-        env["AUTH_CHECKPOINT_KEY"] = "dGhpcyBpcyBhIHRlc3Qga2V5IGZvciBjaWVjcg=="
-        cli_path = os.path.join(os.path.dirname(__file__), "..", "cli.py")
-        result = subprocess.run(
-            [sys.executable, cli_path, "health", "--verbose"],
-            capture_output=True, text=True, timeout=60, env=env,
-        )
-        assert result.returncode in (0, 1)
-        stdout = result.stdout
-        assert any(
-            phrase in stdout.lower()
-            for phrase in ["encryption_key", "settings", "preflight"]
-        )
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Error handling
@@ -223,7 +206,7 @@ class TestStderrClean:
     @pytest.mark.slow
     def test_health_stderr_no_tracebacks(self):
         """argus health should not produce Python tracebacks on stderr."""
-        result = _run_argus("health", timeout=60)
+        result = _run_argus("health", "--timeout", "1", timeout=90)
         stderr = result.stderr
         # The absence of tracebacks is the strongest signal of a clean run.
         # Log messages (INFO/WARNING/ERROR) are expected.
