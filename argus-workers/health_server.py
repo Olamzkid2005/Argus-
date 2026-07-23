@@ -87,6 +87,54 @@ class _MetricsHandler(BaseHTTPRequestHandler):
         else:
             self._send_json({"error": "Not found"}, 404)
 
+    # ── Preflight check helper (cached with TTL) ─────────────────────
+
+    _PREFLIGHT_CACHE: dict[str, Any] = {
+        "result": None,
+        "timestamp": 0.0,
+    }
+    _PREFLIGHT_TTL: float = 60.0  # Re-check every 60 seconds
+
+    @classmethod
+    def _get_preflight(cls) -> dict[str, Any]:
+        """Run the startup preflight check and return structured results.
+
+        Results are cached with a TTL (default 60s) to avoid expensive
+        DNS lookups and tool subprocess probes on every health check.
+
+        Returns a dict with the same shape as PreflightReport.to_dict().
+        Falls back to a default "unavailable" dict on any error.
+        """
+        now = _time.time()
+        cached = cls._PREFLIGHT_CACHE["result"]
+        cached_time = cls._PREFLIGHT_CACHE["timestamp"]
+
+        if cached is not None and (now - cached_time) < cls._PREFLIGHT_TTL:
+            return cached
+
+        try:
+            from runtime.preflight import run_preflight
+
+            preflight = run_preflight()
+            result = preflight.to_dict()
+            cls._PREFLIGHT_CACHE["result"] = result
+            cls._PREFLIGHT_CACHE["timestamp"] = now
+            return result
+        except Exception as e:
+            logger.debug("Preflight check failed: %s", e)
+            fallback = {
+                "total": 0,
+                "ok": 0,
+                "warnings": 0,
+                "errors": 0,
+                "summary": "preflight not available",
+                "checks": [],
+            }
+            # Cache the fallback briefly so we don't spam on every request
+            cls._PREFLIGHT_CACHE["result"] = fallback
+            cls._PREFLIGHT_CACHE["timestamp"] = now
+            return fallback
+
     # ── /health endpoint ────────────────────────────────────────────
 
     @staticmethod
@@ -144,6 +192,11 @@ class _MetricsHandler(BaseHTTPRequestHandler):
 
     def _handle_health(self) -> None:
         data = self._collect_liveness()
+        # Include preflight summary in the lightweight health response
+        data["preflight"] = self._get_preflight()
+        # Recompute status based on preflight errors
+        if data["preflight"].get("errors", 0) > 0 and data["status"] == "ok":
+            data["status"] = "degraded"
         http_status = 200 if data["status"] == "ok" else 503
         self._send_json(data, http_status)
 
@@ -256,6 +309,7 @@ class _MetricsHandler(BaseHTTPRequestHandler):
             "connection_pool": pool_metrics,
             "system": system_info,
             "degradation": degradation_metrics,
+            "preflight": self._get_preflight(),
         }
 
     def _handle_metrics(self) -> None:
