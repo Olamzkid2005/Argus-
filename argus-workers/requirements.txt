@@ -1,34 +1,34 @@
 # Argus Workers - Python Dependencies
 
 # Task Queue
-celery[redis]==5.4.0
+celery[redis]==5.6.3
 redis==5.2.1
 
 # Database
 # psycopg2-binary avoids the libpq-dev build dependency.
 # Trade-off: may segfault under libpq version mismatch and lags security patches.
 # Switch to psycopg2 if deploying in a controlled environment with libpq-dev available.
-psycopg2-binary==2.9.10
-sqlalchemy==2.0.36
+psycopg2-binary==2.9.12
+sqlalchemy==2.0.51
 
 # HTTP Clients
 httpx==0.28.1
-requests==2.32.3
+requests==2.34.2
 
 # AI/LLM
 openai==1.59.5
-anthropic==0.42.0
+anthropic==0.117.0
 
 # Security Tools Integration
 python-nmap==0.7.1
 
 # Data Processing
-pydantic==2.10.4
-python-dotenv==1.0.1
+pydantic==2.13.4
+python-dotenv==1.2.2
 defusedxml==0.7.1
 
 # Templating (Compliance Reports)
-jinja2==3.1.5
+jinja2==3.1.6
 
 # Encryption (settings/credentials)
 cryptography==44.0.2
@@ -40,9 +40,9 @@ psutil==6.1.0
 structlog==24.4.0
 
 # OpenTelemetry
-opentelemetry-api==1.20.0
-opentelemetry-sdk==1.20.0
-opentelemetry-exporter-otlp-proto-http==1.20.0
+opentelemetry-api==1.44.0
+opentelemetry-sdk==1.44.0
+opentelemetry-exporter-otlp-proto-http==1.44.0
 
 # M-35: Test dependencies moved to requirements-dev.txt to avoid bloating
 # production images with ~400MB of browser binaries.
@@ -54,7 +54,7 @@ opentelemetry-exporter-otlp-proto-http==1.20.0
 # playwright>=1.59.0
 
 # HTML Parsing (form discovery for auth)
-beautifulsoup4==4.12.3
+beautifulsoup4==4.15.0
 lxml==5.3.0
 
 # Docker SDK (sandbox container isolation)
