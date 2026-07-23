@@ -136,7 +136,7 @@ def sanitize_input(text: str) -> str:
                 r"disregard\s+.*previous|bypass\s+.*restrictions|"
                 r"act\s+as|pretend\s+you\s+are|"
                 r"from\s+now\s+on\s+you\s+are)",
-                "",
+                "[REDACTED]",
                 text,
             )
 

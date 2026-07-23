@@ -139,7 +139,7 @@ def _draw_cover_page(
     pdf.set_y(25)
     pdf.set_font("Helvetica", "B", 28)
     pdf.set_text_color(230, 237, 243)
-    pdf.cell(0, 14, "Security Assessment Report", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 14, title, align="C", new_x="LMARGIN", new_y="NEXT")
 
     # Subtitle / target
     pdf.set_font("Helvetica", "", 14)

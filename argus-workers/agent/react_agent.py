@@ -812,7 +812,7 @@ class ReActAgent:
             return None
 
         for tool_name in phase_tools:
-            if tool_name not in tried_tools:
+            if tool_name not in tried_tools and self.registry.get_tool(tool_name):
                 return AgentAction(
                     tool_name, {"target": task}, f"Phase tool: {tool_name}"
                 )

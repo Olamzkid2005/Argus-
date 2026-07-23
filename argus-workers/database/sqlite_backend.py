@@ -102,15 +102,19 @@ class SQLiteEngagementRepo:
     """
 
     def __init__(self, db_path: str = ":memory:"):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._closed = False
         with self._lock:
             _ensure_tables(self._conn)
 
     def close(self) -> None:
         with self._lock:
+            if self._closed:
+                return
             self._conn.close()
+            self._closed = True
 
     def _to_dict(self, row: sqlite3.Row | None) -> dict | None:
         if row is None:
@@ -216,15 +220,19 @@ class SQLiteFindingRepo:
     """SQLite-backed FindingRepository for standalone mode."""
 
     def __init__(self, db_path: str = ":memory:"):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._closed = False
         with self._lock:
             _ensure_tables(self._conn)
 
     def close(self) -> None:
         with self._lock:
+            if self._closed:
+                return
             self._conn.close()
+            self._closed = True
 
     def _to_dict(self, row: sqlite3.Row | None) -> dict | None:
         if row is None:

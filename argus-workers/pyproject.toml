@@ -82,6 +82,8 @@ python_functions = ["test_*"]
 
 # Skip tests that require optional dependencies
 # Use: pytest -m "not requires_db" to run only tests that don't need DB
+asyncio_default_fixture_loop_scope = "function"
+
 addopts = [
     "--strict-markers",
     "--tb=short",

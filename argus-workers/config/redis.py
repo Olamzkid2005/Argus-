@@ -21,11 +21,16 @@ def get_redis_url() -> str:
     if url:
         _REDIS_URL = url
         return _REDIS_URL
+    # In local/standalone mode, Redis is intentionally unavailable.
+    # Suppress the warning to avoid scaring users who are running
+    # `argus assess --local` without Docker infrastructure.
+    _local_mode = os.environ.get("ARGUS_LOCAL_MODE", "").lower() in ("1", "true")
     _REDIS_URL = "redis://localhost:6379"
-    logger.warning(
-        "REDIS_URL not set — defaulting to redis://localhost:6379. "
-        "Set REDIS_URL environment variable for production use."
-    )
+    if not _local_mode:
+        logger.warning(
+            "REDIS_URL not set — defaulting to redis://localhost:6379. "
+            "Set REDIS_URL environment variable for production use."
+        )
     return _REDIS_URL
 
 
