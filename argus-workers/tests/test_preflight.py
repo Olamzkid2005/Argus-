@@ -12,6 +12,8 @@ Covers:
 import os
 import sys
 
+import pytest
+
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -450,6 +452,7 @@ class TestCheckPlaceholderCredentials:
 class TestRunPreflight:
     """Test run_preflight()."""
 
+    @pytest.mark.slow(reason="Runs all 9 checks including DNS and tool health probes")
     def test_runs_all_checks(self):
         """run_preflight() runs all default checks and returns a report."""
         from runtime.preflight import run_preflight
@@ -607,6 +610,7 @@ class TestDisplayPreflightReport:
 class TestPreflightIntegration:
     """End-to-end integration between run_preflight and display."""
 
+    @pytest.mark.slow(reason="Runs all 9 checks including DNS and tool health probes")
     def test_run_and_display_verbose(self):
         """Running preflight and displaying in verbose mode works end-to-end."""
         from runtime.preflight import run_preflight, display_preflight_report
@@ -619,6 +623,7 @@ class TestPreflightIntegration:
         for check in report.checks:
             assert check.name in output
 
+    @pytest.mark.slow(reason="Runs all 9 checks including DNS and tool health probes")
     def test_run_and_display_non_verbose(self):
         """Running preflight and displaying in non-verbose mode works."""
         from runtime.preflight import run_preflight, display_preflight_report
