@@ -831,6 +831,92 @@ _register(
     )
 )
 
+# ── Playwright browser verification tools ──
+# These override _generated_tools.py definitions which had an incorrectly
+# auto-generated target_scheme="['http', 'https']" (Python list-literal string)
+# that would never pass evaluate_gate's target.startswith() check.
+# Playwright tools work on any HTTP(S) target — no scheme gate needed.
+
+_register(
+    ToolDefinition(
+        name="playwright-xss",
+        description="Stored Cross-Site Scripting detection via browser automation (overrides _generated_tools.py)",
+        phases=["scan", "deep_scan"],
+        binary="python3",
+        default_args=["argus-workers/tools/scripts/playwright_xss.py"],
+        parameters=[
+            ToolParameter(name="target", description="Target URL", required=True, flag="--target"),
+            ToolParameter(name="creds_file", description="Path to JSON credentials file (alternative to --username/--password)", flag="--creds-file"),
+            ToolParameter(name="username", description="Login username", flag="--username"),
+            ToolParameter(name="password", description="Login password", flag="--password"),
+            ToolParameter(name="form-page", description="Path to the form page", flag="--form-page", default="/feedback"),
+            ToolParameter(name="payload", description="XSS payload to inject", flag="--payload"),
+            ToolParameter(name="username-selector", description="CSS selector for username input", flag="--username-selector", default="input[name=username]"),
+            ToolParameter(name="password-selector", description="CSS selector for password input", flag="--password-selector", default="input[name=password]"),
+            ToolParameter(name="submit-selector", description="CSS selector for submit button", flag="--submit-selector", default="button[type=submit]"),
+        ],
+        timeout=120,
+        signal_quality=SignalQuality.CONFIRMED,
+        priority=80,
+        cost="medium",
+        risk_level="low",
+        # No requires gate — works on all HTTP/HTTPS targets
+    )
+)
+
+_register(
+    ToolDefinition(
+        name="playwright-bola",
+        description="Broken Object Level Authorization detection via browser automation (overrides _generated_tools.py)",
+        phases=["scan", "deep_scan"],
+        binary="python3",
+        default_args=["argus-workers/tools/scripts/playwright_bola.py"],
+        parameters=[
+            ToolParameter(name="target", description="Target URL", required=True, flag="--target"),
+            ToolParameter(name="creds_file", description="Path to JSON credentials file (alternative to --attacker-username/--attacker-password and --victim-username/--victim-password)", flag="--creds-file"),
+            ToolParameter(name="attacker-username", description="Attacker username", flag="--attacker-username"),
+            ToolParameter(name="attacker-password", description="Attacker password", flag="--attacker-password"),
+            ToolParameter(name="victim-username", description="Victim username", flag="--victim-username"),
+            ToolParameter(name="victim-password", description="Victim password", flag="--victim-password"),
+            ToolParameter(name="resource-pattern", description="URL pattern for victim resource", flag="--resource-pattern", default="/api/users/{username}/details"),
+            ToolParameter(name="username-selector", description="CSS selector for username input", flag="--username-selector", default="input[name=username]"),
+            ToolParameter(name="password-selector", description="CSS selector for password input", flag="--password-selector", default="input[name=password]"),
+            ToolParameter(name="submit-selector", description="CSS selector for submit button", flag="--submit-selector", default="button[type=submit]"),
+        ],
+        timeout=120,
+        signal_quality=SignalQuality.CONFIRMED,
+        priority=80,
+        cost="medium",
+        risk_level="low",
+    )
+)
+
+_register(
+    ToolDefinition(
+        name="playwright-privesc",
+        description="Privilege Escalation detection via browser automation (overrides _generated_tools.py)",
+        phases=["scan", "deep_scan"],
+        binary="python3",
+        default_args=["argus-workers/tools/scripts/playwright_privesc.py"],
+        parameters=[
+            ToolParameter(name="target", description="Target URL", required=True, flag="--target"),
+            ToolParameter(name="creds_file", description="Path to JSON credentials file (alternative to --low-priv-username/--low-priv-password)", flag="--creds-file"),
+            ToolParameter(name="low-priv-username", description="Low-privilege user username", flag="--low-priv-username"),
+            ToolParameter(name="low-priv-password", description="Low-privilege user password", flag="--low-priv-password"),
+            ToolParameter(name="admin-paths", description="Comma-separated admin endpoints to probe", flag="--admin-paths"),
+            ToolParameter(name="username-selector", description="CSS selector for username input", flag="--username-selector", default="input[name=username]"),
+            ToolParameter(name="password-selector", description="CSS selector for password input", flag="--password-selector", default="input[name=password]"),
+            ToolParameter(name="submit-selector", description="CSS selector for submit button", flag="--submit-selector", default="button[type=submit]"),
+        ],
+        timeout=120,
+        signal_quality=SignalQuality.CONFIRMED,
+        priority=80,
+        cost="medium",
+        risk_level="low",
+    )
+)
+
+
 _register(
     ToolDefinition(
         name="dependency_check",
@@ -1502,7 +1588,20 @@ def evaluate_gate(tool_name: str, recon_context) -> bool:
 
     if req.target_scheme:
         target = getattr(recon_context, "target_url", "") or ""
-        if not target.startswith(req.target_scheme):
+        # Defense-in-depth: some auto-generated definitions emit list-literal
+        # strings like "['http', 'https']" instead of plain "https".
+        # Handle both formats by checking if ANY scheme in the string matches.
+        _scheme = req.target_scheme
+        if _scheme.startswith("[") and _scheme.endswith("]"):
+            # Parse list-literal format: "['http', 'https']"
+            _schemes = [
+                s.strip().strip("'\"")
+                for s in _scheme.strip("[]").split(",")
+            ]
+            _matched = any(target.startswith(s) for s in _schemes if s)
+            if not _matched:
+                return False
+        elif not target.startswith(_scheme):
             return False
 
     return True
