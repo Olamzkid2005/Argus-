@@ -186,7 +186,7 @@ def update_plan_from_hypotheses(plan, hypotheses: list[dict]) -> None:
     skipped_count = 0
 
     for hyp in hypotheses:
-        confidence = hyp.get("confidence", 0.0)
+        confidence = hyp.get("confidence") or 0.0
         if confidence < 0.5:
             skipped_count += 1
             continue
@@ -203,8 +203,9 @@ def update_plan_from_hypotheses(plan, hypotheses: list[dict]) -> None:
                 # Phase is already active — annotate it as hypothesis-driven
                 for p in plan.phases:
                     if p.name == phase_name and "hypothesis" not in p.activation_reason:
+                        root_key = hyp.get("root_cause_key", "unknown") or "unknown"
                         p.activation_reason += (
-                            f" [hypothesis: {hyp.get('root_cause_key', 'unknown')}"
+                            f" [hypothesis: {root_key}"
                             f" @ {confidence:.0%}]"
                         )
                 continue
