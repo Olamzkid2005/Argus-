@@ -81,6 +81,10 @@ class ToolTask:
 
 @dataclass
 class TestingPhase:
+    # Tell pytest this is NOT a test class (prevents PytestCollectionWarning
+    # from dataclass-generated __init__ interfering with test discovery)
+    __test__ = False
+
     """A logical testing objective, e.g. "authentication testing".
 
     Attributes:

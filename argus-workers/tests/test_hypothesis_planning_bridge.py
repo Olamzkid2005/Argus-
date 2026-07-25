@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import pytest
 from unittest.mock import patch, MagicMock
+
+# All tests in this module are fast unit tests with no external dependencies
+pytestmark = pytest.mark.unit
 from orchestrator_pkg.planning.adaptive_planner import (
     WorkflowPlan,
     TestingPhase,
