@@ -42,6 +42,7 @@ export interface NormalizedFinding {
 
 export interface VerificationResult {
   passed: boolean
+  confidence: number  // 0.0-1.0 float — graded confidence score from the verifier
   summary: string
   verifier: string
   verifiedAt: string

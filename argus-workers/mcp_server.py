@@ -1329,6 +1329,7 @@ class MCPServer:
             return {"error": "engagement_id is required", "chains": [], "paths": [], "chain_plans": []}
 
         from attack_graph import AttackGraph
+        from attack_composition import generate_plan_from_graph
 
         graph = AttackGraph(engagement_id)
 
@@ -1371,7 +1372,7 @@ class MCPServer:
         # Get highest risk paths and chain plans
         chains = graph.find_chains()
         high_risk_paths = graph.get_highest_risk_paths(limit=10)
-        chain_plans = graph.generate_plan_from_graph()
+        chain_plans = generate_plan_from_graph(graph)
 
         # Blocker 18: Report how many findings were skipped so silent data loss is visible
         # (invalid findings are skipped with logger.debug, but the count is surfaced here)

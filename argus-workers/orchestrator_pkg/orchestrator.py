@@ -329,6 +329,33 @@ class Orchestrator:
             self, target, job.get("budget", {}), aggressiveness,
             cache_mode=cache_mode,
         )
+
+        # ── AI/LLM Surface Detection ──
+        # After recon pipeline completes, check for AI chatbot widgets,
+        # LLM API endpoints, and provider signatures. Produces an INFO
+        # advisory finding if detected.
+        if recon_context:
+            try:
+                from tools.ai_surface_detector import (
+                    build_ai_advisory_finding,
+                    detect_ai_surface,
+                )
+
+                detect_ai_surface(recon_context)
+                ai_finding = build_ai_advisory_finding(recon_context, target)
+                if ai_finding:
+                    findings.append(ai_finding)
+                    logger.info(
+                        "AI surface detected for %s: provider=%s, endpoints=%s",
+                        target,
+                        recon_context.llm_provider_detected,
+                        recon_context.ai_endpoints,
+                    )
+            except Exception as e:
+                logger.debug(
+                    "AI surface detection failed (non-fatal): %s", e
+                )
+
         slog.tool_complete(
             "orchestrator.run_recon", success=True, findings=len(findings)
         )

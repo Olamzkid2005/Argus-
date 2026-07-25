@@ -313,12 +313,13 @@ describe("VerificationRunner edge cases", () => {
       name: "throw-setup", description: "",
       async setup() { throw new Error("Setup failed") },
       async execute() {},
-      async verify(): Promise<VerifierResult> { return { passed: true, confidence: 5, evidence: [], summary: "ok" } },
+      async verify(): Promise<VerifierResult> { return { passed: true, confidence: 5, confidenceScore: 0.9, evidence: [], summary: "ok" } },
       async collectEvidence(): Promise<EvidencePackage> { return { packageId: "", findingId: "", screenshots: [], requests: [], responses: [], logs: [], artifacts: [], packageHash: "", createdAt: "" } as any },
     }
     const result = await runner.run(scenario)
     expect(result.passed).toBe(false)
     expect(result.confidence).toBe(0)
+    expect(result.confidenceScore).toBe(0)
     expect(result.summary).toContain("Setup failed")
   })
 
@@ -327,7 +328,7 @@ describe("VerificationRunner edge cases", () => {
       name: "throw-execute", description: "",
       async setup() {},
       async execute() { throw new Error("Execute failed") },
-      async verify(): Promise<VerifierResult> { return { passed: true, confidence: 5, evidence: [], summary: "ok" } },
+      async verify(): Promise<VerifierResult> { return { passed: true, confidence: 5, confidenceScore: 0.9, evidence: [], summary: "ok" } },
       async collectEvidence(): Promise<EvidencePackage> { return { packageId: "", findingId: "", screenshots: [], requests: [], responses: [], logs: [], artifacts: [], packageHash: "", createdAt: "" } as any },
     }
     const result = await runner.run(scenario)
@@ -340,12 +341,13 @@ describe("VerificationRunner edge cases", () => {
       name: "no-evidence", description: "",
       async setup() {},
       async execute() {},
-      async verify(): Promise<VerifierResult> { return { passed: true, confidence: 3, evidence: [], summary: "passed" } },
+      async verify(): Promise<VerifierResult> { return { passed: true, confidence: 3, confidenceScore: 0.6, evidence: [], summary: "passed" } },
       async collectEvidence(): Promise<EvidencePackage> { return { packageId: "", findingId: "", screenshots: [], requests: [], responses: [], logs: [], artifacts: [], packageHash: "", createdAt: "" } as any },
     }
     const result = await runner.run(scenario)
     expect(result.passed).toBe(true)
     expect(result.confidence).toBe(3)
+    expect(result.confidenceScore).toBeCloseTo(0.6)
   })
 })
 

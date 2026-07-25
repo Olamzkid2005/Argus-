@@ -80,6 +80,7 @@ export class BOLAVerifier implements VerificationScenario {
       return {
         passed: false,
         confidence: Confidence.INFORMATIONAL,
+        confidenceScore: 0.0,
         evidence: [],
         summary: `BOLA skipped — login failed for one or both users, access check could not complete`,
       }
@@ -91,6 +92,7 @@ export class BOLAVerifier implements VerificationScenario {
     return {
       passed,
       confidence: passed ? Confidence.HIGH : this.resourceRequiresAuth ? Confidence.LOW : Confidence.INFORMATIONAL,
+      confidenceScore: this.computeConfidence(passed),
       evidence: [],
       summary: !this.resourceRequiresAuth
         ? `BOLA skipped — ${this.resourcePath} is publicly accessible (no auth required)`
@@ -98,6 +100,17 @@ export class BOLAVerifier implements VerificationScenario {
           ? `BOLA confirmed: User B could access User A's resource at ${this.resourcePath}`
           : `BOLA not detected for ${this.resourcePath} (resource requires auth and User B denied)`,
     }
+  }
+
+  /**
+   * Compute graded confidence score (0.0-1.0) from signal strength.
+   * BOLA confirmed with both users accessing the resource = high confidence.
+   */
+  private computeConfidence(passed: boolean): number {
+    if (!this.resourceRequiresAuth) return 0.0
+    if (!passed) return 0.3  // Auth works as expected, low risk
+    // Both users accessed the resource — confirmed BOLA
+    return 0.85
   }
 
   async collectEvidence(): Promise<EvidencePackage> {

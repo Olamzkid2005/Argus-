@@ -67,6 +67,7 @@ export class ChainedScenario implements VerificationScenario {
         this.stageResults.push({
           passed: false,
           confidence: Confidence.INFORMATIONAL,
+          confidenceScore: 0,
           evidence: [],
           summary: `Verification failed at stage "${stage.name}": ${(error as Error).message}`,
         })
@@ -82,9 +83,15 @@ export class ChainedScenario implements VerificationScenario {
         )
       : Confidence.INFORMATIONAL
 
+    const confidenceScoreSum = this.stageResults.reduce((s, r) => s + (r.confidenceScore ?? 0), 0)
+    const avgConfidenceScore = this.stageResults.length > 0
+      ? confidenceScoreSum / this.stageResults.length
+      : 0
+
     return {
       passed: anyPassed,
       confidence: allPassed ? Confidence.HIGH : avgConfidence,
+      confidenceScore: allPassed ? Math.min(avgConfidenceScore + 0.1, 1.0) : avgConfidenceScore,
       evidence: [],
       summary: this.stageResults
         .map((r, i) => `[${this.stages[i].name}] ${r.summary}`)

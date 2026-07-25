@@ -355,6 +355,7 @@ _register(
             ToolParameter("ports", "Port range", flag="-p"),
         ],
         timeout=600,
+        signal_quality=SignalQuality.CONFIRMED,
     )
 )
 
@@ -462,7 +463,7 @@ _register(
             ToolParameter("risk", "Risk level (1-3)", flag="--risk", default=1),
         ],
         timeout=600,
-        signal_quality=SignalQuality.PROBABLE,
+        signal_quality=SignalQuality.CONFIRMED,
     )
 )
 
@@ -661,6 +662,7 @@ _register(
             ),
         ],
         timeout=600,
+        signal_quality=SignalQuality.PROBABLE,
     )
 )
 
@@ -965,6 +967,38 @@ _register(
     )
 )
 
+_register(
+    ToolDefinition(
+        name="cloud_metadata_probe",
+        description="Probe cloud metadata endpoints (169.254.169.254) for IAM credentials, "
+        "instance metadata, and cloud provider token exposure. "
+        "Checks AWS, GCP, Azure, and Alibaba Cloud metadata endpoints. "
+        "Only runs when findings indicate a cloud-hosted target.",
+        phases=["post_exploit"],
+        binary="python3",
+        default_args=["argus-workers/tools/run_agent_tool.py", "cloud_metadata_probe"],
+        parameters=[
+            ToolParameter(
+                name="target",
+                description="Target URL or IP to probe for cloud metadata",
+                required=True,
+                flag="--target",
+            ),
+            ToolParameter(
+                name="extra",
+                description="JSON-encoded extra parameters",
+            ),
+        ],
+        timeout=60,
+        parallel_safe=False,
+        signal_quality=SignalQuality.CONFIRMED,
+        exploit_categories=["cloud_metadata", "credential_disclosure"],
+        estimated_cost=0.0,
+        estimated_runtime=10,
+        risk_level="high",
+    )
+)
+
 
 # ── Reporting phase ──
 
@@ -1063,6 +1097,50 @@ _register(
 
 _register(
     ToolDefinition(
+        name="finding_verifier",
+        description="Verifies specific findings by re-testing with independent HTTP-based methods. "
+        "Validates SQLi, XSS, and Open Redirect via httpx probes. "
+        "Generates confirmation evidence for high-confidence reporting.",
+        phases=["deep_scan", "analyze"],
+        binary="python3",
+        default_args=["argus-workers/tools/scripts/run_finding_verifier.py"],
+        parameters=[
+            ToolParameter(
+                name="target",
+                description="Target URL to verify",
+                required=True,
+                flag="--target",
+            ),
+            ToolParameter(
+                name="finding_type",
+                description="Type of finding to verify (sqli, xss, open_redirect)",
+                required=True,
+                flag="--finding-type",
+            ),
+            ToolParameter(
+                name="payload",
+                description="Payload used in the original finding",
+                flag="--payload",
+            ),
+            ToolParameter(
+                name="endpoint",
+                description="Specific endpoint URL where the finding was detected",
+                flag="--endpoint",
+            ),
+            ToolParameter(
+                name="engagement_id",
+                description="Engagement ID for logging",
+                flag="--engagement-id",
+            ),
+        ],
+        timeout=60,
+        signal_quality=SignalQuality.CONFIRMED,
+        parallel_safe=True,
+    )
+)
+
+_register(
+    ToolDefinition(
         name="browser_security_operator",
         description="Comprehensive browser-based security testing: DOM analysis, auth testing, XSS/CSRF verification",
         phases=["scan", "deep_scan"],
@@ -1136,7 +1214,7 @@ _register(
             )
         ],
         timeout=300,
-        signal_quality=SignalQuality.PROBABLE,
+        signal_quality=SignalQuality.CONFIRMED,
         parallel_safe=True,
     )
 )
@@ -1187,7 +1265,7 @@ _register(
             )
         ],
         timeout=300,
-        signal_quality=SignalQuality.PROBABLE,
+        signal_quality=SignalQuality.CONFIRMED,
         parallel_safe=True,
     )
 )
@@ -1245,6 +1323,35 @@ _register(
 
 
 # ═══════════════════════════════════════════════════════════════
+# Advisory-only tools (not in any exploitation phase)
+# ═══════════════════════════════════════════════════════════════
+
+_register(
+    ToolDefinition(
+        name="ai_surface_detected",
+        description="Advisory finding: AI/LLM surface detected. "
+        "Indicates that the target appears to use AI chat interfaces, LLM APIs, "
+        "or chatbot widgets. Manual AI red-team review (e.g. using PyRIT) is "
+        "recommended to test for prompt injection, data leakage, and insecure "
+        "LLM access controls.",
+        phases=[],  # NOT in any exploitation phase — advisory only
+        parameters=[
+            ToolParameter(
+                name="target",
+                description="Target URL where AI surface was detected",
+                required=True,
+            ),
+        ],
+        timeout=10,
+        signal_quality=SignalQuality.CONFIRMED,
+        priority=10,  # Low priority — informational only
+        cost="low",
+        risk_level="low",
+    )
+)
+
+
+# ═══════════════════════════════════════════════════════════════
 # Helper functions
 # ═══════════════════════════════════════════════════════════════
 
@@ -1265,6 +1372,7 @@ _AGENT_INTERNAL_TOOLS = frozenset(
         "credential_replay",
         "internal_probe",
         "cloud_metadata_probe",
+        "ai_surface_detected",
         "finding_correlation_engine",
         "attack_path_generator",
         "verification_agent",

@@ -26,6 +26,11 @@ class ReconContext:
     has_api: bool = False
     has_file_upload: bool = False
 
+    # ── AI/LLM surface detection fields ──
+    has_ai_chatbot: bool = False
+    ai_endpoints: list[str] = field(default_factory=list)
+    llm_provider_detected: str = ""  # e.g. "openai", "anthropic", "intercom", "drift"
+
     # Repo scan fields
     scan_type: str = "url"  # "url" or "repo"
     repo_url: str = ""

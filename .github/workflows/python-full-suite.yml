@@ -29,6 +29,7 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.11"
+  RUN_E2E_TESTS: "1"
 
 jobs:
   full-suite:
@@ -39,6 +40,8 @@ jobs:
         working-directory: argus-workers
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -83,11 +86,19 @@ jobs:
           python -m pytest tests/ \
             -m "not requires_db and not requires_redis" \
             -v --timeout=180 --tb=long -ra \
+            --cov --cov-report=xml \
             --junit-xml=python-full-suite-results.xml \
             2>&1 | tee /tmp/pytest-output.txt
           echo "---PYTEST EXIT CODE: ${PIPESTATUS[0]}---"
           tail -20 /tmp/pytest-output.txt
           exit ${PIPESTATUS[0]}
+
+      - name: Check diff coverage
+        if: github.event_name == 'pull_request'
+        run: |
+          diff-cover coverage.xml \
+            --compare-branch=origin/${{ github.base_ref }} \
+            --fail-under=60
 
       - name: Upload full suite results
         if: always()

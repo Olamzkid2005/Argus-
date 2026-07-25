@@ -168,9 +168,22 @@ export class LFIVerifier implements VerificationScenario {
       confidence: passed && this.fileContentWith200Detected ? Confidence.HIGH
         : passed ? Confidence.MEDIUM
         : Confidence.INFORMATIONAL,
+      confidenceScore: this.computeConfidence(passed),
       evidence: [],
       summary,
     }
+  }
+
+  /**
+   * Compute graded confidence score (0.0-1.0) from signal strength.
+   * File content with HTTP 200 = very high confidence (actual file read).
+   * File content with non-200 = medium confidence (possible error reflection).
+   */
+  private computeConfidence(passed: boolean): number {
+    if (!passed) return 0.0
+    if (this.fileContentWith200Detected) return 0.9
+    if (this.fileContentDetected) return 0.5
+    return 0.3
   }
 
   async collectEvidence(): Promise<EvidencePackage> {

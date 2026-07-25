@@ -201,9 +201,21 @@ export class SecretsExposureVerifier implements VerificationScenario {
       confidence: highConfSecrets.length > 0 ? Confidence.HIGH
         : hasSecrets ? Confidence.LOW
         : Confidence.INFORMATIONAL,
+      confidenceScore: this.computeConfidence(highConfSecrets.length, allSecrets.length),
       evidence: [],
       summary,
     }
+  }
+
+  /**
+   * Compute graded confidence score (0.0-1.0) from signal strength.
+   * High-confidence secret patterns matched = very confident.
+   * Only medium/low confidence patterns = less confident.
+   */
+  private computeConfidence(highConfCount: number, totalCount: number): number {
+    if (totalCount === 0) return 0.0
+    if (highConfCount > 0) return 0.9
+    return 0.4  // Only medium/low confidence patterns found
   }
 
   async collectEvidence(): Promise<EvidencePackage> {

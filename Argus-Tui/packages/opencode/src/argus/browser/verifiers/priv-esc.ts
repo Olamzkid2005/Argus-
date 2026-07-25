@@ -169,9 +169,21 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
     return {
       passed: hasEscalation,
       confidence: hasEscalation && some200 ? Confidence.HIGH : Confidence.LOW,
+      confidenceScore: this.computeConfidence(hasEscalation, some200),
       evidence: [],
       summary,
     }
+  }
+
+  /**
+   * Compute graded confidence score (0.0-1.0) from signal strength.
+   * Escalation with HTTP 200 on privileged endpoint = high confidence.
+   * Escalation with non-200 = medium confidence (possible access but restricted).
+   */
+  private computeConfidence(hasEscalation: boolean, some200: boolean): number {
+    if (!hasEscalation) return 0.0
+    if (some200) return 0.85
+    return 0.5
   }
 
   async collectEvidence(): Promise<EvidencePackage> {

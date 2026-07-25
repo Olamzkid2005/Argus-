@@ -398,6 +398,7 @@ export class WorkflowRunner {
         const result = await runner.run(scenario)
         const verificationResult: VerificationResult = {
           passed: result.passed,
+          confidence: result.confidenceScore ?? 0,
           summary: result.summary,
           verifier: scenario.name,
           verifiedAt: new Date().toISOString(),
@@ -655,6 +656,7 @@ export class WorkflowRunner {
             finderResult.verifiedCount++
             finding.verificationResult = {
               passed: true,
+              confidence: 0.8,  // MCP HTTP verification — reasonable confidence
               summary: `MCP verified: ${result.data.reason ?? "HTTP probe confirmed"}`,
               verifier: "finding_verifier",
               verifiedAt: new Date().toISOString(),

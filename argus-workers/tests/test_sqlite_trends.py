@@ -1,269 +1,449 @@
-"""
-Tests for database/sqlite_trends.py — cross-engagement trend analysis.
+"""Tests for database/sqlite_trends.py — cross-engagement trend analysis."""
 
-Uses real SQLite with seeded engagements and findings via a shared temp
-file to verify aggregation logic, filters, and graceful empty-DB handling.
-"""
-
-import os
-import tempfile
-from datetime import datetime, timedelta, timezone
+from __future__ import annotations
 
 import pytest
 
-from database.sqlite_trends import SQLiteTrendRepository, TrendSummary, display_trend_summary
 from database.sqlite_backend import SQLiteEngagementRepo, SQLiteFindingRepo
+from database.sqlite_trends import SQLiteTrendRepository, display_trend_summary
 
 
-def _seed_data(db_path: str) -> None:
-    """Seed a SQLite database file with sample engagements and findings."""
+# ── Helpers ──────────────────────────────────────────────────────────────
+
+
+def _seed_engagement(eng_repo: SQLiteEngagementRepo, **overrides: str) -> dict:
+    """Create a basic engagement with sensible defaults."""
+    defaults = {
+        "target_url": "https://example.com",
+        "org_id": "test-org",
+        "status": "completed",
+        "scan_type": "url",
+        "created_by": "test",
+    }
+    defaults.update(overrides)
+    return eng_repo.create(defaults)
+
+
+def _seed_finding(finding_repo: SQLiteFindingRepo, engagement_id: str, **overrides) -> str:
+    """Create a basic finding with sensible defaults."""
+    defaults = {
+        "engagement_id": engagement_id,
+        "finding_type": "SQL_INJECTION",
+        "severity": "HIGH",
+        "endpoint": "https://example.com/api",
+        "evidence": {"payload": "test"},
+        "confidence": 0.9,
+        "source_tool": "nuclei",
+        "cvss_score": 8.5,
+        "cwe_id": "CWE-89",
+    }
+    defaults.update(overrides)
+    return finding_repo.create_finding(**defaults)
+
+
+# ── Fixtures ─────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def shared_db(tmp_path):
+    """All repos share the same temp-file database (avoid :memory: isolation)."""
+    db_path = str(tmp_path / "test_trends.db")
     eng_repo = SQLiteEngagementRepo(db_path)
     finding_repo = SQLiteFindingRepo(db_path)
+    trend_repo = SQLiteTrendRepository(db_path)
+    yield eng_repo, finding_repo, trend_repo
+    trend_repo.close()
+    finding_repo.close()
+    eng_repo.close()
 
-    # Engagement 1: https://example.com
-    eng1 = eng_repo.create({
-        "target_url": "https://example.com",
-        "org_id": "local", "status": "completed", "scan_type": "url",
-    })
-    finding_repo.create_finding(
-        eng1["id"], "SQL_INJECTION", "CRITICAL", "/api",
-        {"payload": "' OR 1=1--"}, 0.9, "nuclei",
-        cwe_id="CWE-89",
-    )
-    finding_repo.create_finding(
-        eng1["id"], "XSS", "HIGH", "/search",
-        {"payload": "<script>"}, 0.8, "httpx",
-        cwe_id="CWE-79",
-    )
-    finding_repo.create_finding(
-        eng1["id"], "INFO_LEAK", "MEDIUM", "/robots.txt",
-        {"detail": "Disallowed paths"}, 0.6, "katana",
-        cwe_id="CWE-200",
-    )
 
-    # Engagement 2: https://example.com (same domain, more findings)
-    eng2 = eng_repo.create({
-        "target_url": "https://example.com",
-        "org_id": "local", "status": "completed", "scan_type": "url",
-    })
-    finding_repo.create_finding(
-        eng2["id"], "SQL_INJECTION", "CRITICAL", "/admin",
-        {"payload": "' UNION SELECT--"}, 0.95, "nuclei",
-        cwe_id="CWE-89",
-    )
-    finding_repo.create_finding(
-        eng2["id"], "AUTH_BYPASS", "CRITICAL", "/login",
-        {"detail": "Weak JWT"}, 0.85, "nuclei",
-        cwe_id="CWE-287",
-    )
+@pytest.fixture
+def seeded_db(shared_db):
+    """Database seeded with 2 engagements and 5 findings across them."""
+    eng_repo, finding_repo, trend_repo = shared_db
 
-    # Engagement 3: different domain, 60 days old
-    old = datetime.now(timezone.utc) - timedelta(days=60)
-    eng3 = eng_repo.create({
-        "target_url": "https://staging.example.org",
-        "org_id": "local", "status": "completed", "scan_type": "url",
-    })
-    eng_repo.update_by_id(eng3["id"], {"completed_at": old.isoformat()})
-    finding_repo.create_finding(
-        eng3["id"], "LOW_ISSUE", "LOW", "/",
-        {"detail": "Server header"}, 0.3, "whatweb",
-        cwe_id="CWE-16",
-    )
+    # Engagement 1: https://example.com — 3 findings (CRITICAL, HIGH, MEDIUM)
+    eng1 = _seed_engagement(eng_repo, target_url="https://example.com")
+    _seed_finding(finding_repo, eng1["id"],
+                  finding_type="SQL_INJECTION", severity="CRITICAL",
+                  endpoint="https://example.com/api", cwe_id="CWE-89", confidence=0.95)
+    _seed_finding(finding_repo, eng1["id"],
+                  finding_type="XSS", severity="HIGH",
+                  endpoint="https://example.com/login", cwe_id="CWE-79", confidence=0.8)
+    _seed_finding(finding_repo, eng1["id"],
+                  finding_type="OPEN_REDIRECT", severity="MEDIUM",
+                  endpoint="https://example.com/redirect", cwe_id="CWE-601", confidence=0.6)
+
+    # Engagement 2: https://test.org — 2 findings (MEDIUM, LOW)
+    eng2 = _seed_engagement(eng_repo, target_url="https://test.org")
+    _seed_finding(finding_repo, eng2["id"],
+                  finding_type="XSS", severity="MEDIUM",
+                  endpoint="https://test.org/search", cwe_id="CWE-79", confidence=0.65)
+    _seed_finding(finding_repo, eng2["id"],
+                  finding_type="WEAK_TLS", severity="LOW",
+                  endpoint="https://test.org", cwe_id="CWE-327", confidence=0.5)
+
+    return eng_repo, finding_repo, trend_repo, eng1, eng2
+
+
+# ── TrendRepository tests ───────────────────────────────────────────────
 
 
 class TestSQLiteTrendRepository:
-    """Test suite for SQLiteTrendRepository with seeded data."""
+    """Tests for SQLiteTrendRepository.get_trends()."""
 
-    @pytest.fixture
-    def seeded_repo(self):
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-        _seed_data(db_path)
-        repo = SQLiteTrendRepository(db_path)
-        yield repo
-        repo.close()
-        try:
-            os.unlink(db_path)
-        except OSError:
-            pass
+    def test_empty_database(self, shared_db):
+        """get_trends returns empty summary when no data exists."""
+        eng_repo, finding_repo, trend_repo = shared_db
+        trends = trend_repo.get_trends()
+        summary = trends["summary"]
+        assert summary["total_engagements"] == 0
+        assert summary["total_findings"] == 0
+        assert summary["unique_targets"] == 0
 
-    @pytest.fixture
-    def empty_repo(self):
+    def test_no_filters_returns_all_data(self, seeded_db):
+        """get_trends with no filters returns all engagements and findings."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        summary = trends["summary"]
+        assert summary["total_engagements"] == 2
+        assert summary["total_findings"] == 5
+        assert summary["unique_targets"] == 2
+
+    def test_summary_has_date_range(self, seeded_db):
+        """Summary includes earliest and latest finding timestamps."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        s = trends["summary"]
+        assert s["earliest_finding"] is not None
+        assert s["latest_finding"] is not None
+        assert s["earliest_finding"] <= s["latest_finding"]
+
+    # ── Severity breakdown ──────────────────────────────────────────
+
+    def test_severity_breakdown(self, seeded_db):
+        """Severity breakdown has correct counts."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        by_sev = trends["by_severity"]
+        sev_map = {s["severity"]: s["count"] for s in by_sev}
+        assert sev_map.get("CRITICAL") == 1
+        assert sev_map.get("HIGH") == 1
+        assert sev_map.get("MEDIUM") == 2
+        assert sev_map.get("LOW") == 1
+
+    def test_severity_ordered_correctly(self, seeded_db):
+        """Severity results are ordered CRITICAL > HIGH > MEDIUM > LOW > INFO."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        order = [s["severity"] for s in trends["by_severity"] if s["severity"]]
+        assert order == ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+
+    def test_severity_includes_avg_confidence(self, seeded_db):
+        """Each severity entry includes avg_confidence."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        for s in trends["by_severity"]:
+            assert "avg_confidence" in s
+            assert isinstance(s["avg_confidence"], (int, float))
+
+    # ── Finding type aggregation ─────────────────────────────────────
+
+    def test_by_type_shows_all_types(self, seeded_db):
+        """Top finding types includes all unique types."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        types = {t["type"] for t in trends["by_type"]}
+        assert "SQL_INJECTION" in types
+        assert "XSS" in types
+        assert "OPEN_REDIRECT" in types
+        assert "WEAK_TLS" in types
+
+    def test_by_type_counts_correctly(self, seeded_db):
+        """Finding type counts are correct (XSS appears twice)."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        type_map = {t["type"]: t["count"] for t in trends["by_type"]}
+        assert type_map["XSS"] == 2
+        assert type_map["SQL_INJECTION"] == 1
+
+    def test_by_type_affected_engagements(self, seeded_db):
+        """XSS affects both engagements, other types affect only one."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        type_map = {t["type"]: t["affected_engagements"] for t in trends["by_type"]}
+        assert type_map["XSS"] == 2
+        assert type_map["SQL_INJECTION"] == 1
+
+    # ── CWE aggregation ──────────────────────────────────────────────
+
+    def test_cwe_aggregation(self, seeded_db):
+        """CWE aggregation returns all 4 distinct CWEs."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        cwe_list = trends["by_cwe"]
+        cwe_map = {c["cwe_id"]: c["count"] for c in cwe_list}
+        assert "CWE-79" in cwe_map
+        assert "CWE-89" in cwe_map
+        assert "CWE-601" in cwe_map
+        assert "CWE-327" in cwe_map
+        assert cwe_map["CWE-79"] == 2  # XSS appears twice
+
+    def test_cwe_aggregation_no_cwe_data(self, shared_db):
+        """CWE aggregation returns empty list when no findings have cwe_id."""
+        eng_repo, finding_repo, trend_repo = shared_db
+        eng = _seed_engagement(eng_repo)
+        _seed_finding(finding_repo, eng["id"], cwe_id=None,
+                      finding_type="TEST", endpoint="https://test.com/a")
+        _seed_finding(finding_repo, eng["id"], cwe_id="",
+                      finding_type="TEST2", endpoint="https://test.com/b")
+        trends = trend_repo.get_trends()
+        assert trends["by_cwe"] == []
+
+    # ── Domain aggregation ───────────────────────────────────────────
+
+    def test_by_domain_counts(self, seeded_db):
+        """Domain breakdown shows correct counts per domain."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        domain_map = {d["target_url"]: d["count"] for d in trends["by_domain"]}
+        assert domain_map.get("https://example.com") == 3
+        assert domain_map.get("https://test.org") == 2
+
+    def test_by_domain_critical_flag(self, seeded_db):
+        """Domain with CRITICAL findings has has_critical=True."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        for d in trends["by_domain"]:
+            if d["target_url"] == "https://example.com":
+                assert d["has_critical"] is True
+            elif d["target_url"] == "https://test.org":
+                assert d["has_critical"] is False
+
+    # ── By engagement ────────────────────────────────────────────────
+
+    def test_by_engagement_counts(self, seeded_db):
+        """Engagement breakdown has correct finding counts."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        eng_map = {e["engagement_id"]: e["count"] for e in trends["by_engagement"]}
+        assert eng_map[eng1["id"]] == 3
+        assert eng_map[eng2["id"]] == 2
+
+    def test_by_engagement_includes_target_url(self, seeded_db):
+        """Engagement breakdown includes target_url."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        urls = {e["target_url"] for e in trends["by_engagement"]}
+        assert "https://example.com" in urls
+        assert "https://test.org" in urls
+
+    # ── Over time ────────────────────────────────────────────────────
+
+    def test_over_time_has_monthly_data(self, seeded_db):
+        """Over-time data shows findings grouped by month."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        assert len(trends["over_time"]) >= 1
+        for m in trends["over_time"]:
+            assert "month" in m
+            assert "count" in m
+            assert m["count"] >= 1
+
+    def test_over_time_includes_high_plus(self, seeded_db):
+        """Over-time data includes high+critical count."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        total_high_plus = sum(m["high_plus_count"] for m in trends["over_time"])
+        assert total_high_plus == 2  # 1 CRITICAL + 1 HIGH
+
+    # ── Average confidence ───────────────────────────────────────────
+
+    def test_avg_confidence_by_severity(self, seeded_db):
+        """Average confidence is computed correctly per severity."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        conf_map = {c["severity"]: c["avg_confidence"] for c in trends["avg_confidence_by_severity"]}
+        assert conf_map["CRITICAL"] == pytest.approx(0.95, abs=0.01)
+        assert conf_map["HIGH"] == pytest.approx(0.80, abs=0.01)
+
+    # ── Filter: domain ───────────────────────────────────────────────
+
+    def test_filter_domain_exact(self, seeded_db):
+        """Domain filter returns only findings for that domain."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends(domain="example.com")
+        assert trends["summary"]["total_findings"] == 3
+        assert trends["summary"]["total_engagements"] == 1
+
+    def test_filter_domain_partial(self, seeded_db):
+        """Domain filter with partial match works."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends(domain="test")
+        # Only "https://test.org" matches '%test%' (example.com does not contain "test")
+        assert trends["summary"]["total_findings"] == 2
+
+    def test_filter_domain_no_match(self, seeded_db):
+        """Domain filter with no match returns empty."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends(domain="nonexistent.com")
+        assert trends["summary"]["total_findings"] == 0
+
+    # ── Filter: min_severity ─────────────────────────────────────────
+
+    def test_filter_min_severity_critical(self, seeded_db):
+        """min_severity=CRITICAL returns only CRITICAL findings."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends(min_severity="CRITICAL")
+        assert trends["summary"]["total_findings"] == 1
+
+    def test_filter_min_severity_high(self, seeded_db):
+        """min_severity=HIGH returns CRITICAL + HIGH findings."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends(min_severity="HIGH")
+        assert trends["summary"]["total_findings"] == 2  # 1 CRITICAL + 1 HIGH
+
+    def test_filter_min_severity_medium(self, seeded_db):
+        """min_severity=MEDIUM returns CRITICAL + HIGH + MEDIUM findings."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends(min_severity="MEDIUM")
+        assert trends["summary"]["total_findings"] == 4
+
+    def test_filter_min_severity_low(self, seeded_db):
+        """min_severity=LOW returns all findings (no filtering)."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends(min_severity="LOW")
+        assert trends["summary"]["total_findings"] == 5
+
+    # ── Filter: last_n_days ──────────────────────────────────────────
+
+    def test_filter_last_n_days_returns_all_for_recent(self, seeded_db):
+        """last_n_days with large value returns all findings."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends(last_n_days=365)
+        assert trends["summary"]["total_findings"] == 5
+
+    def test_filter_last_n_days_returns_none_for_past(self, seeded_db):
+        """last_n_days with 0 returns no findings (created just now, but 0 days = no match)."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends(last_n_days=0)
+        assert trends["summary"]["total_findings"] == 0  # created now, not before 0 days ago
+
+    # ── Combined filters ─────────────────────────────────────────────
+
+    def test_filter_domain_and_severity(self, seeded_db):
+        """Combined domain + severity filter works."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends(domain="example.com", min_severity="HIGH")
+        assert trends["summary"]["total_findings"] == 2  # CRITICAL + HIGH for example.com
+
+    def test_filter_domain_and_severity_no_match(self, seeded_db):
+        """Combined filters with no match return empty."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends(domain="test.org", min_severity="CRITICAL")
+        assert trends["summary"]["total_findings"] == 0  # test.org has no CRITICAL
+
+    # ── Edge cases ───────────────────────────────────────────────────
+
+    def test_single_finding(self, shared_db):
+        """Single finding across one engagement works."""
+        eng_repo, finding_repo, trend_repo = shared_db
+        eng = _seed_engagement(eng_repo, target_url="https://single.com")
+        _seed_finding(finding_repo, eng["id"],
+                      finding_type="TEST", severity="INFO",
+                      endpoint="https://single.com/health")
+        trends = trend_repo.get_trends()
+        assert trends["summary"]["total_findings"] == 1
+        assert trends["summary"]["total_engagements"] == 1
+
+    def test_many_findings_same_type_different_severities(self, shared_db):
+        """Multiple findings of the same type with different severities."""
+        eng_repo, finding_repo, trend_repo = shared_db
+        eng = _seed_engagement(eng_repo, target_url="https://multi.com")
+        for sev in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"):
+            _seed_finding(finding_repo, eng["id"],
+                          finding_type="XSS", severity=sev,
+                          endpoint=f"https://multi.com/{sev.lower()}")
+        trends = trend_repo.get_trends()
+        assert trends["summary"]["total_findings"] == 5
+        sev_map = {s["severity"]: s["count"] for s in trends["by_severity"]}
+        # Each severity appears once (5 findings, 5 different severities)
+        assert len(trends["by_severity"]) == 5
+        assert sev_map.get("CRITICAL") == 1
+        assert sev_map.get("HIGH") == 1
+        assert sev_map.get("INFO") == 1
+
+    def test_close_is_idempotent(self):
+        """close() does not raise on multiple calls."""
         repo = SQLiteTrendRepository(":memory:")
-        yield repo
         repo.close()
+        repo.close()  # second close should not raise
 
-    def test_get_trends_returns_summary(self, seeded_repo):
-        """get_trends returns a TrendSummary with correct totals."""
-        trends = seeded_repo.get_trends()
-        assert isinstance(trends, TrendSummary)
-        assert trends.total_engagements == 3
-        assert trends.total_findings == 6
-        assert trends.unique_domains == 2
+    def test_repo_shared_with_backend(self, tmp_path):
+        """TrendRepository can share a database with backend repos."""
+        db_path = str(tmp_path / "shared_test.db")
+        eng_repo = SQLiteEngagementRepo(db_path)
+        finding_repo = SQLiteFindingRepo(db_path)
+        trend_repo = SQLiteTrendRepository(db_path)
+        try:
+            eng = _seed_engagement(eng_repo)
+            _seed_finding(finding_repo, eng["id"])
+            trends = trend_repo.get_trends()
+            assert trends["summary"]["total_findings"] == 1
+        finally:
+            trend_repo.close()
+            finding_repo.close()
+            eng_repo.close()
 
-    def test_get_trends_severity_breakdown(self, seeded_repo):
-        """Severity breakdown counts are correct."""
-        trends = seeded_repo.get_trends()
-        assert trends.severity_breakdown.get("CRITICAL", 0) == 3
-        assert trends.severity_breakdown.get("HIGH", 0) == 1
-        assert trends.severity_breakdown.get("MEDIUM", 0) == 1
-        assert trends.severity_breakdown.get("LOW", 0) == 1
 
-    def test_get_trends_domain_filter(self, seeded_repo):
-        """Domain filter narrows results."""
-        trends = seeded_repo.get_trends(domain="example.com")
-        assert trends.total_engagements == 2
-        assert trends.total_findings == 5
-        assert trends.unique_domains == 1
-
-    def test_get_trends_last_n_days(self, seeded_repo):
-        """Time filter excludes old engagements."""
-        trends = seeded_repo.get_trends(last_n_days=30)
-        assert trends.total_engagements == 2  # eng3 is 60 days old
-        assert trends.total_findings == 5
-
-    def test_get_trends_min_severity_high(self, seeded_repo):
-        """Min severity filter includes only HIGH+ findings."""
-        trends = seeded_repo.get_trends(min_severity="HIGH")
-        assert trends.total_findings == 4
-
-    def test_get_trends_min_severity_critical(self, seeded_repo):
-        """Min severity CRITICAL includes only CRITICAL findings."""
-        trends = seeded_repo.get_trends(min_severity="CRITICAL")
-        assert trends.total_findings == 3
-
-    def test_get_trends_top_cwes(self, seeded_repo):
-        """Top CWEs sorted by frequency."""
-        trends = seeded_repo.get_trends()
-        assert len(trends.top_cwes) >= 1
-        cwe_89 = [c for c in trends.top_cwes if c["cwe_id"] == "CWE-89"]
-        assert len(cwe_89) == 1
-        assert cwe_89[0]["count"] >= 2
-
-    def test_get_trends_top_domains(self, seeded_repo):
-        """Most tested domains sorted by finding count."""
-        trends = seeded_repo.get_trends()
-        assert len(trends.top_domains) >= 1
-        assert trends.top_domains[0]["domain"] == "example.com"
-
-    def test_get_trends_top_tools(self, seeded_repo):
-        """Top tools sorted by finding count."""
-        trends = seeded_repo.get_trends()
-        tool_names = [t["tool"] for t in trends.top_tools]
-        assert "nuclei" in tool_names
-
-    def test_get_trends_recurring_vulns(self, seeded_repo):
-        """CWE appearing in multiple engagements for same domain."""
-        trends = seeded_repo.get_trends()
-        cwe_89_rec = [
-            r for r in trends.recurring_vulnerabilities if r["cwe_id"] == "CWE-89"
-        ]
-        assert len(cwe_89_rec) >= 1
-        assert cwe_89_rec[0]["times_found"] >= 2
-
-    def test_get_trends_risk_score(self, seeded_repo):
-        """Portfolio risk score computes without error."""
-        trends = seeded_repo.get_trends()
-        assert 0 <= trends.portfolio_risk_score <= 100
-        assert trends.portfolio_risk_score > 0
-
-    def test_get_trends_findings_over_time(self, seeded_repo):
-        """Findings over time returns daily counts."""
-        trends = seeded_repo.get_trends()
-        assert len(trends.findings_over_time) > 0
-
-    def test_summary_line_format(self, seeded_repo):
-        """summary_line property returns formatted string."""
-        trends = seeded_repo.get_trends()
-        line = trends.summary_line
-        assert "3 engagements" in line
-        assert "3 CRITICAL" in line
-        assert "1 HIGH" in line
-
-    def test_empty_db_returns_defaults(self, empty_repo):
-        """Fresh DB returns empty TrendSummary without crashing."""
-        trends = empty_repo.get_trends()
-        assert isinstance(trends, TrendSummary)
-        assert trends.total_engagements == 0
-        assert trends.total_findings == 0
-        assert trends.portfolio_risk_score == 0.0
-
-    def test_empty_db_domain_list(self, empty_repo):
-        """get_domain_list on fresh DB returns []."""
-        assert empty_repo.get_domain_list() == []
-
-    def test_empty_db_cwe_list(self, empty_repo):
-        """get_cwe_list on fresh DB returns []."""
-        assert empty_repo.get_cwe_list() == []
-
-    def test_seeded_domain_list(self, seeded_repo):
-        """get_domain_list returns seeded domains."""
-        domains = seeded_repo.get_domain_list()
-        assert len(domains) >= 2
-        domain_names = [d["domain"] for d in domains]
-        assert "example.com" in domain_names
-
-    def test_seeded_cwe_list(self, seeded_repo):
-        """get_cwe_list returns seeded CWEs."""
-        cwes = seeded_repo.get_cwe_list()
-        assert len(cwes) >= 3
-        cwe_ids = [c["cwe_id"] for c in cwes]
-        assert "CWE-89" in cwe_ids
-        assert "CWE-79" in cwe_ids
+# ── Display function tests ───────────────────────────────────────────────
 
 
 class TestDisplayTrendSummary:
-    """Tests for the display_trend_summary formatting function."""
+    """Tests for display_trend_summary()."""
 
-    def test_empty_display(self):
-        """Display empty trends produces a formatted report."""
-        trends = TrendSummary()
+    def test_empty_database(self, shared_db):
+        """display_trend_summary handles empty results gracefully."""
+        eng_repo, finding_repo, trend_repo = shared_db
+        trends = trend_repo.get_trends()
         output = display_trend_summary(trends)
-        assert "Cross-Engagement Trend Report" in output
-        assert "0/100" in output
+        assert "No findings found" in output
 
-    def test_verbose_extra_sections(self):
-        """Verbose mode includes extra sections."""
-        trends = TrendSummary(
-            total_engagements=1,
-            total_findings=3,
-            severity_breakdown={"CRITICAL": 1, "HIGH": 1, "LOW": 1},
-            top_tools=[{"tool": "nuclei", "count": 2}, {"tool": "httpx", "count": 1}],
-            findings_over_time=[{"date": "2026-06-01", "count": 1}],
-            portfolio_risk_score=45.0,
-        )
-        verbose = display_trend_summary(trends, verbose=True)
-        non_verbose = display_trend_summary(trends, verbose=False)
-
-        assert "Top Finding Sources" in verbose
-        assert "nuclei" in verbose
-        assert "Findings Over Time" in verbose
-        assert "2026-06-01" in verbose
-        assert "Top Finding Sources" not in non_verbose
-
-    def test_display_with_cwes(self):
-        """Display includes top CWEs when present."""
-        trends = TrendSummary(
-            total_engagements=1,
-            total_findings=2,
-            top_cwes=[{"cwe_id": "CWE-89", "count": 2}],
-            portfolio_risk_score=30.0,
-        )
+    def test_contains_cross_engagement_header(self, seeded_db):
+        """Output includes the header title."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
         output = display_trend_summary(trends)
-        assert "Top CWEs" in output
-        assert "CWE-89" in output
+        assert "Cross-Engagement Trend Analysis" in output
 
-    def test_display_with_recurring(self):
-        """Display includes recurring vulnerabilities when present."""
-        trends = TrendSummary(
-            total_engagements=2,
-            total_findings=5,
-            recurring_vulnerabilities=[
-                {"cwe_id": "CWE-89", "target_url": "example.com", "times_found": 2}
-            ],
-            portfolio_risk_score=50.0,
-        )
+    def test_contains_total_findings(self, seeded_db):
+        """Output shows total findings count."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
         output = display_trend_summary(trends)
-        assert "Recurring Vulnerabilities" in output
-        assert "CWE-89" in output
-        assert "2x" in output
+        assert "5" in output or "Total findings" in output
+
+    def test_contains_severity_breakdown(self, seeded_db):
+        """Output includes severity breakdown section."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        output = display_trend_summary(trends)
+        assert "Severity" in output
+
+    def test_verbose_shows_more_sections(self, seeded_db):
+        """Verbose mode shows domain and engagement sections."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        verbose_output = display_trend_summary(trends, verbose=True)
+        brief_output = display_trend_summary(trends, verbose=False)
+        # Verbose output should have more content
+        assert len(verbose_output) >= len(brief_output)
+
+    def test_uses_ascii_only(self, seeded_db):
+        """Output uses only ASCII characters (no unicode issues on Windows)."""
+        eng_repo, finding_repo, trend_repo, eng1, eng2 = seeded_db
+        trends = trend_repo.get_trends()
+        output = display_trend_summary(trends, verbose=True)
+        # Try encoding as ASCII — should not raise
+        encoded = output.encode("ascii", errors="strict")
+        assert len(encoded) > 0

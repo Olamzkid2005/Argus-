@@ -187,9 +187,23 @@ export class SSRFVerifier implements VerificationScenario {
       confidence: passed && this.metadataEndpointReachable ? Confidence.HIGH
         : passed ? Confidence.MEDIUM
         : Confidence.INFORMATIONAL,
+      confidenceScore: this.computeConfidence(passed),
       evidence: [],
       summary,
     }
+  }
+
+  /**
+   * Compute graded confidence score (0.0-1.0) from signal strength.
+   * Cloud metadata endpoint reachable = very high confidence.
+   * Internal content leak = high confidence.
+   * General internal endpoint response = medium-high confidence.
+   */
+  private computeConfidence(passed: boolean): number {
+    if (!passed) return 0.0
+    if (this.metadataEndpointReachable) return 0.95
+    if (this.internalIpLeaked) return 0.8
+    return 0.65  // Internal endpoint responded but no sensitive data confirmed
   }
 
   async collectEvidence(): Promise<EvidencePackage> {

@@ -43,6 +43,7 @@ export class VerificationRunner {
       return {
         passed: false,
         confidence: Confidence.INFORMATIONAL,
+        confidenceScore: 0,
         evidence: [],
         summary: `Verification failed: ${(error as Error).message}`,
       }

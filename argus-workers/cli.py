@@ -61,6 +61,13 @@ if str(PROJECT_ROOT) not in sys.path:
 # Lazy imports (expensive modules loaded only when needed)
 _ORCHESTRATOR_IMPORTED = False
 
+# Finding types that have registered verifiers in tools.finding_verifier
+_VERIFIABLE_FINDING_TYPES = frozenset({
+    "sqli", "sql_injection", "sql-injection",
+    "xss", "cross-site-scripting", "cross_site_scripting",
+    "open-redirect", "open_redirect", "openredirect",
+})
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -309,6 +316,10 @@ def _run_phases(
                 except Exception:
                     logger.debug("LLM refiner failed", exc_info=True)
 
+            # ── Auto-verify low-confidence findings after scan ─────────
+            if status == "completed" and phase_name == "scan":
+                _auto_verify_findings(finding_repo, engagement_id)
+
         except Exception as e:
             logger.error("Phase %s failed: %s", phase_name, e)
             phase_results.append({
@@ -322,6 +333,194 @@ def _run_phases(
             continue
 
     return 0, phase_results
+
+
+def _auto_verify_findings(
+    finding_repo: Any,
+    engagement_id: str,
+    confidence_threshold: float = 0.7,
+    max_to_verify: int = 10,
+) -> None:
+    """Auto-verify low-confidence findings after scan phase.
+
+    Finds findings below the confidence threshold with known verifiable
+    finding types (SQLi, XSS, open redirect), re-tests them via the
+    finding verifier, and promotes/rejects them based on results.
+
+    This is the CLI/local mode equivalent of the orchestration layer's
+    ``run_verification()`` method, but uses the existing SQLite repos and
+    finding verifier directly.
+
+    Args:
+        finding_repo: SQLite finding repository.
+        engagement_id: Engagement UUID.
+        confidence_threshold: Only verify findings below this confidence.
+        max_to_verify: Max findings to verify per engagement.
+    """
+    # Verifiable finding types (ones with registered verifiers)
+    verifiable_types = _VERIFIABLE_FINDING_TYPES
+
+    # Priority mapping: verifier confidence → new confidence score
+    _VERIFIER_CONFIDENCE_MAP = {
+        "high": 0.85,
+        "medium": 0.65,
+        "low": 0.35,
+    }
+
+    try:
+        # Load all findings for this engagement
+        findings, total = finding_repo.get_findings_by_engagement(
+            engagement_id, limit=1000
+        )
+
+        # Filter to low-confidence, verifiable findings
+        to_verify = [
+            f for f in findings
+            if (f.get("confidence") or 0) < confidence_threshold
+            and (f.get("type") or "").lower().replace("-", "_").replace(" ", "_") in verifiable_types
+        ]
+
+        if not to_verify:
+            logger.info(
+                "Auto-verify: no low-confidence verifiable findings (%d total)",
+                total,
+            )
+            return
+
+        # Limit to max_to_verify
+        to_verify = to_verify[:max_to_verify]
+
+        logger.info(
+            "Auto-verify: verifying %d low-confidence finding(s) "
+            "(confidence < %.2f)...",
+            len(to_verify),
+            confidence_threshold,
+        )
+
+        import asyncio
+
+        async def _run_verifications() -> list[dict]:
+            """Run all verifications concurrently."""
+            from tools.finding_verifier import verify_finding as _vf
+
+            results = await asyncio.gather(
+                *(_vf(dict(f), engagement_id=engagement_id) for f in to_verify),
+                return_exceptions=True,
+            )
+            return results
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None:
+            import threading
+
+            results_container: list = []
+            done_event = threading.Event()
+
+            def _run_in_thread():
+                inner = asyncio.new_event_loop()
+                try:
+                    res = inner.run_until_complete(_run_verifications())
+                    results_container.extend(res if isinstance(res, list) else [res])
+                finally:
+                    inner.close()
+                    done_event.set()
+
+            thread = threading.Thread(target=_run_in_thread, daemon=True)
+            thread.start()
+            thread.join(timeout=60)
+            results = results_container
+        else:
+            results = asyncio.run(_run_verifications())
+
+        # Process verification results
+        verified_count = 0
+        confirmed_count = 0
+        rejected_count = 0
+
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.debug(
+                    "Auto-verify failed for finding %s: %s",
+                    to_verify[i].get("id", "?")[:8],
+                    result,
+                )
+                continue
+
+            if i >= len(to_verify):
+                break
+
+            original = to_verify[i]
+            verification = result.get("verification", {})
+            verified = verification.get("verified", False)
+            verifier_confidence = verification.get("confidence", "low")
+
+            # Determine new confidence based on verifier result
+            new_confidence = _VERIFIER_CONFIDENCE_MAP.get(
+                verifier_confidence,
+                0.35,
+            )
+
+            try:
+                from tools.verification.finding_promoter import promote_finding
+
+                promoted = promote_finding(
+                    original,
+                    confidence=min(new_confidence, 1.0),
+                    reproduced=bool(verified),
+                )
+
+                if promoted.get("status") == "CONFIRMED":
+                    confirmed_count += 1
+                elif promoted.get("status") == "REJECTED":
+                    rejected_count += 1
+
+                # Update finding in SQLite (use original source_tool so
+                # the upsert matches the existing finding's UNIQUE constraint
+                # on (engagement_id, endpoint, type, source_tool))
+                finding_repo.create_finding(
+                    engagement_id=engagement_id,
+                    finding_type=original.get("type", ""),
+                    severity=original.get("severity", "INFO"),
+                    endpoint=original.get("endpoint", ""),
+                    evidence={
+                        **(original.get("evidence") or {}),
+                        "verification": verification,
+                        "verification_status": promoted.get("status", "UNKNOWN"),
+                    },
+                    confidence=min(new_confidence, 1.0),
+                    source_tool=original.get("source_tool", "verification"),
+                )
+
+                verified_count += 1
+            except Exception as e:
+                logger.debug(
+                    "Failed to promote finding %s: %s",
+                    original.get("id", "?")[:8],
+                    e,
+                )
+
+        if verified_count > 0:
+            logger.info(
+                "Auto-verify complete: %d verified, "
+                "%d confirmed, %d rejected",
+                verified_count,
+                confirmed_count,
+                rejected_count,
+            )
+        else:
+            logger.info(
+                "Auto-verify: no findings could be verified "
+                "(verifiers may require network access to target)"
+            )
+
+    except ImportError as e:
+        logger.debug("Auto-verify unavailable: %s", e)
+    except Exception as e:
+        logger.debug("Auto-verify failed: %s", e)
 
 
 def _output_results(engagement_id: str, target: str, finding_repo: Any, output_path: str | None) -> None:
@@ -840,6 +1039,294 @@ def cmd_resume(args: argparse.Namespace) -> int:
             del os.environ["ARGUS_LOCAL_MODE"]
 
 
+def cmd_verify(args: argparse.Namespace) -> int:
+    """Re-verify engagement findings and produce a remediation diff.
+
+    Loads all findings for an engagement, re-runs the finding verifier
+    on each verifiable finding (SQLi, XSS, open redirect), compares
+    results with original findings, and produces a structured diff
+    showing which findings are still present, which are fixed, and
+    which are new.
+
+    Usage:
+        argus verify <engagement_id>
+        argus verify <engagement_id> --output verify-report.json
+        argus verify <engagement_id> --local
+        argus verify <engagement_id> --db assessments.db
+    """
+    import copy
+
+    from database.sqlite_backend import SQLiteEngagementRepo, SQLiteFindingRepo
+
+    db_path = _apply_local_mode(getattr(args, "local", False), getattr(args, "db", None))
+    engagement_id = args.engagement_id
+    output_path = getattr(args, "output", None)
+
+    try:
+        # Load engagement and findings
+        eng_repo = SQLiteEngagementRepo(db_path)
+        finding_repo = SQLiteFindingRepo(db_path)
+
+        eng = eng_repo.find_by_id(engagement_id)
+        if eng is None:
+            logger.error("Engagement %s not found", engagement_id[:8])
+            print(f"Error: Engagement {engagement_id[:8]} not found.")
+            eng_repo.close()
+            finding_repo.close()
+            return 1
+
+        findings, total = finding_repo.get_findings_by_engagement(
+            engagement_id, limit=1000
+        )
+
+        if not findings:
+            logger.info("No findings found for engagement %s", engagement_id[:8])
+            print(f"Engagement {engagement_id[:8]} has no findings to verify.")
+            eng_repo.close()
+            finding_repo.close()
+            return 0
+
+        # Verifiable finding types (ones with registered verifiers)
+        verifiable_types = _VERIFIABLE_FINDING_TYPES
+
+        # Snapshot original state
+        original_map: dict[str, dict] = {}
+        for f in findings:
+            ftype = (f.get("type") or "").lower().replace("-", "_").replace(" ", "_")
+            if ftype in verifiable_types:
+                key = (f.get("endpoint", ""), ftype)
+                original_map[key] = copy.deepcopy(f)
+
+        if not original_map:
+            logger.info(
+                "No verifiable findings (SQLi/XSS/OpenRedirect) for engagement %s",
+                engagement_id[:8],
+            )
+            print(f"No verifiable findings found for engagement {engagement_id[:8]}.")
+            eng_repo.close()
+            finding_repo.close()
+            return 0
+
+        logger.info(
+            "Re-verifying %d finding(s) for engagement %s...",
+            len(original_map),
+            engagement_id[:8],
+        )
+
+        # ── Re-run verification ──
+        import asyncio
+
+        findings_list = list(original_map.values())
+
+        async def _run_verifications() -> list[dict]:
+            from tools.finding_verifier import verify_finding as _vf
+
+            results = await asyncio.gather(
+                *(_vf(dict(f), engagement_id=engagement_id) for f in findings_list),
+                return_exceptions=True,
+            )
+            return results
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None:
+            import threading
+            results_container: list = []
+            done_event = threading.Event()
+
+            def _run_in_thread():
+                inner = asyncio.new_event_loop()
+                try:
+                    res = inner.run_until_complete(_run_verifications())
+                    results_container.extend(res if isinstance(res, list) else [res])
+                finally:
+                    inner.close()
+                    done_event.set()
+
+            thread = threading.Thread(target=_run_in_thread, daemon=True)
+            thread.start()
+            thread.join(timeout=120)
+            results = results_container
+        else:
+            results = asyncio.run(_run_verifications())
+
+        # ── Compute diff ──
+        still_present: list[dict] = []
+        fixed: list[dict] = []
+        verification_errors: list[dict] = []
+        unchanged: list[dict] = []
+
+        for i, result in enumerate(results):
+            if i >= len(findings_list):
+                break
+            original = findings_list[i]
+
+            if isinstance(result, Exception):
+                verification_errors.append({
+                    "finding": original,
+                    "error": str(result),
+                })
+                unchanged.append(original)
+                continue
+
+            verification = result.get("verification", {})
+            verified = verification.get("verified", False)
+            reason = verification.get("reason", "")
+            verifier_confidence = verification.get("confidence", "low")
+
+            entry = {
+                "endpoint": original.get("endpoint", ""),
+                "type": original.get("type", ""),
+                "original_severity": original.get("severity", "INFO"),
+                "original_confidence": original.get("confidence", 0),
+                "verifier_confidence": verifier_confidence,
+                "verified": verified,
+                "reason": reason,
+                "original_status": original.get("status", "UNKNOWN"),
+            }
+
+            if verified:
+                entry["status"] = "STILL_PRESENT"
+                still_present.append(entry)
+            elif verifier_confidence == "low" and not verified:
+                # If verifier couldn't reproduce (likely fixed or changed)
+                entry["status"] = "NOT_REPRODUCED"
+                fixed.append(entry)
+            else:
+                entry["status"] = "VERIFICATION_INCONCLUSIVE"
+                unchanged.append(entry)
+
+        # ── Update findings in SQLite with verification evidence ──
+        for entry in still_present:
+            original = original_map.get((entry["endpoint"], entry["type"].lower().replace("-", "_").replace(" ", "_")), {})
+            if original:
+                try:
+                    from tools.verification.finding_promoter import promote_finding
+                    promoted = promote_finding(
+                        original,
+                        confidence=0.85,  # verified → high confidence
+                        reproduced=True,
+                    )
+                    finding_repo.create_finding(
+                        engagement_id=engagement_id,
+                        finding_type=original.get("type", ""),
+                        severity=original.get("severity", "INFO"),
+                        endpoint=original.get("endpoint", ""),
+                        evidence={
+                            **(original.get("evidence") or {}),
+                            "remediation_verification": {
+                                "verified": True,
+                                "status": "STILL_PRESENT",
+                                "reason": entry["reason"],
+                                "timestamp": __import__("time").time(),
+                            },
+                        },
+                        confidence=0.85,
+                        source_tool=original.get("source_tool", "verification"),
+                    )
+                except Exception as e:
+                    logger.debug("Failed to update finding: %s", e)
+
+        for entry in fixed:
+            original = original_map.get((entry["endpoint"], entry["type"].lower().replace("-", "_").replace(" ", "_")), {})
+            if original:
+                try:
+                    finding_repo.create_finding(
+                        engagement_id=engagement_id,
+                        finding_type=original.get("type", ""),
+                        severity=original.get("severity", "INFO"),
+                        endpoint=original.get("endpoint", ""),
+                        evidence={
+                            **(original.get("evidence") or {}),
+                            "remediation_verification": {
+                                "verified": False,
+                                "status": "FIXED",
+                                "reason": entry["reason"],
+                                "timestamp": __import__("time").time(),
+                            },
+                        },
+                        confidence=0.15,  # very low confidence → likely fixed
+                        source_tool=original.get("source_tool", "verification"),
+                    )
+                except Exception as e:
+                    logger.debug("Failed to update finding: %s", e)
+
+        # ── Build and output diff report ──
+        diff_report = {
+            "engagement_id": engagement_id,
+            "target": eng.get("target_url", ""),
+            "timestamp": __import__("time").time(),
+            "summary": {
+                "total_original": len(original_map),
+                "still_present": len(still_present),
+                "fixed": len(fixed),
+                "verification_errors": len(verification_errors),
+                "unchanged": len(unchanged),
+            },
+            "still_present": still_present,
+            "fixed": fixed,
+            "verification_errors": verification_errors,
+        }
+
+        # Print summary
+        print("\n  Remediation Verification Report")
+        print(f"  {'=' * 54}")
+        print(f"  Engagement:  {engagement_id[:8]}")
+        print(f"  Target:      {eng.get('target_url', '')}")
+        print(f"  Findings:    {len(original_map)} verifiable, "
+              f"{diff_report['summary']['still_present']} still present, "
+              f"{diff_report['summary']['fixed']} fixed")
+        print()
+
+        if still_present:
+            print(f"  {'Still Present':^54}")
+            print(f"  {'-' * 54}")
+            for f in still_present:
+                print(f"    [{f['original_severity']}] {f['type']} @ {f['endpoint'][:50]}")
+            print()
+
+        if fixed:
+            print(f"  {'Fixed / Not Reproduced':^54}")
+            print(f"  {'-' * 54}")
+            for f in fixed:
+                print(f"    [{f['original_severity']}] {f['type']} @ {f['endpoint'][:50]}")
+            print()
+
+        if verification_errors:
+            print(f"  {'Verification Errors':^54}")
+            print(f"  {'-' * 54}")
+            for f in verification_errors:
+                print(f"    {f['finding'].get('type', '?')} @ {f['finding'].get('endpoint', '?')[:40]}: {f['error'][:40]}")
+            print()
+
+        # Save to file if requested
+        if output_path:
+            import json as _json
+            with open(output_path, "w") as f:
+                _json.dump(diff_report, f, indent=2, default=str)
+            logger.info("Verification report written to %s", output_path)
+        else:
+            import json as _json
+            print(_json.dumps(diff_report, indent=2, default=str))
+
+        eng_repo.close()
+        finding_repo.close()
+        logger.info(
+            "Verification complete: %d still present, %d fixed",
+            len(still_present),
+            len(fixed),
+        )
+        return 0
+
+    except Exception as e:
+        logger.error("Verification failed: %s", e)
+        print(f"Error: Verification failed: {e}")
+        return 1
+
+
 def cmd_trends(args: argparse.Namespace) -> int:
     """Show cross-engagement trend analysis.
 
@@ -1316,6 +1803,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable LLM-driven replanning between phases (requires LLM API key)",
     )
 
+    # argus verify
+    verify_parser = subparsers.add_parser(
+        "verify", help="Re-verify findings and produce remediation diff report"
+    )
+    verify_parser.add_argument(
+        "engagement_id", help="Engagement UUID to verify"
+    )
+    verify_parser.add_argument(
+        "--output", "-o", default=None,
+        help="Output verification report to file (JSON)",
+    )
+    verify_parser.add_argument(
+        "--local", action="store_true",
+        help="Use SQLite from local mode (reads from ~/.argus/assessments/assessments.db)",
+    )
+    verify_parser.add_argument(
+        "--db", "-d", default=None,
+        help="SQLite database path",
+    )
+
     # argus trends
     trends_parser = subparsers.add_parser(
         "trends", help="Show cross-engagement trend analysis"
@@ -1373,6 +1880,7 @@ def main() -> int:
         "health": cmd_health,
         "resume": cmd_resume,
         "trends": cmd_trends,
+        "verify": cmd_verify,
         "init": cmd_init,
     }
 

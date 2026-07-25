@@ -188,11 +188,22 @@ export class StoredXSSVerifier implements VerificationScenario {
     return {
       passed: this.payloadExecuted,
       confidence: this.payloadExecuted ? Confidence.HIGH : Confidence.INFORMATIONAL,
+      confidenceScore: this.computeConfidence(),
       evidence: [],
       summary: this.payloadExecuted
         ? `Stored XSS confirmed: payload rendered on victim view ${this.victimViewUrl}`
         : `Stored XSS not detected — payload did not execute on victim view`,
     }
+  }
+
+  /**
+   * Compute graded confidence score (0.0-1.0) from signal strength.
+   * XSS with actual execution (tag markers in innerHTML) = very high confidence.
+   */
+  private computeConfidence(): number {
+    if (!this.payloadExecuted) return 0.0
+    // payloadExecuted is already set based on tag/attr markers in unescaped innerHTML
+    return 0.9
   }
 
   async collectEvidence(): Promise<EvidencePackage> {

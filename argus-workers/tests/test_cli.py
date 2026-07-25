@@ -24,14 +24,14 @@ class TestBuildParser:
         assert parser.prog == "argus"
 
     def test_parser_has_all_subcommands(self):
-        """All 7 commands are registered as subparsers."""
+        """All 8 commands are registered as subparsers."""
         parser = build_parser()
         # Access subparsers via _subparsers internal (no public API for this)
         actions = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)]
         assert len(actions) == 1
         subparsers = actions[0].choices
         assert set(subparsers.keys()) == {
-            "assess", "scan", "report", "list", "health", "resume", "trends",
+            "assess", "init", "scan", "report", "list", "health", "resume", "trends", "verify",
         }
 
     def test_main_no_command_prints_help(self):

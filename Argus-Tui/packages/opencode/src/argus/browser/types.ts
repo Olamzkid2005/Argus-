@@ -14,6 +14,7 @@ export interface VerificationScenario {
 export interface VerifierResult {
   passed: boolean
   confidence: Confidence
+  confidenceScore: number  // 0.0-1.0 float — graded confidence (survives downstream into VerificationResult)
   evidence: EvidencePackage[]
   summary: string
 }

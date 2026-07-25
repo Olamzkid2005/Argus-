@@ -163,9 +163,22 @@ export class JWTVerifier implements VerificationScenario {
       confidence: passed && this.noneAlgorithmAccepted ? Confidence.HIGH
         : passed ? Confidence.MEDIUM
         : Confidence.INFORMATIONAL,
+      confidenceScore: this.computeConfidence(passed),
       evidence: [],
       summary,
     }
+  }
+
+  /**
+   * Compute graded confidence score (0.0-1.0) from signal strength.
+   * "alg:none" accepted = very high confidence (critical vulnerability).
+   * Tampered payload accepted = high confidence.
+   */
+  private computeConfidence(passed: boolean): number {
+    if (!passed) return 0.0
+    if (this.noneAlgorithmAccepted) return 0.95
+    if (this.payloadTamperSucceeded) return 0.7
+    return 0.5
   }
 
   async collectEvidence(): Promise<EvidencePackage> {
