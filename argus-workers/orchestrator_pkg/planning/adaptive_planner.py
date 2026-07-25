@@ -2798,9 +2798,8 @@ class AdaptiveWorkflowPlanner:
         if hypothesis_tools:
             for phase in plan.phases:
                 phase_tool_names = {t.tool_name for t in phase.tools}
-                if phase_tool_names & hypothesis_tools:
-                    if not phase.activation_reason.endswith(" (hypothesis-driven)"):
-                        phase.activation_reason += " (hypothesis-driven)"
+                if phase_tool_names & hypothesis_tools and not phase.activation_reason.endswith(" (hypothesis-driven)"):
+                    phase.activation_reason += " (hypothesis-driven)"
 
             logger.info(
                 "[AdaptivePlanner] apply_hypotheses_to_plan: %d hypothesis tool(s) "

@@ -25,7 +25,6 @@ Design
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -255,8 +254,8 @@ def _activate_phase(plan, phase_name: str, hypothesis: dict) -> None:
         ValueError: If phase_name is not recognized.
     """
     from orchestrator_pkg.planning.adaptive_planner import (
-        ToolTask,
         TestingPhase,
+        ToolTask,
     )
 
     confidence = hypothesis.get("confidence", 0.5)

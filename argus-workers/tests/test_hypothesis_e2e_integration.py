@@ -17,6 +17,7 @@ the real HypothesisEngine and bridge code without mocking internals.
 from __future__ import annotations
 
 import pytest
+
 from orchestrator_pkg.planning.adaptive_planner import WorkflowPlan
 from orchestrator_pkg.planning.hypothesis_planning_bridge import (
     update_plan_from_hypotheses,
@@ -307,7 +308,6 @@ class TestHypothesisE2EIntegration:
         initial_names = {p.name for p in seeded_plan.phases}
 
         update_plan_from_hypotheses(seeded_plan, hypotheses)
-        current_names = {p.name for p in seeded_plan.phases}
 
         # Every original phase should still be present exactly once
         for name in initial_names:
@@ -315,14 +315,6 @@ class TestHypothesisE2EIntegration:
             assert count == 1, (
                 f"Phase '{name}' was duplicated! Count: {count}"
             )
-
-        # If a hypothesis happened to match an existing phase, it should
-        # be annotated. Otherwise, the phase stays as-is.
-        for phase in seeded_plan.phases:
-            if phase.name in initial_names:
-                # Existing phase: may or may not be annotated depending
-                # on whether a hypothesis matched it — that's OK
-                pass
 
         # New phases should have been added from non-duplicate hypotheses
         assert len(seeded_plan.phases) > len(initial_names), (
@@ -426,8 +418,8 @@ class TestHypothesisE2EPhaseActivation:
             assert len(phase.tools) >= 1
             for tool in phase.tools:
                 # Verify ToolTask is properly constructed (names may change)
-                from orchestrator_pkg.planning.adaptive_planner import ToolTask as _TT
-                assert isinstance(tool, _TT), f"Expected ToolTask, got {type(tool)}"
+                from orchestrator_pkg.planning.adaptive_planner import ToolTask
+                assert isinstance(tool, ToolTask), f"Expected ToolTask, got {type(tool)}"
                 assert isinstance(tool.tool_name, str) and tool.tool_name
                 assert isinstance(tool.timeout, int) and tool.timeout > 0
                 assert isinstance(tool.args_template, list) and len(tool.args_template) > 0
