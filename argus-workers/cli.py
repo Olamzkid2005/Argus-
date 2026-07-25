@@ -320,6 +320,30 @@ def _run_phases(
             if status == "completed" and phase_name == "scan":
                 _auto_verify_findings(finding_repo, engagement_id)
 
+            # ── Hypothesis-driven phase activation after scan ───────────
+            if status == "completed" and phase_name == "scan":
+                try:
+                    from orchestrator_pkg.planning.hypothesis_planning_bridge import (
+                        apply_hypothesis_engine,
+                    )
+                    all_findings, _ = finding_repo.get_findings_by_engagement(
+                        engagement_id, limit=500
+                    )
+                    adaptive_plan = getattr(orch, "_adaptive_plan", None)
+                    if adaptive_plan is not None and all_findings:
+                        hypotheses = apply_hypothesis_engine(
+                            adaptive_plan, all_findings, engagement_id
+                        )
+                        if hypotheses:
+                            logger.info(
+                                "Hypothesis engine: %d hypothesis(es) generated "
+                                "from %d finding(s)",
+                                len(hypotheses),
+                                len(all_findings),
+                            )
+                except Exception:
+                    logger.debug("Hypothesis integration failed", exc_info=True)
+
         except Exception as e:
             logger.error("Phase %s failed: %s", phase_name, e)
             phase_results.append({
