@@ -2758,52 +2758,86 @@ class AdaptiveWorkflowPlanner:
         plan: WorkflowPlan,
         hypotheses: list[dict],
     ) -> WorkflowPlan:
-        """Mark phases as hypothesis-driven based on predicted vulnerabilities.
+        """Apply hypotheses to the plan — annotate existing phases AND activate new ones.
 
+        Two-phase approach:
+
+        **Phase 1 — Annotate existing phases:**
         Examines each hypothesis's ``suggested_tools`` to find phases whose
         tool names overlap with hypothesis tools, then appends a note to those
         phases' ``activation_reason``. This makes the plan reflect predicted
         attack vectors in the LLM agent context.
 
-        Currently only updates already-active phases (does not activate
-        previously-skipped phases). If deeper hypothesis-to-phase activation
-        is needed, extend this method to create new ``TestingPhase`` instances
-        from ``self.phase_defs`` for matching skipped phases.
+        **Phase 2 — Activate new phases:**
+        Uses the hypothesis-planning bridge's ``update_plan_from_hypotheses()``
+        to activate new TestingPhase instances based on tool, CWE, and
+        description keyword mappings. This extends the plan with phases that
+        the initial recon signal analysis didn't trigger.
 
         Args:
             plan: The current WorkflowPlan to update.
             hypotheses: List of hypothesis dicts from HypothesisEngine.
-                Each dict should have ``suggested_tools`` (list[str]).
+                Each dict should have ``suggested_tools`` (list[str]),
+                ``confidence`` (float 0-1), ``root_cause_key`` (str),
+                and ``description`` (str).
 
         Returns:
-            Updated WorkflowPlan with hypothesis-driven markers on phases.
+            Updated WorkflowPlan with hypothesis-driven markers on phases
+            and any newly activated phases.
         """
         if not plan or not hypotheses:
             return plan
 
-        # Build a set of tool names mentioned across all hypotheses
+        # ── Phase 1: Annotate existing phases ──
         hypothesis_tools: set[str] = set()
         for h in hypotheses:
             suggested = h.get("suggested_tools", [])
             if isinstance(suggested, list):
                 hypothesis_tools.update(suggested)
 
-        if not hypothesis_tools:
-            return plan
+        if hypothesis_tools:
+            for phase in plan.phases:
+                phase_tool_names = {t.tool_name for t in phase.tools}
+                if phase_tool_names & hypothesis_tools:
+                    if not phase.activation_reason.endswith(" (hypothesis-driven)"):
+                        phase.activation_reason += " (hypothesis-driven)"
 
-        # Mark any phase whose tool names overlap with hypothesis tools
-        for phase in plan.phases:
-            phase_tool_names = {t.tool_name for t in phase.tools}
-            if phase_tool_names & hypothesis_tools:
-                if not phase.activation_reason.endswith(" (hypothesis-driven)"):
-                    phase.activation_reason += " (hypothesis-driven)"
+            logger.info(
+                "[AdaptivePlanner] apply_hypotheses_to_plan: %d hypothesis tool(s) "
+                "matched against %d active phase(s)",
+                len(hypothesis_tools),
+                len(plan.phases),
+            )
 
-        logger.info(
-            "[AdaptivePlanner] apply_hypotheses_to_plan: %d hypothesis tool(s) "
-            "matched against %d active phase(s)",
-            len(hypothesis_tools),
-            len(plan.phases),
-        )
+        # ── Phase 2: Activate new phases ──
+        try:
+            from orchestrator_pkg.planning.hypothesis_planning_bridge import (
+                update_plan_from_hypotheses as _bridge_update,
+            )
+
+            old_count = len(plan.phases)
+            _bridge_update(plan, hypotheses)
+            new_count = len(plan.phases)
+            activated = new_count - old_count
+            if activated > 0:
+                new_names = [p.name for p in plan.phases[old_count:]]
+                logger.info(
+                    "[AdaptivePlanner] apply_hypotheses_to_plan: activated %d new "
+                    "hypothesis-driven phase(s): %s",
+                    activated,
+                    ", ".join(new_names),
+                )
+        except ImportError:
+            logger.debug(
+                "[AdaptivePlanner] hypothesis-planning bridge not available — "
+                "skipping new phase activation"
+            )
+        except Exception as exc:
+            logger.debug(
+                "[AdaptivePlanner] hypothesis-planning bridge failed (non-fatal): %s",
+                exc,
+            )
+
         return plan
 
     def get_plan_summary(self, plan: WorkflowPlan) -> dict:
