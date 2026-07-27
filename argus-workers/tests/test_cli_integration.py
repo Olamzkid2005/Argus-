@@ -23,9 +23,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 
 def _run_argus(*args: str, timeout: int = 30, env: dict | None = None) -> subprocess.CompletedProcess:
-    """Run ``cli.py <args>`` as a subprocess and return the result.
+    """Run ``python -m cli <args>`` as a subprocess and return the result.
 
-    Uses the current Python interpreter and the project's cli.py module.
+    Uses the current Python interpreter and the project's cli package.
     Captures both stdout and stderr.
 
     Args:
@@ -36,14 +36,15 @@ def _run_argus(*args: str, timeout: int = 30, env: dict | None = None) -> subpro
     Returns:
         ``subprocess.CompletedProcess`` with stdout, stderr, returncode.
     """
-    cli_path = os.path.join(os.path.dirname(__file__), "..", "cli.py")
-    cmd = [sys.executable, cli_path] + list(args)
+    workers_dir = os.path.join(os.path.dirname(__file__), "..")
+    cmd = [sys.executable, "-m", "cli"] + list(args)
     return subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         timeout=timeout,
         env=env,
+        cwd=workers_dir,
     )
 
 
