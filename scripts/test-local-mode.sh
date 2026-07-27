@@ -24,7 +24,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Target: use arg $1 or default test target
 TARGET="${1:-http://testphp.vulnweb.com}"
-CLI_PY="$PROJECT_ROOT/argus-workers/cli.py"
+CLI_DIR="$PROJECT_ROOT/argus-workers"
+CLI_CMD="python3 -m cli"
 DB_PATH="/tmp/argus-smoke-test-$$.db"
 OUTPUT_PATH="/tmp/argus-smoke-test-$$-output.json"
 
@@ -58,7 +59,7 @@ echo ""
 
 # ── Test 1: CLI --help works ──
 info "Test 1: CLI --help produces output..."
-HELP_OUTPUT=$(python3 "$CLI_PY" --help 2>&1 || true)
+HELP_OUTPUT=$(cd "$CLI_DIR" && $CLI_CMD --help 2>&1 || true)
 if echo "$HELP_OUTPUT" | grep -q "usage:"; then
     ok "CLI --help shows usage"
 else
@@ -67,7 +68,7 @@ fi
 
 # ── Test 2: assess --help works ──
 info "Test 2: assess --help produces output..."
-ASSESS_HELP=$(python3 "$CLI_PY" assess --help 2>&1 || true)
+ASSESS_HELP=$(cd "$CLI_DIR" && $CLI_CMD assess --help 2>&1 || true)
 if echo "$ASSESS_HELP" | grep -q "\-\-local"; then
     ok "assess --help shows --local flag"
 else
@@ -76,7 +77,7 @@ fi
 
 # ── Test 3: scan --help works ──
 info "Test 3: scan --help produces output..."
-SCAN_HELP=$(python3 "$CLI_PY" scan --help 2>&1 || true)
+SCAN_HELP=$(cd "$CLI_DIR" && $CLI_CMD scan --help 2>&1 || true)
 if echo "$SCAN_HELP" | grep -q "\-\-local"; then
     ok "scan --help shows --local flag"
 else
@@ -85,7 +86,7 @@ fi
 
 # ── Test 4: report --help works ──
 info "Test 4: report --help produces output..."
-REPORT_HELP=$(python3 "$CLI_PY" report --help 2>&1 || true)
+REPORT_HELP=$(cd "$CLI_DIR" && $CLI_CMD report --help 2>&1 || true)
 if echo "$REPORT_HELP" | grep -q "\-\-local"; then
     ok "report --help shows --local flag"
 else
@@ -94,7 +95,7 @@ fi
 
 # ── Test 5: list --help works ──
 info "Test 5: list --help produces output..."
-LIST_HELP=$(python3 "$CLI_PY" list --help 2>&1 || true)
+LIST_HELP=$(cd "$CLI_DIR" && $CLI_CMD list --help 2>&1 || true)
 if echo "$LIST_HELP" | grep -q "\-\-local"; then
     ok "list --help shows --local flag"
 else
@@ -103,7 +104,7 @@ fi
 
 # ── Test 6: list --local shows empty (no assessments yet) ──
 info "Test 6: list --local with no assessments..."
-LIST_OUTPUT=$(python3 "$CLI_PY" list --db "$DB_PATH" 2>&1 || true)
+LIST_OUTPUT=$(cd "$CLI_DIR" && $CLI_CMD list --db "$DB_PATH" 2>&1 || true)
 if echo "$LIST_OUTPUT" | grep -q "No engagements found"; then
     ok "list shows no engagements on fresh database"
 else
@@ -116,7 +117,7 @@ info "      This may take a few minutes if tools (nuclei, httpx, etc.) are avail
 info "      It will gracefully degrade if tools are missing."
 
 set +e
-ASSESS_OUTPUT=$(python3 "$CLI_PY" assess "$TARGET" \
+ASSESS_OUTPUT=$(cd "$CLI_DIR" && $CLI_CMD assess "$TARGET" \
     --db "$DB_PATH" \
     --output "$OUTPUT_PATH" \
     --aggressiveness light \
@@ -177,7 +178,7 @@ fi
 # ── Test 9: report --local shows JSON output ──
 info "Test 9: report --local retrieves findings..."
 # Find the engagement ID from the output
-ENG_ID=$(python3 -c "
+ENG_ID=$(cd "$CLI_DIR" && python3 -c "
 import json
 try:
     with open('$OUTPUT_PATH') as f:
