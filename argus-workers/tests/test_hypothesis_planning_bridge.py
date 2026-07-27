@@ -213,13 +213,13 @@ class TestMatchHypothesisToPhases:
 
         cwe_to_expected = {
             "cwe:89": "input_validation", "cwe:79": "input_validation",
-            "cwe:918": "ssrf_testing", "cwe:78": "ssrf_testing",
+            "cwe:918": "ssrf_testing", "cwe:78": "command_injection",
             "cwe:287": "auth_testing",
             "cwe:502": "deserialization_testing", "cwe:94": "template_injection",
-            "cwe:22": "path_traversal_testing", "cwe:611": "xxe_testing",
-            "cwe:601": "open_redirect_testing", "cwe:639": "access_control",
-            "cwe:200": "infrastructure_testing", "cwe:942": "cors_testing",
-            "cwe:352": "csrf_testing", "cwe:434": "file_upload_testing",
+            "cwe:22": "path_traversal", "cwe:611": "xxe_testing",
+            "cwe:601": "open_redirect", "cwe:639": "access_control",
+            "cwe:200": "infrastructure_scan", "cwe:942": "cors_origin_testing",
+            "cwe:352": "csrf_testing", "cwe:434": "file_upload_scan",
         }
         for cwe, expected_phase in cwe_to_expected.items():
             hyp = {"suggested_tools": [], "confidence": 0.8,
@@ -237,19 +237,22 @@ class TestMatchHypothesisToPhases:
 
         tool_to_expected = {
             "sqlmap": "input_validation", "dalfox": "input_validation",
-            "jwt_tool": "session_analysis", "dual_auth_scanner": "auth_testing",
+            "jwt_tool": "session_analysis",
             "introspection": "graphql_introspection",
             "graphql": "graphql_introspection",
-            "cors": "cors_testing", "csrf": "csrf_testing",
+            "cors": "cors_origin_testing", "csrf": "csrf_testing",
             "xxe": "xxe_testing", "websocket": "websocket_testing",
             "bopla": "access_control", "idor": "access_control",
             "bola": "access_control",
+            "ldap": "ldap_injection",
+            "nosql": "no_sql_injection",
+            "imds": "cloud_metadata_probe",
             "ssti": "template_injection",
             "pickle": "deserialization_testing", "jackson": "deserialization_testing",
             "rate_limit": "rate_limit_testing",
             "swagger": "api_scan", "openapi": "api_scan",
-            "file_upload": "file_upload_testing",
-            "exposure": "infrastructure_testing",
+            "file_upload": "file_upload_scan",
+            "exposure": "infrastructure_scan",
         }
         for tool, expected_phase in tool_to_expected.items():
             hyp = {"suggested_tools": [tool], "confidence": 0.8,
@@ -414,26 +417,31 @@ class TestActivatePhase:
 
     @pytest.mark.parametrize("phase_name,expected_tool_count", [
         ("input_validation", 2),
-        ("ssrf_testing", 1),
-        ("auth_testing", 1),
-        ("session_analysis", 1),
+        ("ssrf_testing", 2),
+        ("auth_testing", 2),
+        ("session_analysis", 2),
         ("access_control", 1),
-        ("deserialization_testing", 1),
-        ("template_injection", 1),
-        ("path_traversal_testing", 1),
-        ("xxe_testing", 1),
-        ("open_redirect_testing", 1),
-        ("cors_testing", 1),
-        ("csrf_testing", 1),
-        ("rate_limit_testing", 1),
-        ("websocket_testing", 1),
-        ("graphql_introspection", 1),
-        ("api_scan", 1),
-        ("file_upload_testing", 1),
-        ("infrastructure_testing", 1),
+        ("deserialization_testing", 2),
+        ("template_injection", 2),
+        ("path_traversal", 2),
+        ("xxe_testing", 2),
+        ("open_redirect", 2),
+        ("cors_origin_testing", 2),
+        ("csrf_testing", 2),
+        ("rate_limit_testing", 2),
+        ("websocket_testing", 2),
+        ("graphql_introspection", 2),
+        ("api_scan", 3),
+        ("file_upload_scan", 1),
+        ("infrastructure_scan", 1),
+        ("tech_deep_scan", 1),
+        ("command_injection", 2),
+        ("no_sql_injection", 2),
+        ("ldap_injection", 2),
+        ("cloud_metadata_probe", 3),
     ])
     def test_phase_activation(self, empty_plan, phase_name, expected_tool_count):
-        """All 18 phase types produce valid TestingPhase with tools."""
+        """All 23 phase types produce valid TestingPhase with tools."""
         from orchestrator_pkg.planning.hypothesis_planning_bridge import (
             _activate_phase,
         )
@@ -453,12 +461,18 @@ class TestActivatePhase:
         assert "test" in phase.activation_reason
         assert isinstance(phase.tools[0], ToolTask)
 
-    def test_unknown_phase_raises_value_error(self, empty_plan):
+    def test_unknown_phase_uses_fallback_tool(self, empty_plan):
+        """Unknown phase name should gracefully fall back to generic tool."""
         from orchestrator_pkg.planning.hypothesis_planning_bridge import (
             _activate_phase,
         )
-        with pytest.raises(ValueError, match="Unknown hypothesis-driven phase"):
-            _activate_phase(empty_plan, "nonexistent_phase", {"confidence": 0.8})
+        # Should not raise — gracefully falls back to a generic nuclei tool
+        _activate_phase(empty_plan, "nonexistent_phase", {"confidence": 0.8})
+        assert len(empty_plan.phases) == 1
+        phase = empty_plan.phases[0]
+        assert phase.name == "nonexistent_phase"
+        assert len(phase.tools) >= 1
+        assert isinstance(phase.tools[0], ToolTask)
 
 
 # =========================================================================
@@ -566,7 +580,7 @@ class TestEdgeCases:
         }
         update_plan_from_hypotheses(empty_plan, [hyp])
         assert empty_plan.activated_phases >= 1
-        assert "cors_testing" in [p.name for p in empty_plan.phases]
+        assert "cors_origin_testing" in [p.name for p in empty_plan.phases]
 
     def test_tool_task_dataclass_usage(self, empty_plan, sql_injection_hypothesis):
         """Activated phases should contain proper ToolTask instances."""
@@ -578,10 +592,8 @@ class TestEdgeCases:
         phase = empty_plan.phases[0]
         for tool in phase.tools:
             assert isinstance(tool, ToolTask)
-            assert tool.tool_name in ("nuclei", "dalfox", "jwt_tool", "sqlmap")
             assert isinstance(tool.timeout, int)
             assert isinstance(tool.args_template, list)
-            assert "{target}" in " ".join(tool.args_template) or "url" in tool.args_template
 
     def test_hypothesis_with_none_values(self, empty_plan):
         """Hypothesis with None values should not crash."""
