@@ -20,6 +20,8 @@ Design
   and root-cause keys
 - Non-destructive: only activates phases, never deactivates
 - Graceful degradation: empty hypotheses = no-op
+- Tool-task definitions are sourced from the phase modules in
+  ``orchestrator_pkg.planning.phases`` to avoid duplication
 """
 
 from __future__ import annotations
@@ -29,18 +31,65 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# ── Phase tool builders ────────────────────────────────────────────────
+
+
+def _get_phase_tools(phase_name: str, hypothesis: dict) -> list:
+    """Get tool tasks for a hypothesis-driven phase activation.
+
+    Looks up the phase in the canonical PHASE_DEFINITIONS registry
+    and calls its tools builder function directly. This avoids
+    duplicating function name construction logic and handles any
+    naming inconsistencies between phase names and tool function
+    names in the phase modules.
+
+    Falls back to generating a minimal default tool list if the
+    phase is not found in the registry.
+
+    Args:
+        phase_name: The phase name (must match PHASE_DEFINITIONS).
+        hypothesis: The hypothesis dict (unused for tool building,
+                    included for future extensibility).
+
+    Returns:
+        List of ToolTask instances.
+    """
+    from orchestrator_pkg.planning.phases._registry import PHASE_DEFINITIONS
+    from orchestrator_pkg.planning.phases._types import ToolTask
+
+    for pd in PHASE_DEFINITIONS:
+        if pd.name == phase_name:
+            return pd.tools_fn(None)
+
+    # Fallback: minimal generic tool
+    logger.debug(
+        "No phase definition for '%s' — using minimal fallback tool",
+        phase_name,
+    )
+    return [
+        ToolTask(
+            tool_name="nuclei",
+            description=f"{phase_name} (hypothesis-driven)",
+            priority=10,
+            timeout=300,
+            args_template=["-u", "{target}", "-jsonl", "-silent",
+                           "-severity", "medium,high,critical"],
+        ),
+    ]
+
+
 # ── Hypothesis-to-Phase Mapping ────────────────────────────────────────
 
 #: Maps hypothesis signals (tool names, CWE IDs, root-cause key prefixes)
 #: to the phase name that should be activated in the WorkflowPlan.
-#: Phase names must match AdaptiveWorkflowPlanner's PHASE_DEFINITIONS.
+#: Phase names MUST match AdaptiveWorkflowPlanner's PHASE_DEFINITIONS.
 _HYPOTHESIS_PHASE_MAP: dict[str, str] = {
-    # SQL injection signals → input_validation (deep injection testing)
+    # SQL injection signals → input_validation
     "sqlmap": "input_validation",
     "cwe:89": "input_validation",
     "sqli": "input_validation",
 
-    # XSS signals → input_validation (deep XSS testing)
+    # XSS signals → input_validation
     "dalfox": "input_validation",
     "cwe:79": "input_validation",
     "xss": "input_validation",
@@ -49,14 +98,13 @@ _HYPOTHESIS_PHASE_MAP: dict[str, str] = {
     "ssrf": "ssrf_testing",
     "cwe:918": "ssrf_testing",
 
-    # Command injection → ssrf_testing (overlaps with OOB testing)
-    "cwe:78": "ssrf_testing",
-    "command_injection": "ssrf_testing",
+    # Command injection → command_injection (was incorrectly mapped to ssrf_testing)
+    "cwe:78": "command_injection",
+    "command_injection": "command_injection",
 
-    # Auth signals → auth_testing
+    # Auth signals → auth_testing / session_analysis
     "jwt_tool": "session_analysis",
     "cwe:287": "auth_testing",
-    "dual_auth_scanner": "auth_testing",
     "jwt": "session_analysis",
     "credential": "auth_testing",
 
@@ -71,19 +119,19 @@ _HYPOTHESIS_PHASE_MAP: dict[str, str] = {
     "ssti": "template_injection",
     "template_injection": "template_injection",
 
-    # Path traversal → path_traversal_testing
-    "cwe:22": "path_traversal_testing",
-    "path_traversal": "path_traversal_testing",
-    "lfi": "path_traversal_testing",
+    # Path traversal → path_traversal (was incorrectly mapped to path_traversal_testing)
+    "cwe:22": "path_traversal",
+    "path_traversal": "path_traversal",
+    "lfi": "path_traversal",
 
     # XXE signals → xxe_testing
     "cwe:611": "xxe_testing",
     "xxe": "xxe_testing",
     "xml": "xxe_testing",
 
-    # Open redirect → open_redirect_testing
-    "cwe:601": "open_redirect_testing",
-    "open_redirect": "open_redirect_testing",
+    # Open redirect → open_redirect (was incorrectly mapped to open_redirect_testing)
+    "cwe:601": "open_redirect",
+    "open_redirect": "open_redirect",
 
     # IDOR / access control → access_control
     "cwe:639": "access_control",
@@ -92,15 +140,15 @@ _HYPOTHESIS_PHASE_MAP: dict[str, str] = {
     "privilege_escalation": "access_control",
     "bopla": "access_control",
 
-    # Information disclosure → infrastructure_testing
-    "cwe:200": "infrastructure_testing",
-    "info_disclosure": "infrastructure_testing",
-    "exposure": "infrastructure_testing",
+    # Information disclosure → infrastructure_scan (was incorrectly mapped to infrastructure_testing)
+    "cwe:200": "infrastructure_scan",
+    "info_disclosure": "infrastructure_scan",
+    "exposure": "infrastructure_scan",
 
-    # CORS → cors_testing
-    "cwe:942": "cors_testing",
-    "cors": "cors_testing",
-    "wildcard_cors": "cors_testing",
+    # CORS → cors_origin_testing (was incorrectly mapped to cors_testing)
+    "cwe:942": "cors_origin_testing",
+    "cors": "cors_origin_testing",
+    "wildcard_cors": "cors_origin_testing",
 
     # CSRF → csrf_testing
     "cwe:352": "csrf_testing",
@@ -124,9 +172,22 @@ _HYPOTHESIS_PHASE_MAP: dict[str, str] = {
     "openapi": "api_scan",
     "swagger": "api_scan",
 
-    # File upload → file_upload_testing
-    "file_upload": "file_upload_testing",
-    "cwe:434": "file_upload_testing",
+    # File upload → file_upload_scan (was incorrectly mapped to file_upload_testing)
+    "file_upload": "file_upload_scan",
+    "cwe:434": "file_upload_scan",
+
+    # NoSQL injection → no_sql_injection (new)
+    "cwe:943": "no_sql_injection",
+    "nosql": "no_sql_injection",
+    "mongodb": "no_sql_injection",
+
+    # LDAP injection → ldap_injection (new)
+    "cwe:90": "ldap_injection",
+    "ldap": "ldap_injection",
+
+    # Cloud metadata → cloud_metadata_probe (new)
+    "imds": "cloud_metadata_probe",
+    "cloud_metadata": "cloud_metadata_probe",
 }
 
 
@@ -243,293 +304,37 @@ def update_plan_from_hypotheses(plan, hypotheses: list[dict]) -> None:
 def _activate_phase(plan, phase_name: str, hypothesis: dict) -> None:
     """Activate a phase in the plan by adding a TestingPhase entry.
 
-    Uses standard tool tasks appropriate for the phase type.
+    Sources tool tasks from the corresponding phase module in
+    ``planning/phases/`` to avoid duplicating tool-task definitions.
 
     Args:
         plan: WorkflowPlan to modify.
-        phase_name: Name of the phase to activate.
+        phase_name: Name of the phase to activate (must match PHASE_DEFINITIONS).
         hypothesis: The hypothesis dict that triggered this activation.
 
     Raises:
-        ValueError: If phase_name is not recognized.
+        ValueError: If phase_name is not recognized (no matching phase module).
     """
     from orchestrator_pkg.planning.adaptive_planner import (
         TestingPhase,
-        ToolTask,
     )
 
     confidence = hypothesis.get("confidence", 0.5)
     root_key = hypothesis.get("root_cause_key", "unknown")
 
-    # Build tool tasks and description based on phase type
-    if phase_name == "input_validation":
-        tools = [
-            ToolTask(
-                tool_name="dalfox",
-                description="XSS scanning on input parameters (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["url", "{target}", "--json"],
-            ),
-            ToolTask(
-                tool_name="nuclei",
-                description="Injection vulnerability scanning (hypothesis-driven)",
-                priority=20,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "injection,sqli,lfi,ssrf,ssti"],
-            ),
-        ]
-        description = "Deep input validation testing (hypothesis-driven)"
+    # Get tools from the phase module — no more duplicating tool definitions here!
+    tools = _get_phase_tools(phase_name, hypothesis)
 
-    elif phase_name == "ssrf_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="SSRF scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "ssrf,blind-oob,oast,http-injection"],
-            ),
-        ]
-        description = "SSRF vulnerability testing (hypothesis-driven)"
-
-    elif phase_name == "auth_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="Auth vulnerability scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "auth,login,jwt,oauth,session"],
-            ),
-        ]
-        description = "Authentication testing (hypothesis-driven)"
-
-    elif phase_name == "session_analysis":
-        tools = [
-            ToolTask(
-                tool_name="jwt_tool",
-                description="JWT token analysis (hypothesis-driven)",
-                priority=10,
-                timeout=120,
-                args_template=["{target}", "-C", "-d"],
-            ),
-        ]
-        description = "Session token analysis (hypothesis-driven)"
-
-    elif phase_name == "access_control":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="IDOR/ACL scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "idor,privesc,acl,exposure"],
-            ),
-        ]
-        description = "Access control testing (hypothesis-driven)"
-
-    elif phase_name == "deserialization_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="Deserialization scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "deserialization,rce,oob,injection"],
-            ),
-        ]
-        description = "Deserialization vulnerability testing (hypothesis-driven)"
-
-    elif phase_name == "template_injection":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="SSTI scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "ssti,template-injection,injection"],
-            ),
-        ]
-        description = "Template injection testing (hypothesis-driven)"
-
-    elif phase_name == "path_traversal_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="Path traversal scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "lfi,path-traversal,disclosure"],
-            ),
-        ]
-        description = "Path traversal testing (hypothesis-driven)"
-
-    elif phase_name == "xxe_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="XXE scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "xxe,xml,oob,exposure,disclosure"],
-            ),
-        ]
-        description = "XXE vulnerability testing (hypothesis-driven)"
-
-    elif phase_name == "open_redirect_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="Open redirect scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "redirect,open-redirect,oast,exposure"],
-            ),
-        ]
-        description = "Open redirect testing (hypothesis-driven)"
-
-    elif phase_name == "cors_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="CORS scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "cors,headers,misconfig,exposure"],
-            ),
-        ]
-        description = "CORS testing (hypothesis-driven)"
-
-    elif phase_name == "csrf_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="CSRF scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "csrf,samesite,cookie,exposure,bypass"],
-            ),
-        ]
-        description = "CSRF testing (hypothesis-driven)"
-
-    elif phase_name == "rate_limit_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="Rate limit testing (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "rate-limit,bruteforce,excessive"],
-            ),
-        ]
-        description = "Rate limit testing (hypothesis-driven)"
-
-    elif phase_name == "websocket_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="WebSocket security scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "websocket,ws,origin,cswsh,hijack"],
-            ),
-        ]
-        description = "WebSocket testing (hypothesis-driven)"
-
-    elif phase_name == "graphql_introspection":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="GraphQL introspection scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "graphql,introspection,schema,playground"],
-            ),
-        ]
-        description = "GraphQL introspection testing (hypothesis-driven)"
-
-    elif phase_name == "api_scan":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="API vulnerability scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "api,graphql,swagger,openapi,rest"],
-            ),
-        ]
-        description = "API security testing (hypothesis-driven)"
-
-    elif phase_name == "file_upload_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="File upload scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "file-upload,upload"],
-            ),
-        ]
-        description = "File upload testing (hypothesis-driven)"
-
-    elif phase_name == "infrastructure_testing":
-        tools = [
-            ToolTask(
-                tool_name="nuclei",
-                description="Infrastructure scanning (hypothesis-driven)",
-                priority=10,
-                timeout=300,
-                args_template=["-u", "{target}", "-jsonl", "-silent",
-                               "-severity", "medium,high,critical",
-                               "-tags", "network,misconfig,exposure"],
-            ),
-        ]
-        description = "Infrastructure testing (hypothesis-driven)"
-
-    else:
-        raise ValueError(f"Unknown hypothesis-driven phase: {phase_name}")
+    if not tools:
+        raise ValueError(f"No tools available for hypothesis-driven phase: {phase_name}")
 
     phase = TestingPhase(
         name=phase_name,
-        description=description,
+        description=f"{phase_name} (hypothesis-driven)",
         activation_reason=(
             f"hypothesis-driven: {root_key} @ {confidence:.0%} confidence"
         ),
-        # Place near the end of execution order so signal-driven phases run first
-        order=200,
+        order=200,  # Place near end so signal-driven phases run first
         tools=tools,
     )
     plan.phases.append(phase)
