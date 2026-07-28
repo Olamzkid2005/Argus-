@@ -68,9 +68,17 @@ PHASES: list[Phase] = [
         tool_phases=("recon",),
     ),
     Phase(
+        id="source_analysis",
+        display_name="AI Source Analysis",
+        order=2,
+        estimated_minutes=5,
+        step_id="source_analysis",
+        tool_phases=("source_analysis",),
+    ),
+    Phase(
         id="scanning",
         display_name="Scanning",
-        order=2,
+        order=3,
         estimated_minutes=10,
         step_id="vuln_mapping",
         tool_phases=("scan", "deep_scan", "repo_scan"),
@@ -78,21 +86,21 @@ PHASES: list[Phase] = [
     Phase(
         id="exploitation",
         display_name="Exploitation",
-        order=3,
+        order=4,
         estimated_minutes=8,
         tool_phases=("exploit",),
     ),
     Phase(
         id="analyzing",
         display_name="Analysis",
-        order=4,
+        order=5,
         estimated_minutes=5,
         tool_phases=("analyze",),
     ),
     Phase(
         id="post_exploitation",
         display_name="Post-Exploitation",
-        order=5,
+        order=6,
         estimated_minutes=8,
         step_id="post_exploitation",
         tool_phases=("post_exploit",),
@@ -100,7 +108,7 @@ PHASES: list[Phase] = [
     Phase(
         id="pivot",
         display_name="Pivot & Lateral Movement",
-        order=6,
+        order=7,
         estimated_minutes=10,
         step_id="pivot",
         tool_phases=("post_exploit",),
@@ -108,7 +116,7 @@ PHASES: list[Phase] = [
     Phase(
         id="reporting",
         display_name="Report Generation",
-        order=7,
+        order=8,
         estimated_minutes=2,
         step_id="reporting",
         tool_phases=("report",),
@@ -116,7 +124,7 @@ PHASES: list[Phase] = [
     Phase(
         id="complete",
         display_name="Complete",
-        order=8,
+        order=9,
         is_terminal=True,
     ),
     Phase(
@@ -144,7 +152,8 @@ PHASES: list[Phase] = [
 # does not import the full state machine module.
 TRANSITIONS: dict[str, list[str]] = {
     "created": ["recon", "failed", "paused"],
-    "recon": ["scanning", "failed", "paused"],
+    "recon": ["source_analysis", "scanning", "failed", "paused"],
+    "source_analysis": ["scanning", "failed", "paused"],
     "scanning": ["analyzing", "exploitation", "failed", "paused"],
     "exploitation": ["analyzing", "reporting", "failed", "paused"],
     "analyzing": ["post_exploitation", "reporting", "recon", "scanning", "failed", "paused"],
