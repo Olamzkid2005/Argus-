@@ -507,28 +507,12 @@ class MCPServer:
                     )
                     continue
 
-                # Verify the tool binary exists on PATH before registering.
-                # python3-based agent-internal tools are excluded — they always
-                # use the current interpreter and their scripts are whitelisted above.
-                # Reuse the same augmented PATH logic as call_tool() for consistency.
-                if cmd_basename != "python3":
-                    _venv_bin = str(Path(sys.executable).parent)
-                    _go_bin = os.path.expanduser("~/go/bin")
-                    _homebrew_bin = "/opt/homebrew/bin"
-                    _project_venv = str(
-                        Path(__file__).resolve().parent.parent / "venv" / "bin"
-                    )
-                    _existing_path = os.environ.get("PATH", "")
-                    _extra_path = os.environ.get("ARGUS_EXTRA_PATH", "")
-                    _augmented_path = f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:/usr/local/bin:/usr/bin:/bin:{_extra_path}:{_existing_path}"
-                    if not shutil.which(command, path=_augmented_path):
-                        logger.warning(
-                            "Skipping tool '%s': binary '%s' not found on PATH. "
-                            "Install it or add its directory to PATH.",
-                            data.get("name", "unknown"),
-                            command,
-                        )
-                        continue
+                # NOTE: Binary existence check is deferred to execution time
+                # (in call_tool) to keep startup fast. shutil.which() is extremely
+                # slow on Windows (~100ms per call). Skipping it here means all
+                # YAML-defined tools are registered regardless of whether their
+                # binary is on PATH. If a tool's binary is missing when call_tool
+                # is invoked, a clear error message is returned.
 
                 tool = ToolDefinition(
                     name=data["name"],
@@ -776,6 +760,24 @@ class MCPServer:
                 tool=name,
                 signal_quality=tool_signal_quality,
             ).to_dict()
+
+        # Verify the tool binary exists on PATH before executing.
+        # Binary existence is cached per tool so this check is fast after
+        # the first call for each tool (and is a no-op for python3 tools
+        # since they use the current interpreter).
+        _tool_command = Path(tool.command).name.lower() if tool.command else ""
+        if _tool_command != "python3":
+            if not self._binary_on_path(tool.command):
+                return MCPToolResult(
+                    success=False,
+                    error=(
+                        f"Tool '{name}' binary '{tool.command}' not found on PATH. "
+                        f"Install it or add its directory to PATH. "
+                        f"Set ARGUS_EXTRA_PATH for custom install locations."
+                    ),
+                    tool=name,
+                    signal_quality=tool_signal_quality,
+                ).to_dict()
 
         # Gap 4.4: Check cache before executing
         _cache_mode = (cache_mode or CacheMode.NORMAL.value)
