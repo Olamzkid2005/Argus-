@@ -180,7 +180,6 @@ class ConnectionManager:
             while True:
                 try:
                     conn = pool_instance.getconn()
-                    break
                 except pool.PoolError:
                     if deadline and time.time() >= deadline:
                         raise DatabaseConnectionError(
@@ -195,6 +194,8 @@ class ConnectionManager:
                     with self._pool_cond:
                         self._pool_cond.wait(timeout=jitter)
                     continue
+
+                # Connection acquired successfully — proceed to health checks
                 wait_time = (time.time() - wait_start) * 1000
 
                 # Validate connection health with SELECT 1 ping (blocker 60)
@@ -244,6 +245,9 @@ class ConnectionManager:
                             logger.info(
                                 "Got fresh connection from reinitialized pool"
                             )
+                    # Retry loop: the connection we got was stale or pool was
+                    # reinitialized — go back and validate the fresh one
+                    continue
 
                 # Enforce statement_timeout on each connection
                 # This prevents runaway queries from blocking the pool
@@ -272,8 +276,6 @@ class ConnectionManager:
                         logger.warning("Slow connection acquisition: %.1fms", wait_time)
 
                     return conn
-                else:
-                    raise DatabaseConnectionError("Failed to acquire database connection")
         except psycopg2.Error as e:
             raise DatabaseConnectionError(f"Connection error: {e}") from e
 
