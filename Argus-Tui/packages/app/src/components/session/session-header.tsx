@@ -140,7 +140,7 @@ export function SessionHeader() {
   const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
-  const { params, view } = useSessionLayout()
+  const { params, view, tabs } = useSessionLayout()
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
@@ -476,6 +476,36 @@ export function SessionHeader() {
                           aria-controls="review-panel"
                         >
                           <Icon size="small" name={view().reviewPanel.opened() ? "review-active" : "review"} />
+                        </Button>
+                      </TooltipKeybind>
+
+                      {/* Attack Map toggle — opens the side panel and switches to the attack-map tab */}
+                      <TooltipKeybind title="Attack Map" keybind="">
+                        <Button
+                          variant="ghost"
+                          class="titlebar-icon w-8 h-6 p-0 box-border"
+                          onClick={() => {
+                            if (view().reviewPanel.opened()) {
+                              view().reviewPanel.close()
+                            } else {
+                              view().reviewPanel.open()
+                              tabs().open("attack-map")
+                            }
+                          }}
+                          aria-label="Attack Map"
+                          aria-expanded={view().reviewPanel.opened()}
+                          aria-controls="review-panel"
+                        >
+                          <div class="relative flex items-center justify-center size-4">
+                            <Icon
+                              size="small"
+                              name="shield"
+                              classList={{
+                                "text-icon-strong": view().reviewPanel.opened(),
+                                "text-icon-weak": !view().reviewPanel.opened(),
+                              }}
+                            />
+                          </div>
                         </Button>
                       </TooltipKeybind>
 

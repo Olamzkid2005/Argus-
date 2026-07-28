@@ -27,6 +27,7 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { AttackMapPanel } from "@/pages/session/attack-map-panel"
 
 type RenderDiff = (SnapshotFileDiff & { file: string }) | VcsFileDiff
 
@@ -261,6 +262,13 @@ export function SessionSidePanel(props: {
                             </div>
                           </Tabs.Trigger>
                         </Show>
+                        <Show when={reviewTab()}>
+                          <Tabs.Trigger value="attack-map">
+                            <div class="flex items-center gap-1.5">
+                              <div>Attack Map</div>
+                            </div>
+                          </Tabs.Trigger>
+                        </Show>
                         <Show when={contextOpen()}>
                           <Tabs.Trigger
                             value="context"
@@ -318,6 +326,14 @@ export function SessionSidePanel(props: {
                     <Show when={reviewTab() && props.canReview()}>
                       <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                         <Show when={reviewOpen() && activeTab() === "review"}>{props.reviewPanel()}</Show>
+                      </Tabs.Content>
+                    </Show>
+
+                    <Show when={reviewTab()}>
+                      <Tabs.Content value="attack-map" class="flex flex-col h-full overflow-hidden contain-strict">
+                        <Show when={activeTab() === "attack-map" && reviewOpen()}>
+                          <AttackMapPanel />
+                        </Show>
                       </Tabs.Content>
                     </Show>
 

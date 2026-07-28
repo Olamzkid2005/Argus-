@@ -6,7 +6,9 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@/utils/toast"
 import { useNavigate } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, onMount, Show } from "solid-js"
+import { Keybind } from "@opencode-ai/ui/keybind"
+import { useCommand } from "@/context/command"
 import { createStore } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
@@ -208,6 +210,71 @@ export function StatusPopoverServerBody() {
   )
 }
 
+import { getSnapshot, onAttackGraphUpdate } from "@/utils/attack-graph-bridge"
+
+function AttackMapSummary() {
+  const language = useLanguage()
+  const command = useCommand()
+  const [count, setCount] = createStore({ paths: 0, chains: 0, riskScore: 0 })
+
+  const update = () => {
+    const snap = getSnapshot()
+    if (snap) {
+      setCount({
+        paths: snap.metadata.totalPaths,
+        chains: snap.metadata.chainsDetected,
+        riskScore: snap.metadata.highestRiskScore,
+      })
+    }
+  }
+
+  onMount(() => {
+    update()
+    const cleanup = onAttackGraphUpdate(update)
+    onCleanup(cleanup)
+  })
+
+  const attackKeybind = createMemo(() => command.keybind("attack-map.toggle"))
+
+  return (
+    <Show
+      when={count.paths > 0}
+      fallback={
+        <div class="text-14-regular text-text-base text-center my-auto">
+          {language.t("status.popover.attack.empty")}
+        </div>
+      }
+    >
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center gap-3 justify-center">
+          <div class="flex flex-col items-center">
+            <span class="text-20-bold text-text-strong">{count.chains}</span>
+            <span class="text-11-regular text-text-weak">{language.t("status.popover.attack.chains", { count: count.chains })}</span>
+          </div>
+          <div class="flex flex-col items-center">
+            <span class="text-20-bold text-text-strong">{count.paths}</span>
+            <span class="text-11-regular text-text-weak">{language.t("status.popover.attack.paths", { count: count.paths })}</span>
+          </div>
+          <div class="flex flex-col items-center">
+            <span class="text-20-bold" style={{ color: count.riskScore >= 8 ? "#dc2626" : count.riskScore >= 5 ? "#ea580c" : "var(--text-strong)" }}>
+              {count.riskScore.toFixed(1)}
+            </span>
+            <span class="text-11-regular text-text-weak">{language.t("status.popover.attack.risk")}</span>
+          </div>
+        </div>
+        <Show when={attackKeybind()}>
+          {(kb) => (
+            <div class="text-11-regular text-text-weaker text-center flex items-center justify-center gap-1">
+              <span>{language.t("status.popover.attack.press")}</span>
+              <Keybind class="!border-0 !bg-transparent !shadow-none">{kb()}</Keybind>
+            </div>
+          )}
+        </Show>
+      </div>
+    </Show>
+  )
+}
+
 function ServerStatusPopoverView(props: { state: ServerStatusState }) {
   return (
     <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
@@ -358,6 +425,11 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
             {pluginCount() > 0 ? `${pluginCount()} ` : ""}
             {language.t("status.popover.tab.plugins")}
           </Tabs.Trigger>
+          <Show when={getSnapshot()?.paths?.length}>
+            <Tabs.Trigger value="attack" data-slot="tab" class="text-12-regular">
+              {language.t("status.popover.tab.attack")}
+            </Tabs.Trigger>
+          </Show>
         </Tabs.List>
 
         {!settings.general.newLayoutDesigns() && (
@@ -533,6 +605,14 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                   )}
                 </For>
               </Show>
+            </div>
+          </div>
+        </Tabs.Content>
+
+        <Tabs.Content value="attack">
+          <div class="flex flex-col px-2 pb-2">
+            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+              <AttackMapSummary />
             </div>
           </div>
         </Tabs.Content>
