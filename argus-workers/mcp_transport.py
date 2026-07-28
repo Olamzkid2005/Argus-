@@ -1,304 +1,304 @@
 """
-MCP stdio JSON-RPC Transport
+mcp_transport — stdio JSON-RPC transport for the MCP server.
 
-Implements the JSON-RPC 2.0 wire protocol over stdio for communication
-between the TypeScript CLI and Python worker processes.
+Provides the JSON-RPC 2.0 wire protocol that bridges the TypeScript CLI
+and the Python workers. Communication happens over stdin/stdout so the
+TypeScript side can spawn the Python process as a child subprocess with
+zero configuration — no network ports, no file sockets.
+
+Usage:
+    python -m mcp_server
+
+Or from TypeScript:
+    const child = spawn("python3", ["-m", "mcp_server"]);
+    child.stdin.write(JSON.stringify({...}) + "\\n");
+    child.stdout.on("data", ...);
 
 Protocol:
-  - Requests: JSON-RPC 2.0 objects written to stdin (one per line)
-  - Responses: JSON-RPC 2.0 objects written to stdout (one per line)
-  - Logging: stderr for diagnostics (never stdout)
-  - Line delimiter: LF (\\n)
+    Request:  {"jsonrpc":"2.0","id":1,"method":"<name>","params":{...}}
+    Response: {"jsonrpc":"2.0","id":1,"result":{...}}
+    Error:    {"jsonrpc":"2.0","id":1,"error":{"code":N,"message":"..."}}
+    Notification (no id): no response sent.
 
-Methods:
-  - ping → "pong" (health check)
-  - list_tools → ToolDefinition[]
-  - call_tool → ToolResult
-
-Security:
-  - Enforces MAX_MESSAGE_SIZE to prevent OOM from large tool outputs
-  - All errors include structured error_type for the TS side to use
-    instead of fragile string matching
+Handlers take ``params: dict | None`` and return a JSON-serializable dict.
 """
+
+from __future__ import annotations
 
 import json
 import logging
-import os
-import select
-import stat
 import sys
-import time as _time
 import traceback
-from collections.abc import Callable
-from typing import Any
-
-from exceptions import MCPTransportError as MCPTransportError  # re-exported
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
+# ── JSON-RPC 2.0 error codes ──
 
-# Maximum incoming message size (10 MB). Lines longer than this are rejected
-# to prevent OOM from overly large tool outputs (nuclei, web_scanner, etc.).
-_MAX_MESSAGE_SIZE = 10 * 1024 * 1024
-
-# Maximum outgoing response size (50 MB). Responses exceeding this are
-# truncated with a warning.
-_MAX_RESPONSE_SIZE = 50 * 1024 * 1024
+PARSE_ERROR = -32700       # Invalid JSON was received by the server
+INVALID_REQUEST = -32600   # The JSON sent is not a valid Request object
+METHOD_NOT_FOUND = -32601  # The method does not exist / is not available
+INVALID_PARAMS = -32602    # Invalid method parameter(s)
+INTERNAL_ERROR = -32603    # Internal JSON-RPC error
 
 
-# Sentinel used by _read_request to signal a malformed JSON line that should
-# be skipped (continue) rather than treated as EOF (break).
-_SKIP_LINE: dict = {}
+def create_ping_handler() -> Callable[[dict | None], dict]:
+    """Create a handler for the ``ping`` method.
+
+    Returns:
+        A callable that accepts ``params`` (ignored) and returns
+        ``{"pong": True, "timestamp": <epoch_ms>}``.
+    """
+    import time as _time
+
+    def _ping(params: dict | None = None) -> dict:
+        return {"pong": True, "timestamp": int(_time.time() * 1000)}
+
+    return _ping
 
 
 class MCPTransport:
-    # Heartbeat timeout: if no data arrives from stdin within this window,
-    # assume the parent process died and shut down gracefully (blocker 62).
-    # Configurable via ARGUS_MCP_HEARTBEAT_TIMEOUT_SECS env var.
-    # Set to 0 to disable heartbeat detection.
-    _HEARTBEAT_FALLBACK_TIMEOUT_SECS = 60
+    """Stdio JSON-RPC 2.0 transport for the MCP server.
 
-    @staticmethod
-    def _get_heartbeat_timeout() -> int:
-        """Get the heartbeat timeout in seconds, 0 = disabled."""
-        raw = os.environ.get("ARGUS_MCP_HEARTBEAT_TIMEOUT_SECS", "")
-        if raw == "":
-            return MCPTransport._HEARTBEAT_FALLBACK_TIMEOUT_SECS
-        try:
-            val = int(raw)
-            return val if val >= 0 else MCPTransport._HEARTBEAT_FALLBACK_TIMEOUT_SECS
-        except (ValueError, TypeError):
-            return MCPTransport._HEARTBEAT_FALLBACK_TIMEOUT_SECS
+    Reads JSON-RPC requests from stdin (one JSON object per line) and
+    writes responses to stdout. Single requests and batch arrays are both
+    supported. Notifications (requests without an ``id`` field) never
+    produce a response.
 
-    # SECURITY: This transport is STRICTLY stdio-only.
-    # No network listener, no socket support, no TCP mode.
-    # If you need network-based MCP, create a SEPARATE transport class
-    # with its own security review — do NOT modify this one.
-    _TRANSPORT_MODE = "stdio"
+    Handlers are registered by name and receive a single ``params``
+    argument (a dict or None). They may return any JSON-serializable value.
 
-    def __init__(self):
-        self.handlers: dict[str, Callable] = {}
+    Example::
+
+        transport = MCPTransport()
+        transport.register("ping", lambda p: {"pong": True})
+        transport.register("list_tools", lambda p: {"tools": [...]})
+        transport.run()
+    """
+
+    def __init__(
+        self,
+        stdin: Any | None = None,
+        stdout: Any | None = None,
+    ) -> None:
+        self._handlers: dict[str, Callable[[dict | None], Any]] = {}
         self._running = False
-        self._last_activity: float = 0.0
+        # Allow injecting fake streams for testing. Default to the real
+        # stdio buffers so the subprocess parent communicates via pipes.
+        self._stdin = stdin if stdin is not None else sys.stdin.buffer
+        self._stdout = stdout if stdout is not None else sys.stdout.buffer
 
-        # Guard: verify stdin/stdout are not network sockets.
-        # This is a belt-and-suspenders check alongside the purely stdio design.
-        # If either handle has a socket peer, log a warning so an operator
-        # can detect accidental network exposure.
-        self._assert_stdio_only()
+    def register(
+        self,
+        method: str,
+        handler: Callable[[dict | None], Any],
+    ) -> None:
+        """Register a handler for the given JSON-RPC method name.
 
-    @staticmethod
-    def _assert_stdio_only() -> None:
-        """Assert that stdin and stdout are not network sockets.
-
-        Uses os.fstat() + stat.S_ISSOCK to detect whether stdin/stdout
-        file descriptors are network sockets. Logs a warning if either
-        FD is a socket — alerts the operator of accidental network exposure.
-
-        This is a defense-in-depth check. The transport is designed to be
-        stdio-only; this catches misconfiguration at startup.
-
-        Raises:
-            RuntimeError: If stdin or stdout is a socket AND the env var
-                          ARGUS_MCP_BLOCK_SOCKET is set to "1" — hard-fail
-                          mode for CI/deployment guard.
+        Args:
+            method: Method name (e.g. ``"ping"``, ``"call_tool"``).
+            handler: Callable that accepts ``params: dict | None`` and
+                     returns a JSON-serializable result.
         """
-        for fd_name, fd in [("stdin", sys.stdin), ("stdout", sys.stdout)]:
-            try:
-                fileno = fd.fileno()
-                mode = os.fstat(fileno).st_mode
-                if stat.S_ISSOCK(mode):
-                    msg = (
-                        f"MCP {fd_name} (fd={fileno}) is a network socket! "
-                        f"This transport is stdio-only. "
-                        f"Do NOT expose MCP over the network without auth."
-                    )
-                    logger.warning(msg)
-                    if os.environ.get("ARGUS_MCP_BLOCK_SOCKET", "") == "1":
-                        raise RuntimeError(msg)
-            except (OSError, TypeError, AttributeError, ValueError):
-                pass  # Not a valid FD, can't determine type - proceed
+        self._handlers[method] = handler
 
-    def register(self, method: str, handler: Callable):
-        self.handlers[method] = handler
+    # ── Public lifecycle ──
 
-    def _wait_for_stdin(self) -> bool:
-        """Wait for data on stdin with the heartbeat timeout.
+    def run(self) -> None:
+        """Run the transport loop: read requests from stdin, write responses to stdout.
 
-        Uses select.select() which is portable across Unix platforms.
-        Returns True if data is available, False if timeout expired
-        (parent process likely dead).
+        The loop continues until EOF on stdin (pipe closed) or an
+        unrecoverable error. SIGTERM/SIGINT are handled gracefully — the
+        loop terminates after processing the current request.
 
-        When heartbeat is disabled (timeout=0), returns True immediately
-        so the caller proceeds to the blocking readline(). Catches and
-        logs select() errors so a transient FD issue doesn't kill the worker.
+        Health endpoints (``/health``, ``/metrics``) are **not** served here;
+        they are handled by ``health_server.py`` started separately in
+        ``mcp_server.main()``.
         """
-        timeout = self._get_heartbeat_timeout()
-        if timeout == 0:
-            return True  # heartbeat disabled
-
-        try:
-            readable, _, _ = select.select([sys.stdin], [], [], timeout)
-            return len(readable) > 0
-        except (ValueError, TypeError, OSError) as exc:
-            logger.warning(
-                "Heartbeat select() failed on stdin — proceeding to readline: %s",
-                exc,
-            )
-            return True
-
-    def _read_request(self) -> dict | None:
-        """Read and parse one JSON-RPC request from stdin.
-
-        Before blocking on readline(), checks the stdin heartbeat
-        (blocker 62) with a configurable timeout. If no data arrives
-        within the window, assumes the parent process died and signals
-        graceful shutdown.
-
-        Enforces a 10 MB max message size. Lines exceeding this limit are
-        logged as errors and skipped — the transport continues to the next
-        line instead of crashing.
-
-        Returns:
-            dict: Parsed request on success.
-            None: EOF (stdin closed) or heartbeat timeout — caller should exit.
-            _SKIP_LINE: Malformed JSON or oversized — caller should continue.
-        """
-        # Check stdin heartbeat before blocking on readline (blocker 62).
-        # If the parent process has stopped sending data, we shut down
-        # gracefully instead of hanging forever.
-        if not self._wait_for_stdin():
-            timeout = self._get_heartbeat_timeout()
-            logger.warning(
-                "Stdin heartbeat timed out after %ds — no requests received. "
-                "Assuming parent process died, shutting down.",
-                timeout,
-            )
-            self.stop()
-            return None
-
-        line = sys.stdin.readline()
-        if not line:
-            return None
-
-        # Enforce max message size (blocker 39)
-        if len(line) > _MAX_MESSAGE_SIZE:
-            logger.error(
-                "Incoming message exceeds max size (%d > %d bytes) — skipping",
-                len(line),
-                _MAX_MESSAGE_SIZE,
-            )
-            return _SKIP_LINE
-
-        try:
-            parsed = json.loads(line.strip())
-            self._last_activity = _time.time()
-            return parsed
-        except json.JSONDecodeError as e:
-            logger.error("Invalid JSON-RPC request: %s", e)
-            return _SKIP_LINE
-
-    def _send_response(
-        self, request: dict, result: Any = None, error: dict | None = None
-    ):
-        response = {"jsonrpc": "2.0", "id": request.get("id")}
-        if error:
-            response["error"] = error
-        else:
-            response["result"] = result
-
-        serialized = json.dumps(response)
-
-        # Enforce max response size (blocker 39)
-        if len(serialized) > _MAX_RESPONSE_SIZE:
-            logger.warning(
-                "Response for %s exceeds max size (%d bytes) — truncating",
-                request.get("method", "unknown"),
-                len(serialized),
-            )
-            # Truncate result to fit within limit
-            truncated_result = {
-                "warning": f"Response truncated: original size {len(serialized)} bytes",
-                "original": str(result)[:1000] if result else "",
-            }
-            response["result"] = truncated_result
-            serialized = json.dumps(response)
-
-        sys.stdout.write(serialized + "\n")
-        sys.stdout.flush()
-
-    def _handle_request(self, request: dict):
-        method = request.get("method")
-        params = request.get("params", {})
-
-        if not method:
-            self._send_response(
-                request, error=({"code": -32600, "message": "Method not specified"})
-            )
-            return
-
-        handler = self.handlers.get(method)
-        if not handler:
-            self._send_response(
-                request,
-                error={
-                    "code": -32601,
-                    "message": f"Method not found: {method}",
-                },
-            )
-            return
-
-        try:
-            result = handler(params)
-            self._send_response(request, result=result)
-        except Exception as e:
-            logger.error("Handler error for %s: %s", method, traceback.format_exc())
-            err_msg = str(e)
-            err_lower = err_msg.lower()
-            # Classify errors so the TS side can use structured codes instead
-            # of fragile string matching on the error message.
-            error_type = "internal_error"
-            if any(kw in err_lower for kw in ("llm", "openai", "anthropic", "ai provider", "ai model")):
-                error_type = "llm_error"
-            self._send_response(
-                request,
-                error={
-                    "code": -32603,
-                    "message": err_msg,
-                    "data": {"error_type": error_type},
-                },
-            )
-
-    def run(self):
         self._running = True
+
+        # Read lines from stdin (one JSON-RPC request per line).
+        # Use self._stdin for raw bytes to avoid encoding issues,
+        # then decode as UTF-8 (the JSON-RPC spec requires UTF-8).
+        stdin = self._stdin
+        stdout = self._stdout
+
         while self._running:
             try:
-                request = self._read_request()
-                if request is None:
-                    break  # EOF — stdin closed
-                if request is _SKIP_LINE:
-                    continue  # malformed JSON — skip and keep reading
-                self._handle_request(request)
-            except KeyboardInterrupt:
-                break
-            except Exception:
-                logger.error("Transport error: %s", traceback.format_exc())
+                line = stdin.readline()
+            except (OSError, ValueError) as e:
+                logger.error("MCP transport read error: %s", e)
                 break
 
-    @property
-    def idle_seconds(self) -> float:
-        """Seconds since last request activity. Returns 0 if no activity yet."""
-        if self._last_activity == 0.0:
-            return 0.0
-        return _time.time() - self._last_activity
+            if not line:
+                # EOF — parent process closed the pipe
+                logger.info("MCP transport: stdin closed, shutting down")
+                break
 
-    def stop(self):
-        """Gracefully stop the transport loop."""
+            line = line.strip()
+            if not line:
+                continue
+
+            # Handle individual request or batch
+            try:
+                raw = json.loads(line)
+            except json.JSONDecodeError:
+                self._send_error(
+                    stdout,
+                    None,
+                    PARSE_ERROR,
+                    "Parse error: invalid JSON",
+                )
+                continue
+
+            if isinstance(raw, list):
+                # Batch — process each request, collect responses
+                responses = []
+                for req in raw:
+                    resp = self._process_request(req)
+                    if resp is not None:
+                        responses.append(resp)
+                if responses:
+                    self._write_json(stdout, responses)
+            else:
+                # Single request
+                resp = self._process_request(raw)
+                if resp is not None:
+                    self._write_json(stdout, resp)
+
         self._running = False
 
+    def stop(self) -> None:
+        """Signal the transport loop to stop at the next iteration."""
+        self._running = False
 
-def create_ping_handler():
-    def ping(params: dict) -> str:
-        return "pong"
+    # ── Request processing ──
 
-    return ping
+    def _process_request(self, raw: Any) -> dict | None:
+        """Process a single decoded JSON-RPC request.
+
+        Args:
+            raw: Decoded JSON value (should be a dict).
+
+        Returns:
+            A response dict, or ``None`` for notifications.
+        """
+        if not isinstance(raw, dict):
+            return self._make_error(
+                None,
+                INVALID_REQUEST,
+                "Invalid Request: must be a JSON object",
+            )
+
+        request_id = raw.get("id")
+        method = raw.get("method", "")
+        params = raw.get("params")
+
+        # Validate required fields
+        if not isinstance(method, str) or not method:
+            return self._make_error(
+                request_id,
+                INVALID_REQUEST,
+                "Invalid Request: 'method' must be a non-empty string",
+            )
+
+        # Notifications (no id) — no response
+        if request_id is None:
+            self._handle_notification(method, params)
+            return None
+
+        # Look up handler
+        handler = self._handlers.get(method)
+        if handler is None:
+            return self._make_error(
+                request_id,
+                METHOD_NOT_FOUND,
+                f"Method not found: {method}",
+            )
+
+        # Call handler
+        try:
+            result = handler(params)
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": result,
+            }
+        except Exception as e:
+            logger.error(
+                "Handler '%s' raised: %s\n%s",
+                method,
+                e,
+                traceback.format_exc(),
+            )
+            return self._make_error(
+                request_id,
+                INTERNAL_ERROR,
+                f"Internal error: {e}",
+            )
+
+    def _handle_notification(self, method: str, params: Any) -> None:
+        """Process a notification (request without id). Logged but not handled."""
+        handler = self._handlers.get(method)
+        if handler is not None:
+            try:
+                handler(params)
+            except Exception:
+                logger.debug(
+                    "Notification handler '%s' failed (silently ignored):",
+                    method,
+                    exc_info=True,
+                )
+        else:
+            logger.debug("Unhandled notification: %s", method)
+
+    # ── Response helpers ──
+
+    def _make_error(
+        self,
+        request_id: Any,
+        code: int,
+        message: str,
+    ) -> dict:
+        """Build a JSON-RPC error response dict."""
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {
+                "code": code,
+                "message": message,
+            },
+        }
+
+    def _send_error(
+        self,
+        stdout: Any,
+        request_id: Any,
+        code: int,
+        message: str,
+    ) -> None:
+        """Build and write a JSON-RPC error response."""
+        resp = self._make_error(request_id, code, message)
+        self._write_json(stdout, resp)
+
+    def _write_json(self, stdout: Any, obj: Any) -> None:
+        """Serialize ``obj`` as JSON and write it as a single line to stdout.
+
+        Uses ``sys.stdout.buffer`` for raw bytes to avoid the encoding
+        layer adding extra newlines or mangling binary-safe strings.
+
+        Always appends ``\\n`` so the reader can split on newlines. Flushes
+        after every write to ensure the parent process receives responses
+        without buffering delay.
+        """
+        try:
+            data = json.dumps(obj, default=str, ensure_ascii=False).encode(
+                "utf-8"
+            ) + b"\n"
+            stdout.write(data)
+            stdout.flush()
+        except (OSError, ValueError) as e:
+            # If the parent has closed its stdin, we can't write.
+            # This is common during shutdown — log and stop.
+            logger.debug("MCP transport write error (parent may have closed pipe): %s", e)
+            self._running = False
