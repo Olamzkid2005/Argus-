@@ -29,5 +29,7 @@ export type ProgressEvent =
   | { type: "llm_planning_error"; phase: "initial" | "replan"; error: string }
   // LLM replan analysis — emitted when the LLM analyzes findings and suggests next steps
   | { type: "llm_replan_analysis"; label: string; reasoning: string; suggestedCapabilities: string[]; stopAssessment: boolean; llmModel: string }
+  // Attack graph snapshot update — emitted after replan cycles with full graph data for visualizer
+  | { type: "attack_graph_update"; engagementId: string; snapshot: { paths: any[]; metadata: { totalPaths: number; totalFindings: number; highestRiskScore: number; chainsDetected: number } } }
 
 export type ProgressCallback = (event: ProgressEvent) => void

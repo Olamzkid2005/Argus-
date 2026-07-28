@@ -683,6 +683,48 @@ export class WorkersBridge {
     return this.sendRequest("get_attack_graph", params) as Promise<any>
   }
 
+  /**
+   * Fetch the full attack graph snapshot for frontend visualization.
+   *
+   * Returns the complete `to_snapshot_dict()` output enriched with chain
+   * metadata (chain_id, chain_name per path) and summary statistics.
+   * Designed for the AttackGraphVisualizer component.
+   */
+  async getAttackGraphSnapshot(params: {
+    engagement_id: string
+    findings?: any[]
+  }): Promise<{
+    paths: Array<{
+      risk_score: number
+      nodes: Array<{
+        id: string
+        type: "vulnerability" | "endpoint"
+        data: Record<string, any>
+        cvss: number | null
+        confidence: number | null
+        prerequisites: string[]
+        downstream_impacts: string[]
+      }>
+      edges: Array<{
+        from_node: string
+        to_node: string
+        type: string
+        correlation_factor: number
+        relationship_type: string
+      }>
+      chain_id?: string
+      chain_name?: string
+    }>
+    metadata: {
+      totalPaths: number
+      totalFindings: number
+      highestRiskScore: number
+      chainsDetected: number
+    }
+  }> {
+    return this.sendRequest("get_attack_graph_snapshot", params) as Promise<any>
+  }
+
   /** Phase 4.1.4: Get completed tool list for a given phase (for checkpoint resume). */
   async getCheckpoint(engagementId: string, phase: string): Promise<{ completed_tools: string[] }> {
     return this.sendRequest("get_checkpoint", { engagement_id: engagementId, phase }) as Promise<{ completed_tools: string[] }>

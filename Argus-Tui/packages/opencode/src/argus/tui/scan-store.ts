@@ -63,6 +63,8 @@ export interface ScanState {
   // LLM replan analysis history
   llmReplanEntries: LLMReplanEntry[]
   llmReplanStatus: "idle" | "running" | "completed"
+  // Attack graph snapshot data for the visualizer (updated after each replan cycle)
+  attackGraphSnapshot: any | null
 }
 
 const initialState: ScanState = {
@@ -91,6 +93,7 @@ const initialState: ScanState = {
   llmPlanningModelConfig: "",
   llmReplanEntries: [] as LLMReplanEntry[],
   llmReplanStatus: "idle",
+  attackGraphSnapshot: null as any | null,
 }
 
 const [scanState, setScanState] = createStore<ScanState>({ ...initialState })
@@ -127,6 +130,7 @@ function snapshot(): ScanState {
     llmPlanningModelConfig: scanState.llmPlanningModelConfig,
     llmReplanEntries: [...scanState.llmReplanEntries],
     llmReplanStatus: scanState.llmReplanStatus,
+    attackGraphSnapshot: scanState.attackGraphSnapshot,
   }
 }
 
@@ -338,6 +342,15 @@ function processEventInner(event: ProgressEvent, engagementId?: string) {
         appendLog(`LLM suggests stopping assessment: ${event.reasoning}`)
       } else if (event.suggestedCapabilities.length > 0) {
         appendLog(`LLM suggests next capabilities: ${event.suggestedCapabilities.join(", ")}`)
+      }
+      break
+    case "attack_graph_update":
+      setScanState("attackGraphSnapshot", event.snapshot)
+      // Window-level bridge: makes the snapshot available to the desktop app
+      // without requiring cross-package TypeScript imports.
+      if (typeof window !== "undefined") {
+        ;(window as any).__argus_attack_graph_snapshot__ = event.snapshot
+        window.dispatchEvent(new CustomEvent("attack-graph-update", { detail: event.snapshot }))
       }
       break
     default:

@@ -1236,6 +1236,33 @@ export class WorkflowRunner {
               store.appendAuditLog(engagementId, "ATTACK_GRAPH",
                 `Detected ${agResult.chains.length} chain(s), ${agResult.chain_plans.length} exploitation plan(s)`)
             }
+
+            // ── Fetch full attack graph snapshot for frontend visualization ──
+            // Runs alongside the chain detection above but returns the complete
+            // to_snapshot_dict() output with node/edge/risk data for the SVG visualizer.
+            // Best-effort: failures don't block the assessment.
+            try {
+              const snapshot = await bridge.getAttackGraphSnapshot({
+                engagement_id: engagementId,
+                findings: allFindings.map((f) => ({
+                  type: f.subtype?.toUpperCase() ?? "UNKNOWN",
+                  severity: f.severity >= 4 ? "CRITICAL" : f.severity === 3 ? "HIGH" : f.severity === 2 ? "MEDIUM" : f.severity === 1 ? "LOW" : "INFO",
+                  endpoint: f.url ?? f.description?.match(/(https?:\/\/[^\s]+)/)?.[1] ?? "",
+                  source_tool: f.source ?? "",
+                  confidence: f.confidence ? f.confidence / 5 : 0.5,
+                })),
+              })
+              // Emit the snapshot as a structured progress event so the TUI's
+              // scan-store can store it and render the AttackGraphVisualizer.
+              emit({
+                type: "attack_graph_update",
+                engagementId,
+                snapshot,
+              })
+            } catch (snapErr) {
+              // Snapshot fetch is best-effort — visualizer just won't update
+              emit(`⚠ Attack graph snapshot failed (non-blocking): ${(snapErr as Error).message}`)
+            }
           } catch (err) {
             // Attack graph is best-effort — don't block replanning if it fails
             emit(`⚠ Attack graph fetch failed (non-blocking): ${(err as Error).message}`)
