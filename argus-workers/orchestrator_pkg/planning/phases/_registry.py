@@ -59,10 +59,20 @@ from . import (
     infrastructure_scan,
     cloud_metadata_probe,
     file_upload_scan,
+    ai_surface_analysis,
 )
 
 
 PHASE_DEFINITIONS: list[_PhaseDefinition] = [
+    _PhaseDefinition(
+        name="ai_surface_analysis",
+        description="AI attack-surface scanning (MCP servers, agent frameworks, LLM SDKs, model gateways, vector stores, API endpoints)",
+        order=15,
+        activate_fn=ai_surface_analysis._activate_ai_surface_analysis,
+        tools_fn=ai_surface_analysis._ai_surface_analysis_tools,
+        triggers=["auth_testing", "api_scan", "ssrf_testing"],
+        depends_on=["tech_deep_scan"],
+    ),
     _PhaseDefinition(
         name="tech_deep_scan",
         description="Technology-specific deep scanning (CMS, frameworks, servers)",
