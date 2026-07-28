@@ -1186,6 +1186,24 @@ Structure your report with these sections:
 5. Remediation Roadmap (prioritized action items by severity)
 6. Conclusion
 
+AI ATTACK SURFACE GUIDANCE:
+Findings with source_tool="ai-surface" are from static AI attack-surface scanning
+and cover: MCP servers, agent frameworks (LangChain, CrewAI, Strands), LLM SDKs
+(OpenAI, Anthropic, Bedrock), model gateways (LiteLLM), vector stores/RAG,
+AI provider keys, AI infrastructure (K8s AI workloads, Terraform), and API endpoints.
+
+- CONFIRMED verdict findings are unambiguous code/config facts (e.g., MCP server
+  with financial-action tools, no-human-oversight gate missing). Treat these as
+  HIGH/CRITICAL severity in the report.
+- LIKELY verdict findings are inferred risks needing review (e.g., non-literal
+  data flow into LLM call). Include these in the findings summary but note them
+  as requiring manual verification.
+- Findings with no verdict are pure inventory (e.g., API endpoint discovery,
+  AI infrastructure). List these separately in an "AI Surface Inventory" subsection.
+
+Group AI attack surface findings into a dedicated "AI Attack Surface" section
+in the Detailed Findings, separate from conventional web/network findings.
+
 Return as structured JSON matching the schema provided.
 Use professional security report language. Be specific about evidence.
 """
