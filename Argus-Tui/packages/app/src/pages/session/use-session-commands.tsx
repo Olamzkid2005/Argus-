@@ -472,6 +472,19 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         ]
       : []),
     viewCommand({
+      id: "attack-map.toggle",
+      title: language.t("command.attackMap.toggle"),
+      keybind: "mod+shift+m",
+      onSelect: () => {
+        if (view().reviewPanel.opened()) {
+          view().reviewPanel.close()
+        } else {
+          view().reviewPanel.open()
+          tabs().open("attack-map")
+        }
+      },
+    }),
+    viewCommand({
       id: "input.focus",
       title: language.t("command.input.focus"),
       keybind: "ctrl+l",
