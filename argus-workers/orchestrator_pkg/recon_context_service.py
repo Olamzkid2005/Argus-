@@ -92,6 +92,30 @@ class ReconContextService:
                     if keyword in fp:
                         frameworks.append(framework)
 
+            # ── AI surface analysis ──
+            ai_surface_findings = [f for f in findings if f.get("source_tool") == "ai-surface"]
+            ai_categories: set[str] = set()
+            confirmed_risks = 0
+            likely_risks = 0
+            has_mcp = False
+            has_agents = False
+            has_vector = False
+            has_gateway = False
+
+            for f in ai_surface_findings:
+                category = f.get("ai_surface_category") or ""
+                if category:
+                    ai_categories.add(category)
+                verdict = f.get("ai_surface_verdict")
+                if verdict == "confirmed":
+                    confirmed_risks += 1
+                elif verdict == "likely":
+                    likely_risks += 1
+                has_mcp = has_mcp or category == "mcp-server"
+                has_agents = has_agents or category == "agent-framework"
+                has_vector = has_vector or category == "vector-store"
+                has_gateway = has_gateway or category == "model-gateway"
+
             ctx = ReconContext(
                 target_url=repo_url,
                 scan_type="repo",
@@ -105,6 +129,14 @@ class ReconContextService:
                 frameworks_detected=list(set(frameworks)),
                 has_hardcoded_secrets=has_secrets,
                 dependency_vulns_count=dep_vulns,
+                has_source_access=True,
+                ai_surface_categories=sorted(ai_categories),
+                ai_surface_confirmed_risk_count=confirmed_risks,
+                ai_surface_likely_risk_count=likely_risks,
+                has_mcp_servers=has_mcp,
+                has_agent_frameworks=has_agents,
+                has_vector_stores=has_vector,
+                has_model_gateways=has_gateway,
             )
             save_recon_context(engagement_id, ctx)
             logger.info(

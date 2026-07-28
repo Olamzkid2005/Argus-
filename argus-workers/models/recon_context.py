@@ -31,6 +31,24 @@ class ReconContext:
     ai_endpoints: list[str] = field(default_factory=list)
     llm_provider_detected: str = ""  # e.g. "openai", "anthropic", "intercom", "drift"
 
+    # ── AI source analysis fields (populated by ai-surface scanner) ──
+    has_source_access: bool = False
+    """Whether source code access is available (from engagement type or repo scan)."""
+    ai_surface_categories: list[str] = field(default_factory=list)
+    """Detected AI surface categories, e.g. ["mcp-server", "llm-sdk", "agent-framework"]."""
+    ai_surface_confirmed_risk_count: int = 0
+    """Number of CONFIRMED risk findings from ai-surface scan."""
+    ai_surface_likely_risk_count: int = 0
+    """Number of LIKELY risk findings from ai-surface scan."""
+    has_mcp_servers: bool = False
+    """Whether MCP servers were detected in the source code."""
+    has_agent_frameworks: bool = False
+    """Whether agent frameworks were detected (LangChain, CrewAI, etc.)."""
+    has_vector_stores: bool = False
+    """Whether vector stores/RAG pipelines were detected."""
+    has_model_gateways: bool = False
+    """Whether model gateways (LiteLLM, etc.) were detected."""
+
     # Repo scan fields
     scan_type: str = "url"  # "url" or "repo"
     repo_url: str = ""
