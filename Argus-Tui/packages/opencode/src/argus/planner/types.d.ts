@@ -1,0 +1,164 @@
+import { Capability } from "./capabilities";
+import { Severity, Confidence } from "../shared/types";
+import type { TargetType, AuthState, ExecutionMode, ErrorRecovery, CredentialRef, NormalizedFinding, EvidencePackage, ArtifactRef, ArtifactType } from "../shared/types";
+import type { ProgressEvent } from "../shared/progress";
+export { Severity, Confidence };
+export type { TargetType, AuthState, ExecutionMode, ErrorRecovery, CredentialRef, NormalizedFinding, EvidencePackage, ArtifactRef, ArtifactType, };
+export interface WorkflowDefinition {
+    name: string;
+    label: string;
+    version: number;
+    phases: PhaseDefinition[];
+    approval_required?: Record<string, boolean>;
+}
+export interface PhaseDefinition {
+    name: string;
+    required_capabilities: Capability[];
+    execution: ExecutionMode;
+    error_recovery: ErrorRecovery;
+    approval_gate?: string;
+}
+export interface PhaseExecutionRequest {
+    phaseId: string;
+    name: string;
+    workflowName: string;
+    target: string;
+    requiredCapabilities: Capability[];
+    credentials?: CredentialRef[];
+    config: Record<string, unknown>;
+    previousPhaseResults: PhaseExecutionResult[];
+    approvalGateName?: string;
+    execution?: "deterministic" | "llm_driven";
+    /** Whether tools in this phase execute in parallel or sequentially.
+     *  Drawn from the workflow YAML `execution` property. */
+    toolExecution?: "parallel" | "sequential" | "llm_driven";
+    replanCycle?: boolean;
+}
+export interface PhaseExecutionResult {
+    phaseId: string;
+    status: "completed" | "failed" | "skipped" | "partial";
+    findings: NormalizedFinding[];
+    artifacts: ArtifactRef[];
+    errors: string[];
+    durationMs: number;
+    hypotheses?: Hypothesis[];
+}
+export interface AssessmentPlan {
+    workflow: string;
+    phases: PhaseExecutionRequest[];
+    errorRecovery: Record<string, ErrorRecovery>;
+    planCreatedAt: string;
+}
+export interface Hypothesis {
+    id: string;
+    description: string;
+    confidence: number;
+    status: string;
+}
+/** An attack chain detected by the Python AttackGraph engine. */
+export interface AttackChain {
+    chain_id: string;
+    name: string;
+    severity: string;
+    correlation_factor: number;
+    prerequisite_type: string;
+    chain_type: string;
+    description: string;
+}
+/** An exploitation phase plan derived from an attack chain. */
+export interface ChainPhasePlan {
+    chain_id: string;
+    name: string;
+    severity: string;
+    risk_score: number;
+    prerequisite_finding_types: string[];
+    suggested_capabilities: string[];
+    description: string;
+}
+/**
+ * Full attack graph snapshot for frontend visualization.
+ * Mirrors the output of AttackGraph.to_snapshot_dict() on the Python side.
+ */
+export interface AttackGraphSnapshot {
+    /** Attack paths with risk scores, nodes, edges, and optional chain membership */
+    paths: AttackPathData[];
+    /** Summary metadata computed from the graph */
+    metadata: {
+        totalPaths: number;
+        totalFindings: number;
+        highestRiskScore: number;
+        chainsDetected: number;
+    };
+}
+/** A single node in the attack graph (vulnerability or endpoint). */
+export interface GraphNodeData {
+    id: string;
+    type: "vulnerability" | "endpoint";
+    data: {
+        type?: string;
+        severity?: string;
+        endpoint?: string;
+        source_tool?: string;
+        url?: string;
+    };
+    cvss: number | null;
+    confidence: number | null;
+    prerequisites: string[];
+    downstream_impacts: string[];
+}
+/** An edge connecting two graph nodes. */
+export interface GraphEdgeData {
+    from_node: string;
+    to_node: string;
+    type: string;
+    correlation_factor: number;
+    relationship_type: string;
+}
+/** A single attack path with risk score and optional chain membership. */
+export interface AttackPathData {
+    risk_score: number;
+    nodes: GraphNodeData[];
+    edges: GraphEdgeData[];
+    chain_id?: string;
+    chain_name?: string;
+}
+export interface PlannerContext {
+    target: string;
+    targetType: TargetType;
+    authState: AuthState;
+    techStack?: string[];
+    findings: NormalizedFinding[];
+    executedCapabilities: Set<Capability>;
+    insertedPhases: Set<string>;
+    replanCount: number;
+    maxReplans?: number;
+    hypotheses?: Hypothesis[];
+    /**
+     * Attack chains detected by the Python attack graph engine.
+     * Reserved for future TUI display of detected chains. Currently
+     * only `chainPlans` is consumed by the planner's replan() method.
+     */
+    attackChains?: AttackChain[];
+    /** Chain-derived phase plans to insert as exploitation steps. */
+    chainPlans?: ChainPhasePlan[];
+    /**
+     * Capabilities suggested by LLM analysis (from handle_phase_complete).
+     * These are fed into replan() so the planner can apply its own
+     * deduplication, tool selection, and gate evaluation logic.
+     */
+    llmSuggestedCapabilities?: string[];
+    /** LLM reasoning text from handle_phase_complete analysis. */
+    llmReasoning?: string;
+    /**
+     * LLM-specific replan counter — independent from rule-based replanCount.
+     * Tracks how many times the LLM has triggered phase insertion.
+     */
+    llmReplanCount?: number;
+    /**
+     * Max replan cycles for LLM-driven replanning.
+     * Defaults to MAX_REPLANS (10) if not set.
+     */
+    llmMaxReplans?: number;
+    /** Optional progress callback for emitting structured events to the TUI. */
+    onProgress?: (event: ProgressEvent) => void;
+}
