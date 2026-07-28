@@ -105,6 +105,57 @@ export interface ChainPhasePlan {
   description: string
 }
 
+/** 
+ * Full attack graph snapshot for frontend visualization.
+ * Mirrors the output of AttackGraph.to_snapshot_dict() on the Python side.
+ */
+export interface AttackGraphSnapshot {
+  /** Attack paths with risk scores, nodes, edges, and optional chain membership */
+  paths: AttackPathData[]
+  /** Summary metadata computed from the graph */
+  metadata: {
+    totalPaths: number
+    totalFindings: number
+    highestRiskScore: number
+    chainsDetected: number
+  }
+}
+
+/** A single node in the attack graph (vulnerability or endpoint). */
+export interface GraphNodeData {
+  id: string
+  type: "vulnerability" | "endpoint"
+  data: {
+    type?: string
+    severity?: string
+    endpoint?: string
+    source_tool?: string
+    url?: string
+  }
+  cvss: number | null
+  confidence: number | null
+  prerequisites: string[]
+  downstream_impacts: string[]
+}
+
+/** An edge connecting two graph nodes. */
+export interface GraphEdgeData {
+  from_node: string
+  to_node: string
+  type: string
+  correlation_factor: number
+  relationship_type: string
+}
+
+/** A single attack path with risk score and optional chain membership. */
+export interface AttackPathData {
+  risk_score: number
+  nodes: GraphNodeData[]
+  edges: GraphEdgeData[]
+  chain_id?: string
+  chain_name?: string
+}
+
 export interface PlannerContext {
   target: string
   targetType: TargetType

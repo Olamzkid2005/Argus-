@@ -21,10 +21,15 @@
     "argus": "./bin/argus"
   },
   "exports": {
-    "./*": "./src/*.ts",
     "./runtime": "./src/opencode-runtime.ts",
     "./argus/*": "./src/argus/*.ts",
-    "./cli/*": "./src/cli/*.ts"
+    "./cli/*": "./src/cli/*.ts",
+    "./tui/*": "./src/argus/tui/*.ts",
+    "./visualizer/*": "./src/argus/visualizer/*.ts",
+    "./planner/*": "./src/argus/planner/*.ts",
+    "./bridge/*": "./src/argus/bridge/*.ts",
+    "./shared/*": "./src/argus/shared/*.ts",
+    "./*": "./src/*.ts"
   },
   "imports": {
     "#db": {
