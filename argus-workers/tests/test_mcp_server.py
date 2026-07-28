@@ -101,6 +101,19 @@ class TestMCPToolResult:
 
 
 class TestMCPServer:
+    def setup_method(self) -> None:
+        """Patch slow/potentially-hanging initialization steps.
+        socket.getaddrinfo can hang on some systems (DNS timeout).
+        """
+        import mcp_server as ms
+        self._orig_getaddrinfo = ms.socket.getaddrinfo
+        ms.socket.getaddrinfo = lambda *a, **kw: None  # no-op DNS check
+
+    def teardown_method(self) -> None:
+        """Restore original DNS."""
+        import mcp_server as ms
+        ms.socket.getaddrinfo = self._orig_getaddrinfo
+
     def test_init(self):
         # Pass a non-existent tools_dir to avoid auto-loading all YAML tool defs
         server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
@@ -193,10 +206,279 @@ class TestMCPServer:
 
 
 class TestGetMCPServer:
+    def setup_method(self) -> None:
+        """Patch DNS to prevent hang during MCPServer init."""
+        import mcp_server as ms
+        self._orig_getaddrinfo = ms.socket.getaddrinfo
+        ms.socket.getaddrinfo = lambda *a, **kw: None
+
+    def teardown_method(self) -> None:
+        """Restore original DNS."""
+        import mcp_server as ms
+        ms.socket.getaddrinfo = self._orig_getaddrinfo
+
     def test_singleton(self):
         s1 = get_mcp_server()
         s2 = get_mcp_server()
         assert s1 is s2
+
+
+# ── Binary availability cache & PATH validation ──
+
+
+class TestBinaryOnPath:
+    """Tests for MCPServer._binary_on_path() and execution-time
+    binary validation in call_tool().
+
+    Uses mocker to patch shutil.which() so tests don't hit the
+    filesystem (which is extremely slow on Windows).
+    """
+
+    def setup_method(self) -> None:
+        """Clear the class-level binary cache and patch DNS
+        before each test. DNS can hang on some systems.
+        """
+        MCPServer._binary_cache.clear()
+        import mcp_server as ms
+        self._orig_getaddrinfo = ms.socket.getaddrinfo
+        ms.socket.getaddrinfo = lambda *a, **kw: None
+
+    def teardown_method(self) -> None:
+        """Restore original DNS."""
+        import mcp_server as ms
+        ms.socket.getaddrinfo = self._orig_getaddrinfo
+
+    def make_server(self):
+        return MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+
+    def test_binary_found(self, mocker):
+        """_binary_on_path returns the path when binary exists."""
+        mocker.patch("mcp_server.shutil.which", return_value="/usr/bin/nuclei")
+        server = self.make_server()
+        path = server._binary_on_path("nuclei")
+        assert path == "/usr/bin/nuclei"
+
+    def test_binary_not_found(self, mocker):
+        """_binary_on_path returns None when binary doesn't exist."""
+        mocker.patch("mcp_server.shutil.which", return_value=None)
+        server = self.make_server()
+        path = server._binary_on_path("nonexistent_tool")
+        assert path is None
+
+    def test_binary_cache_hit(self, mocker):
+        """Repeated lookups for the same binary hit the cache.
+
+        Uses a non-critical tool name so _check_critical_tools()
+        during __init__() doesn't populate the cache for this tool.
+        The CRITICAL_TOOLS are looked up during init, so
+        mock_which.call_count starts at len(CRITICAL_TOOLS)
+        after make_server().
+        """
+        INIT_TOOL_CHECKS = len(MCPServer.CRITICAL_TOOLS)
+        mock_which = mocker.patch("mcp_server.shutil.which", return_value="/usr/bin/my_tool")
+        server = self.make_server()
+        assert mock_which.call_count == INIT_TOOL_CHECKS
+
+        # First call for a non-critical tool — should call shutil.which
+        path1 = server._binary_on_path("my_tool")
+        assert path1 == "/usr/bin/my_tool"
+        assert mock_which.call_count == INIT_TOOL_CHECKS + 1
+
+        # Second call — should use cache, not call shutil.which again
+        path2 = server._binary_on_path("my_tool")
+        assert path2 == "/usr/bin/my_tool"
+        assert mock_which.call_count == INIT_TOOL_CHECKS + 1  # Still cached
+
+    def test_binary_cache_separate_tools(self, mocker):
+        """Different tool names get separate cache entries.
+
+        Uses non-critical tool names (not in CRITICAL_TOOLS) so
+        _check_critical_tools() doesn't interfere.
+        """
+        INIT_TOOL_CHECKS = len(MCPServer.CRITICAL_TOOLS)
+        # Provide side_effect for init's calls + 3 test calls
+        mock_which = mocker.patch(
+            "mcp_server.shutil.which",
+            side_effect=(
+                # CRITICAL_TOOLS names for init (values don't matter)
+                ["/usr/bin/critical"] * INIT_TOOL_CHECKS
+                + ["/usr/bin/tool_a", "/usr/bin/tool_b", None]
+            ),
+        )
+        server = self.make_server()
+        assert mock_which.call_count == INIT_TOOL_CHECKS
+
+        assert server._binary_on_path("tool_a") == "/usr/bin/tool_a"
+        assert server._binary_on_path("tool_b") == "/usr/bin/tool_b"
+        assert server._binary_on_path("tool_c") is None
+        assert mock_which.call_count == INIT_TOOL_CHECKS + 3
+
+    def test_binary_cache_shared_across_instances(self, mocker):
+        """Cache is class-level so different instances share it.
+
+        Uses a non-critical tool name so init's critical tool checks
+        don't pollute the cache for this test.
+        """
+        INIT_TOOL_CHECKS = len(MCPServer.CRITICAL_TOOLS)
+        mock_which = mocker.patch("mcp_server.shutil.which", return_value="/usr/bin/my_tool")
+
+        server1 = self.make_server()
+        assert mock_which.call_count == INIT_TOOL_CHECKS
+        server1._binary_on_path("my_tool")
+        assert mock_which.call_count == INIT_TOOL_CHECKS + 1
+
+        server2 = self.make_server()
+        server2._binary_on_path("my_tool")
+        # Should use server1's cached result — no additional shutil.which calls
+        assert mock_which.call_count == INIT_TOOL_CHECKS + 1
+
+    def test_binary_cache_reset(self, mocker):
+        """Clearing the class-level cache forces re-lookup.
+
+        Uses a non-critical tool name so init's critical tool checks
+        don't pollute the cache for this test.
+        """
+        INIT_TOOL_CHECKS = len(MCPServer.CRITICAL_TOOLS)
+        mock_which = mocker.patch("mcp_server.shutil.which", return_value="/usr/bin/my_tool")
+        server = self.make_server()
+        assert mock_which.call_count == INIT_TOOL_CHECKS
+
+        # Look up a non-critical tool — should call shutil.which
+        server._binary_on_path("my_tool")
+        assert mock_which.call_count == INIT_TOOL_CHECKS + 1
+
+        # Clear the cache
+        MCPServer._binary_cache.clear()
+
+        # Re-lookup should call shutil.which again
+        server._binary_on_path("my_tool")
+        assert mock_which.call_count == INIT_TOOL_CHECKS + 2  # Re-fetched
+
+    def test_check_critical_tools_all_found(self, mocker):
+        """When all critical tools are on PATH, log info."""
+        mocker.patch("mcp_server.shutil.which", return_value="/usr/bin/tool")
+        mock_logger = mocker.patch("mcp_server.logger.info")
+        server = self.make_server()
+
+        server._check_critical_tools()
+        mock_logger.assert_any_call(
+            "All %d critical tool(s) are available",
+            len(server.CRITICAL_TOOLS),
+        )
+
+    def test_check_critical_tools_some_missing(self, mocker):
+        """When some critical tools are missing, log warning."""
+        # Return None for some critical tools to trigger warning
+        which_results = {
+            "nuclei": "/usr/bin/nuclei",
+            "nmap": None,  # missing
+            "sqlmap": "/usr/bin/sqlmap",
+            "subfinder": None,  # missing
+            "httpx": "/usr/bin/httpx",
+            "whatweb": None,  # missing
+        }
+        mocker.patch(
+            "mcp_server.shutil.which",
+            side_effect=lambda name, **kw: which_results.get(name),
+        )
+        mock_logger = mocker.patch("mcp_server.logger.warning")
+        server = self.make_server()
+
+        server._check_critical_tools()
+        # Should log a warning about missing tools
+        assert mock_logger.called
+        # call_args[0][0] = "STARTUP GUARD: %s", call_args[0][1] = the formatted msg
+        warning_msg = mock_logger.call_args[0][1]
+        assert "critical tool(s) missing" in warning_msg
+
+
+class TestCallToolBinaryValidation:
+    """Tests for execution-time binary validation in call_tool()."""
+
+    def setup_method(self) -> None:
+        """Clear the class-level binary cache and patch DNS
+        before each test. DNS can hang on some systems.
+        """
+        MCPServer._binary_cache.clear()
+        import mcp_server as ms
+        self._orig_getaddrinfo = ms.socket.getaddrinfo
+        ms.socket.getaddrinfo = lambda *a, **kw: None
+
+    def teardown_method(self) -> None:
+        """Restore original DNS."""
+        import mcp_server as ms
+        ms.socket.getaddrinfo = self._orig_getaddrinfo
+
+    def make_server(self):
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="nuclei",
+            command="nuclei",
+            description="Fast vulnerability scanner",
+        ))
+        return server
+
+    def test_binary_not_found_returns_clean_error(self, mocker):
+        """When binary is not on PATH, call_tool returns clean error."""
+        mocker.patch("mcp_server.shutil.which", return_value=None)
+        server = self.make_server()
+        result = server.call_tool("nuclei", {"target": "http://test.com"})
+        assert result["isError"] is True
+        error_text = result["content"][0]["text"]
+        assert "not found on PATH" in error_text
+        assert "nuclei" in error_text
+
+    def test_binary_found_proceeds_to_execution(self, mocker):
+        """When binary is on PATH, call_tool proceeds to subprocess.
+
+        Uses sys.executable (always available) to verify the happy path.
+        """
+        import sys
+        mocker.patch("mcp_server.shutil.which", return_value=sys.executable)
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="test",
+            command=sys.executable,
+            args=["-c", "print('hello')"],
+        ))
+        result = server.call_tool("test")
+        assert result["isError"] is False
+        assert "hello" in result["content"][0]["text"]
+
+    def test_python3_tool_skips_binary_check(self, mocker):
+        """Python3-based tools skip the binary check entirely."""
+        mocker.patch("mcp_server.shutil.which", return_value=None)
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="agent-tool",
+            command="python3",
+            args=["-c", "print('hello')"],
+        ))
+        # Even though shutil.which would fail, python3 tools bypass the check
+        # and are executed via the current interpreter
+        result = server.call_tool("agent-tool")
+        assert result["isError"] is False
+
+    def test_binary_check_cached_per_tool(self, mocker):
+        """Binary check is cached so repeated calls for the same tool are fast."""
+        import sys
+        INIT_TOOL_CHECKS = len(MCPServer.CRITICAL_TOOLS)
+        mock_which = mocker.patch("mcp_server.shutil.which", return_value=sys.executable)
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="test",
+            command=sys.executable,
+            args=["-c", "print('hello')"],
+        ))
+
+        # First call — 6 init calls + 1 binary check = 7
+        server.call_tool("test")
+        assert mock_which.call_count == INIT_TOOL_CHECKS + 1
+
+        # Second call — should use cached result, no additional shutil.which
+        server.call_tool("test")
+        # Still INIT_TOOL_CHECKS + 1 — second call used cache
+        assert mock_which.call_count == INIT_TOOL_CHECKS + 1
 
 
 # ── Phase 1.2: _fallback_phase_complete ──────────────────────────────
@@ -313,6 +595,17 @@ class TestHandlePhaseComplete:
     Verifies error handling and fallback behavior. LLM integration tests
     require a live API key and are not included here.
     """
+
+    def setup_method(self) -> None:
+        """Patch DNS to prevent hang during MCPServer init."""
+        import mcp_server as ms
+        self._orig_getaddrinfo = ms.socket.getaddrinfo
+        ms.socket.getaddrinfo = lambda *a, **kw: None
+
+    def teardown_method(self) -> None:
+        """Restore original DNS."""
+        import mcp_server as ms
+        ms.socket.getaddrinfo = self._orig_getaddrinfo
 
     def make_server(self):
         return MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
