@@ -279,26 +279,13 @@ class MCPServer:
                 "Check container DNS config or set --dns-servers 8.8.8.8"
             )
 
-        # ── Consolidated startup preflight check ──
-        # Runs all preflight checks (critical tools, credentials, encryption keys,
-        # scope config, DNS, LLM, DB) and logs a structured report.
-        # Each check is optional — the worker always starts regardless of results.
-        # Set PREFLIGHT_BLOCK_ON_ERROR=1 to raise RuntimeError on ERROR checks.
-        try:
-            from runtime.preflight import log_startup_preflight
-
-            _preflight = log_startup_preflight()
-            if _preflight.has_errors():
-                _block_on_error = os.environ.get("PREFLIGHT_BLOCK_ON_ERROR", "").lower() in ("1", "true")
-                if _block_on_error:
-                    _error_msgs = "; ".join(c.message for c in _preflight.errors)
-                    raise RuntimeError(
-                        f"PREFLIGHT_BLOCK_ON_ERROR=1: {_preflight.error_count} preflight error(s): {_error_msgs}"
-                    )
-        except RuntimeError:
-            raise
-        except Exception as e:
-            logger.warning("Preflight check failed (non-fatal): %s", e)
+        # ── Startup preflight is intentionally NOT run here ──
+        # The preflight check (log_startup_preflight) is redundant with the
+        # background health check thread started in main() via log_startup_health().
+        # Running it synchronously here would block transport startup by ~8-12s
+        # on systems where shutil.which() is slow (Windows) or DNS takes time.
+        # The background health check in log_startup_health() handles preflight,
+        # Celery ping, and LLM checks asynchronously.
 
     # Critical tools that must be available for full functionality.
     # Used by _check_critical_tools() to warn or enforce at startup.
@@ -1655,24 +1642,29 @@ def main():
     transport.register("cancel", handle_cancel)
 
     # ── Gap 8.3: Log startup health diagnostics ──
-    # Run a comprehensive health check and log the results so operators
-    # can see the startup state without querying the /health endpoint.
+    # Run in a background daemon thread so it doesn't block the transport
+    # from starting. The health check is slow (~8-10s) due to Celery ping
+    # and preflight checks that scan for tools on PATH.
     from health_server import log_startup_health, start_health_server_from_env
 
-    try:
-        health = log_startup_health()
-        if health["status"] == "degraded":
-            logger.warning(
-                "Startup health: DEGRADED — %d/%d tools available, LLM=%s, Celery=%s",
-                health["tools"]["available"],
-                health["tools"]["total"],
-                health["llm_available"],
-                health["celery_worker"]["alive"],
-            )
-        else:
-            logger.info("Startup health: OK")
-    except Exception:
-        logger.debug("Startup health diagnostics failed", exc_info=True)
+    def _run_health_check():
+        try:
+            health = log_startup_health()
+            if health["status"] == "degraded":
+                logger.warning(
+                    "Startup health: DEGRADED — %d/%d tools available, LLM=%s, Celery=%s",
+                    health["tools"]["available"],
+                    health["tools"]["total"],
+                    health["llm_available"],
+                    health["celery_worker"]["alive"],
+                )
+            else:
+                logger.info("Startup health: OK")
+        except Exception:
+            logger.debug("Startup health diagnostics failed", exc_info=True)
+
+    _health_thread = threading.Thread(target=_run_health_check, daemon=True)
+    _health_thread.start()
 
     # ── Phase 5.1: Start health/metrics HTTP server (blocker 57) ──
     # Runs on a daemon thread so it doesn't block stdio transport shutdown.
