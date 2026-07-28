@@ -154,34 +154,47 @@ class EngagementStateMachine:
 
         Called at the start of transition() and chain_transition() so
         the FOR UPDATE lock is already held, preventing TOCTOU races.
+
+        Exception handling is deliberately narrow:
+          - psycopg2.Error / DatabaseConnectionError → DB outage, always re-raise
+          - IndexError / TypeError from row access → unexpected format, fallback
+          - Any other exception → propagates (bugs must not be silently swallowed)
         """
         if self.current_state is not None:
             return
         conn = self._get_connection()
         try:
-            c = conn.cursor()
-            c.execute(
-                "SELECT status FROM engagements WHERE id = %s", (self.engagement_id,)
-            )
-            row = c.fetchone()
-            c.close()
-            resolved = row[0] if row else "created"
-        except (psycopg2.Error, DatabaseConnectionError) as e:
-            logger.error(
-                "Database error resolving state for engagement %s: %s",
-                self.engagement_id,
-                e,
-            )
-            raise  # Re-raise DB outages — don't silently mask them
-        except (IndexError, TypeError) as e:
-            logger.warning(
-                "Unexpected row format for engagement %s, defaulting to 'created': %s",
-                self.engagement_id,
-                e,
-            )
-            resolved = "created"
+            # First block: DB cursor operations — only psycopg2 errors are
+            # handled; anything else (AttributeError, etc.) must propagate.
+            try:
+                c = conn.cursor()
+                c.execute(
+                    "SELECT status FROM engagements WHERE id = %s", (self.engagement_id,)
+                )
+                row = c.fetchone()
+                c.close()
+            except (psycopg2.Error, DatabaseConnectionError) as e:
+                logger.error(
+                    "Database error resolving state for engagement %s: %s",
+                    self.engagement_id,
+                    e,
+                )
+                raise  # Re-raise DB outages — don't silently mask them
+
+            # Second block: narrow scope — only the row access can raise
+            # IndexError/TypeError. Any other exception type propagates.
+            try:
+                resolved = row[0] if row else "created"
+            except (IndexError, TypeError) as e:
+                logger.warning(
+                    "Unexpected row format for engagement %s, defaulting to 'created': %s",
+                    self.engagement_id,
+                    e,
+                    exc_info=True,
+                )
+                resolved = "created"
         finally:
-            self._release_connection(conn)
+            self._release_connection(conn)  # Always release — no regression
 
         if resolved == "awaiting_approval":
             logger.warning(
