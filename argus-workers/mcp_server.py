@@ -11,6 +11,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import sysconfig
 import threading
 import time
 from pathlib import Path
@@ -303,8 +304,9 @@ class MCPServer:
 
         Uses an LRU cache so repeated lookups for the same binary only hit
         the filesystem once. The augmented PATH includes venv, go, homebrew,
-        and common system paths.
+        pip user scripts, and common system paths.
         """
+        _sep = os.pathsep
         _cache = self.__class__._binary_cache
         if name not in _cache:
             _venv_bin = str(Path(sys.executable).parent)
@@ -313,12 +315,14 @@ class MCPServer:
             _project_venv = str(
                 Path(__file__).resolve().parent.parent / "venv" / "bin"
             )
+            _pip_scripts = sysconfig.get_path("scripts")
             _existing_path = os.environ.get("PATH", "")
             _extra_path = os.environ.get("ARGUS_EXTRA_PATH", "")
-            _augmented_path = (
-                f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:"
-                f"/usr/local/bin:/usr/bin:/bin:{_extra_path}:{_existing_path}"
-            )
+            _augmented_path = _sep.join([
+                _venv_bin, _go_bin, _homebrew_bin, _project_venv, _pip_scripts,
+                "/usr/local/bin", "/usr/bin", "/bin",
+                _extra_path, _existing_path,
+            ])
             _cache[name] = shutil.which(name, path=_augmented_path)
         return _cache[name]
 
@@ -807,16 +811,20 @@ class MCPServer:
             }
             for _key in BLOCKED_ENV_VARS:
                 _env.pop(_key, None)
-            # Add venv to PATH so pip-installed tools are findable
+            # Add venv + pip scripts to PATH so pip-installed tools are findable
+            _sep = os.pathsep
             _venv_bin = str(Path(sys.executable).parent)
             _go_bin = os.path.expanduser("~/go/bin")
             _homebrew_bin = "/opt/homebrew/bin"
             _project_venv = str(Path(__file__).resolve().parent.parent / "venv" / "bin")
+            _pip_scripts = sysconfig.get_path("scripts")
             # Preserve any existing PATH customizations (e.g. from start-argus.sh)
             _existing_path = _env.get("PATH", "")
-            _env["PATH"] = (
-                f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:/snap/bin:/usr/local/bin:/usr/bin:/bin:{_existing_path}"
-            )
+            _env["PATH"] = _sep.join([
+                _venv_bin, _go_bin, _homebrew_bin, _project_venv, _pip_scripts,
+                "/snap/bin", "/usr/local/bin", "/usr/bin", "/bin",
+                _existing_path,
+            ])
             _env["PYTHONDONTWRITEBYTECODE"] = "1"
 
             result = subprocess.run(  # noqa: S603 — safe: cmd is list form, validated by _validate_args_safe()
@@ -1303,6 +1311,7 @@ class MCPServer:
 
         phase_map = {
             "recon": ["VULN_SCAN", "AUTH_TEST"],
+            "source_analysis": ["VULN_SCAN"],
             "scan": ["DEEP_SCAN", "XSS_DETECTION", "SQLI_DETECTION"],
             "deep_scan": ["POST_EXPLOIT", "EXPLOIT_CHAIN"],
             "repo_scan": ["VULN_SCAN"],
@@ -1331,36 +1340,31 @@ class MCPServer:
             "fallback": True,  # Signal to TypeScript that this is degraded (non-LLM) response
         }
 
-    def handle_get_attack_graph(self, params: dict) -> dict:
-        """Return the attack graph chains and highest-risk paths for an engagement.
+    @staticmethod
+    def _build_attack_graph(
+        engagement_id: str,
+        params_findings: list | None = None,
+    ) -> tuple[Any, int, list]:
+        """Build and populate an AttackGraph from findings.
 
-        Reads findings from the engagement database, builds an AttackGraph,
-        detects vulnerability chains, and returns structured chain data that
-        the TypeScript planner can use to insert exploitation phases.
+        Shared helper used by both handle_get_attack_graph and
+        handle_get_attack_graph_snapshot to avoid duplicate graph-building
+        logic.
 
         Args:
-            params: dict with:
-                - engagement_id: str — engagement UUID
-                - findings: list[dict] — optional pre-loaded findings (if not
-                  provided, reads from database)
+            engagement_id: Engagement UUID
+            params_findings: Optional pre-loaded findings from params.
+                             If None or empty, reads from the database.
 
         Returns:
-            dict with:
-                - chains: list[dict] — detected attack chains with risk scores
-                - paths: list[dict] — highest-risk attack paths
-                - chain_plans: list[dict] — ordered exploitation phase plans
+            tuple of (graph, skipped_count, raw_findings)
         """
-        engagement_id = params.get("engagement_id", "")
-        if not engagement_id:
-            return {"error": "engagement_id is required", "chains": [], "paths": [], "chain_plans": []}
-
         from attack_graph import AttackGraph
-        from attack_composition import generate_plan_from_graph
 
         graph = AttackGraph(engagement_id)
+        findings = params_findings or []
 
-        # Load findings from params or database
-        findings = params.get("findings", [])
+        # Load from database if no findings provided
         if not findings:
             try:
                 from database.repositories.finding_repository import FindingRepository
@@ -1370,6 +1374,7 @@ class MCPServer:
                 logger.debug("Could not load findings for attack graph: %s", e)
 
         # Build the graph from findings
+        skipped_count = 0
         for raw_finding in findings:
             if isinstance(raw_finding, dict):
                 from models.finding import VulnerabilityFinding
@@ -1394,6 +1399,41 @@ class MCPServer:
                     graph.add_finding(finding)
                 except Exception as e:
                     logger.debug("Skipping invalid finding in attack graph: %s", e)
+                    skipped_count += 1
+            else:
+                skipped_count += 1
+
+        return graph, skipped_count, findings
+
+    def handle_get_attack_graph(self, params: dict) -> dict:
+        """Return the attack graph chains and highest-risk paths for an engagement.
+
+        Reads findings from the engagement database, builds an AttackGraph,
+        detects vulnerability chains, and returns structured chain data that
+        the TypeScript planner can use to insert exploitation phases.
+
+        Args:
+            params: dict with:
+                - engagement_id: str — engagement UUID
+                - findings: list[dict] — optional pre-loaded findings (if not
+                  provided, reads from database)
+
+        Returns:
+            dict with:
+                - chains: list[dict] — detected attack chains with risk scores
+                - paths: list[dict] — highest-risk attack paths
+                - chain_plans: list[dict] — ordered exploitation phase plans
+        """
+        engagement_id = params.get("engagement_id", "")
+        if not engagement_id:
+            return {"error": "engagement_id is required", "chains": [], "paths": [], "chain_plans": []}
+
+        from attack_composition import generate_plan_from_graph
+
+        graph, skipped_count, findings = self._build_attack_graph(
+            engagement_id,
+            params.get("findings"),
+        )
 
         # Get highest risk paths and chain plans
         chains = graph.find_chains()
@@ -1401,9 +1441,6 @@ class MCPServer:
         chain_plans = generate_plan_from_graph(graph)
 
         # Blocker 18: Report how many findings were skipped so silent data loss is visible
-        # (invalid findings are skipped with logger.debug, but the count is surfaced here)
-        skipped_count = len(findings) - sum(1 for raw_finding in findings
-                                             if isinstance(raw_finding, dict))
         if skipped_count > 0:
             logger.warning(
                 "Attack graph: %d finding(s) were skipped due to invalid format — "
@@ -1430,6 +1467,94 @@ class MCPServer:
             "chains": serialized_chains,
             "paths": high_risk_paths,
             "chain_plans": chain_plans,
+        }
+
+    def handle_get_attack_graph_snapshot(self, params: dict) -> dict:
+        """Return the full attack graph snapshot for the frontend visualizer.
+
+        Builds an AttackGraph from engagement findings, computes risk scores
+        and chain metadata, and returns the complete `to_snapshot_dict()`
+        output enriched with chain IDs and names for interactive visualization.
+
+        Args:
+            params: dict with:
+                - engagement_id: str — engagement UUID
+                - findings: list[dict] — optional pre-loaded findings
+
+        Returns:
+            dict with:
+                - paths: list[dict] — serialized attack paths with nodes, edges, risk
+                - metadata: dict — summary statistics (totalPaths, totalFindings,
+                  highestRiskScore, chainsDetected)
+        """
+        engagement_id = params.get("engagement_id", "")
+        if not engagement_id:
+            return {
+                "paths": [],
+                "metadata": {
+                    "totalPaths": 0,
+                    "totalFindings": 0,
+                    "highestRiskScore": 0,
+                    "chainsDetected": 0,
+                },
+            }
+
+        from attack_graph_db import AttackGraphRepository
+
+        # Try loading from repository first (persisted graph)
+        try:
+            repo = AttackGraphRepository()
+            graph = repo.load_graph(engagement_id)
+        except Exception as e:
+            logger.debug("Could not load persisted graph for %s: %s", engagement_id, e)
+            graph = None
+
+        if graph is None:
+            # Build fresh from findings using the shared helper
+            graph, _, _ = self._build_attack_graph(
+                engagement_id,
+                params.get("findings"),
+            )
+
+        # Get snapshot and enrich with chain metadata
+        snapshot = graph.to_snapshot_dict()
+        chains = graph.find_chains()
+
+        # Enrich paths with chain IDs and names
+        for path_data in snapshot.get("paths", []):
+            for chain in chains:
+                prereq_type = chain["prereq_node"].data.get("type", "")
+                chain_type = chain["chain_node"].data.get("type", "")
+                path_types = [
+                    n.get("data", {}).get("type", "")
+                    for n in path_data.get("nodes", [])
+                    if n.get("type") == "vulnerability"
+                ]
+                if prereq_type in path_types and chain_type in path_types:
+                    path_data["chain_id"] = chain["chain_id"]
+                    path_data["chain_name"] = chain["name"]
+                    break
+
+        # Compute metadata
+        all_nodes = set()
+        for p in snapshot.get("paths", []):
+            for n in p.get("nodes", []):
+                all_nodes.add(n.get("id", ""))
+
+        risk_scores = [
+            p.get("risk_score", 0)
+            for p in snapshot.get("paths", [])
+            if p.get("risk_score") is not None
+        ]
+
+        return {
+            "paths": snapshot.get("paths", []),
+            "metadata": {
+                "totalPaths": len(snapshot.get("paths", [])),
+                "totalFindings": len(all_nodes),
+                "highestRiskScore": max(risk_scores) if risk_scores else 0,
+                "chainsDetected": len(chains),
+            },
         }
 
 
@@ -1535,6 +1660,11 @@ def main():
         return server.handle_get_attack_graph(params)
 
     transport.register("get_attack_graph", handle_get_attack_graph)
+
+    def handle_get_attack_graph_snapshot(params):
+        return server.handle_get_attack_graph_snapshot(params)
+
+    transport.register("get_attack_graph_snapshot", handle_get_attack_graph_snapshot)
 
     def handle_phase_complete(params):
         return server.handle_phase_complete(params)

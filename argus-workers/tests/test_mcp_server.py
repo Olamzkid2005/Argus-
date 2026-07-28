@@ -589,6 +589,225 @@ class TestFallbackPhaseComplete:
         assert caps.count("POST_EXPLOIT") == 1
 
 
+class TestBuildAttackGraph:
+    """Tests for MCPServer._build_attack_graph()."""
+
+    def setup_method(self) -> None:
+        import mcp_server as ms
+        self._orig_getaddrinfo = ms.socket.getaddrinfo
+        ms.socket.getaddrinfo = lambda *a, **kw: None
+
+    def teardown_method(self) -> None:
+        import mcp_server as ms
+        ms.socket.getaddrinfo = self._orig_getaddrinfo
+
+    def make_server(self):
+        return MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+
+    def test_build_empty_graph(self):
+        """Empty findings should produce an empty graph (no nodes)."""
+        server = self.make_server()
+        graph, skipped, findings = server._build_attack_graph("ENG-test", [])
+        assert len(graph.nodes) == 0
+        assert skipped == 0
+
+    def test_build_from_valid_findings(self):
+        """Valid findings should populate the graph."""
+        server = self.make_server()
+        findings_data = [
+            {
+                "type": "XSS",
+                "severity": "HIGH",
+                "endpoint": "/api/users",
+                "source_tool": "dalfox",
+                "confidence": 0.8,
+            },
+            {
+                "type": "SSRF",
+                "severity": "CRITICAL",
+                "endpoint": "/api/fetch",
+                "source_tool": "nuclei",
+                "confidence": 0.9,
+            },
+        ]
+        graph, skipped, findings = server._build_attack_graph("ENG-test", findings_data)
+        assert len(graph.nodes) >= 2  # Each finding creates at least 1 vuln node + 1 endpoint node
+        assert skipped == 0
+
+    def test_skips_invalid_findings(self):
+        """Non-dict findings should be skipped and counted."""
+        server = self.make_server()
+        findings_data = [
+            {"type": "XSS", "severity": "HIGH", "endpoint": "/xss", "source_tool": "test", "confidence": 0.5},
+            None,  # invalid
+            "not a dict",  # invalid
+        ]
+        graph, skipped, findings = server._build_attack_graph("ENG-test", findings_data)
+        assert len(graph.nodes) >= 1
+        assert skipped >= 2
+
+    def test_build_detects_chains(self):
+        """Findings matching a chain rule should produce detectable chains."""
+        server = self.make_server()
+        findings_data = [
+            {
+                "type": "XSS",
+                "severity": "HIGH",
+                "endpoint": "/api/comments",
+                "source_tool": "dalfox",
+                "confidence": 0.85,
+            },
+            {
+                "type": "CSRF",
+                "severity": "MEDIUM",
+                "endpoint": "/api/action",
+                "source_tool": "nuclei",
+                "confidence": 0.7,
+            },
+        ]
+        graph, skipped, _ = server._build_attack_graph("ENG-chain-test", findings_data)
+        chains = graph.find_chains()
+        # XSS + CSRF should trigger chain_2 (XSS + CSRF → Account Takeover)
+        chain_ids = [c["chain_id"] for c in chains]
+        assert "chain_2" in chain_ids  # XSS + CSRF → ATO
+        assert skipped == 0
+
+
+class TestHandleAttackGraphSnapshot:
+    """Tests for MCPServer.handle_get_attack_graph_snapshot()."""
+
+    def setup_method(self) -> None:
+        import mcp_server as ms
+        self._orig_getaddrinfo = ms.socket.getaddrinfo
+        ms.socket.getaddrinfo = lambda *a, **kw: None
+
+    def teardown_method(self) -> None:
+        import mcp_server as ms
+        ms.socket.getaddrinfo = self._orig_getaddrinfo
+
+    def make_server(self):
+        return MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+
+    def test_missing_engagement_id_returns_empty(self):
+        """Without engagement_id, should return empty paths and zero metadata."""
+        server = self.make_server()
+        result = server.handle_get_attack_graph_snapshot({})
+        assert result["paths"] == []
+        assert result["metadata"]["totalPaths"] == 0
+        assert result["metadata"]["totalFindings"] == 0
+        assert result["metadata"]["highestRiskScore"] == 0
+        assert result["metadata"]["chainsDetected"] == 0
+
+    def test_returns_snapshot_structure(self):
+        """Valid findings should return a properly structured snapshot."""
+        server = self.make_server()
+        findings_data = [
+            {
+                "type": "XSS",
+                "severity": "HIGH",
+                "endpoint": "/search",
+                "source_tool": "dalfox",
+                "confidence": 0.85,
+            },
+            {
+                "type": "SSRF",
+                "severity": "CRITICAL",
+                "endpoint": "/proxy",
+                "source_tool": "nuclei",
+                "confidence": 0.9,
+            },
+        ]
+        result = server.handle_get_attack_graph_snapshot({
+            "engagement_id": "ENG-snap-test",
+            "findings": findings_data,
+        })
+
+        # Check top-level structure
+        assert "paths" in result
+        assert "metadata" in result
+        assert len(result["paths"]) > 0
+
+        # Check path structure (each path should have nodes, edges, risk_score)
+        for path in result["paths"]:
+            assert "risk_score" in path
+            assert "nodes" in path
+            assert "edges" in path
+            assert isinstance(path["nodes"], list)
+            assert isinstance(path["edges"], list)
+
+            # Each node should have the required fields
+            for node in path["nodes"]:
+                assert "id" in node
+                assert "type" in node
+                assert "data" in node
+
+        # Check metadata structure
+        meta = result["metadata"]
+        assert meta["totalPaths"] > 0
+        assert meta["totalFindings"] > 0
+        assert meta["highestRiskScore"] > 0
+
+    def test_chains_are_reflected_in_metadata(self):
+        """Chainable findings should propagate to chainsDetected metadata."""
+        server = self.make_server()
+        # XSS + CSRF should trigger chain_2
+        findings_data = [
+            {
+                "type": "XSS",
+                "severity": "HIGH",
+                "endpoint": "/comments",
+                "source_tool": "dalfox",
+                "confidence": 0.85,
+            },
+            {
+                "type": "CSRF",
+                "severity": "MEDIUM",
+                "endpoint": "/action",
+                "source_tool": "nuclei",
+                "confidence": 0.7,
+            },
+        ]
+        result = server.handle_get_attack_graph_snapshot({
+            "engagement_id": "ENG-chain-snap",
+            "findings": findings_data,
+        })
+
+        assert result["metadata"]["chainsDetected"] >= 1
+
+        # At least one path should have chain_id and chain_name enriched
+        has_chain_enrichment = any(
+            p.get("chain_id") and p.get("chain_name")
+            for p in result["paths"]
+        )
+        assert has_chain_enrichment, "No paths were enriched with chain metadata"
+
+    def test_missing_engagement_id_via_params(self):
+        """Empty engagement_id in params should return empty result."""
+        server = self.make_server()
+        result = server.handle_get_attack_graph_snapshot({"engagement_id": ""})
+        assert result["paths"] == []
+
+    def test_snapshot_with_single_finding(self):
+        """A single finding should still produce a valid snapshot."""
+        server = self.make_server()
+        findings_data = [
+            {
+                "type": "SQL_INJECTION",
+                "severity": "CRITICAL",
+                "endpoint": "/api/login",
+                "source_tool": "sqlmap",
+                "confidence": 0.95,
+            },
+        ]
+        result = server.handle_get_attack_graph_snapshot({
+            "engagement_id": "ENG-single",
+            "findings": findings_data,
+        })
+        assert len(result["paths"]) >= 1
+        assert result["metadata"]["highestRiskScore"] >= 0
+        assert result["metadata"]["chainsDetected"] == 0  # Single finding can't form a chain
+
+
 class TestHandlePhaseComplete:
     """Tests for MCPServer.handle_phase_complete().
 
