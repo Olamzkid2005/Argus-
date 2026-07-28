@@ -311,6 +311,30 @@ class MCPServer:
         "whatweb",
     })
 
+    def _binary_on_path(self, name: str) -> str | None:
+        """Check if a binary is available on the augmented PATH (cached).
+
+        Uses an LRU cache so repeated lookups for the same binary only hit
+        the filesystem once. The augmented PATH includes venv, go, homebrew,
+        and common system paths.
+        """
+        _cache = self.__class__._binary_cache
+        if name not in _cache:
+            _venv_bin = str(Path(sys.executable).parent)
+            _go_bin = os.path.expanduser("~/go/bin")
+            _homebrew_bin = "/opt/homebrew/bin"
+            _project_venv = str(
+                Path(__file__).resolve().parent.parent / "venv" / "bin"
+            )
+            _existing_path = os.environ.get("PATH", "")
+            _extra_path = os.environ.get("ARGUS_EXTRA_PATH", "")
+            _augmented_path = (
+                f"{_venv_bin}:{_go_bin}:{_homebrew_bin}:{_project_venv}:"
+                f"/usr/local/bin:/usr/bin:/bin:{_extra_path}:{_existing_path}"
+            )
+            _cache[name] = shutil.which(name, path=_augmented_path)
+        return _cache[name]
+
     def _check_critical_tools(self) -> None:
         """Check critical tools are available after YAML loading.
 
@@ -320,9 +344,10 @@ class MCPServer:
 
         Critical tools are defined in ``CRITICAL_TOOLS``.
         """
+        # Check actual binary availability on PATH (not just registry)
         missing = [
             name for name in self.CRITICAL_TOOLS
-            if name not in self._tools
+            if not self._binary_on_path(name)
         ]
         if not missing:
             logger.info(
@@ -559,6 +584,9 @@ class MCPServer:
     # in tools/tool_runner.py. Any divergence causes findings-bearing output to be
     # treated as an error on the MCP path, silently losing findings.
     # Last verified: both match exactly (8 tools each).
+    # Shared binary availability cache (class-level, shared across all instances)
+    _binary_cache: dict[str, str | None] = {}
+
     FINDINGS_EXIT_CODES: dict[str, set[int]] = {
         "semgrep": {1},
         "bandit": {1},
