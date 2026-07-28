@@ -57,6 +57,9 @@ findings.md
 # Cache / build artifacts
 .semgrep_cache/
 
+# Cloned reference repos (not part of the project)
+AI-Surface/
+
 # IDE
 .idea/
 .vscode/
