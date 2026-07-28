@@ -693,6 +693,34 @@ tools:
       coverage_score: 50
       cost: medium
 
+  # ── AI Surface Analysis ────────────────────────────────────────
+
+  - name: ai-surface
+    label: AI Surface Scanner
+    description: Static AI attack-surface scanner — detects MCP servers, agent frameworks, LLM SDKs, model gateways, vector stores, AI provider keys, and API endpoints from source code
+    capabilities:
+      - ai_surface_mapping
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: false
+    supports_web: false
+    supports_source: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 90
+      coverage_score: 80
+    consumes:
+      - source_code
+    provides:
+      - ai_surfaces
+      - mcp_servers
+      - agent_frameworks
+      - llm_sdks
+    signal_quality: CONFIRMED
+    priority: 80
+    cost: medium
+
   # ── Infrastructure Scanning ────────────────────────────────────
 
   - name: sn1per
