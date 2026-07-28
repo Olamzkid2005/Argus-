@@ -447,6 +447,15 @@ class MCPServer:
                     "playwright_privesc.py",
                 )
             ),
+            os.path.normpath(
+                os.path.join(
+                    project_dir,
+                    "argus-workers",
+                    "tools",
+                    "scripts",
+                    "run_finding_verifier.py",
+                )
+            ),
         }
 
         try:
