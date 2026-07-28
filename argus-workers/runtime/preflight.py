@@ -361,14 +361,14 @@ def _check_scope_config() -> CheckResult:
     )
 
 
-def _check_dns(timeout: float = 5.0) -> CheckResult:
+def _check_dns(timeout: float = 2.0) -> CheckResult:
     """Check external DNS resolution.
 
     Uses a short socket timeout to avoid blocking indefinitely on systems
     without internet access (common on Windows, container sandboxes, etc.).
 
     Args:
-        timeout: Socket timeout in seconds. Default 5.0.
+        timeout: Socket timeout in seconds. Default 2.0.
     """
     old_timeout = socket.getdefaulttimeout()
     try:
@@ -491,11 +491,16 @@ def _check_tool_health() -> CheckResult:
     Uses ToolHealthChecker to run --version probes on critical tools.
     Reports degraded tools (binary exists but doesn't respond) separately
     from unavailable tools (binary not found).
+
+    NOTE: Only checks ``_CRITICAL_TOOL_NAMES`` (6 tools), NOT all 65+
+    registered tool definitions. Probing all tools via ``check_all()``
+    without ``tool_names`` would call ``shutil.which()`` for every tool,
+    which is extremely slow on Windows (~100ms per call).
     """
     try:
         from tool_core.health_checker import ToolHealthChecker
 
-        checker = ToolHealthChecker(probe_timeout=5)
+        checker = ToolHealthChecker(probe_timeout=3)
         report = checker.check_all(
             tool_names=_CRITICAL_TOOL_NAMES, max_workers=6
         )
