@@ -1,0 +1,42 @@
+name: ai-surface
+command: ai-surface
+description: "Static AI attack-surface scanner: MCP servers, agent frameworks, LLM SDKs, model gateways, vector stores, AI provider keys, API endpoints"
+args:
+  - "scan"
+  - "--output"
+  - "json"
+parameters:
+  - name: target
+    type: string
+    description: "Target path (directory) to scan for AI attack surfaces"
+    required: true
+    flag: null
+  - name: output_format
+    type: string
+    description: "Output format (json)"
+    required: false
+    flag: "--output"
+    default: "json"
+  - name: fail_on
+    type: string
+    description: "Severity gate threshold (critical|high|medium|low)"
+    required: false
+    flag: "--fail-on"
+    default: "high"
+  - name: verbose
+    type: boolean
+    description: "Verbose output"
+    required: false
+    flag: "--verbose"
+    default: false
+capabilities:
+  - ai_surface_mapping
+signal_quality: CONFIRMED
+risk_level: low
+requires:
+  recon_signals:
+    - has_source_access
+priority: 80
+cost: medium
+enabled: true
+timeout: 300
