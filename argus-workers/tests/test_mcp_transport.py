@@ -1,165 +1,289 @@
-"""Tests for mcp_transport.py — MCPTransport, create_ping_handler."""
+"""
+Tests for mcp_transport.py — stdio JSON-RPC 2.0 transport layer.
 
-from io import StringIO
-from unittest.mock import MagicMock, patch
+Covers:
+  - create_ping_handler()
+  - MCPTransport._process_request() — single requests, notifications, errors
+  - MCPTransport._make_error() — error format
+  - MCPTransport.register() — handler lifecycle
+  - MCPTransport.run() — integration with fake stdin/stdout streams
+  - Edge cases: invalid JSON, unknown methods, handler exceptions, batch requests
+"""
 
-from mcp_transport import _SKIP_LINE, MCPTransport, create_ping_handler
+from __future__ import annotations
+
+import io
+import json
+
+import pytest
+
+from mcp_transport import (
+    MCPTransport,
+    PARSE_ERROR,
+    INVALID_REQUEST,
+    METHOD_NOT_FOUND,
+    INTERNAL_ERROR,
+    create_ping_handler,
+)
 
 
-class TestMCPTransport:
-    def test_register_stores_handler(self):
-        transport = MCPTransport()
-        handler = MagicMock()
-        transport.register("test", handler)
-        assert transport.handlers["test"] == handler
+class TestCreatePingHandler:
+    """Tests for create_ping_handler()."""
 
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_read_request_parses_json(self, mock_stdin):
-        mock_stdin.write('{"method": "ping"}\n')
-        mock_stdin.seek(0)
-        transport = MCPTransport()
-        result = transport._read_request()
-        assert result == {"method": "ping"}
-
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_read_request_returns_skip_line_for_empty_line(self, mock_stdin):
-        """A blank line is invalid JSON, which returns the _SKIP_LINE sentinel."""
-        mock_stdin.write("\n")
-        mock_stdin.seek(0)
-        transport = MCPTransport()
-        result = transport._read_request()
-        assert result is _SKIP_LINE
-
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_read_request_returns_skip_line_for_invalid_json(self, mock_stdin):
-        """Invalid JSON returns the _SKIP_LINE sentinel, not None."""
-        mock_stdin.write("not json\n")
-        mock_stdin.seek(0)
-        transport = MCPTransport()
-        result = transport._read_request()
-        assert result is _SKIP_LINE
-
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    def test_send_response_writes_result(self, mock_stdout):
-        transport = MCPTransport()
-        transport._send_response({"id": 1}, result="pong")
-        output = mock_stdout.getvalue()
-        assert '"jsonrpc": "2.0"' in output
-        assert '"result": "pong"' in output
-        assert '"id": 1' in output
-
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    def test_send_response_writes_error(self, mock_stdout):
-        transport = MCPTransport()
-        transport._send_response(
-            {"id": 1},
-            error={"code": -32601, "message": "Method not found"},
-        )
-        output = mock_stdout.getvalue()
-        assert '"error"' in output
-        assert "-32601" in output
-        assert '"result"' not in output
-
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_handle_request_dispatches_to_handler(self, mock_stdin, mock_stdout):
-        transport = MCPTransport()
-        transport.register("ping", create_ping_handler())
-        transport._handle_request({"id": 1, "method": "ping"})
-        output = mock_stdout.getvalue()
-        assert '"result": "pong"' in output
-
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    def test_handle_request_returns_32601_for_unknown_method(self, mock_stdout):
-        transport = MCPTransport()
-        transport._handle_request({"id": 1, "method": "unknown"})
-        output = mock_stdout.getvalue()
-        assert "-32601" in output
-        assert "Method not found" in output
-
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    def test_handle_request_returns_32600_for_missing_method(self, mock_stdout):
-        transport = MCPTransport()
-        transport._handle_request({"id": 1})
-        output = mock_stdout.getvalue()
-        assert "-32600" in output
-        assert "Method not specified" in output
-
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    def test_handle_request_returns_32603_on_handler_exception(self, mock_stdout):
-        def failing_handler(params):
-            raise ValueError("oops")
-
-        transport = MCPTransport()
-        transport.register("fail", failing_handler)
-        transport._handle_request({"id": 1, "method": "fail"})
-        output = mock_stdout.getvalue()
-        assert "-32603" in output
-        assert "oops" in output
-
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_run_reads_and_handles_requests(self, mock_stdin, mock_stdout):
-        mock_stdin.write('{"id": 1, "method": "ping"}\n')
-        mock_stdin.write('{"id": 2, "method": "ping"}\n')
-        mock_stdin.seek(0)
-        transport = MCPTransport()
-        transport.register("ping", create_ping_handler())
-        transport.run()
-        output = mock_stdout.getvalue()
-        assert output.count('"result": "pong"') == 2
-
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_run_breaks_on_none_request(self, mock_stdin):
-        transport = MCPTransport()
-        transport.run()
-
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_run_breaks_on_keyboard_interrupt(self, mock_stdin):
-        mock_stdin.readline = MagicMock(side_effect=KeyboardInterrupt())
-        transport = MCPTransport()
-        transport.run()
-
-    def test_create_ping_handler_returns_pong(self):
+    def test_returns_pong(self):
         handler = create_ping_handler()
-        assert handler({}) == "pong"
+        result = handler({})
+        assert result["pong"] is True
+        assert "timestamp" in result
+        assert isinstance(result["timestamp"], int)
 
-    # ── Transport mode guard tests ──
+    def test_handles_none_params(self):
+        handler = create_ping_handler()
+        result = handler(None)
+        assert result["pong"] is True
 
-    def test_transport_mode_is_stdio(self):
-        """_TRANSPORT_MODE must be stdio — no network transport allowed.
 
-        This is an explicit assertion against adding network support to
-        this transport class. If you need network MCP, create a SEPARATE
-        transport class with its own security review. See docstring.
+class TestMCPTransportProcessRequest:
+    """Tests for MCPTransport._process_request() — no I/O needed."""
+
+    @pytest.fixture
+    def transport(self):
+        t = MCPTransport()
+        t.register("echo", lambda params: params or {})
+        t.register("fail", lambda params: (_ for _ in ()).throw(ValueError("oops")))
+        return t
+
+    def test_valid_request(self, transport):
+        resp = transport._process_request({
+            "jsonrpc": "2.0",
+            "id": "1",
+            "method": "echo",
+            "params": {"key": "value"},
+        })
+        assert resp["jsonrpc"] == "2.0"
+        assert resp["id"] == "1"
+        assert resp["result"] == {"key": "value"}
+
+    def test_notification_no_response(self, transport):
+        resp = transport._process_request({
+            "jsonrpc": "2.0",
+            "method": "echo",
+            "params": {"key": "value"},
+        })
+        assert resp is None
+
+    def test_notification_unknown_method_no_error(self, transport):
+        """Notifications with unknown methods should not produce errors."""
+        resp = transport._process_request({
+            "jsonrpc": "2.0",
+            "method": "nonexistent",
+        })
+        assert resp is None
+
+    def test_unknown_method(self, transport):
+        resp = transport._process_request({
+            "jsonrpc": "2.0",
+            "id": "1",
+            "method": "nonexistent",
+        })
+        assert resp["error"]["code"] == METHOD_NOT_FOUND
+        assert "nonexistent" in resp["error"]["message"]
+
+    def test_handler_exception(self, transport):
+        resp = transport._process_request({
+            "jsonrpc": "2.0",
+            "id": "1",
+            "method": "fail",
+        })
+        assert resp["error"]["code"] == INTERNAL_ERROR
+        assert "oops" in resp["error"]["message"]
+
+    def test_not_a_dict(self, transport):
+        resp = transport._process_request("not a dict")
+        assert resp["error"]["code"] == INVALID_REQUEST
+        assert "must be a JSON object" in resp["error"]["message"]
+
+    def test_missing_method(self, transport):
+        resp = transport._process_request({
+            "jsonrpc": "2.0",
+            "id": "1",
+        })
+        assert resp["error"]["code"] == INVALID_REQUEST
+        assert "method" in resp["error"]["message"]
+
+    def test_empty_method(self, transport):
+        resp = transport._process_request({
+            "jsonrpc": "2.0",
+            "id": "1",
+            "method": "",
+        })
+        assert resp["error"]["code"] == INVALID_REQUEST
+        assert "method" in resp["error"]["message"]
+
+
+class TestMCPTransportMakeError:
+    """Tests for _make_error()."""
+
+    def test_error_format(self):
+        transport = MCPTransport()
+        err = transport._make_error("req-1", -32000, "Custom error")
+        assert err["jsonrpc"] == "2.0"
+        assert err["id"] == "req-1"
+        assert err["error"]["code"] == -32000
+        assert err["error"]["message"] == "Custom error"
+
+    def test_error_with_none_id(self):
+        transport = MCPTransport()
+        err = transport._make_error(None, PARSE_ERROR, "Parse error")
+        assert err["id"] is None
+
+
+class TestMCPTransportRun:
+    """Integration tests for MCPTransport.run() using fake streams.
+
+    The transport accepts optional ``stdin``/``stdout`` parameters so we
+    can pass BytesIO objects directly without patching sys.stdin/sys.stdout.
+    """
+
+    def _make_input(self, requests) -> bytes:
+        """Serialize one or more JSON-RPC requests as newline-delimited JSON."""
+        lines = [json.dumps(req) for req in requests]
+        return ("\n".join(lines) + "\n").encode("utf-8")
+
+    def _run(self, input_data: bytes):
+        """Build a transport with fake streams and run it.
+
+        Returns the captured stdout content as bytes.
         """
-        assert (
-            MCPTransport._TRANSPORT_MODE == "stdio"
-        ), "This transport is stdio-only. Do NOT add network mode."
+        fake_stdin = io.BytesIO(input_data)
+        fake_stdout = io.BytesIO()
+        transport = MCPTransport(stdin=fake_stdin, stdout=fake_stdout)
+        transport.register("ping", create_ping_handler())
+        transport.register("echo", lambda params: params or {})
+        transport.run()
+        fake_stdout.seek(0)
+        return fake_stdout.read()
 
-    def test_assert_stdio_only_does_not_raise_for_pipe_fds(self):
-        """_assert_stdio_only should not raise when stdin/stdout are pipes."""
-        # In test context, stdin/stdout are typically pipes or StringIO.
-        # This should complete without error.
+    def test_ping_request(self):
+        output = self._run(self._make_input([
+            {"jsonrpc": "2.0", "id": "1", "method": "ping"},
+        ]))
+        lines = output.strip().split(b"\n")
+        assert len(lines) == 1
+        resp = json.loads(lines[0])
+        assert resp["id"] == "1"
+        assert resp["result"]["pong"] is True
+
+    def test_echo_request(self):
+        output = self._run(self._make_input([
+            {"jsonrpc": "2.0", "id": "2", "method": "echo", "params": {"hello": "world"}},
+        ]))
+        resp = json.loads(output.strip())
+        assert resp["result"]["hello"] == "world"
+
+    def test_unknown_method(self):
+        output = self._run(self._make_input([
+            {"jsonrpc": "2.0", "id": "3", "method": "unknown_tool"},
+        ]))
+        resp = json.loads(output.strip())
+        assert resp["error"]["code"] == METHOD_NOT_FOUND
+        assert "unknown_tool" in resp["error"]["message"]
+
+    def test_notification_no_output(self):
+        """Notifications should produce no response."""
+        output = self._run(self._make_input([
+            {"jsonrpc": "2.0", "method": "ping"},
+        ]))
+        assert output.strip() == b""
+
+    def test_mixed_notifications_and_requests(self):
+        """Notifications don't produce responses; requests do."""
+        output = self._run(self._make_input([
+            {"jsonrpc": "2.0", "method": "ping"},          # notification — no response
+            {"jsonrpc": "2.0", "id": "1", "method": "ping"},  # request — response
+            {"jsonrpc": "2.0", "method": "echo"},          # notification — no response
+            {"jsonrpc": "2.0", "id": "2", "method": "echo", "params": {"x": 1}},  # response
+        ]))
+        lines = [l for l in output.strip().split(b"\n") if l]
+        assert len(lines) == 2
+        resp1 = json.loads(lines[0])
+        resp2 = json.loads(lines[1])
+        assert resp1["id"] == "1"
+        assert resp1["result"]["pong"] is True
+        assert resp2["id"] == "2"
+        assert resp2["result"]["x"] == 1
+
+    def test_batch_request(self):
+        """Batch of requests returns an array of responses."""
+        output = self._run(self._make_input([
+            [
+                {"jsonrpc": "2.0", "id": "a", "method": "ping"},
+                {"jsonrpc": "2.0", "id": "b", "method": "echo", "params": {"n": 42}},
+                {"jsonrpc": "2.0", "method": "ping"},  # notification — skipped in batch
+            ],
+        ]))
+        responses = json.loads(output.strip())
+        assert isinstance(responses, list)
+        assert len(responses) == 2  # notification produces no response
+        ids = {r["id"] for r in responses}
+        assert ids == {"a", "b"}
+        assert responses[1]["result"]["n"] == 42
+
+    def test_batch_notifications_only(self):
+        """A batch with only notifications produces no output."""
+        output = self._run(self._make_input([
+            [
+                {"jsonrpc": "2.0", "method": "ping"},
+                {"jsonrpc": "2.0", "method": "echo", "params": {"x": 1}},
+            ],
+        ]))
+        assert output.strip() == b""
+
+    def test_empty_input(self):
+        """Empty or whitespace-only lines should be skipped."""
+        output = self._run(b"\n\n  \n")
+        assert output.strip() == b""
+
+    def test_invalid_json(self):
+        output = self._run(b"not-json\n")
+        resp = json.loads(output.strip())
+        assert resp["error"]["code"] == PARSE_ERROR
+
+    def test_multiple_requests(self):
+        output = self._run(self._make_input([
+            {"jsonrpc": "2.0", "id": "1", "method": "ping"},
+            {"jsonrpc": "2.0", "id": "2", "method": "echo", "params": {"a": 1}},
+            {"jsonrpc": "2.0", "id": "3", "method": "unknown"},
+        ]))
+        lines = [l for l in output.strip().split(b"\n") if l]
+        assert len(lines) == 3
+        assert json.loads(lines[0])["result"]["pong"] is True
+        assert json.loads(lines[1])["result"]["a"] == 1
+        assert json.loads(lines[2])["error"]["code"] == METHOD_NOT_FOUND
+
+
+class TestMCPTransportRegister:
+    """Tests for register()."""
+
+    def test_register_and_call_via_process(self):
         transport = MCPTransport()
-        # _assert_stdio_only is called in __init__, so just creating
-        # the transport validates it. If it raised, the test would fail.
-        assert transport._TRANSPORT_MODE == "stdio"
+        transport.register("add", lambda params: {"sum": params["x"] + params["y"]})
 
-    @patch("mcp_transport.logger")
-    @patch("mcp_transport.os.fstat")
-    def test_assert_stdio_only_warns_for_socket_fds(self, mock_fstat, mock_logger):
-        """_assert_stdio_only should log a warning for socket FDs."""
-        import stat
+        resp = transport._process_request({
+            "jsonrpc": "2.0",
+            "id": "1",
+            "method": "add",
+            "params": {"x": 3, "y": 4},
+        })
+        assert resp["result"]["sum"] == 7
 
-        # Mock os.fstat to return a socket mode
-        mock_stat = MagicMock()
-        mock_stat.st_mode = stat.S_IFSOCK | 0o644
-        mock_fstat.return_value = mock_stat
-
+    def test_register_overwrites_existing(self):
         transport = MCPTransport()
-        # Warning should be logged for socket FDs
-        assert mock_logger.warning.called
-        assert "network socket" in str(mock_logger.warning.call_args)
-        # Transport still creates successfully
-        assert transport._TRANSPORT_MODE == "stdio"
+        transport.register("method", lambda p: {"from": "first"})
+        transport.register("method", lambda p: {"from": "second"})
+        resp = transport._process_request({
+            "jsonrpc": "2.0",
+            "id": "1",
+            "method": "method",
+        })
+        assert resp["result"]["from"] == "second"
