@@ -13,13 +13,13 @@ from tool_definitions import ToolDefinition, ToolParameter, ToolRequires, Signal
 _register(ToolDefinition(
     name="ai-surface",
     description="Static AI attack-surface scanner: MCP servers, agent frameworks, LLM SDKs, model gateways, vector stores, AI provider keys, API endpoints",
-    phases=["scan"],
+    phases=["source_analysis"],
     default_args=["scan", "--output", "json"],
     parameters=[
     ToolParameter(name="target", description="Target path (directory) to scan for AI attack surfaces", required=True),
     ToolParameter(name="output_format", description="Output format (json)", flag="--output", default="json"),
     ToolParameter(name="fail_on", description="Severity gate threshold (critical|high|medium|low)", flag="--fail-on", default="high"),
-    ToolParameter(name="verbose", description="Verbose output", flag="--verbose", default=false),
+    ToolParameter(name="verbose", description="Verbose output", flag="--verbose", default=False),
 ],
     timeout=300,
     signal_quality=SignalQuality.CONFIRMED,
