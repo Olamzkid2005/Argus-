@@ -363,13 +363,24 @@ export class AttackGraphVisualizer {
   //  Interaction (adapted from ai-surface)
   // ──────────────────────────────────────────────
 
+  private selectableNodes: SVGElement[] = []
+  private focusedIndex = -1
+
   private wireInteraction(): void {
     const g = this.g!
     const { onNodeClick, onHubClick, onChainClick } = this.callbacks
 
+    // Build a flat list of selectable elements for keyboard navigation
+    this.selectableNodes = [
+      ...g.querySelectorAll<SVGElement>(".node-leaf, .node-hub, .edge-chain"),
+    ]
+
     // Hover: dim out-of-category nodes, highlight related (ai-surface pattern)
     g.querySelectorAll(".node-leaf, .node-hub").forEach((node) => {
-      node.addEventListener("mouseenter", () => this.focusCategory(g, (node as SVGElement).dataset.type ?? ""))
+      node.addEventListener("mouseenter", () => {
+        this.focusedIndex = -1
+        this.focusCategory(g, (node as SVGElement).dataset.type ?? "")
+      })
       node.addEventListener("mouseleave", () => this.unfocus(g))
     })
 
@@ -383,6 +394,9 @@ export class AttackGraphVisualizer {
         return
       }
 
+      // Update focused index from click
+      this.focusedIndex = this.selectableNodes.indexOf(node)
+
       if (node.classList.contains("node-leaf")) {
         onNodeClick(node.dataset.id ?? "")
       } else if (node.classList.contains("node-hub")) {
@@ -391,6 +405,93 @@ export class AttackGraphVisualizer {
         onChainClick(node.dataset.chainId)
       }
     })
+
+    // Keyboard navigation: Tab cycles focus, Arrow keys navigate, Enter opens
+    // Attached to SVG (the focused element via tabindex) so keyboard events reach it
+    this.svg!.addEventListener("keydown", (e) => {
+      if (this.selectableNodes.length === 0) return
+
+      switch (e.key) {
+        case "Tab": {
+          e.preventDefault()
+          const dir = e.shiftKey ? -1 : 1
+          this.focusedIndex = (this.focusedIndex + dir + this.selectableNodes.length) % this.selectableNodes.length
+          this.focusNodeAtIndex(this.focusedIndex)
+          break
+        }
+        case "ArrowRight":
+        case "ArrowDown": {
+          e.preventDefault()
+          this.focusedIndex = (this.focusedIndex + 1) % this.selectableNodes.length
+          this.focusNodeAtIndex(this.focusedIndex)
+          break
+        }
+        case "ArrowLeft":
+        case "ArrowUp": {
+          e.preventDefault()
+          this.focusedIndex = (this.focusedIndex - 1 + this.selectableNodes.length) % this.selectableNodes.length
+          this.focusNodeAtIndex(this.focusedIndex)
+          break
+        }
+        case "Enter":
+        case " ": {
+          e.preventDefault()
+          const el = this.selectableNodes[this.focusedIndex]
+          if (!el) break
+          if (el.classList.contains("node-leaf")) {
+            onNodeClick(el.dataset.id ?? "")
+          } else if (el.classList.contains("node-hub")) {
+            onHubClick(el.dataset.type ?? "")
+          } else if (el.classList.contains("edge-chain") && el.dataset.chainId) {
+            onChainClick(el.dataset.chainId)
+          }
+          break
+        }
+        case "Escape": {
+          e.preventDefault()
+          this.unfocus(g)
+          this.focusedIndex = -1
+          break
+        }
+      }
+    })
+
+    // Make the SVG focusable so it can receive keyboard events
+    this.svg!.setAttribute("tabindex", "0")
+    this.svg!.setAttribute("role", "application")
+    this.svg!.setAttribute("aria-label", "Attack chain graph. Use Tab and arrow keys to navigate, Enter to select.")
+  }
+
+  /** Focus a node at the given index, dimming others. */
+  private focusNodeAtIndex(index: number): void {
+    const g = this.g!
+    const el = this.selectableNodes[index]
+    if (!el) return
+
+    // Determine what category to highlight
+    const cat = el.dataset.type ?? el.dataset.chainId ?? ""
+    g.classList.add("dim")
+    g.querySelectorAll(".related").forEach((n) => n.classList.remove("related"))
+
+    if (el.classList.contains("edge-chain")) {
+      // Highlight all nodes in this chain
+      g.querySelectorAll(".node, .edge").forEach((n) => {
+        if ((n as SVGElement).dataset.chainId === el.dataset.chainId) {
+          n.classList.add("related")
+        }
+      })
+    } else {
+      g.querySelectorAll(".node, .edge").forEach((n) => {
+        if (n.classList.contains("node-center") || (n as SVGElement).dataset.type === cat) {
+          n.classList.add("related")
+        }
+      })
+    }
+
+    // Visual focus ring on the selected element
+    g.querySelectorAll(".keyboard-focused").forEach((n) => n.classList.remove("keyboard-focused"))
+    el.classList.add("keyboard-focused")
+    el.scrollIntoView?.({ block: "nearest", behavior: "smooth" })
   }
 
   /** Highlight a category, dim everything else (from ai-surface wireMapInteraction). */
@@ -408,7 +509,6 @@ export class AttackGraphVisualizer {
     // Also highlight chain edges belonging to nodes in this category
     g.querySelectorAll(".edge-chain").forEach((el) => {
       const chainEdge = el as SVGElement
-      // Find leaf nodes connected by this chain edge within the focused category
       if (chainEdge.dataset.chainId) {
         el.classList.add("related")
       }
@@ -419,6 +519,7 @@ export class AttackGraphVisualizer {
   private unfocus(g: SVGElement): void {
     g.classList.remove("dim")
     g.querySelectorAll(".related").forEach((el) => el.classList.remove("related"))
+    g.querySelectorAll(".keyboard-focused").forEach((el) => el.classList.remove("keyboard-focused"))
   }
 }
 
