@@ -328,6 +328,8 @@ class FindingNormalizer:
         "spotbugs": 0.15,
         "secret-scan": 0.10,
         "snyk": 0.10,
+        # AI surface scanner (static analysis with confirmed/likely verdicts)
+        "ai-surface": 0.08,
     }
 
     def normalize(
