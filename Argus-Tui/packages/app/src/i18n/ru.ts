@@ -561,6 +561,13 @@ export const dict = {
   "status.popover.tab.plugins": "Плагины",
   "status.popover.action.manageServers": "Управлять серверами",
 
+  "status.popover.tab.attack": "Карта атак",
+  "status.popover.attack.chains": "Цепочки",
+  "status.popover.attack.paths": "Пути",
+  "status.popover.attack.risk": "Риск",
+  "status.popover.attack.press": "Нажмите",
+  "status.popover.attack.empty": "Цепочки атак еще не обнаружены.",
+
   "session.share.popover.title": "Опубликовать в интернете",
   "session.share.popover.description.shared":
     "Эта сессия общедоступна. Доступ к ней может получить любой, у кого есть ссылка.",
