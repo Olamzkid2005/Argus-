@@ -512,6 +512,13 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Server verwalten",
+
+  "status.popover.tab.attack": "Angriffskarte",
+  "status.popover.attack.chains": "Ketten",
+  "status.popover.attack.paths": "Pfade",
+  "status.popover.attack.risk": "Risiko",
+  "status.popover.attack.press": "Drücken",
+  "status.popover.attack.empty": "Noch keine Angriffsketten erkannt.",
   "session.share.popover.title": "Im Web veröffentlichen",
   "session.share.popover.description.shared":
     "Diese Sitzung ist öffentlich im Web. Sie ist für jeden mit dem Link zugänglich.",
