@@ -563,6 +563,13 @@ export const dict = {
   "status.popover.tab.plugins": "Plugini",
   "status.popover.action.manageServers": "Upravljaj serverima",
 
+  "status.popover.tab.attack": "Mapa napada",
+  "status.popover.attack.chains": "Lanci",
+  "status.popover.attack.paths": "Putanje",
+  "status.popover.attack.risk": "Rizik",
+  "status.popover.attack.press": "Pritisnite",
+  "status.popover.attack.empty": "Još uvijek nisu otkriveni lanci napada.",
+
   "session.share.popover.title": "Objavi na webu",
   "session.share.popover.description.shared": "Ova sesija je javna na webu. Dostupna je svima koji imaju link.",
   "session.share.popover.description.unshared": "Podijeli sesiju javno na webu. Biće dostupna svima koji imaju link.",
