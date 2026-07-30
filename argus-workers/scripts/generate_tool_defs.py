@@ -47,6 +47,7 @@ CAPABILITY_TO_PHASES: dict[str, list[str]] = {
     "cloud_enum": ["recon", "scan"],
     "s3_scanning": ["scan"],
     "report_generation": ["report"],
+    "ai_surface_mapping": ["source_analysis"],
 }
 
 # ---------------------------------------------------------------------------
@@ -78,7 +79,15 @@ def _build_parameters(params: list[dict]) -> str:
         if default is not None:
             import json
 
-            args += f", default={json.dumps(default)}"
+            # Convert JSON booleans to Python literal syntax
+            default_str = json.dumps(default)
+            if default_str == "true":
+                default_str = "True"
+            elif default_str == "false":
+                default_str = "False"
+            elif default_str == "null":
+                default_str = "None"
+            args += f", default={default_str}"
         if enum_vals:
             vals = ", ".join(f'"{v}"' for v in enum_vals)
             args += f", enum=[{vals}]"
@@ -208,9 +217,9 @@ def check(tools_dir: str, generated_path: str) -> bool:
         tmp_path = tmp.name
 
     try:
-        with open(tmp_path) as f:
+        with open(tmp_path, encoding="utf-8") as f:
             generated = f.read()
-        with open(generated_path) as f:
+        with open(generated_path, encoding="utf-8") as f:
             existing = f.read()
 
         gen_hash = hashlib.sha256(generated.encode()).hexdigest()
