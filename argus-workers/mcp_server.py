@@ -1509,6 +1509,56 @@ class MCPServer:
             logger.debug("Could not load persisted graph for %s: %s", engagement_id, e)
             graph = None
 
+        # Load persisted chain_exploit_script data from DB if available
+        chain_scripts: dict[str, Any] = {}
+        try:
+            import json as _json
+            conn = None
+            cursor = None
+            try:
+                from database.connection import get_db
+                conn = get_db().get_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id, path_nodes, chain_exploit_script FROM attack_paths "
+                    "WHERE engagement_id = %s AND chain_exploit_script IS NOT NULL",
+                    (engagement_id,),
+                )
+                for row in cursor.fetchall():
+                    old_path_id, old_path_nodes_json, script = row
+                    if script:
+                        try:
+                            old_nodes = (
+                                _json.loads(old_path_nodes_json)
+                                if isinstance(old_path_nodes_json, str)
+                                else old_path_nodes_json
+                            )
+                            node_types = tuple(
+                                n.get("data", {}).get("type", "")
+                                for n in (old_nodes.get("nodes") or [])
+                            )
+                            # Parse script if it's a JSON string
+                            if isinstance(script, str):
+                                try:
+                                    script = _json.loads(script)
+                                except (_json.JSONDecodeError, TypeError):
+                                    pass
+                            chain_scripts[str(node_types)] = script
+                        except (_json.JSONDecodeError, AttributeError, TypeError):
+                            pass
+            except Exception as e:
+                logger.debug("Could not load chain_exploit_script data: %s", e)
+            finally:
+                if cursor:
+                    cursor.close()
+                if conn:
+                    try:
+                        get_db().release_connection(conn)
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug("Failed to query chain_exploit_script for %s: %s", engagement_id, e)
+
         if graph is None:
             # Build fresh from findings using the shared helper
             graph, _, _ = self._build_attack_graph(
@@ -1520,7 +1570,7 @@ class MCPServer:
         snapshot = graph.to_snapshot_dict()
         chains = graph.find_chains()
 
-        # Enrich paths with chain IDs and names
+        # Enrich paths with chain IDs, names, and exploit scripts
         for path_data in snapshot.get("paths", []):
             for chain in chains:
                 prereq_type = chain["prereq_node"].data.get("type", "")
@@ -1534,6 +1584,16 @@ class MCPServer:
                     path_data["chain_id"] = chain["chain_id"]
                     path_data["chain_name"] = chain["name"]
                     break
+
+            # Attach chain_exploit_script if available
+            if path_data.get("chain_id"):
+                node_types = tuple(
+                    n.get("data", {}).get("type", "")
+                    for n in path_data.get("nodes", [])
+                    if n.get("type") == "vulnerability"
+                )
+                if str(node_types) in chain_scripts:
+                    path_data["chain_exploit_script"] = chain_scripts[str(node_types)]
 
         # Compute metadata
         all_nodes = set()
