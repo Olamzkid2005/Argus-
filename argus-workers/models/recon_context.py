@@ -80,6 +80,21 @@ class ReconContext:
             "has_api": self.has_api,
             "has_file_upload": self.has_file_upload,
             "findings_count": self.findings_count,
+
+            # ── AI/LLM surface detection ──
+            "has_ai_chatbot": self.has_ai_chatbot,
+            "ai_endpoints": (self.ai_endpoints or [])[:5],
+            "llm_provider_detected": self.llm_provider_detected,
+
+            # ── AI source analysis (ai-surface scanner) ──
+            "has_source_access": self.has_source_access,
+            "ai_surface_categories": (self.ai_surface_categories or [])[:5],
+            "ai_surface_confirmed_risk_count": self.ai_surface_confirmed_risk_count,
+            "ai_surface_likely_risk_count": self.ai_surface_likely_risk_count,
+            "has_mcp_servers": self.has_mcp_servers,
+            "has_agent_frameworks": self.has_agent_frameworks,
+            "has_vector_stores": self.has_vector_stores,
+            "has_model_gateways": self.has_model_gateways,
         }
 
         # Add target memory if available
