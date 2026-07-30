@@ -568,6 +568,13 @@ export const dict = {
   "status.popover.tab.plugins": "Eklentiler",
   "status.popover.action.manageServers": "Sunucuları yönet",
 
+  "status.popover.tab.attack": "Saldırı Haritası",
+  "status.popover.attack.chains": "Zincirler",
+  "status.popover.attack.paths": "Yollar",
+  "status.popover.attack.risk": "Risk",
+  "status.popover.attack.press": "Basın",
+  "status.popover.attack.empty": "Henüz saldırı zinciri tespit edilmedi.",
+
   "session.share.popover.title": "Web'de yayınla",
   "session.share.popover.description.shared": "Bu oturum web'de herkese açıktır. Bağlantıya sahip herkes erişebilir.",
   "session.share.popover.description.unshared":
