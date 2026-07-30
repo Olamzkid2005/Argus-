@@ -499,6 +499,13 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "플러그인",
   "status.popover.action.manageServers": "서버 관리",
+
+  "status.popover.tab.attack": "공격 맵",
+  "status.popover.attack.chains": "체인",
+  "status.popover.attack.paths": "경로",
+  "status.popover.attack.risk": "위험",
+  "status.popover.attack.press": "누르기",
+  "status.popover.attack.empty": "아직 공격 체인이 감지되지 않았습니다.",
   "session.share.popover.title": "웹에 게시",
   "session.share.popover.description.shared": "이 세션은 웹에 공개되었습니다. 링크가 있는 누구나 액세스할 수 있습니다.",
   "session.share.popover.description.unshared":
