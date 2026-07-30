@@ -615,6 +615,13 @@ export const dict = {
   "status.popover.tab.plugins": "Плагіни",
   "status.popover.action.manageServers": "Керувати серверами",
 
+  "status.popover.tab.attack": "Карта атак",
+  "status.popover.attack.chains": "Ланцюги",
+  "status.popover.attack.paths": "Шляхи",
+  "status.popover.attack.risk": "Ризик",
+  "status.popover.attack.press": "Натисніть",
+  "status.popover.attack.empty": "Ланцюгів атак ще не виявлено.",
+
   "session.share.popover.title": "Опублікувати в інтернеті",
   "session.share.popover.description.shared":
     "Ця сесія є публічною в інтернеті. Вона доступна будь-кому за посиланням.",
