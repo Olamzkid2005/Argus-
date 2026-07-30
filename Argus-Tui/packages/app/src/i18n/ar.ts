@@ -500,6 +500,13 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "الإضافات",
   "status.popover.action.manageServers": "إدارة الخوادم",
+
+  "status.popover.tab.attack": "خريطة الهجوم",
+  "status.popover.attack.chains": "السلاسل",
+  "status.popover.attack.paths": "المسارات",
+  "status.popover.attack.risk": "المخاطر",
+  "status.popover.attack.press": "اضغط",
+  "status.popover.attack.empty": "لم يتم اكتشاف أي سلاسل هجوم بعد.",
   "session.share.popover.title": "نشر على الويب",
   "session.share.popover.description.shared": "هذه الجلسة عامة على الويب. يمكن لأي شخص لديه الرابط الوصول إليها.",
   "session.share.popover.description.unshared": "شارك الجلسة علنًا على الويب. ستكون متاحة لأي شخص لديه الرابط.",
