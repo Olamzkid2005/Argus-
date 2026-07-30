@@ -558,6 +558,13 @@ export const dict = {
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Administrer servere",
 
+  "status.popover.tab.attack": "Angrebskort",
+  "status.popover.attack.chains": "Kæder",
+  "status.popover.attack.paths": "Stier",
+  "status.popover.attack.risk": "Risiko",
+  "status.popover.attack.press": "Tryk",
+  "status.popover.attack.empty": "Ingen angrebskæder opdaget endnu.",
+
   "session.share.popover.title": "Udgiv på nettet",
   "session.share.popover.description.shared":
     "Denne session er offentlig på nettet. Den er tilgængelig for alle med linket.",
