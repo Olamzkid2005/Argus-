@@ -501,6 +501,13 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "プラグイン",
   "status.popover.action.manageServers": "サーバーを管理",
+
+  "status.popover.tab.attack": "攻撃マップ",
+  "status.popover.attack.chains": "チェーン",
+  "status.popover.attack.paths": "パス",
+  "status.popover.attack.risk": "リスク",
+  "status.popover.attack.press": "押す",
+  "status.popover.attack.empty": "攻撃チェーンはまだ検出されていません。",
   "session.share.popover.title": "ウェブで公開",
   "session.share.popover.description.shared":
     "このセッションはウェブで公開されています。リンクを知っている人なら誰でもアクセスできます。",
