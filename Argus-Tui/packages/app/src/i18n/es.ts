@@ -564,6 +564,13 @@ export const dict = {
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Administrar servidores",
 
+  "status.popover.tab.attack": "Mapa de Ataque",
+  "status.popover.attack.chains": "Cadenas",
+  "status.popover.attack.paths": "Rutas",
+  "status.popover.attack.risk": "Riesgo",
+  "status.popover.attack.press": "Presione",
+  "status.popover.attack.empty": "Aún no se detectaron cadenas de ataque.",
+
   "session.share.popover.title": "Publicar en web",
   "session.share.popover.description.shared":
     "Esta sesión es pública en la web. Es accesible para cualquiera con el enlace.",
