@@ -566,6 +566,13 @@ export const dict = {
   "status.popover.tab.plugins": "插件",
   "status.popover.action.manageServers": "管理服务器",
 
+  "status.popover.tab.attack": "攻击地图",
+  "status.popover.attack.chains": "攻击链",
+  "status.popover.attack.paths": "路径",
+  "status.popover.attack.risk": "风险",
+  "status.popover.attack.press": "按",
+  "status.popover.attack.empty": "尚未检测到攻击链。",
+
   "session.share.popover.title": "发布到网页",
   "session.share.popover.description.shared": "此会话已在网页上公开。任何拥有链接的人都可以访问。",
   "session.share.popover.description.unshared": "在网页上公开分享此会话。任何拥有链接的人都可以访问。",
