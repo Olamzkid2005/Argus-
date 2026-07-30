@@ -502,6 +502,13 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Wtyczki",
   "status.popover.action.manageServers": "Zarządzaj serwerami",
+
+  "status.popover.tab.attack": "Mapa ataku",
+  "status.popover.attack.chains": "Łańcuchy",
+  "status.popover.attack.paths": "Ścieżki",
+  "status.popover.attack.risk": "Ryzyko",
+  "status.popover.attack.press": "Naciśnij",
+  "status.popover.attack.empty": "Nie wykryto jeszcze żadnych łańcuchów ataku.",
   "session.share.popover.title": "Opublikuj w sieci",
   "session.share.popover.description.shared":
     "Ta sesja jest publiczna w sieci. Jest dostępna dla każdego, kto posiada link.",
