@@ -554,6 +554,13 @@ export const dict = {
   "status.popover.tab.plugins": "外掛程式",
   "status.popover.action.manageServers": "管理伺服器",
 
+  "status.popover.tab.attack": "攻擊地圖",
+  "status.popover.attack.chains": "攻擊鏈",
+  "status.popover.attack.paths": "路徑",
+  "status.popover.attack.risk": "風險",
+  "status.popover.attack.press": "按",
+  "status.popover.attack.empty": "尚未檢測到攻擊鏈。",
+
   "session.share.popover.title": "發佈到網頁",
   "session.share.popover.description.shared": "此工作階段已在網頁上公開。任何擁有連結的人都可以存取。",
   "session.share.popover.description.unshared": "在網頁上公開分享此工作階段。任何擁有連結的人都可以存取。",
