@@ -558,6 +558,13 @@ export const dict = {
   "status.popover.tab.plugins": "ปลั๊กอิน",
   "status.popover.action.manageServers": "จัดการเซิร์ฟเวอร์",
 
+  "status.popover.tab.attack": "แผนที่การโจมตี",
+  "status.popover.attack.chains": "ลูกโซ่",
+  "status.popover.attack.paths": "เส้นทาง",
+  "status.popover.attack.risk": "ความเสี่ยง",
+  "status.popover.attack.press": "กด",
+  "status.popover.attack.empty": "ยังไม่พบห่วงโซ่การโจมตี",
+
   "session.share.popover.title": "เผยแพร่บนเว็บ",
   "session.share.popover.description.shared": "เซสชันนี้เป็นสาธารณะบนเว็บ สามารถเข้าถึงได้โดยผู้ที่มีลิงก์",
   "session.share.popover.description.unshared": "แชร์เซสชันสาธารณะบนเว็บ จะเข้าถึงได้โดยผู้ที่มีลิงก์",
