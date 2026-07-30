@@ -146,9 +146,62 @@ export class AttackDetailDrawer {
             `).join("")}</ul>
           </section>
         ` : ""}
+
+        ${this.renderExploitScriptSection(chain)}
+
+        ${this.renderVerificationSection(chain)}
       </div>`
 
     this.open()
+  }
+
+  /** Render exploit script section inside a chain view. */
+  private renderExploitScriptSection(chain: AttackPathData): string {
+    const script = chain.chain_exploit_script
+    if (!script) return ""
+
+    const scriptText = typeof script === "string" ? script : (script.script ?? script.exploit_script ?? JSON.stringify(script, null, 2))
+    const steps = script.steps ?? []
+
+    return `
+      <section class="ag-detail-section">
+        <h3>Exploit Script</h3>
+        <details class="ag-script-details">
+          <summary class="ag-script-summary">
+            Show exploit script (${scriptText.length} chars)
+          </summary>
+          <pre class="ag-script-pre"><code class="ag-script-code">${esc(scriptText)}</code></pre>
+        </details>
+        ${steps.length > 0 ? `
+          <h4 style="margin-top:8px;font-size:12px;color:var(--ag-edge-base);text-transform:uppercase;letter-spacing:0.5px">Steps</h4>
+          <ol class="ag-list ag-step-list">${steps.map((s: any) => `<li>${esc(s.summary ?? s.step ?? "")}</li>`).join("")}</ol>
+        ` : ""}
+        ${script.impact_summary ? `
+          <h4 style="margin-top:8px;font-size:12px;color:var(--ag-edge-base);text-transform:uppercase;letter-spacing:0.5px">Impact</h4>
+          <p class="ag-impact-text">${esc(script.impact_summary)}</p>
+        ` : ""}
+      </section>`
+  }
+
+  /** Render verification status section. */
+  private renderVerificationSection(chain: AttackPathData): string {
+    const verification = chain.verification
+    if (!verification) return ""
+
+    const verified = verification.verified ?? verification.passed
+    const confidence = verification.confidence ?? ""
+    const reason = verification.reason ?? ""
+
+    return `
+      <section class="ag-detail-section">
+        <h3>Verification Status</h3>
+        <div class="ag-verification-status ${verified ? "verified" : "unverified"}">
+          <span class="ag-verification-icon">${verified ? "✓" : "○"}</span>
+          <span class="ag-verification-label">${verified ? "Verified" : "Not Verified"}</span>
+          ${confidence ? `<span class="ag-verification-conf">(${esc(confidence)} confidence)</span>` : ""}
+        </div>
+        ${reason ? `<p class="ag-verification-reason">${esc(reason)}</p>` : ""}
+      </section>`
   }
 
   /** Render a chain membership section inside a finding drawer. */
