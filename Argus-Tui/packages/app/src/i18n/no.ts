@@ -564,6 +564,13 @@ export const dict = {
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Administrer servere",
 
+  "status.popover.tab.attack": "Angrepskart",
+  "status.popover.attack.chains": "Kjeder",
+  "status.popover.attack.paths": "Stier",
+  "status.popover.attack.risk": "Risiko",
+  "status.popover.attack.press": "Trykk",
+  "status.popover.attack.empty": "Ingen angrepskjeder oppdaget ennå.",
+
   "session.share.popover.title": "Publiser på nett",
   "session.share.popover.description.shared":
     "Denne sesjonen er offentlig på nettet. Den er tilgjengelig for alle med lenken.",
