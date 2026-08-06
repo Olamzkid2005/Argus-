@@ -302,29 +302,39 @@ class MCPServer:
     def _binary_on_path(self, name: str) -> str | None:
         """Check if a binary is available on the augmented PATH (cached).
 
-        Uses an LRU cache so repeated lookups for the same binary only hit
-        the filesystem once. The augmented PATH includes venv, go, homebrew,
-        pip user scripts, and common system paths.
+        Positive lookups are cached for the process lifetime. Negative lookups
+        (binary not found) are cached for ``_BINARY_CACHE_MISS_TTL_SECS`` and
+        re-checked afterwards, so a tool installed while the server is running
+        (or a fixed PATH) is discovered without a restart.
+
+        The augmented PATH includes venv, go, homebrew, pip user scripts, and
+        common system paths.
         """
         _sep = os.pathsep
         _cache = self.__class__._binary_cache
-        if name not in _cache:
-            _venv_bin = str(Path(sys.executable).parent)
-            _go_bin = os.path.expanduser("~/go/bin")
-            _homebrew_bin = "/opt/homebrew/bin"
-            _project_venv = str(
-                Path(__file__).resolve().parent.parent / "venv" / "bin"
-            )
-            _pip_scripts = sysconfig.get_path("scripts")
-            _existing_path = os.environ.get("PATH", "")
-            _extra_path = os.environ.get("ARGUS_EXTRA_PATH", "")
-            _augmented_path = _sep.join([
-                _venv_bin, _go_bin, _homebrew_bin, _project_venv, _pip_scripts,
-                "/usr/local/bin", "/usr/bin", "/bin",
-                _extra_path, _existing_path,
-            ])
-            _cache[name] = shutil.which(name, path=_augmented_path)
-        return _cache[name]
+        _now = time.monotonic()
+        _cached = _cache.get(name)
+        if _cached is not None:
+            _path, _checked_at = _cached
+            if _path is not None or (_now - _checked_at) < self._BINARY_CACHE_MISS_TTL_SECS:
+                return _path
+        _venv_bin = str(Path(sys.executable).parent)
+        _go_bin = os.path.expanduser("~/go/bin")
+        _homebrew_bin = "/opt/homebrew/bin"
+        _project_venv = str(
+            Path(__file__).resolve().parent.parent / "venv" / "bin"
+        )
+        _pip_scripts = sysconfig.get_path("scripts")
+        _existing_path = os.environ.get("PATH", "")
+        _extra_path = os.environ.get("ARGUS_EXTRA_PATH", "")
+        _augmented_path = _sep.join([
+            _venv_bin, _go_bin, _homebrew_bin, _project_venv, _pip_scripts,
+            "/usr/local/bin", "/usr/bin", "/bin",
+            _extra_path, _existing_path,
+        ])
+        _found = shutil.which(name, path=_augmented_path)
+        _cache[name] = (_found, time.monotonic())
+        return _found
 
     def _check_critical_tools(self) -> None:
         """Check critical tools are available after YAML loading.
@@ -569,7 +579,12 @@ class MCPServer:
     # treated as an error on the MCP path, silently losing findings.
     # Last verified: both match exactly (8 tools each).
     # Shared binary availability cache (class-level, shared across all instances)
-    _binary_cache: dict[str, str | None] = {}
+    # Maps tool name -> (absolute_path_or_None, monotonic_check_time). Positive
+    # hits live for the process lifetime; negative hits (None) are re-checked
+    # after _BINARY_CACHE_MISS_TTL_SECS so tools installed mid-session are
+    # picked up instead of being reported missing forever.
+    _binary_cache: dict[str, tuple[str | None, float]] = {}
+    _BINARY_CACHE_MISS_TTL_SECS = 60.0
 
     FINDINGS_EXIT_CODES: dict[str, set[int]] = {
         "semgrep": {1},
@@ -1463,9 +1478,21 @@ class MCPServer:
                 "description": chain.get("description", ""),
             })
 
+        # get_highest_risk_paths() embeds raw Path objects under "path" —
+        # not JSON-serializable. Drop the key (risk_score + nodes carry the
+        # data the TS side consumes) so the strict transport serializer
+        # doesn't reject the whole response with -32603.
+        serialized_paths = [
+            {
+                "risk_score": p.get("risk_score"),
+                "nodes": p.get("nodes", []),
+            }
+            for p in high_risk_paths
+        ]
+
         return {
             "chains": serialized_chains,
-            "paths": high_risk_paths,
+            "paths": serialized_paths,
             "chain_plans": chain_plans,
         }
 
@@ -1586,11 +1613,15 @@ class MCPServer:
                     break
 
             # Attach chain_exploit_script if available
+            # Fingerprint MUST match the DB-side convention (see loader above
+            # and attack_graph_db.py): ALL node types in path order — not just
+            # vulnerability nodes. Filtering here previously produced tuples
+            # that never matched the stored keys, silently dropping scripts
+            # from every path in the visualizer.
             if path_data.get("chain_id"):
                 node_types = tuple(
                     n.get("data", {}).get("type", "")
                     for n in path_data.get("nodes", [])
-                    if n.get("type") == "vulnerability"
                 )
                 if str(node_types) in chain_scripts:
                     path_data["chain_exploit_script"] = chain_scripts[str(node_types)]

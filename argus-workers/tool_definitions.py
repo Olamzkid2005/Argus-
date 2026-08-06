@@ -210,27 +210,11 @@ def _register(tool: ToolDefinition) -> None:
 from _generated_tools import *  # noqa: F403,E402
 
 # ── Source analysis phase (AI attack-surface scanning) ──
-
-_register(
-    ToolDefinition(
-        name="ai-surface",
-        description="Static AI attack-surface scanner: MCP servers, agent frameworks, LLM calls, model gateways, vector stores, exposed provider keys",
-        phases=["source_analysis"],
-        binary="ai-surface",
-        default_args=["scan", "--output", "json"],
-        parameters=[
-            ToolParameter("target", "Target path to scan (positional)", required=True),
-            ToolParameter("output_format", "Output format", flag="--output", default="json"),
-            ToolParameter("fail_on", "Gate threshold", flag="--fail-on", default="high"),
-        ],
-        timeout=300,
-        signal_quality=SignalQuality.CONFIRMED,
-        requires=ToolRequires(recon_signals=["has_source_access"]),
-        priority=80,
-        cost="medium",
-        risk_level="low",
-    )
-)
+# NOTE: ai-surface is registered from tools/definitions/ai-surface.yaml via
+# _generated_tools.py above. A hand-written _register() for the same name was
+# removed — it silently overwrote the generated (superset) definition, which
+# includes the `verbose` parameter and richer descriptions. Keep the two in
+# sync by editing the YAML and re-running scripts/generate_tool_defs.py.
 
 
 # ── Reconnaissance phase ──

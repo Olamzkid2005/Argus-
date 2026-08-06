@@ -83,11 +83,39 @@ def _extract_endpoint(finding: dict) -> str:
         path = metadata.get("path", "")
         if method and path:
             return f"{method} {path}"
-        return path or files[0] if files else "UNKNOWN"
+        # Reached only when method/path pair is incomplete — fall back to
+        # whatever we have. Note: Python evaluates `a or b if c else d` as
+        # `(a or b) if c else d`, which wrongly returned "UNKNOWN" when a
+        # path was known but no files existed. Parenthesize explicitly.
+        return (path or (files[0] if files else "")) or "UNKNOWN"
 
     if files:
         return f"file:{files[0]}"
     return "UNKNOWN"
+
+
+# Metadata keys that may carry secrets / provider credentials and must be
+# redacted from finding evidence. Matched case-insensitively on key name
+# (substring match so e.g. "api_key", "AWS_SECRET", "auth_token" are caught).
+_SENSITIVE_METADATA_SUBSTRINGS = (
+    "secret", "token", "password", "passwd", "api_key", "apikey",
+    "credential", "authorization", "bearer", "private_key",
+    "access_key", "aws_", "azure_", "openai_", "anthropic_",
+    "gemini_", "provider_key",
+)
+
+
+def _redact_metadata(metadata: dict) -> dict:
+    """Copy metadata, dropping keys that look like credentials/secrets.
+
+    ai-surface findings can surface exposed AI-provider keys; those raw
+    values must not land in evidence verbatim.
+    """
+    return {
+        k: v
+        for k, v in metadata.items()
+        if not any(s in k.lower() for s in _SENSITIVE_METADATA_SUBSTRINGS)
+    }
 
 
 def _build_evidence(finding: dict) -> dict:
@@ -124,14 +152,10 @@ def _build_evidence(finding: dict) -> dict:
     if bridges:
         result["bridges"] = bridges
 
-    # Include relevant metadata fields
+    # Include relevant metadata fields (redacted: no secrets/credentials)
     metadata = evidence.get("metadata", {}) or {}
     if metadata:
-        result["metadata"] = {
-            k: v
-            for k, v in metadata.items()
-            if k not in ()
-        }
+        result["metadata"] = _redact_metadata(metadata)
 
     return result
 

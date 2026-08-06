@@ -15,7 +15,7 @@ from typing import Any
 
 logger = logging.getLogger("cli.local_mode")
 
-_VERIFIABLE_VERIFIABLE_FINDING_TYPES = frozenset({
+_VERIFIABLE_FINDING_TYPES = frozenset({
     "sqli", "sql_injection", "sql-injection",
     "xss", "cross-site-scripting", "cross_site_scripting",
     "open-redirect", "open_redirect", "openredirect",
@@ -334,7 +334,7 @@ def _auto_verify_findings(
         max_to_verify: Max findings to verify per engagement.
     """
     # Verifiable finding types (ones with registered verifiers)
-    verifiable_types = _VERIFIABLE_VERIFIABLE_FINDING_TYPES
+    verifiable_types = _VERIFIABLE_FINDING_TYPES
 
     # Priority mapping: verifier confidence → new confidence score
     _VERIFIER_CONFIDENCE_MAP = {

@@ -27,7 +27,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import select
+import stat
 import sys
+import time
 import traceback
 from typing import Any, Callable
 
@@ -40,6 +44,13 @@ INVALID_REQUEST = -32600   # The JSON sent is not a valid Request object
 METHOD_NOT_FOUND = -32601  # The method does not exist / is not available
 INVALID_PARAMS = -32602    # Invalid method parameter(s)
 INTERNAL_ERROR = -32603    # Internal JSON-RPC error
+
+# ── Message size limits (blocker 39) ──
+# Cap inbound request lines and outbound responses so a runaway tool output
+# (e.g. a multi-GB nuclei/web_scanner line) can't OOM the worker or its
+# parent process. Restored after the transport rewrite dropped both limits.
+_MAX_MESSAGE_SIZE = 10 * 1024 * 1024    # inbound request line cap
+_MAX_RESPONSE_SIZE = 50 * 1024 * 1024   # outbound response cap
 
 
 def create_ping_handler() -> Callable[[dict | None], dict]:
@@ -104,6 +115,58 @@ class MCPTransport:
 
     # ── Public lifecycle ──
 
+    def _assert_stdio_only(self) -> None:
+        """Defense-in-depth: warn (or hard-fail) if stdin/stdout are sockets.
+
+        MCP is a stdio protocol; if stdin/stdout are network sockets the
+        worker may have been accidentally exposed on the network. When
+        ``ARGUS_MCP_BLOCK_SOCKET=1`` a socket detection raises instead of
+        merely warning (blocker 62 regression guard).
+        """
+        _block = os.environ.get("ARGUS_MCP_BLOCK_SOCKET", "").lower() in ("1", "true")
+        for _name, _stream in (("stdin", self._stdin), ("stdout", self._stdout)):
+            try:
+                _mode = os.fstat(_stream.fileno()).st_mode
+            except (AttributeError, OSError, ValueError):
+                continue  # injected fake streams in tests have no fileno
+            if stat.S_ISSOCK(_mode):
+                _msg = (
+                    f"MCP transport {_name} is a network socket — expected a stdio pipe. "
+                    "This worker should only be reachable over stdin/stdout."
+                )
+                if _block:
+                    raise RuntimeError(_msg)
+                logger.warning("%s", _msg)
+
+    def _heartbeat_timeout_secs(self) -> float:
+        """Return the idle-parent heartbeat timeout, or 0.0 to disable it.
+
+        Controlled by ``ARGUS_MCP_HEARTBEAT_TIMEOUT_SECS`` (default 60).
+        A value of 0 disables the watchdog entirely.
+        """
+        _raw = os.environ.get("ARGUS_MCP_HEARTBEAT_TIMEOUT_SECS", "60")
+        try:
+            return max(0.0, float(_raw))
+        except ValueError:
+            return 60.0
+
+    def _wait_for_stdin(self, timeout: float) -> bool:
+        """Wait up to ``timeout`` seconds for data on stdin via select().
+
+        Returns True when data is ready, or when select() is unavailable
+        (e.g. injected BytesIO streams in tests). Returns False when the
+        timeout elapses with no data — the parent is presumed dead or stuck
+        (blocker 62).
+        """
+        if timeout <= 0:
+            return True  # heartbeat disabled
+        try:
+            _readable, _, _ = select.select([self._stdin], [], [], timeout)
+        except (OSError, ValueError, TypeError) as e:
+            logger.debug("MCP transport select() failed, proceeding without heartbeat: %s", e)
+            return True
+        return bool(_readable)
+
     def run(self) -> None:
         """Run the transport loop: read requests from stdin, write responses to stdout.
 
@@ -111,11 +174,25 @@ class MCPTransport:
         unrecoverable error. SIGTERM/SIGINT are handled gracefully — the
         loop terminates after processing the current request.
 
+        Guards (restored after the transport rewrite dropped them):
+          - Bounded reads: inbound lines are capped at ``_MAX_MESSAGE_SIZE``
+            (10 MB) so a runaway producer can't OOM the worker (blocker 39).
+          - Outbound responses are capped at ``_MAX_RESPONSE_SIZE`` (50 MB)
+            and truncated with a warning when exceeded.
+          - Socket-mode detection on stdin/stdout (defense in depth).
+          - Idle-parent heartbeat: if no request arrives within
+            ``ARGUS_MCP_HEARTBEAT_TIMEOUT_SECS`` (default 60s), the parent is
+            presumed dead and the worker shuts down instead of blocking
+            forever (blocker 62). This also lets ``stop()`` interrupt a
+            blocked read.
+
         Health endpoints (``/health``, ``/metrics``) are **not** served here;
         they are handled by ``health_server.py`` started separately in
         ``mcp_server.main()``.
         """
         self._running = True
+        self._assert_stdio_only()
+        _heartbeat = self._heartbeat_timeout_secs()
 
         # Read lines from stdin (one JSON-RPC request per line).
         # Use self._stdin for raw bytes to avoid encoding issues,
@@ -124,8 +201,16 @@ class MCPTransport:
         stdout = self._stdout
 
         while self._running:
+            # Idle-parent watchdog — also gives stop() a bounded window.
+            if not self._wait_for_stdin(_heartbeat):
+                logger.warning(
+                    "MCP transport: no data from parent for %.0fs — parent may be dead, shutting down",
+                    _heartbeat,
+                )
+                break
+
             try:
-                line = stdin.readline()
+                line = stdin.readline(_MAX_MESSAGE_SIZE + 1)
             except (OSError, ValueError) as e:
                 logger.error("MCP transport read error: %s", e)
                 break
@@ -134,6 +219,19 @@ class MCPTransport:
                 # EOF — parent process closed the pipe
                 logger.info("MCP transport: stdin closed, shutting down")
                 break
+
+            if len(line) > _MAX_MESSAGE_SIZE:
+                self._send_error(
+                    stdout,
+                    None,
+                    INVALID_REQUEST,
+                    f"Message exceeds max size ({_MAX_MESSAGE_SIZE} bytes)",
+                )
+                # Drain the remainder of the oversized line so the next
+                # read starts at a clean boundary.
+                while line and not line.endswith(b"\n"):
+                    line = stdin.readline(_MAX_MESSAGE_SIZE + 1)
+                continue
 
             line = line.strip()
             if not line:
@@ -152,6 +250,16 @@ class MCPTransport:
                 continue
 
             if isinstance(raw, list):
+                if not raw:
+                    # JSON-RPC 2.0: an empty batch must be answered with a
+                    # single Invalid Request error.
+                    self._send_error(
+                        stdout,
+                        None,
+                        INVALID_REQUEST,
+                        "Invalid Request: empty batch",
+                    )
+                    continue
                 # Batch — process each request, collect responses
                 responses = []
                 for req in raw:
@@ -169,7 +277,12 @@ class MCPTransport:
         self._running = False
 
     def stop(self) -> None:
-        """Signal the transport loop to stop at the next iteration."""
+        """Signal the transport loop to stop at the next iteration.
+
+        With the idle-parent heartbeat enabled, ``run()`` polls stdin via
+        ``select()`` so ``stop()`` takes effect within one heartbeat window
+        instead of blocking on a hung readline().
+        """
         self._running = False
 
     # ── Request processing ──
@@ -290,11 +403,45 @@ class MCPTransport:
         Always appends ``\\n`` so the reader can split on newlines. Flushes
         after every write to ensure the parent process receives responses
         without buffering delay.
+
+        Enforces ``_MAX_RESPONSE_SIZE`` (50 MB): oversized payloads (e.g.
+        giant tool outputs) are truncated to a warning stub so the parent
+        can't OOM (blocker 39). Non-serializable handler results surface as
+        -32603 instead of being silently stringified.
         """
         try:
-            data = json.dumps(obj, default=str, ensure_ascii=False).encode(
-                "utf-8"
-            ) + b"\n"
+            data = json.dumps(obj, ensure_ascii=False).encode("utf-8") + b"\n"
+        except (TypeError, ValueError) as e:
+            # Handler returned something JSON can't serialize — surface as
+            # an internal error rather than silently stringifying it.
+            logger.error("MCP transport: response is not JSON-serializable: %s", e)
+            request_id = obj.get("id") if isinstance(obj, dict) else None
+            data = json.dumps(
+                self._make_error(
+                    request_id,
+                    INTERNAL_ERROR,
+                    f"Response is not JSON-serializable: {e}",
+                ),
+                ensure_ascii=False,
+            ).encode("utf-8") + b"\n"
+
+        if len(data) > _MAX_RESPONSE_SIZE:
+            logger.warning(
+                "MCP transport: response exceeds %d bytes (%d) — truncating",
+                _MAX_RESPONSE_SIZE,
+                len(data),
+            )
+            request_id = obj.get("id") if isinstance(obj, dict) else None
+            data = json.dumps(
+                self._make_error(
+                    request_id,
+                    INTERNAL_ERROR,
+                    f"Response too large ({len(data)} bytes, max {_MAX_RESPONSE_SIZE})",
+                ),
+                ensure_ascii=False,
+            ).encode("utf-8") + b"\n"
+
+        try:
             stdout.write(data)
             stdout.flush()
         except (OSError, ValueError) as e:
