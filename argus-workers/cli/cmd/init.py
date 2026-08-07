@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-import json
+import argparse
 import logging
 import os
-import tempfile
-import time
-import uuid
 from pathlib import Path
-from typing import Any
-
-import cli._local_mode as local_mode
 
 logger = logging.getLogger("cli.cmd")
 
@@ -52,7 +46,7 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     if existing_env and not force:
         print(f"  .env already exists at: {existing_env}")
-        print(f"  Use --force to overwrite (existing file will be backed up).")
+        print("  Use --force to overwrite (existing file will be backed up).")
         exit_code = 1
     else:
         # ── Generate encryption keys ──
@@ -134,7 +128,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     # ── Run preflight check ──
     print()
     try:
-        from runtime.preflight import run_preflight, display_preflight_report
+        from runtime.preflight import display_preflight_report, run_preflight
 
         preflight = run_preflight()
         print(display_preflight_report(preflight, verbose=True))
@@ -157,11 +151,11 @@ def cmd_init(args: argparse.Namespace) -> int:
     print()
     if generated:
         print(f"  [OK] Generated and saved: {', '.join(generated)}")
-        print(f"  [INFO] Restart any running workers to pick up the new keys.")
+        print("  [INFO] Restart any running workers to pick up the new keys.")
     if exit_code == 0:
         print("  [OK] Init complete.")
     else:
-        print(f"  [WARN] Init completed with issues.")
+        print("  [WARN] Init completed with issues.")
 
     return exit_code
 

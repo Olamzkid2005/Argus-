@@ -2,14 +2,8 @@
 
 from __future__ import annotations
 
-import json
+import argparse
 import logging
-import os
-import tempfile
-import time
-import uuid
-from pathlib import Path
-from typing import Any
 
 import cli._local_mode as local_mode
 
@@ -64,7 +58,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
             return 0
 
         # Verifiable finding types (ones with registered verifiers)
-        verifiable_types = _VERIFIABLE_FINDING_TYPES
+        verifiable_types = local_mode._VERIFIABLE_FINDING_TYPES
 
         # Snapshot original state
         original_map: dict[str, dict] = {}
@@ -181,12 +175,6 @@ def cmd_verify(args: argparse.Namespace) -> int:
             original = original_map.get((entry["endpoint"], entry["type"].lower().replace("-", "_").replace(" ", "_")), {})
             if original:
                 try:
-                    from tools.verification.finding_promoter import promote_finding
-                    promoted = promote_finding(
-                        original,
-                        confidence=0.85,  # verified → high confidence
-                        reproduced=True,
-                    )
                     finding_repo.create_finding(
                         engagement_id=engagement_id,
                         finding_type=original.get("type", ""),

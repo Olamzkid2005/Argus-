@@ -2,16 +2,8 @@
 
 from __future__ import annotations
 
-import json
+import argparse
 import logging
-import os
-import tempfile
-import time
-import uuid
-from pathlib import Path
-from typing import Any
-
-import cli._local_mode as local_mode
 
 logger = logging.getLogger("cli.cmd")
 
@@ -33,7 +25,7 @@ def cmd_health(args: argparse.Namespace) -> int:
 
     # ── Section 1: Preflight configuration checks ──
     try:
-        from runtime.preflight import run_preflight, display_preflight_report
+        from runtime.preflight import display_preflight_report, run_preflight
 
         preflight = run_preflight()
         print(display_preflight_report(preflight, verbose=verbose))

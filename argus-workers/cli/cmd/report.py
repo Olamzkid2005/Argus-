@@ -2,18 +2,46 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
-import os
-import tempfile
 import time
-import uuid
-from pathlib import Path
-from typing import Any
 
 import cli._local_mode as local_mode
 
 logger = logging.getLogger("cli.cmd")
+
+
+def _display_coverage_report(coverage: dict) -> None:
+    """Print the adaptive-plan coverage report in a readable format.
+
+    Args:
+        coverage: Coverage report dict from AdaptivePlanner.get_coverage_report()
+            (coverage_gaps, activated, activated_count, skipped_count,
+            total_phases, coverage_pct).
+    """
+    total = coverage.get("total_phases", 0)
+    activated = coverage.get("activated", []) or []
+    activated_count = coverage.get("activated_count", len(activated))
+    skipped_count = coverage.get("skipped_count", 0)
+    pct = coverage.get("coverage_pct", 0.0)
+    gaps = coverage.get("coverage_gaps", []) or []
+
+    print("\n  Phase Coverage Report")
+    print(f"  {'=' * 54}")
+    print(f"  Total phases:   {total}")
+    print(f"  Activated:      {activated_count}")
+    print(f"  Skipped:        {skipped_count}")
+    print(f"  Coverage:       {pct * 100:.0f}%")
+    if activated:
+        print("\n  Activated phases:")
+        for name in activated:
+            print(f"    - {name}")
+    if gaps:
+        print("\n  Coverage gaps (skipped phases):")
+        for gap in gaps:
+            print(f"    - {gap.get('name', 'unknown')}: {gap.get('reason', '')}")
+    print()
 
 
 def cmd_report(args: argparse.Namespace) -> int:
