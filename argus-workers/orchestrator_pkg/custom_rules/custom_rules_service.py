@@ -98,8 +98,8 @@ class CustomRulesService:
     @staticmethod
     def publish(
         engagement_id: str,
-        targets: list[str],
-        ws_publisher: Any = None,
+        targets: list[str],  # noqa: ARG004
+        ws_publisher: Any = None,  # noqa: ARG004
     ) -> None:
         """Load custom rules and publish them via SSE (Gap 10.1 migration).
 

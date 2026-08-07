@@ -1344,9 +1344,11 @@ def _diagnose_inactivity(domain: str, rc) -> str:
         return "no recon_context (None)"
 
     if domain == "idor":
-        if not (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0):
-            if not (hasattr(rc, "has_api") and rc.has_api):
-                if not (hasattr(rc, "api_endpoints") and len(rc.api_endpoints) > 0):
+        # Nested gates are intentional — sequential signal checks with distinct
+        # fallthrough reasons per domain; merging would hurt readability.
+        if not (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0):  # noqa: SIM102
+            if not (hasattr(rc, "has_api") and rc.has_api):  # noqa: SIM102
+                if not (hasattr(rc, "api_endpoints") and len(rc.api_endpoints) > 0):  # noqa: SIM102
                     crawled = len(rc.crawled_paths) if hasattr(rc, "crawled_paths") and rc.crawled_paths else 0
                     dynamic = (
                         (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0)
@@ -1361,9 +1363,11 @@ def _diagnose_inactivity(domain: str, rc) -> str:
         return "activated (IDOR)"  # fallthrough shouldn't happen
 
     if domain == "auth":
-        if not (hasattr(rc, "has_login_page") and rc.has_login_page):
-            if not (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0):
-                if not (hasattr(rc, "has_api") and rc.has_api):
+        # Nested gates are intentional — sequential signal checks with distinct
+        # fallthrough reasons per domain; merging would hurt readability.
+        if not (hasattr(rc, "has_login_page") and rc.has_login_page):  # noqa: SIM102
+            if not (hasattr(rc, "auth_endpoints") and len(rc.auth_endpoints) > 0):  # noqa: SIM102
+                if not (hasattr(rc, "has_api") and rc.has_api):  # noqa: SIM102
                     crawled = len(rc.crawled_paths) if hasattr(rc, "crawled_paths") and rc.crawled_paths else 0
                     dynamic = (
                         (hasattr(rc, "parameter_bearing_urls") and len(rc.parameter_bearing_urls) > 0)

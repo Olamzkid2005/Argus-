@@ -963,10 +963,10 @@ class ToolRunner:
                         process_killed = True
                     # Poll with exponential backoff until reaped (max ~6.3s total)
                     _WNOHANG = getattr(os, "WNOHANG", 1)
-                    _WIFEXITED = getattr(os, "WIFEXITED", lambda s: True)
+                    _WIFEXITED = getattr(os, "WIFEXITED", lambda _s: True)
                     _WEXITSTATUS = getattr(os, "WEXITSTATUS", lambda s: s)
-                    _WIFSIGNALED = getattr(os, "WIFSIGNALED", lambda s: False)
-                    _WTERMSIG = getattr(os, "WTERMSIG", lambda s: 9)
+                    _WIFSIGNALED = getattr(os, "WIFSIGNALED", lambda _s: False)
+                    _WTERMSIG = getattr(os, "WTERMSIG", lambda _s: 9)
                     for delay in [0.1, 0.2, 0.5, 1.0, 2.0, 2.5]:
                         try:
                             wpid, status = os.waitpid(proc.pid, _WNOHANG)

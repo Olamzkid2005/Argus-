@@ -24,11 +24,9 @@ Usage::
 
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
 import threading
-from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -382,7 +380,6 @@ def display_trend_summary(trends: dict, verbose: bool = False) -> str:
         Formatted string with tables and summaries.
     """
     lines: list[str] = []
-    sep = "=" * 70
     dash = "-" * 70
 
     summary = trends.get("summary", {})

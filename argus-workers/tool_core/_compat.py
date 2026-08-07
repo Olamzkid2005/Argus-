@@ -22,7 +22,7 @@ Usage:
 # ── datetime.UTC compat (Python 3.11+) ──────────────────────────────────────
 # `datetime.UTC` was added in Python 3.11 as a convenience alias for
 # `datetime.timezone.utc`. Provide it when running on 3.10.
-from datetime import UTC as utc  # type: ignore[assignment]
+from datetime import UTC as utc  # type: ignore[assignment]  # noqa: N811
 
 # Re-export as UTC for compatibility with ``from datetime import UTC`` pattern.
 # Files that used ``from datetime import UTC`` can use:
@@ -43,7 +43,7 @@ try:
 except ImportError:
     import enum
 
-    class StrEnum(str, enum.Enum):  # type: ignore[no-redef]
+    class StrEnum(str, enum.Enum):  # type: ignore[no-redef]  # noqa: UP042
         """Backport of Python 3.11's ``enum.StrEnum``."""
 
         def __new__(cls, value: str) -> "StrEnum":
@@ -56,6 +56,6 @@ except ImportError:
 # ``typing.NotRequired`` was added in Python 3.11 (PEP 655). On 3.10 it is
 # available from the ``typing_extensions`` third-party package.
 try:
-    from typing import NotRequired  # type: ignore[no-redef]
+    from typing import NotRequired  # type: ignore[no-redef]  # noqa: F401
 except ImportError:
     pass  # type: ignore[no-redef,assignment]
