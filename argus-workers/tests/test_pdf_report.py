@@ -10,7 +10,6 @@ Verifies:
 
 from io import BytesIO
 
-import pytest
 from pypdf import PdfReader
 
 from reporting.pdf_report import render_pdf_report

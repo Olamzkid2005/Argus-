@@ -7,7 +7,6 @@ import pytest
 from database.sqlite_backend import SQLiteEngagementRepo, SQLiteFindingRepo
 from database.sqlite_trends import SQLiteTrendRepository, display_trend_summary
 
-
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 

@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tool_core.health_checker import (
-    ToolHealthChecker,
     HealthReport,
+    ToolHealthChecker,
     ToolHealthResult,
     display_health_report,
 )

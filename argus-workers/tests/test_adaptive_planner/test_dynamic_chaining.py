@@ -1,15 +1,11 @@
 """Tests for TestDynamicChaining from adaptive_planner."""
 
-from types import SimpleNamespace
 
 from orchestrator_pkg.planning.adaptive_planner import (
     AdaptiveWorkflowPlanner,
     TestingPhase,
-    ToolTask,
     WorkflowPlan,
 )
-
-from .conftest import _make_mock_recon
 
 
 class TestDynamicChaining:

@@ -18,7 +18,6 @@ Tests cover:
 - Engagement Analytics Engine
 """
 
-import pytest
 
 from tool_core.base import ToolContext
 from tool_core.result import ToolStatus

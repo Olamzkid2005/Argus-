@@ -7,22 +7,20 @@ Tests the full lifecycle:
   4. Full pipeline: real JSON → AISurfaceParser → FindingNormalizer → ReconContext
 """
 
-import json
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from models.recon_context import ReconContext
+from orchestrator_pkg.planning.phases._types import ToolTask
 from orchestrator_pkg.planning.phases.ai_surface_analysis import (
     _activate_ai_surface_analysis,
     _ai_surface_analysis_tools,
 )
-from orchestrator_pkg.planning.phases._types import ToolTask
 from orchestrator_pkg.recon_context_service import ReconContextService
 from parsers.normalizer import FindingNormalizer
 from parsers.parsers.ai_surface import AISurfaceParser
-
 
 # ═══════════════════════════════════════════════════════════════════
 # Fixtures

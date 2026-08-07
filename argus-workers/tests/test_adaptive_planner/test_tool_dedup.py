@@ -1,6 +1,5 @@
 """Tests for TestToolDedup from adaptive_planner."""
 
-from types import SimpleNamespace
 
 from orchestrator_pkg.planning.adaptive_planner import (
     AdaptiveWorkflowPlanner,
@@ -8,8 +7,6 @@ from orchestrator_pkg.planning.adaptive_planner import (
     ToolTask,
     WorkflowPlan,
 )
-
-from .conftest import _make_mock_recon
 
 
 class TestToolDedup:

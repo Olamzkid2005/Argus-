@@ -10,7 +10,6 @@ import pytest
 
 from cli import build_parser, main
 
-
 # ── Argument parsing tests ──────────────────────────────────────────────
 
 

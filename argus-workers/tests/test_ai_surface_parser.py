@@ -10,7 +10,6 @@ from models.finding import EvidenceStrength, VulnerabilityFinding
 from parsers.normalizer import FindingNormalizer
 from parsers.parsers.ai_surface import AISurfaceParser
 
-
 # ═══════════════════════════════════════════════════════════════════
 # Fixtures
 # ═══════════════════════════════════════════════════════════════════

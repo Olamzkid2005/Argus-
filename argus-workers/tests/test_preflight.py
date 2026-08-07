@@ -69,7 +69,7 @@ class TestPreflightReport:
 
     def test_auto_counts_from_checks(self):
         """Report auto-computes counts from checks list."""
-        from runtime.preflight import PreflightReport, CheckResult, CheckSeverity
+        from runtime.preflight import CheckResult, CheckSeverity, PreflightReport
 
         checks = [
             CheckResult(name="a", severity=CheckSeverity.OK, message="ok"),
@@ -87,7 +87,7 @@ class TestPreflightReport:
 
     def test_errors_property(self):
         """errors property returns only ERROR checks."""
-        from runtime.preflight import PreflightReport, CheckResult, CheckSeverity
+        from runtime.preflight import CheckResult, CheckSeverity, PreflightReport
 
         checks = [
             CheckResult(name="a", severity=CheckSeverity.OK, message="ok"),
@@ -101,7 +101,7 @@ class TestPreflightReport:
 
     def test_warnings_property(self):
         """warnings property returns only WARNING checks."""
-        from runtime.preflight import PreflightReport, CheckResult, CheckSeverity
+        from runtime.preflight import CheckResult, CheckSeverity, PreflightReport
 
         checks = [
             CheckResult(name="a", severity=CheckSeverity.WARNING, message="w1"),
@@ -115,7 +115,7 @@ class TestPreflightReport:
 
     def test_summary_mixed(self):
         """Summary with mixed results."""
-        from runtime.preflight import PreflightReport, CheckResult, CheckSeverity
+        from runtime.preflight import CheckResult, CheckSeverity, PreflightReport
 
         checks = [
             CheckResult(name="a", severity=CheckSeverity.OK, message=""),
@@ -131,7 +131,7 @@ class TestPreflightReport:
 
     def test_summary_all_ok(self):
         """Summary with all OK."""
-        from runtime.preflight import PreflightReport, CheckResult, CheckSeverity
+        from runtime.preflight import CheckResult, CheckSeverity, PreflightReport
 
         checks = [
             CheckResult(name="a", severity=CheckSeverity.OK, message=""),
@@ -145,7 +145,7 @@ class TestPreflightReport:
 
     def test_to_dict(self):
         """to_dict returns expected dict shape."""
-        from runtime.preflight import PreflightReport, CheckResult, CheckSeverity
+        from runtime.preflight import CheckResult, CheckSeverity, PreflightReport
 
         checks = [
             CheckResult(name="test_check", severity=CheckSeverity.OK, message="All good"),
@@ -180,7 +180,7 @@ class TestCheckSettingsEncryptionKey:
 
     def test_key_set_returns_ok(self):
         """When SETTINGS_ENCRYPTION_KEY is set, returns OK."""
-        from runtime.preflight import _check_settings_encryption_key, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_settings_encryption_key
 
         os.environ["SETTINGS_ENCRYPTION_KEY"] = "test-key"
         try:
@@ -192,7 +192,7 @@ class TestCheckSettingsEncryptionKey:
 
     def test_key_missing_returns_error(self):
         """When SETTINGS_ENCRYPTION_KEY is not set, returns ERROR."""
-        from runtime.preflight import _check_settings_encryption_key, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_settings_encryption_key
 
         # Ensure it's not set
         os.environ.pop("SETTINGS_ENCRYPTION_KEY", None)
@@ -206,8 +206,9 @@ class TestCheckAuthCheckpointKey:
 
     def test_key_set_and_valid_returns_ok(self):
         """When AUTH_CHECKPOINT_KEY is a valid Fernet key, returns OK."""
-        from runtime.preflight import _check_auth_checkpoint_key, CheckSeverity
         from cryptography.fernet import Fernet
+
+        from runtime.preflight import CheckSeverity, _check_auth_checkpoint_key
 
         valid_key = Fernet.generate_key().decode()
         os.environ["AUTH_CHECKPOINT_KEY"] = valid_key
@@ -220,7 +221,7 @@ class TestCheckAuthCheckpointKey:
 
     def test_key_missing_returns_warning(self):
         """When AUTH_CHECKPOINT_KEY is not set, returns WARNING."""
-        from runtime.preflight import _check_auth_checkpoint_key, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_auth_checkpoint_key
 
         os.environ.pop("AUTH_CHECKPOINT_KEY", None)
         result = _check_auth_checkpoint_key()
@@ -229,7 +230,7 @@ class TestCheckAuthCheckpointKey:
 
     def test_key_invalid_returns_error(self):
         """When AUTH_CHECKPOINT_KEY is not a valid Fernet key, returns ERROR."""
-        from runtime.preflight import _check_auth_checkpoint_key, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_auth_checkpoint_key
 
         os.environ["AUTH_CHECKPOINT_KEY"] = "not-a-valid-fernet-key"
         try:
@@ -245,7 +246,7 @@ class TestCheckScopeConfig:
 
     def test_not_autonomous_returns_ok(self):
         """When not in autonomous mode, returns OK."""
-        from runtime.preflight import _check_scope_config, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_scope_config
 
         os.environ.pop("ARGUS_AUTONOMOUS", None)
         os.environ.pop("ARGUS_ALLOW_UNSCOPED", None)
@@ -254,7 +255,7 @@ class TestCheckScopeConfig:
 
     def test_autonomous_no_unscoped_returns_warning(self):
         """Autonomous mode without ARGUS_ALLOW_UNSCOPED returns WARNING."""
-        from runtime.preflight import _check_scope_config, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_scope_config
 
         os.environ["ARGUS_AUTONOMOUS"] = "1"
         os.environ.pop("ARGUS_ALLOW_UNSCOPED", None)
@@ -267,7 +268,7 @@ class TestCheckScopeConfig:
 
     def test_autonomous_with_unscoped_returns_warning(self):
         """Autonomous mode with ARGUS_ALLOW_UNSCOPED returns WARNING."""
-        from runtime.preflight import _check_scope_config, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_scope_config
 
         os.environ["ARGUS_AUTONOMOUS"] = "1"
         os.environ["ARGUS_ALLOW_UNSCOPED"] = "1"
@@ -285,7 +286,7 @@ class TestCheckDNS:
 
     def test_returns_result(self):
         """_check_dns returns a CheckResult (either OK or WARNING)."""
-        from runtime.preflight import _check_dns, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_dns
 
         result = _check_dns()
         # DNS may or may not work in CI — both are valid outcomes
@@ -298,7 +299,7 @@ class TestCheckLLMConfig:
 
     def test_no_keys_returns_warning(self):
         """When no LLM keys are configured, returns WARNING."""
-        from runtime.preflight import _check_llm_config, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_llm_config
 
         # Save and clear relevant keys
         saved = {}
@@ -317,7 +318,7 @@ class TestCheckLLMConfig:
 
     def test_with_openai_key_returns_ok(self):
         """When OPENAI_API_KEY is set, returns OK."""
-        from runtime.preflight import _check_llm_config, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_llm_config
 
         os.environ["OPENAI_API_KEY"] = "sk-test-key-12345"
         try:
@@ -329,7 +330,7 @@ class TestCheckLLMConfig:
 
     def test_with_placeholder_key_returns_warning(self):
         """When key starts with 'your_', treats as unconfigured."""
-        from runtime.preflight import _check_llm_config, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_llm_config
 
         os.environ["OPENAI_API_KEY"] = "your_key_here"
         try:
@@ -344,7 +345,7 @@ class TestCheckDatabaseURL:
 
     def test_url_set_returns_ok(self):
         """When DATABASE_URL is set, returns OK."""
-        from runtime.preflight import _check_database_url, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_database_url
 
         os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost:5432/db"
         try:
@@ -368,7 +369,7 @@ class TestCheckDatabaseURL:
 
     def test_url_missing_returns_warning(self):
         """When DATABASE_URL is not set, returns WARNING."""
-        from runtime.preflight import _check_database_url, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_database_url
 
         os.environ.pop("DATABASE_URL", None)
         result = _check_database_url()
@@ -381,7 +382,7 @@ class TestCheckPlaceholderCredentials:
 
     def test_no_placeholders_returns_ok(self):
         """When no placeholder credentials are detected, returns OK."""
-        from runtime.preflight import _check_placeholder_credentials, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_placeholder_credentials
 
         # Save all env vars that check_placeholder_credentials() inspects
         # and set them all to non-placeholder values
@@ -409,7 +410,7 @@ class TestCheckPlaceholderCredentials:
 
     def test_placeholder_detected(self):
         """When placeholder is found, returns WARNING (non-autonomous)."""
-        from runtime.preflight import _check_placeholder_credentials, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_placeholder_credentials
 
         saved_pw = os.environ.pop("POSTGRES_PASSWORD", None)
         saved_auto = os.environ.pop("ARGUS_AUTONOMOUS", None)
@@ -426,7 +427,7 @@ class TestCheckPlaceholderCredentials:
 
     def test_placeholder_in_autonomous_returns_error(self):
         """Placeholder in autonomous mode returns ERROR."""
-        from runtime.preflight import _check_placeholder_credentials, CheckSeverity
+        from runtime.preflight import CheckSeverity, _check_placeholder_credentials
 
         saved_pw = os.environ.pop("POSTGRES_PASSWORD", None)
         saved_auto = os.environ.pop("ARGUS_AUTONOMOUS", None)
@@ -501,9 +502,9 @@ class TestDisplayPreflightReport:
     def test_all_pass_non_verbose_shows_success(self):
         """When all checks pass in non-verbose mode, shows success message."""
         from runtime.preflight import (
-            PreflightReport,
             CheckResult,
             CheckSeverity,
+            PreflightReport,
             display_preflight_report,
         )
 
@@ -519,9 +520,9 @@ class TestDisplayPreflightReport:
     def test_mixed_results_non_verbose_shows_warnings_and_errors(self):
         """Non-verbose shows only non-OK checks."""
         from runtime.preflight import (
-            PreflightReport,
             CheckResult,
             CheckSeverity,
+            PreflightReport,
             display_preflight_report,
         )
 
@@ -541,9 +542,9 @@ class TestDisplayPreflightReport:
     def test_verbose_shows_all(self):
         """Verbose mode shows all checks including OK."""
         from runtime.preflight import (
-            PreflightReport,
             CheckResult,
             CheckSeverity,
+            PreflightReport,
             display_preflight_report,
         )
 
@@ -559,9 +560,9 @@ class TestDisplayPreflightReport:
     def test_errors_sorted_first(self):
         """Errors appear before warnings and OK in output."""
         from runtime.preflight import (
-            PreflightReport,
             CheckResult,
             CheckSeverity,
+            PreflightReport,
             display_preflight_report,
         )
 
@@ -582,9 +583,9 @@ class TestDisplayPreflightReport:
     def test_detail_lines_in_non_verbose(self):
         """Long detail strings are shown below the table in non-verbose mode."""
         from runtime.preflight import (
-            PreflightReport,
             CheckResult,
             CheckSeverity,
+            PreflightReport,
             display_preflight_report,
         )
 
@@ -613,7 +614,7 @@ class TestPreflightIntegration:
     @pytest.mark.slow(reason="Runs all 9 checks including DNS and tool health probes")
     def test_run_and_display_verbose(self):
         """Running preflight and displaying in verbose mode works end-to-end."""
-        from runtime.preflight import run_preflight, display_preflight_report
+        from runtime.preflight import display_preflight_report, run_preflight
 
         report = run_preflight()
         output = display_preflight_report(report, verbose=True)
@@ -626,7 +627,7 @@ class TestPreflightIntegration:
     @pytest.mark.slow(reason="Runs all 9 checks including DNS and tool health probes")
     def test_run_and_display_non_verbose(self):
         """Running preflight and displaying in non-verbose mode works."""
-        from runtime.preflight import run_preflight, display_preflight_report
+        from runtime.preflight import display_preflight_report, run_preflight
 
         report = run_preflight()
         output = display_preflight_report(report, verbose=False)

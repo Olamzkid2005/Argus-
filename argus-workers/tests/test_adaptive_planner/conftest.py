@@ -2,13 +2,6 @@
 
 from types import SimpleNamespace
 
-from orchestrator_pkg.planning.adaptive_planner import (
-    AdaptiveWorkflowPlanner,
-    TestingPhase,
-    ToolTask,
-    WorkflowPlan,
-)
-
 
 def _make_mock_recon(**overrides):
     """Create a minimal ReconContext-like SimpleNamespace with specified attributes.

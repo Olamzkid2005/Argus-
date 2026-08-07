@@ -4,6 +4,8 @@ Tests for database/sqlite_checkpoint.py — SQLite-backed checkpoint manager.
 Uses real in-memory SQLite (not mocking) for full CRUD verification.
 """
 
+from datetime import UTC
+
 import pytest
 
 from database.sqlite_checkpoint import SQLiteCheckpointManager
@@ -119,9 +121,9 @@ class TestSQLiteCheckpointManager:
 
     def test_non_serializable_data(self, mgr):
         """Data with non-serializable types uses default=str."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        data = {"timestamp": datetime.now(timezone.utc), "count": 42}
+        data = {"timestamp": datetime.now(UTC), "count": 42}
         cpid = mgr.save_checkpoint("eng-001", "recon", data)
         assert cpid is not None
 

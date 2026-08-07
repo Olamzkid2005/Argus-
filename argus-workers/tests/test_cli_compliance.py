@@ -11,15 +11,11 @@ Verifies:
 
 from __future__ import annotations
 
-import json
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from cli import build_parser, cmd_report
-
 
 # ── Argument parsing tests ─────────────────────────────────────
 
@@ -460,8 +456,8 @@ class TestComplianceIntegration:
 
     def test_real_compliance_report_pci(self):
         """Generate a real PCI DSS compliance report."""
-        from database.sqlite_backend import SQLiteFindingRepo
         from compliance_reporting import generate_compliance_report
+        from database.sqlite_backend import SQLiteFindingRepo
 
         repo = SQLiteFindingRepo(":memory:")
         for ftype, sev in [

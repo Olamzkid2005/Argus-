@@ -14,8 +14,8 @@ Coverage:
 
 import os
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 
 import pytest
 
@@ -23,10 +23,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from models.recon_context import ReconContext
 from tools.ai_surface_detector import (
-    detect_ai_surface,
-    build_ai_advisory_finding,
-    CHATBOT_PROVIDER_PATTERNS,
     AI_API_PATHS,
+    CHATBOT_PROVIDER_PATTERNS,
+    build_ai_advisory_finding,
+    detect_ai_surface,
 )
 
 
