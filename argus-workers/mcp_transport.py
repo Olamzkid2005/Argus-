@@ -31,9 +31,9 @@ import os
 import select
 import stat
 import sys
-import time
 import traceback
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

@@ -4,23 +4,22 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 import tempfile
-import uuid
 from pathlib import Path
-from typing import Any
 
 from cli.cmd import (
     assess,
-    scan,
-    report,
-    list as list_cmd,
     health,
+    init,
+    report,
     resume,
+    scan,
     trends,
     verify,
-    init,
+)
+from cli.cmd import (
+    list as list_cmd,
 )
 
 logger = logging.getLogger("cli")

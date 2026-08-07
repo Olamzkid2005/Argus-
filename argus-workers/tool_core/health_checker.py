@@ -24,11 +24,9 @@ import logging
 import os
 import shutil
 import subprocess
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import ClassVar
 
 logger = logging.getLogger(__name__)
@@ -303,8 +301,7 @@ class ToolHealthChecker:
     def _get_all_tool_names(self) -> list[str]:
         """Load all registered tool names from tool_definitions."""
         try:
-            from tool_definitions import TOOLS
-            from tool_definitions import _AGENT_INTERNAL_TOOLS
+            from tool_definitions import _AGENT_INTERNAL_TOOLS, TOOLS
 
             names = []
             for name in TOOLS:

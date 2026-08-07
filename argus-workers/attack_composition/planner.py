@@ -13,7 +13,6 @@ from typing import Any
 
 from attack_graph import AttackGraph, Path
 
-
 # Map chain IDs to suggested capabilities for exploitation
 CHAIN_TO_CAPABILITIES: dict[str, list[str]] = {
     "chain_1": ["open_redirect", "auth"],

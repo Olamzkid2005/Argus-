@@ -387,7 +387,7 @@ def _check_dns(timeout: float = 2.0) -> CheckResult:
             detail="DNS-reliant tools (subfinder, amass, dnsx) may not work. "
             "Check container DNS config or set --dns-servers 8.8.8.8",
         )
-    except socket.timeout:
+    except TimeoutError:
         return CheckResult(
             name="dns_resolution",
             severity=CheckSeverity.WARNING,

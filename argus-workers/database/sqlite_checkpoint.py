@@ -25,11 +25,9 @@ import json
 import logging
 import sqlite3
 import threading
-import time
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +51,7 @@ _PHASE_ORDER = ["recon", "scan", "analyze", "report"]
 
 def _now_iso() -> str:
     """Return ISO 8601 timestamp string."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _ensure_tables(conn: sqlite3.Connection) -> None:
