@@ -108,7 +108,7 @@ class TestToolRunnerStreamingScopeValidation:
         self.sandbox_dir = tempfile.mkdtemp(prefix="test_sandbox_stream_")
         self.runner = ToolRunner(sandbox_dir=self.sandbox_dir)
         # Dummy on_line callback — scope blocks before it's ever called
-        self.noop_callback = lambda line: None
+        self.noop_callback = lambda _line: None
 
     def teardown_method(self):
         self.runner.cleanup()
