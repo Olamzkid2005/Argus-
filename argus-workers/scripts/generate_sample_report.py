@@ -245,7 +245,7 @@ def generate_html_report(output_dir: str) -> str:
         f.write(html)
 
     size = os.path.getsize(output_path)
-    logger.info(f"  {output_path} ({size:,} bytes)")
+    logger.info("  %s (%s bytes)", output_path, f"{size:,}")
     return output_path
 
 
@@ -270,19 +270,19 @@ def generate_compliance_report(standard: str, output_dir: str, label: str) -> st
     if standard == "owasp_top10":
         cats = summary.get("categories", {})
         for cat, count in sorted(cats.items(), key=lambda x: -x[1]):
-            logger.info(f"    {cat:<45} {count} finding(s)")
+            logger.info("    %-45s %d finding(s)", cat, count)
     elif standard == "pci_dss":
-        logger.info(f"    Compliant: {summary['compliant_requirements']}/{summary['total_requirements']}")
-        logger.info(f"    Non-compliant: {summary['non_compliant_requirements']}")
+        logger.info("    Compliant: %s/%s", summary["compliant_requirements"], summary["total_requirements"])
+        logger.info("    Non-compliant: %s", summary["non_compliant_requirements"])
     elif standard in ("hipaa", "iso_27001"):
-        logger.info(f"    Composite score: {summary['composite_score']}/100")
+        logger.info("    Composite score: %s/100", summary["composite_score"])
     elif standard == "soc2":
-        logger.info(f"    Passing: {summary['passing_criteria']}/{summary['total_criteria']}")
-        logger.info(f"    Failing: {summary['failing_criteria']}")
+        logger.info("    Passing: %s/%s", summary["passing_criteria"], summary["total_criteria"])
+        logger.info("    Failing: %s", summary["failing_criteria"])
     elif standard == "nist_csf":
-        logger.info(f"    Functions covered: {summary.get('total_functions', 'N/A')}")
+        logger.info("    Functions covered: %s", summary.get("total_functions", "N/A"))
 
-    logger.info(f"  {output_path} ({size:,} bytes)")
+    logger.info("  %s (%s bytes)", output_path, f"{size:,}")
     return output_path
 
 
@@ -309,7 +309,7 @@ def generate_pdf_report(output_dir: str) -> str:
         f.write(pdf_bytes)
 
     size = os.path.getsize(output_path)
-    logger.info(f"  {output_path} ({size:,} bytes)")
+    logger.info("  %s (%s bytes)", output_path, f"{size:,}")
     return output_path
 
 
@@ -328,7 +328,7 @@ def main():
     total_reports = 2 + len(COMPLIANCE_STANDARDS)  # HTML + PDF + compliance
 
     print(f"\n{'='*60}")
-    print(f"  Argus Sample Report Generator")
+    print("  Argus Sample Report Generator")
     print(f"{'='*60}")
     print(f"\nFindings: {len(SAMPLE_FINDINGS)} across multiple categories")
     print(f"Output:   {output_dir}")
@@ -350,7 +350,7 @@ def main():
     print(f"\n{'='*60}")
     print(f"  All {total_reports} reports generated in {output_dir}")
     print(f"{'='*60}")
-    print(f"\nTo view:")
+    print("\nTo view:")
     print(f"  Enhanced HTML report:   {html_path}")
     print(f"  PDF report:             {pdf_path}")
 

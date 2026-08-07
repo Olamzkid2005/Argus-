@@ -238,9 +238,10 @@ class Orchestrator:
         self._check_timeout()
         job_type = job.get("type")
         with self.span_recorder.span(ExecutionSpan.SPAN_ORCHESTRATOR_STEP):
+            _routing_msg = f"Routing job: {job_type}"
             self.logger.log(
                 "orchestrator_step",
-                f"Routing job: {job_type}",
+                _routing_msg,
                 {"job_type": job_type, "engagement_id": self.engagement_id},
             )
             if job_type == "recon":
@@ -1437,7 +1438,7 @@ class Orchestrator:
                 (finding.get("type") or "").lower().replace(" ", "-").replace("_", "-")
             )
             # Only verify types that have matching verifiers
-            from tools.finding_verifier import VERIFIERS as _verifiers
+            from tools.finding_verifier import VERIFIERS as _verifiers  # noqa: N811
             if finding_type not in _verifiers:
                 return None
 

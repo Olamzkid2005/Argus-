@@ -185,12 +185,11 @@ def ensure_migrations_applied() -> None:
                     len(applied),
                 )
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "Database migration failed on first task execution: %s. "
                 "Worker will continue but DB queries may fail. "
                 "Run migrations manually or fix the issue and restart.",
                 e,
-                exc_info=True,
             )
             # Don't set the flag — allow retry on next task
             raise

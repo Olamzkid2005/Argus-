@@ -220,7 +220,7 @@ class DualAuthScanner(AbstractTool):
         self.findings: list[dict] = []
 
         slog.phase_header("Dual-Auth Scan", target=self.target_url)
-        logger.info(f"Starting dual-auth scan: {self.target_url}")
+        logger.info("Starting dual-auth scan: %s", self.target_url)
 
         # Phase 1: Authenticate as User A and discover owned resources
         slog.info("Phase 1: Authenticating as User A")
@@ -232,14 +232,14 @@ class DualAuthScanner(AbstractTool):
             logger.info("User A authenticated successfully")
         except Exception as e:
             slog.warn(f"User A authentication failed: {e}")
-            logger.warning(f"User A authentication failed: {e}")
+            logger.warning("User A authentication failed: %s", e)
 
         if session_a:
             slog.tool_start("resource_discovery")
             owned_resources = self._discover_owned_resources(session_a)
             resource_count = sum(len(v) for v in owned_resources.values())
             slog.tool_complete("resource_discovery", findings=resource_count)
-            logger.info(f"Discovered {resource_count} resources as User A")
+            logger.info("Discovered %s resources as User A", resource_count)
 
             if not owned_resources:
                 slog.info("No owned resources — skipping cross-account tests")
@@ -258,7 +258,7 @@ class DualAuthScanner(AbstractTool):
                     logger.info("User B authenticated successfully")
                 except Exception as e:
                     slog.warn(f"User B authentication failed: {e}")
-                    logger.warning(f"User B authentication failed: {e}")
+                    logger.warning("User B authentication failed: %s", e)
 
                 if session_b:
                     slog.tool_start("cross_account_access")
@@ -295,7 +295,7 @@ class DualAuthScanner(AbstractTool):
         self.findings = self._builder.findings
 
         slog.tool_complete("dual_auth_scan", findings=len(self.findings))
-        logger.info(f"Dual-auth scan complete: {len(self.findings)} findings")
+        logger.info("Dual-auth scan complete: %s findings", len(self.findings))
 
         result = UnifiedToolResult(
             tool_name=self.tool_name,
@@ -349,7 +349,7 @@ class DualAuthScanner(AbstractTool):
             resp = session.request(method, url, **kwargs)
             return resp
         except (TimeoutError, RequestException, Timeout, ConnectionError, urllib3.exceptions.SSLError) as e:
-            logger.debug(f"DualAuth request failed: {e}")
+            logger.debug("DualAuth request failed: %s", e)
             return None
 
     def _discover_owned_resources(self, session: requests.Session) -> dict[str, list[str]]:

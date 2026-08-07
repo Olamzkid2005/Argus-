@@ -304,7 +304,7 @@ class AIVulnScanner(AbstractTool):
             resp = req_session.request(method, url, **kwargs)
             return resp
         except (TimeoutError, RequestException, Timeout, ConnectionError, urllib3.exceptions.SSLError) as e:
-            logger.debug(f"AI scanner request failed: {e}")
+            logger.debug("AI scanner request failed: %s", e)
             return None
 
     def _discover_ai_endpoints(self, endpoints: list[str]) -> list[str]:
