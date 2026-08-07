@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 from ._types import ToolTask
@@ -36,32 +36,31 @@ class _PhaseDefinition:
 
 # Import all activation and tools functions from phase modules
 from . import (
-    tech_deep_scan,
-    auth_testing,
-    session_analysis,
     access_control,
-    csrf_testing,
-    graphql_introspection,
-    api_scan,
-    websocket_testing,
-    cors_origin_testing,
-    open_redirect,
-    rate_limit_testing,
-    input_validation,
-    xxe_testing,
-    template_injection,
-    deserialization_testing,
-    ldap_injection,
-    path_traversal,
-    command_injection,
-    nosql_injection,
-    ssrf_testing,
-    infrastructure_scan,
-    cloud_metadata_probe,
-    file_upload_scan,
     ai_surface_analysis,
+    api_scan,
+    auth_testing,
+    cloud_metadata_probe,
+    command_injection,
+    cors_origin_testing,
+    csrf_testing,
+    deserialization_testing,
+    file_upload_scan,
+    graphql_introspection,
+    infrastructure_scan,
+    input_validation,
+    ldap_injection,
+    nosql_injection,
+    open_redirect,
+    path_traversal,
+    rate_limit_testing,
+    session_analysis,
+    ssrf_testing,
+    tech_deep_scan,
+    template_injection,
+    websocket_testing,
+    xxe_testing,
 )
-
 
 PHASE_DEFINITIONS: list[_PhaseDefinition] = [
     _PhaseDefinition(

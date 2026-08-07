@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
-from ._types import ToolTask, _get_attr, _get_tech_stack
+from ._types import ToolTask, _get_attr
 
 logger = logging.getLogger(__name__)
 

@@ -43,19 +43,15 @@ Add new phases by appending to PHASE_DEFINITIONS. Each definition requires:
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from orchestrator_pkg.planning.phases import _PhaseDefinition
 from orchestrator_pkg.planning.phases._types import (
     ToolTask,
     _get_attr,
-    _get_tech_stack,
     _has_min_recon,
-    _ReconCtx,
-    _ActivationResult,
 )
-from orchestrator_pkg.planning.phases import _PhaseDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +147,6 @@ class WorkflowPlan:
 
 # ── Phase Registry (imported from planning/phases/) ──
 from orchestrator_pkg.planning.phases import PHASE_DEFINITIONS  # noqa: E402, F401
-
 
 # ── Planner ────────────────────────────────────────────────────────────
 

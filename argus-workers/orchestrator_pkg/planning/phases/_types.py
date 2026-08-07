@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 # Convenience type aliases for ReconContext-like objects
 _ReconCtx = Any
 _ActivationResult = tuple[bool, str]

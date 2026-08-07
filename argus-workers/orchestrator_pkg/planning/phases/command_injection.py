@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from ._types import ToolTask, _get_attr, _get_tech_stack
 
@@ -32,7 +31,7 @@ _CMD_EXECUTION_FUNCTIONS: set[str] = {
     "child_process.spawn", "child_process.execfile",
     "child_process.fork",
     # Ruby
-    "exec", "system", "popen", "open",
+    "open",
     # Go
     "os.exec", "exec.command", "exec.commandcontext",
 }
