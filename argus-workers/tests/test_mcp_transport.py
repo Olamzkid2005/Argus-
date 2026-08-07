@@ -18,11 +18,11 @@ import json
 import pytest
 
 from mcp_transport import (
-    MCPTransport,
-    PARSE_ERROR,
+    INTERNAL_ERROR,
     INVALID_REQUEST,
     METHOD_NOT_FOUND,
-    INTERNAL_ERROR,
+    PARSE_ERROR,
+    MCPTransport,
     create_ping_handler,
 )
 
@@ -50,7 +50,7 @@ class TestMCPTransportProcessRequest:
     def transport(self):
         t = MCPTransport()
         t.register("echo", lambda params: params or {})
-        t.register("fail", lambda params: (_ for _ in ()).throw(ValueError("oops")))
+        t.register("fail", lambda _params: (_ for _ in ()).throw(ValueError("oops")))
         return t
 
     def test_valid_request(self, transport):
@@ -204,7 +204,7 @@ class TestMCPTransportRun:
             {"jsonrpc": "2.0", "method": "echo"},          # notification — no response
             {"jsonrpc": "2.0", "id": "2", "method": "echo", "params": {"x": 1}},  # response
         ]))
-        lines = [l for l in output.strip().split(b"\n") if l]
+        lines = [line for line in output.strip().split(b"\n") if line]
         assert len(lines) == 2
         resp1 = json.loads(lines[0])
         resp2 = json.loads(lines[1])
@@ -255,7 +255,7 @@ class TestMCPTransportRun:
             {"jsonrpc": "2.0", "id": "2", "method": "echo", "params": {"a": 1}},
             {"jsonrpc": "2.0", "id": "3", "method": "unknown"},
         ]))
-        lines = [l for l in output.strip().split(b"\n") if l]
+        lines = [line for line in output.strip().split(b"\n") if line]
         assert len(lines) == 3
         assert json.loads(lines[0])["result"]["pong"] is True
         assert json.loads(lines[1])["result"]["a"] == 1
@@ -279,8 +279,8 @@ class TestMCPTransportRegister:
 
     def test_register_overwrites_existing(self):
         transport = MCPTransport()
-        transport.register("method", lambda p: {"from": "first"})
-        transport.register("method", lambda p: {"from": "second"})
+        transport.register("method", lambda _p: {"from": "first"})
+        transport.register("method", lambda _p: {"from": "second"})
         resp = transport._process_request({
             "jsonrpc": "2.0",
             "id": "1",

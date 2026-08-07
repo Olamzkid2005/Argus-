@@ -107,7 +107,7 @@ class TestMCPServer:
         """
         import mcp_server as ms
         self._orig_getaddrinfo = ms.socket.getaddrinfo
-        ms.socket.getaddrinfo = lambda *a, **kw: None  # no-op DNS check
+        ms.socket.getaddrinfo = lambda *_a, **_kw: None  # no-op DNS check
 
     def teardown_method(self) -> None:
         """Restore original DNS."""
@@ -210,7 +210,7 @@ class TestGetMCPServer:
         """Patch DNS to prevent hang during MCPServer init."""
         import mcp_server as ms
         self._orig_getaddrinfo = ms.socket.getaddrinfo
-        ms.socket.getaddrinfo = lambda *a, **kw: None
+        ms.socket.getaddrinfo = lambda *_a, **_kw: None
 
     def teardown_method(self) -> None:
         """Restore original DNS."""
@@ -241,7 +241,7 @@ class TestBinaryOnPath:
         MCPServer._binary_cache.clear()
         import mcp_server as ms
         self._orig_getaddrinfo = ms.socket.getaddrinfo
-        ms.socket.getaddrinfo = lambda *a, **kw: None
+        ms.socket.getaddrinfo = lambda *_a, **_kw: None
 
     def teardown_method(self) -> None:
         """Restore original DNS."""
@@ -379,7 +379,7 @@ class TestBinaryOnPath:
         }
         mocker.patch(
             "mcp_server.shutil.which",
-            side_effect=lambda name, **kw: which_results.get(name),
+            side_effect=lambda name, **_kw: which_results.get(name),
         )
         mock_logger = mocker.patch("mcp_server.logger.warning")
         server = self.make_server()
@@ -402,7 +402,7 @@ class TestCallToolBinaryValidation:
         MCPServer._binary_cache.clear()
         import mcp_server as ms
         self._orig_getaddrinfo = ms.socket.getaddrinfo
-        ms.socket.getaddrinfo = lambda *a, **kw: None
+        ms.socket.getaddrinfo = lambda *_a, **_kw: None
 
     def teardown_method(self) -> None:
         """Restore original DNS."""
@@ -595,7 +595,7 @@ class TestBuildAttackGraph:
     def setup_method(self) -> None:
         import mcp_server as ms
         self._orig_getaddrinfo = ms.socket.getaddrinfo
-        ms.socket.getaddrinfo = lambda *a, **kw: None
+        ms.socket.getaddrinfo = lambda *_a, **_kw: None
 
     def teardown_method(self) -> None:
         import mcp_server as ms
@@ -679,7 +679,7 @@ class TestHandleAttackGraphSnapshot:
     def setup_method(self) -> None:
         import mcp_server as ms
         self._orig_getaddrinfo = ms.socket.getaddrinfo
-        ms.socket.getaddrinfo = lambda *a, **kw: None
+        ms.socket.getaddrinfo = lambda *_a, **_kw: None
 
     def teardown_method(self) -> None:
         import mcp_server as ms
@@ -819,7 +819,7 @@ class TestHandlePhaseComplete:
         """Patch DNS to prevent hang during MCPServer init."""
         import mcp_server as ms
         self._orig_getaddrinfo = ms.socket.getaddrinfo
-        ms.socket.getaddrinfo = lambda *a, **kw: None
+        ms.socket.getaddrinfo = lambda *_a, **_kw: None
 
     def teardown_method(self) -> None:
         """Restore original DNS."""
