@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 # All tests in this module are fast unit tests with no external dependencies
 pytestmark = pytest.mark.unit
 from orchestrator_pkg.planning.adaptive_planner import (
-    WorkflowPlan,
     TestingPhase,
     ToolTask,
+    WorkflowPlan,
 )
-
 
 # ── Fixtures ────────────────────────────────────────────────────────────
 
@@ -140,9 +140,6 @@ class TestMatchHypothesisToPhases:
     def test_import(self):
         """Module imports correctly."""
         from orchestrator_pkg.planning.hypothesis_planning_bridge import (
-            _match_hypothesis_to_phases,
-            update_plan_from_hypotheses,
-            apply_hypothesis_engine,
             _HYPOTHESIS_PHASE_MAP,
         )
         assert len(_HYPOTHESIS_PHASE_MAP) >= 50, (
@@ -355,7 +352,6 @@ class TestUpdatePlanFromHypotheses:
         }
 
         hypotheses = [api_hypothesis, ssrf_hypothesis, jwt_hypothesis]
-        initial_count = len(populated_plan.phases)
         update_plan_from_hypotheses(populated_plan, hypotheses)
 
         # Should have 2 existing + 2 new = 4 total (api_scan already exists)

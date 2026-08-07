@@ -166,16 +166,25 @@ class TestAutoVerificationInRunScan:
 
     def _make(self):
         o = object.__new__(Orchestrator)
-        o.engagement_id = "test-eng-001"; o.start_time = time.time()
-        o.ws_publisher = MagicMock(); o.logger = MagicMock(); o.state = None
-        o._check_timeout = MagicMock(); o._save_findings = MagicMock(return_value=0)
+        o.engagement_id = "test-eng-001"
+        o.start_time = time.time()
+        o.ws_publisher = MagicMock()
+        o.logger = MagicMock()
+        o.state = None
+        o._check_timeout = MagicMock()
+        o._save_findings = MagicMock(return_value=0)
         o._maybe_run_browser_scanner = MagicMock(return_value=[])
-        o.bug_bounty_mode = False; o.llm_client = MagicMock()
-        o.llm_payload_generator = None; o.mcp = MagicMock(); o.trace_id = None
+        o.bug_bounty_mode = False
+        o.llm_client = MagicMock()
+        o.llm_payload_generator = None
+        o.mcp = MagicMock()
+        o.trace_id = None
         o.span_recorder = MagicMock()
         o.span_recorder.span.return_value.__enter__ = MagicMock(return_value=None)
         o.span_recorder.span.return_value.__exit__ = MagicMock(return_value=None)
-        o._execution_engine = None; o.tool_runner = MagicMock(); o.parser = MagicMock()
+        o._execution_engine = None
+        o.tool_runner = MagicMock()
+        o.parser = MagicMock()
         o.normalizer = MagicMock()
         return o
 
@@ -237,18 +246,26 @@ class TestFootholdCheckInRunAnalysis:
 
     def _make(self):
         o = object.__new__(Orchestrator)
-        o.engagement_id = "test-eng-001"; o.start_time = time.time()
-        o.ws_publisher = MagicMock(); o.logger = MagicMock()
-        o._check_timeout = MagicMock(); o.llm_client = MagicMock()
-        o.llm_payload_generator = None; o.bug_bounty_mode = False; o.state = None
+        o.engagement_id = "test-eng-001"
+        o.start_time = time.time()
+        o.ws_publisher = MagicMock()
+        o.logger = MagicMock()
+        o._check_timeout = MagicMock()
+        o.llm_client = MagicMock()
+        o.llm_payload_generator = None
+        o.bug_bounty_mode = False
+        o.state = None
         o.trace_id = None
         o.span_recorder = MagicMock()
         o.span_recorder.span.return_value.__enter__ = MagicMock(return_value=None)
         o.span_recorder.span.return_value.__exit__ = MagicMock(return_value=None)
         o._get_org_id = MagicMock(return_value="org-1")
         o._load_priority_vuln_classes = MagicMock(return_value=[])
-        o.normalizer = MagicMock(); o.finding_repo = MagicMock()
-        o.engagement_repo = MagicMock(); o.rate_limit_repo = MagicMock(); o.mcp = MagicMock()
+        o.normalizer = MagicMock()
+        o.finding_repo = MagicMock()
+        o.engagement_repo = MagicMock()
+        o.rate_limit_repo = MagicMock()
+        o.mcp = MagicMock()
         return o
 
     def _run(self, orch, scored, pe_side_effect=None):

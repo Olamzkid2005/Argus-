@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
+
 import pytest
 
 from database.sqlite_backend import SQLiteEngagementRepo, SQLiteFindingRepo
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -239,7 +239,7 @@ class TestSQLiteFindingRepo:
 
     def test_create_finding_sets_defaults(self, finding_repo, eng_id):
         """create_finding uses default values for optional fields."""
-        f_id = _seed_finding(
+        _seed_finding(
             finding_repo, eng_id,
             cvss_score=None, owasp_category=None, cwe_id=None,
         )
@@ -249,8 +249,8 @@ class TestSQLiteFindingRepo:
 
     def test_create_finding_upserts_duplicate(self, finding_repo, eng_id):
         """create_finding updates existing finding on duplicate (same key tuple)."""
-        f_id1 = _seed_finding(finding_repo, eng_id, severity="HIGH")
-        f_id2 = _seed_finding(finding_repo, eng_id, severity="CRITICAL")
+        _seed_finding(finding_repo, eng_id, severity="HIGH")
+        _seed_finding(finding_repo, eng_id, severity="CRITICAL")
 
         # Same engagement, endpoint, type, tool — should be the same finding
         findings, total = finding_repo.get_findings_by_engagement(eng_id)
