@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-import argparse
-import asyncio
 import json
 import logging
 import os
-import threading
-import time
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -165,10 +160,11 @@ def _run_phases(
                 planner = getattr(orch, "_adaptive_planner", None)
                 adaptive_plan = getattr(orch, "_adaptive_plan", None)
                 if planner and adaptive_plan and hasattr(planner, "should_continue"):
-                    if not planner.should_continue(
+                    should_continue = planner.should_continue(
                         plan=adaptive_plan,
                         phase_results=phase_results,
-                    ):
+                    )
+                    if not should_continue:
                         logger.info(
                             "Coverage gate: stopping before %s "
                             "(no findings from previous phase(s))",

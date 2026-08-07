@@ -772,18 +772,17 @@ class MCPServer:
         # the first call for each tool (and is a no-op for python3 tools
         # since they use the current interpreter).
         _tool_command = Path(tool.command).name.lower() if tool.command else ""
-        if _tool_command != "python3":
-            if not self._binary_on_path(tool.command):
-                return MCPToolResult(
-                    success=False,
-                    error=(
-                        f"Tool '{name}' binary '{tool.command}' not found on PATH. "
-                        f"Install it or add its directory to PATH. "
-                        f"Set ARGUS_EXTRA_PATH for custom install locations."
-                    ),
-                    tool=name,
-                    signal_quality=tool_signal_quality,
-                ).to_dict()
+        if _tool_command != "python3" and not self._binary_on_path(tool.command):
+            return MCPToolResult(
+                success=False,
+                error=(
+                    f"Tool '{name}' binary '{tool.command}' not found on PATH. "
+                    f"Install it or add its directory to PATH. "
+                    f"Set ARGUS_EXTRA_PATH for custom install locations."
+                ),
+                tool=name,
+                signal_quality=tool_signal_quality,
+            ).to_dict()
 
         # Gap 4.4: Check cache before executing
         _cache_mode = (cache_mode or CacheMode.NORMAL.value)

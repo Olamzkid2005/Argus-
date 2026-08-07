@@ -433,9 +433,12 @@ class CloudMetadataProbe(AbstractTool):
             if isinstance(parsed, dict):
                 for key, value in parsed.items():
                     key_lower = key.lower()
-                    if any(p in key_lower for p in SENSITIVE_PATTERNS):
-                        if isinstance(value, str) and len(value) > 8:
-                            sensitive_items.append({
+                    if (
+                        any(p in key_lower for p in SENSITIVE_PATTERNS)
+                        and isinstance(value, str)
+                        and len(value) > 8
+                    ):
+                        sensitive_items.append({
                                 "type": key,
                                 "value_preview": value[:20] + "..." if len(value) > 20 else value,
                                 "length": len(value),
