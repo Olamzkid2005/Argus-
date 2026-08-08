@@ -432,7 +432,7 @@ jobs:
           python-version: "3.11"
 
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('argus-workers/requirements.txt', 'argus-workers/requirements-dev.txt') }}
@@ -465,7 +465,7 @@ jobs:
           python-version: "3.11"
 
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('argus-workers/requirements.txt', 'argus-workers/requirements-dev.txt') }}
