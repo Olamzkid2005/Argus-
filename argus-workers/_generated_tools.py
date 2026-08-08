@@ -431,7 +431,7 @@ _register(ToolDefinition(
 # ── finding_verifier (from finding_verifier.yaml) ──
 _register(ToolDefinition(
     name="finding_verifier",
-    description="Verify findings by re-testing with independent HTTP-based methods â€” validates SQLi, XSS, and Open Redirect via httpx",
+    description="Verify findings by re-testing with independent HTTP-based methods — validates SQLi, XSS, and Open Redirect via httpx",
     binary="python3",
     phases=["scan"],
     default_args=["argus-workers/tools/scripts/run_finding_verifier.py"],
