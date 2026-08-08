@@ -87,7 +87,10 @@ class DistributedSemaphore:
                 if acquired == 1:
                     return True
             except Exception:
-                pass  # Redis down — fall through to local fallback
+                # Redis unreachable — propagate so acquire() falls back to the
+                # local semaphore instead of spinning for the full timeout and
+                # returning False (which would break acquire/release balance).
+                raise
             time.sleep(0.1)
         return False
 

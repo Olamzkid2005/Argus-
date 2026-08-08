@@ -371,14 +371,28 @@ def execute_repo_scan(
                     all_findings[idx] = finding
 
         def _emit(tool: str, activity: str, status: str, items: int | None = None):
-            orchestrator.ws_publisher.publish_scanner_activity(
-                engagement_id=orchestrator.engagement_id,
-                tool_name=tool,
-                activity=activity,
-                status=status,
-                target=repo_url,
-                items_found=items,
-            )
+            # Gap 10.1: ws_publisher was removed from the Orchestrator — emit
+            # through the unified streaming.EventBus instead (same event shape).
+            try:
+                from streaming import EventType as _EventType
+                from streaming import emit_event as _emit_event
+
+                _emit_event(
+                    orchestrator.engagement_id,
+                    _EventType.SCANNER_ACTIVITY,
+                    {
+                        "tool_name": tool,
+                        "activity": activity,
+                        "status": status,
+                        "target": repo_url,
+                        "items_found": items,
+                    },
+                )
+            except Exception:  # pragma: no cover - non-fatal telemetry
+                logger.debug(
+                    "Failed to emit scanner_activity event (non-fatal): %s",
+                    activity,
+                )
 
         # ── Validate repo URL before cloning (prevents SSRF) ──
         validate_repo_url(repo_url)
