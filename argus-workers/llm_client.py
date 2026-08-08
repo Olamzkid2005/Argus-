@@ -245,6 +245,31 @@ class LLMClient:
                             self._user_email,
                         )
                         return row[1]
+                return None
+
+            # Unscoped fallback (legacy): first valid key across ALL users.
+            # Warn loudly — the caller should pass user_email for tenant-scoped
+            # lookup (M-v5-01) to avoid cross-tenant billing leakage.
+            logger.warning(
+                "Loading API key from database WITHOUT user scoping — pass "
+                "user_email to LLMClient for tenant-scoped lookup (M-v5-01)."
+            )
+            with db_cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT ON (key) key, value
+                    FROM user_settings
+                    WHERE key = ANY(%s)
+                      AND value IS NOT NULL
+                      AND value != ''
+                    ORDER BY key, updated_at DESC
+                    """,
+                    (list(key_names),),
+                )
+                for row in cursor.fetchall():
+                    if len(row) > 1 and row[1] and len(str(row[1])) > 10:
+                        logger.info("Loaded API key from database (redacted)")
+                        return row[1]
             return None
         except Exception as e:
             logger.debug("Could not load API key from database settings: %s", e)

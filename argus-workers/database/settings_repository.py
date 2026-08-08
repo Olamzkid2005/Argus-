@@ -176,7 +176,7 @@ class SettingsRepository:
 
 
 # Convenience function
-def get_user_api_keys(user_email: str) -> dict[str, str]:
+def get_user_api_keys(user_email: str) -> dict[str, str | None]:
     """
     Get all API keys for a user.
 
@@ -184,12 +184,14 @@ def get_user_api_keys(user_email: str) -> dict[str, str]:
         user_email: User's email address
 
     Returns:
-        Dictionary with 'openai_api_key' and 'opencode_api_key'
+        Dictionary with 'openai_api_key' and 'opencode_api_key'.
+        Missing keys are None (not empty string) so callers can
+        distinguish "unset" from "set to empty".
     """
     repo = SettingsRepository()
     settings = repo.get_user_settings(user_email)
 
     return {
-        "openai_api_key": settings.get("openai_api_key") or "",
-        "opencode_api_key": settings.get("opencode_api_key") or "",
+        "openai_api_key": settings.get("openai_api_key"),
+        "opencode_api_key": settings.get("opencode_api_key"),
     }
