@@ -1,157 +1,97 @@
-"""Tests for mcp_transport.py recovery fix — _SKIP_LINE vs None distinction."""
+"""Tests for mcp_transport.py run-loop recovery — malformed JSON handling.
 
+Verifies that a single malformed JSON line does NOT kill the transport loop:
+it is answered with a JSON-RPC PARSE_ERROR response and processing continues,
+while genuine EOF (stdin closed) still exits the loop cleanly.
+
+These tests exercise the real ``MCPTransport.run()`` via injected BytesIO
+streams (same pattern as test_mcp_transport.py).
+"""
+
+from __future__ import annotations
+
+import io
 import json
-from io import StringIO
-from unittest.mock import patch
 
-from mcp_transport import _SKIP_LINE, MCPTransport
+from mcp_transport import PARSE_ERROR, MCPTransport
 
 
-class TestReadRequestSentinel:
-    """_read_request returns different sentinels for malformed JSON vs EOF."""
-
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_malformed_json_returns_skip_line(self, mock_stdin):
-        """Malformed JSON line returns _SKIP_LINE sentinel, not None."""
-        mock_stdin.write("not valid json\n")
-        mock_stdin.seek(0)
-        transport = MCPTransport()
-
-        result = transport._read_request()
-
-        assert result is _SKIP_LINE
-        assert result is not None
-
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_eof_returns_none(self, mock_stdin):
-        """EOF (stdin closed) returns None."""
-        transport = MCPTransport()
-
-        result = transport._read_request()
-
-        assert result is None
-
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_valid_json_returns_dict(self, mock_stdin):
-        """Valid JSON returns the parsed dict."""
-        mock_stdin.write('{"method": "ping"}\n')
-        mock_stdin.seek(0)
-        transport = MCPTransport()
-
-        result = transport._read_request()
-
-        assert result == {"method": "ping"}
-        assert result is not _SKIP_LINE
-        assert result is not None
-
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_empty_line_returns_skip_line(self, mock_stdin):
-        """Empty line is NOT EOF — returns _SKIP_LINE (not None)."""
-        mock_stdin.write("\n")
-        mock_stdin.seek(0)
-        transport = MCPTransport()
-
-        result = transport._read_request()
-
-        assert result is _SKIP_LINE
-
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_skip_line_sentinel_is_empty_dict(self, mock_stdin):
-        """_SKIP_LINE is an empty dict sentinel, not None."""
-        assert _SKIP_LINE == {}
-        assert _SKIP_LINE is not None
+def _run(input_data: bytes):
+    """Build a transport with fake streams and run it, returning stdout bytes."""
+    fake_stdin = io.BytesIO(input_data)
+    fake_stdout = io.BytesIO()
+    transport = MCPTransport(stdin=fake_stdin, stdout=fake_stdout)
+    transport.register("ping", lambda _params: {"pong": True})
+    transport.run()
+    fake_stdout.seek(0)
+    return fake_stdout.read()
 
 
-class TestRunLoopRecovery:
-    """run() loop correctly handles _SKIP_LINE vs None."""
+def _responses(output: bytes) -> list[dict]:
+    """Parse newline-delimited JSON responses from captured stdout."""
+    return [json.loads(line) for line in output.strip().split(b"\n") if line.strip()]
 
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_skips_malformed_json_and_continues(self, mock_stdin, mock_stdout):
-        """Malformed JSON lines are skipped and processing continues."""
-        mock_stdin.write("not json\n")
-        mock_stdin.write('{"id": 1, "method": "ping"}\n')
-        mock_stdin.seek(0)
-        transport = MCPTransport()
-        transport.register("ping", lambda _params: "pong")
 
-        transport.run()
+class TestMalformedJsonRecovery:
+    """Malformed JSON lines are answered with a PARSE_ERROR, loop continues."""
 
-        output = mock_stdout.getvalue()
-        assert '"result": "pong"' in output
+    def test_malformed_json_returns_parse_error(self):
+        """A malformed JSON line produces a PARSE_ERROR response, not a crash."""
+        output = _run(b"not valid json\n")
+        responses = _responses(output)
+        assert len(responses) == 1
+        assert responses[0]["error"]["code"] == PARSE_ERROR
 
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_malformed_json_between_valid_messages(self, mock_stdin, mock_stdout):
+    def test_skips_malformed_json_and_continues(self):
+        """A malformed line does not prevent later valid requests from being processed."""
+        output = _run(b"not json\n" + b'{"id": 1, "method": "ping"}\n')
+        responses = _responses(output)
+        pongs = [r for r in responses if r.get("result") == {"pong": True}]
+        assert len(pongs) == 1
+        assert pongs[0]["id"] == 1
+
+    def test_malformed_json_between_valid_messages(self):
         """Multiple valid messages with malformed lines in between all work."""
-        mock_stdin.write('{"id": 1, "method": "ping"}\n')
-        mock_stdin.write("garbage\n")
-        mock_stdin.write("{bad}\n")
-        mock_stdin.write('{"id": 2, "method": "ping"}\n')
-        mock_stdin.seek(0)
-        transport = MCPTransport()
-        transport.register("ping", lambda _params: "pong")
+        data = (
+            b'{"id": 1, "method": "ping"}\n'
+            b"garbage\n"
+            b"{bad}\n"
+            b'{"id": 2, "method": "ping"}\n'
+        )
+        responses = _responses(_run(data))
+        pongs = [r for r in responses if r.get("result") == {"pong": True}]
+        assert len(pongs) == 2
 
-        transport.run()
+    def test_empty_lines_are_skipped(self):
+        """Blank lines are ignored silently (no response, no crash)."""
+        output = _run(b"\n\n" + b'{"id": 1, "method": "ping"}\n')
+        responses = _responses(output)
+        assert len(responses) == 1
+        assert responses[0]["id"] == 1
 
-        output = mock_stdout.getvalue()
-        assert output.count('"result": "pong"') == 2
 
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_eof_breaks_loop(self, mock_stdin, mock_stdout):
-        """EOF (no more data) breaks the run loop cleanly — run() returns."""
-        transport = MCPTransport()
+class TestRunLoopEof:
+    """EOF (stdin closed) exits the run loop cleanly."""
 
-        transport.run()
+    def test_eof_breaks_loop(self):
+        """Empty input (EOF immediately) returns without hanging."""
+        output = _run(b"")
+        assert output == b""
 
-        assert transport._running is True
+    def test_eof_after_messages_breaks_loop(self):
+        """Processing completes, then EOF ends the loop."""
+        output = _run(b'{"id": 1, "method": "ping"}\n')
+        responses = _responses(output)
+        assert len(responses) == 1
+        assert responses[0]["result"] == {"pong": True}
 
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_mixed_skip_and_eof_behavior(self, mock_stdin, mock_stdout):
+    def test_mixed_skip_and_eof_behavior(self):
         """Messages after malformed lines are processed, and EOF still breaks."""
-        mock_stdin.write('{"id": 1, "method": "ping"}\n')
-        mock_stdin.write("bad line\n")
-        mock_stdin.write('{"id": 2, "method": "ping"}\n')
-        mock_stdin.seek(0)
-        transport = MCPTransport()
-        transport.register("ping", lambda _params: "pong")
-
-        transport.run()
-
-        output = mock_stdout.getvalue()
-        assert output.count('"result": "pong"') == 2
-
-    @patch("mcp_transport.sys.stdout", new_callable=StringIO)
-    @patch("mcp_transport.sys.stdin", new_callable=StringIO)
-    def test_keyboard_interrupt_breaks_loop(self, mock_stdin, mock_stdout):
-        """KeyboardInterrupt breaks the run loop."""
-        mock_stdin.readline = lambda: (_ for _ in ()).throw(KeyboardInterrupt())
-        transport = MCPTransport()
-
-        transport.run()
-
-        assert transport._running is True  # _running not reset, loop exited cleanly
-
-
-class TestSkipLineSentinelBehavior:
-    """The _SKIP_LINE sentinel identity is used for run() loop control."""
-
-    def test_skip_line_is_not_none(self):
-        """_SKIP_LINE must not be None, which is reserved for EOF."""
-        assert _SKIP_LINE is not None
-
-    def test_skip_line_is_dict(self):
-        """_SKIP_LINE is an empty dict."""
-        assert isinstance(_SKIP_LINE, dict)
-        assert len(_SKIP_LINE) == 0
-
-    def test_existing_test_needs_update(self):
-        """Verify the existing test_mcp_transport bug — invalid JSON should not be None."""
-        try:
-            json.loads("not json")
-        except json.JSONDecodeError:
-            result = _SKIP_LINE
-        assert result is _SKIP_LINE
-        assert result is not None
+        data = (
+            b'{"id": 1, "method": "ping"}\n'
+            b"bad line\n"
+            b'{"id": 2, "method": "ping"}\n'
+        )
+        responses = _responses(_run(data))
+        pongs = [r for r in responses if r.get("result") == {"pong": True}]
+        assert len(pongs) == 2

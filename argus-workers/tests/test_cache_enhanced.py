@@ -53,22 +53,22 @@ class TestWorkerCache:
         result = cache.set("key-004", {"data": "value"}, ttl=300)
 
         assert result is True
-        mock_redis.setex.assert_called_once()
-        args = mock_redis.setex.call_args[0]
+        mock_redis.set.assert_called_once()
+        args, kwargs = mock_redis.set.call_args
         assert args[0] == "cache:key-004"
-        assert args[1] == 300
-        assert json.loads(args[2]) == {"data": "value"}
+        assert json.loads(args[1]) == {"data": "value"}
+        assert kwargs.get("ex") == 300
 
     def test_set_default_ttl(self, mock_redis):
         """Test set uses default TTL"""
         cache.set("key-005", "value")
 
-        args = mock_redis.setex.call_args[0]
-        assert args[1] == cache.ttl
+        _, kwargs = mock_redis.set.call_args
+        assert kwargs.get("ex") == cache.ttl
 
     def test_set_redis_error(self, mock_redis):
         """Test set handles Redis errors"""
-        mock_redis.setex.side_effect = Exception("Redis error")
+        mock_redis.set.side_effect = Exception("Redis error")
 
         result = cache.set("key-006", "value")
 
@@ -128,7 +128,7 @@ class TestWorkerCache:
         )
 
         assert result is True
-        mock_redis.setex.assert_called_once()
+        mock_redis.set.assert_called_once()
 
     def test_invalidate_query(self, mock_redis):
         """Test invalidating queries by pattern"""
@@ -231,11 +231,11 @@ class TestCachedDecorator:
         result = expensive_function("x")
 
         assert result == "computed_x"
-        mock_redis.setex.assert_called_once()
-        args = mock_redis.setex.call_args[0]
+        mock_redis.set.assert_called_once()
+        args, kwargs = mock_redis.set.call_args
         assert args[0] == "cache:test_func2:x"
-        assert args[1] == 120
-        assert json.loads(args[2]) == "computed_x"
+        assert json.loads(args[1]) == "computed_x"
+        assert kwargs.get("ex") == 120
 
     def test_cached_decorator_invalidation(self, mock_redis):
         """Test cached decorator invalidation helper"""
@@ -292,9 +292,9 @@ class TestCachedQueryDecorator:
         result = get_findings("ENG-001", severity="CRITICAL")
 
         assert result == [{"id": 1}]
-        mock_redis.setex.assert_called_once()
-        args = mock_redis.setex.call_args[0]
-        assert args[1] == 600
+        mock_redis.set.assert_called_once()
+        _, kwargs = mock_redis.set.call_args
+        assert kwargs.get("ex") == 600
 
     def test_cached_query_invalidate(self, mock_redis):
         """Test cached_query invalidation helper"""

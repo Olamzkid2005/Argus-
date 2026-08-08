@@ -8,6 +8,7 @@ Follows the same pattern as ``test_web_scanner.py`` and ``test_ai_vuln_scanner.p
 import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
+import httpx
 import pytest
 
 from tool_core.base import ToolContext
@@ -563,14 +564,19 @@ class TestRateLimiting:
 
     def test_detects_rate_limited(self, scanner):
         """429 detected → API_RATE_LIMITED finding."""
-        resp_ok = _mock_async_response(status_code=200, text="ok")
-        resp_429 = _mock_async_response(status_code=429, text="Too Many Requests")
+        # Real httpx.Response objects: the scanner isinstance-checks responses
+        # before counting status codes, so plain Mocks would be skipped.
+        resp_ok = httpx.Response(200, text="ok")
+        resp_429 = httpx.Response(429, text="Too Many Requests")
 
         async def run():
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_client = mock_cls.return_value.__aenter__.return_value
                 # First chunk: some 200, then a 429
-                mock_client.get.side_effect = [resp_ok, resp_429] + [resp_ok] * 48
+                # NOTE: must be an AsyncMock so asyncio.gather() can await it.
+                mock_client.get = AsyncMock(
+                    side_effect=[resp_ok, resp_429] + [resp_ok] * 48
+                )
 
                 findings = await scanner._test_api_rate_limiting(
                     self.SCANNER_BASE_URL,
@@ -586,12 +592,13 @@ class TestRateLimiting:
 
     def test_detects_no_rate_limit(self, scanner):
         """All 200s → API_NO_RATE_LIMIT finding."""
-        resp_ok = _mock_async_response(status_code=200, text="ok")
+        resp_ok = httpx.Response(200, text="ok")
 
         async def run():
             with patch("httpx.AsyncClient") as mock_cls:
                 mock_client = mock_cls.return_value.__aenter__.return_value
-                mock_client.get.return_value = resp_ok
+                # NOTE: must be an AsyncMock so asyncio.gather() can await it.
+                mock_client.get = AsyncMock(return_value=resp_ok)
 
                 findings = await scanner._test_api_rate_limiting(
                     self.SCANNER_BASE_URL,

@@ -271,7 +271,6 @@ class TestWiringIntegration:
         """Orchestrator init wires RateLimitRepository."""
         with (
             patch("orchestrator_pkg.orchestrator.os.getenv", return_value=None),
-            patch("orchestrator_pkg.orchestrator.get_websocket_publisher"),
             patch("orchestrator_pkg.orchestrator.get_mcp_server"),
             patch("orchestrator_pkg.orchestrator.get_stream_manager"),
             patch("orchestrator_pkg.orchestrator.ToolRunner"),

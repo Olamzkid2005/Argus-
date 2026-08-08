@@ -258,8 +258,24 @@ class TestAttackSurfaceMapper:
         ctx._tool_runner = None
         return ctx
 
-    def test_runs_without_tool_runner(self):
+    def test_runs_without_tool_runner(self, mocker):
         from tools.attack_surface_mapper import AttackSurfaceMapper
+
+        # Standalone fallback must degrade gracefully when the recon binaries are
+        # not installed — patch subprocess to simulate that instead of scanning
+        # the live internet (subfinder/naabu/katana are present on dev machines).
+        mocker.patch(
+            "tools.attack_surface.subdomain_discovery.subprocess.run",
+            side_effect=FileNotFoundError,
+        )
+        mocker.patch(
+            "tools.attack_surface.port_discovery.subprocess.run",
+            side_effect=FileNotFoundError,
+        )
+        mocker.patch(
+            "tools.attack_surface.url_discovery.subprocess.run",
+            side_effect=FileNotFoundError,
+        )
 
         mapper = AttackSurfaceMapper()
         result = mapper.execute(self._make_ctx())
@@ -913,27 +929,39 @@ class TestAssetGraph:
 
 
 class TestSubdomainDiscovery:
-    def test_without_runner(self):
+    def test_without_runner(self, mocker):
         from tools.attack_surface.subdomain_discovery import SubdomainDiscovery
 
+        mocker.patch(
+            "tools.attack_surface.subdomain_discovery.subprocess.run",
+            side_effect=FileNotFoundError,
+        )
         disc = SubdomainDiscovery()
         subs = disc.discover("example.com")
         assert "example.com" in subs
 
 
 class TestPortDiscovery:
-    def test_without_runner(self):
+    def test_without_runner(self, mocker):
         from tools.attack_surface.port_discovery import PortDiscovery
 
+        mocker.patch(
+            "tools.attack_surface.port_discovery.subprocess.run",
+            side_effect=FileNotFoundError,
+        )
         disc = PortDiscovery()
         ports = disc.discover("example.com")
         assert ports == []
 
 
 class TestURLDiscovery:
-    def test_without_runner(self):
+    def test_without_runner(self, mocker):
         from tools.attack_surface.url_discovery import URLDiscovery
 
+        mocker.patch(
+            "tools.attack_surface.url_discovery.subprocess.run",
+            side_effect=FileNotFoundError,
+        )
         disc = URLDiscovery()
         urls = disc.discover("https://example.com")
         assert urls == []

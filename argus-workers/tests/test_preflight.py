@@ -11,6 +11,7 @@ Covers:
 
 import os
 import sys
+from unittest.mock import patch
 
 import pytest
 
@@ -301,43 +302,28 @@ class TestCheckLLMConfig:
         """When no LLM keys are configured, returns WARNING."""
         from runtime.preflight import CheckSeverity, _check_llm_config
 
-        # Save and clear relevant keys
-        saved = {}
-        for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
-                     "OPENROUTER_API_KEY", "AZURE_OPENAI_API_KEY", "LLM_API_KEY"):
-            saved[key] = os.environ.pop(key, None)
-
-        try:
+        # clear=True makes this immune to API keys leaked by earlier tests.
+        with patch.dict(os.environ, {}, clear=True):
             result = _check_llm_config()
             assert result.severity == CheckSeverity.WARNING
             assert "No LLM API keys" in result.message
-        finally:
-            for key, val in saved.items():
-                if val is not None:
-                    os.environ[key] = val
 
     def test_with_openai_key_returns_ok(self):
         """When OPENAI_API_KEY is set, returns OK."""
         from runtime.preflight import CheckSeverity, _check_llm_config
 
-        os.environ["OPENAI_API_KEY"] = "sk-test-key-12345"
-        try:
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key-12345"}, clear=True):
             result = _check_llm_config()
             assert result.severity == CheckSeverity.OK
             assert "OpenAI" in result.message
-        finally:
-            del os.environ["OPENAI_API_KEY"]
 
     def test_with_placeholder_key_returns_warning(self):
         """When key starts with 'your_', treats as unconfigured."""
         from runtime.preflight import CheckSeverity, _check_llm_config
 
-        os.environ["OPENAI_API_KEY"] = "your_key_here"
-        try:
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "your_key_here"}, clear=True):
             result = _check_llm_config()
             assert result.severity == CheckSeverity.WARNING
-        finally:
-            del os.environ["OPENAI_API_KEY"]
 
 
 class TestCheckDatabaseURL:

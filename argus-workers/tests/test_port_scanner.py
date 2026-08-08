@@ -1,22 +1,25 @@
 """Tests for tools.port_scanner — Category: dataclass"""
 
-import pytest
-
 from tools.port_scanner import OpenPort, PortScanner
 
 
 class TestOpenPort:
-    """Tests for the OpenPort class."""
+    """Tests for the OpenPort factory function."""
 
     def test_instantiation(self):
-        """Class requires constructor args."""
-        with pytest.raises(TypeError):
-            OpenPort()
+        """OpenPort() is a dict factory with safe defaults (legacy alias)."""
+        p = OpenPort()
+        assert isinstance(p, dict)
+        assert p["port"] == 0
+        assert p["protocol"] == "tcp"
+        assert p["state"] == "open"
 
     def test_str_repr(self):
-        """String representation not available (requires constructor args)."""
-        with pytest.raises(TypeError):
-            OpenPort()
+        """OpenPort result is str-able and repr-able."""
+        p = OpenPort(80, "tcp", "http", "1.1", "open")
+        assert isinstance(str(p), str)
+        assert isinstance(repr(p), str)
+        assert p["port"] == 80
 
 
 class TestPortScanner:

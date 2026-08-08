@@ -86,6 +86,21 @@ def _patch_ctx(mock_ctx):
     return lambda: setattr(_ta_mod, "task_context", orig)
 
 
+def _call_run_analysis(mock_task, **kwargs):
+    """Invoke run_analysis regardless of module-cache state.
+
+    When tasks.analyze is imported fresh under the mocked celery_app (isolated
+    run), run_analysis is a plain function and mock_task fills the `self` param.
+    When it was already imported with the real celery_app (full-suite run, e.g.
+    by test_analyze.py), run_analysis is a bind=True Celery task that injects
+    the task instance as `self` — passing mock_task positionally would collide
+    with the keyword args, so it is omitted there.
+    """
+    if hasattr(run_analysis, "_orig_run"):
+        return run_analysis(**kwargs)
+    return run_analysis(mock_task, **kwargs)
+
+
 def _run(mock_task, mock_ctx, eng_state="analyzing", **extra_kw):
     import tasks.utils as _tu_mod
 
@@ -96,7 +111,7 @@ def _run(mock_task, mock_ctx, eng_state="analyzing", **extra_kw):
             _ta_mod.app.send_task = MagicMock()
             ms = _ta_mod.app.send_task
             try:
-                result = run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001", **extra_kw)
+                result = _call_run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001", **extra_kw)
             except Exception:
                 result = {"error": "exception", "send_task": ms}
             return result, ms
@@ -158,7 +173,7 @@ class TestTaskDispatchFailure:
         try:
             with patch("tasks.utils.get_engagement_state", return_value="analyzing"):
                 _ta_mod.app.send_task = MagicMock(side_effect=ConnectionError("Redis unavailable"))
-                result = run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001")
+                result = _call_run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001")
         finally:
             _ta_mod.app.send_task = orig_send
             restore()
@@ -172,7 +187,7 @@ class TestTaskDispatchFailure:
         try:
             with patch("tasks.utils.get_engagement_state", return_value="analyzing"):
                 _ta_mod.app.send_task = MagicMock(side_effect=ConnectionError("Broker unreachable"))
-                result = run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001")
+                result = _call_run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001")
         finally:
             _ta_mod.app.send_task = orig_send
             restore()
@@ -257,7 +272,7 @@ class TestBugBountyModeForwarding:
         try:
             with patch("tasks.utils.get_engagement_state", return_value="analyzing"):
                 with patch("tasks.analyze.app.send_task"):
-                    run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001", bug_bounty_mode=True)
+                    _call_run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001", bug_bounty_mode=True)
         finally:
             _ta_mod.task_context = mock_fn._mock_wraps if hasattr(mock_fn, "_mock_wraps") else lambda: None
         assert mock_fn.call_args[1]["job_extra"]["bug_bounty_mode"] is True
@@ -269,7 +284,7 @@ class TestBugBountyModeForwarding:
         try:
             with patch("tasks.utils.get_engagement_state", return_value="analyzing"):
                 with patch("tasks.analyze.app.send_task"):
-                    run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001")
+                    _call_run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001")
         finally:
             _ta_mod.task_context = mock_fn._mock_wraps if hasattr(mock_fn, "_mock_wraps") else lambda: None
         assert "bug_bounty_mode" not in mock_fn.call_args[1]["job_extra"]

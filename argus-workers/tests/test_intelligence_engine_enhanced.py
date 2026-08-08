@@ -19,10 +19,14 @@ def _no_cache():
     for a later test that expects an API failure or different results.
     No tests in this module are testing the caching behavior itself.
     """
-    with (
-        patch.object(IntelligenceEngine, "_cache_get", return_value=None),
-        patch.object(IntelligenceEngine, "_cache_set"),
-    ):
+    # The old _cache_get/_cache_set methods were removed in B.02 — NVD/EPSS
+    # caching now lives in CveEpssCache (cve_cache.py). Patch get_cve_cache()
+    # to return a mock that always reports a cache miss so no test is polluted
+    # by a successful fetch in a previous test.
+    mock_cache = MagicMock()
+    mock_cache.get_nvd_data.return_value = None
+    mock_cache.get_epss_scores.return_value = None
+    with patch("intelligence_engine.get_cve_cache", return_value=mock_cache):
         yield
 
 

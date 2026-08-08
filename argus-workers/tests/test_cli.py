@@ -332,7 +332,7 @@ class TestBuildParser:
 class TestMainDispatch:
     """Verify main() dispatches to the correct command handlers."""
 
-    @patch("cli.cmd_assess")
+    @patch("cli.cmd.assess.cmd_assess")
     def test_main_assess_calls_cmd_assess(self, mock_assess):
         """main() dispatches 'assess' to cmd_assess."""
         mock_assess.return_value = 0
@@ -340,7 +340,7 @@ class TestMainDispatch:
             assert main() == 0
         mock_assess.assert_called_once()
 
-    @patch("cli.cmd_scan")
+    @patch("cli.cmd.scan.cmd_scan")
     def test_main_scan_calls_cmd_scan(self, mock_scan):
         """main() dispatches 'scan' to cmd_scan."""
         mock_scan.return_value = 0
@@ -348,7 +348,7 @@ class TestMainDispatch:
             assert main() == 0
         mock_scan.assert_called_once()
 
-    @patch("cli.cmd_report")
+    @patch("cli.cmd.report.cmd_report")
     def test_main_report_calls_cmd_report(self, mock_report):
         """main() dispatches 'report' to cmd_report."""
         mock_report.return_value = 0
@@ -356,7 +356,7 @@ class TestMainDispatch:
             assert main() == 0
         mock_report.assert_called_once()
 
-    @patch("cli.cmd_list")
+    @patch("cli.cmd.list.cmd_list")
     def test_main_list_calls_cmd_list(self, mock_list):
         """main() dispatches 'list' to cmd_list."""
         mock_list.return_value = 0
@@ -364,7 +364,7 @@ class TestMainDispatch:
             assert main() == 0
         mock_list.assert_called_once()
 
-    @patch("cli.cmd_health")
+    @patch("cli.cmd.health.cmd_health")
     def test_main_health_calls_cmd_health(self, mock_health):
         """main() dispatches 'health' to cmd_health."""
         mock_health.return_value = 0
@@ -372,7 +372,7 @@ class TestMainDispatch:
             assert main() == 0
         mock_health.assert_called_once()
 
-    @patch("cli.cmd_resume")
+    @patch("cli.cmd.resume.cmd_resume")
     def test_main_resume_calls_cmd_resume(self, mock_resume):
         """main() dispatches 'resume' to cmd_resume."""
         mock_resume.return_value = 0
@@ -380,7 +380,7 @@ class TestMainDispatch:
             assert main() == 0
         mock_resume.assert_called_once()
 
-    @patch("cli.cmd_trends")
+    @patch("cli.cmd.trends.cmd_trends")
     def test_main_trends_calls_cmd_trends(self, mock_trends):
         """main() dispatches 'trends' to cmd_trends."""
         mock_trends.return_value = 0
@@ -398,14 +398,14 @@ class TestMainDispatch:
     def test_main_propagates_keyboard_interrupt(self):
         """main() propagates KeyboardInterrupt (to be caught by sys.exit wrapper)."""
         with patch.object(sys, "argv", ["argus", "assess", "https://example.com"]):
-            with patch("cli.cmd_assess", side_effect=KeyboardInterrupt):
+            with patch("cli.cmd.assess.cmd_assess", side_effect=KeyboardInterrupt):
                 with pytest.raises(KeyboardInterrupt):
                     main()
 
     def test_main_propagates_exception(self):
         """main() propagates unexpected exceptions (to be caught by sys.exit wrapper)."""
         with patch.object(sys, "argv", ["argus", "assess", "https://example.com"]):
-            with patch("cli.cmd_assess", side_effect=Exception("Unexpected error")):
+            with patch("cli.cmd.assess.cmd_assess", side_effect=Exception("Unexpected error")):
                 with pytest.raises(Exception, match="Unexpected error"):
                     main()
 

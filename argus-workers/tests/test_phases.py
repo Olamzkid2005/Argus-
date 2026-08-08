@@ -64,6 +64,7 @@ class TestPHASES:
         ids = [p.id for p in PHASES]
         assert "created" in ids
         assert "recon" in ids
+        assert "source_analysis" in ids
         assert "scanning" in ids
         assert "exploitation" in ids
         assert "analyzing" in ids
@@ -73,7 +74,7 @@ class TestPHASES:
         assert "complete" in ids
         assert "failed" in ids
         assert "paused" in ids
-        assert len(ids) == 11
+        assert len(ids) == 12
 
     def test_terminal_phases(self):
         complete = get_phase("complete")
@@ -87,13 +88,15 @@ class TestPHASES:
     def test_order_values(self):
         for p in PHASES:
             if p.id == "complete":
-                assert p.order == 8
+                assert p.order == 9
             elif p.id == "recon":
                 assert p.order == 1
-            elif p.id == "scanning":
+            elif p.id == "source_analysis":
                 assert p.order == 2
-            elif p.id == "exploitation":
+            elif p.id == "scanning":
                 assert p.order == 3
+            elif p.id == "exploitation":
+                assert p.order == 4
             elif p.id in ("failed", "paused"):
                 assert p.order == -1
 
@@ -105,7 +108,9 @@ class TestTransitions:
         assert TRANSITIONS["created"] == ["recon", "failed", "paused"]
 
     def test_recon_transitions(self):
-        assert set(TRANSITIONS["recon"]) == {"scanning", "failed", "paused"}
+        assert set(TRANSITIONS["recon"]) == {
+            "source_analysis", "scanning", "failed", "paused"
+        }
 
     def test_complete_has_no_transitions(self):
         assert TRANSITIONS["complete"] == []
@@ -177,7 +182,7 @@ class TestGetPhaseOrder:
 
     def test_known_phase(self):
         assert get_phase_order("recon") == 1
-        assert get_phase_order("complete") == 8
+        assert get_phase_order("complete") == 9
 
     def test_unknown_phase_returns_sentinel(self):
         # Unknown phases return 999 so they sort at the end of progress bars,

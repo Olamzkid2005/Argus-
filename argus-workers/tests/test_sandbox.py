@@ -13,6 +13,14 @@ import pytest
 from tool_core.sandbox.client import SandboxClient, SandboxResult
 
 
+def _is_docker_available() -> bool:
+    """Return True when a Docker daemon is reachable for sandbox isolation."""
+    try:
+        return SandboxClient().is_docker_available
+    except Exception:
+        return False
+
+
 class TestSandboxResult:
     """Tests for the SandboxResult dataclass."""
 
@@ -143,6 +151,10 @@ class TestSandboxClientDocker:
         assert result.returncode == 0
         assert "hello" in result.stdout
 
+    @pytest.mark.skipif(
+        not _is_docker_available(),
+        reason="Docker required for network isolation test (subprocess fallback has host network)",
+    )
     def test_no_network(self):
         """Docker sandbox should not have network access."""
         client = SandboxClient()

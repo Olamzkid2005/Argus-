@@ -1023,49 +1023,39 @@ class TestSafeEventEmitter:
         assert event["data"]["iteration"] == 3
 
     def test_flush_finding_via_websocket(self):
-        """Test that findings are flushed via WebSocket publisher."""
+        """Test that findings are flushed via the SSE event stream (Gap 10.1)."""
         from runtime.event_stream import SafeEventEmitter
+        from streaming import EventType
 
         emitter = SafeEventEmitter("eng-1")
         emitter.emit_finding("f-1", "xss", "HIGH", 0.95, "https://x.com", "nuclei")
 
-        mock_ws = MagicMock()
-        with (
-            patch("websocket_events.get_websocket_publisher", return_value=mock_ws),
-            patch("streaming.emit_thinking"),
-        ):
+        with patch("streaming.emit_event") as mock_event:
             emitter.flush()
 
-        mock_ws.publish_finding.assert_called_once_with(
-            "eng-1",
-            "f-1",
-            "xss",
-            "HIGH",
-            0.95,
-            "https://x.com",
-            "nuclei",
-        )
+        mock_event.assert_called_once()
+        args = mock_event.call_args[0]
+        assert args[0] == "eng-1"
+        assert args[1] == EventType.FINDING
+        data = args[2]
+        assert data["finding_id"] == "f-1"
+        assert data["type"] == "xss"
+        assert data["severity"] == "HIGH"
+        assert data["confidence"] == 0.95
+        assert data["endpoint"] == "https://x.com"
+        assert data["source_tool"] == "nuclei"
 
     def test_flush_state_change_via_websocket(self):
-        """Test that state changes are flushed via WebSocket publisher."""
+        """Test that state changes are flushed via the SSE event stream (Gap 10.1)."""
         from runtime.event_stream import SafeEventEmitter
 
         emitter = SafeEventEmitter("eng-1")
         emitter.emit_state_change("init", "scanning")
 
-        mock_ws = MagicMock()
-        with (
-            patch("websocket_events.get_websocket_publisher", return_value=mock_ws),
-            patch("streaming.emit_thinking"),
-        ):
+        with patch("streaming.emit_state_change") as mock_state_change:
             emitter.flush()
 
-        mock_ws.publish_state_transition.assert_called_once_with(
-            "eng-1",
-            "init",
-            "scanning",
-            "",
-        )
+        mock_state_change.assert_called_once_with("eng-1", "init", "scanning", "")
 
     def test_multiple_event_types_mixed(self):
         """Test that a mix of event types are all flushed correctly."""
@@ -1077,19 +1067,18 @@ class TestSafeEventEmitter:
         emitter.emit_tool_complete("nuclei", True, 50)
         emitter.emit_state_change("scan", "analyze")
 
-        mock_ws = MagicMock()
         with (
             patch("streaming.emit_thinking") as mock_thinking,
             patch("streaming.emit_tool_start") as mock_start,
             patch("streaming.emit_tool_complete") as mock_complete,
-            patch("websocket_events.get_websocket_publisher", return_value=mock_ws),
+            patch("streaming.emit_state_change") as mock_state_change,
         ):
             emitter.flush()
 
         mock_thinking.assert_called_once()
         mock_start.assert_called_once()
         mock_complete.assert_called_once()
-        mock_ws.publish_state_transition.assert_called_once()
+        mock_state_change.assert_called_once()
 
     def test_flush_handles_individual_event_failure(self):
         """Test that one failing event doesn't stop the rest from flushing."""

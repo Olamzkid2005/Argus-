@@ -142,14 +142,14 @@ class TestCustomRulesServicePublish:
                 {"name": "Rule 2", "severity": "MEDIUM", "description": "Desc 2"},
             ],
         ):
-            ws_publisher = MagicMock()
-            CustomRulesService.publish(
-                engagement_id="eng-001",
-                targets=["https://example.com"],
-                ws_publisher=ws_publisher,
-            )
-
-            assert ws_publisher.publish_scanner_activity.call_count == 2
+            # Gap 10.1: rules are published via SSE streaming, not ws_publisher.
+            with patch("streaming.emit_thinking") as mock_emit:
+                CustomRulesService.publish(
+                    engagement_id="eng-001",
+                    targets=["https://example.com"],
+                    ws_publisher=MagicMock(),
+                )
+            assert mock_emit.call_count == 2
 
     def test_no_rules_does_nothing(self):
         from orchestrator_pkg.custom_rules.custom_rules_service import (
@@ -157,11 +157,10 @@ class TestCustomRulesServicePublish:
         )
 
         with patch.object(CustomRulesService, "load", return_value=[]):
-            ws_publisher = MagicMock()
-            CustomRulesService.publish(
-                engagement_id="eng-001",
-                targets=["https://example.com"],
-                ws_publisher=ws_publisher,
-            )
-
-            ws_publisher.publish_scanner_activity.assert_not_called()
+            with patch("streaming.emit_thinking") as mock_emit:
+                CustomRulesService.publish(
+                    engagement_id="eng-001",
+                    targets=["https://example.com"],
+                    ws_publisher=MagicMock(),
+                )
+            mock_emit.assert_not_called()

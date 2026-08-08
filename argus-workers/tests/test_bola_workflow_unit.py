@@ -207,6 +207,8 @@ class TestTestBolaStep:
                 "type": "CONFIRMED_BOLA",
                 "severity": "CRITICAL",
                 "endpoint": "/api/accounts/1",
+                "evidence": {"resource_id": "1", "message": "cross-account access"},
+                "confidence": 0.9,
             },
         ]
 
@@ -223,7 +225,12 @@ class TestTestBolaStep:
         assert result.success is True
         assert result.findings_emitted == 1
         assert ctx.bola_findings == 1
-        mock_scanner._emit_finding.assert_called_once_with(raw_findings[0])
+        mock_scanner._builder.add.assert_called_once()
+        args, kwargs = mock_scanner._builder.add.call_args
+        assert args[0] == "CONFIRMED_BOLA"
+        assert args[1] == "CRITICAL"
+        assert args[2] == "/api/accounts/1"
+        assert kwargs.get("confidence") == 0.9
 
 
 # ── TestBoplaStep Tests ────────────────────────────────────────────────
@@ -235,8 +242,24 @@ class TestTestBoplaStep:
         ctx.session_a = Mock()
         ctx.session_b = Mock()
         step = TestBoplaStep()
-        a_findings = [{"type": "BOPLA_SENSITIVE_FIELDS"}]
-        b_findings = [{"type": "BOPLA_SENSITIVE_FIELDS"}]
+        a_findings = [
+            {
+                "type": "BOPLA_SENSITIVE_FIELDS",
+                "severity": "HIGH",
+                "endpoint": "/api/users",
+                "evidence": {"role": "user_a", "exposed_fields": ["ssn"]},
+                "confidence": 0.85,
+            }
+        ]
+        b_findings = [
+            {
+                "type": "BOPLA_SENSITIVE_FIELDS",
+                "severity": "HIGH",
+                "endpoint": "/api/users",
+                "evidence": {"role": "user_b", "exposed_fields": ["ssn"]},
+                "confidence": 0.85,
+            }
+        ]
 
         with patch(
             "tools.dual_auth_scanner.DualAuthScanner.for_phase_execution"
@@ -250,14 +273,22 @@ class TestTestBoplaStep:
         assert result.success is True
         assert result.findings_emitted == 2
         assert ctx.bopla_findings == 2
-        assert mock_scanner._emit_finding.call_count == 2
+        assert mock_scanner._builder.add.call_count == 2
 
     def test_bopla_still_executes_when_user_b_auth_failed(self, ctx):
         """BOPLA runs on User A even when User B session is None."""
         ctx.session_a = Mock()
         ctx.session_b = None
         step = TestBoplaStep()
-        a_findings = [{"type": "BOPLA_SENSITIVE_FIELDS"}]
+        a_findings = [
+            {
+                "type": "BOPLA_SENSITIVE_FIELDS",
+                "severity": "HIGH",
+                "endpoint": "/api/users",
+                "evidence": {"role": "user_a", "exposed_fields": ["email"]},
+                "confidence": 0.85,
+            }
+        ]
 
         with patch(
             "tools.dual_auth_scanner.DualAuthScanner.for_phase_execution"
@@ -271,6 +302,7 @@ class TestTestBoplaStep:
         assert result.success is True
         assert result.findings_emitted == 1
         assert ctx.bopla_findings == 1
+        mock_scanner._builder.add.assert_called_once()
 
 
 # ── BolaWorkflow Tests ────────────────────────────────────────────────
@@ -424,8 +456,20 @@ class TestStepEdgeCases:
         ctx.owned_resources = {"accounts": ["1"]}
         step = TestBolaStep()
         raw_findings = [
-            {"type": "CONFIRMED_BOLA", "severity": "CRITICAL", "endpoint": "/a/1"},
-            {"type": "POTENTIAL_BOLA", "severity": "MEDIUM", "endpoint": "/a/1"},
+            {
+                "type": "CONFIRMED_BOLA",
+                "severity": "CRITICAL",
+                "endpoint": "/a/1",
+                "evidence": {"resource_id": "1"},
+                "confidence": 0.9,
+            },
+            {
+                "type": "POTENTIAL_BOLA",
+                "severity": "MEDIUM",
+                "endpoint": "/a/1",
+                "evidence": {"resource_id": "1"},
+                "confidence": 0.5,
+            },
         ]
 
         with patch(
@@ -441,7 +485,7 @@ class TestStepEdgeCases:
         assert result.success is True
         assert result.findings_emitted == 2
         assert ctx.bola_findings == 2
-        assert mock_scanner._emit_finding.call_count == 2
+        assert mock_scanner._builder.add.call_count == 2
 
     def test_bopla_no_findings(self, ctx):
         """BOPLA step returns 0 findings when no sensitive fields exposed."""

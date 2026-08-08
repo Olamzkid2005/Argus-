@@ -9,7 +9,6 @@ Covers:
 
 from __future__ import annotations
 
-import json
 import sys
 import time
 from unittest.mock import MagicMock, patch
@@ -91,71 +90,145 @@ class TestRunVerification:
         obj.trace_id = None
         return obj
 
-    @patch("streaming.emit_thinking")
-    def test_skips_when_no_findings(self, mock_emit, orch):
+    def test_skips_when_no_findings(self, orch):
         result = Orchestrator.run_verification(orch, {"findings": []})
         assert result["status"] == "skipped"
         assert result["findings_to_verify"] == 0
         orch.ws_publisher.publish_scanner_activity.assert_not_called()
-        mock_emit.assert_not_called()
 
-    @patch("streaming.emit_thinking")
-    def test_skips_when_all_below_threshold(self, mock_emit, orch):
+    def test_skips_when_all_below_threshold(self, orch):
         result = Orchestrator.run_verification(orch, {
             "findings": [_finding("f1", SEVERITY_MEDIUM), _finding("f2", 1)],
             "threshold": SEVERITY_HIGH,
         })
         assert result["status"] == "no_candidates"
         assert result["findings_to_verify"] == 0
-        mock_emit.assert_called_once()
+        assert result["findings_verified"] == 0
 
-    @patch("streaming.emit_thinking")
-    def test_marks_high_and_critical(self, mock_emit, orch):
+    def test_marks_high_and_critical(self, orch):
+        """HIGH/CRITICAL candidates are selected and verified."""
+
+        async def _vfy(finding, engagement_id=""):
+            return {
+                "id": finding.get("id"),
+                "type": "xss",
+                "endpoint": finding.get("endpoint", ""),
+                "verification": {"verified": True},
+            }
+
         findings = [_finding("f1", SEVERITY_HIGH), _finding("f2", SEVERITY_CRITICAL)]
-        result = Orchestrator.run_verification(orch, {"findings": findings, "threshold": SEVERITY_HIGH, "max_to_verify": 10})
-        assert result["status"] == "recommended"
+        with patch("tools.finding_verifier.verify_finding") as mock_vfy:
+            mock_vfy.side_effect = _vfy
+            result = Orchestrator.run_verification(orch, {"findings": findings, "threshold": SEVERITY_HIGH, "max_to_verify": 10})
         assert result["findings_to_verify"] == 2
-        assert findings[0]["_needs_browser_verification"] is True
-        assert findings[1]["_needs_browser_verification"] is True
+        assert result["findings_verified"] == 2
+        assert set(result["verified_ids"]) == {"f1", "f2"}
+        assert findings[0].get("_verified") is True
+        assert findings[1]["verification"]["verified"] is True
 
-    @patch("streaming.emit_thinking")
-    def test_respects_max_to_verify(self, mock_emit, orch):
+    def test_respects_max_to_verify(self, orch):
+        """Only max_to_verify findings are selected."""
+
+        async def _vfy(finding, engagement_id=""):
+            return {
+                "id": finding.get("id"),
+                "type": "xss",
+                "endpoint": finding.get("endpoint", ""),
+                "verification": {"verified": True},
+            }
+
         findings = [_finding(f"f{i}", SEVERITY_CRITICAL) for i in range(5)]
-        result = Orchestrator.run_verification(orch, {"findings": findings, "threshold": SEVERITY_HIGH, "max_to_verify": 2})
+        with patch("tools.finding_verifier.verify_finding") as mock_vfy:
+            mock_vfy.side_effect = _vfy
+            result = Orchestrator.run_verification(orch, {"findings": findings, "threshold": SEVERITY_HIGH, "max_to_verify": 2})
         assert result["findings_to_verify"] == 2
-        assert len([f for f in findings if f.get("_needs_browser_verification")]) == 2
+        assert len(result["verified_ids"]) == 2
 
-    @patch("streaming.emit_thinking")
-    def test_sorts_by_severity_descending(self, mock_emit, orch):
+    def test_sorts_by_severity_descending(self, orch):
+        """Most severe findings are verified first."""
+
+        async def _vfy(finding, engagement_id=""):
+            return {
+                "id": finding.get("id"),
+                "type": "xss",
+                "endpoint": finding.get("endpoint", ""),
+                "verification": {"verified": True},
+            }
+
         findings = [_finding("f2", SEVERITY_MEDIUM), _finding("f3", SEVERITY_HIGH), _finding("f1", SEVERITY_CRITICAL)]
-        result = Orchestrator.run_verification(orch, {"findings": findings, "threshold": SEVERITY_MEDIUM, "max_to_verify": 2})
+        with patch("tools.finding_verifier.verify_finding") as mock_vfy:
+            mock_vfy.side_effect = _vfy
+            result = Orchestrator.run_verification(orch, {"findings": findings, "threshold": SEVERITY_MEDIUM, "max_to_verify": 2})
         assert result["findings_to_verify"] == 2
-        marked_ids = [f["id"] for f in findings if f.get("_needs_browser_verification")]
-        assert "f1" in marked_ids and "f3" in marked_ids and "f2" not in marked_ids
+        # Top 2 by severity: f1 (critical), f3 (high) — f2 (medium) excluded
+        assert result["verified_ids"] == ["f1", "f3"]
 
-    @patch("streaming.emit_thinking")
-    def test_emits_scanner_activity_event(self, mock_emit, orch):
+    def test_emits_scanner_activity_event(self, orch):
+        """A verification_complete SSE event is emitted with verified findings."""
+
+        async def _vfy(finding, engagement_id=""):
+            return {
+                "id": finding.get("id"),
+                "type": "xss",
+                "endpoint": finding.get("endpoint", ""),
+                "verification": {"verified": True},
+            }
+
+        from streaming import EventType
+
         findings = [_finding("f1", SEVERITY_CRITICAL), _finding("f2", SEVERITY_HIGH)]
-        Orchestrator.run_verification(orch, {"findings": findings, "threshold": SEVERITY_HIGH, "max_to_verify": 5, "phase": "scan"})
-        orch.ws_publisher.publish_scanner_activity.assert_called_once()
-        c = orch.ws_publisher.publish_scanner_activity.call_args[1]
-        assert c["engagement_id"] == "test-eng-001" and c["tool_name"] == "verification_runner"
-        assert c["status"] == "completed" and c["items_found"] == 2
-        details = json.loads(c["details"])
-        assert set(details["finding_ids"]) == {"f1", "f2"} and details["count"] == 2
+        with (
+            patch("tools.finding_verifier.verify_finding") as mock_vfy,
+            patch("streaming.emit_event") as mock_event,
+        ):
+            mock_vfy.side_effect = _vfy
+            Orchestrator.run_verification(orch, {"findings": findings, "threshold": SEVERITY_HIGH, "max_to_verify": 5, "phase": "scan"})
+        activity_calls = [
+            c for c in mock_event.call_args_list if c.args[1] == EventType.SCANNER_ACTIVITY
+        ]
+        assert len(activity_calls) == 1
+        data = activity_calls[0].args[2]
+        assert data["activity"] == "verification_complete"
+        assert set(data["finding_ids"]) == {"f1", "f2"}
+        assert data["total_candidates"] == 2
+        assert data["http_verified"] == 2
 
-    @patch("streaming.emit_thinking")
-    def test_verification_priority_set(self, mock_emit, orch):
+    def test_verification_priority_set(self, orch):
+        """Verified findings carry verification metadata on the finding dict."""
+
+        async def _vfy(finding, engagement_id=""):
+            return {
+                "id": finding.get("id"),
+                "type": "xss",
+                "endpoint": finding.get("endpoint", ""),
+                "verification": {"verified": True},
+            }
+
         findings = [_finding("f_crit", SEVERITY_CRITICAL), _finding("f_high", SEVERITY_HIGH)]
-        Orchestrator.run_verification(orch, {"findings": findings, "threshold": SEVERITY_HIGH, "max_to_verify": 10})
-        assert findings[0]["_verification_priority"] == SEVERITY_CRITICAL
-        assert findings[1]["_verification_priority"] == SEVERITY_HIGH
+        with patch("tools.finding_verifier.verify_finding") as mock_vfy:
+            mock_vfy.side_effect = _vfy
+            Orchestrator.run_verification(orch, {"findings": findings, "threshold": SEVERITY_HIGH, "max_to_verify": 10})
+        assert findings[0].get("_verified") is True
+        assert findings[1]["verification"]["verified"] is True
 
-    @patch("streaming.emit_thinking")
-    def test_returns_correct_result_structure(self, mock_emit, orch):
-        result = Orchestrator.run_verification(orch, {"findings": [_finding("f1", SEVERITY_CRITICAL)], "threshold": SEVERITY_HIGH, "max_to_verify": 10, "phase": "scan"})
-        assert result["phase"] == "verification" and result["status"] == "recommended"
-        assert result["findings_to_verify"] == 1 and result["verified_ids"] == ["f1"]
+    def test_returns_correct_result_structure(self, orch):
+        """Result dict follows the run_verification contract."""
+
+        async def _vfy(finding, engagement_id=""):
+            return {
+                "id": finding.get("id"),
+                "type": "xss",
+                "endpoint": finding.get("endpoint", ""),
+                "verification": {"verified": True},
+            }
+
+        with patch("tools.finding_verifier.verify_finding") as mock_vfy:
+            mock_vfy.side_effect = _vfy
+            result = Orchestrator.run_verification(orch, {"findings": [_finding("f1", SEVERITY_CRITICAL)], "threshold": SEVERITY_HIGH, "max_to_verify": 10, "phase": "scan"})
+        assert result["phase"] == "verification"
+        assert result["status"] == "completed"
+        assert result["findings_to_verify"] == 1
+        assert result["verified_ids"] == ["f1"]
 
 
 # ── Auto-verification in run_scan() tests (Gap 1.1) ──────────────────

@@ -194,12 +194,16 @@ class TestConnectHelper:
                 connect()
 
     def test_connect_uses_env_var(self):
+        # connect() without an explicit connection_string now returns a pool
+        # connection via get_db().get_connection() (deprecation of one-off
+        # psycopg2 connections).
         with patch.dict(
             os.environ, {"DATABASE_URL": "postgresql://user@localhost/db"}, clear=False
         ):
-            with patch("database.connection.psycopg2.connect") as mock_connect:
+            with patch("database.connection.get_db") as mock_get_db:
+                mock_conn = mock_get_db.return_value.get_connection.return_value
                 conn = connect()
-                assert conn is mock_connect.return_value
+                assert conn is mock_conn
 
     def test_connect_with_string_arg(self):
         with patch("database.connection.psycopg2.connect") as mock_connect:

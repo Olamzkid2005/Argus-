@@ -45,6 +45,14 @@ class TestReconContextService:
                 "tasks.utils": mock_utils,
             },
         ):
+            # The service module may already be imported by an earlier test file
+            # (e.g. test_ai_surface_lifecycle) with a REAL tasks.utils binding, so
+            # re-execute it here to make `save_recon_context` resolve to our mock.
+            import importlib
+
+            import orchestrator_pkg.recon_context_service as _service
+
+            importlib.reload(_service)
             yield mock_utils.save_recon_context
 
     # ── Fixtures ────────────────────────────────────────────────
