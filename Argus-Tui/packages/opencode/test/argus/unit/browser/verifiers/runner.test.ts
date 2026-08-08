@@ -11,6 +11,7 @@ const passingScenario: VerificationScenario = {
   verify: async () => ({
     passed: true,
     confidence: Confidence.HIGH,
+    confidenceScore: 0.9,
     evidence: [],
     summary: "ok",
   }),
@@ -42,6 +43,7 @@ describe("VerificationRunner", () => {
         return {
           passed: true,
           confidence: Confidence.HIGH,
+          confidenceScore: 0.9,
           evidence: [],
           summary: "ok",
         }
@@ -84,6 +86,7 @@ describe("VerificationRunner", () => {
       verify: async () => ({
         passed: true,
         confidence: Confidence.MEDIUM,
+        confidenceScore: 0.6,
         evidence: [],
         summary: "verified",
       }),
@@ -107,6 +110,7 @@ describe("VerificationRunner", () => {
       verify: async () => ({
         passed: true,
         confidence: Confidence.HIGH,
+        confidenceScore: 0.9,
         evidence: [],
         summary: "ok",
       }),
@@ -137,6 +141,7 @@ describe("VerificationRunner", () => {
       verify: async () => ({
         passed: false,
         confidence: Confidence.LOW,
+        confidenceScore: 0.2,
         evidence: [],
         summary: "verification did not pass",
       }),

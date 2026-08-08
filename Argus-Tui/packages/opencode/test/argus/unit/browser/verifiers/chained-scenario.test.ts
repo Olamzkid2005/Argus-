@@ -7,7 +7,7 @@ const passingScenario = {
   description: "Always passes",
   setup: mock(() => Promise.resolve()),
   execute: mock(() => Promise.resolve()),
-  verify: mock(() => Promise.resolve({ passed: true, confidence: Confidence.HIGH, evidence: [], summary: "Passed" })),
+  verify: mock(() => Promise.resolve({ passed: true, confidence: Confidence.HIGH, confidenceScore: 0.9, evidence: [], summary: "Passed" })),
   collectEvidence: mock(() => Promise.resolve({
     packageId: "p1",
     findingId: "f1",
@@ -23,7 +23,7 @@ const failingScenario = {
   description: "Always fails",
   setup: mock(() => Promise.resolve()),
   execute: mock(() => Promise.resolve()),
-  verify: mock(() => Promise.resolve({ passed: false, confidence: Confidence.INFORMATIONAL, evidence: [], summary: "Failed" })),
+  verify: mock(() => Promise.resolve({ passed: false, confidence: Confidence.INFORMATIONAL, confidenceScore: 0.0, evidence: [], summary: "Failed" })),
   collectEvidence: mock(() => Promise.resolve({
     packageId: "p2",
     findingId: "f2",
@@ -151,7 +151,7 @@ describe("ChainedScenario", () => {
 
   it("verify() returns allPassed=true with HIGH confidence when all pass", async () => {
     passingScenario.verify.mockReset()
-    passingScenario.verify.mockImplementation(() => Promise.resolve({ passed: true, confidence: Confidence.HIGH, evidence: [], summary: "Passed" }))
+    passingScenario.verify.mockImplementation(() => Promise.resolve({ passed: true, confidence: Confidence.HIGH, confidenceScore: 0.9, evidence: [], summary: "Passed" }))
 
     const chain = new ChainedScenario([
       { scenario: passingScenario, name: "stage1" },
@@ -164,8 +164,8 @@ describe("ChainedScenario", () => {
   it("verify() returns anyPassed with average confidence when mixed", async () => {
     passingScenario.verify.mockReset()
     failingScenario.verify.mockReset()
-    passingScenario.verify.mockImplementation(() => Promise.resolve({ passed: true, confidence: Confidence.HIGH, evidence: [], summary: "Passed" }))
-    failingScenario.verify.mockImplementation(() => Promise.resolve({ passed: false, confidence: Confidence.INFORMATIONAL, evidence: [], summary: "Failed" }))
+    passingScenario.verify.mockImplementation(() => Promise.resolve({ passed: true, confidence: Confidence.HIGH, confidenceScore: 0.9, evidence: [], summary: "Passed" }))
+    failingScenario.verify.mockImplementation(() => Promise.resolve({ passed: false, confidence: Confidence.INFORMATIONAL, confidenceScore: 0.0, evidence: [], summary: "Failed" }))
 
     const chain = new ChainedScenario([
       { scenario: passingScenario, name: "pass" },

@@ -160,8 +160,10 @@ export class AttackDetailDrawer {
     const script = chain.chain_exploit_script
     if (!script) return ""
 
-    const scriptText = typeof script === "string" ? script : (script.script ?? script.exploit_script ?? JSON.stringify(script, null, 2))
-    const steps = script.steps ?? []
+    const isString = typeof script === "string"
+    const scriptText = isString ? script : (script.script ?? script.exploit_script ?? JSON.stringify(script, null, 2))
+    const scriptObj = isString ? undefined : script
+    const steps = scriptObj?.steps ?? []
 
     return `
       <section class="ag-detail-section">
@@ -176,9 +178,9 @@ export class AttackDetailDrawer {
           <h4 style="margin-top:8px;font-size:12px;color:var(--ag-edge-base);text-transform:uppercase;letter-spacing:0.5px">Steps</h4>
           <ol class="ag-list ag-step-list">${steps.map((s: any) => `<li>${esc(s.summary ?? s.step ?? "")}</li>`).join("")}</ol>
         ` : ""}
-        ${script.impact_summary ? `
+        ${scriptObj?.impact_summary ? `
           <h4 style="margin-top:8px;font-size:12px;color:var(--ag-edge-base);text-transform:uppercase;letter-spacing:0.5px">Impact</h4>
-          <p class="ag-impact-text">${esc(script.impact_summary)}</p>
+          <p class="ag-impact-text">${esc(scriptObj.impact_summary)}</p>
         ` : ""}
       </section>`
   }

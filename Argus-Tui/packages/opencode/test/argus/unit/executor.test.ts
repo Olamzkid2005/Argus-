@@ -170,7 +170,7 @@ describe("InProcessExecutor fixes", () => {
         phase: "scan",
         cwe: "CWE-89",
         evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
-        verificationResult: { passed: true, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        verificationResult: { passed: true, confidence: 0.9, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -191,7 +191,7 @@ describe("InProcessExecutor fixes", () => {
         tool: "scanner",
         phase: "scan",
         evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
-        verificationResult: { passed: true, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        verificationResult: { passed: true, confidence: 0.9, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -231,7 +231,7 @@ describe("InProcessExecutor fixes", () => {
         description: "RCE in upload endpoint",
         tool: "scanner",
         phase: "scan",
-        verificationResult: { passed: true, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        verificationResult: { passed: true, confidence: 0.9, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -252,7 +252,7 @@ describe("InProcessExecutor fixes", () => {
         tool: "scanner",
         phase: "scan",
         evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
-        verificationResult: { passed: false, summary: "Probe failed", verifier: "ssrf", verifiedAt: new Date().toISOString() },
+        verificationResult: { passed: false, confidence: 0.2, summary: "Probe failed", verifier: "ssrf", verifiedAt: new Date().toISOString() },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }

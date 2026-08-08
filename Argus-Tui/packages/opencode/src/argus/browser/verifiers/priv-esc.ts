@@ -154,6 +154,7 @@ export class PrivilegeEscalationVerifier implements VerificationScenario {
       return {
         passed: false,
         confidence: Confidence.INFORMATIONAL,
+        confidenceScore: 0.0,
         evidence: [],
         summary: `Privilege escalation skipped — login failed, endpoint access checks could not be performed`,
       }
