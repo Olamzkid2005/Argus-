@@ -27,6 +27,7 @@ pytest-timeout>=2.3.1
 pytest-mock>=3.14.0
 pytest-cov>=6.1.1
 diff-cover>=9.0.0
+pypdf>=5.0.0
 
 # Runtime dependencies needed to import and test production code
 PyYAML>=6.0.2
