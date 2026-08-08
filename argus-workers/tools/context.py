@@ -50,7 +50,7 @@ class ToolContext:
             tool_runner=orchestrator.tool_runner,
             parser=orchestrator.parser,
             normalizer=orchestrator.normalizer,
-            ws_publisher=orchestrator.ws_publisher,
+            ws_publisher=getattr(orchestrator, "ws_publisher", None),
             llm_payload_generator=getattr(orchestrator, "llm_payload_generator", None),
         )
 
