@@ -35,9 +35,21 @@ jobs:
   full-suite:
     name: full-suite (ubuntu)
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     defaults:
       run:
         working-directory: argus-workers
+    env:
+      REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
         with:
@@ -87,10 +99,10 @@ jobs:
               b.close()
           EOF
 
-      - name: Run full test suite (excluding DB/Redis-dependent tests)
+      - name: Run full test suite (excluding DB/Docker-dependent tests)
         run: |
           python -m pytest tests/ \
-            -m "not requires_db and not requires_redis and not docker" \
+            -m "not requires_db and not docker" \
             -v --timeout=180 --tb=long -ra \
             --cov --cov-report=xml \
             --junit-xml=python-full-suite-results.xml \
