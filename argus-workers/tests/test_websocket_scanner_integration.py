@@ -433,12 +433,18 @@ class TestWebSocketScannerEdgeCases:
         """Scanning an unreachable URL returns empty list, doesn't crash."""
         from tools.websocket_scanner import WebSocketScanner
 
-        scanner = WebSocketScanner(timeout=3)
+        # Hermetic: simulate a transport-level failure instead of hitting the
+        # real network (DNS / websockets-version behaviour was flaky in CI).
+        with patch(
+            "tools.websocket_scanner.websockets.connect",
+            side_effect=OSError("connection refused"),
+        ):
+            scanner = WebSocketScanner(timeout=3)
 
-        async def _scan():
-            return await scanner.scan("wss://nonexistent-12345.example/ws")
+            async def _scan():
+                return await scanner.scan("wss://nonexistent-12345.example/ws")
 
-        findings = asyncio.run(_scan())
+            findings = asyncio.run(_scan())
         assert findings == []
 
     def test_scanner_initializes_with_custom_timeout(self):

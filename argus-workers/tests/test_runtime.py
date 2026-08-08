@@ -458,6 +458,7 @@ class TestExecutionEngine:
 
 
 class TestGovernance:
+    @pytest.mark.requires_redis
     def test_initial_state(self):
         """Test that Governance initializes with defaults."""
         g = Governance("eng-1")
@@ -507,6 +508,7 @@ class TestGovernance:
         assert can_proceed is False
         assert "token_budget" in reason
 
+    @pytest.mark.requires_redis
     def test_record_result_tracks_cost(self):
         """Test that record_result accumulates cost."""
         g = Governance("eng-1")
@@ -544,6 +546,7 @@ class TestGovernance:
         is_low, _ = g.check_low_signal()
         assert is_low is False  # Counter was reset
 
+    @pytest.mark.requires_redis
     def test_get_status_returns_snapshot(self):
         """Test that get_status returns current governance state."""
         g = Governance("eng-1")
@@ -674,6 +677,7 @@ class TestRuntimeIntegration:
         assert len(state.tool_history) == 1
         assert state.tool_history[0].tool == "nuclei"
 
+    @pytest.mark.requires_redis
     def test_engagement_state_with_governance(self):
         """Test EngagementState + Governance interaction."""
         state = EngagementState("eng-integ-2")
@@ -740,6 +744,7 @@ class TestRuntimeIntegration:
         assert len(state.tool_history) == 1
         assert state.state_version == 2  # bumped on record
 
+    @pytest.mark.requires_redis
     def test_all_components_roundtrip(self):
         """End-to-end: simulate a full agent iteration through all components."""
         # 1. Create state

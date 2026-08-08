@@ -194,7 +194,12 @@ class TestFeatureFlagE2E:
             emit_finding=sse_callback,
             source_tool="bola_workflow",
         )
-        scanner._emit_finding(mock_finding)
+        scanner._builder.add(
+            mock_finding["type"],
+            mock_finding["severity"],
+            mock_finding["endpoint"],
+            {"request": mock_finding["endpoint"]},
+        )
 
         # Finding was emitted through the callback
         assert len(captured) >= 1

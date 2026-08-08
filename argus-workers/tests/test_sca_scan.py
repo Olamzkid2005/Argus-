@@ -192,7 +192,7 @@ class TestSCAScanning:
     # ── Maven dependency check tests ──
 
     @patch("glob.glob")
-    @patch("xml.etree.ElementTree.parse")
+    @patch("defusedxml.ElementTree.parse")
     @pytest.mark.e2e
     def test_check_maven_dependencies(self, mock_parse, mock_glob):
         """Test Maven dependency checking."""
