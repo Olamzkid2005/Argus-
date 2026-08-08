@@ -404,6 +404,20 @@ class Governance:
         """Reset the low-signal counter (e.g., when starting a new phase)."""
         self._consecutive_low_signal = 0
 
+    def check_low_signal(self) -> tuple[bool, str]:
+        """Check whether the low-signal threshold has been reached.
+
+        Returns:
+            (is_low: bool, reason: str) — reason is empty when not low.
+        """
+        if self._consecutive_low_signal >= self.low_signal_threshold:
+            return True, (
+                "Low-signal threshold reached: "
+                f"{self._consecutive_low_signal} consecutive low-value results "
+                f"(threshold: {self.low_signal_threshold})"
+            )
+        return False, ""
+
     # ── Internal helpers ──
 
     def _shutdown(self, reason: str, detail: str):
