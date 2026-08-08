@@ -35,6 +35,8 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
+from exceptions import MCPTransportError  # noqa: F401 (re-exported for callers)
+
 logger = logging.getLogger(__name__)
 
 # ── JSON-RPC 2.0 error codes ──
@@ -195,30 +197,54 @@ class MCPTransport:
         _heartbeat = self._heartbeat_timeout_secs()
 
         # Read lines from stdin (one JSON-RPC request per line).
-        # Use self._stdin for raw bytes to avoid encoding issues,
-        # then decode as UTF-8 (the JSON-RPC spec requires UTF-8).
-        stdin = self._stdin
+        # Use raw fd reads + an internal line buffer instead of
+        # BufferedReader.readline(): readline() over-reads a burst of queued
+        # lines into its Python-level buffer, so a subsequent select() on the
+        # fd reports "no data" and the heartbeat watchdog would drop the
+        # buffered requests (burst-loss bug).
         stdout = self._stdout
+        line_buffer = b""
 
         while self._running:
             # Idle-parent watchdog — also gives stop() a bounded window.
-            if not self._wait_for_stdin(_heartbeat):
-                logger.warning(
-                    "MCP transport: no data from parent for %.0fs — parent may be dead, shutting down",
-                    _heartbeat,
-                )
-                break
+            # Skipped while complete lines are already buffered locally.
+            if b"\n" not in line_buffer:
+                if not self._wait_for_stdin(_heartbeat):
+                    logger.warning(
+                        "MCP transport: no data from parent for %.0fs — parent may be dead, shutting down",
+                        _heartbeat,
+                    )
+                    break
 
-            try:
-                line = stdin.readline(_MAX_MESSAGE_SIZE + 1)
-            except (OSError, ValueError) as e:
-                logger.error("MCP transport read error: %s", e)
-                break
+                chunk = self._read_raw(65536)
+                if not chunk:
+                    # EOF or read error — parent process closed the pipe
+                    logger.info("MCP transport: stdin closed, shutting down")
+                    break
 
-            if not line:
-                # EOF — parent process closed the pipe
-                logger.info("MCP transport: stdin closed, shutting down")
-                break
+                line_buffer += chunk
+
+                # Bound the buffer: a newline-less line that exceeds the max
+                # size is rejected instead of being accumulated forever.
+                if (
+                    b"\n" not in line_buffer
+                    and len(line_buffer) > _MAX_MESSAGE_SIZE
+                ):
+                    self._send_error(
+                        stdout,
+                        None,
+                        INVALID_REQUEST,
+                        f"Message exceeds max size ({_MAX_MESSAGE_SIZE} bytes)",
+                    )
+                    line_buffer = b""
+                    continue
+
+            nl = line_buffer.find(b"\n")
+            if nl == -1:
+                # Partial line without newline — wait for the rest
+                continue
+            line = line_buffer[: nl + 1]
+            line_buffer = line_buffer[nl + 1 :]
 
             if len(line) > _MAX_MESSAGE_SIZE:
                 self._send_error(
@@ -227,10 +253,6 @@ class MCPTransport:
                     INVALID_REQUEST,
                     f"Message exceeds max size ({_MAX_MESSAGE_SIZE} bytes)",
                 )
-                # Drain the remainder of the oversized line so the next
-                # read starts at a clean boundary.
-                while line and not line.endswith(b"\n"):
-                    line = stdin.readline(_MAX_MESSAGE_SIZE + 1)
                 continue
 
             line = line.strip()
@@ -393,6 +415,26 @@ class MCPTransport:
         """Build and write a JSON-RPC error response."""
         resp = self._make_error(request_id, code, message)
         self._write_json(stdout, resp)
+
+    def _read_raw(self, size: int) -> bytes:
+        """Read up to ``size`` raw bytes from stdin without over-reading.
+
+        Uses ``os.read`` on the underlying fd so a burst of queued lines
+        stays in our own ``line_buffer`` (never in a BufferedReader's hidden
+        buffer that ``select()`` can't see). Falls back to ``read()`` for
+        injected fake streams (e.g. BytesIO in unit tests).
+        """
+        try:
+            fileno = self._stdin.fileno()
+        except (AttributeError, OSError, ValueError):
+            try:
+                return self._stdin.read(size)
+            except (OSError, ValueError):
+                return b""
+        try:
+            return os.read(fileno, size)
+        except (OSError, ValueError):
+            return b""
 
     def _write_json(self, stdout: Any, obj: Any) -> None:
         """Serialize ``obj`` as JSON and write it as a single line to stdout.
