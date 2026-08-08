@@ -143,6 +143,14 @@ class LegacyAPISecurityScanner(AbstractTool):
             result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)
             result.mark_finished()
             return result
+        # SSRF guard: reject internal/loopback/cloud-metadata targets before scanning
+        from tools.scope_validator import ScopeValidator as _ScopeValidator
+
+        if _ScopeValidator.is_internal_address(parsed.hostname or ""):
+            slog.warn(f"Rejected internal/SSRF target '{target_url}'")
+            result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)
+            result.mark_finished()
+            return result
         if self.engagement_id and not validate_target_scope(target_url, self.engagement_id):
             slog.warn(f"Target {target_url} is outside authorized scope — scan aborted")
             result = UnifiedToolResult(tool_name=self.tool_name, target=target_url)

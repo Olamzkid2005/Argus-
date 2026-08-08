@@ -439,8 +439,9 @@ def cached_query(ttl: int = 300):
 
         return _CachedFunc(
             wrapper,
-            # Scope invalidation to this function's keys using the hash prefix
-            invalidate=lambda: cache.clear_pattern(f"*cached_query:{func.__name__}*"),
+            # Keys are stored as query:{hash} (the hash already encodes the
+            # function name + args) — scope invalidation to the query namespace.
+            invalidate=lambda: cache.clear_pattern("query:*"),
         )
 
     return decorator

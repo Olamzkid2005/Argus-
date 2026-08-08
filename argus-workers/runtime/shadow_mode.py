@@ -29,6 +29,24 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# In-memory fallback mirror so shadow stats stay observable in environments
+# without Postgres (unit tests, CI lint gates). The DB remains the source of
+# truth for cross-worker convergence; the mirror only kicks in when the DB is
+# unavailable.
+_MEM_STATS: dict[str, dict[str, int]] = {}
+
+
+def _update_stats_mem(phase: str, match: bool) -> None:
+    """Update the in-memory fallback counters for a phase."""
+    entry = _MEM_STATS.setdefault(
+        phase, {"consecutive_successes": 0, "total_mismatches": 0}
+    )
+    if match:
+        entry["consecutive_successes"] += 1
+    else:
+        entry["consecutive_successes"] = 0
+        entry["total_mismatches"] += 1
+
 
 def _normalize_for_comparison(obj: Any) -> str:
     """Normalize an object to a stable string for comparison.
@@ -131,6 +149,7 @@ def shadow_compare(
             engagement_id,
             e,
         )
+        _update_stats_mem(phase, match=False)
         _update_stats_db(phase, match=False)
         return
 
@@ -148,6 +167,7 @@ def shadow_compare(
         # Compare full results
         match = _compute_hash(new_result) == _compute_hash(old_result)
 
+    _update_stats_mem(phase, match=match)
     _update_stats_db(phase, match=match)
 
     if match:
@@ -191,19 +211,47 @@ def get_shadow_stats(phase: str | None = None) -> dict:
                     "total_mismatches": 0,
                     "last_result": "none",
                 }
-            else:
-                cursor.execute(
-                    "SELECT * FROM shadow_mode_stats ORDER BY phase"
-                )
-                columns = [desc[0] for desc in cursor.description]
-                rows = cursor.fetchall()
-                results: dict[str, dict] = {}
-                for row in rows:
-                    results[str(row[0])] = dict(zip(columns, row, strict=False))
-                return results
+            # Aggregated shape: {field: {phase: value}} — consistent between
+            # the DB and in-memory fallback paths.
+            cursor.execute(
+                "SELECT * FROM shadow_mode_stats ORDER BY phase"
+            )
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            aggregated: dict[str, dict[str, int]] = {
+                "consecutive_successes": {},
+                "total_mismatches": {},
+            }
+            for row in rows:
+                row_dict = dict(zip(columns, row, strict=False))
+                phase_name = str(row_dict["phase"])
+                aggregated["consecutive_successes"][phase_name] = row_dict[
+                    "consecutive_successes"
+                ]
+                aggregated["total_mismatches"][phase_name] = row_dict[
+                    "total_mismatches"
+                ]
+            return aggregated
     except Exception as e:
         logger.error("Failed to read shadow stats from DB: %s", e)
-        return {"error": str(e)}
+        # Fall back to the in-memory mirror
+        if phase:
+            entry = _MEM_STATS.get(
+                phase, {"consecutive_successes": 0, "total_mismatches": 0}
+            )
+            return {
+                "phase": phase,
+                "consecutive_successes": entry["consecutive_successes"],
+                "total_mismatches": entry["total_mismatches"],
+                "last_result": "none",
+            }
+        aggregated = {"consecutive_successes": {}, "total_mismatches": {}}
+        for _phase, entry in _MEM_STATS.items():
+            aggregated["consecutive_successes"][_phase] = entry[
+                "consecutive_successes"
+            ]
+            aggregated["total_mismatches"][_phase] = entry["total_mismatches"]
+        return aggregated
 
 
 def get_consecutive_successes(phase: str) -> int:
@@ -227,6 +275,11 @@ def reset_shadow_stats(phase: str | None = None):
     Args:
         phase: Optional phase name. If None, resets all phases.
     """
+    # Clear the in-memory mirror regardless of DB availability
+    if phase:
+        _MEM_STATS.pop(phase, None)
+    else:
+        _MEM_STATS.clear()
     try:
         from database.connection import db_cursor
 

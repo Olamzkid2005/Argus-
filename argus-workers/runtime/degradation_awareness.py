@@ -58,7 +58,10 @@ class DegradationAwareness:
         self._tool_finding_counts: deque[int] = deque(maxlen=_TOOL_WINDOW_SIZE)
         self._consecutive_llm_failures = 0
         self._last_llm_success_rate = 1.0
-        self._lock = threading.Lock()
+        # RLock: get_status() calls get_llm_success_rate() and
+        # get_tool_finding_rate(), which re-acquire the same lock — a plain
+        # Lock would deadlock on the first agent-loop iteration.
+        self._lock = threading.RLock()
         # Register with global registry for health endpoint observability
         try:
             register_degradation_awareness(self)

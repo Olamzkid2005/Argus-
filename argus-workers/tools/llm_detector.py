@@ -354,7 +354,11 @@ If NOT vulnerable:
                 vulnerable_match = re.search(
                     r'"vulnerable"\s*:\s*(true|false)', raw_text, re.IGNORECASE
                 )
-                vulnerable = "true" in (vulnerable_match.group(1) if vulnerable_match else "false").lower()
+                if vulnerable_match is None:
+                    # No recognizable LLM response structure — treat as a
+                    # parse failure (None) rather than guessing "not vulnerable".
+                    return None
+                vulnerable = "true" in vulnerable_match.group(1).lower()
                 confidence_match = re.search(r'"confidence"\s*:\s*([0-9.]+)', raw_text)
                 confidence = (
                     float(confidence_match.group(1)) if confidence_match else 0.0
