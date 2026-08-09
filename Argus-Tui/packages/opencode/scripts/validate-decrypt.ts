@@ -14,11 +14,11 @@ import crypto from "node:crypto"
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs"
 import { join, dirname } from "node:path"
 import { tmpdir } from "node:os"
-import { execSync } from "node:child_process"
 
 const { EncryptionManager, EncryptionError } = await import("../src/argus/storage/encryption")
 const { EncryptedDbHandle } = await import("../src/argus/storage/encrypted-db")
 const { StoragePaths } = await import("../src/argus/storage/paths")
+const { Database } = await import("bun:sqlite")
 
 // ── Test environment ──
 const TMPDIR = mkdtempSync(join(tmpdir(), "argus-decrypt-validate-"))
@@ -40,8 +40,13 @@ function assert(condition: boolean, msg: string) {
 
 function sqlite3(dbPath: string, query: string): string {
   try {
-    const result = execSync(`/opt/local/bin/sqlite3 "${dbPath}" "${query}"`, { encoding: "utf-8", timeout: 5000 })
-    return result.trim()
+    const db = new Database(dbPath)
+    try {
+      const row = db.query(query).get() as Record<string, unknown> | undefined
+      return row ? String(Object.values(row)[0] ?? "").trim() : ""
+    } finally {
+      db.close()
+    }
   } catch (e: any) {
     console.error(`    sqlite3 error: ${e.message}`)
     return ""
@@ -427,7 +432,7 @@ async function suite4() {
 // ════════════════════════════════════════════════════════════════
 console.log("═══ Decrypt End-to-End Validation ═══")
 console.log(`  TMPDIR: ${TMPDIR}`)
-console.log(`  sqlite3: /opt/local/bin/sqlite3 v3.51.3`)
+console.log(`  sqlite3: bun:sqlite (platform-independent)`)
 
 try {
   await suite1()
