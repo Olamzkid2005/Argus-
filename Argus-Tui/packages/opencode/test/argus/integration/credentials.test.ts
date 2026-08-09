@@ -3,11 +3,18 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { CredentialStore } from "../../../src/argus/engagement/credentials"
+import { EncryptionManager } from "../../../src/argus/storage/encryption"
 
 let tmpDir: string
 
 beforeAll(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "argus-cred-test-"))
+  // Hermetic: other test files in the same process may have initialized the
+  // master key and left it cached. CredentialStore.save() encrypts when a key
+  // is cached, which would break the plaintext-JSON assertions below.
+  EncryptionManager.destroy().catch(() => {})
+  EncryptionManager.clearCache()
+  EncryptionManager.clearPassphrase()
 })
 
 afterAll(() => {

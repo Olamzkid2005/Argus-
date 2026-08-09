@@ -28,10 +28,19 @@ let dockerAvailable = false
 
 beforeAll(async () => {
   try {
+    // Race the docker check against a 3s timeout: on CI runners (especially
+    // Windows) the docker CLI can hang for >5s when the daemon is unavailable,
+    // which previously tripped bun's 5s hook timeout and failed the whole file.
     const proc = Bun.spawn(["docker", "info", "--format", "{{.ServerVersion}}"], {
       stdio: ["ignore", "pipe", "pipe"],
     })
-    const output = await new Response(proc.stdout).text()
+    const output = await Promise.race([
+      new Response(proc.stdout).text(),
+      new Promise<string>((resolve) => setTimeout(() => {
+        proc.kill()
+        resolve("")
+      }, 3000)),
+    ])
     dockerAvailable = output.trim().length > 0
   } catch {
     dockerAvailable = false

@@ -82,15 +82,21 @@ export class EncryptedFileHandle {
   }
 
   /**
-   * Check if a file is likely encrypted by inspecting its header.
-   * Returns true if the first byte has the VERSION_BYTE flag (0x01).
-   * This is a heuristic — plaintext SQLite DBs or other binary files
-   * could coincidentally start with 0x01.
+   * Check if a file is an encrypted evidence file by inspecting its header.
+   * The on-disk format is [VERSION:1][SALT:16][IV:12][CIPHERTEXT...][AUTH TAG:16],
+   * so an encrypted file starts with exactly VERSION_BYTE (0x01, or 0x03 when
+   * compressed) and is at least 45 bytes long. The previous heuristic — "first
+   * byte's LSB is set" — falsely matched ~50% of plaintext text files (e.g.
+   * 'I' = 0x49, 'A' = 0x41), which made verifyPackage try to decrypt plaintext
+   * evidence and wrongly report it as TAMPERED.
    */
   static isEncryptedFile(filePath: string): boolean {
     try {
       const fd = readFileSync(filePath)
-      return fd.length > 0 && (fd[0] & 0x01) === 0x01
+      // Format: version(1) + salt(16) + iv(12) + authTag(16) minimum = 45 bytes
+      if (fd.length < 45) return false
+      const version = fd[0]
+      return version === 0x01 || version === 0x03 // uncompressed | compressed
     } catch {
       return false
     }
