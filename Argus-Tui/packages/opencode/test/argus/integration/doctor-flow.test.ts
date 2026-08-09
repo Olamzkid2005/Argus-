@@ -11,13 +11,13 @@ import { describe, expect, test } from "bun:test"
 const TIMEOUT_MS = 30000
 
 describe("doctor full-pipeline integration", () => {
-  test("doctorCommand returns exactly 12 checks by default", async () => {
+  test("doctorCommand returns exactly 13 checks by default", async () => {
     const { doctorCommand } = await import("../../../src/argus/commands/doctor")
     const results = await doctorCommand()
-    expect(results.length).toBe(12)
+    expect(results.length).toBe(13)
   }, { timeout: TIMEOUT_MS })
 
-  test("all 12 checks have valid name, status, and message", async () => {
+  test("all 13 checks have valid name, status, and message", async () => {
     const { doctorCommand } = await import("../../../src/argus/commands/doctor")
     const results = await doctorCommand()
 
@@ -31,6 +31,7 @@ describe("doctor full-pipeline integration", () => {
       "Credentials",
       "Configuration",
       "Scope Protection",
+      "Planner LLM",
       "DNS Resolution",
       "Config Validation",
       "Toolchain",
@@ -121,10 +122,10 @@ describe("doctor full-pipeline integration", () => {
     expect(toolchain!.message).toMatch(/tools on PATH|0 tools found/)
   }, { timeout: TIMEOUT_MS })
 
-  test("--online flag adds LLM Provider check (total 13)", async () => {
+  test("--online flag adds LLM Provider check (total 14)", async () => {
     const { doctorCommand } = await import("../../../src/argus/commands/doctor")
     const results = await doctorCommand({ online: true })
-    expect(results.length).toBe(13)
+    expect(results.length).toBe(14)
     const llm = results.find((r: any) => r.name === "LLM Provider")!
     expect(llm).toBeDefined()
     expect(["PASS", "WARN"]).toContain(llm!.status)
@@ -143,9 +144,10 @@ describe("doctor full-pipeline integration", () => {
     expect(names[6]).toBe("Credentials")
     expect(names[7]).toBe("Configuration")
     expect(names[8]).toBe("Scope Protection")
-    expect(names[9]).toBe("DNS Resolution")
-    expect(names[10]).toBe("Config Validation")
-    expect(names[11]).toBe("Toolchain")
+    expect(names[9]).toBe("Planner LLM")
+    expect(names[10]).toBe("DNS Resolution")
+    expect(names[11]).toBe("Config Validation")
+    expect(names[12]).toBe("Toolchain")
   }, { timeout: TIMEOUT_MS })
 
   test("status strings are never empty", async () => {

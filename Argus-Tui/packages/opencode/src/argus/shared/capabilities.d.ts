@@ -27,6 +27,7 @@ export declare enum Capability {
     PHISHING_CHAIN = "phishing_chain",
     CREDENTIAL_REPLAY = "credential_replay",
     SECURITY_ANALYSIS = "security_analysis",
+    AI_SURFACE_MAPPING = "ai_surface_mapping",
     SECRET_DETECTION = "secret_detection",
     SAST = "sast",
     SCA = "sca",

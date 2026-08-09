@@ -103,8 +103,11 @@ export async function verifyPackage(
     }
 
     let actualHash: string
-    if (options?.masterKey) {
-      // Encrypted file: decrypt first, then hash the plaintext
+    if (options?.masterKey && EncryptedFileHandle.isEncryptedFile(artifactPath)) {
+      // Encrypted file: decrypt first, then hash the plaintext.
+      // isEncryptedFile() guards against a cached master key being applied to
+      // plaintext artifacts (e.g. when encryption was never enabled for the
+      // engagement) — decryption of plaintext would wrongly mark them tampered.
       const fileId = EncryptedFileHandle.fileIdFromPath(artifact.path)
       try {
         const plaintext = EncryptedFileHandle.readEncrypted(
