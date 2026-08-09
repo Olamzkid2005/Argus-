@@ -232,6 +232,13 @@ itOnMac(
 
     // Clear cache — key is gone
     EncryptionManager.clearCache()
+    // Disable encryption BEFORE construction: the constructor's
+    // syncEncryptionFromConfig() auto-initializes the master key via
+    // ensureKeySync() when encryptionEnabled is true (default), which would
+    // re-cache the key from the Keychain and defeat the clearCache() above.
+    // This test verifies the defensive error path when the key is genuinely
+    // not loaded — that requires the store to NOT auto-init on construction.
+    withoutEncryption()
     const store2 = new EngagementStore(dbPath)
     withEncryption()
 
@@ -453,8 +460,11 @@ itOnMac(
 
     // Session 3: Encryption OFF — encrypted engagement throws on access
     EncryptionManager.clearCache()
-    const store3 = new EngagementStore(dbPath)
+    // Disable encryption BEFORE construction so the constructor's
+    // syncEncryptionFromConfig() does NOT auto-init the master key via
+    // ensureKeySync() (which would re-cache it and defeat clearCache()).
     withoutEncryption()
+    const store3 = new EngagementStore(dbPath)
 
     expect(store3.getEngagement(eng2.id)).not.toBeNull()
 

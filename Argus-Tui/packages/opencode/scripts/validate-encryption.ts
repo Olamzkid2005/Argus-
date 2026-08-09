@@ -58,9 +58,11 @@ await runSuite("1. File-based keychain (Linux/Windows fallback)", async () => {
   const passphrase = "test-passphrase-123-!@#"
   EncryptionManager.setPassphrase(passphrase)
 
-  // isFileBased should be false on macOS
-  log(`isFileBased() returns false on macOS: ${EncryptionManager.isFileBased() === false}`,
-    EncryptionManager.isFileBased() === false)
+  // isFileBased should be false on macOS, true on Linux/Windows (file fallback)
+  const isMac = process.platform === "darwin"
+  const expectedFileBased = !isMac
+  log(`isFileBased() returns ${expectedFileBased} on ${process.platform}: ${EncryptionManager.isFileBased() === expectedFileBased}`,
+    EncryptionManager.isFileBased() === expectedFileBased)
 
   // Test that setPassphrase/getPassphrase roundtrips
   log(`getPassphrase() returns set value: ${EncryptionManager.getPassphrase() === passphrase}`,
