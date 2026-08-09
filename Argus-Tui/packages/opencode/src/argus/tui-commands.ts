@@ -181,11 +181,18 @@ const commands: ArgusTuiCommand[] = [
       if (_cachedTools && _cachedTools.length > 0) {
         return formatToolList(_cachedTools)
       }
-      const { WorkersBridge } = await import("./bridge/mcp-client")
-      const { existsSync } = await import("fs")
       const wp = MCP_WORKER_PATH
-      if (!existsSync(wp)) return "MCP worker not found. Run `argus doctor` to check setup."
-      const bridge = new WorkersBridge(wp)
+      // Test seam: allows tests to inject a fake bridge instead of spawning a
+      // real Python MCP worker (which requires the full Python dependency tree).
+      const bridge = _toolsBridgeFactory
+        ? _toolsBridgeFactory(wp)
+        : await (async () => {
+            const { existsSync } = await import("fs")
+            if (!existsSync(wp)) return null
+            const { WorkersBridge } = await import("./bridge/mcp-client")
+            return new WorkersBridge(wp)
+          })()
+      if (!bridge) return "MCP worker not found. Run `argus doctor` to check setup."
       let toolDefs: ToolDefinition[] = []
       try {
         await bridge.connect()
@@ -499,6 +506,31 @@ export function getArgusTuiCommands(): ArgusTuiCommand[] {
 
 export function findArgusTuiCommand(slashName: string): ArgusTuiCommand | undefined {
   return commands.find((c) => c.slashes.includes(slashName) || c.name === slashName)
+}
+
+/**
+ * Structural subset of the MCP WorkersBridge used by the /tools handler.
+ * Keeping this a local interface avoids a static import of bridge/mcp-client
+ * (which pulls in child_process) at module load time.
+ */
+interface ToolsBridgeLike {
+  connect(): Promise<void>
+  getTools(): Promise<ToolDefinition[]>
+  disconnect(): Promise<void>
+}
+
+/**
+ * Test seam: injects a fake bridge so the /tools handler's worker fall-through
+ * path can be exercised without spawning a real Python MCP worker (which needs
+ * the full Python dependency tree — psycopg2 etc. — not available in the lint
+ * unit job). Unlike mock.module, this never leaks into other test files.
+ */
+let _toolsBridgeFactory: ((workerPath: string) => ToolsBridgeLike) | undefined
+
+export function setToolsBridgeFactory(
+  factory: ((workerPath: string) => ToolsBridgeLike) | undefined,
+): void {
+  _toolsBridgeFactory = factory
 }
 
 /**

@@ -130,15 +130,36 @@ describe("tui-commands", () => {
   })
 
   it("/tools handler falls through to worker path when cache is empty (requires python3)", async () => {
-    // Requires python3 on PATH — skipped on systems without it (e.g. Windows).
-    const { findArgusTuiCommand, resetToolsCache, getToolsCache } = await import("../../../src/argus/tui-commands")
+    // Hermetic: inject a fake bridge via the setToolsBridgeFactory seam so the
+    // handler exercises the worker fall-through path without spawning a real
+    // Python MCP worker (which needs the full Python dependency tree — psycopg2
+    // etc. — not available in the lint unit job). Unlike mock.module, the seam
+    // never leaks into other test files in the same process.
+    const mod = await import("../../../src/argus/tui-commands")
+    const { findArgusTuiCommand, resetToolsCache, getToolsCache, setToolsBridgeFactory } = mod
     const cmd = findArgusTuiCommand("tools")!
 
-    resetToolsCache()
-    expect(getToolsCache()).toEqual([])
+    setToolsBridgeFactory(() => ({
+      async connect(): Promise<void> {},
+      async getTools(): Promise<import("../../../src/argus/bridge/types").ToolDefinition[]> {
+        return [
+          { name: "nuclei", description: "Vulnerability scanner", inputSchema: { type: "object", properties: {}, required: [] }, capabilities: ["scan", "vuln"], signal_quality: "CONFIRMED" },
+        ]
+      },
+      async disconnect(): Promise<void> {},
+    }))
 
-    const result = await cmd.handler("")
-    expect(result.length).toBeGreaterThan(0)
+    try {
+      resetToolsCache()
+      expect(getToolsCache()).toEqual([])
+
+      const result = await cmd.handler("")
+      expect(result.length).toBeGreaterThan(0)
+      expect(result).toContain("nuclei")
+    } finally {
+      setToolsBridgeFactory(undefined)
+      resetToolsCache()
+    }
   })
 
   // --- Verify handler tests (Fix 5: empty finding ID validation + delegates to verifyCommand) ---
