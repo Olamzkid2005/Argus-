@@ -183,6 +183,51 @@ def run_scan(
                     "Attack graph chain detection failed (non-fatal): %s", _chain_err
                 )
 
+        # ── Gap closure: automatic auth-focused scan trigger ──
+        # Recon records login pages and auth endpoints on the ReconContext
+        # (has_login_page / auth_endpoints). When an auth surface exists, dive
+        # into exactly those endpoints with the auth tooling (jwt_tool, dual
+        # auth, session analysis, ...) before analysis. tasks.scan.auth_focused_scan
+        # chains into analyze itself, so we return here without dispatching
+        # analyze. The budget flag prevents re-triggering on steering
+        # re-invocations. Auth takes precedence over the generic deep-scan
+        # pass below: login flows are the highest-value attack surface.
+        if (
+            not _needs_exploitation
+            and not budget.get("auth_focused_dispatched")
+        ):
+            try:
+                _auth_endpoints = _detect_auth_endpoints(engagement_id, redis_url)
+            except Exception as _auth_err:
+                logger.warning(
+                    "Auth endpoint detection failed (non-fatal): %s", _auth_err
+                )
+                _auth_endpoints = []
+            if _auth_endpoints:
+                budget["auth_focused_dispatched"] = True
+                slog.info(
+                    "Auth surface detected (%d login/auth endpoint(s)) — dispatching auth_focused_scan: %s",
+                    len(_auth_endpoints),
+                    _auth_endpoints[:3],
+                )
+                try:
+                    _auth_task = app.send_task(
+                        "tasks.scan.auth_focused_scan",
+                        args=[engagement_id, _auth_endpoints, budget, ctx.trace_id],
+                    )
+                    result["auth_focused_dispatched"] = True
+                    result["auth_focused_task_id"] = _auth_task.id
+                    result["next_state"] = "auth_focused_scan"
+                    slog.dispatch("auth_focused_scan", task_id=_auth_task.id)
+                    return result
+                except Exception as e:
+                    logger.exception(
+                        "Failed to enqueue auth_focused_scan for engagement=%s: %s",
+                        engagement_id,
+                        e,
+                    )
+                    # Fall through to the deep-scan / analyze dispatch below.
+
         # ── Gap closure: automatic deep-scan trigger ──
         # When the scan found high-value endpoints (CRITICAL/HIGH findings) but
         # no exploitable chain, deepen the engagement against exactly those
@@ -329,6 +374,60 @@ def _detect_high_value_endpoints(
     if not engine.detect_high_value_targets(findings):
         return []
     return engine.get_priority_endpoints(findings)
+
+
+def _detect_auth_endpoints(
+    engagement_id: str, redis_url: str | None = None, max_endpoints: int = 5
+) -> list[str]:
+    """Return login/auth endpoints recorded by recon that warrant an auth-focused scan.
+
+    Signal source: the persisted ``ReconContext`` (populated by
+    ``orchestrator_pkg.recon`` with ``has_login_page`` / ``auth_endpoints``).
+    Falls back to the live endpoints when a login page was detected but the
+    exact auth URLs were not extracted, so the trigger still fires. Returns
+    ``[]`` when recon found no auth surface (or recon data is unavailable),
+    making this strictly non-fatal.
+
+    Args:
+        engagement_id: Engagement UUID.
+        redis_url: Redis URL to read the ReconContext from. Pass the same
+            value run_scan resolves (``REDIS_URL`` env) so the signal is read
+            from the same store the recon phase wrote to.
+        max_endpoints: Upper bound on returned endpoints (deduped).
+    """
+    from tasks.utils import load_recon_context
+
+    try:
+        recon = load_recon_context(engagement_id, redis_url)
+    except Exception as e:
+        logger.debug(
+            "Recon context unavailable for auth detection (non-fatal): %s", e
+        )
+        return []
+    if not recon:
+        return []
+
+    has_login = bool(getattr(recon, "has_login_page", False))
+    auth_endpoints = list(getattr(recon, "auth_endpoints", None) or [])
+    if not auth_endpoints:
+        if has_login:
+            # Login page detected but the exact URL wasn't extracted —
+            # auth-focus the live endpoints instead of missing the trigger.
+            auth_endpoints = list(getattr(recon, "live_endpoints", None) or [])
+        else:
+            return []
+
+    seen: set[str] = set()
+    endpoints: list[str] = []
+    for ep in auth_endpoints:
+        ep = (ep or "").strip()
+        if not ep or ep in seen:
+            continue
+        seen.add(ep)
+        endpoints.append(ep)
+        if len(endpoints) >= max_endpoints:
+            break
+    return endpoints
 
 
 def _check_missing_phase_tools(phase: str) -> list[str]:
