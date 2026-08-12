@@ -13,6 +13,7 @@ Replaces scattered LLM call logic in:
 
 import json
 import logging
+import re
 import time as _time
 from dataclasses import dataclass
 
@@ -23,6 +24,22 @@ from config.constants import (
 from llm_client import LLMClient, LLMResponse
 
 logger = logging.getLogger(__name__)
+
+
+def _scan_openers(text: str) -> list[int]:
+    """Return candidate JSON-start positions (``{`` preferred, then ``[``).
+
+    Object literals are far more common in structured LLM output than arrays,
+    so all ``{`` positions are tried before any ``[`` positions.
+    """
+    positions: list[int] = []
+    for idx, ch in enumerate(text):
+        if ch == "{":
+            positions.append(idx)
+    for idx, ch in enumerate(text):
+        if ch == "[" and idx not in positions:
+            positions.append(idx)
+    return positions
 
 
 class CostTracker:
@@ -162,7 +179,15 @@ class LLMService:
             self._cost_tracker.add(cost)
 
             try:
-                parsed = json.loads(response_text)
+                parsed = self._extract_json(response_text)
+                if parsed is None:
+                    logger.warning(
+                        "LLM returned non-JSON response (%.200r...), using fallback",
+                        response_text,
+                    )
+                    return self._fallback(
+                        "JSON parse error: no JSON object recovered"
+                    )
                 duration_ms = int((_time.time() - start) * 1000)
                 # Track actual token counts for governance (blocker 48)
                 if isinstance(raw, LLMResponse):
@@ -185,7 +210,7 @@ class LLMService:
                         "Unexpected response type (expected dict or list)"
                     )
                 return parsed
-            except json.JSONDecodeError as e:
+            except ValueError as e:
                 logger.warning(
                     "LLM returned non-JSON response (%.200r...), using fallback: %s",
                     response_text,
@@ -197,6 +222,88 @@ class LLMService:
             slog.llm_result("Failed: %s", e)
             logger.warning("LLM call failed: %s", e)
             return self._fallback(str(e))
+
+    @staticmethod
+    def _extract_json(response_text: str) -> dict | list | None:
+        """Parse JSON from an LLM response, tolerating production quirks.
+
+        Even with ``response_format={"type": "json_object"}``, models routinely
+        wrap the payload in markdown fences (````` ```json ... ``` `````) or pad it
+        with prose. Recovery ladder:
+
+        1. Direct ``json.loads``
+        2. Strip a single ````` ```json ... ``` ````` fence
+        3. Extract the first balanced ``{...}``/``[...]`` block via brace matching
+        4. ``json5``-style cleanup (trailing commas, single quotes) as a last resort
+
+        Returns the parsed object, or ``None`` when no JSON could be recovered.
+        """
+        text = (response_text or "").strip()
+        if not text:
+            return None
+
+        # 1. Direct parse
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # 2. Markdown-fenced block
+        if "```" in text:
+            m = re.search(
+                r"```(?:json)?\s*(.+?)```", text, re.DOTALL | re.IGNORECASE
+            )
+            if m:
+                try:
+                    return json.loads(m.group(1).strip())
+                except json.JSONDecodeError:
+                    pass
+
+        # 3. First balanced {...} / [...] block (prose-wrapped JSON).
+        # Skips braces that appear inside prose (e.g. "See {note} the plan:")
+        # by trying each candidate start position in order.
+        for start in _scan_openers(text):
+            opener = text[start]
+            closer = "}" if opener == "{" else "]"
+            depth = 0
+            in_str = False
+            escape = False
+            for i in range(start, len(text)):
+                ch = text[i]
+                if in_str:
+                    if escape:
+                        escape = False
+                    elif ch == "\\":
+                        escape = True
+                    elif ch == '"':
+                        in_str = False
+                    continue
+                if ch == '"':
+                    in_str = True
+                elif ch == opener:
+                    depth += 1
+                elif ch == closer:
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[start : i + 1]
+                        try:
+                            return json.loads(candidate)
+                        except json.JSONDecodeError:
+                            # Not the JSON we want (unbalanced prose brace) —
+                            # keep scanning from the next candidate opener.
+                            break
+
+        # 4. Last resort: json5-ish cleanup (trailing commas, single quotes)
+        try:
+            import json5  # type: ignore  # optional dependency
+
+            return json5.loads(text)
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+        return None
 
     def _fallback(self, reason: str) -> dict:
         """Single fallback response for all callers."""

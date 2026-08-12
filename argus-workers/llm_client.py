@@ -12,6 +12,7 @@ API key resolution order (first found wins):
 import asyncio
 import logging
 import os
+import random
 import threading
 import time
 from dataclasses import dataclass
@@ -665,6 +666,18 @@ class LLMClient:
                 raise
             except Exception as e:
                 last_error = e
+                if not self._is_retryable_error(e):
+                    # Permanent client-side error (400/401/403/validation) —
+                    # retrying cannot succeed and only burns provider quota.
+                    # Do NOT trip the circuit breaker: this is a config error,
+                    # not an availability problem, and wedging the circuit
+                    # would take down otherwise-healthy LLM features.
+                    logger.warning(
+                        "LLM chat_async non-retryable error (no retry): %s", e
+                    )
+                    raise LLMUnavailableError(
+                        f"LLM call failed (non-retryable): {e}"
+                    ) from e
                 self._increment_circuit_breaker()
                 logger.warning(
                     "LLM chat_async attempt %d failed: %s", attempt + 1, e
@@ -678,7 +691,7 @@ class LLMClient:
                             "Circuit breaker still open — aborting retries"
                         )
                         break
-                    await asyncio.sleep(2**attempt)
+                    await asyncio.sleep(self._backoff_delay(attempt, e))
 
         raise LLMUnavailableError(
             f"LLM call failed after {self.max_retries + 1} retries: {last_error}"
@@ -771,6 +784,18 @@ class LLMClient:
                 raise
             except Exception as e:
                 last_error = e
+                if not self._is_retryable_error(e):
+                    # Permanent client-side error (400/401/403/validation) —
+                    # retrying cannot succeed and only burns provider quota.
+                    # Do NOT trip the circuit breaker: this is a config error,
+                    # not an availability problem, and wedging the circuit
+                    # would take down otherwise-healthy LLM features.
+                    logger.warning(
+                        "LLM chat_sync non-retryable error (no retry): %s", e
+                    )
+                    raise LLMUnavailableError(
+                        f"LLM call failed (non-retryable): {e}"
+                    ) from e
                 self._increment_circuit_breaker()
                 logger.warning(
                     "LLM chat_sync attempt %d failed: %s", attempt + 1, e
@@ -784,11 +809,78 @@ class LLMClient:
                             "Circuit breaker still open — aborting retries"
                         )
                         break
-                    time.sleep(2**attempt)
+                    time.sleep(self._backoff_delay(attempt, e))
 
         raise LLMUnavailableError(
             f"LLM call failed after {self.max_retries + 1} retries: {last_error}"
         )
+
+    # ── Retry classification ────────────────────────────────────────────
+
+    @staticmethod
+    def _is_retryable_error(e: Exception) -> bool:
+        """Classify whether an LLM call error is worth retrying.
+
+        Retryable: network timeouts/connection failures, HTTP 5xx, HTTP 429
+        (rate limit). Permanent: HTTP 4xx client errors (400/401/403/404/422)
+        and anything else — retrying them only burns quota and delays real
+        diagnosis.
+
+        Duck-types against both httpx (``e.response.status_code``) and the
+        OpenAI SDK (``e.status_code``) error shapes without hard module-level
+        imports.
+        """
+        resp = getattr(e, "response", None)
+        status = getattr(resp, "status_code", None)
+        if status is None:
+            status = getattr(e, "status_code", None)
+        if status is not None:
+            try:
+                return int(status) == 429 or int(status) >= 500
+            except (TypeError, ValueError):
+                return False
+        # Network-level failures (httpx TimeoutException/ConnectError, OSError…).
+        # Also covers the OpenAI SDK's openai.APIConnectionError / APITimeoutError
+        # (no .status_code, not OSError subclasses) — exactly the failures retries
+        # exist for.
+        return isinstance(e, (OSError, ConnectionError)) or type(e).__name__ in (
+            "TimeoutException",
+            "ConnectError",
+            "ConnectTimeout",
+            "ReadTimeout",
+            "RemoteProtocolError",
+            "NetworkError",
+            "APIConnectionError",
+            "APITimeoutError",
+        )
+
+    @staticmethod
+    def _retry_after_seconds(e: Exception) -> float | None:
+        """Honor a ``Retry-After`` header on 429 responses, if present."""
+        headers = getattr(getattr(e, "response", None), "headers", None)
+        if not headers:
+            headers = getattr(e, "headers", None)
+        if headers:
+            value = headers.get("Retry-After")
+            if value:
+                try:
+                    return min(float(value), 60.0)
+                except (TypeError, ValueError):
+                    pass
+        return None
+
+    @staticmethod
+    def _backoff_delay(attempt: int, e: Exception | None = None) -> float:
+        """Exponential backoff with jitter + Retry-After honoring.
+
+        Jitter breaks the thundering herd of multiple workers retrying the
+        same provider in lockstep after an outage or rate-limit event.
+        """
+        if e is not None:
+            retry_after = LLMClient._retry_after_seconds(e)
+            if retry_after is not None:
+                return retry_after
+        return 2**attempt + random.uniform(0, 0.5)
 
     # ── Public API: thin wrappers around shared core ──
 
