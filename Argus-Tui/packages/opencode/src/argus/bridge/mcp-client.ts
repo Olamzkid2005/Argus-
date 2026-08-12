@@ -220,6 +220,19 @@ export class WorkersBridge {
       input: this.process.stdout!,
     })
 
+    // The worker may die at any moment (missing Python deps on CI, crash,
+    // OOM). Writes to its closed stdin pipe emit an EPIPE 'error' event on
+    // the Writable stream; without a handler bun raises it as an uncaught
+    // exception that takes down the whole process. Swallow it — pending
+    // requests are rejected by the process 'exit' handler instead.
+    this.process.stdin?.on("error", (err: Error) => {
+      if ((err as NodeJS.ErrnoException).code === "EPIPE") {
+        // Expected when the worker exits — pending RPCs get rejected on exit.
+        return
+      }
+      console.warn(`[MCP] stdin error: ${err.message}`)
+    })
+
     let malformedLineCount = 0
     this.rl.on("line", (line: string) => {
       try {
