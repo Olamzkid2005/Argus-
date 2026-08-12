@@ -52,6 +52,20 @@ from tasks.analyze import run_analysis
 
 _heavy_deps.stop()
 
+# Restore the REAL tasks.analyze module (and the `tasks.analyze` attribute on
+# the parent `tasks` package). patch.dict's stop() removes sys.modules entries
+# added during the mock window, but the parent package attribute still points
+# at the mock-imported module — so a later `from tasks import analyze` (e.g. in
+# test_full_scan_pipeline_e2e.py) would resolve the mock with plain-function
+# run_analysis and fail on `.run()`. Re-importing with the (now restored) real
+# celery_app fixes both the sys.modules entry and the parent attribute.
+import importlib  # noqa: E402
+
+sys.modules.pop("tasks.analyze", None)
+importlib.import_module("tasks.analyze")
+# NOTE: this file keeps its own mock-bound references (_ta_mod / run_analysis)
+# for direct invocation; the re-import above only resets global state.
+
 
 def _result(needs_post_exploitation=False):
     return {
