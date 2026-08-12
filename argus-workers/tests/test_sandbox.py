@@ -6,11 +6,19 @@ Docker-dependent tests are skipped when Docker is unavailable.
 
 from __future__ import annotations
 
-from unittest.mock import PropertyMock, patch
+import sys
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
 from tool_core.sandbox.client import SandboxClient, SandboxResult
+
+
+@pytest.fixture()
+def _stub_docker_module():
+    """Stub the optional ``docker`` package so _run_docker can be exercised."""
+    with patch.dict(sys.modules, {"docker": MagicMock()}):
+        yield
 
 
 def _is_docker_available() -> bool:
@@ -61,6 +69,54 @@ class TestSandboxClient:
         """Custom timeout should be reflected."""
         client = SandboxClient(timeout=30)
         assert client.timeout == 30
+
+    def test_network_disabled_default_true(self):
+        """Network must be disabled by default (safe default)."""
+        client = SandboxClient()
+        assert client.network_disabled is True
+
+    def test_network_disabled_can_be_enabled(self):
+        """network_disabled=False should opt into container networking."""
+        client = SandboxClient(network_disabled=False)
+        assert client.network_disabled is False
+
+    def test_network_disabled_threaded_to_docker_run(self, _stub_docker_module):
+        """network_disabled must be forwarded to containers.run."""
+        client = SandboxClient(network_disabled=False)
+        mock_containers = MagicMock()
+        mock_containers.run.return_value = (
+            b'{"returncode": 0, "stdout": "", "stderr": ""}'
+        )
+        mock_docker_client = MagicMock()
+        mock_docker_client.containers = mock_containers
+        with patch.object(
+            type(client), "is_docker_available", new_callable=PropertyMock, return_value=True
+        ):
+            with patch.object(
+                type(client), "client", new_callable=PropertyMock, return_value=mock_docker_client
+            ):
+                client.run_command(["echo", "hello"])
+        kwargs = mock_containers.run.call_args.kwargs
+        assert kwargs.get("network_disabled") is False
+
+    def test_network_disabled_default_forwarded_to_docker_run(self, _stub_docker_module):
+        """Default sandbox must pass network_disabled=True to containers.run."""
+        client = SandboxClient()
+        mock_containers = MagicMock()
+        mock_containers.run.return_value = (
+            b'{"returncode": 0, "stdout": "", "stderr": ""}'
+        )
+        mock_docker_client = MagicMock()
+        mock_docker_client.containers = mock_containers
+        with patch.object(
+            type(client), "is_docker_available", new_callable=PropertyMock, return_value=True
+        ):
+            with patch.object(
+                type(client), "client", new_callable=PropertyMock, return_value=mock_docker_client
+            ):
+                client.run_command(["echo", "hello"])
+        kwargs = mock_containers.run.call_args.kwargs
+        assert kwargs.get("network_disabled") is True
 
     def test_is_docker_available_property(self):
         """is_docker_available should return a boolean without raising."""

@@ -47,12 +47,18 @@ class SandboxClient:
     """Spawns disposable Docker containers for isolated command execution.
 
     Each ``run_command()`` call creates a new ephemeral container that is
-    automatically removed after execution. The container has:
+    automatically removed after execution. By default the container has:
     - No network access (``network_disabled=True``)
     - Read-only root filesystem (``read_only=True``)
     - 256 MB memory limit
     - 50 process limit (prevents fork bombs)
     - No privileges or capabilities
+
+    ``network_disabled=False`` opts into outbound container networking. This
+    is required for flows that must reach a real target — e.g. chain-exploit
+    verification against the engagement target — and is ONLY safe because the
+    container remains disposable, read-only, secret-stripped, and resource
+    bounded. All other execution keeps the safe network-disabled default.
 
     When Docker is unavailable (not installed or daemon not reachable),
     automatically falls back to subprocess-based execution with locked-down
@@ -63,6 +69,9 @@ class SandboxClient:
             ``argus-sandbox:latest``).
         docker_host: Docker daemon URL (default from DOCKER_HOST env var).
         timeout: Default timeout in seconds for container execution.
+        network_disabled: Whether the sandbox container has no network access.
+            Default True (no network). Set False only when the sandboxed
+            command must reach an authorized target.
     """
 
     def __init__(
@@ -70,10 +79,12 @@ class SandboxClient:
         image: str | None = None,
         docker_host: str | None = None,
         timeout: int = 60,
+        network_disabled: bool = True,
     ):
         self.image = image or os.environ.get("SANDBOX_IMAGE", "argus-sandbox:latest")
         self.docker_host = docker_host or os.environ.get("DOCKER_HOST")
         self.timeout = timeout
+        self.network_disabled = network_disabled
         self._client: Any = None  # docker.DockerClient, lazily initialized
 
     @property
@@ -148,7 +159,7 @@ class SandboxClient:
                 image=self.image,
                 command=["python3", "/usr/local/bin/sandbox_runner.py"],
                 input=payload.encode(),
-                network_disabled=True,
+                network_disabled=self.network_disabled,
                 read_only=True,
                 tmpfs={"/tmp": "size=64M"},
                 mem_limit="256m",
