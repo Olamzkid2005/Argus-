@@ -24,6 +24,7 @@ PHASE_TO_STATE_MAP: dict[str, str] = {
     "scan": "scanning",
     "vulnerability_scanning": "scanning",
     "deep_scan": "scanning",
+    "auth_focused_scan": "scanning",
     "repo_scan": "scanning",
     "analyze": "analyzing",
     "analysis": "analyzing",

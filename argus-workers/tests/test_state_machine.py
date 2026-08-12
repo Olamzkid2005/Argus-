@@ -210,3 +210,9 @@ class TestEngagementStateMachine:
         assert len(history) == 1
         assert history[0]["from_state"] == "created"
         assert history[0]["to_state"] == "recon"
+
+    def test_auth_focused_scan_phase_maps_to_scanning(self):
+        """auth_focused_scan is a scanning-family phase (deepening pass)."""
+        from state_machine import resolve_state_for_phase
+
+        assert resolve_state_for_phase("auth_focused_scan") == "scanning"
