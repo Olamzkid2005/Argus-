@@ -89,6 +89,58 @@ class TestEngagementStateMachine:
 
         assert machine.can_transition_to("recon") is True
 
+    def test_exploitation_to_post_exploitation_allowed(self):
+        """scan.py dispatches run_post_exploit with state set to 'exploitation'."""
+        machine = EngagementStateMachine(
+            TEST_ENGAGEMENT_ID, current_state="exploitation"
+        )
+
+        assert machine.can_transition_to("post_exploitation") is True
+        assert machine.can_transition_to("analyzing") is True
+
+    def test_post_exploitation_to_analyzing_allowed(self):
+        """post_exploit re-dispatches analysis after exploitation."""
+        machine = EngagementStateMachine(
+            TEST_ENGAGEMENT_ID, current_state="post_exploitation"
+        )
+
+        assert machine.can_transition_to("analyzing") is True
+        assert machine.can_transition_to("reporting") is True
+
+    def test_exploitation_round_trip_chain_valid(self):
+        """Full exploit loop: scanning → exploitation → post_exploitation → analyzing → reporting."""
+        machine = EngagementStateMachine(TEST_ENGAGEMENT_ID, current_state="scanning")
+        assert machine.can_transition_to("exploitation") is True
+
+        machine.current_state = "exploitation"
+        assert machine.can_transition_to("post_exploitation") is True
+
+        machine.current_state = "post_exploitation"
+        assert machine.can_transition_to("analyzing") is True
+
+        machine.current_state = "analyzing"
+        assert machine.can_transition_to("reporting") is True
+
+    def test_post_exploitation_to_analyzing_persists(self):
+        """post_exploit's re-dispatch to analysis persists through the DB."""
+        mock_db, mock_conn, mock_cursor = _mock_db()
+        mock_cursor.fetchone.return_value = ("post_exploitation",)
+
+        with patch("state_machine.get_db", return_value=mock_db):
+            machine = EngagementStateMachine(
+                TEST_ENGAGEMENT_ID, current_state="post_exploitation"
+            )
+            machine.transition(
+                "analyzing",
+                "Post-exploitation complete — re-dispatching LLM analysis",
+            )
+
+        assert machine.current_state == "analyzing"
+        # Verify the transition history INSERT used the engagement_states table
+        insert_call = mock_cursor.execute.call_args_list[1]
+        assert "engagement_states" in insert_call[0][0]
+        assert mock_conn.commit.called
+
     def test_transition_persists_state_and_budget(self):
         """Test transition executes both INSERT and UPDATE SQL"""
         mock_db, mock_conn, mock_cursor = _mock_db()

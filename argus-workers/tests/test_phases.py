@@ -128,6 +128,14 @@ class TestTransitions:
         assert "recon" in TRANSITIONS["analyzing"]
         assert "scanning" in TRANSITIONS["analyzing"]
 
+    def test_exploitation_to_post_exploitation(self):
+        """Exploitation phase may dispatch post_exploit (attack-chain path)."""
+        assert "post_exploitation" in TRANSITIONS["exploitation"]
+
+    def test_post_exploitation_to_analyzing(self):
+        """Post-exploitation may re-dispatch analysis for another round."""
+        assert "analyzing" in TRANSITIONS["post_exploitation"]
+
     def test_all_phases_have_transitions_defined(self):
         phase_ids = {p.id for p in PHASES}
         transition_keys = set(TRANSITIONS.keys())

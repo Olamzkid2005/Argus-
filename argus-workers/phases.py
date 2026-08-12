@@ -155,9 +155,15 @@ TRANSITIONS: dict[str, list[str]] = {
     "recon": ["source_analysis", "scanning", "failed", "paused"],
     "source_analysis": ["scanning", "failed", "paused"],
     "scanning": ["analyzing", "exploitation", "failed", "paused"],
-    "exploitation": ["analyzing", "reporting", "failed", "paused"],
+    # Exploitation→post_exploitation: scan.py dispatches run_post_exploit
+    # after an attack chain is detected (state set to "exploitation").
+    "exploitation": ["analyzing", "post_exploitation", "reporting", "failed", "paused"],
+    # Analyzing→post_exploitation: analyze.py dispatches run_post_exploit
+    # when foothold findings exist (state set to "post_exploitation").
+    # post_exploitation→analyzing: post_exploit.py re-dispatches analysis
+    # after exploitation so new findings get LLM analysis before reporting.
     "analyzing": ["post_exploitation", "reporting", "recon", "scanning", "failed", "paused"],
-    "post_exploitation": ["pivot", "scanning", "reporting", "failed", "paused"],
+    "post_exploitation": ["analyzing", "pivot", "scanning", "reporting", "failed", "paused"],
     "pivot": ["scanning", "post_exploitation", "failed", "paused"],
     "reporting": ["complete", "failed", "paused"],
     "paused": ["recon", "scanning", "analyzing", "exploitation", "post_exploitation", "pivot", "reporting", "failed"],
