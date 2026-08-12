@@ -224,6 +224,44 @@ def _mcp_cache_key(name: str, arguments: dict | None) -> str:
     return hashlib.sha256(key_data.encode()).hexdigest()[:16]
 
 
+# Legacy TS-side phase names → canonical ReActAgent phase keys.
+_PHASE_NAME_MAP = {
+    "reconnaissance": "recon",
+    "scan": "scan",
+    "vulnerability_scanning": "scan",
+    "deep_scan": "deep_scan",
+    "deep": "deep_scan",
+    "repo_scan": "repo_scan",
+    "analyze": "analyze",
+    "report": "report",
+}
+
+
+def _canonical_phase_name(phase: str) -> str:
+    """Normalize a (possibly legacy) phase name to its canonical key."""
+    return _PHASE_NAME_MAP.get(phase, phase)
+
+
+class _PlanningOnlyToolRunner:
+    """Stand-in ToolRunner used by MCP replanning.
+
+    Replanning only SELECTS the next tool — execution is handled by the TS
+    executor via handle_execute. This runner lets ReActAgent.create_for_phase
+    register the phase's real tool definitions (so the LLM branch of
+    plan_next_action has valid tools to choose from) without executing
+    anything.
+    """
+
+    def run(self, tool_name: str, args: list | None = None, timeout: int = 300):
+        from agent import AgentResult
+
+        return AgentResult(
+            tool=tool_name,
+            success=False,
+            error="planning-only registration — execution handled by executor",
+        )
+
+
 class MCPServer:
     """
     MCP Protocol Server for tool execution.
@@ -1018,19 +1056,7 @@ class MCPServer:
         if not tool_order:
             from tools.assessment_orchestrator import PHASE_PIPELINE_TOOLS
 
-            phase = session.phase
-            # Map legacy phase names to canonical keys
-            phase_map = {
-                "reconnaissance": "recon",
-                "scan": "scan",
-                "vulnerability_scanning": "scan",
-                "deep_scan": "deep_scan",
-                "deep": "deep_scan",
-                "repo_scan": "repo_scan",
-                "analyze": "analyze",
-                "report": "report",
-            }
-            canonical = phase_map.get(phase, phase)
+            canonical = _canonical_phase_name(session.phase)
             tool_order = list(PHASE_PIPELINE_TOOLS.get(canonical, []))
 
         return {
@@ -1143,19 +1169,66 @@ class MCPServer:
         context = "\n".join(context_parts)
         task = f"{session.phase}: {session.target}"
 
-        registry = ToolRegistry()
-        agent = ReActAgent(
-            registry,
-            llm_client=llm_client,
-            engagement_id=getattr(session, "engagement_id", None),
-            phase=session.phase,
-        )
+        # Register the phase's tools so the LLM branch of plan_next_action has
+        # valid tools to choose from: _call_llm_for_action lists tools via
+        # registry.list_tools() and rejects anything not in the registry via
+        # registry.get_tool(). A bare registry would force the deterministic
+        # fallback every time even with an LLM available. The phase name is
+        # normalized so legacy TS names (e.g. "vulnerability_scanning") map to
+        # canonical keys and still register their tools.
+        phase = _canonical_phase_name(session.phase)
+        try:
+            agent = ReActAgent.create_for_phase(
+                phase=phase,
+                tool_runner=_PlanningOnlyToolRunner(),
+                llm_client=llm_client,
+                engagement_id=getattr(session, "engagement_id", None),
+            )
+        except Exception as e:
+            logger.debug(
+                "create_for_phase failed for replan (phase=%s): %s — using bare agent",
+                phase,
+                e,
+            )
+            registry = ToolRegistry()
+            agent = ReActAgent(
+                registry,
+                llm_client=llm_client,
+                engagement_id=getattr(session, "engagement_id", None),
+                phase=phase,
+            )
+
+        # The LLM branch of plan_next_action() is gated on recon_context —
+        # without one the agent silently falls back to deterministic ordering
+        # and the interactive replan loop never actually reasons over
+        # observations. Load the persisted ReconContext when available;
+        # otherwise build a minimal one from the session target so the LLM
+        # branch still engages.
+        recon_context = None
+        _engagement_id = getattr(session, "engagement_id", None)
+        if _engagement_id:
+            try:
+                from tasks.utils import load_recon_context
+
+                recon_context = load_recon_context(_engagement_id)
+            except Exception as e:
+                logger.debug(
+                    "Failed to load recon context for replan (engagement=%s): %s",
+                    _engagement_id,
+                    e,
+                )
+                recon_context = None
+        if recon_context is None and getattr(session, "target", None):
+            from models.recon_context import ReconContext
+
+            recon_context = ReconContext(target_url=session.target)
 
         try:
             action = agent.plan_next_action(
                 task=task,
                 context=context,
                 tried_tools={ex.tool for ex in session.tool_history},
+                recon_context=recon_context,
             )
         except Exception as e:
             logger.warning("ReActAgent replan failed: %s", e)
