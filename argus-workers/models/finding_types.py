@@ -16,6 +16,7 @@ TYPE_TO_FAMILY: dict[str, str] = {
     "TIME_BASED_SQLI": "SQLI",
     "TIME_BASED_SQL_INJECTION": "SQLI",
     "ERROR_SQLI": "SQLI",
+    "DATA_EXFILTRATION": "SQLI",
     # Cross-Site Scripting
     "REFLECTED_XSS": "XSS",
     "STORED_XSS": "XSS",
