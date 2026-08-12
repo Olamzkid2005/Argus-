@@ -8,6 +8,7 @@ import contextlib
 import logging
 import os
 import select
+import shutil
 import site
 import subprocess
 import sys
@@ -605,6 +606,26 @@ class ToolRunner:
         with self.span_recorder.span(ExecutionSpan.SPAN_TOOL_EXECUTION, {"tool": tool}):
             # Resolve tool binary path for tools not in locked PATH
             tool_path = self._resolve_tool_path(tool)
+
+            # Fail LOUDLY when the binary is missing instead of letting
+            # subprocess raise a confusing FileNotFoundError that surfaces as a
+            # generic EXCEPTION result. NOT_INSTALLED is a fatal status, so the
+            # agent and operator both see the real cause + an install hint.
+            if not os.path.isfile(tool_path) and shutil.which(tool_path) is None:
+                logger.error(
+                    "Tool %r is not installed (resolved=%r) — refusing to run. "
+                    "Install via 'python scripts/install_tools.py' or ensure the "
+                    "binary is on the worker PATH.",
+                    tool,
+                    tool_path,
+                )
+                result = UnifiedToolResult.not_installed(
+                    tool,
+                    command=[tool_path] + args,
+                    target=self._extract_target(args) or "",
+                )
+                result.mark_finished()
+                return result
 
             try:
                 # Execute with locked environment
