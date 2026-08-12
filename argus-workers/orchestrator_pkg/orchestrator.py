@@ -851,6 +851,93 @@ class Orchestrator:
             "trace_id": get_trace_id(),
         }
 
+    @staticmethod
+    def _merge_swarm_findings(
+        existing: list[dict], swarm_findings: list[dict]
+    ) -> None:
+        """Append swarm findings, skipping ones the deterministic pass already found.
+
+        Dedupes on (type, endpoint, source_tool) so tools the safety net
+        already ran (arjun/jwt_tool/web_scanner) don't double-count when the
+        swarm re-executes them. Mutates ``existing`` in place.
+        """
+        existing_fps = {
+            (
+                f.get("type", ""),
+                f.get("endpoint", ""),
+                f.get("source_tool", ""),
+            )
+            for f in existing
+        }
+        for sf in swarm_findings:
+            fp = (
+                sf.get("type", ""),
+                sf.get("endpoint", ""),
+                sf.get("source_tool", ""),
+            )
+            if fp in existing_fps:
+                continue
+            existing_fps.add(fp)
+            existing.append(sf)
+
+    def _run_swarm_specialists(
+        self,
+        recon_context,
+        aggressiveness: str,
+        auth_config: dict | None = None,
+        bug_bounty_mode: bool = False,
+    ) -> list[dict]:
+        """Run the parallel specialist swarm (IDOR/Auth/API) at high/extreme.
+
+        The swarm is signal-gated: each specialist only activates when recon
+        findings suggest its domain. It is feature-flagged
+        (``ARGUS_FF_swarm_specialists``), bounded by a wall-clock timeout,
+        and fully non-fatal — any failure degrades to skipping the swarm.
+        """
+        if aggressiveness not in ("high", "extreme"):
+            return []
+        if not recon_context:
+            return []
+        from feature_flags import is_enabled as _ff_enabled
+
+        if not _ff_enabled("swarm_specialists", default=True):
+            return []
+        llm_client = getattr(self, "llm_client", None)
+        if not llm_client or not llm_client.is_available():
+            return []
+        try:
+            from agent.swarm import SwarmOrchestrator
+            from llm_service import LLMService
+
+            llm_service = LLMService(llm_client=llm_client)
+            swarm = SwarmOrchestrator(
+                llm_service=llm_service,
+                tool_runner=self.tool_runner,
+                recon_context=recon_context,
+                engagement_id=self.engagement_id,
+                decision_repo=getattr(self, "decision_repo", None),
+                auth_config=auth_config,
+                bug_bounty_mode=bug_bounty_mode,
+            )
+            swarm_findings, _tools = swarm.run(timeout=600)
+            normalized = []
+            for f in swarm_findings:
+                norm = self._normalize_finding(
+                    f, f.get("source_tool") or f.get("tool") or "swarm"
+                )
+                if norm:
+                    normalized.append(norm)
+            if normalized:
+                logger.info(
+                    "Swarm specialists produced %d finding(s) for engagement %s",
+                    len(normalized),
+                    self.engagement_id,
+                )
+            return normalized
+        except Exception as e:
+            logger.warning("Swarm specialists skipped (non-fatal): %s", e)
+            return []
+
     def _run_scan_with_fallback(
         self,
         targets: list[str],
@@ -944,6 +1031,20 @@ class Orchestrator:
                 norm = self._normalize_finding(f, f.get("source_tool", "fallback"))
                 if norm:
                     findings.append(norm)
+
+            # ── Specialist swarm pass (high/extreme aggressiveness) ──
+            # Signal-gated parallel specialists (IDOR/Auth/API). Non-fatal:
+            # any failure degrades to skipping the swarm entirely. Findings
+            # are deduped against the deterministic list so tools the safety
+            # net already ran (arjun/jwt_tool/web_scanner) don't double-count.
+            swarm_findings = self._run_swarm_specialists(
+                recon_context,
+                aggressiveness,
+                auth_config=auth_config,
+                bug_bounty_mode=bug_bounty_mode,
+            )
+            self._merge_swarm_findings(findings, swarm_findings)
+
             slog.tool_complete(
                 "scan_with_fallback", success=True, findings=len(findings)
             )

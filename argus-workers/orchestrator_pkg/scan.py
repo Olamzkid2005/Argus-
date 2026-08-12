@@ -297,6 +297,49 @@ _streaming_tools: dict[str, dict] = {
     "sqlmap": {"flag": "--output-format=json", "json_lines": False, "batch_json": True},
 }
 
+_sqlmap_json_support: bool | None = None
+
+
+def _sqlmap_supports_json() -> bool:
+    """Return True if the installed sqlmap accepts --output-format=json.
+
+    Upstream sqlmap (git) supports JSON output; some pip-packaged builds
+    (e.g. 1.10.3#pip) reject ``--output-format=json``/``--json-output`` and
+    print a usage dump to stdout while exiting 0, which used to make sqlmap
+    silently produce ZERO findings in the deterministic pipeline. Probe once
+    per process and cache the result.
+    """
+    global _sqlmap_json_support
+    if _sqlmap_json_support is not None:
+        return _sqlmap_json_support
+    try:
+        import re
+        import subprocess
+
+        # Resolve through the same augmented-PATH mechanism ToolRunner uses
+        # (venv/bin, ~/go/bin, /opt/homebrew/bin, ...) so the probe matches
+        # the binary that would actually run.
+        from tools.tool_utils import resolve_tool_binary
+
+        sqlmap_path = resolve_tool_binary("sqlmap")
+        if sqlmap_path is None:
+            _sqlmap_json_support = False
+            return False
+        probe = subprocess.run(
+            [sqlmap_path, "--help"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        combined = (probe.stdout or "") + (probe.stderr or "")
+        _sqlmap_json_support = bool(
+            re.search(r"json-output|output-format", combined, re.IGNORECASE)
+        )
+    except Exception:
+        _sqlmap_json_support = False
+    logger.info("sqlmap JSON output support detected: %s", _sqlmap_json_support)
+    return _sqlmap_json_support
+
 
 def _parse_line_buffer(ctx, tool_name, line_buffer, all_findings):
     """Parse accumulated JSON output from a streaming tool (e.g. sqlmap batch JSON)."""
@@ -737,42 +780,59 @@ def execute_scan_tools(
         # Build sqlmap command
         if "sqlmap" not in _skip and not _budget_exceeded():
             _tool_count += 1
-            import hashlib
+            if _sqlmap_supports_json():
+                # Upstream sqlmap (git) supports JSON output.
+                import hashlib
 
-            _target_slug = hashlib.md5(
-                target.encode(), usedforsecurity=False
-            ).hexdigest()[:8]
-            sandbox = (
-                ctx.tool_runner.sandbox_dir
-                if hasattr(ctx.tool_runner, "sandbox_dir")
-                and ctx.tool_runner.sandbox_dir
-                else None
-            )
-            if sandbox:
-                sandbox.mkdir(parents=True, exist_ok=True)
-                sqlmap_out = str(sandbox / "tmp" / f"sqlmap_{_target_slug}.json")
-            else:
-                import os
-                import tempfile
-
-                sqlmap_out = os.path.join(
-                    tempfile.gettempdir(), f"sqlmap_{_target_slug}.json"
+                _target_slug = hashlib.md5(
+                    target.encode(), usedforsecurity=False
+                ).hexdigest()[:8]
+                sandbox = (
+                    ctx.tool_runner.sandbox_dir
+                    if hasattr(ctx.tool_runner, "sandbox_dir")
+                    and ctx.tool_runner.sandbox_dir
+                    else None
                 )
-                _temp_outputs.append(sqlmap_out)
-            sqlmap_cmd = [
-                "-u",
-                target,
-                "--output-format=json",
-                "--json-output",
-                sqlmap_out,
-            ]
+                if sandbox:
+                    sandbox.mkdir(parents=True, exist_ok=True)
+                    sqlmap_out = str(sandbox / "tmp" / f"sqlmap_{_target_slug}.json")
+                else:
+                    import os
+                    import tempfile
+
+                    sqlmap_out = os.path.join(
+                        tempfile.gettempdir(), f"sqlmap_{_target_slug}.json"
+                    )
+                    _temp_outputs.append(sqlmap_out)
+                sqlmap_cmd = [
+                    "-u",
+                    target,
+                    "--output-format=json",
+                    "--json-output",
+                    sqlmap_out,
+                ]
+            else:
+                # pip-packaged sqlmap builds (e.g. 1.10.3#pip) reject
+                # --output-format=json/--json-output and exit 0 with a usage
+                # dump, which used to silently produce ZERO findings. Run in
+                # text mode instead; SqlmapParser._parse_text handles it.
+                sqlmap_cmd = ["-u", target, "--batch"]
             sqlmap_timeout = TOOL_TIMEOUT_LONG
             if agg == "high":
                 sqlmap_cmd.extend(["--level", "3", "--risk", "2"])
                 sqlmap_timeout = 600
+                if not _sqlmap_supports_json():
+                    # Bounded schema enumeration (database_exfiltration capability)
+                    sqlmap_cmd.extend(["--dbs", "--tables"])
             elif agg == "extreme":
-                sqlmap_cmd.extend(["--level", "5", "--risk", "3", "--all"])
+                sqlmap_cmd.extend(["--level", "5", "--risk", "3"])
                 sqlmap_timeout = 1800
+                if not _sqlmap_supports_json():
+                    # Bounded data exfiltration: enumerate and dump up to
+                    # --stop 50 entries per table (limitStop bounds each table).
+                    sqlmap_cmd.extend(["--dbs", "--tables", "--dump", "--stop", "50"])
+                else:
+                    sqlmap_cmd.append("--all")
             scan_jobs.append(("sqlmap", sqlmap_cmd, sqlmap_timeout))
 
         # Build jwt_tool command
@@ -872,6 +932,11 @@ def execute_scan_tools(
                 futures = {}
                 for name, args, timeout in scan_jobs:
                     config = _streaming_tools.get(name)
+                    # pip sqlmap builds reject the JSON flags — route sqlmap
+                    # through the non-streaming path so ctx.parser.parse()
+                    # (SqlmapParser._parse_text) handles the text output.
+                    if name == "sqlmap" and not _sqlmap_supports_json():
+                        config = None
                     if config:
                         line_buffer: list[str] | None = [] if config.get("batch_json") else None
                         on_line = _make_on_tool_line(
