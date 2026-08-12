@@ -81,6 +81,22 @@ def run_scan(
                 "Failed to emit thinking update for engagement=%s", engagement_id
             )
 
+    # ── Binary provisioning visibility: warn loudly about missing tools ──
+    # Without the external binaries the agent's tool calls fail; make that
+    # operator-visible at scan start instead of silently degrading.
+    try:
+        _missing_tools = _check_missing_phase_tools("scan")
+        if _missing_tools:
+            logger.warning(
+                "MISSING TOOL BINARIES (%d): %s. Agent tool calls for these will "
+                "fail loudly with NOT_INSTALLED status. Install via: "
+                "python scripts/install_tools.py",
+                len(_missing_tools),
+                ", ".join(sorted(_missing_tools)),
+            )
+    except Exception as _tools_err:
+        logger.debug("Tool availability check failed (non-fatal): %s", _tools_err)
+
     mode = "agent" if agent_mode else "deterministic"
     slog.phase_header("SCAN PHASE", targets=f"{len(targets)} target(s)", mode=mode)
 
@@ -167,6 +183,46 @@ def run_scan(
                     "Attack graph chain detection failed (non-fatal): %s", _chain_err
                 )
 
+        # ── Gap closure: automatic deep-scan trigger ──
+        # When the scan found high-value endpoints (CRITICAL/HIGH findings) but
+        # no exploitable chain, deepen the engagement against exactly those
+        # endpoints before analysis. tasks.scan.deep_scan chains into analyze
+        # itself, so we return here without dispatching analyze. The budget
+        # flag prevents re-triggering on steering re-invocations.
+        if not _needs_exploitation and not budget.get("deep_scan_dispatched"):
+            try:
+                _priority_endpoints = _detect_high_value_endpoints(
+                    engagement_id, ctx.db_conn_string
+                )
+            except Exception as _deep_err:
+                logger.warning(
+                    "High-value endpoint detection failed (non-fatal): %s", _deep_err
+                )
+                _priority_endpoints = []
+            if _priority_endpoints:
+                budget["deep_scan_dispatched"] = True
+                slog.info(
+                    "High-value endpoint(s) detected — dispatching deep_scan: %s",
+                    _priority_endpoints[:3],
+                )
+                try:
+                    _deep_task = app.send_task(
+                        "tasks.scan.deep_scan",
+                        args=[engagement_id, _priority_endpoints, budget, ctx.trace_id],
+                    )
+                    result["deep_scan_dispatched"] = True
+                    result["deep_scan_task_id"] = _deep_task.id
+                    result["next_state"] = "deep_scan"
+                    slog.dispatch("deep_scan", task_id=_deep_task.id)
+                    return result
+                except Exception as e:
+                    logger.exception(
+                        "Failed to enqueue deep_scan for engagement=%s: %s",
+                        engagement_id,
+                        e,
+                    )
+                    # Fall through to the normal analyze dispatch below.
+
         if _needs_exploitation:
             # Insert exploitation phase before analysis
             try:
@@ -249,6 +305,54 @@ def run_scan(
             result["reason"] = "analyze_dispatch_failed"
 
         return result
+
+
+def _detect_high_value_endpoints(
+    engagement_id: str, db_conn_string: str | None
+) -> list[str]:
+    """Return CRITICAL/HIGH-severity endpoints that warrant a deep scan.
+
+    Loads findings from the database and uses IntelligenceEngine's
+    high-value detection so the deepening decision is signal-driven rather
+    than operator-steered. Returns [] when nothing warrants deepening.
+    """
+    from database.repositories.finding_repository import FindingRepository
+    from intelligence_engine import IntelligenceEngine
+
+    if not db_conn_string:
+        return []
+    repo = FindingRepository(db_conn_string)
+    findings, _total = repo.get_findings_by_engagement(engagement_id, limit=500)
+    if not findings:
+        return []
+    engine = IntelligenceEngine()
+    if not engine.detect_high_value_targets(findings):
+        return []
+    return engine.get_priority_endpoints(findings)
+
+
+def _check_missing_phase_tools(phase: str) -> list[str]:
+    """Return tool names for *phase* whose binaries are unavailable.
+
+    Used to warn loudly at scan start so operators notice missing external
+    binaries instead of the agent silently degrading to fallback scanners.
+    """
+    from tool_core.registry import ToolRegistry
+    from tool_definitions import get_tools_for_phase
+
+    try:
+        tools = get_tools_for_phase(phase)
+    except Exception:
+        return []
+    if not tools:
+        return []
+    registry = ToolRegistry()
+    missing = []
+    for tool in tools:
+        name = getattr(tool, "name", None)
+        if name and not registry.is_available(name):
+            missing.append(name)
+    return missing
 
 
 @app.task(bind=True, name="tasks.scan.deep_scan", soft_time_limit=2400, time_limit=3600)
