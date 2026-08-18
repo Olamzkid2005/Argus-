@@ -231,3 +231,135 @@ def worker_health_check(self):
         "hostname": socket.gethostname(),
         "timestamp": now.isoformat(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Materialized-view refresh (migration 007)
+# ---------------------------------------------------------------------------
+# All three views have unique indexes, so CONCURRENTLY refresh is safe.
+_MATERIALIZED_VIEWS = (
+    "mv_org_dashboard",
+    "mv_engagement_findings",
+    "mv_tool_performance",
+)
+
+
+@app.task(bind=True, name="tasks.maintenance.refresh_views")
+def refresh_views(self):
+    """
+    Refresh materialized views used by dashboard and reporting queries.
+
+    Runs every 5 minutes via Celery Beat.  Uses ``CONCURRENTLY`` so that
+    queries against the views are never blocked.  Each view must have a
+    unique index (created in migration 007).
+
+    Note: ``REFRESH MATERIALIZED VIEW CONCURRENTLY`` cannot run inside a
+    transaction block, so the connection is switched to autocommit for the
+    duration of the refresh.
+    """
+    refreshed: list[str] = []
+    errors: list[dict[str, str]] = []
+    try:
+        from database.connection import get_db
+
+        db = get_db()
+        conn = db.get_connection()
+        try:
+            # CONCURRENTLY refresh must not be inside a transaction.
+            conn.autocommit = True
+            cursor = conn.cursor()
+            try:
+                for view_name in _MATERIALIZED_VIEWS:
+                    try:
+                        cursor.execute(
+                            f"REFRESH MATERIALIZED VIEW CONCURRENTLY {view_name}"
+                        )
+                        refreshed.append(view_name)
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to refresh view %s: %s", view_name, exc
+                        )
+                        errors.append({"view": view_name, "error": str(exc)})
+            finally:
+                cursor.close()
+        finally:
+            conn.autocommit = False
+            db.release_connection(conn)
+
+        return {
+            "status": "completed",
+            "refreshed": refreshed,
+            "errors": errors,
+        }
+    except Exception as e:
+        logger.error("refresh_views failed: %s", e)
+        return {"status": "error", "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Nuclei template updater (daily)
+# ---------------------------------------------------------------------------
+
+
+@app.task(bind=True, name="tasks.maintenance.update_nuclei_templates")
+def update_nuclei_templates(self, timeout: int = 120):
+    """
+    Update the local nuclei template cache so new CVEs are detected.
+
+    Runs daily via Celery Beat.  Wraps
+    ``tools.update_nuclei_templates.update_nuclei_templates``.
+    """
+    try:
+        from tools.update_nuclei_templates import (
+            get_template_count,
+        )
+        from tools.update_nuclei_templates import (
+            update_nuclei_templates as _do_update,
+        )
+
+        before = get_template_count()
+        success = _do_update(timeout=timeout)
+        after = get_template_count()
+        return {
+            "status": "completed",
+            "success": success,
+            "templates_before": before,
+            "templates_after": after,
+        }
+    except Exception as e:
+        logger.error("update_nuclei_templates task failed: %s", e)
+        return {"status": "error", "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Dead-Letter-Queue cleanup (every 12 h)
+# ---------------------------------------------------------------------------
+
+
+@app.task(bind=True, name="tasks.maintenance.cleanup_dlq")
+def cleanup_dlq(self, older_than_hours: int = 168):
+    """
+    Purge stale entries from the Dead Letter Queue.
+
+    Runs every 12 hours via Celery Beat.  Removes DLQ entries older than
+    the retention window (default 7 days / 168 hours) so the queue stays
+    bounded.  Redis TTL handles the sorted sets; this sweep also cleans
+    up the per-engagement indexes and the hash data store.
+    """
+    try:
+        from dead_letter_queue import get_dlq
+
+        purged = get_dlq().purge(older_than_hours=older_than_hours)
+        logger.info(
+            "DLQ cleanup: purged %d entries older than %dh",
+            purged,
+            older_than_hours,
+        )
+        return {
+            "status": "completed",
+            "purged": purged,
+            "older_than_hours": older_than_hours,
+        }
+    except Exception as e:
+        logger.error("cleanup_dlq failed: %s", e)
+        return {"status": "error", "error": str(e)}
