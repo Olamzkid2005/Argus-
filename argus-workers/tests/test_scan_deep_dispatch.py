@@ -28,6 +28,15 @@ from tasks.scan import (  # noqa: E402
 )
 
 _heavy_deps.stop()
+# Remove the contaminated tasks.scan module from sys.modules so that later
+# test files (e.g. test_full_scan_pipeline_e2e.py) re-import it fresh with
+# the real celery_app.  Without this, tasks.scan stays cached with
+# app = _mock_app (a plain lambda) and e2e tests see
+# "'function' object has no attribute 'run'".
+sys.modules.pop("tasks.scan", None)
+import tasks as _tasks_pkg  # noqa: E402
+
+_tasks_pkg.__dict__.pop("scan", None)
 
 
 class TestDetectHighValueEndpoints:
