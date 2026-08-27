@@ -327,6 +327,33 @@ jobs:
           retention-days: 14
           path: argus-workers/python-test-results.xml
 
+  collection-order-check:
+    name: Python Workers (collection-order randomized)
+    needs: [argus-workers-lint]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libpq-dev
+
+      - name: Install test dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt -q
+
+      - name: Run tests with randomized file collection order (3 iterations)
+        run: |
+          python scripts/randomize_test_order.py \
+            --iterations 3 \
+            -- -m "not requires_db and not requires_redis and not e2e and not docker" \
+            --timeout=120 -q
+
   python-tests-full:
     name: Python Workers (DB/Redis/E2E full suite)
     # Runs on schedule (nightly) and on workflow_dispatch to avoid blocking PRs
