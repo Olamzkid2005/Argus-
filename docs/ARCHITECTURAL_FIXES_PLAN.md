@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Argus Architectural Fixes Plan — Consolidated
 
 **Status:** Final, after codebase validation and design interview

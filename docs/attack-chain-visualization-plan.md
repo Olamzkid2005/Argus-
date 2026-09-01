@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Argus Attack Chain Visualization — Convergence Plan
 
 > **Inspired by:** `ai-surface`'s radial cluster map (`src/ai_surface/ui/app.js`, ~1,900 lines of vanilla SVG)

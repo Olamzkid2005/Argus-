@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Argus: Red Team Autonomy Gaps — Complete Audit
 
 All file paths and line numbers verified against the actual codebase.

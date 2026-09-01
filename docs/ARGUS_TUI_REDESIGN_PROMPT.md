@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Argus TUI Redesign Prompt
 
 > Use this prompt with the `premium-ui-architect` or `general` agent to redesign the Argus Terminal UI (TUI).

@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Empty Directories in the Codebase
 
 These directories exist but are intentionally empty:

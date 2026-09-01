@@ -1,6 +1,9 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Argus 70-Item Audit Checklist — Verification Report
 
 > **Date:** 2026-07-16  
+> **Current-status correction (2026-09-01):** This dated report is not a current completion ledger. Current verification found stale completion claims, 68 tool-definition YAML files, 76 registered Python tools, and 3 collection-order failures in the focused E2E batch (`tasks.analyze` cache contamination).
 > **Method:** Codebase search and file review across 20+ search queries, 40+ file reads  
 > **Status per item:** ✅ Confirmed | ⚠️ Partially Confirmed | ❌ Refuted | 🔍 Inconclusive
 

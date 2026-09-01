@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Argus — Failure-Mode & Pre-Flight Checklist
 
 > **Purpose:** An exhaustive checklist of everything that can go wrong or prevent Argus from working properly. Use it before running `argus`, `argus assess`, `make docker-up`, `make test-v5`, or before a release. Walk top-to-bottom for a full pre-flight; jump to a section when debugging a specific failure.

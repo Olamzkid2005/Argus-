@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Autonomous Red Team — Implementation Roadmap
 
 **Date:** 2026-07-03 (Comprehensive Audit)
@@ -16,7 +18,7 @@
 | 4. Infrastructure Resilience | 5 sub-phases | 15 of 15 | ✅ Complete |
 | 5. DB Schema Alignment | 2 sub-phases | 8 of 8 | ✅ Complete |
 
-> **Total: 50 of 50 items implemented.** All phases complete across all 7 workstreams.
+> **Historical total:** 50 of 50 items were recorded as implemented at the time of this roadmap update. This is not the current readiness status. Current verification still identifies unresolved autonomy, integration, operational, and environment-dependent test gaps; see `autonomous-red-team-readiness-review.md` and `autonomy-blockers.md`.
 
 ---
 

@@ -1,8 +1,10 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Implementation Plan: Professional Security UI
 
 ## Implementation Status (audited live — June 7, 2026)
 
-Overall: **31/31 steps complete (100%)** — all phases fully implemented and verified.
+Overall: **Historical plan status — not a current completion ledger.** The original 31-step plan recorded all steps complete at the time of its update, but current verification finds partial/deferred TUI, reporting, fixture, and autonomy work. Use source/configuration/tests to determine present status.
 
 | Phase | Step | Description | Status |
 |-------|------|-------------|--------|
@@ -108,8 +110,8 @@ tool-definitions.yaml           ← must list nuclei
 | Asset | File | Status |
 |-------|------|--------|
 | Python YAML tool definitions (47 tools) | `argus-workers/tools/definitions/*.yaml` | ✅ Single source candidate — full metadata, args, capabilities |
-| Python tool_definitions.py (68 tools) | `argus-workers/tool_definitions.py` | ❌ Should be generated from YAML, not hand-maintained |
-| TypeScript tool-definitions.yaml (33 tools) | `Argus-Tui/.../workflows/tool-definitions.yaml` | ❌ Should be generated from YAML, not hand-maintained |
+| Python tool_definitions.py (76 registered tools at 2026-09-01) | `argus-workers/tool_definitions.py` | Layered registry; generated definitions plus intentional inline registrations |
+| TypeScript tool-definitions.yaml | `Argus-Tui/.../workflows/tool-definitions.yaml` | Independent planning registry; validate overlap rather than generate blindly |
 | MCP Server (stdio JSON-RPC) | `argus-workers/mcp_server.py` | ✅ Already reads YAML directly — no change needed |
 | MCP Bridge (TS → Python) | `Argus-Tui/.../bridge/mcp-client.ts` | ✅ JSON-RPC client with circuit breaker |
 | Workflow YAMLs (bola, xss, privEsc, etc.) | `Argus-Tui/.../workflows/` | ⚠️ Use capabilities with zero tools mapped |

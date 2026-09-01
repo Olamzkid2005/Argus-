@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Argus Tool System — Complete Reference
 
 ## Overview
@@ -16,10 +18,10 @@ Argus has **two parallel tool systems** — a deterministic planner on the TypeS
 │  PYTHON SIDE             │   │  TYPESCRIPT SIDE          │
 │                          │   │                          │
 │  tools/definitions/*.yaml│   │  tool-definitions.yaml    │
-│  (47 tools, full detail) │   │  (33 tools, planner use) │
+│  (Python YAML inventory; count verified separately) │   │  (TS planner inventory; independent schema) │
 │        ↓                 │   │        ↓                 │
 │  tool_definitions.py     │   │  Planner selects tools   │
-│  (68 tools, all phases)  │   │  by capability match     │
+│  (Python registered tools; 76 verified 2026-09-01) │   │  by capability match     │
 │        ↓                 │   │        ↓                 │
 │  MCP Server (stdio)      │   │  Executor calls MCP      │
 │  - list_tools            │   │  via JSON-RPC over stdio │
@@ -291,7 +293,7 @@ The TypeScript side spawns `mcp_server.py` as a subprocess and communicates via 
 
 **Location:** `Argus-Tui/packages/opencode/src/argus/workflows/tool-definitions.yaml`
 
-This is a **separate, smaller** file (33 tools) that the planner uses to map capabilities to tools. It does NOT include execution details (commands, args, parameters) — only capability mappings and scoring.
+This is a **separate planner registry** whose inventory is independently maintained; it maps capabilities to tools. It does NOT include execution details (commands, args, parameters) — only capability mappings and scoring.
 
 ```yaml
 - name: nuclei
@@ -399,7 +401,7 @@ User runs: /assess https://example.com
 2. bridge.agentPlan({target, phase, techStack, previousFindings, executedTools})
    → Python ReActAgent receives context
    → ReActAgent builds prompt with:
-        - Full tool list from tool_definitions.py (68 tools, with descriptions)
+        - Full tool list from tool_definitions.py (76 registered tools verified 2026-09-01, with descriptions)
         - Current phase capabilities
         - What's already been run
         - What findings exist so far

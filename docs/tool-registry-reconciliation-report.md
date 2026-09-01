@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Tool-Registry Reconciliation Report
 
 **Investigating the alleged "duplicate tool registries" in the Argus codebase**
@@ -37,7 +39,7 @@ Every tool definition, regardless of origin, ends up in this single dict. It is 
 
 | Component | Location |
 |---|---|
-| YAML source files | `argus-workers/tools/definitions/*.yaml` (67 files, 1 per tool) |
+| YAML source files | `argus-workers/tools/definitions/*.yaml` (68 files verified 2026-09-01, 1 per tool) |
 | Generator script | `argus-workers/scripts/generate_tool_defs.py` |
 | Generated output | `argus-workers/_generated_tools.py` |
 | Registrations | 65 tool definitions via `_register()` calls |
@@ -124,6 +126,8 @@ The comments in `tool_definitions.py` confirm this is by design:
 | Registry class | `Argus-Tui/packages/opencode/src/argus/workflows/tool-registry.ts` |
 | YAML data file | `Argus-Tui/packages/opencode/src/argus/workflows/tool-definitions.yaml` |
 | Workflow YAMLs | Same directory: `full_assessment.yaml`, `quick_scan.yaml`, `xss.yaml`, etc. |
+
+> Earlier versions of this report stated that these TypeScript files were absent. That statement is stale; they are present in the current checkout.
 
 ### Schema Difference: TS vs Python
 

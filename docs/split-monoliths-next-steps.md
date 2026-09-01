@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # ✅ Complete: Monolithic Files Split
 
 All three monolithic files plus the optional bridge refactoring have been split successfully. Every change is verified against the full test suite with zero regressions.

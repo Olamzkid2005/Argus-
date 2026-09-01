@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Tool Registry Investigation: Findings
 
 **Date:** 2026-07-20  
@@ -18,11 +20,11 @@ After file-by-file investigation, the Python-side tool-registry is an
 
 ```
 Layer 1:  YAML source of truth
-          tools/definitions/*.yaml  (65 files)
+          tools/definitions/*.yaml  (68 files verified 2026-09-01)
           │
           ▼ (scripts/generate_tool_defs.py)
 Layer 2:  Auto-generated Python
-          _generated_tools.py  (1155 lines, 60 tools)
+          _generated_tools.py  (generated output; counts are not a stable current metric)
           │
 Layer 3:  from _generated_tools import *  (line 210)
           + 60 inline _register() calls that can override generated defs
@@ -88,9 +90,7 @@ tool registry — it reads from Layer 3.
 
 The docstring references `Argus-Tui/packages/opencode/src/argus/workflows/tool-registry.ts`
 as the TS-side independent registry for planning metadata (capabilities, scoring,
-auth gating). **This file does not exist in this checkout.** No YAML files
-exist in the `Argus-Tui` directory either. The TS-side registry may be from a
-different branch or may not have been implemented in this version.
+auth gating). The TypeScript-side registry and YAML exist in this checkout. Older wording in this report that says these files are absent is stale; current paths are under `Argus-Tui/packages/opencode/src/argus/workflows/`.
 
 ## Conclusion: NOT a Duplicate Registry Problem
 

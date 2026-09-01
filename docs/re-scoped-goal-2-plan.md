@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Re-Scoped Goal 2: Workflow Planning & Mid-Flight Adaptation
 
 **Correcting the Strengthening Plan's Tier 1.1, 1.3, and 2.2 based on actual codebase architecture.**

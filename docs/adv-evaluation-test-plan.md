@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Adversarial Evaluation Test Plan — Item 64
 
 > **Objective:** Evaluate Argus's resilience against actively defending targets (WAF, rate limiting, honeypots, deception)

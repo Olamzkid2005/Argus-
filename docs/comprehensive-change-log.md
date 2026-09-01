@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Comprehensive Change Log — Argus Platform> **Date:** 2026-07-22
 > **Baseline:** **1,115+ Python tests passing** + **17/17 TUI packages typecheck clean** + **0 xfail in core modules** 🎉
 > **Scope:** All sessions from initial onboarding through final audit

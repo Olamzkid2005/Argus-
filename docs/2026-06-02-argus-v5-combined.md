@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Argus V5 Design & Architecture Plan
 
 **Date:** 2026-06-02
@@ -1761,8 +1763,8 @@ _Last updated: 2026-06-04_
 
 | Phase | Tasks | Status | Completion Estimate |
 |-------|-------|--------|-------------------|
-| **Phase 0: Architecture Gaps** | 19 tasks | ✅ Complete | 100% |
-| **Phase B: Backend Remediation** | 12 tasks | ✅ Complete | 100% |
+| **Phase 0: Architecture Gaps** | 19 tasks | Historical status — reverify | Not a current baseline |
+| **Phase B: Backend Remediation** | 12 tasks | Historical status — reverify | Not a current baseline |
 | **Phase 1: Foundation** | 5 tasks | ✅ Complete | 100% |
 | **Phase 2: Core Modules** | 6 tasks | ✅ Complete | 100% |
 | **Phase 3: CLI Integration** | 6 tasks | ✅ Complete | 100% |
@@ -1810,4 +1812,4 @@ _Last updated: 2026-06-04_
 
 ### Completion Status
 
-**All 51 tasks across all phases are complete.** The V5 implementation matches the full design specification in this document.
+**Historical completion claim:** The V5 implementation was recorded as complete at the time of this document's final update. It does not match the current checkout in every respect: some planned TUI components, full integration paths, and operational checks remain partial or deferred. Verify current behavior against source and tests before treating any task as complete.

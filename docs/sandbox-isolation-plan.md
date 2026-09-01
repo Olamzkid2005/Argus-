@@ -1,3 +1,5 @@
+> **Current-status notice (verified 2026-09-01):** This document is a dated decision, plan, audit, or historical record. Its completion claims are not a current implementation guarantee; current source, configuration, and tests are authoritative.
+
 # Sandbox Isolation Plan — Subprocess → Docker/Container
 
 > **Objective:** Harden `chain_exploit_generator.py` and other subprocess-based tool execution against escape and resource exhaustion.
