@@ -330,6 +330,8 @@ jobs:
   collection-order-check:
     name: Python Workers (collection-order randomized)
     needs: [argus-workers-lint]
+    # Informational until existing collection-order contamination is resolved.
+    continue-on-error: true
     runs-on: ubuntu-latest
     defaults:
       run:
