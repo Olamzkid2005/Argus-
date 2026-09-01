@@ -27,6 +27,11 @@ import tasks.post_exploit as _pe_mod  # noqa: E402
 from tasks.post_exploit import _collect_pivot_targets  # noqa: E402
 
 _heavy_deps.stop()
+# Do not leave the mock-bound task module cached for later integration tests.
+sys.modules.pop("tasks.post_exploit", None)
+_tasks_pkg = sys.modules.get("tasks")
+if _tasks_pkg is not None:
+    _tasks_pkg.__dict__.pop("post_exploit", None)
 
 # NOTE: string-form patches like patch("tasks.post_exploit._target_in_scope")
 # are NOT used here — the dual sys.path layout (argus-workers/ and

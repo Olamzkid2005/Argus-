@@ -51,6 +51,11 @@ _heavy_deps_patcher.start()
 from orchestrator_pkg.orchestrator import Orchestrator
 
 _heavy_deps_patcher.stop()
+# Avoid retaining an orchestrator imported while OpenTelemetry is mocked.
+sys.modules.pop("orchestrator_pkg.orchestrator", None)
+_orchestrator_pkg = sys.modules.get("orchestrator_pkg")
+if _orchestrator_pkg is not None:
+    _orchestrator_pkg.__dict__.pop("orchestrator", None)
 
 
 def _finding(fid: str, severity: int) -> dict:
