@@ -37,6 +37,9 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
+# Import task modules after pytest fixtures are unavailable at collection; keep
+# the E2E tests' explicit patch.object calls as the dependency boundary.
+
 # ═══════════════════════════════════════════════════════════════════
 # Module-level mocks — applied to every test  (same pattern as
 # test_orchestrator_integration.py's mock_heavy_deps)
@@ -83,6 +86,14 @@ def mock_heavy_deps():
             "tools.tool_runner": MagicMock(),
         },
     ):
+        # Tests that import tasks.analyze with mocked Celery can leave a
+        # plain-function module attached to the tasks package. Evict that
+        # cached module before each E2E test so the active mocked dependencies
+        # determine a consistent task wrapper.
+        sys.modules.pop("tasks.analyze", None)
+        tasks_pkg = sys.modules.get("tasks")
+        if tasks_pkg is not None:
+            tasks_pkg.__dict__.pop("analyze", None)
         yield
 
 

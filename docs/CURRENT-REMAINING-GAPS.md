@@ -2,7 +2,7 @@
 
 > **Status:** Current gap register
 >
-> **Verified:** 2026-09-01
+> **Verified:** 2026-09-01 (after the collection-order and migration-test fixes)
 >
 > **Purpose:** Record the work that remains before Argus can honestly be described as fully autonomous, production-grade AI red-team pentesting software.
 >
@@ -12,13 +12,15 @@
 
 ### 1. Full test suite is not clean
 
-The last full Python worker-suite run reported:
+The prior full Python worker-suite run reported:
 
 - 4,908 passed
 - 55 skipped
 - 7 xfailed
 - 27 xpassed
 - 4 unexpected failures
+
+The formerly reported DB-context failure and three E2E failures now pass in targeted regression runs. A full-suite rerun is still required before this item can be marked closed.
 
 Three failures were collection-order contamination in the full-scan E2E tests:
 
@@ -32,7 +34,7 @@ Affected tests:
 - `test_chain_error_report_raises`
 - `test_full_pipeline_chain`
 
-The issue is cached `tasks.analyze` state after mocked imports. A focused batch also reproduced this intermittently: 76 passed and 3 failed.
+The E2E failures were caused by cached `tasks.analyze` state after mocked imports. Targeted cleanup now makes the affected regression set deterministic; the migration batch test also now clears cached rollout configuration.
 
 The fourth previously reported failure was:
 

@@ -9,7 +9,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ── Module-level mocks for OpenTelemetry and Celery ──
+# Keep OpenTelemetry isolated per test without replacing Celery or importing
+# tasks.analyze under a fake application. Import-time Celery replacement leaked
+# a plain-function task module into sys.modules and contaminated E2E tests.
 _otel = MagicMock()
 _otel.trace = MagicMock()
 _otel.trace.get_tracer.return_value = MagicMock()
@@ -28,43 +30,18 @@ _otel_sdk.trace.export = MagicMock()
 _otel.exporter = _otel_exporter
 _otel.sdk = _otel_sdk
 
-_mock_app = MagicMock()
-_mock_app.task = lambda **_kwargs: lambda f: f
-_mock_celery = type(sys)("celery_app")
-_mock_celery.app = _mock_app
+_ta_mod = None
+run_analysis = None
 
-_heavy_deps = patch.dict(
-    sys.modules, {
-        "opentelemetry": _otel, "opentelemetry.trace": _otel.trace,
-        "opentelemetry.exporter": _otel_exporter, "opentelemetry.exporter.otlp": _otel_otlp,
-        "opentelemetry.exporter.otlp.proto": _otel_proto,
-        "opentelemetry.exporter.otlp.proto.http": _otel_http,
-        "opentelemetry.exporter.otlp.proto.http.trace_exporter": _otel_http.trace_exporter,
-        "opentelemetry.sdk": _otel_sdk, "opentelemetry.sdk.resources": _otel_sdk.resources,
-        "opentelemetry.sdk.trace": _otel_sdk.trace,
-        "opentelemetry.sdk.trace.export": _otel_sdk.trace.export,
-        "celery_app": _mock_celery,
-    },
-)
-_heavy_deps.start()
-import tasks.analyze as _ta_mod
-from tasks.analyze import run_analysis
 
-_heavy_deps.stop()
+@pytest.fixture(autouse=True)
+def _load_task_module(_mocks):
+    global _ta_mod, run_analysis
+    import importlib
 
-# Restore the REAL tasks.analyze module (and the `tasks.analyze` attribute on
-# the parent `tasks` package). patch.dict's stop() removes sys.modules entries
-# added during the mock window, but the parent package attribute still points
-# at the mock-imported module — so a later `from tasks import analyze` (e.g. in
-# test_full_scan_pipeline_e2e.py) would resolve the mock with plain-function
-# run_analysis and fail on `.run()`. Re-importing with the (now restored) real
-# celery_app fixes both the sys.modules entry and the parent attribute.
-import importlib  # noqa: E402
-
-sys.modules.pop("tasks.analyze", None)
-importlib.import_module("tasks.analyze")
-# NOTE: this file keeps its own mock-bound references (_ta_mod / run_analysis)
-# for direct invocation; the re-import above only resets global state.
+    _ta_mod = importlib.import_module("tasks.analyze")
+    run_analysis = _ta_mod.run_analysis
+    yield
 
 
 def _result(needs_post_exploitation=False):
@@ -77,7 +54,7 @@ def _result(needs_post_exploitation=False):
     }
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def _mocks():
     with patch.dict(sys.modules, {
         "opentelemetry": _otel, "opentelemetry.trace": _otel.trace,
@@ -282,25 +259,27 @@ class TestBugBountyModeForwarding:
     def test_forwards_bug_bounty_mode(self, mock_task, mock_ctx):
         mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=False)
         mock_fn = MagicMock(return_value=MagicMock(__enter__=MagicMock(return_value=mock_ctx), __exit__=MagicMock()))
+        original_task_context = _ta_mod.task_context
         _ta_mod.task_context = mock_fn
         try:
             with patch("tasks.utils.get_engagement_state", return_value="analyzing"):
                 with patch("tasks.analyze.app.send_task"):
                     _call_run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001", bug_bounty_mode=True)
         finally:
-            _ta_mod.task_context = mock_fn._mock_wraps if hasattr(mock_fn, "_mock_wraps") else lambda: None
+            _ta_mod.task_context = original_task_context
         assert mock_fn.call_args[1]["job_extra"]["bug_bounty_mode"] is True
 
     def test_omits_bug_bounty_mode_when_none(self, mock_task, mock_ctx):
         mock_ctx.orchestrator.run_analysis.return_value = _result(needs_post_exploitation=False)
         mock_fn = MagicMock(return_value=MagicMock(__enter__=MagicMock(return_value=mock_ctx), __exit__=MagicMock()))
+        original_task_context = _ta_mod.task_context
         _ta_mod.task_context = mock_fn
         try:
             with patch("tasks.utils.get_engagement_state", return_value="analyzing"):
                 with patch("tasks.analyze.app.send_task"):
                     _call_run_analysis(mock_task, engagement_id="test-eng-001", budget={}, trace_id="trace-001")
         finally:
-            _ta_mod.task_context = mock_fn._mock_wraps if hasattr(mock_fn, "_mock_wraps") else lambda: None
+            _ta_mod.task_context = original_task_context
         assert "bug_bounty_mode" not in mock_fn.call_args[1]["job_extra"]
 
 

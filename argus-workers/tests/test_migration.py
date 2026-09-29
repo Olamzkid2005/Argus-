@@ -165,6 +165,12 @@ class TestMigrateEngagement:
 class TestBatchMigration:
     """Tests for batch_migrate_pending_engagements()."""
 
+    def setup_method(self):
+        """Clear cached rollout configuration between batch tests."""
+        from runtime.migration import _clear_rollout_cache
+
+        _clear_rollout_cache()
+
     @patch.dict(os.environ, {}, clear=True)
     def test_empty_db_returns_empty(self):
         """Batch migration with no engagements returns empty list."""

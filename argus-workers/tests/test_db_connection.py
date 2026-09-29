@@ -145,11 +145,18 @@ class TestConnectionContextManager:
         import logging
 
         cm = ConnectionManager()
+        cm._pgbouncer_mode = "session"
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
-        # Simulate set_tenant_context raising an error
-        mock_cursor.execute.side_effect = Exception("function set_tenant_context() does not exist")
+
+        def execute_side_effect(sql, *_args):
+            if "set_tenant_context" in sql:
+                raise Exception("function set_tenant_context() does not exist")
+
+        # Simulate the database function failing without depending on the
+        # number of cursor health/configuration checks performed first.
+        mock_cursor.execute.side_effect = execute_side_effect
 
         caplog.set_level(logging.WARNING)
         with patch.object(cm, "get_connection", return_value=mock_conn):
