@@ -190,6 +190,27 @@ internal targets — the only override in the codebase is `ARGUS_ALLOW_UNSCOPED`
 (`scope_validator.py:66`), which addresses (a) but not (b). This is consistent with the absence of
 any recorded live-fire run.
 
+**Root cause of (a), pinned:** the recon/orchestrator path resolves scope from the **database**
+rather than the job payload — `orchestrator_pkg/orchestrator.py:200` calls
+`EngagementService.load_authorized_scope(self.engagement_id)` (and `:323` calls
+`store_scope_config`). With `DATABASE_URL` popped by local mode, that load returns empty, so
+`ScopeValidator.__init__` emits `NO SCOPE CONFIGURED - ALL TARGETS WILL BE REJECTED` and
+`validate_target()` raises for every target. The job-payload scope that
+`cli/_local_mode.py:185` sets is never consulted on this path. The secondary scan-pipeline filter at
+`orchestrator_pkg/scan.py:497-498` reads scope from **ctx attributes**
+(`getattr(ctx, "scope_mode")`, `getattr(ctx, "allowed_targets")`), which the orchestrator sets on
+*itself* (`orchestrator.py:698-699`), so that path is only correct when ctx is the orchestrator.
+
+**Decision taken (option 1):** permit an internal/loopback target only when **both** an explicit
+`ARGUS_ALLOW_INTERNAL_TARGETS` opt-in is set **and** the host is explicitly listed in the
+engagement's authorized scope allowlist. Cloud metadata endpoints (`169.254.169.254`,
+`metadata.google.internal`, `instance-data*`, `100.100.100.200`) stay blocked unconditionally.
+Note `_BLOCKED_METADATA_HOSTNAMES` (`tools/scope_validator.py:18`) currently mixes metadata hosts
+with loopback (`localhost`, `127.0.0.1`, `::1`, `::`, `0.0.0.0`), so those two classes must be split
+before the opt-in can work. `ScopeValidator.is_internal_address()` semantics must stay unchanged
+(it is asserted True for loopback in `tests/test_scope_validator.py:326-329`); the block decision
+belongs in a new predicate that the only blocking call site (`orchestrator_pkg/scan.py:507`) uses.
+
 ---
 
 ## 4. Work plan
