@@ -502,15 +502,56 @@ def execute_scan_tools(
             blocked_targets = []
             from urllib.parse import urlparse as _urlparse
             for t in targets:
-                # Step 1: SSRF/internal target check (filters private IPs, cloud metadata, DNS rebinding)
                 hostname = _urlparse(t).hostname or t.split("/")[0].split(":")[0]
-                if ScopeValidator.is_internal_address(hostname):
+
+                # Step 1: cloud metadata / link-local are never scannable, under
+                # any configuration — the internal-target opt-in does not apply.
+                if ScopeValidator.is_always_blocked_target(hostname):
                     blocked_targets.append(t)
-                    slog.warn("Target %s is an internal/SSRF target — blocking", t)
+                    slog.warn(
+                        "Target %s is a cloud metadata / link-local target — blocking",
+                        t,
+                    )
                     continue
 
-                # Step 2: Engagement scope check (domain matching, allow/block lists)
-                if validate_target_scope(t, engagement_id, mode=scope_mode, allowed_targets=allowed, blocked_targets=blocked):
+                # Step 2: Engagement scope check (domain matching, allow/block lists).
+                # Evaluated before the internal-target decision so an explicitly
+                # authorized internal target can be told apart from an accidental one.
+                in_scope = validate_target_scope(
+                    t, engagement_id, mode=scope_mode,
+                    allowed_targets=allowed, blocked_targets=blocked,
+                )
+
+                # Step 3: SSRF/internal guard. Private and loopback targets stay
+                # blocked unless the operator opted in AND the target is explicitly
+                # authorized in the engagement scope, so an accidental internal
+                # target is still rejected.
+                if ScopeValidator.is_blocked_internal_target(
+                    hostname, authorized=in_scope
+                ):
+                    blocked_targets.append(t)
+                    if in_scope and not ScopeValidator.internal_targets_opt_in():
+                        slog.warn(
+                            "Target %s is internal/SSRF and explicitly authorized, but "
+                            "internal scanning is not enabled — blocking. Set "
+                            "ARGUS_ALLOW_INTERNAL_TARGETS=1 to scan authorized "
+                            "internal targets.",
+                            t,
+                        )
+                    else:
+                        slog.warn(
+                            "Target %s is an unauthorized internal/SSRF target — blocking",
+                            t,
+                        )
+                    continue
+
+                if in_scope:
+                    if hostname and ScopeValidator.is_internal_address(hostname):
+                        slog.info(
+                            "Target %s is internal but explicitly authorized and "
+                            "opted in — allowing",
+                            t,
+                        )
                     scoped_targets.append(t)
                 else:
                     blocked_targets.append(t)

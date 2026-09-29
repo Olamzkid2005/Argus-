@@ -29,6 +29,20 @@ _BLOCKED_METADATA_HOSTNAMES: frozenset = frozenset({
     "100.100.100.200",  # Alibaba Cloud metadata
 })
 
+# Genuine cloud metadata services. These are never legitimate scan targets and
+# stay blocked even when the operator explicitly opts in to internal targets
+# (ARGUS_ALLOW_INTERNAL_TARGETS). Loopback and RFC1918 addresses are deliberately
+# NOT in this set: they are internal-but-scannable lab/staging targets, gated
+# separately by ScopeValidator.is_blocked_internal_target().
+_ALWAYS_BLOCKED_METADATA_HOSTNAMES: frozenset = frozenset({
+    "169.254.169.254",  # AWS/GCP/Azure IMDS
+    "metadata.google.internal",  # GCP metadata
+    "metadata",  # GCP short name
+    "instance-data",  # AWS short name
+    "instance-data.us-east-1.compute.internal",  # AWS regional
+    "100.100.100.200",  # Alibaba Cloud metadata
+})
+
 
 class ScopeValidator:
     """
@@ -187,6 +201,81 @@ class ScopeValidator:
         except ValueError:
             pass
         return False
+
+    @staticmethod
+    def internal_targets_opt_in() -> bool:
+        """True when the operator explicitly opted in to scanning internal targets.
+
+        Read from ``ARGUS_ALLOW_INTERNAL_TARGETS`` (default off) — following the
+        same explicit-opt-in convention as ``ARGUS_ALLOW_UNSCOPED``.
+        """
+        return os.environ.get("ARGUS_ALLOW_INTERNAL_TARGETS", "").lower() in (
+            "1",
+            "true",
+        )
+
+    @staticmethod
+    def is_always_blocked_target(
+        hostname: str, resolved_ip: str | None = None
+    ) -> bool:
+        """Cloud metadata / link-local target — blocked under every configuration.
+
+        Unlike private and loopback ranges, cloud metadata services are not
+        legitimate scan targets in any engagement, so the internal-target opt-in
+        does not apply to them.
+        """
+        host = (hostname or "").lower().strip()
+        if not host:
+            return False
+        if host in _ALWAYS_BLOCKED_METADATA_HOSTNAMES:
+            return True
+
+        # Link-local (169.254.0.0/16, fe80::/10) hosts the IMDS range too.
+        import ipaddress
+
+        for candidate in (resolved_ip, host):
+            if not candidate:
+                continue
+            try:
+                if ipaddress.ip_address(candidate).is_link_local:
+                    return True
+            except ValueError:
+                continue
+        return False
+
+    @staticmethod
+    def is_blocked_internal_target(
+        hostname: str,
+        resolved_ip: str | None = None,
+        authorized: bool = False,
+    ) -> bool:
+        """Decide whether an internal address must block a scan target.
+
+        Internal targets (loopback, RFC1918, CGNAT) remain blocked by default as
+        SSRF defense. They are permitted only when **both** conditions hold:
+
+        1. the operator opted in via ``ARGUS_ALLOW_INTERNAL_TARGETS``, and
+        2. ``authorized`` is True — i.e. the caller established that the target is
+           explicitly listed in the engagement's authorized scope.
+
+        Cloud metadata / link-local targets are always blocked (see
+        ``is_always_blocked_target``).
+
+        Args:
+            hostname: Hostname or IP being considered.
+            resolved_ip: Pre-resolved IP, when the caller already has it.
+            authorized: Whether the target is explicitly authorized in scope.
+
+        Returns:
+            True if the target must be blocked.
+        """
+        if not ScopeValidator.is_internal_address(hostname, resolved_ip):
+            return False
+        if ScopeValidator.is_always_blocked_target(hostname, resolved_ip):
+            return True
+        if authorized and ScopeValidator.internal_targets_opt_in():
+            return False
+        return True
 
     @staticmethod
     def is_internal_address(hostname: str, resolved_ip: str | None = None) -> bool:
