@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tools.context import ScanContext, ToolContext
+from tools.scope_validator import validate_target_scope
 
 
 class ToolRunnerStub:
@@ -98,6 +99,94 @@ class TestToolContext:
 
         ctx = ToolContext.from_orchestrator(FakeOrchestrator())
         assert ctx.llm_payload_generator is None
+
+    def test_init_defaults_scope_fields(self, tool_runner, parser, normalizer):
+        ctx = ToolContext(
+            engagement_id="eng-001",
+            tool_runner=tool_runner,
+            parser=parser,
+            normalizer=normalizer,
+        )
+        assert ctx.scope_mode == "allowlist"
+        assert ctx.allowed_targets is None
+        assert ctx.blocked_targets is None
+
+    def test_from_orchestrator_carries_scope_fields(self):
+        """Regression: scope threaded onto the Orchestrator must survive the
+        ToolContext conversion.
+
+        execute_scan_tools() always replaces its ctx with
+        ToolContext.from_orchestrator() (the Orchestrator has no
+        publish_activity method, so the hasattr guard never short-circuits) and
+        then reads the scope back off the context. When these fields were not
+        copied, validate_target_scope() ran in allowlist mode with no patterns
+        and denied every target, so the pipeline silently scanned nothing.
+        """
+
+        class FakeOrchestrator:
+            engagement_id = "eng-001"
+            tool_runner = "tr"
+            parser = "prs"
+            normalizer = "nrm"
+            scope_mode = "allowlist"
+            allowed_targets = ["http://127.0.0.1:5000"]
+            blocked_targets = ["*.internal.example.com"]
+
+        ctx = ToolContext.from_orchestrator(FakeOrchestrator())
+        assert ctx.scope_mode == "allowlist"
+        assert ctx.allowed_targets == ["http://127.0.0.1:5000"]
+        assert ctx.blocked_targets == ["*.internal.example.com"]
+
+    def test_carried_scope_authorizes_the_configured_target(self):
+        """The carried scope must actually authorize, not merely be present.
+
+        This reproduces the original failure: with no allowed_targets reaching
+        the scope check, _check_allowed() denies in allowlist mode.
+        """
+
+        class FakeOrchestrator:
+            engagement_id = "eng-001"
+            tool_runner = "tr"
+            parser = "prs"
+            normalizer = "nrm"
+            scope_mode = "allowlist"
+            allowed_targets = ["http://127.0.0.1:5000"]
+            blocked_targets = None
+
+        ctx = ToolContext.from_orchestrator(FakeOrchestrator())
+        assert (
+            validate_target_scope(
+                "http://127.0.0.1:5000",
+                ctx.engagement_id,
+                mode=ctx.scope_mode,
+                allowed_targets=ctx.allowed_targets,
+                blocked_targets=ctx.blocked_targets,
+            )
+            is True
+        )
+        # A target outside the allowlist is still denied.
+        assert (
+            validate_target_scope(
+                "http://127.0.0.1:9999",
+                ctx.engagement_id,
+                mode=ctx.scope_mode,
+                allowed_targets=ctx.allowed_targets,
+                blocked_targets=ctx.blocked_targets,
+            )
+            is False
+        )
+
+    def test_from_orchestrator_scope_defaults_when_orchestrator_has_none(self):
+        class FakeOrchestrator:
+            engagement_id = "eng-001"
+            tool_runner = "tr"
+            parser = "prs"
+            normalizer = "nrm"
+
+        ctx = ToolContext.from_orchestrator(FakeOrchestrator())
+        assert ctx.scope_mode == "allowlist"
+        assert ctx.allowed_targets is None
+        assert ctx.blocked_targets is None
 
     def test_publish_activity_calls_ws_publisher(self, tool_runner, parser, normalizer):
         mock_ws = MagicMock()
