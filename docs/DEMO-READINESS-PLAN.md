@@ -1,0 +1,250 @@
+# Argus — Demo Readiness Plan
+
+**Goal:** reach a defensible, working demo of an autonomous security-assessment run:
+one command starts an assessment, the **engine decides which tools to run** (not a hard-coded
+list), phases advance without a human, a report artifact is produced, and scope is enforced.
+
+**Status of this document:** every claim below was verified against this checkout on 2026-09-29.
+Line numbers are from this working tree. Where something is *unverified*, it says so explicitly.
+
+---
+
+## 1. What "working demo" means (and what it must not claim)
+
+| Tier | Definition | State |
+|---|---|---|
+| **P0 — Pipeline runs** | One command completes recon → scan → analyze → report on a local authorized target. | Reachable today, blocked by B1 |
+| **P1 — Agent decides** | Tool selection comes from the agent loop (`agent_decisions` rows written, not all `was_fallback`). | Machinery present, needs B1 + B4 |
+| **P2 — Signal-driven autonomy** | Phases activate from recon signals; run is unattended end-to-end; report + audit trail emitted. | **Recommended demo bar** |
+| **P3 — Multi-host red team** | Pivot/lateral movement across hosts. | Not a demo goal |
+
+Language to use: *"target-scoped autonomous assessment with early post-exploitation"*.
+Not: *"fully autonomous red team"*.
+
+---
+
+## 2. The architecture as actually implemented
+
+There are **three execution paths**, and they do not share an orchestration layer. This is the
+single most important thing to internalize before planning demo work.
+
+### Path A — TUI / CLI `assess` (TS drives, Python decides) ← **primary demo surface**
+```
+bun run src/argus/main.ts assess <target>
+  → commands/assess.ts
+  → WorkflowRunner.run()                 workflow-runner.ts:815
+      ├─ getTargetValidator().validateTarget()          (scope guardrail)
+      ├─ EngagementStore (SQLite ~/.argus/argus.db)     ← persistence
+      ├─ WorkflowPlanner.plan()  (LLM or deterministic)
+      └─ InProcessExecutor
+            ├─ bridge.agentInit(...)    executor.ts:532
+            ├─ loop: bridge.agentNext() → bridge.callTool() → bridge.agentObserve()
+            └─ bridge.phaseComplete()
+  → WorkersBridge (stdio JSON-RPC)  →  argus-workers/mcp_server.py
+```
+The **decision-making engine is Python** (`MCPServer.handle_agent_next`, `handle_agent_observe`
+in `mcp_server.py`). The TS side is a planner/executor shim. Tool execution is
+`MCPServer.call_tool`.
+
+### Path B — Celery / live-fire (Python end to end) ← **unattended demo surface**
+```
+dispatch_task.py → celery_app → tasks.recon.run_recon
+  → Orchestrator.run_recon/run_scan/run_analysis/run_reporting
+  → app.send_task(...) to chain the next phase
+```
+Chaining is **already wired** (verified dispatch edges):
+`recon.py:161,363 → scan` · `scan.py:214 → auth_focused_scan` · `scan.py:254 → deep_scan` ·
+`scan.py:291,335,544,647 → analyze` · `analyze.py:128,170 → report/post_exploit` ·
+`post_exploit.py:189,219 → …` · `report.py:88,131 → llm_review/diff`.
+
+### Path C — Local CLI (`python -m cli assess <target> --local`) ← **cheapest demo**
+Runs recon→scan→analyze→report **in-process on SQLite**, with `DATABASE_URL` deliberately popped:
+*"CLI always runs in local/SQLite mode — no Docker/Postgres needed."* (`cli/main.py:48-52`).
+Entry: `cli/cmd/assess.py` → `cli/_local_mode.py::_get_orchestrator` →
+`_run_phases(orch, target, phases=("recon","scan","analyze","report"))`.
+Verified working: `python -m cli --help` and `python -m cli list` both run.
+
+> **Planning consequence:** Path C removes the entire Docker/Postgres/Redis/Celery dependency
+> chain from the critical path. Use it to prove the engine, then graduate to Path A/B for the demo
+> surface.
+
+---
+
+## 3. Blockers, verified
+
+### B1 — MCP ping contract mismatch (CRITICAL, blocks all of Path A)
+`isHealthy()` requires the literal string `"pong"`:
+
+- `Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts:326`
+  ```ts
+  async isHealthy(): Promise<boolean> {
+    const result = await this.sendRequest("ping", {})
+    return result === "pong"        // ← never true against the real worker
+  }
+  ```
+- Python returns an **object**: `mcp_transport.py:58-70`
+  ```py
+  def _ping(params=None) -> dict:
+      return {"pong": True, "timestamp": int(_time.time() * 1000)}
+  ```
+  which `_process_request` wraps as `{"jsonrpc":"2.0","id":…,"result":{...}}`.
+
+**Measured, not inferred** — spawning the real worker and sending a `ping`:
+```
+FIRST RESPONSE after 1.42s
+raw response: {"jsonrpc": "2.0", "id": 1, "result": {"pong": true, "timestamp": 1790661954480}}
+typeof result: dict | equals 'pong'? False
+```
+So the worker is **healthy in 1.42 s**; it is *not* a timeout problem.
+
+**Consequence chain:** `isHealthy()` always false → `waitForReady()` loops until
+`ARGUS_MCP_READY_TIMEOUT_MS` (default 10 000 ms) and throws `mcp-client.ts:340` →
+`spawnChild()` throws → `connect()` throws → **no tool can ever execute on Path A**, and
+`argus doctor` reports `✗ [MCP Worker] Worker error: MCP worker connect timed out after 10s`.
+
+**Why it survived:** the only test touching this stubs the RPC out —
+`test/argus/unit/bridge/mcp-client.test.ts:676` does `bridge.sendRequest = async () => "pong"`.
+The mock asserts the code's own assumption, so it can never catch the drift.
+
+**Fix options** (pick one, then freeze with a test):
+- **A (preferred):** accept both shapes in TS.
+  `return result === "pong" || (typeof result === "object" && result !== null && (result as any).pong === true)`
+- **B:** return the bare string from Python — `return "pong"` — and drop `timestamp`
+  (check no other client consumes it first).
+
+### B2 — The TS↔Python boundary has no real test
+The only "live target" test is `test/argus/e2e/targets.test.ts`, and it is not live: it calls
+`runAssessmentWithMock(target, mockBridge)` (line 138) and returns canned findings for known
+targets — explicitly *"so the pipeline doesn't stall on connect()"* (line 83).
+Every integration test mocks the bridge, which is exactly how B1 shipped. Closing B2 is what stops
+this class of bug recurring.
+
+### B3 — Scope config blocks autonomous mode
+`argus.config.yaml` ships `security.scope.mode: warn` with `allowed_targets: []`.
+`validateAutonomousScopeMode()` (`workflow-runner.ts:131`) **throws** when `ARGUS_AUTONOMOUS=1`
+and mode is `warn`/`open`; `runtime/preflight.py` enforces the same on the Python side.
+So `assess --autonomous` cannot start until the config is set to `allowlist` + explicit targets.
+
+### B4 — LLM key conventions are split across the two runtimes
+- TS planner reads `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENCODE_API_KEY`, model from
+  `ARGUS_PLANNER_MODEL` / `OPENCODE_MODEL` (`planner/llm-service.ts:78-82`).
+- `argus-workers/.env` sets `LLM_API_KEY` + `LLM_MODEL` (Python's convention).
+- Bun auto-loads `.env` from the **process cwd** (the `opencode` package), so
+  `argus-workers/.env` is invisible to the TS planner.
+
+Result: the planner silently runs deterministic even though a key is "configured".
+(Python-side use of `LLM_API_KEY` is a separate, also-unverified path.)
+
+### B5 — `doctor` warnings are partly stale, partly real gaps
+- Looks for `.env` at `PROJECT_ROOT` (`doctor.ts` `envCheck`, `configValidationCheck`) — so
+  `argus-workers/.env` is not seen.
+- `REDIS_URL` unset → real (Path B needs it; Path A/C do not).
+- `NEXTAUTH_SECRET` unset → **stale**: there is no Next.js web UI (`argus-platform/` was deleted
+  in the v5 migration). `docker-compose.yml` no longer references `NEXTAUTH_*`.
+- `MISSING: sqlmap`-style claims need care: `tool_utils.resolve_tool_binary` uses an *augmented*
+  PATH and correctly finds e.g. `argus-workers/venv/bin/sqlmap` even when `which sqlmap` fails.
+  The tool inventory you supplied looks like the **container's** (`/venv/bin/wafw00f` is a
+  container path), not this host's.
+
+### B6 — Path B infrastructure is not up
+`docker-compose.yml` requires `POSTGRES_PASSWORD` and `DATABASE_URL` (fail-fast `:?`), and Path B
+needs Postgres + Redis + a worker. None are running here, and there is no repo-root `.env`.
+
+### B7 — Interpreter selection is implicit
+`WorkersBridge` defaults to bare `python3` (`mcp-client.ts:99`), and `doctor.resolvePython()`
+honours `ARGUS_PYTHON` first. On this host system `python3` happens to have the deps
+(verified: `import psycopg2, celery` succeed), but that is environmental luck, not a guarantee.
+
+---
+
+## 4. Work plan
+
+Ordered so that each step is independently verifiable and unblocks the next.
+
+### Step 0 — Unblock Path A  *(hours)*
+- [ ] Fix **B1** (one of the two options above).
+- [ ] Add a contract test that **spawns the real worker** and asserts `isHealthy() === true`
+      against its actual `ping` payload — not a stubbed `sendRequest`.
+- [ ] Re-run `bun run src/argus/main.ts doctor`; expect MCP Worker → **PASS**.
+- **Acceptance:** doctor MCP check passes against the real `mcp_server.py`; the assertion fails if
+  either side's payload shape changes.
+
+### Step 1 — Prove the engine locally, no infra  *(1–2 days)*
+- [ ] Start an authorized local target: a `argus-workers/test_fixtures/*/app.py` Flask app
+      (`conftest.py` already knows how to launch these and wait on `/health`).
+- [ ] Run `python -m cli assess http://127.0.0.1:<port> --local --db /tmp/argus-demo.db`.
+- [ ] Confirm the four phases execute and findings land in SQLite.
+- [ ] Where it breaks, fix forward. This is the cheapest possible whole-engine test and needs no
+      Docker, Postgres, Redis, Celery, or LLM.
+- **Acceptance:** a complete `recon → scan → analyze → report` run against a local fixture, with
+  findings retrievable via `python -m cli list` / `report`.
+
+### Step 2 — Autonomy switches  *(1–3 days)*
+- [ ] Set `security.scope.mode: allowlist` + explicit `allowed_targets` for the test target
+      (closes **B3**); keep `require_confirmation` behaviour explicit.
+- [ ] Export the TS-visible LLM key (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`) **and**
+      `ARGUS_PLANNER_MODEL`, or accept deterministic mode deliberately (closes **B4**).
+- [ ] Set `ARGUS_PYTHON` to `argus-workers/venv/bin/python` for determinism (closes **B7**).
+- [ ] Exercise `assess --autonomous` (implies `ARGUS_AUTONOMOUS=1` + `ARGUS_AUTO_APPROVE=1`) and
+      confirm it is genuinely unattended: no prompt, no TTY dependency.
+- **Acceptance:** `ARGUS_AUTONOMOUS=1 ARGUS_AUTO_APPROVE=1` runs to completion with no interaction,
+  and **refuses** to start when scope mode is `warn`/`open` (guardrail still live).
+
+### Step 3 — Evidence the autonomy is real  *(2–4 days)*
+- [ ] Confirm rows appear in `agent_decisions`
+      (`database/migrations/012_add_agent_decision_log.sql`,
+      `database/repositories/agent_decision_repository.py`) with `tool_selected`, `reasoning`,
+      `was_fallback`, tokens, cost.
+- [ ] Confirm `[SCAN_METRICS]` (`orchestrator.py::_emit_scan_metrics`) reports
+      `agent_success_rate` / `agent_full_fallback_rate`.
+- [ ] Assert **≥1 non-fallback decision** and that phase advancement was engine-driven.
+- **Acceptance:** the demo can point at recorded decisions proving the engine chose tools, plus a
+  report artifact — not just a findings count.
+
+### Step 4 — Unattended (Celery) path + assertions  *(3–7 days)*
+- [ ] Bring up Path B: repo-root `.env`, `docker compose up -d postgres redis worker`.
+- [ ] Run `scripts/livefire/run-livefire.sh` end to end against Juice Shop.
+- [ ] Turn the harness into a test: today it **asserts nothing** while
+      `scripts/livefire/README.md` pre-commits success criteria (swarm 3/3, 10–25 findings,
+      ≥2 CRITICAL/HIGH, 0% fallback, >30% HIGH+ verified, 0 orphan processes, <500 MB worker,
+      0 scope violations, 11–31 min). Add the assertions and emit a baseline JSON per run.
+- **Acceptance:** one recorded live-fire run that passes or fails on its own criteria, with a
+  stored baseline to diff against.
+
+### Step 5 — Make the guardrails trustworthy  *(ongoing)*
+- [ ] **Test determinism:** `pytest-randomly` is auto-loaded, producing two orderings and two
+      different failure sets. Known contamination: `tasks/utils.py::_get_redis_client()`
+      module-global cache + `sys.modules` mocking in `test_full_scan_pipeline_e2e.py`
+      (E2E trio) and shared `DEFAULT_CONFIG.copy()` shallow mutation in `test_config_manager.py`.
+- [ ] **TS suite:** 25 failures across `LLMPlannerService` (singleton leak — passes 29/29 alone),
+      2 genuine `encryption-workflow`, 1 `tui-commands`, 1 `smoke`.
+- [ ] **Hygiene:** untrack `argus-platform/{next-env.d.ts,tsconfig.tsbuildinfo}` (gitignore alone
+      cannot untrack); patterns for both are already staged in `.gitignore`.
+- **Acceptance:** Python suite is order-independent; TS suite green or every failure triaged.
+
+---
+
+## 5. Fixes already landed (this session)
+
+| Fix | File | Verified |
+|---|---|---|
+| `_metrics["reconnect_attempts"]` guaranteed `KeyError` on pool reinit | `argus-workers/database/connection.py` | increment path exercised |
+| `source_analysis` missing from state machine (phases.py said "MUST match") | `argus-workers/state_machine.py` + new parity test | full suite, no regressions |
+| `_check_missing_phase_tools` inverted (reported internal tools, never real gaps) | `argus-workers/tasks/scan.py` | 9 real gaps vs 2 phantoms |
+| Repo hygiene (`=3.15.0` junk file, missing ignore patterns) | `.gitignore` | — |
+
+Full non-DB suite: **4,865 passed, 6 failed** — same 6 pre-existing order-contamination failures
+as baseline; passed count rose by exactly the 7 tests added. `ruff check` clean.
+
+---
+
+## 6. Explicitly unverified (do not claim these work)
+
+- No live scan against any real target has been run in this checkout.
+- No `docker compose up` of the full stack; no CI run; Path B never executed here.
+- No LLM call has been observed succeeding from either runtime.
+- No `livefire-runs/` directory exists → **no recorded successful live-fire run**.
+- The propagation of `agent_init`/`agent_next`/`agent_observe`/`phase_complete` payload shapes
+  was reviewed only for `ping`, `list_tools`, and `call_tool`. **Diff the remaining four handlers**
+  (`mcp_server.py:1810-1833`) against `mcp-client.ts` before trusting Path A end to end — B1 shows
+  this boundary is exactly where silent mismatches live.
