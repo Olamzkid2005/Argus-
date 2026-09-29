@@ -289,8 +289,34 @@ Ordered so that each step is independently verifiable and unblocks the next.
 | `_check_missing_phase_tools` inverted (reported internal tools, never real gaps) | `argus-workers/tasks/scan.py` | 9 real gaps vs 2 phantoms |
 | Repo hygiene (`=3.15.0` junk file, missing ignore patterns) | `.gitignore` | — |
 
-Full non-DB suite: **4,865 passed, 6 failed** — same 6 pre-existing order-contamination failures
-as baseline; passed count rose by exactly the 7 tests added. `ruff check` clean.
+## 5a. Regression status (verified)
+
+Full non-DB suite (`-m "not requires_db and not requires_redis and not e2e and not docker"`,
+file order): **4,897 passed, 6 failed**. The 6 failures are the same pre-existing
+order-contamination set seen before any of these fixes (baseline was 4,858 passed / 6 failed with
+identical test names), and the passed count rose only by the tests added:
+
+```
+FAILED tests/test_full_scan_pipeline_e2e.py::TestFullScanPipelineE2E::test_phase_analyze_transitions_and_dispatches_report
+FAILED tests/test_full_scan_pipeline_e2e.py::TestFullScanPipelineE2E::test_full_pipeline_chain
+FAILED tests/test_full_scan_pipeline_e2e.py::TestFullScanPipelineE2E::test_chain_error_report_raises
+FAILED tests/test_orchestrator_scope.py::TestOrchestratorScope::test_run_scan_sets_scope_mode_from_job
+FAILED tests/test_orchestrator_scope.py::TestOrchestratorScope::test_run_scan_sets_scope_mode_allowlist_default
+FAILED tests/test_orchestrator_scope.py::TestOrchestratorScope::test_run_scan_scope_empty_dict_skips
+```
+
+Both suites pass completely when run in isolation, which confirms these are ordering effects and
+not regressions from the scope/scan changes:
+
+```
+pytest tests/test_orchestrator_scope.py        -> 10 passed
+pytest tests/test_full_scan_pipeline_e2e.py    -> 16 passed
+```
+
+Consistently touched areas: **843 passed** across the normalizer/parser/finding suites (covers the
+finding-title change), and 361 passed across context/web_scanner/scope. `ruff check` clean on
+every changed file; TS side `bun typecheck` clean. The 6 failures remain unfixed — see item 5 of
+the work plan (test determinism).
 
 ---
 
