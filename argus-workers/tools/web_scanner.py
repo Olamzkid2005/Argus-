@@ -634,15 +634,27 @@ class WebScanner(AbstractTool):
         # or internal/SSRF targets before sending any potentially destructive
         # payloads (mass assignment, credential testing, host header injection).
         hostname = parsed.hostname or target_url.split("/")[0].split(":")[0]
-        if hostname and ScopeValidator.is_internal_address(hostname):
+        # Internal targets stay blocked unless the operator opted in via
+        # ARGUS_ALLOW_INTERNAL_TARGETS. When they have, the target has already
+        # been authorized upstream — the scan pipeline runs validate_target_scope
+        # before dispatching any tool — so this tool-level guard defers instead of
+        # re-denying it. Cloud metadata / link-local remain blocked regardless.
+        _internal_opted_in = ScopeValidator.internal_targets_opt_in()
+        if hostname and ScopeValidator.is_blocked_internal_target(
+            hostname, authorized=_internal_opted_in
+        ):
             logger.warning(
-                "Target %s is an internal/SSRF target — scan aborted",
+                "Target %s is an internal/SSRF target — scan aborted. "
+                "Set ARGUS_ALLOW_INTERNAL_TARGETS=1 and authorize the target in "
+                "the engagement scope to scan internal targets.",
                 target_url,
             )
             self.findings = []
             return
-        if self.engagement_id and not validate_target_scope(
-            target_url, self.engagement_id
+        if (
+            self.engagement_id
+            and not _internal_opted_in
+            and not validate_target_scope(target_url, self.engagement_id)
         ):
             logger.warning(
                 "Target %s is outside authorized scope for engagement %s — scan aborted (M-25)",

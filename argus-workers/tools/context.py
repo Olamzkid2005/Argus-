@@ -42,6 +42,17 @@ class ToolContext:
     ws_publisher: Any = None  # WebSocket event publisher (optional)
     llm_payload_generator: Any = None  # optional LLM payload generator
 
+    # Engagement scope, threaded from the job payload onto the Orchestrator.
+    # These MUST survive the conversion below: execute_scan_tools() reads them
+    # via getattr(ctx, ...) to authorize each target, and the Orchestrator is
+    # ALWAYS replaced by a ToolContext (the Orchestrator has no
+    # publish_activity method, so the hasattr check never short-circuits).
+    # Dropping them made _check_allowed() deny every target in allowlist mode
+    # with no patterns configured, silently scanning nothing.
+    scope_mode: str = "allowlist"
+    allowed_targets: list[str] | None = None
+    blocked_targets: list[str] | None = None
+
     @staticmethod
     def from_orchestrator(orchestrator) -> "ToolContext":
         """Extract a ToolContext from an Orchestrator instance."""
@@ -52,6 +63,9 @@ class ToolContext:
             normalizer=orchestrator.normalizer,
             ws_publisher=getattr(orchestrator, "ws_publisher", None),
             llm_payload_generator=getattr(orchestrator, "llm_payload_generator", None),
+            scope_mode=getattr(orchestrator, "scope_mode", "allowlist"),
+            allowed_targets=getattr(orchestrator, "allowed_targets", None),
+            blocked_targets=getattr(orchestrator, "blocked_targets", None),
         )
 
     def publish_activity(
