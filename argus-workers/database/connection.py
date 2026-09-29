@@ -47,10 +47,13 @@ class ConnectionManager:
         return cls._instance
 
     def __init__(self):
-        if self._initialized:
+        # Tests and controlled shutdowns may replace the singleton instance
+        # without resetting its initialization marker. Reinitialize whenever
+        # this instance lacks the required synchronization/metrics state.
+        if getattr(self, "_initialized", False) and hasattr(self, "_metrics_lock"):
             return
         with self._instance_lock:
-            if self._initialized:
+            if getattr(self, "_initialized", False) and hasattr(self, "_metrics_lock"):
                 return
             self._initialized = True
             self._pool: pool.ThreadedConnectionPool | None = None
@@ -74,6 +77,11 @@ class ConnectionManager:
             "total_queries": 0,
             "slow_queries": 0,
             "total_wait_time_ms": 0,
+            # Incremented when the pool is closed and reinitialized after a
+            # connection loss (see get_connection). Must be initialized here:
+            # the reinit path mutates it with +=, so a missing key raises
+            # KeyError exactly when the pool is already in a degraded state.
+            "reconnect_attempts": 0,
         }
         self._metrics_lock = threading.Lock()
         # Condition variable for signaling connection availability (B.03 fix)

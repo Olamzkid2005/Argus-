@@ -73,8 +73,16 @@ celerybeat-schedule-shm
 celerybeat-schedule-wal
 
 # L-01: nuclei-templates should be a git submodule (large YAML data ~1.5M LOC)
+# Ignore the vendored copy until it is converted to a submodule.
+argus-workers/tool_assets/nuclei-templates/
 
 # L-02: argus-platform/ was removed during v5 migration — no longer needed.
+# Two build artifacts (next-env.d.ts, tsconfig.tsbuildinfo) are still tracked;
+# untrack them with: git rm --cached argus-platform/next-env.d.ts argus-platform/tsconfig.tsbuildinfo
+argus-platform/
+
+# TypeScript incremental build caches
+*.tsbuildinfo
 
 # Windows Redis binaries — shipped for legacy start-argus.ps1 support
 # but should not be tracked in git (22MB+ of binary bloat).

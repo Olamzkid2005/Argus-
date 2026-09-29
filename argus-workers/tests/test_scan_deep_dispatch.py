@@ -141,21 +141,45 @@ class TestDetectAuthEndpoints:
 
 class TestCheckMissingPhaseTools:
     def test_returns_empty_when_all_available(self):
-        registry = MagicMock()
-        registry.is_available.return_value = True
-        with patch("tool_core.registry.ToolRegistry", return_value=registry):
+        with patch("tool_definitions.is_tool_available", return_value=True):
             assert _check_missing_phase_tools("scan") == []
 
     def test_lists_missing_tools(self):
-        registry = MagicMock()
-        registry.is_available.side_effect = lambda name: name == "nuclei"
-        with patch("tool_core.registry.ToolRegistry", return_value=registry):
-            missing = _check_missing_phase_tools("scan")
-        assert missing
-        assert "nuclei" not in missing  # available
+        """Genuinely missing binaries must actually be reported.
 
-    def test_tolerates_definition_load_failure(self):
+        Regression: the candidate list used to come from
+        get_tools_for_phase(), which filters out unavailable tools, so missing
+        binaries were never listed.
+        """
         with patch(
-            "tool_definitions.get_tools_for_phase", side_effect=Exception("boom")
+            "tool_definitions.is_tool_available",
+            side_effect=lambda name: name == "nuclei",
+        ):
+            missing = _check_missing_phase_tools("scan")
+        assert "nuclei" not in missing  # available
+        assert "sqlmap" in missing  # declared for scan, not installed here
+
+    def test_never_reports_agent_internal_tools(self):
+        """Agent-internal tools have no binary and must not be reported.
+
+        Regression: register/browser_security_operator were reported as
+        missing binaries because ToolRegistry.is_available() resolves PATH.
+        """
+        from tool_definitions import _AGENT_INTERNAL_TOOLS
+
+        missing = set(_check_missing_phase_tools("scan"))
+        assert missing.isdisjoint(_AGENT_INTERNAL_TOOLS), (
+            f"agent-internal tools wrongly reported as missing: "
+            f"{sorted(missing & _AGENT_INTERNAL_TOOLS)}"
+        )
+        assert "register" not in missing
+        assert "browser_security_operator" not in missing
+
+    def test_unknown_phase_returns_empty(self):
+        assert _check_missing_phase_tools("not_a_phase") == []
+
+    def test_tolerates_availability_probe_failure(self):
+        with patch(
+            "tool_definitions.is_tool_available", side_effect=Exception("boom")
         ):
             assert _check_missing_phase_tools("scan") == []

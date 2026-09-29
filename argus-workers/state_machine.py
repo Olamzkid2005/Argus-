@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 PHASE_TO_STATE_MAP: dict[str, str] = {
     "reconnaissance": "recon",
     "recon": "recon",
+    "source_analysis": "source_analysis",
     "scan": "scanning",
     "vulnerability_scanning": "scanning",
     "deep_scan": "scanning",
@@ -74,6 +75,7 @@ class EngagementStateMachine:
     STATES = [
         "created",
         "recon",
+        "source_analysis",
         "scanning",
         "exploitation",
         "analyzing",
@@ -88,7 +90,11 @@ class EngagementStateMachine:
     # Valid state transitions
     TRANSITIONS = {
         "created": ["recon", "failed", "paused"],
-        "recon": ["scanning", "failed", "paused"],
+        # recon→source_analysis: repo-scoped engagements run the AI attack-surface
+        # scan of source code before the network scanning phase. Kept in sync with
+        # phases.py::TRANSITIONS (see test_phases_state_machine_parity.py).
+        "recon": ["source_analysis", "scanning", "failed", "paused"],
+        "source_analysis": ["scanning", "failed", "paused"],
         "scanning": ["analyzing", "exploitation", "failed", "paused"],
         # Exploitation→post_exploitation: scan.py dispatches run_post_exploit
         # after an attack chain is detected (state set to "exploitation").

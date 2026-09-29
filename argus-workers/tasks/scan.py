@@ -431,27 +431,34 @@ def _detect_auth_endpoints(
 
 
 def _check_missing_phase_tools(phase: str) -> list[str]:
-    """Return tool names for *phase* whose binaries are unavailable.
+    """Return tool names declared for *phase* whose binaries are unavailable.
 
     Used to warn loudly at scan start so operators notice missing external
     binaries instead of the agent silently degrading to fallback scanners.
+
+    Two deliberate choices here, both regression fixes:
+
+    * Do NOT build the candidate list with ``get_tools_for_phase()``. That
+      helper filters its result down to tools whose binaries are already
+      available, so every genuinely missing binary (e.g. sqlmap) is removed
+      before it can be reported — the warning could never fire.
+    * Do NOT probe with ``ToolRegistry.is_available()``. It resolves a binary
+      on PATH, and so reports agent-internal tools (``register``,
+      ``browser_security_operator``, ...) as missing even though they are
+      Python functions shipped inside the agent. ``is_tool_available``
+      exempts them, keeping availability semantics consistent with tool
+      selection everywhere else.
     """
-    from tool_core.registry import ToolRegistry
-    from tool_definitions import get_tools_for_phase
+    from tool_definitions import TOOLS, is_tool_available
 
     try:
-        tools = get_tools_for_phase(phase)
+        return [
+            name
+            for name, tool in TOOLS.items()
+            if phase in tool.phases and not is_tool_available(name)
+        ]
     except Exception:
         return []
-    if not tools:
-        return []
-    registry = ToolRegistry()
-    missing = []
-    for tool in tools:
-        name = getattr(tool, "name", None)
-        if name and not registry.is_available(name):
-            missing.append(name)
-    return missing
 
 
 @app.task(bind=True, name="tasks.scan.deep_scan", soft_time_limit=2400, time_limit=3600)
