@@ -155,6 +155,41 @@ needs Postgres + Redis + a worker. None are running here, and there is no repo-r
 honours `ARGUS_PYTHON` first. On this host system `python3` happens to have the deps
 (verified: `import psycopg2, celery` succeed), but that is environmental luck, not a guarantee.
 
+### B8 — Local/localhost targets cannot be scanned at all (found by running the demo)
+
+First real end-to-end attempt — `python -m cli assess http://127.0.0.1:<port> --local` against
+`test_fixtures/simple-web-app` (Flask, deliberately SQLi-vulnerable) — **completed with exit 0 and
+0 findings**. All four phases ran; nothing was scanned. Two independent blocks:
+
+**(a) Scope is declared but never applied.** `cli/_local_mode.py:185` builds
+`"scope": {"mode": "allowlist", "allowed_targets": [target]}` into the job dict, but
+`orchestrator_pkg/scan.py:496-500` reads scope from **ctx attributes**
+(`getattr(ctx, "scope_mode", ...)`, `getattr(ctx, "allowed_targets", None)`). The job's scope never
+reaches ctx, so `allowed=None` and the validator falls back to loading scope from PostgreSQL:
+```
+Failed to persist scope config for <id>: [DATABASE_ERROR] DATABASE_URL environment variable not set
+SCOPE_VALIDATOR: NO SCOPE CONFIGURED — ALL TARGETS WILL BE REJECTED.
+Target http://127.0.0.1:<port> REJECTED — no scope configured.
+```
+Local mode deliberately pops `DATABASE_URL`, so this path can never succeed.
+
+**(b) Loopback is blocked unconditionally.** `orchestrator_pkg/scan.py:507` calls
+`ScopeValidator.is_internal_address(hostname)` *before* the scope check, and that predicate returns
+`True` for `127.0.0.1` (`scope_validator.py:192`; asserted in `tests/test_scope_validator.py:329`):
+```
+Blocked internal/SSRF hostname: 127.0.0.1
+Target http://127.0.0.1:<port> is an internal/SSRF target - blocking
+Scope/SSRF filter blocked 1 of 1 targets - nothing to scan
+```
+This is **deliberate and tested** ("SSRF check runs BEFORE scope check — internal targets blocked
+even if in scope"), but it means *no* private/loopback target is scannable. Consequently both of
+this project's own documented demo targets are unreachable by design:
+`test_fixtures/*` apps (loopback) and `scripts/livefire` defaults to
+`TARGET_URL=http://127.0.0.1:3001` (Juice Shop, loopback). There is **no opt-in env var** for
+internal targets — the only override in the codebase is `ARGUS_ALLOW_UNSCOPED`
+(`scope_validator.py:66`), which addresses (a) but not (b). This is consistent with the absence of
+any recorded live-fire run.
+
 ---
 
 ## 4. Work plan
