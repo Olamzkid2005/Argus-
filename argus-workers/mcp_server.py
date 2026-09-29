@@ -1088,6 +1088,24 @@ class MCPServer:
             logger.info("Session %s was cancelled — returning done=True", session_id)
             return {"done": True, "session_id": session_id}
 
+        # The TS executor passes its ARGUS_HYBRID_MAX_ITERATIONS on every
+        # agent_next call (blocker 32). Record it when present so the shared
+        # iteration counter below can actually cap against it: the TS side does
+        # not send this value to agent_init, so relying on agent_init alone left
+        # ts_max_iterations unset and the coordinated cap dead.
+        _max_iterations = params.get("max_iterations")
+        if _max_iterations is not None:
+            try:
+                self.session_store.set_ts_max_iterations(session_id, _max_iterations)
+                session = self.session_store.get(session_id)
+            except Exception as e:
+                logger.debug(
+                    "Could not record TS max_iterations=%s for session %s: %s",
+                    _max_iterations,
+                    session_id,
+                    e,
+                )
+
         # Get shared iteration counter and check against coordinated max (blocker 32)
         current_iteration = self.session_store.get_iteration(session_id)
         ts_max = getattr(session, 'ts_max_iterations', None)

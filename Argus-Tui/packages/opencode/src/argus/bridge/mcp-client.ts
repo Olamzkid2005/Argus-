@@ -323,7 +323,18 @@ export class WorkersBridge {
   async isHealthy(): Promise<boolean> {
     try {
       const result = await this.sendRequest("ping", {})
-      return result === "pong"
+      // The Python worker answers `ping` with {"pong": true, "timestamp": ...}
+      // (mcp_transport.create_ping_handler), which MCPTransport._process_request
+      // wraps as the JSON-RPC `result`. Older/alternative transports answer with
+      // the bare string "pong". Accept both — requiring only the string made
+      // every readiness check fail, so spawnChild() always timed out and no tool
+      // could ever execute.
+      if (result === "pong") return true
+      return (
+        typeof result === "object" &&
+        result !== null &&
+        (result as { pong?: unknown }).pong === true
+      )
     } catch {
       return false
     }
