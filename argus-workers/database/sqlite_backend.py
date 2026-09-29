@@ -51,6 +51,7 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
             id TEXT PRIMARY KEY,
             engagement_id TEXT NOT NULL,
             type TEXT DEFAULT '',
+            title TEXT DEFAULT '',
             severity TEXT DEFAULT 'INFO',
             confidence REAL DEFAULT 0.5,
             endpoint TEXT DEFAULT '',
@@ -92,6 +93,17 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_hypotheses_engagement
             ON hypotheses(engagement_id);
     """)
+
+    # Additive migrations for databases created before a column existed.
+    # CREATE TABLE IF NOT EXISTS does not alter an existing table, so every new
+    # column needs an explicit ALTER here or local-mode databases silently keep
+    # the old shape (which is how findings lost their titles).
+    _existing_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(findings)").fetchall()
+    }
+    if "title" not in _existing_columns:
+        conn.execute("ALTER TABLE findings ADD COLUMN title TEXT DEFAULT ''")
+        logger.info("Migrated SQLite findings table: added 'title' column")
 
 
 class SQLiteEngagementRepo:
@@ -265,6 +277,7 @@ class SQLiteFindingRepo:
         evidence_strength: str | None = None,
         tool_agreement_level: str | None = None,
         fp_likelihood: float | None = None,
+        title: str = "",
     ) -> str:
         finding_id = str(uuid.uuid4())
         now = _now()
@@ -272,12 +285,14 @@ class SQLiteFindingRepo:
             # Upsert: try update first, then insert
             cursor = self._conn.execute(
                 """UPDATE findings SET severity=?, confidence=?, evidence=?,
-                   cvss_score=?, owasp_category=?, cwe_id=?, updated_at=?
+                   cvss_score=?, owasp_category=?, cwe_id=?,
+                   title=COALESCE(NULLIF(?, ''), title), updated_at=?
                    WHERE engagement_id=? AND endpoint=? AND type=? AND source_tool=?
                    RETURNING id""",
                 (
                     severity, confidence, json.dumps(evidence) if isinstance(evidence, dict) else evidence,
-                    cvss_score, owasp_category, cwe_id, now,
+                    cvss_score, owasp_category, cwe_id,
+                    title or "", now,
                     engagement_id, endpoint or "", finding_type or "", source_tool or "",
                 ),
             )
@@ -287,13 +302,13 @@ class SQLiteFindingRepo:
 
             self._conn.execute(
                 """INSERT INTO findings
-                   (id, engagement_id, type, severity, confidence, endpoint,
+                   (id, engagement_id, type, title, severity, confidence, endpoint,
                     evidence, source_tool, cvss_score, owasp_category, cwe_id,
                     evidence_strength, tool_agreement_level, fp_likelihood,
                     verified, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)""",
                 (
-                    finding_id, engagement_id, finding_type or "", severity,
+                    finding_id, engagement_id, finding_type or "", title or "", severity,
                     confidence, endpoint or "",
                     json.dumps(evidence) if isinstance(evidence, dict) else evidence,
                     source_tool or "", cvss_score, owasp_category, cwe_id,
@@ -318,23 +333,25 @@ class SQLiteFindingRepo:
                 f_confidence = f.get("confidence", 0.5)
                 f_tool = f.get("source_tool", "")
                 f_cvss = f.get("cvss_score")
+                f_title = f.get("title", "") or ""
 
                 # Upsert — SQLite doesn't distinguish insert vs update
                 # (no xmax equivalent), so we return approximate counts.
                 self._conn.execute(
                     """INSERT INTO findings
-                       (id, engagement_id, type, severity, confidence, endpoint,
+                       (id, engagement_id, type, title, severity, confidence, endpoint,
                         evidence, source_tool, cvss_score, verified, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                        ON CONFLICT(engagement_id, endpoint, type, source_tool)
                        DO UPDATE SET
                            severity=excluded.severity,
                            confidence=excluded.confidence,
                            evidence=excluded.evidence,
                            cvss_score=excluded.cvss_score,
+                           title=COALESCE(NULLIF(excluded.title, ''), title),
                            updated_at=excluded.updated_at""",
                     (
-                        f_id, engagement_id, f_type, f_severity, f_confidence,
+                        f_id, engagement_id, f_type, f_title, f_severity, f_confidence,
                         f_endpoint,
                         json.dumps(f_evidence) if isinstance(f_evidence, dict) else f_evidence,
                         f_tool, f_cvss, now, now,
