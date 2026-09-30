@@ -1095,6 +1095,24 @@ export class InProcessExecutor implements PhaseExecutor {
           this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
           success = true
           break
+        } else if (result.success) {
+          // Exit 0 with nothing to report is a *result*, not a failure: the
+          // tool ran and found nothing. subfinder on a host with no subdomains,
+          // waybackurls on a domain with no archived URLs, and alterx on input
+          // it cannot permute all exit 0 and print nothing. This used to fall
+          // through to the error path, so an ordinary scan of a small or local
+          // target reported "Tool returned unsuccessful result", retried the
+          // tool for nothing, and counted the silence as a recon error — three
+          // such phantom errors on the 127.0.0.1 demo run came from exactly
+          // these tools. Note that a tool whose *parser* found nothing on a
+          // findings-bearing exit code is already reported as a failure by the
+          // worker; reaching here means the process exited cleanly.
+          if (execOptions.verbose) {
+            console.log(`[executor]    ${tool.name}: exited cleanly with no output — empty result`)
+          }
+          this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
+          success = true
+          break
         }
         lastError = new Error(result.error ?? "Tool returned unsuccessful result")
         this.toolHealth.recordFailure(tool.name, lastError.message)

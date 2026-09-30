@@ -130,6 +130,17 @@ also wrote its `-Format json` report to a `nikto_<host>_<timestamp>.json` file i
 directory rather than stdout, littering the working tree; it now prints to stdout and the parser
 reads the text report.
 
+**Fixed (2026-09-30, empty results read as errors):** a tool that exited 0 without printing
+anything was reported as a failure. The worker maps a clean exit to `success: true` with no
+structured data and no `error`, while the executor's result handling only accepted structured
+findings or a non-empty raw string — so a legitimately empty result fell through to
+`Tool returned unsuccessful result`, was retried once, and was counted as an error. On the
+`127.0.0.1` demo run this produced `recon … 25 finding(s), 3 error(s)`, where all three errors were
+`alterx`, `waybackurls`, and `subfinder` (confirmed against the live worker: each returns
+`success=True` with no data, because the target has no subdomains, no archived URLs, and no
+permutable labels). A clean exit with no output is now a terminal empty result — no retry, no
+error, and no `expectedAbsences` entry.
+
 The same pass found the worker only converted *System A* parser output. The ~30 parsers under
 `parsers/parsers/` (System B — httpx, katana, naabu, gau, dalfox, trivy, bandit, subfinder, …)
 return plain dicts, while the MCP result builder reads `finding.__dict__`; every finding from those

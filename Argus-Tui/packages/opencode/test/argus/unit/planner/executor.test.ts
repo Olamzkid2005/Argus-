@@ -1308,6 +1308,30 @@ describe("InProcessExecutor", () => {
       const result = await exec.execute(makePhase())
       expect(result.errors.length).toBeGreaterThan(0)
     })
+
+    test("a clean exit with no output is an empty result, not a failure", async () => {
+      // subfinder/waybackurls/alterx against a local target exit 0 and print
+      // nothing. The worker maps that to `success: true` with no structured
+      // data and no error, which the executor previously turned into
+      // "Tool returned unsuccessful result" plus a pointless retry.
+      let calls = 0
+      const bridge = {
+        ...mockBridge,
+        callTool: async () => {
+          calls++
+          return { success: true, data: {}, error: undefined, durationMs: 5 }
+        },
+      }
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(makePhase())
+
+      expect(result.errors).toEqual([])
+      expect(result.findings).toHaveLength(0)
+      expect(exec.expectedAbsences).toHaveLength(0)
+      // No retry: an empty result is terminal, unlike a failure.
+      expect(calls).toBe(1)
+    })
   })
   describe("expected absences (the target simply lacks the thing)", () => {
     const absenceBridge = (message: string) => ({
