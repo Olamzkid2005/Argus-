@@ -12,6 +12,50 @@ from database.connection import db_cursor
 
 logger = logging.getLogger(__name__)
 
+#: Severities the reports table has a counter column for.
+_SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+
+
+def _as_report_dict(report_data: object) -> dict:
+    """Coerce the generator's JSON into the dict the reports table expects.
+
+    ``LLMService.chat_json`` is typed ``dict | list``: when the model answers
+    with a bare findings array the report still has to persist instead of
+    raising ``'list' object has no attribute 'get'``.
+    """
+    if isinstance(report_data, dict):
+        return report_data
+    if isinstance(report_data, list):
+        return {"findings": report_data}
+    if report_data is None:
+        return {}
+    return {"findings": [report_data]}
+
+
+def _as_finding_dicts(findings: object) -> list[dict]:
+    """Keep the dict entries of a findings field — the LLM also writes prose.
+
+    Non-dict entries are dropped from the derived counts only; the untouched
+    report is still stored in ``full_report_json``.
+    """
+    if findings is None:
+        return []
+    if isinstance(findings, dict):
+        return [findings]
+    if isinstance(findings, (list, tuple)):
+        return [entry for entry in findings if isinstance(entry, dict)]
+    return []
+
+
+def _count_by_severity(findings: list[dict]) -> dict[str, int]:
+    """Count findings per severity, case-insensitively."""
+    counts = dict.fromkeys(_SEVERITIES, 0)
+    for finding in findings:
+        severity = str(finding.get("severity") or "").upper()
+        if severity in counts:
+            counts[severity] += 1
+    return counts
+
 
 class ReportRepository:
     """
@@ -28,7 +72,7 @@ class ReportRepository:
     def upsert_report(
         self,
         engagement_id: str,
-        report_data: dict,
+        report_data: dict | list,
         generated_by: str = "llm",
         model_used: str = None,
         sbom_json: dict = None,
@@ -46,21 +90,27 @@ class ReportRepository:
         Returns:
             Report ID string, or None on failure
         """
-        findings = report_data.get("detailed_findings", [])
-        if not findings:
-            findings = report_data.get("findings", [])
+        report_data = _as_report_dict(report_data)
+        raw_findings = report_data.get("detailed_findings") or report_data.get(
+            "findings"
+        )
+        findings = _as_finding_dicts(raw_findings)
+        if isinstance(raw_findings, (list, tuple)) and len(findings) != len(
+            raw_findings
+        ):
+            logger.warning(
+                "Report for %s has %d entries in its findings list that are not "
+                "objects; the raw report is still stored, but they are not counted",
+                engagement_id,
+                len(raw_findings) - len(findings),
+            )
 
         total = len(findings)
-        critical = sum(
-            1 for f in findings if (f.get("severity", "") or "").upper() == "CRITICAL"
-        )
-        high = sum(
-            1 for f in findings if (f.get("severity", "") or "").upper() == "HIGH"
-        )
-        medium = sum(
-            1 for f in findings if (f.get("severity", "") or "").upper() == "MEDIUM"
-        )
-        low = sum(1 for f in findings if (f.get("severity", "") or "").upper() == "LOW")
+        counts = _count_by_severity(findings)
+        critical = counts["CRITICAL"]
+        high = counts["HIGH"]
+        medium = counts["MEDIUM"]
+        low = counts["LOW"]
 
         try:
             with db_cursor() as cursor:
@@ -89,9 +139,11 @@ class ReportRepository:
                     (
                         engagement_id,
                         generated_by,
-                        report_data.get("executive_summary", ""),
-                        json.dumps(report_data),
-                        report_data.get("risk_level", "medium"),
+                        # The LLM's JSON is not schema-checked, so coerce the
+                        # scalar columns instead of handing psycopg a dict.
+                        str(report_data.get("executive_summary") or ""),
+                        json.dumps(report_data, default=str),
+                        str(report_data.get("risk_level") or "medium"),
                         total,
                         critical,
                         high,

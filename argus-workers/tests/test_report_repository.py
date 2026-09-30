@@ -156,6 +156,81 @@ class TestUpsertReport:
         assert params[11] == json.dumps({"bom": "data"})
 
 
+class TestUpsertReportToleratesLooseLlmJson:
+    """The report generator hands over whatever the model returned.
+
+    Regression: a report whose ``detailed_findings`` held prose strings blew up
+    with "'str' object has no attribute 'get'" and was never persisted.
+    """
+
+    def test_string_entries_are_not_counted_by_severity(self, mock_db_cursor):
+        mock_db_cursor.fetchone.return_value = ("report-5",)
+        repo = ReportRepository()
+
+        result = repo.upsert_report(
+            engagement_id="eng-1",
+            report_data={
+                "executive_summary": "Summary",
+                "detailed_findings": [
+                    "Missing security headers",
+                    {"severity": "HIGH"},
+                    {"severity": "critical"},
+                ],
+            },
+        )
+
+        assert result == "report-5"
+        _sql, params = mock_db_cursor.execute.call_args[0]
+        assert params[5] == 2  # total_findings — the prose entry is not a finding
+        assert params[6] == 1  # critical
+        assert params[7] == 1  # high
+
+    def test_bare_list_report_is_persisted_as_findings(self, mock_db_cursor):
+        """``LLMService.chat_json`` is typed ``dict | list``."""
+        mock_db_cursor.fetchone.return_value = ("report-6",)
+        repo = ReportRepository()
+        findings = [{"severity": "LOW"}, {"severity": "HIGH"}]
+
+        result = repo.upsert_report(engagement_id="eng-1", report_data=findings)
+
+        assert result == "report-6"
+        _sql, params = mock_db_cursor.execute.call_args[0]
+        assert params[5] == 2
+        assert params[7] == 1
+        assert params[9] == 1
+        assert json.loads(params[3]) == {"findings": findings}
+
+    def test_non_dict_scalars_do_not_reach_the_driver(self, mock_db_cursor):
+        mock_db_cursor.fetchone.return_value = ("report-7",)
+        repo = ReportRepository()
+
+        result = repo.upsert_report(
+            engagement_id="eng-1",
+            report_data={
+                "executive_summary": {"text": "Summary"},
+                "risk_level": None,
+                "detailed_findings": {"severity": "MEDIUM"},
+            },
+        )
+
+        assert result == "report-7"
+        _sql, params = mock_db_cursor.execute.call_args[0]
+        assert isinstance(params[2], str)
+        assert params[4] == "medium"  # risk_level default, not None
+        assert params[5] == 1  # a single finding object, not a list
+        assert params[8] == 1  # medium
+
+    def test_none_report_data_still_inserts_a_row(self, mock_db_cursor):
+        mock_db_cursor.fetchone.return_value = ("report-8",)
+        repo = ReportRepository()
+
+        result = repo.upsert_report(engagement_id="eng-1", report_data=None)
+
+        assert result == "report-8"
+        _sql, params = mock_db_cursor.execute.call_args[0]
+        assert params[5] == 0
+
+
 class TestGetReport:
     def test_returns_report_dict_with_json_loaded_fields(self, mock_db_cursor):
         full_report = {"executive_summary": "Summary", "risk_level": "high"}
