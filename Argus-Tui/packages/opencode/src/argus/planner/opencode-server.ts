@@ -83,11 +83,50 @@ const log = (msg: string) => console.log(`[Argus:ocserver] ${msg}`)
  */
 const acquired = new Set<OpencodeServerHandle>()
 
+/**
+ * Servers this process has acquired, keyed by the directory they serve.
+ *
+ * The planner and the worker handoff both need one, and each would otherwise
+ * start its own `opencode serve` — two servers for one assessment is waste, not
+ * isolation. A cached server is health-checked before reuse, so one that has
+ * died is replaced instead of being handed out forever.
+ */
+const serversByDirectory = new Map<string, OpencodeServerHandle>()
+
 /** Stop every server this process started. Safe to call more than once. */
 export async function shutdownAcquiredServers(): Promise<void> {
   const handles = [...acquired]
   acquired.clear()
+  serversByDirectory.clear()
   await Promise.all(handles.map((handle) => handle.dispose()))
+}
+
+// ── Transport selection ──────────────────────────────────────────────
+
+/** `ARGUS_LLM_TRANSPORT=server|direct|auto` (default `auto`). */
+export const LLM_TRANSPORT_ENV_VAR = "ARGUS_LLM_TRANSPORT"
+
+export type PlannerTransport = "server" | "direct"
+
+/**
+ * Where a call to a provider should be made.
+ *
+ * OpenCode's own gateways serve requests made by OpenCode itself and refuse
+ * them from this source tree (HTTP 403 `FreeTierError`, see blocker B9), so
+ * `opencode*` providers default to going through a local OpenCode server. Every
+ * other provider is a normal HTTP API that Argus can call directly.
+ *
+ * The same selection governs the worker handoff: one run must not have the
+ * planner borrowing OpenCode's client while the worker posts to a gateway that
+ * will refuse it.
+ */
+export function selectPlannerTransport(
+  providerID: string,
+  preference = process.env[LLM_TRANSPORT_ENV_VAR]?.trim().toLowerCase(),
+): PlannerTransport {
+  if (preference === "direct") return "direct"
+  if (preference === "server") return "server"
+  return providerID.startsWith("opencode") ? "server" : "direct"
 }
 
 /** A free TCP port, released immediately so the server can bind it. */
@@ -110,6 +149,17 @@ async function healthy(baseUrl: string, directory: string): Promise<boolean> {
   }
 }
 
+/** A live server for this directory, or undefined. Failed caches are dropped. */
+async function cachedServer(directory: string): Promise<OpencodeServerHandle | undefined> {
+  const cached = serversByDirectory.get(directory)
+  if (!cached) return undefined
+  if (await healthy(cached.baseUrl, directory)) return cached
+  serversByDirectory.delete(directory)
+  acquired.delete(cached)
+  await cached.dispose().catch(() => {})
+  return undefined
+}
+
 /**
  * Find a server to use, or start one.
  *
@@ -121,6 +171,9 @@ export async function acquireServer(input: {
   directory: string
   binary?: string
 }): Promise<OpencodeServerHandle> {
+  const cached = await cachedServer(input.directory)
+  if (cached) return cached
+
   const existing = process.env.OPENCODE_SERVER_URL?.trim()
   if (existing) {
     const baseUrl = existing.replace(/\/+$/, "")
@@ -131,7 +184,14 @@ export async function acquireServer(input: {
       )
     }
     log(`using server from OPENCODE_SERVER_URL at ${baseUrl}`)
-    return { baseUrl, owned: false, origin: "OPENCODE_SERVER_URL", dispose: async () => {} }
+    const handle: OpencodeServerHandle = {
+      baseUrl,
+      owned: false,
+      origin: "OPENCODE_SERVER_URL",
+      dispose: async () => {},
+    }
+    serversByDirectory.set(input.directory, handle)
+    return handle
   }
 
   const binary = input.binary ?? process.env.ARGUS_OPENCODE_BIN?.trim() ?? "opencode"
@@ -165,10 +225,12 @@ export async function acquireServer(input: {
         origin: `${binary} serve`,
         dispose: async () => {
           acquired.delete(handle)
+          serversByDirectory.delete(input.directory)
           if (child.exitCode === null) child.kill("SIGTERM")
         },
       }
       acquired.add(handle)
+      serversByDirectory.set(input.directory, handle)
       return handle
     }
     await new Promise((r) => setTimeout(r, 300))

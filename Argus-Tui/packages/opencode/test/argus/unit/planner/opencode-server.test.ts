@@ -11,7 +11,7 @@
 
 import { describe, expect, test } from "bun:test"
 import { parseJsonObject, unwrapToolCall } from "@/argus/planner/opencode-server"
-import { selectPlannerTransport } from "@/argus/planner/llm-service"
+import { LLM_TRANSPORT_ENV_VAR, selectPlannerTransport } from "@/argus/planner/llm-service"
 
 describe("parseJsonObject", () => {
   test("plain object", () => {
@@ -74,16 +74,37 @@ describe("unwrapToolCall", () => {
 })
 
 describe("selectPlannerTransport", () => {
+  /**
+   * Read the default rule from a known state.
+   *
+   * Suites that must not spawn a real `opencode serve` pin
+   * `ARGUS_LLM_TRANSPORT=direct` at module scope, and Bun runs the test files in
+   * one process, so the variable may hold another file's value here.
+   */
+  function withNoPreference<T>(fn: () => T): T {
+    const previous = process.env[LLM_TRANSPORT_ENV_VAR]
+    delete process.env[LLM_TRANSPORT_ENV_VAR]
+    try {
+      return fn()
+    } finally {
+      if (previous !== undefined) process.env[LLM_TRANSPORT_ENV_VAR] = previous
+    }
+  }
+
   test("OpenCode's own gateways go through the local server", () => {
     // A direct call from this build is refused by those gateways, so the server
     // is not a preference here — it is the only transport that can work.
-    expect(selectPlannerTransport("opencode", undefined)).toBe("server")
-    expect(selectPlannerTransport("opencode-go", undefined)).toBe("server")
+    withNoPreference(() => {
+      expect(selectPlannerTransport("opencode")).toBe("server")
+      expect(selectPlannerTransport("opencode-go")).toBe("server")
+    })
   })
 
   test("other providers are called directly", () => {
-    expect(selectPlannerTransport("deepseek", undefined)).toBe("direct")
-    expect(selectPlannerTransport("anthropic", undefined)).toBe("direct")
+    withNoPreference(() => {
+      expect(selectPlannerTransport("deepseek")).toBe("direct")
+      expect(selectPlannerTransport("anthropic")).toBe("direct")
+    })
   })
 
   test("the environment can force either transport", () => {

@@ -35,6 +35,7 @@ import { Provider } from "@/provider/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Auth } from "@/auth"
 import { LLMNative } from "@/session/llm/native-request"
+import { acquireServer, selectPlannerTransport } from "./opencode-server"
 import {
   PLANNER_MODEL_ENV_VAR,
   ambientEnvAllowed,
@@ -98,8 +99,19 @@ export async function disposePlannerRuntime(): Promise<void> {
  * The worker has no provider registry of its own — OpenCode's lives in this
  * process.
  */
-export interface WorkerLlmConfig {
-  /** Protocol the worker may speak. Only OpenAI-compatible chat today. */
+/**
+ * What to hand the Python worker so it runs on the planner's model.
+ *
+ * Two transports, matching the two the worker can speak:
+ *
+ * `openai-compatible`
+ *   A normal HTTP API the worker calls itself, with `apiKey`.
+ * `opencode-server`
+ *   A local OpenCode server the worker asks to make the call. This is the only
+ *   transport that can reach `opencode*` gateways: they refuse direct calls
+ *   made from this source tree (HTTP 403 `FreeTierError`, blocker B9).
+ */
+export interface DirectWorkerLlmConfig {
   readonly provider: "openai-compatible"
   readonly providerID: string
   readonly model: string
@@ -107,6 +119,19 @@ export interface WorkerLlmConfig {
   /** Base URL; the worker appends `/chat/completions`. */
   readonly baseUrl: string
 }
+
+export interface ServerWorkerLlmConfig {
+  readonly provider: "opencode-server"
+  readonly providerID: string
+  /** Model id as OpenCode's registry names it, not the provider's API alias. */
+  readonly modelID: string
+  /** Base URL of the local server, e.g. `http://127.0.0.1:41234`. */
+  readonly baseUrl: string
+  /** Directory the server serves; sent with every request. */
+  readonly directory: string
+}
+
+export type WorkerLlmConfig = DirectWorkerLlmConfig | ServerWorkerLlmConfig
 
 export type PlannerModelResolution =
   | {
@@ -117,7 +142,7 @@ export type PlannerModelResolution =
       readonly source: "explicit" | "default" | "first-configured"
       readonly ignoredAmbientEnv: string[]
       /** Present when the worker can be pointed at the same model. */
-      readonly handoff?: WorkerLlmConfig
+      readonly handoff?: DirectWorkerLlmConfig
       /** Why the worker cannot use this model, when that is the case. */
       readonly handoffUnsupportedReason?: string
     }
@@ -130,7 +155,10 @@ export type PlannerModelResolution =
  * OpenAI chat-completions (or Anthropic's wire format when explicitly
  * configured), so a provider on any other protocol cannot be handed over.
  */
-function buildWorkerLlmConfig(model: Provider.Model, apiKey: string | undefined): WorkerLlmConfig | undefined {
+function buildWorkerLlmConfig(
+  model: Provider.Model,
+  apiKey: string | undefined,
+): DirectWorkerLlmConfig | undefined {
   const npm = model.api.npm
   const url = model.api.url
   if (!apiKey || !url) return undefined
@@ -323,10 +351,59 @@ export async function resolveWorkerLlmConfig(): Promise<
 > {
   const resolution = await resolvePlannerModel()
   if (!resolution.ok) return { reason: resolution.reason }
+
+  if (selectPlannerTransport(resolution.providerID) === "server") {
+    // The resolved endpoint is the gateway itself, which refuses calls from
+    // this build; the worker borrows the server instead. `acquireServer` is a
+    // per-directory singleton, so this hands over the same server the planner
+    // is using rather than starting a second one.
+    const directory = process.cwd()
+    try {
+      const server = await acquireServer({ directory })
+      return {
+        config: buildServerWorkerLlmConfig({
+          providerID: resolution.providerID,
+          modelID: resolution.modelID,
+          baseUrl: server.baseUrl,
+          directory,
+        }),
+      }
+    } catch (error: unknown) {
+      return {
+        reason:
+          `Provider '${resolution.providerID}' is served through a local OpenCode server, ` +
+          `which is not available: ${error instanceof Error ? error.message : String(error)}`,
+      }
+    }
+  }
+
   if (!resolution.handoff) {
     return { reason: resolution.handoffUnsupportedReason ?? "No worker-compatible endpoint for the resolved model." }
   }
   return { config: resolution.handoff }
+}
+
+/**
+ * The worker's half of an `opencode*` run: the address of a local server.
+ *
+ * These keys are the wire contract with the Python worker
+ * (`argus-workers/config/llm_env.py::build_worker_llm_config`); renaming one
+ * here without renaming it there makes every worker run fall back to
+ * deterministic mode.
+ */
+export function buildServerWorkerLlmConfig(input: {
+  providerID: string
+  modelID: string
+  baseUrl: string
+  directory: string
+}): ServerWorkerLlmConfig {
+  return {
+    provider: "opencode-server",
+    providerID: input.providerID,
+    modelID: input.modelID,
+    baseUrl: input.baseUrl,
+    directory: input.directory,
+  }
 }
 
 async function resolvePlannerModelUncached(

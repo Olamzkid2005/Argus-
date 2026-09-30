@@ -683,15 +683,28 @@ export class WorkersBridge {
     /**
      * The model the Python worker should use. Supplied by the planner so one
      * run uses one model — the worker has no provider registry of its own.
-     * Never logged: it carries an API key.
+     *
+     * `openai-compatible` is called directly by the worker with `apiKey`;
+     * `opencode-server` asks the local OpenCode server to make the call, which
+     * is the only way to reach `opencode*` gateways (blocker B9).
+     *
+     * Never logged: the direct form carries an API key.
      */
-    llm?: {
-      provider: "openai-compatible"
-      providerID: string
-      model: string
-      apiKey: string
-      baseUrl: string
-    }
+    llm?:
+      | {
+          provider: "openai-compatible"
+          providerID: string
+          model: string
+          apiKey: string
+          baseUrl: string
+        }
+      | {
+          provider: "opencode-server"
+          providerID: string
+          modelID: string
+          baseUrl: string
+          directory: string
+        }
   }): Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string; hypotheses?: Array<{ id: string; description: string; confidence: number; status: string }> }> {
     return this.sendRequest("agent_init", params) as Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string; hypotheses?: Array<{ id: string; description: string; confidence: number; status: string }> }>
   }

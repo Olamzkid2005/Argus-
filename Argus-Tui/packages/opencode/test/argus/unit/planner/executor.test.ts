@@ -1,5 +1,11 @@
 import { describe, expect, test, beforeEach } from "bun:test"
 import { InProcessExecutor, CrossToolRateLimiter, ThrottleTracker } from "../../../../src/argus/planner/executor"
+
+// `executeHybrid` resolves the worker's LLM handoff, and for an `opencode*`
+// provider that means acquiring a real `opencode serve`. Unit tests must not
+// spawn servers, and the server transport has its own coverage in
+// opencode-server.test.ts.
+process.env.ARGUS_LLM_TRANSPORT = "direct"
 import { Capability } from "../../../../src/argus/planner/capabilities"
 import { ConfidenceEngine } from "../../../../src/argus/engagement/confidence"
 import type { PhaseExecutionRequest } from "../../../../src/argus/planner/types"

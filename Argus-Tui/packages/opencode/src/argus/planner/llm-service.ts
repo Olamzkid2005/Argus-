@@ -39,9 +39,17 @@ import {
   prompt as serverPrompt,
   parseJsonObject,
   OpencodeServerError,
+  LLM_TRANSPORT_ENV_VAR,
+  selectPlannerTransport,
   type OpencodeServerHandle,
+  type PlannerTransport,
   type ServerModelRef,
 } from "./opencode-server"
+
+// The transport policy lives with the transport (opencode-server.ts) because
+// the worker handoff must make the same decision; re-exported here so the
+// planner keeps one entry point for it.
+export { LLM_TRANSPORT_ENV_VAR, selectPlannerTransport, type PlannerTransport }
 
 // ── Structured Output Schemas ────────────────────────────────────────
 // These Effect Schemas define the shape of data the LLM must return.
@@ -96,30 +104,6 @@ export interface LLMPhaseSuggestionResult {
 
 const ENV_PLANNER_MODEL = PLANNER_MODEL_ENV_VAR
 const ENV_OPENCODE_MODEL = "OPENCODE_MODEL"
-
-// ── Transport selection ──────────────────────────────────────────────
-
-/** `ARGUS_LLM_TRANSPORT=server|direct|auto` (default `auto`). */
-export const LLM_TRANSPORT_ENV_VAR = "ARGUS_LLM_TRANSPORT"
-
-export type PlannerTransport = "server" | "direct"
-
-/**
- * Where a planner call should be made.
- *
- * OpenCode's own gateways serve requests made by OpenCode itself and refuse
- * them from this source tree (HTTP 403 `FreeTierError`, see blocker B9), so
- * `opencode*` providers default to going through a local OpenCode server.
- * Every other provider is a normal HTTP API that Argus can call directly.
- */
-export function selectPlannerTransport(
-  providerID: string,
-  preference = process.env[LLM_TRANSPORT_ENV_VAR]?.trim().toLowerCase(),
-): PlannerTransport {
-  if (preference === "direct") return "direct"
-  if (preference === "server") return "server"
-  return providerID.startsWith("opencode") ? "server" : "direct"
-}
 
 /**
  * JSON Schema for the phase-suggestion response — the wire form of
