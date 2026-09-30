@@ -1519,6 +1519,38 @@ _AGENT_INTERNAL_TOOLS = frozenset(
 )
 
 
+#: Registry entries that name an in-process pipeline step, not an executable.
+#:
+#: The orchestrator runs these itself — post-exploitation, credential replay
+#: and the internal probe through ``run_post_exploitation()``, attack-graph
+#: building, report generation and compliance scoring through their services —
+#: and ``ai_surface_detected`` is an advisory marker with no phase at all.
+#:
+#: They are declared so registry consumers can tell them apart from a tool
+#: whose external binary simply is not installed: no install can make these
+#: runnable, and handing their name to a PATH-based runner (ToolRunner, the MCP
+#: bridge) can only fail. Note that these are deliberately *not* in
+#: ``_AGENT_INTERNAL_TOOLS``: that set means "available without a binary", and
+#: everything in it is offered to the ReAct agent as a callable tool.
+_PIPELINE_STEP_TOOLS = frozenset(
+    {
+        "intelligence-engine",
+        "attack-graph",
+        "post_exploitation",
+        "credential_replay",
+        "internal_probe",
+        "report-generator",
+        "compliance-check",
+        "ai_surface_detected",
+    }
+)
+
+
+def is_pipeline_step(tool_name: str) -> bool:
+    """True when *tool_name* is an in-process step, not an executable tool."""
+    return tool_name in _PIPELINE_STEP_TOOLS
+
+
 def is_tool_available(tool_name: str) -> bool:
     """Check if a tool binary is available on the system PATH.
 

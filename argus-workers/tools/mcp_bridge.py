@@ -30,7 +30,11 @@ class MCPToolBridge:
     - Streaming output
     - Schema validation
 
-    Unavailable binaries are skipped with a warning.
+    Two kinds of registry entry are *not* registered, and they are reported
+    separately because the fix differs: a tool whose external binary is simply
+    not installed (the operator can install it), and an in-process pipeline
+    step the orchestrator runs itself (nothing to install, and calling it
+    through a PATH-based runner could only fail).
     """
 
     def __init__(self, tool_runner: ToolRunner, engagement_id: str = None):
@@ -41,6 +45,7 @@ class MCPToolBridge:
 
     def _register_tools(self):
         """Register tools from tool_definitions.py with the MCP server."""
+        from tool_definitions import is_pipeline_step
         from tools.tool_utils import is_tool_available
 
         slog = ScanLogger("mcp_bridge", engagement_id=self.engagement_id or "")
@@ -49,29 +54,49 @@ class MCPToolBridge:
         mcp_tools = build_mcp_tool_definitions()
 
         registered_count = 0
-        skipped_tools = []
+        missing_binaries = []
+        pipeline_steps = []
 
         for tool_def in mcp_tools:
             binary_name = getattr(tool_def, "binary", None) or tool_def.command
-            if not is_tool_available(binary_name):
-                skipped_tools.append(tool_def.name)
+            if is_tool_available(binary_name):
+                self.mcp.register_tool(tool_def)
+                registered_count += 1
+                continue
+
+            # Not on PATH: either an external binary that is not installed, or
+            # an in-process step whose name was never a binary to begin with.
+            if is_pipeline_step(tool_def.name):
+                pipeline_steps.append(tool_def.name)
                 slog.info(
-                    "Skipping tool '%s' — binary not found on PATH", tool_def.name
+                    "Not registering '%s' — in-process pipeline step, not an "
+                    "executable",
+                    tool_def.name,
                 )
                 continue
-            self.mcp.register_tool(tool_def)
-            registered_count += 1
 
-        if skipped_tools:
+            missing_binaries.append(tool_def.name)
+            slog.info("Skipping tool '%s' — binary not found on PATH", tool_def.name)
+
+        if missing_binaries:
             logger.warning(
-                "Skipped %d unavailable tool(s): %s",
-                len(skipped_tools),
-                ", ".join(skipped_tools),
+                "Skipped %d tool(s) whose external binary is not on PATH: %s",
+                len(missing_binaries),
+                ", ".join(missing_binaries),
+            )
+        if pipeline_steps:
+            logger.info(
+                "%d in-process pipeline step(s) are not exposed over MCP: %s",
+                len(pipeline_steps),
+                ", ".join(pipeline_steps),
             )
         slog.info(
-            "Registered %d tools with MCP (%d skipped)",
+            "Registered %d tools with MCP (%d skipped: %d missing binary, "
+            "%d pipeline step)",
             registered_count,
-            len(skipped_tools),
+            len(missing_binaries) + len(pipeline_steps),
+            len(missing_binaries),
+            len(pipeline_steps),
         )
 
     def call_via_mcp(

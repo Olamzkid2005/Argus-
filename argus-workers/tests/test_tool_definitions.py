@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from tool_definitions import (
+    _PIPELINE_STEP_TOOLS,
     ALL_PHASES,
     TOOLS,
     SignalQuality,
@@ -18,6 +19,7 @@ from tool_definitions import (
     get_phase_tool_names,
     get_tool,
     get_tools_for_phase,
+    is_pipeline_step,
     is_tool_available,
 )
 
@@ -324,3 +326,26 @@ class TestReregistrationKeepsGeneratedFields:
             "browser_security_operator",
         ]
         assert by_name["npm-audit"].command == "npm"
+
+
+class TestPipelineStepTools:
+    """Registry entries that name an in-process step, not an executable."""
+
+    def test_every_pipeline_step_is_registered(self):
+        unknown = sorted(name for name in _PIPELINE_STEP_TOOLS if name not in TOOLS)
+        assert unknown == [], f"declared as pipeline steps but not registered: {unknown}"
+
+    def test_pipeline_steps_declare_no_launcher(self):
+        """A step that declares a binary is executable and must not be listed."""
+        with_launcher = sorted(
+            name for name in _PIPELINE_STEP_TOOLS if TOOLS[name].binary is not None
+        )
+        assert with_launcher == [], (
+            f"these declare a binary and are executable: {with_launcher}"
+        )
+
+    def test_helper_agrees_with_the_set(self):
+        assert is_pipeline_step("report-generator") is True
+        assert is_pipeline_step("browser_security_operator") is False
+        assert is_pipeline_step("nuclei") is False
+        assert is_pipeline_step("__nonexistent__") is False
