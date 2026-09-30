@@ -174,6 +174,38 @@ class TestParser:
         result = self.parser.parse("unknown_tool", "")
         assert result == []
 
+    def test_launcher_envelope_with_no_findings_yields_nothing(self):
+        """A successful launcher result must not become a phantom finding."""
+        envelope = json.dumps(
+            {
+                "success": True,
+                "data": "",
+                "findings": [],
+                "findings_count": 0,
+                "signal_quality": "PROBABLE",
+                "duration_ms": 72,
+                "error": "",
+            }
+        )
+
+        assert self.parser.parse("executive_report_generator", envelope) == []
+
+    def test_launcher_envelope_findings_are_used(self):
+        envelope = json.dumps(
+            {
+                "success": True,
+                "data": "",
+                "findings": [{"title": "Real finding", "severity": "high"}],
+                "findings_count": 1,
+                "error": "",
+            }
+        )
+
+        findings = self.parser.parse("executive_report_generator", envelope)
+
+        assert len(findings) == 1
+        assert findings[0]["title"] == "Real finding"
+
     def test_parse_case_insensitive(self):
         """Test that tool name is case insensitive"""
         output = "https://example.com"

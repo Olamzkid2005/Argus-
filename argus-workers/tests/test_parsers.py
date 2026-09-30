@@ -337,6 +337,40 @@ class TestGenericParser:
         assert generic.parse("") == []
 
 
+class TestLauncherEnvelopeIsNotAFinding:
+    """A run_agent_tool.py result envelope is transport, not a finding.
+
+    Regression: the envelope ({"success": ..., "findings": [], "error": ""})
+    parsed as a single dict, so every successful reporting run surfaced a
+    phantom MEDIUM finding titled "Generic finding" with no description.
+    """
+
+    ENVELOPE = {
+        "success": True,
+        "data": "",
+        "findings": [],
+        "findings_count": 0,
+        "signal_quality": "PROBABLE",
+        "duration_ms": 72,
+        "error": "",
+    }
+
+    def test_envelope_with_no_findings_yields_nothing(self):
+        assert generic.parse(json.dumps(self.ENVELOPE)) == []
+
+    def test_dispatch_of_envelope_yields_nothing(self):
+        output = json.dumps(self.ENVELOPE)
+        assert dispatch("executive_report_generator", output) == []
+        assert dispatch("engagement_analytics_engine", output) == []
+
+    def test_envelope_findings_are_used_verbatim(self):
+        envelope = dict(self.ENVELOPE, findings=[{"title": "Real finding", "severity": "high"}])
+        findings = generic.parse(json.dumps(envelope))
+        assert len(findings) == 1
+        assert findings[0].title == "Real finding"
+        assert findings[0].severity == 3
+
+
 class TestDispatch:
     def test_dispatches_to_correct_parser(self):
         output = json.dumps(

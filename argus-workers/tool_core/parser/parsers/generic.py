@@ -19,6 +19,16 @@ def _try_json(output: str) -> list[NormalizedFinding] | None:
     except json.JSONDecodeError:
         return None
 
+    # Tool launchers (tools/run_agent_tool.py) print a result envelope:
+    #   {"success": ..., "data": ..., "findings": [...], "error": ...}
+    # The envelope is transport, not a finding. Parsing it as one mints a
+    # phantom "Generic finding" (severity medium) from every successful run
+    # that found nothing — including reporting tools, which report on
+    # findings rather than produce them. An empty list means the tool
+    # genuinely found nothing.
+    if isinstance(data, dict) and isinstance(data.get("findings"), list):
+        return _try_json(json.dumps(data["findings"])) or []
+
     items = data if isinstance(data, list) else [data]
     findings = []
     for item in items:
@@ -109,8 +119,11 @@ def parse(output: str) -> list[NormalizedFinding]:
     if not output or not output.strip():
         return []
 
+    # JSON is authoritative: a parsed empty result means the tool found
+    # nothing, and must not fall through to the regex heuristics (which would
+    # otherwise turn the JSON envelope's own "error": "" key into findings).
     json_findings = _try_json(output)
-    if json_findings:
+    if json_findings is not None:
         return json_findings
 
     return _regex_extract(output)

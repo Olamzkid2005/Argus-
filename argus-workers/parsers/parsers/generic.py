@@ -54,9 +54,11 @@ class GenericParser(BaseParser):
         if not raw_output or not raw_output.strip():
             return []
 
-        # Try JSON first
+        # Try JSON first; JSON is authoritative, so an empty result means the
+        # tool found nothing rather than falling through to the regex
+        # heuristics (which would mine the envelope's own "error": "" key).
         json_findings = _try_json(raw_output)
-        if json_findings:
+        if json_findings is not None:
             return json_findings
 
         # Fall back to regex extraction
@@ -69,6 +71,16 @@ def _try_json(output: str) -> list[dict] | None:
         data = json.loads(output)
     except json.JSONDecodeError:
         return None
+
+    # Tool launchers (tools/run_agent_tool.py) print a result envelope:
+    #   {"success": ..., "data": ..., "findings": [...], "error": ...}
+    # The envelope is transport, not a finding. Parsing it as one mints a
+    # phantom "Generic finding" (severity medium) from every successful run
+    # that found nothing — including reporting tools, which report on
+    # findings rather than produce them. An empty list means the tool
+    # genuinely found nothing.
+    if isinstance(data, dict) and isinstance(data.get("findings"), list):
+        return _try_json(json.dumps(data["findings"])) or []
 
     items = data if isinstance(data, list) else [data]
     findings = []
