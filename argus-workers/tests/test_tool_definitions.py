@@ -11,6 +11,7 @@ from tool_definitions import (
     ToolDefinition,
     ToolParameter,
     ToolRequires,
+    _register,
     build_mcp_tool_definitions,
     build_phase_tools_dict,
     evaluate_gate,
@@ -238,3 +239,88 @@ class TestBuildMCPToolDefinitions:
         mcp_tools = build_mcp_tool_definitions()
         names = [t.name for t in mcp_tools]
         assert "nuclei" in names
+
+
+class TestReregistrationKeepsGeneratedFields:
+    """A hand-written entry must not drop what the YAML definition carried.
+
+    The generated definitions are imported before the hand-written ones, so a
+    later `_register()` of the same name used to replace them wholesale. That
+    stripped the `binary` (`python3` for the in-process launchers) and made the
+    MCP bridge skip the tool as "unavailable" because PATH has no binary named
+    after it.
+    """
+
+    def test_missing_binary_and_args_are_inherited(self):
+        name = "__test_reregister_keep__"
+        try:
+            _register(
+                ToolDefinition(
+                    name=name,
+                    description="from yaml",
+                    binary="python3",
+                    default_args=["argus-workers/tools/run_agent_tool.py", name],
+                )
+            )
+            _register(ToolDefinition(name=name, description="hand-written"))
+
+            td = TOOLS[name]
+            assert td.binary == "python3"
+            assert td.default_args == ["argus-workers/tools/run_agent_tool.py", name]
+            # Everything else still comes from the later registration.
+            assert td.description == "hand-written"
+        finally:
+            TOOLS.pop(name, None)
+
+    def test_explicit_binary_and_args_still_win(self):
+        name = "__test_reregister_override__"
+        try:
+            _register(
+                ToolDefinition(
+                    name=name,
+                    description="from yaml",
+                    binary="python3",
+                    default_args=["old-launcher.py", name],
+                )
+            )
+            _register(
+                ToolDefinition(
+                    name=name,
+                    description="hand-written",
+                    binary="custom-bin",
+                    default_args=["new-launcher.py", name],
+                )
+            )
+
+            td = TOOLS[name]
+            assert td.binary == "custom-bin"
+            assert td.default_args == ["new-launcher.py", name]
+        finally:
+            TOOLS.pop(name, None)
+
+    @pytest.mark.parametrize(
+        "name,binary",
+        [
+            ("browser_security_operator", "python3"),
+            ("verification_agent", "python3"),
+            ("executive_report_generator", "python3"),
+            ("attack_path_generator", "python3"),
+            ("finding_correlation_engine", "python3"),
+            ("npm-audit", "npm"),
+        ],
+    )
+    def test_real_registry_keeps_the_yaml_launcher(self, name, binary):
+        td = TOOLS[name]
+        assert td.binary == binary, (
+            f"{name} lost its YAML binary — the MCP bridge will skip it as "
+            f"unavailable (got {td.binary!r})"
+        )
+
+    def test_mcp_definitions_use_the_yaml_launcher(self):
+        by_name = {t.name: t for t in build_mcp_tool_definitions()}
+        assert by_name["browser_security_operator"].command == "python3"
+        assert by_name["browser_security_operator"].args[:2] == [
+            "argus-workers/tools/run_agent_tool.py",
+            "browser_security_operator",
+        ]
+        assert by_name["npm-audit"].command == "npm"

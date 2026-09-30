@@ -39,8 +39,11 @@ Pattern: Declarative agent registry with derived types and phase maps.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import logging
+from dataclasses import dataclass, field, replace
 from typing import final
+
+logger = logging.getLogger(__name__)
 
 from tool_core._compat import StrEnum
 from tool_core.config.models import ToolMetadata
@@ -198,9 +201,39 @@ class ToolDefinition:
 #: Tools access by name: TOOLS["nuclei"], TOOLS["httpx"], etc.
 TOOLS: dict[str, ToolDefinition] = {}
 
+#: Names whose re-registration inherited ``binary``/``default_args`` — reported
+#: once, after the module finishes importing (see the bottom of this file).
+_REGISTRY_MERGES: dict[str, list[str]] = {}
+
 
 def _register(tool: ToolDefinition) -> None:
-    """Register a tool definition (internal helper)."""
+    """Register a tool definition (internal helper).
+
+    The generated definitions (from ``tools/definitions/*.yaml``) are imported
+    below, and hand-written entries follow them. A hand-written entry for a name
+    the YAML already defines used to *replace* the generated one, silently
+    dropping whatever only the generated definition carried. Measured: 17 tools
+    lost the ``binary`` their YAML declares — every ``python3`` launcher plus
+    ``npm-audit``'s ``npm`` — so the MCP bridge asked PATH for a binary that was
+    never meant to exist and skipped the tool as "unavailable":
+    browser_security_operator, verification_agent, the executive report
+    generator and the intelligence engines among them.
+
+    A re-registration now keeps the existing ``binary``/``default_args`` when the
+    incoming definition lacks them, so a tool cannot quietly disappear from the
+    registry; the names merged this way are summarised at the bottom of the
+    module.
+    """
+    existing = TOOLS.get(tool.name)
+    if existing is not None:
+        filled: dict[str, object] = {}
+        if tool.binary is None and existing.binary is not None:
+            filled["binary"] = existing.binary
+        if not tool.default_args and existing.default_args:
+            filled["default_args"] = list(existing.default_args)
+        if filled:
+            _REGISTRY_MERGES[tool.name] = sorted(filled)
+            tool = replace(tool, **filled)
     TOOLS[tool.name] = tool
 
 
@@ -1657,3 +1690,15 @@ def build_mcp_tool_definitions() -> list:
             )
         )
     return mcp_tools
+
+
+if _REGISTRY_MERGES:
+    logger.debug(
+        "%d re-registered tool(s) inherited binary/default_args from their YAML "
+        "definition: %s",
+        len(_REGISTRY_MERGES),
+        ", ".join(
+            f"{name} ({'/'.join(fields)})"
+            for name, fields in sorted(_REGISTRY_MERGES.items())
+        ),
+    )
