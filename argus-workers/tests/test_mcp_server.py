@@ -481,6 +481,59 @@ class TestCallToolBinaryValidation:
         assert mock_which.call_count == INIT_TOOL_CHECKS + 1
 
 
+class TestLauncherExtraArgument:
+    """Launcher tools (run_agent_tool.py) take credentials through ``--extra``.
+
+    The ``extra`` parameter used to be declared without a CLI flag, so its JSON
+    payload was appended positionally and argparse rejected every credentialed
+    call: ``run_agent_tool.py: error: unrecognized arguments: {"email": ...}``.
+    That is how executive_report_generator and engagement_analytics_engine
+    failed every reporting phase.
+    """
+
+    def test_every_extra_parameter_in_the_definitions_has_the_cli_flag(self):
+        from pathlib import Path
+
+        import yaml
+
+        definitions = Path(__file__).resolve().parent.parent / "tools" / "definitions"
+        offenders = []
+        for path in sorted(definitions.glob("*.yaml")):
+            data = yaml.safe_load(path.read_text()) or {}
+            for param in data.get("parameters") or []:
+                if param.get("name") == "extra" and param.get("flag") != "--extra":
+                    offenders.append(path.name)
+        assert offenders == [], f"extra parameter without the --extra flag: {offenders}"
+
+    def test_extra_is_passed_as_a_flag_not_positionally(self, mocker):
+        import sys
+
+        mocker.patch("mcp_server.shutil.which", return_value=sys.executable)
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="launcher-tool",
+            command=sys.executable,
+            args=["-c", "import sys; print('|'.join(sys.argv[1:]))"],
+            parameters=[
+                ToolSchema(name="target", type="string", flag="--target"),
+                ToolSchema(name="extra", type="string", flag="--extra"),
+            ],
+        ))
+        payload = '{"email":"admin","password":"admin"}'
+
+        result = server.call_tool("launcher-tool", {
+            "target": "http://127.0.0.1:1",
+            "extra": payload,
+        })
+
+        assert result["isError"] is False
+        argv = result["content"][0]["text"]
+        assert "--extra" in argv
+        assert payload in argv
+        # The flag must precede the payload, not trail it as a stray positional.
+        assert argv.count("--extra") == 1
+
+
 class TestFindingsExitCodeWithoutFindings:
     """A findings-bearing exit code with nothing to parse is a CLI error.
 
