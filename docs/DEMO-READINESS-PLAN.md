@@ -393,8 +393,21 @@ Ordered so that each step is independently verifiable and unblocks the next.
       handed to the worker (closes **B4** — `0bd76813`/`b6a7a2a1`). A real completion now runs
       through the local OpenCode server in both runtimes (**B9** resolved — `c4b9328c`/`2c0e947e`).
 - [x] Worker/planner interpreter selection is explicit and reported (`closes **B7**`).
+- [x] `--autonomous` refuses to start when scope resolves to `warn`/`open`, and the refusal is
+      visible to a driver: exit 1, engagement `FAILED` (not left `RUNNING`), one stderr line
+      (`bcdbf80c`; the smoke test pins exit 1 plus the guard message). The CLI also stopped
+      exporting `ARGUS_ALLOW_UNSCOPED=1` — the worker reads that as "no scope configured, all
+      targets allowed", which silently disabled the allowlist autonomous mode must run under.
 - [ ] Exercise `assess --autonomous` (implies `ARGUS_AUTONOMOUS=1` + `ARGUS_AUTO_APPROVE=1`) and
       confirm it is genuinely unattended: no prompt, no TTY dependency.
+      Scope comes from the environment
+      (`ARGUS_SCOPE_MODE=allowlist ARGUS_ALLOWED_TARGETS=127.0.0.1`) — the committed
+      `argus.config.yaml` stays `warn` with no targets, as `scope-resolution.test.ts` requires.
+      Running it surfaced three blockers, each fixed and unit-tested:
+      the executor fabricated MEDIUM findings out of raw tool output (`c1c45a08`);
+      a worker restart killed the worker that replaced it (`f9898eb4`);
+      and the health probe restarted a worker that was merely busy running a scan (`d5935bb3`).
+      Evidence run: `/tmp/step2-auto3.log`, fixture on `127.0.0.1:55693`.
 - **Acceptance:** `ARGUS_AUTONOMOUS=1 ARGUS_AUTO_APPROVE=1` runs to completion with no interaction,
   and **refuses** to start when scope mode is `warn`/`open` (guardrail still live).
 
