@@ -228,6 +228,22 @@ before the opt-in can work. `ScopeValidator.is_internal_address()` semantics mus
 (it is asserted True for loopback in `tests/test_scope_validator.py:326-329`); the block decision
 belongs in a new predicate that the only blocking call site (`orchestrator_pkg/scan.py:507`) uses.
 
+**Resolved — both halves, measured against the fixture:**
+
+- **Scope reaches the validator** (`63bc9837`): the run scope is published for the process
+  (`tools/scope_validator.py:set_process_scope`) and forwarded through `ToolRunner` and
+  `orchestrator_pkg/scan.py`, so an allowlisted target is accepted with no Postgres scope row.
+  Subtree paths and the bare host match; the wrong port, a host with a suffix (`:8877x`), another
+  host and an attacker-controlled domain do not.
+- **The opt-in works** (`b0a5a4fd`, verified 2026-09-30):
+  `ARGUS_ALLOW_INTERNAL_TARGETS=1` plus an allowlisted target lets the scan phase run. This is the
+  flag Step 1's command line was missing; without it the scan phase filters its only target and the
+  run looks like "nothing found".
+- The classifier no longer announces a block it did not make (`edd4b313`):
+  `is_internal_address()` logged `Blocked internal/SSRF hostname: 127.0.0.1` three times in a run
+  that then scanned that target. It is a predicate — detection is now a debug line, and every
+  caller that really blocks keeps its own warning.
+
 ### B9 — No LLM credential on this machine can actually serve a request
 
 Found by making the first real planner call this repo has ever made (`c1cf6984`). The call now
@@ -338,15 +354,36 @@ Ordered so that each step is independently verifiable and unblocks the next.
 - **Acceptance met:** doctor MCP check passes against the real `mcp_server.py`; the assertion fails
   if either side's payload shape changes.
 
-### Step 1 — Prove the engine locally, no infra  *(1–2 days)*
-- [ ] Start an authorized local target: a `argus-workers/test_fixtures/*/app.py` Flask app
-      (`conftest.py` already knows how to launch these and wait on `/health`).
-- [ ] Run `python -m cli assess http://127.0.0.1:<port> --local --db /tmp/argus-demo.db`.
-- [ ] Confirm the four phases execute and findings land in SQLite.
-- [ ] Where it breaks, fix forward. This is the cheapest possible whole-engine test and needs no
-      Docker, Postgres, Redis, Celery, or LLM.
-- **Acceptance:** a complete `recon → scan → analyze → report` run against a local fixture, with
-  findings retrievable via `python -m cli list` / `report`.
+### Step 1 — Prove the engine locally, no infra  *(1–2 days)*  ✅ done
+- [x] Start an authorized local target: `argus-workers/test_fixtures/simple-web-app/app.py`
+      (Flask, deliberately SQLi-vulnerable) on an ephemeral port, waiting on `/health`.
+- [x] Run it (note the internal-target opt-in from **B8** — without it the scan phase drops its
+      only target):
+      ```
+      ARGUS_ALLOW_INTERNAL_TARGETS=1 python -m cli assess http://127.0.0.1:<port> \
+          --local --db /tmp/argus-demo.db
+      ```
+- [x] Confirm the four phases execute and findings land in SQLite. Measured 2026-09-30 (191 s,
+      exit 0): `recon` 15 findings → `scan` 1 → `analyze` → `report`, 9 findings stored (7
+      `OPEN_PORT` from naabu, 1 `NO_HTTPS`, 1 `CRAWLED_ENDPOINT` from katana), 1 warning in the
+      whole log (`13 tool(s) whose external binary is not on PATH`).
+- [x] Where it breaks, fix forward. This is the cheapest possible whole-engine test and needs no
+      Docker, Postgres, Redis, Celery, or LLM. What the run actually broke, all fixed and pushed:
+      the registry dropped a re-registered tool's YAML launcher, so 16 of the 37 "unavailable"
+      tools were never really unavailable (`1b7fff82`); the 8 steps the orchestrator runs itself
+      were reported as missing binaries instead of as steps (`7f800a33`); a report whose JSON was
+      not the expected shape failed to persist (`928287d9`); the run wrote to Postgres even though
+      `--local` popped `DATABASE_URL` — a task module loads `.env` and brings it back — so every
+      store it does not have failed noisily (`0b9a2439`); the web scanner's finding types were not
+      declared, so they were relabelled `GENERIC_FINDING` (`7725d8bc`); `cli list` printed no
+      finding count and no run ever moved an engagement off `created` (`0b9a2439`).
+- **Acceptance met:** a complete `recon → scan → analyze → report` run against a local fixture, with
+  findings retrievable via `python -m cli list` (now shows the count) and
+  `python -m cli report <id> --local --db … --format json`.
+- **Known limitation, recorded rather than hidden:** the LLM report is not persisted in local mode —
+  `reports` is a Postgres-only table, so `report` upserts are skipped there. `cli report` works off
+  the SQLite findings instead. Persisting the LLM artifact locally needs a SQLite report store
+  (Step 3 wants a report artifact, so this is the next gap to close there).
 
 ### Step 2 — Autonomy switches  *(1–3 days)*
 - [x] Scope guard is configurable (`ARGUS_SCOPE_MODE` / `ARGUS_ALLOWED_TARGETS`), enforced, and its
@@ -397,6 +434,12 @@ Ordered so that each step is independently verifiable and unblocks the next.
       different failure sets. Known contamination: `tasks/utils.py::_get_redis_client()`
       module-global cache + `sys.modules` mocking in `test_full_scan_pipeline_e2e.py`
       (E2E trio) and shared `DEFAULT_CONFIG.copy()` shallow mutation in `test_config_manager.py`.
+      Reproduced (2026-09-30) on a 99-file batch of the tool/scope/report suites: in file order it
+      fails exactly the three `test_orchestrator_scope` tests above; moving that file to the front
+      makes the same batch green (`1580 passed`), and a worktree at `ba91b9bd` — before this
+      session's changes — fails the same three. The tests `except Exception: pass` around
+      `run_scan()`, so the swallowed exception is invisible; surfacing it is the first step to
+      fixing whichever earlier test leaves the state behind.
 - [ ] **TS suite:** 25 failures across `LLMPlannerService` (singleton leak — passes 29/29 alone),
       2 genuine `encryption-workflow`, 1 `tui-commands`, 1 `smoke`.
 - [ ] **Hygiene:** untrack `argus-platform/{next-env.d.ts,tsconfig.tsbuildinfo}` (gitignore alone
@@ -447,9 +490,12 @@ the work plan (test determinism).
 
 ## 6. Explicitly unverified (do not claim these work)
 
-- No live scan against any real target has been run in this checkout.
+- No live scan against any real target has been run in this checkout. The only whole-engine run is
+  Step 1's, against `test_fixtures/simple-web-app` on loopback.
 - No `docker compose up` of the full stack; no CI run; Path B never executed here.
-- No LLM call has been observed succeeding from either runtime.
+- LLM calls *have* now been observed succeeding from both runtimes (B9, via the local OpenCode
+  server): a planner call returned 9 phases and a worker call returned a tool choice. What is still
+  unverified is the paid/console-account paths and any interactive login.
 - No `livefire-runs/` directory exists → **no recorded successful live-fire run**.
 - The propagation of `agent_init`/`agent_next`/`agent_observe`/`phase_complete` payload shapes
   was reviewed only for `ping`, `list_tools`, and `call_tool`. **Diff the remaining four handlers**

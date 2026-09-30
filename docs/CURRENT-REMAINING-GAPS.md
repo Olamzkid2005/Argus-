@@ -60,12 +60,19 @@ Some execution paths still degrade to deterministic execution or stop rather tha
 
 ### 3. Tool availability is operationally incomplete
 
-The Python registry reports missing entries in some paths, including:
+**Fixed (2026-09-30):** the registry no longer *reports* tools it actually has. A hand-written
+entry that re-registered a name used to replace the generated definition wholesale, dropping the
+`binary` its YAML declares; the MCP bridge then asked PATH for a binary that was never meant to
+exist and skipped the tool as "unavailable" — `browser_security_operator` and `register` among
+16 that now resolve (`1b7fff82`). The 8 steps the orchestrator runs in-process (`report-generator`,
+`post_exploitation`, `intelligence-engine`, …) are now declared as pipeline steps instead of being
+reported as missing binaries (`7f800a33`).
 
-- `browser_security_operator`
-- `register`
-
-External binaries such as Nuclei, Nmap, SQLMap, WhatWeb, Subfinder, and others still depend on host or container provisioning.
+What remains is provisioning, not reporting: 13 third-party binaries are genuinely absent here
+(`testssl`, `wpscan`, `trufflehog`, `commix`, `jwt_tool`, `brakeman`, `spotbugs`, `phpcs`, `eslint`,
+`dependency_check`, `sn1per`, `bucket_upload`, `ai-surface`), and the bridge names them in one
+warning per run. External binaries such as Nuclei, Nmap, SQLMap, WhatWeb, Subfinder, and others
+still depend on host or container provisioning.
 
 The provisioning system exists, but deployment readiness still depends on:
 
