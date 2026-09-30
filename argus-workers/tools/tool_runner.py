@@ -181,6 +181,47 @@ class ToolRunner:
         except Exception:
             return None
 
+    def _scope_block_reason(self, target: str) -> str | None:
+        """Why this target must not be scanned, or None when it is authorized.
+
+        Two sources, in order:
+
+        1. The engagement record's ``authorized_scope`` (domains / IP ranges),
+           which is how Postgres-backed deployments authorize a run.
+        2. The run scope the orchestrator published with
+           ``scope_validator.set_process_scope`` — the local/SQLite path, where
+           the job payload is the only statement of authorization and no
+           engagement record carries one.
+
+        Fails closed: when neither source authorizes the target it is rejected,
+        and the message says which sources were consulted so a denied run is
+        diagnosable from the tool result alone.
+        """
+        from tools.scope_validator import (
+            ScopeValidator,
+            ScopeViolationError,
+            validate_target_scope,
+        )
+
+        scope = self._load_authorized_scope()
+        if scope:
+            validator = ScopeValidator(self.engagement_id or "", scope)
+            try:
+                validator.validate_target(target)
+            except ScopeViolationError as e:
+                return str(e)
+            return None
+
+        if not validate_target_scope(target, self.engagement_id or ""):
+            return (
+                f"Target '{target}' rejected: the engagement record carries no "
+                f"authorized_scope and this process has no published run scope. "
+                f"Set the job's scope (mode/allowed_targets), configure "
+                f"authorized_scope on the engagement, or allow unscoped runs with "
+                f"ARGUS_ALLOW_UNSCOPED=1."
+            )
+        return None
+
     # File extensions that appear in tool args but are NOT valid TLDs.
     # Used by _extract_target to filter out non-target args like .nse scripts,
     # .txt wordlists, .json configs, .yaml templates, etc.
@@ -538,17 +579,12 @@ class ToolRunner:
         # bypassing scope enforcement when the authorized scope changes.
         target = self._extract_target(args)
         if target:
-            from tools.scope_validator import ScopeValidator, ScopeViolationError
-
-            scope = self._load_authorized_scope()
-            validator = ScopeValidator(self.engagement_id or "", scope)
-            try:
-                validator.validate_target(target)
-            except ScopeViolationError as e:
+            block_reason = self._scope_block_reason(target)
+            if block_reason:
                 result = UnifiedToolResult(
                     tool_name=tool,
                     stdout="",
-                    stderr=str(e),
+                    stderr=block_reason,
                     exit_code=1,
                     status=ToolStatus.SCOPE_ERROR,
                 )
@@ -853,17 +889,12 @@ class ToolRunner:
         # Scope validation — mirror run()'s scope guard
         target = self._extract_target(args)
         if target:
-            from tools.scope_validator import ScopeValidator, ScopeViolationError
-
-            scope = self._load_authorized_scope()
-            validator = ScopeValidator(self.engagement_id or "", scope)
-            try:
-                validator.validate_target(target)
-            except ScopeViolationError as e:
+            block_reason = self._scope_block_reason(target)
+            if block_reason:
                 return UnifiedToolResult(
                     tool_name=tool,
                     stdout="",
-                    stderr=str(e),
+                    stderr=block_reason,
                     exit_code=1,
                     status=ToolStatus.SCOPE_ERROR,
                 )

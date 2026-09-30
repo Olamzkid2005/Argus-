@@ -104,6 +104,32 @@ class TestSnapshotService:
 
     @patch("snapshot_manager.SnapshotManager")
     @patch("loop_budget_manager.LoopBudgetManager")
+    def test_local_mode_builds_the_snapshot_in_memory_only(
+        self, MockBudgetMgr, MockSnapshotMgr, monkeypatch
+    ):
+        """A local run's state is in SQLite, so there is no Postgres row to
+        snapshot. Writing one anyway failed on the foreign key and took the whole
+        analyze phase down on an otherwise complete local run (measured)."""
+        monkeypatch.setenv("ARGUS_LOCAL_MODE", "1")
+        MockBudgetMgr.return_value = MagicMock(to_dict=MagicMock(return_value={}))
+
+        svc = SnapshotService(
+            db_conn="postgres://unused-for-local-runs",
+            engagement_id="eng-123",
+            finding_repo=None,
+            get_org_id_fn=MagicMock(return_value=None),
+            load_priority_vuln_classes_fn=MagicMock(return_value=[]),
+        )
+
+        snapshot, _, _, _ = svc.load_and_build({"budget": {}})
+
+        MockSnapshotMgr.assert_not_called()
+        assert snapshot["engagement_id"] == "eng-123"
+        assert snapshot["snapshot_id"] is None
+        assert snapshot["attack_graph"] == {"paths": []}
+
+    @patch("snapshot_manager.SnapshotManager")
+    @patch("loop_budget_manager.LoopBudgetManager")
     def test_load_and_build_without_db_conn_raises_oserror(
         self, MockBudgetMgr, MockSnapshotMgr
     ):

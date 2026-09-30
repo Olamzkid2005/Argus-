@@ -6,6 +6,7 @@ Prevents prompt injection from tricking the agent into scanning unauthorized tar
 import json
 import logging
 import os
+from typing import Any
 from urllib.parse import urlparse
 
 from exceptions import ScopeViolationError
@@ -575,6 +576,36 @@ def _check_blocked(target: str, blocked_targets: list[str] | None) -> bool:
     return False
 
 
+def _target_authorized_by(pattern: str, target: str) -> bool:
+    """Whether one allowed pattern authorizes a target.
+
+    A direct glob match is the main case. Two derived forms are also accepted,
+    because tools are handed concrete resources rather than the base an operator
+    typed, and denying them silently removed tools from an authorized run
+    (measured: sqlmap-style parameter URLs, ffuf's ``/FUZZ`` and every port
+    scanner were skipped while the rest of the pipeline ran):
+
+    * a **path under** the pattern — ``http://host:port/user?id=1`` and
+      ``http://host:port/FUZZ`` are the authorized resource reached through an
+      authorized base;
+    * the **bare host** of an authorized URL — port scanners take a host rather
+      than a URL, so ``127.0.0.1`` is authorized by ``http://127.0.0.1:8877``.
+
+    Nothing here widens scope to another host or port: the subtree form requires
+    a full string prefix ending on a path boundary, and the bare host must equal
+    a pattern's host exactly.
+    """
+    if _match_glob(pattern, target):
+        return True
+
+    base = pattern.rstrip("/")
+    if target.lower().startswith(base.lower() + "/"):
+        return True
+
+    pattern_host = urlparse(pattern if "//" in pattern else f"//{pattern}").hostname
+    return bool(pattern_host) and target.lower() == pattern_host.lower()
+
+
 def _check_allowed(target: str, allowed_targets: list[str] | None, mode: str) -> bool | None:
     """Check if target matches allowed patterns. Returns True if allowed,
     False if denied, None if no decision (delegate to caller)."""
@@ -594,7 +625,7 @@ def _check_allowed(target: str, allowed_targets: list[str] | None, mode: str) ->
         return True
 
     for pattern in allowed:
-        if _match_glob(pattern, target):
+        if _target_authorized_by(pattern, target):
             return True
 
     if mode == "allowlist":
@@ -611,6 +642,47 @@ def _check_allowed(target: str, allowed_targets: list[str] | None, mode: str) ->
         target,
     )
     return True
+
+
+# ── Run scope published by the orchestrator ──────────────────────────
+#
+# A run's authorization is stated in the job payload (the local CLI sends
+# ``{"mode": "allowlist", "allowed_targets": [target]}``), but tools execute
+# several layers below the code that reads that payload. The orchestrator
+# publishes the scope here on arrival and the tool-level guards consult it, so a
+# run cannot be authorized at the phase level and then denied at the tool level
+# — which is what happened on the SQLite/local path, where no engagement record
+# ever carried a scope (found by running step 1 of docs/DEMO-READINESS-PLAN.md).
+_run_scope: dict[str, Any] = {}
+
+
+def set_process_scope(
+    mode: str = "allowlist",
+    allowed_targets: list[str] | None = None,
+    blocked_targets: list[str] | None = None,
+) -> None:
+    """Publish the run's scope for this process.
+
+    Called by the orchestrator when it reads the job payload, following the
+    same run-level-config convention as ``config.llm_env.set_worker_llm_config``.
+    """
+    global _run_scope
+    _run_scope = {
+        "mode": mode or "allowlist",
+        "allowed_targets": list(allowed_targets or []),
+        "blocked_targets": list(blocked_targets or []),
+    }
+
+
+def clear_process_scope() -> None:
+    """Forget the published run scope (tests, and process teardown)."""
+    global _run_scope
+    _run_scope = {}
+
+
+def process_scope() -> dict[str, Any] | None:
+    """The published run scope, or None when this process has none."""
+    return dict(_run_scope) if _run_scope else None
 
 
 def validate_target_scope(
@@ -683,6 +755,16 @@ def validate_target_scope(
             return False
 
     # -- Config-based enforcement path (mode / allowed / blocked) --
+    # A caller that brings no rules of its own (the tool-level guards do not have
+    # the job payload) means "use this run's scope". Without this fallback such a
+    # call would deny every target under the default allowlist mode.
+    if allowed_targets is None and blocked_targets is None:
+        published = process_scope()
+        if published:
+            mode = published.get("mode", mode)
+            allowed_targets = published.get("allowed_targets")
+            blocked_targets = published.get("blocked_targets")
+
     if _check_blocked(target, blocked_targets):
         return False
 

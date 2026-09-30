@@ -7,7 +7,9 @@ Extracted from Orchestrator.run_analysis() Section 1 (Snapshot/Load phase).
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -69,13 +71,34 @@ class SnapshotService:
         from loop_budget_manager import LoopBudgetManager
         from snapshot_manager import SnapshotManager
 
-        if not self.db_conn:
-            raise OSError(
-                "DATABASE_URL is not set — cannot create snapshot for analysis"
+        # `decision_snapshots` is a Postgres table, and in local mode the run's
+        # state lives in SQLite — this engagement does not exist in Postgres, so
+        # writing a snapshot there fails on the foreign key and took the whole
+        # analyze phase down with it (measured: every other phase completed on a
+        # local run while analyze failed). The snapshot the engine consumes is
+        # built in memory here; only the persistence is skipped.
+        if os.environ.get("ARGUS_LOCAL_MODE") == "1":
+            logger.info(
+                "Local mode: the analysis snapshot for %s is in-memory only "
+                "(decision snapshots are a Postgres store).",
+                self.engagement_id,
             )
+            snapshot = {
+                "engagement_id": self.engagement_id,
+                "findings": [],
+                "attack_graph": {"paths": []},
+                "engagement_state": {},
+                "snapshot_timestamp": datetime.now(UTC).isoformat(),
+                "snapshot_id": None,
+            }
+        else:
+            if not self.db_conn:
+                raise OSError(
+                    "DATABASE_URL is not set — cannot create snapshot for analysis"
+                )
 
-        snapshot_mgr = SnapshotManager(self.db_conn)
-        snapshot = snapshot_mgr.create_snapshot(self.engagement_id)
+            snapshot_mgr = SnapshotManager(self.db_conn)
+            snapshot = snapshot_mgr.create_snapshot(self.engagement_id)
 
         budget_config = job.get("budget", {})
         budget_mgr = LoopBudgetManager(self.engagement_id, budget_config)

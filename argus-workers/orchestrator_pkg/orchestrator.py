@@ -138,6 +138,28 @@ class Orchestrator:
         except Exception:
             logger.exception("Error during tool runner cleanup")
 
+    def _publish_scope(self) -> None:
+        """Publish this phase's scope for the tool-level guards.
+
+        The job payload states a run's authorization, but tools execute several
+        layers below the code that reads it. ``set_process_scope`` is how that
+        decision reaches ``ToolRunner`` and the tool adapters — the same
+        run-level-config convention as ``config.llm_env.set_worker_llm_config``.
+
+        Failing here is not fatal: the guards then fall back to the engagement
+        record, and deny when that has no scope either (fail closed).
+        """
+        try:
+            from tools.scope_validator import set_process_scope
+
+            set_process_scope(
+                getattr(self, "scope_mode", "allowlist"),
+                getattr(self, "allowed_targets", None),
+                getattr(self, "blocked_targets", None),
+            )
+        except Exception:
+            logger.debug("Could not publish run scope", exc_info=True)
+
     def _register_mcp_tools(self):
         """
         Register tools with the MCP server.
@@ -315,12 +337,16 @@ class Orchestrator:
                 "Scope loaded from job: mode=%s, allowed=%s, blocked=%s",
                 self.scope_mode, self.allowed_targets, self.blocked_targets,
             )
+            # Publish for the tool-level guards, which never see the job payload.
+            self._publish_scope()
             # Persist scope to engagement record so it survives worker restarts
             # between recon and scan phases (or across secondary task paths like
             # deep_scan / auth_focused_scan).
             try:
                 from orchestrator_pkg.engagement import EngagementService
-                EngagementService.store_scope_config(self.engagement_id, _scope)
+                EngagementService.store_scope_config(
+                    self.engagement_id, _scope, repo=getattr(self, "engagement_repo", None)
+                )
             except Exception:
                 logger.debug("Failed to persist scope config (non-fatal)")
 
@@ -711,7 +737,8 @@ class Orchestrator:
             try:
                 from orchestrator_pkg.engagement import EngagementService
                 _scope_config = EngagementService.load_scope_config(
-                    self.engagement_id
+                    self.engagement_id,
+                    repo=getattr(self, "engagement_repo", None),
                 )
                 if _scope_config and isinstance(_scope_config, dict):
                     self.scope_mode = _scope_config.get("mode", "allowlist")
@@ -723,6 +750,11 @@ class Orchestrator:
                     )
             except Exception:
                 pass
+
+        # Publish whichever scope this phase resolved for the tool-level guards
+        # (ToolRunner, tool adapters): they execute several layers below the job
+        # payload and would otherwise deny every target of an authorized run.
+        self._publish_scope()
 
         # Respect user-configured scan mode and agent mode.
         # Priority: explicit scan_mode > agent_mode flag > default (agent-first with fallback)

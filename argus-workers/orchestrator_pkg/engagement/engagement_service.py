@@ -101,7 +101,7 @@ class EngagementService:
             return None
 
     @staticmethod
-    def store_scope_config(engagement_id: str, scope_config: dict) -> None:
+    def store_scope_config(engagement_id: str, scope_config: dict, repo=None) -> None:
         """Persist scope config to the engagement record.
 
         Stores the scope payload dict as ``metadata->'scope_config'`` in the
@@ -119,10 +119,36 @@ class EngagementService:
         Args:
             engagement_id: Engagement UUID
             scope_config: Scope dict from the job payload
+            repo: Optional engagement repository. The local/SQLite path passes the
+                repo it is already using, so the scope lands in the engagement
+                record that run reads (its ``metadata`` column). Without a repo
+                the Postgres JSONB statement below is used, which is how the
+                Docker path persists — and which fails wherever that column is
+                absent, which is why the fallback exists.
         """
         if not scope_config or not isinstance(scope_config, dict):
             return
         import json
+
+        if repo is not None:
+            try:
+                metadata = (repo.find_by_id(engagement_id) or {}).get("metadata") or {}
+                if isinstance(metadata, str):
+                    metadata = json.loads(metadata)
+                metadata["scope_config"] = scope_config
+                repo.update_by_id(engagement_id, {"metadata": metadata})
+                logger.info(
+                    "Scope config persisted to the engagement record (local backend): "
+                    "mode=%s",
+                    scope_config.get("mode", "unknown"),
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to persist scope config for %s: %s",
+                    engagement_id,
+                    e,
+                )
+            return
 
         from database.connection import db_cursor
 
@@ -153,15 +179,39 @@ class EngagementService:
             )
 
     @staticmethod
-    def load_scope_config(engagement_id: str) -> dict | None:
+    def load_scope_config(engagement_id: str, repo=None) -> dict | None:
         """Load the scope config from the engagement record.
 
         Reads ``metadata->'scope_config'`` from the engagements JSONB column.
         This is the scope payload format (``mode``/``allowed_targets``/``blocked_targets``),
         distinct from the legacy ``authorized_scope`` format (``domains``/``ipRanges``).
 
-        Returns the parsed scope dict or ``None`` if no scope config was stored.
+        Args:
+            engagement_id: Engagement UUID
+            repo: Optional engagement repository (see ``store_scope_config``); the
+                local/SQLite path reads back from the repo it persisted into.
+
+        Returns:
+            The parsed scope dict or ``None`` if no scope config was stored.
         """
+        import json
+
+        if repo is not None:
+            try:
+                stored = ((repo.find_by_id(engagement_id) or {}).get("metadata") or {}).get(
+                    "scope_config"
+                )
+                if isinstance(stored, str):
+                    stored = json.loads(stored)
+                return dict(stored) if isinstance(stored, dict) else None
+            except Exception as e:
+                logger.warning(
+                    "Failed to load scope config for %s: %s",
+                    engagement_id,
+                    e,
+                )
+                return None
+
         from database.connection import db_cursor
 
         try:
@@ -172,8 +222,6 @@ class EngagementService:
                 )
                 row = cursor.fetchone()
                 if row and row[0] is not None:
-                    import json
-
                     raw = row[0]
                     if isinstance(raw, str):
                         return json.loads(raw)
