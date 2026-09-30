@@ -785,6 +785,9 @@ class ReActAgent:
                 arguments=decision.get("arguments", {}),
                 reasoning=decision.get("reasoning", ""),
                 cost_usd=decision.get("cost_usd", 0.0),
+                # Provenance for the audit trail: this tool was chosen by the
+                # LLM, not by the deterministic ordering below.
+                source="llm",
             )
 
         except Exception as e:
@@ -793,6 +796,51 @@ class ReActAgent:
                 e,
             )
             return None
+
+    def _record_decision(self, action: AgentAction, iteration: int) -> None:
+        """Persist one agent decision to ``agent_decisions``.
+
+        `was_fallback` records provenance, not reachability: an LLM that is
+        configured but returned nothing sends the agent to deterministic
+        ordering, and that decision used to be stored as `was_fallback=False` —
+        making a fallback look agentic in exactly the failure mode the column
+        exists to expose. Tokens come from the action, which now always carries
+        the counts from the LLM response.
+
+        Called the moment the action is chosen so that decisions which never
+        execute (scope-blocked, governance-stopped, budget-exhausted) are still
+        auditable.
+        """
+        if not self.decision_repo or not self.engagement_id:
+            return
+        try:
+            self.decision_repo.log_decision(
+                engagement_id=self.engagement_id,
+                phase=self._phase,
+                iteration=iteration,
+                tool_selected=action.tool,
+                arguments=action.arguments,
+                reasoning=action.reasoning,
+                was_fallback=self._is_fallback_action(action),
+                input_tokens=getattr(action, "input_tokens", 0) or None,
+                output_tokens=getattr(action, "output_tokens", 0) or None,
+            )
+        except Exception as e:
+            logger.warning("Failed to log decision: %s", e)
+
+    @staticmethod
+    def _is_fallback_action(action: AgentAction) -> bool:
+        """Whether the deterministic planner chose this tool, not the LLM.
+
+        Both audit records (`agent_decisions` and the SSE decision event) must
+        answer "did the engine choose this?", and the only honest source for
+        that is who produced the action. The earlier rule — "is an LLM client
+        configured and reachable?" — reported an LLM failure as an agentic
+        decision: with a client present but returning nothing, the agent falls
+        back to deterministic ordering and the row still said
+        `was_fallback=False`.
+        """
+        return getattr(action, "source", "") != "llm"
 
     def _deterministic_plan(self, task: str, tried_tools: set) -> AgentAction | None:
         """Fallback: deterministic phase-based tool planning when LLM is unavailable."""
@@ -1167,14 +1215,14 @@ Based on these findings, what capabilities should the next phase use?
                 # Record LLM success for DegradationAwareness
                 if self._degradation_awareness is not None:
                     self._degradation_awareness.record_llm_result(success=True)
-                # Attach actual LLM token counts to the action for governance (blocker 48)
-                # These are read from the LLMService which tracks them from the LLMResponse.
-                if (
-                    _ff_enabled("GOVERNANCE_V2", default=False)
-                    and self.governance is not None
-                    and hasattr(llm_service, 'last_input_tokens')
-                ):
+                # Attach actual LLM token counts to the action (blocker 48).
+                # Unconditional: these are the audit record of what the call
+                # cost, so they must not depend on the GOVERNANCE_V2 flag —
+                # agent_decisions stored NULL tokens for every decision while
+                # this was gated, leaving cost_usd permanently 0.
+                if hasattr(llm_service, "last_input_tokens"):
                     action.input_tokens = llm_service.last_input_tokens
+                if hasattr(llm_service, "last_output_tokens"):
                     action.output_tokens = llm_service.last_output_tokens
                 assert isinstance(action, AgentAction)
                 return action
@@ -1725,6 +1773,19 @@ Based on these findings, what capabilities should the next phase use?
                 logger.info("Agent: no more actions at iteration %d", iteration)
                 break
 
+            # Record what the engine chose, as soon as it has chosen.
+            #
+            # This used to run at the *end* of the iteration, so every path that
+            # leaves the body early dropped the decision: a tool blocked by
+            # scope validation, governance, or budget produced no audit row at
+            # all. That is backwards — a blocked tool is the single most
+            # interesting decision to record, and it silently made an LLM-driven
+            # run look like it had made no choices (the LLM's nuclei selections
+            # were exactly the rows missing from a live scan, while the
+            # deterministic phase-tool iterations that *did* execute were the
+            # only ones present).
+            self._record_decision(action, iteration)
+
             # ── Track cost regardless of governance mode ──
             # Cost tracking must run BEFORE the governance cost guard check, so it's
             # not lost when GOVERNANCE_V2 is active (which previously skipped the
@@ -1819,9 +1880,9 @@ Based on these findings, what capabilities should the next phase use?
                         iteration=iteration,
                         tool=action.tool,
                         reasoning=action.reasoning,
-                        was_fallback=not (
-                            self.llm_client and self.llm_client.is_available()
-                        ),
+                        # Same provenance rule as agent_decisions: the
+                        # deterministic plan after an LLM failure is a fallback.
+                        was_fallback=self._is_fallback_action(action),
                     )
             except Exception:
                 logger.warning(
@@ -2049,25 +2110,6 @@ Based on these findings, what capabilities should the next phase use?
                     self.engagement_state.execution_iteration = iteration + 1
                 except Exception as e:
                     logger.debug("Failed to track execution iteration: %s", e)
-
-            # Log decision to repository
-            if self.decision_repo and self.engagement_id:
-                try:
-                    self.decision_repo.log_decision(
-                        engagement_id=self.engagement_id,
-                        phase=self._phase,
-                        iteration=iteration,
-                        tool_selected=action.tool,
-                        arguments=action.arguments,
-                        reasoning=action.reasoning,
-                        was_fallback=not (
-                            self.llm_client and self.llm_client.is_available()
-                        ),
-                        input_tokens=None,
-                        output_tokens=None,
-                    )
-                except Exception as e:
-                    logger.warning("Failed to log decision: %s", e)
 
         slog.agent_complete(tools_ran=len(results), total_cost=total_cost_usd)
         return results

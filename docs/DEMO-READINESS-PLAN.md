@@ -422,13 +422,47 @@ Ordered so that each step is independently verifiable and unblocks the next.
 > local OpenCode server in both runtimes, so this step is no longer blocked by credentials. What it
 > still needs is an actual assessment run whose `agent_decisions` rows can be inspected — and the
 > latency to plan around: 30–95 s per free-tier call.
-- [ ] Confirm rows appear in `agent_decisions`
+- [x] Confirm rows appear in `agent_decisions`
       (`database/migrations/012_add_agent_decision_log.sql`,
       `database/repositories/agent_decision_repository.py`) with `tool_selected`, `reasoning`,
-      `was_fallback`, tokens, cost.
-- [ ] Confirm `[SCAN_METRICS]` (`orchestrator.py::_emit_scan_metrics`) reports
-      `agent_success_rate` / `agent_full_fallback_rate`.
-- [ ] Assert **≥1 non-fallback decision** and that phase advancement was engine-driven.
+      `was_fallback`, tokens, cost. **Confirmed 2026-09-30** by driving the production task
+      bodies in-process — `tasks.recon.run_recon` then `tasks.scan.run_scan`
+      (`run_scan.apply(agent_mode=True)`) against the `127.0.0.1:55693` fixture, log at
+      `/tmp/step3-worker-scan2.log`, engagement `69669de0-62e3-47c3-b0f2-ae8c420219b8`.
+      Ten rows, every one with a real reasoning string and real token/cost figures, e.g.
+      `nuclei | was_fallback=false | tokens 2285/89 | cost $0.000396 | "Nuclei is the mandatory
+      first step…"`.
+- [x] Confirm `[SCAN_METRICS]` (`orchestrator.py::_emit_scan_metrics`) reports
+      `agent_success_rate` / `agent_full_fallback_rate`. **Confirmed**, same run: `[SCAN_METRICS]
+      {'total_targets': 1, 'agent_success': 1, 'agent_full_fallback': 0, 'agent_success_rate': 1.0,
+      'agent_full_fallback_rate': 0.0, 'agent_findings': 0, 'safety_net_findings': 1,
+      'total_findings': 1, 'agent_tried_tools': 0}`.
+- [x] Assert **≥1 non-fallback decision** and that phase advancement was engine-driven.
+      **Confirmed**: 10 non-fallback rows in the run above, each an LLM tool selection (the
+      deterministic phase-tool iterations after the provider began returning 503s are now
+      correctly stored as `was_fallback=true`, so the count is meaningful).
+
+**Three defects had to be fixed to get that evidence** — all in the worker's decision writer, which had
+never recorded an honest decision (`agent_decisions` held 35 rows, all `was_fallback=true`, all dated
+2026-05-30, all with NULL tokens):
+
+- `was_fallback` was computed as "is an LLM client reachable?", so a *failed* LLM call that sent the
+  agent back to deterministic ordering was still stored as agentic. Provenance now travels with the
+  action (`AgentAction.source`, set by `_call_llm_for_action`) and both audit records use
+  `ReActAgent._is_fallback_action()`.
+- Token counts were only attached under the `GOVERNANCE_V2` flag, and `log_decision` was called with
+  hardcoded `None`s, so `cost_usd` was permanently `$0.000000`.
+- Decisions were logged at the *end* of the agent loop, so every action that left the body early —
+  scope-blocked, governance-stopped — was dropped. In the first evidence run that silently erased
+  exactly the LLM's choices (the model picked `nuclei` five times; the scope guard refused it; zero
+  rows) while keeping the deterministic ones that did execute. Logging now happens the moment the
+  action is chosen.
+
+**Known demo gap (open):** this evidence comes from the worker's own scan pipeline. The
+TUI/CLI demo path drives the worker over MCP (`agent_init`/`agent_next`), which builds `ReActAgent`
+instances with **no** `decision_repo`, and it cannot insert `ENG-…` ids into a `UUID NOT NULL`
+foreign key anyway (`InvalidTextRepresentation` reproduced). So an `assess --autonomous` run still
+records nothing; wiring that path is the next piece of Step 3.
 - [x] A completed run leaves a report artifact on disk:
       `<data>/engagements/<id>/report.md`, written by both `assess` and `resume`, with the path
       announced on stderr. stdout printing is unchanged — an unattended or TUI run now has

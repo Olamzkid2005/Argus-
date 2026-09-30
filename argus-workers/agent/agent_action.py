@@ -20,6 +20,7 @@ class AgentAction:
         expected_signal: str = "",
         input_tokens: int = 0,
         output_tokens: int = 0,
+        source: str = "",
     ):
         self.action_id = action_id or str(uuid.uuid4())
         self.tool = tool
@@ -32,6 +33,10 @@ class AgentAction:
         # Actual LLM token counts from the response (blocker 48)
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
+        # Who chose this tool: "llm" when the LLM selected it, "" (or another
+        # value) when it came from deterministic ordering. Audit code needs
+        # provenance, not whether an LLM happened to be reachable.
+        self.source = source
 
     def to_dict(self) -> dict:
         return {
@@ -45,4 +50,5 @@ class AgentAction:
             "expected_signal": self.expected_signal,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "source": self.source,
         }

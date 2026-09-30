@@ -111,6 +111,25 @@ What broke and what is now fixed:
   gates were consulted rather than silently bypassed. `ARGUS_DENY_DESTRUCTIVE=1` makes destructive
   gates and destructive tools refuse even with auto-approve on, which is what allows the block path
   to be exercised end-to-end in an unattended run.
+- **Confirmed — the worker records real agent decisions (2026-09-30).** Step 3's three evidence
+  items are now proven on the worker path: a run produced 10 `agent_decisions` rows with real
+  reasoning, token counts and cost (all `was_fallback=false`), plus the `[SCAN_METRICS]` line with
+  `agent_success_rate` / `agent_full_fallback_rate`. Getting there required three fixes in the
+  decision writer: `was_fallback` meant "an LLM client is reachable" rather than "the LLM chose this"
+  (so a failed LLM call that fell back to deterministic ordering was stored as agentic), tokens were
+  only attached under a feature flag and passed as `None` (so `cost_usd` was always `$0.000000`), and
+  decisions were logged at the *end* of the loop so anything that left the body early — notably a
+  tool blocked by scope validation — left no trace at all. Details and the exact evidence are in
+  `DEMO-READINESS-PLAN.md` Step 3. The same run also shows the agent re-selecting a scope-blocked
+  `nuclei` ten times (the tool *is* added to `tried_tools`; the model ignores the exclusion), spending
+  ten LLM calls with no phase progress — no guard stops repeated blocked selections yet.
+- **Open — the demo path still records nothing.** That evidence comes from the worker's own scan
+  pipeline. The TUI/CLI drives the worker over MCP (`agent_init`/`agent_next`), which constructs
+  `ReActAgent` without a `decision_repo`, and `agent_decisions.engagement_id` is `UUID NOT NULL
+  REFERENCES engagements(id)` while demo engagement ids are `ENG-…` (the insert is rejected with
+  `InvalidTextRepresentation`, and `log_decision` swallows the error). Until that is wired, pointing
+  the demo at `agent_decisions` requires a run through the worker pipeline rather than
+  `assess --autonomous`.
 
 ### 3. Tool availability is operationally incomplete
 
