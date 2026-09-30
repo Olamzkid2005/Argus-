@@ -12,12 +12,16 @@ The planner now resolves once and passes the concrete endpoint to the worker at
 different provider (the ``sk-or-`` auto-detection used to do exactly that).
 """
 
+import asyncio
+import time
 from unittest.mock import patch
 
 import pytest
 
 from config.llm_env import set_worker_llm_config
-from llm_client import LLMClient
+from exceptions import LLMUnavailableError
+from llm_client import LLMClient, LLMResponse
+from opencode_server_client import OpencodeServerError
 
 HANDOFF = {
     "provider": "openai-compatible",
@@ -25,6 +29,16 @@ HANDOFF = {
     "model": "kimi-k2.7-code",
     "apiKey": "sk-driver-key-1234567890",
     "baseUrl": "https://opencode.ai/zen/go/v1",
+}
+
+#: The second transport: no endpoint, no key — just the local OpenCode server
+#: that is already running (docs/DEMO-READINESS-PLAN.md, blocker B9).
+SERVER_HANDOFF = {
+    "provider": "opencode-server",
+    "providerID": "opencode",
+    "modelID": "nemotron-3-ultra-free",
+    "baseUrl": "http://127.0.0.1:4096",
+    "directory": "/Users/mac/Documents/Argus-",
 }
 
 
@@ -107,6 +121,137 @@ class TestWorkerAdoptsPlannerModel:
         assert client.model == "explicit-model"
         assert client.api_key == "explicit-key-1234567890"
         assert client.api_url == "https://explicit.test/v1/chat/completions"
+
+
+class TestOpencodeServerHandoff:
+    """The worker asks a local OpenCode server to make the call.
+
+    OpenCode's own gateways refuse direct calls from this source tree, so the
+    planner hands down the address of the server it spawned. These tests pin
+    that the worker routes the call through it rather than trying to POST to a
+    gateway of its own — and that a provider refusal is not retried, because a
+    free-tier call costs 30-95s of quota.
+    """
+
+    def _client(self, monkeypatch, **overrides) -> LLMClient:
+        # LLM_API_KEY is Argus's own variable and may legitimately be set in a
+        # worker's shell; it must not turn the server transport into a direct
+        # call or change what is available.
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        set_worker_llm_config({**SERVER_HANDOFF, **overrides})
+        return LLMClient()
+
+    def test_server_handoff_is_adopted_without_a_key(self, no_db_or_redis, monkeypatch):
+        client = self._client(monkeypatch)
+
+        assert client.provider == "opencode-server"
+        assert client.model == "nemotron-3-ultra-free"
+        assert not client.api_key
+        assert client.api_url == ""
+        # Available even without a key: OpenCode holds the credential.
+        assert client.is_available() is True
+
+    def test_own_key_cannot_reroute_the_server_transport(self, no_db_or_redis, monkeypatch):
+        # An sk-or- key used to force the OpenRouter URL; a handoff that names a
+        # transport must not be rewritten into a direct call to someone else.
+        monkeypatch.setenv("LLM_API_KEY", "sk-or-v1-own-key")
+        set_worker_llm_config(SERVER_HANDOFF)
+
+        client = LLMClient()
+
+        assert client.provider == "opencode-server"
+        assert client.api_url == ""
+
+    def test_call_is_made_through_the_server_client(self, no_db_or_redis, monkeypatch):
+        client = self._client(monkeypatch)
+        expected = LLMResponse(text="{\"tool\": \"nuclei\"}", input_tokens=5, output_tokens=7)
+
+        with patch("opencode_server_client.OpencodeServerClient") as factory:
+            factory.return_value.chat.return_value = expected
+            result = client.chat_sync([{"role": "user", "content": "pick a tool"}])
+
+        assert result is expected
+        assert factory.call_args.kwargs == {
+            "base_url": "http://127.0.0.1:4096",
+            "model": "nemotron-3-ultra-free",
+            "provider_id": "opencode",
+            "directory": "/Users/mac/Documents/Argus-",
+            # A free-tier call takes 30-95s; the direct transports' 30s default
+            # would abort calls that are still working.
+            "timeout": 180,
+        }
+        assert factory.return_value.chat.call_args.args[0] == [
+            {"role": "user", "content": "pick a tool"}
+        ]
+
+    def test_async_call_is_made_through_the_server_client(self, no_db_or_redis, monkeypatch):
+        client = self._client(monkeypatch)
+        expected = LLMResponse(text="ok")
+
+        with patch("opencode_server_client.OpencodeServerClient") as factory:
+            factory.return_value.chat.return_value = expected
+            result = asyncio.run(
+                client.chat_async([{"role": "user", "content": "pick a tool"}])
+            )
+
+        assert result is expected
+        assert factory.return_value.chat.call_count == 1
+
+    def test_a_provider_refusal_is_not_retried(self, no_db_or_redis, monkeypatch):
+        client = self._client(monkeypatch)
+
+        with patch("opencode_server_client.OpencodeServerClient") as factory:
+            factory.return_value.chat.side_effect = OpencodeServerError(
+                "free tier can only be used from within OpenCode", retryable=False
+            )
+            with pytest.raises(LLMUnavailableError) as excinfo:
+                client.chat_sync([{"role": "user", "content": "pick a tool"}])
+
+        assert factory.return_value.chat.call_count == 1
+        assert "free tier" in str(excinfo.value)
+        # A config/provider error must not wedge the circuit for healthy work.
+        assert client._circuit_failures == 0
+
+    def test_a_transient_failure_is_retried_then_succeeds(self, no_db_or_redis, monkeypatch):
+        client = self._client(monkeypatch)
+        expected = LLMResponse(text="ok")
+
+        with patch("opencode_server_client.OpencodeServerClient") as factory, patch.object(
+            LLMClient, "_backoff_delay", return_value=0.0
+        ):
+            factory.return_value.chat.side_effect = [
+                OpencodeServerError("server hiccup", retryable=True),
+                expected,
+            ]
+            result = client.chat_sync([{"role": "user", "content": "pick a tool"}])
+
+        assert result is expected
+        assert factory.return_value.chat.call_count == 2
+        assert client._circuit_failures == 0
+
+    def test_retries_are_exhausted_before_giving_up(self, no_db_or_redis, monkeypatch):
+        client = self._client(monkeypatch)
+        client.max_retries = 2
+
+        with patch("opencode_server_client.OpencodeServerClient") as factory, patch.object(
+            LLMClient, "_backoff_delay", return_value=0.0
+        ):
+            factory.return_value.chat.side_effect = OpencodeServerError(
+                "server hiccup", retryable=True
+            )
+            with pytest.raises(LLMUnavailableError) as excinfo:
+                client.chat_sync([{"role": "user", "content": "pick a tool"}])
+
+        assert factory.return_value.chat.call_count == 3
+        assert "after 3 attempts" in str(excinfo.value)
+
+    def test_availability_follows_the_circuit_breaker(self, no_db_or_redis, monkeypatch):
+        client = self._client(monkeypatch)
+
+        client._circuit_failures = client._circuit_threshold
+        client._circuit_open_until = time.time() + 60
+
+        assert client.is_available() is False
 
 
 class TestWithoutHandoff:

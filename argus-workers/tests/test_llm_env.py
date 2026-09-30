@@ -98,6 +98,14 @@ _DriverLlmBlock = {
     "baseUrl": "https://opencode.ai/zen/go/v1",
 }
 
+_ServerLlmBlock = {
+    "provider": "opencode-server",
+    "providerID": "opencode",
+    "modelID": "nemotron-3-ultra-free",
+    "baseUrl": "http://127.0.0.1:4096",
+    "directory": "/Users/mac/Documents/Argus-",
+}
+
 
 class TestWorkerLlmConfig:
     """The planner resolves the model; the worker must adopt that decision."""
@@ -151,3 +159,64 @@ class TestWorkerLlmConfig:
         # pointing at a half-configured model.
         assert worker_llm_config() is not None
         assert worker_llm_config().model == "kimi-k2.7-code"
+
+
+class TestOpencodeServerBlock:
+    """The second transport: a local OpenCode server makes the call.
+
+    OpenCode's gateways refuse direct calls from this source tree (blocker B9),
+    so the planner hands the worker the address of the server it is already
+    running instead of an endpoint and a key.
+    """
+
+    def teardown_method(self):
+        set_worker_llm_config(None)
+
+    def test_builds_a_server_config(self):
+        config = build_worker_llm_config(_ServerLlmBlock)
+
+        assert config.provider == "opencode-server"
+        assert config.provider_id == "opencode"
+        assert config.model_id == "nemotron-3-ultra-free"
+        assert config.model == "nemotron-3-ultra-free"
+        assert config.base_url == "http://127.0.0.1:4096"
+        assert config.directory == "/Users/mac/Documents/Argus-"
+        assert config.uses_opencode_server is True
+
+    def test_model_is_accepted_as_a_fallback_for_model_id(self):
+        config = build_worker_llm_config(
+            {**_ServerLlmBlock, "modelID": "", "model": "big-pickle"}
+        )
+
+        assert config.model_id == "big-pickle"
+
+    def test_directory_is_optional(self):
+        config = build_worker_llm_config({**_ServerLlmBlock, "directory": ""})
+
+        assert config.directory == ""
+        assert config.uses_opencode_server is True
+
+    def test_trailing_slash_is_stripped(self):
+        config = build_worker_llm_config({**_ServerLlmBlock, "baseUrl": "http://127.0.0.1:4096/"})
+
+        assert config.base_url == "http://127.0.0.1:4096"
+
+    def test_the_direct_transport_is_not_mistaken_for_a_server(self):
+        assert build_worker_llm_config(_DriverLlmBlock).uses_opencode_server is False
+
+    def test_a_server_block_without_a_base_url_is_not_a_server_transport(self):
+        assert worker_llm_config() is None
+        with pytest.raises(InvalidWorkerLlmConfig):
+            build_worker_llm_config({**_ServerLlmBlock, "baseUrl": ""})
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {**_ServerLlmBlock, "providerID": ""},
+            {**_ServerLlmBlock, "modelID": "", "model": ""},
+            {**_ServerLlmBlock, "baseUrl": "ftp://127.0.0.1:4096"},
+        ],
+    )
+    def test_rejects_unusable_server_blocks(self, payload):
+        with pytest.raises(InvalidWorkerLlmConfig):
+            build_worker_llm_config(payload)

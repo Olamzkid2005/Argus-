@@ -111,8 +111,14 @@ class LLMClient:
         # True when the endpoint came from an explicit argument or the driver's
         # handoff rather than being inferred from the key's prefix. Needed below
         # so an sk-or- key cannot re-route the run away from the provider that the
-        # planner selected.
-        endpoint_from_config = bool(api_url or run_api_url)
+        # planner selected. The local-server transport has no URL of its own but
+        # is just as explicit: OpenCode makes the call, so prefix re-routing
+        # must not apply there either.
+        self._run_config = run_config
+        self._uses_opencode_server = bool(
+            run_config and run_config.uses_opencode_server
+        )
+        endpoint_from_config = bool(api_url or run_api_url or self._uses_opencode_server)
 
         # Resolve API key: explicit > driver handoff > Argus's own env vars > DB > Redis.
         # The handoff key sits ahead of LLM_API_KEY because the handoff model may
@@ -653,6 +659,18 @@ class LLMClient:
         self._check_circuit_breaker()
         await self._check_rate_limit_async()
 
+        if self._uses_opencode_server:
+            # The server is a plain synchronous HTTP API and the client for it
+            # blocks, so keep it off the event loop.
+            return await asyncio.to_thread(
+                self._call_opencode_server_sync,
+                messages,
+                temperature,
+                max_tokens,
+                response_format,
+                timeout,
+            )
+
         req_timeout = timeout or 30
         start = time.time()
         last_error = None
@@ -774,6 +792,11 @@ class LLMClient:
         self._check_circuit_breaker()
         self._check_rate_limit()
 
+        if self._uses_opencode_server:
+            return self._call_opencode_server_sync(
+                messages, temperature, max_tokens, response_format, timeout
+            )
+
         req_timeout = timeout or 30
         start = time.time()
         last_error = None
@@ -867,6 +890,91 @@ class LLMClient:
 
         raise LLMUnavailableError(
             f"LLM call failed after {self.max_retries + 1} retries: {last_error}"
+        )
+
+    def _call_opencode_server_sync(
+        self,
+        messages: list[dict],
+        temperature: float = 0.3,
+        max_tokens: int = 500,
+        response_format: dict | None = None,
+        timeout: int | None = None,
+    ) -> LLMResponse:
+        """Make the call through the local OpenCode server.
+
+        OpenCode's own gateways refuse direct calls from this source tree
+        (docs/DEMO-READINESS-PLAN.md, blocker B9), so this transport asks a
+        local ``opencode serve`` to make the call with its own credentials.
+
+        Timing differs sharply from the direct transports — a free-tier call
+        takes 30-95s — so only failures flagged ``retryable`` by the server
+        client are retried. A refusal that will repeat identically is raised on
+        the first attempt rather than after three minutes of quota.
+        """
+        # Imported here, not at module scope: opencode_server_client imports
+        # LLMResponse from this module, so a top-level import would be circular.
+        from opencode_server_client import (
+            DEFAULT_TIMEOUT_SECONDS,
+            OpencodeServerClient,
+            OpencodeServerError,
+        )
+
+        config = self._run_config
+        client = OpencodeServerClient(
+            base_url=config.base_url,
+            model=config.model_id or config.model,
+            provider_id=config.provider_id,
+            directory=config.directory,
+            timeout=timeout or DEFAULT_TIMEOUT_SECONDS,
+        )
+
+        start = time.time()
+        last_error: Exception | None = None
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                result = client.chat(
+                    messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    response_format=response_format,
+                )
+            except OpencodeServerError as e:
+                last_error = e
+                if not e.retryable:
+                    # A config or provider error, not an availability problem:
+                    # retrying cannot help and wedging the breaker would take
+                    # down healthy LLM features (same policy as the direct
+                    # transports).
+                    logger.warning(
+                        "OpenCode server call failed (not retryable): %s", e
+                    )
+                    raise
+                self._increment_circuit_breaker()
+                logger.warning(
+                    "OpenCode server attempt %d failed: %s", attempt + 1, e
+                )
+                if attempt < self.max_retries:
+                    if (
+                        self._circuit_open_until
+                        and time.time() < self._circuit_open_until
+                    ):
+                        logger.warning("Circuit breaker still open — aborting retries")
+                        break
+                    time.sleep(self._backoff_delay(attempt, e))
+                continue
+
+            self._circuit_failures = 0
+            self._log_llm_complete(
+                start,
+                tokens=result.input_tokens + result.output_tokens,
+                cost=result.cost_usd,
+            )
+            return result
+
+        raise LLMUnavailableError(
+            f"OpenCode server call failed after {self.max_retries + 1} "
+            f"attempts: {last_error}"
         )
 
     # ── Retry classification ────────────────────────────────────────────
@@ -1044,6 +1152,17 @@ class LLMClient:
         is not set, the client reports itself as unavailable with a clear error
         message logged at init time.
         """
+        # The local-server transport holds no key of its own: OpenCode owns the
+        # credential and makes the call, so there is nothing here to validate.
+        if self._uses_opencode_server:
+            with self._circuit_lock:
+                if (
+                    self._circuit_failures >= self._circuit_threshold
+                    and time.time() < self._circuit_open_until
+                ):
+                    return False  # Circuit is OPEN
+            return True
+
         if not self.api_key:
             return False
         # Reject obvious placeholder values that are not real API keys.

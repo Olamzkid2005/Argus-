@@ -134,14 +134,32 @@ class WorkerLlmConfig:
     through ``agent_init``. Without that, both runtimes would resolve
     independently and could disagree — one run planned by one model and tool
     selection performed by another.
+
+    Two transports exist, selected by ``provider``:
+
+    ``generic``
+        An OpenAI-compatible HTTP endpoint called directly, with ``api_key``.
+    ``opencode-server``
+        A local OpenCode server is asked to make the call (``base_url``), so the
+        request is made by OpenCode itself. OpenCode's own gateways refuse
+        direct calls from a source build, so this is the only transport that can
+        reach them — see docs/DEMO-READINESS-PLAN.md, blocker B9.
     """
 
     provider: str
     model: str
-    api_key: str
-    api_url: str
+    api_key: str = ""
+    api_url: str = ""
     provider_id: str = ""
+    model_id: str = ""
+    directory: str = ""
+    base_url: str = ""
     source: str = "opencode-registry"
+
+    @property
+    def uses_opencode_server(self) -> bool:
+        """Whether calls go through a local OpenCode server."""
+        return self.provider == "opencode-server" and bool(self.base_url)
 
 
 #: Set for the lifetime of the worker process once the driver declares it.
@@ -163,7 +181,8 @@ def _chat_completions_url(base_url: str) -> str:
 def build_worker_llm_config(payload: object) -> WorkerLlmConfig:
     """Validate an ``agent_init`` ``llm`` block.
 
-    Only OpenAI-compatible chat is accepted, matching the worker's LLM client.
+    Two blocks are accepted, matching the two transports the worker can speak:
+    ``openai-compatible`` (endpoint + key) and ``opencode-server`` (local server).
 
     Raises:
         InvalidWorkerLlmConfig: when required fields are missing or malformed.
@@ -172,15 +191,35 @@ def build_worker_llm_config(payload: object) -> WorkerLlmConfig:
         raise InvalidWorkerLlmConfig("llm block must be an object")
 
     provider = str(payload.get("provider") or "")
-    if provider != "openai-compatible":
-        raise InvalidWorkerLlmConfig(
-            f"unsupported llm provider {provider!r}; only 'openai-compatible' is supported"
-        )
-
     model = str(payload.get("model") or "").strip()
-    api_key = str(payload.get("apiKey") or "").strip()
     base_url = str(payload.get("baseUrl") or "").strip()
 
+    if provider == "opencode-server":
+        provider_id = str(payload.get("providerID") or "").strip()
+        model_id = str(payload.get("modelID") or model).strip()
+        directory = str(payload.get("directory") or "").strip()
+        if not model_id:
+            raise InvalidWorkerLlmConfig("llm.modelID is required")
+        if not provider_id:
+            raise InvalidWorkerLlmConfig("llm.providerID is required")
+        if not base_url.startswith(("http://", "https://")):
+            raise InvalidWorkerLlmConfig("llm.baseUrl must be an http(s) URL")
+        return WorkerLlmConfig(
+            provider="opencode-server",
+            model=model_id,
+            provider_id=provider_id,
+            model_id=model_id,
+            directory=directory,
+            base_url=base_url.rstrip("/"),
+        )
+
+    if provider != "openai-compatible":
+        raise InvalidWorkerLlmConfig(
+            f"unsupported llm provider {provider!r}; expected 'openai-compatible' or "
+            f"'opencode-server'"
+        )
+
+    api_key = str(payload.get("apiKey") or "").strip()
     if not model:
         raise InvalidWorkerLlmConfig("llm.model is required")
     if not api_key:
@@ -194,6 +233,7 @@ def build_worker_llm_config(payload: object) -> WorkerLlmConfig:
         api_key=api_key,
         api_url=_chat_completions_url(base_url),
         provider_id=str(payload.get("providerID") or ""),
+        model_id=model,
     )
 
 
