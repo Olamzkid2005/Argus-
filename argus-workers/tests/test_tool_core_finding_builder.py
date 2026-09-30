@@ -1,5 +1,8 @@
 """Tests for tool_core/finding_builder.py — FindingBuilder."""
 
+import re
+from pathlib import Path
+
 import pytest
 
 from tool_core.finding_builder import FindingBuilder
@@ -110,3 +113,43 @@ class TestFindingBuilder:
         # Should not raise
         finding = builder.add("XSS", "HIGH", "/api", {})
         assert finding["type"] == "XSS"
+
+
+class TestKnownVulnTypesCoversTheCodeThatEmitsThem:
+    """A scanner's finding type must be known, or the builder loses it.
+
+    ``add()`` warns and relabels an unknown type GENERIC_FINDING, so a scanner
+    emitting a type that is missing from KNOWN_VULN_TYPES silently stops
+    producing its own vulnerability type. Measured: the local assess run turned
+    the web scanner's NO_HTTPS into GENERIC_FINDING.
+    """
+
+    #: Directories whose ``finding_type=`` literals are not production output.
+    SKIPPED_DIRS = frozenset({"venv", ".venv", "tests", "tool_assets", "node_modules"})
+
+    def test_every_emitted_type_is_known(self):
+        root = Path(__file__).resolve().parent.parent
+        pattern = re.compile(
+            "finding_type\\s*=\\s*[\"']([A-Za-z_][A-Za-z0-9_]*)[\"']"
+        )
+        emitted: dict[str, set[str]] = {}
+        for path in root.rglob("*.py"):
+            if set(path.parts) & self.SKIPPED_DIRS:
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            for match in pattern.finditer(text):
+                emitted.setdefault(match.group(1), set()).add(
+                    str(path.relative_to(root))
+                )
+
+        assert emitted, "no finding_type= literals found — has the scan gone stale?"
+        unknown = {
+            name: sorted(paths)
+            for name, paths in emitted.items()
+            if name not in FindingBuilder.KNOWN_VULN_TYPES
+        }
+        assert unknown == {}, (
+            f"{len(unknown)} finding type(s) are emitted but unknown, so they are "
+            f"relabelled GENERIC_FINDING: "
+            + ", ".join(f"{name} ({paths[0]})" for name, paths in sorted(unknown.items()))
+        )
