@@ -58,9 +58,22 @@ class LlmCostTracker:
         """Compatibility alias for LLMService — records LLM cost."""
         self.record_llm_call(cost)
 
-    def exceeded(self) -> bool:
-        """Compatibility alias for LLMService — checks if budget exceeded."""
-        return not self.has_remaining_budget()
+    def exceeded(self, estimated_cost: float = 0.0) -> bool:
+        """Compatibility alias for LLMService — checks if budget exceeded.
+
+        Accepts the optional upcoming-cost estimate LLMService passes (M-v4-18),
+        matching ``llm_service.CostTracker.exceeded``. Without the parameter,
+        every LLM call in a worker that wired this tracker in raised
+        ``TypeError`` and fell back to deterministic mode — measured on a local
+        run, where all eight analyze-phase calls failed that way, so no
+        engine-chosen decision could be recorded at all.
+
+        Args:
+            estimated_cost: Cost of the call about to be recorded. Checks
+                whether total + estimate would exceed the cap, so the first
+                overshooting call is not processed in full.
+        """
+        return (self._get_current_cost() + estimated_cost) > self.max_cost
 
     @property
     def total(self) -> float:
