@@ -1188,9 +1188,32 @@ Based on these findings, what capabilities should the next phase use?
         """
         tried_tools = tried_tools or set()
         llm_client = llm_client or self.llm_client
+        # Set when the LLM proposed a tool that must not run again; the
+        # deterministic plan is used instead and the generic "returned None"
+        # diagnostics are suppressed so the log says what actually happened.
+        rejection: str | None = None
+
+        # Honour the policy DegradationAwareness already states: when its LLM
+        # success rate drops below 50% the recommendation is "switching to
+        # deterministic tool ordering". Nothing consumed that recommendation, so
+        # a run whose selections kept being refused kept buying LLM calls that
+        # could not change the outcome — including re-proposing tools it had
+        # already finished with. Once the rate is that low the deterministic
+        # plan is strictly better: it is free and it skips tried tools.
+        llm_ordering_disabled = False
+        if self._degradation_awareness is not None:
+            try:
+                _da_status = self._degradation_awareness.get_status()
+                llm_ordering_disabled = (
+                    _da_status.level == DegradationLevel.DEGRADED
+                    and _da_status.llm_success_rate < 0.5
+                )
+            except Exception as exc:  # pragma: no cover - diagnostic only
+                logger.debug("Degradation status unavailable: %s", exc)
 
         if (
-            llm_client
+            not llm_ordering_disabled
+            and llm_client
             and hasattr(llm_client, "is_available")
             and llm_client.is_available()
             and recon_context
@@ -1210,22 +1233,49 @@ Based on these findings, what capabilities should the next phase use?
                     self._degradation_awareness.record_llm_result(success=True)
                 return None
             if action is not None:
-                # LLM succeeded — reset failure counter
-                self._llm_failure_count = 0
-                # Record LLM success for DegradationAwareness
-                if self._degradation_awareness is not None:
-                    self._degradation_awareness.record_llm_result(success=True)
-                # Attach actual LLM token counts to the action (blocker 48).
-                # Unconditional: these are the audit record of what the call
-                # cost, so they must not depend on the GOVERNANCE_V2 flag —
-                # agent_decisions stored NULL tokens for every decision while
-                # this was gated, leaving cost_usd permanently 0.
-                if hasattr(llm_service, "last_input_tokens"):
-                    action.input_tokens = llm_service.last_input_tokens
-                if hasattr(llm_service, "last_output_tokens"):
-                    action.output_tokens = llm_service.last_output_tokens
-                assert isinstance(action, AgentAction)
-                return action
+                if action.tool in tried_tools:
+                    # Enforce the exclusion the prompt only asks for.
+                    #
+                    # `tried_tools` is rendered into the selection prompt, but a
+                    # small model ignores it: on a live scan the agent proposed
+                    # `nuclei` ten iterations in a row, and every one was
+                    # refused by scope validation before it could run. Each
+                    # repeat cost an LLM call and advanced nothing, because the
+                    # tool was already in `tried_tools` — and a tool blocked by
+                    # scope validation can never succeed on retry, so there was
+                    # nothing to wait for. Rejecting the selection here hands the
+                    # iteration to the deterministic plan, which does skip tried
+                    # tools, so the run moves on instead of spinning.
+                    rejection = (
+                        f"re-selected already-tried tool '{action.tool}'"
+                    )
+                    self._llm_failure_count += 1
+                    logger.warning(
+                        "LLM %s (failure #%d) — ignoring the selection and using "
+                        "the deterministic plan. Tried so far: %s",
+                        rejection,
+                        self._llm_failure_count,
+                        ", ".join(sorted(tried_tools)) or "none",
+                    )
+                    if self._degradation_awareness is not None:
+                        self._degradation_awareness.record_llm_result(success=False)
+                else:
+                    # LLM succeeded — reset failure counter
+                    self._llm_failure_count = 0
+                    # Record LLM success for DegradationAwareness
+                    if self._degradation_awareness is not None:
+                        self._degradation_awareness.record_llm_result(success=True)
+                    # Attach actual LLM token counts to the action (blocker 48).
+                    # Unconditional: these are the audit record of what the call
+                    # cost, so they must not depend on the GOVERNANCE_V2 flag —
+                    # agent_decisions stored NULL tokens for every decision while
+                    # this was gated, leaving cost_usd permanently 0.
+                    if hasattr(llm_service, "last_input_tokens"):
+                        action.input_tokens = llm_service.last_input_tokens
+                    if hasattr(llm_service, "last_output_tokens"):
+                        action.output_tokens = llm_service.last_output_tokens
+                    assert isinstance(action, AgentAction)
+                    return action
             else:
                 # LLM was attempted but returned None — record failure
                 if self._degradation_awareness is not None:
@@ -1236,7 +1286,9 @@ Based on these findings, what capabilities should the next phase use?
         # log a warning so operators can detect degraded performance.
         # Guard: only warn if we actually TRIED the LLM (recon_context was present).
         if (
-            llm_client
+            rejection is None
+            and not llm_ordering_disabled
+            and llm_client
             and hasattr(llm_client, "is_available")
             and llm_client.is_available()
             and recon_context

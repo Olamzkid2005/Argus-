@@ -485,8 +485,10 @@ So "make the demo run record decisions" has two honest shapes, and it is a choic
    `ReActAgent.plan_next_action` per step, so every step is an LLM choice. This is what the Step 3
    acceptance text actually describes ("the demo can point at recorded decisions proving the engine
    chose tools"), and it is a feature, not a wiring fix: it changes when the demo spends LLM calls
-   (10–30 s each on the free tier) and needs the blocked-tool repetition seen in the evidence run
-   fixed first, or it will burn calls re-selecting a tool the scope guard already refused.
+   (10–30 s each on the free tier). The blocked-tool repetition that made this expensive is fixed —
+   a selection naming an already-tried tool is rejected and the iteration falls to the deterministic
+   plan, and a DEGRADED LLM success rate now actually switches the ordering instead of only being
+   reported.
 
 Either shape also needs the id problem solved, since `agent_decisions.engagement_id` is
 `UUID NOT NULL REFERENCES engagements(id)` while local engagements are `ENG-…` in SQLite. Relaxing

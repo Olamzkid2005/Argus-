@@ -120,9 +120,16 @@ What broke and what is now fixed:
   only attached under a feature flag and passed as `None` (so `cost_usd` was always `$0.000000`), and
   decisions were logged at the *end* of the loop so anything that left the body early — notably a
   tool blocked by scope validation — left no trace at all. Details and the exact evidence are in
-  `DEMO-READINESS-PLAN.md` Step 3. The same run also shows the agent re-selecting a scope-blocked
-  `nuclei` ten times (the tool *is* added to `tried_tools`; the model ignores the exclusion), spending
-  ten LLM calls with no phase progress — no guard stops repeated blocked selections yet.
+  `DEMO-READINESS-PLAN.md` Step 3. **Also fixed — the agent no longer re-selects a tool the run has
+  already put behind it.** The evidence run had it propose a scope-blocked `nuclei` on all ten
+  iterations: the tool *is* added to `tried_tools` and rendered into the selection prompt, but a
+  small model ignores the exclusion, so ten LLM calls bought ten identical refusals and no phase
+  progress. A selection that names an already-tried tool is now rejected (with a warning naming the
+  exclusion) and the iteration is handed to the deterministic plan, which does skip tried tools;
+  rejections also count toward `DegradationAwareness`, whose stated "switch to deterministic tool
+  ordering" policy below a 50% LLM success rate is finally consumed instead of only recorded. The
+  re-run advances through ten *distinct* tools and records 2 non-fallback decisions (the LLM's real
+  choices, with tokens and cost) alongside 8 honestly-labelled fallbacks.
 - **Open — the demo path still records nothing.** That evidence comes from the worker's own scan
   pipeline. The TUI/CLI drives the worker over MCP (`agent_init`/`agent_next`), which constructs
   `ReActAgent` without a `decision_repo`, and `agent_decisions.engagement_id` is `UUID NOT NULL

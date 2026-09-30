@@ -230,6 +230,18 @@ class _SelectingLLMClient:
         )
 
 
+class _CountingLLMClient(_SelectingLLMClient):
+    """A selecting client that also records whether it was consulted."""
+
+    def __init__(self, payload: str):
+        super().__init__(payload)
+        self.calls = 0
+
+    def chat_sync(self, messages, **kwargs):
+        self.calls += 1
+        return super().chat_sync(messages, **kwargs)
+
+
 class _ExplodingLLMClient:
     """Test double whose calls fail, as a 503 from the provider would."""
 
@@ -304,3 +316,96 @@ class TestActionProvenance:
         assert ReActAgent._is_fallback_action(action) is True
         assert (action.input_tokens, action.output_tokens) == (0, 0)
         assert action.to_dict()["source"] == ""
+
+
+class TestTriedToolEnforcement:
+    """A tool this run already put behind it must not be chosen again.
+
+    `tried_tools` is rendered into the selection prompt, but a small model
+    ignores it: a live scan had the agent propose `nuclei` ten iterations in a
+    row, each refused by scope validation, each costing an LLM call while the
+    run advanced nothing.
+    """
+
+    @staticmethod
+    def _noop_tool():
+        return {}
+
+    def _agent(self, llm_client, tools=("httpx", "nuclei")):
+        registry = ToolRegistry()
+        for name in tools:
+            registry.register(
+                name,
+                self._noop_tool,
+                {"name": name, "description": f"{name} probe", "parameters": []},
+            )
+        return ReActAgent(registry, llm_client=llm_client)
+
+    def _recon(self):
+        from models.recon_context import ReconContext
+
+        return ReconContext(
+            target_url="http://127.0.0.1:55693",
+            live_endpoints=["http://127.0.0.1:55693/health"],
+        )
+
+    def test_reselecting_a_tried_tool_is_rejected(self):
+        agent = self._agent(
+            _SelectingLLMClient('{"tool": "nuclei", "reasoning": "nuclei again"}')
+        )
+        action = agent.plan_next_action(
+            "scan: http://127.0.0.1:55693",
+            "ctx",
+            tried_tools={"nuclei"},
+            recon_context=self._recon(),
+        )
+
+        assert action is not None
+        assert action.tool != "nuclei"
+        assert ReActAgent._is_fallback_action(action) is True
+        assert agent._llm_failure_count == 1
+
+    def test_a_degraded_run_stops_consulting_the_llm(self):
+        """The DEGRADED policy ("switch to deterministic ordering") must bite.
+
+        Nothing consumed that recommendation, so a run whose selections kept
+        being refused kept buying LLM calls that could not change the outcome.
+        """
+        from models.recon_context import ReconContext
+        from runtime.degradation_awareness import DegradationAwareness
+
+        degradation = DegradationAwareness("ENG-degraded-test")
+        for _ in range(6):
+            degradation.record_llm_result(success=False)
+        assert degradation.get_status().llm_success_rate < 0.5
+
+        client = _CountingLLMClient('{"tool": "nuclei", "reasoning": "from llm"}')
+        agent = self._agent(client)
+        agent._degradation_awareness = degradation
+
+        action = agent.plan_next_action(
+            "scan: http://127.0.0.1:55693",
+            "ctx",
+            recon_context=ReconContext(target_url="http://127.0.0.1:55693"),
+        )
+
+        assert client.calls == 0
+        assert action is not None
+        assert ReActAgent._is_fallback_action(action) is True
+        assert agent._llm_failure_count == 0
+
+    def test_an_untried_selection_is_still_accepted(self):
+        agent = self._agent(
+            _SelectingLLMClient('{"tool": "nuclei", "reasoning": "fresh choice"}')
+        )
+        action = agent.plan_next_action(
+            "scan: http://127.0.0.1:55693",
+            "ctx",
+            tried_tools={"httpx"},
+            recon_context=self._recon(),
+        )
+
+        assert action is not None
+        assert action.tool == "nuclei"
+        assert action.source == "llm"
+        assert agent._llm_failure_count == 0
