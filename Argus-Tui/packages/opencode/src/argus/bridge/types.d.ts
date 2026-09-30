@@ -30,6 +30,12 @@ export type SignalQuality = "CONFIRMED" | "PROBABLE" | "CANDIDATE";
 export interface ToolResult {
     success: boolean;
     data: unknown;
+    /**
+     * Findings parsed by the worker's parser for this tool (`meta.data.structured`
+     * on the MCP response). These — not `data` — are the findings; `data` is the
+     * raw tool text, which is frequently just a CLI error.
+     */
+    structured?: Array<Record<string, unknown>>;
     error?: string;
     durationMs: number;
     /** Signal quality tier from the tool definition, used by ConfidenceEngine as baseline */

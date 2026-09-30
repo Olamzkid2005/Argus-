@@ -481,6 +481,70 @@ class TestCallToolBinaryValidation:
         assert mock_which.call_count == INIT_TOOL_CHECKS + 1
 
 
+class TestFindingsExitCodeWithoutFindings:
+    """A findings-bearing exit code with nothing to parse is a CLI error.
+
+    gitleaks/dalfox/nuclei exit non-zero when they FIND something. When the
+    tool's own parser extracts nothing from that output the run was almost
+    certainly misconfigured ("unknown flag", bad path) — reporting success
+    lets the error text be promoted into a finding downstream.
+    """
+
+    def setup_method(self) -> None:
+        MCPServer._binary_cache.clear()
+        import mcp_server as ms
+        self._orig_getaddrinfo = ms.socket.getaddrinfo
+        ms.socket.getaddrinfo = lambda *_a, **_kw: None
+
+    def teardown_method(self) -> None:
+        import mcp_server as ms
+        ms.socket.getaddrinfo = self._orig_getaddrinfo
+
+    def make_server(self, script: str):
+        import sys
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="gitleaks",
+            command=sys.executable,
+            args=["-c", script],
+        ))
+        return server
+
+    def test_findings_exit_code_with_unparseable_output_reports_failure(self, mocker):
+        import sys
+        mocker.patch("mcp_server.shutil.which", return_value=sys.executable)
+        script = (
+            "import sys; "
+            "sys.stderr.write('stat http://127.0.0.1:1: no such file or directory\\n'); "
+            "sys.exit(1)"
+        )
+        server = self.make_server(script)
+        result = server.call_tool("gitleaks", {"target": "http://127.0.0.1:1"})
+        assert result["isError"] is True
+        assert result["meta"]["success"] is False
+        assert "no such file" in result["content"][0]["text"]
+        assert "structured" not in result["meta"].get("data", {})
+
+    def test_findings_exit_code_with_parsed_findings_reports_success(self, mocker):
+        import json
+        import sys
+        mocker.patch("mcp_server.shutil.which", return_value=sys.executable)
+        payload = json.dumps([{
+            "RuleID": "aws-access-token",
+            "Description": "AWS Access Key",
+            "File": "config.py",
+            "StartLine": 3,
+            "Secret": "AKIAEXAMPLE",
+        }])
+        server = self.make_server(f"print({payload!r}); raise SystemExit(1)")
+        result = server.call_tool("gitleaks", {"target": "http://127.0.0.1:2"})
+        assert result["isError"] is False
+        structured = result["meta"]["data"]["structured"]
+        assert structured
+        assert structured[0]["title"] == "aws-access-token"
+        assert structured[0]["tool"] == "gitleaks"
+
+
 # ── Phase 1.2: _fallback_phase_complete ──────────────────────────────
 
 

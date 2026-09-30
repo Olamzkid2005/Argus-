@@ -67,7 +67,22 @@ def _ensure_extra_parsers() -> dict[str, Any]:
     return _EXTRA_PARSERS
 
 
-def dispatch(tool_name: str, output: str) -> list[NormalizedFinding]:
+def dispatch(
+    tool_name: str,
+    output: str,
+    *,
+    allow_generic: bool = True,
+) -> list[NormalizedFinding]:
+    """Route raw tool output to the parser for that tool.
+
+    Args:
+        tool_name: Name of the tool that produced the output.
+        output: Raw stdout (or stderr) to parse.
+        allow_generic: When False, skip the generic heuristic parser. Callers
+            use this to ask "did this tool's *own* parser produce anything?"
+            — the generic parser manufactures a RAW_OUTPUT finding for almost
+            any text, so it cannot answer that question.
+    """
     # 1. Try System A (native module-level parsers)
     parser = _PARSERS.get(tool_name)
     if parser:
@@ -89,7 +104,10 @@ def dispatch(tool_name: str, output: str) -> list[NormalizedFinding]:
                 exc,
             )
 
-    # 3. Fall back to generic heuristic parser
+    # 3. Fall back to generic heuristic parser. Callers that need to know
+    #    whether the tool's own parser matched can opt out (see allow_generic).
+    if not allow_generic:
+        return []
     return generic.parse(output)
 
 

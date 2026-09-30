@@ -36,7 +36,7 @@ from agent.tool_registry import ToolRegistry
 from cache import CacheMode, WorkerCache
 from config.llm_env import InvalidWorkerLlmConfig, set_worker_llm_config
 from llm_client import LLMClient
-from tool_core.parser import dispatch
+from tool_core.parser import dispatch, has_parser
 from tools.scope_validator import ScopeViolationError
 
 # ── Signal quality tiers for planner intelligence ──
@@ -902,11 +902,38 @@ class MCPServer:
             )
             duration_ms = int((time.time() - start) * 1000)
 
+            # Always dispatch findings parsing — even on non-zero exit if
+            # the exit code indicates findings were found. This ensures
+            # tools like semgrep, bandit, gitleaks produce structured findings
+            # on the MCP path.
+            output_to_parse = result.stdout
+            if not output_to_parse and result.stderr:
+                output_to_parse = result.stderr
+            structured = dispatch(name, output_to_parse)
+
             # Determine success: exit code 0 = success. Some security tools
             # exit non-zero when they FIND vulnerabilities (semgrep, bandit,
-            # gitleaks, trivy, etc.) — treat those as successes too.
+            # gitleaks, trivy, etc.) — treat those as successes too, but only
+            # when the tool's own parser can actually extract findings from the
+            # output. A findings-bearing exit code with nothing to parse is the
+            # signature of a CLI error ("unknown flag", bad path, ...), and
+            # reporting it as success lets the error text be promoted into a
+            # finding downstream.
             findings_exit = self.FINDINGS_EXIT_CODES.get(name, set())
             success = result.returncode == 0 or result.returncode in findings_exit
+            if (
+                success
+                and result.returncode != 0
+                and has_parser(name)
+                and not dispatch(name, output_to_parse, allow_generic=False)
+            ):
+                success = False
+                structured = []
+                logger.info(
+                    "Tool '%s' exited %d (findings code) but its parser produced no findings — reporting failure",
+                    name,
+                    result.returncode,
+                )
 
             if success:
                 self._execution_stats[name]["successes"] += 1
@@ -924,15 +951,7 @@ class MCPServer:
                 tool=name,
                 signal_quality=tool_signal_quality,
             )
-            # Always dispatch findings parsing — even on non-zero exit if
-            # the exit code indicates findings were found. This ensures
-            # tools like semgrep, bandit, gitleaks produce structured findings
-            # on the MCP path.
-            output_to_parse = result.stdout
-            if not output_to_parse and result.stderr:
-                output_to_parse = result.stderr
-            structured = dispatch(name, output_to_parse)
-            if structured:
+            if structured and success:
                 mcp_result.data["structured"] = [f.__dict__ for f in structured]
 
             # Cache the result (NO_CACHE mode skips writes)

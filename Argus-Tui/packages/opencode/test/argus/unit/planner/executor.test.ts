@@ -1183,6 +1183,64 @@ describe("InProcessExecutor", () => {
     })
   })
 
+  describe("unstructured tool output", () => {
+    test("raw stdout is recorded as an observation, never as a finding", async () => {
+      const bridge = {
+        ...mockBridge,
+        callTool: async () => ({ success: true, data: "unknown flag: --json", durationMs: 5 }),
+      }
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(makePhase())
+      expect(result.findings).toHaveLength(0)
+      expect(result.errors).toHaveLength(0)
+      expect(exec.unstructuredOutput).toHaveLength(1)
+      expect(exec.unstructuredOutput[0].tool).toBe("test-tool")
+      expect(exec.unstructuredOutput[0].snippet).toContain("unknown flag")
+    })
+
+    test("pipeline steps do not promote raw stdout to a finding either", async () => {
+      const bridge = {
+        ...mockBridge,
+        callTool: async () => ({ success: true, data: "[FAIL] Unable to connect to 127.0.0.1:80", durationMs: 5 }),
+      }
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const phase = makePhase({
+        config: {
+          pipelineSteps: [
+            { tool: "test-tool", capabilities: ["web_recon"], consumes: [], provides: [] },
+          ],
+        },
+      })
+      const result = await exec.execute(phase)
+      expect(result.findings).toHaveLength(0)
+      expect(exec.unstructuredOutput.length).toBeGreaterThan(0)
+      expect(exec.unstructuredOutput[0].snippet).toContain("Unable to connect")
+    })
+
+    test("worker-parsed findings still become findings", async () => {
+      const bridge = {
+        ...mockBridge,
+        callTool: async () => ({
+          success: true,
+          data: "stdout that is not itself a finding",
+          structured: [{ title: "SQL injection", severity: "HIGH", confidence: 0.85, tool: "sqlmap", endpoint: "/user?id=1" }],
+          durationMs: 5,
+        }),
+      }
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(makePhase())
+      expect(result.findings).toHaveLength(1)
+      expect(result.findings[0].title).toBe("SQL injection")
+      expect(result.findings[0].severity).toBe(3)
+      expect(result.findings[0].id).toBeTruthy()
+      expect(result.findings[0].status).toBe("PENDING")
+      expect(exec.unstructuredOutput).toHaveLength(0)
+    })
+  })
+
   describe("edge cases", () => {
     test("phase with no capabilities returns empty result", async () => {
       const toolRegistry = {

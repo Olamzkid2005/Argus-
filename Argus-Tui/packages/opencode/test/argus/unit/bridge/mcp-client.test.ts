@@ -774,3 +774,35 @@ describe("WorkersBridge — Edge cases", () => {
     await expect((bridge as any).sendRequest("test", {}, 1)).rejects.toThrow("timed out")
   })
 })
+
+describe("callTool response mapping", () => {
+  test("forwards the worker's parsed findings as structured, not as data", async () => {
+    const { WorkersBridge } = await import("../../../../src/argus/bridge/mcp-client")
+    const bridge = new WorkersBridge("/path/to/mcp_server.py")
+    const parsed = [{ title: "CVE-2024-1234", severity: 3, confidence: 2, tool: "nuclei" }]
+    ;(bridge as any).sendRequest = async () => ({
+      content: [{ type: "text", text: "raw stdout that is not a finding" }],
+      isError: false,
+      meta: { success: true, duration_ms: 12, tool: "nuclei", signal_quality: "CONFIRMED", data: { structured: parsed } },
+    })
+
+    const result = await bridge.callTool("nuclei", {})
+    expect(result.success).toBe(true)
+    expect(result.data).toBe("raw stdout that is not a finding")
+    expect(result.structured).toEqual(parsed)
+  })
+
+  test("leaves structured undefined when the worker parsed nothing", async () => {
+    const { WorkersBridge } = await import("../../../../src/argus/bridge/mcp-client")
+    const bridge = new WorkersBridge("/path/to/mcp_server.py")
+    ;(bridge as any).sendRequest = async () => ({
+      content: [{ type: "text", text: "unknown flag: --json" }],
+      isError: false,
+      meta: { success: true, duration_ms: 4, tool: "dalfox" },
+    })
+
+    const result = await bridge.callTool("dalfox", {})
+    expect(result.data).toBe("unknown flag: --json")
+    expect(result.structured).toBeUndefined()
+  })
+})

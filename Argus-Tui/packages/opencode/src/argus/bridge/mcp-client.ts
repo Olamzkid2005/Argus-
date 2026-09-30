@@ -500,12 +500,27 @@ export class WorkersBridge {
       const mcpResponse = raw as {
         content?: Array<{ type: string; text: string }>
         isError?: boolean
-        meta?: { success?: boolean; duration_ms?: number; tool?: string; signal_quality?: string }
+        meta?: {
+          success?: boolean
+          duration_ms?: number
+          tool?: string
+          signal_quality?: string
+          data?: { structured?: unknown }
+        }
       }
       const text = mcpResponse.content?.[0]?.text ?? ""
+      // The worker parses the tool's output with its own parser and returns the
+      // findings under meta.data.structured. They — not the raw text — are the
+      // findings: the text is stdout/stderr and is often just a CLI error
+      // (e.g. "unknown flag: --json"), which must never be promoted downstream.
+      const structuredRaw = mcpResponse.meta?.data?.structured
+      const structured = Array.isArray(structuredRaw)
+        ? structuredRaw.filter((f): f is Record<string, unknown> => !!f && typeof f === "object")
+        : []
       const result: ToolResult = {
         success: mcpResponse.meta?.success ?? (mcpResponse.isError !== undefined ? !mcpResponse.isError : false),
         data: text,
+        structured: structured.length > 0 ? structured : undefined,
         error: mcpResponse.isError ? text : undefined,
         durationMs: mcpResponse.meta?.duration_ms ?? 0,
         signalQuality: mcpResponse.meta?.signal_quality as ToolResult["signalQuality"],

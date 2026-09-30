@@ -159,7 +159,7 @@ export class ThrottleTracker {
   }
 }
 
-import { Confidence } from "../shared/types"
+import { Confidence, Severity } from "../shared/types"
 import { ConfidenceEngine } from "../engagement/confidence"
 import { ApprovalService } from "../workflows/approval"
 import type { ApprovalGate } from "../workflows/types"
@@ -194,6 +194,69 @@ function baselineConfidence(signalQuality: SignalQuality | undefined): number {
     case "PROBABLE":  return Confidence.MEDIUM
     case "CANDIDATE": return Confidence.LOW
     default:          return Confidence.INFORMATIONAL
+  }
+}
+
+const SEVERITY_BY_NAME: Record<string, Severity> = {
+  INFO: Severity.INFO,
+  LOW: Severity.LOW,
+  MEDIUM: Severity.MEDIUM,
+  HIGH: Severity.HIGH,
+  CRITICAL: Severity.CRITICAL,
+}
+
+/** Coerce a parser's severity ("HIGH", "high", 3, ...) onto the Severity scale. */
+function coerceSeverity(value: unknown): Severity {
+  const numeric = Number(value)
+  if (!Number.isNaN(numeric) && Number.isInteger(numeric) && numeric >= 0 && numeric <= 4) {
+    return numeric as Severity
+  }
+  if (typeof value === "string") {
+    const named = SEVERITY_BY_NAME[value.trim().toUpperCase()]
+    if (named !== undefined) return named
+  }
+  // Unknown severities must not inflate a report.
+  return Severity.INFO
+}
+
+/**
+ * Coerce a parser's confidence onto the Confidence scale (0-5 tiers).
+ * The worker's parsers emit either a 0..1 float (e.g. 0.85) or the tier itself.
+ */
+function coerceConfidence(value: unknown): Confidence {
+  const numeric = Number(value)
+  if (Number.isNaN(numeric) || numeric <= 0) return Confidence.INFORMATIONAL
+  if (numeric < 1) return Math.min(Confidence.CONFIRMED, Math.round(numeric * 4)) as Confidence
+  if (numeric <= Confidence.CONFIRMED) return Math.round(numeric) as Confidence
+  return Confidence.INFORMATIONAL
+}
+
+/**
+ * Normalize a parser-produced finding into the shape the engagement store
+ * expects. The worker's NormalizedFinding dicts carry the security content but
+ * no id, status or timestamps — those are required for persistence.
+ */
+function normalizeParsedFinding(raw: unknown, tool: string, phaseId: string): NormalizedFinding {
+  const r = (raw ?? {}) as Record<string, unknown>
+  const now = new Date().toISOString()
+  const str = (key: string): string | undefined =>
+    typeof r[key] === "string" && (r[key] as string).length > 0 ? (r[key] as string) : undefined
+  return {
+    id: str("id") ?? `find-${tool}-${crypto.randomUUID()}`,
+    title: str("title") ?? `${tool} finding`,
+    severity: coerceSeverity(r.severity),
+    confidence: coerceConfidence(r.confidence),
+    status: (str("status") ?? "PENDING") as NormalizedFinding["status"],
+    description: str("description") ?? "",
+    subtype: str("subtype"),
+    cve: str("cve"),
+    cwe: str("cwe"),
+    owasp: str("owasp"),
+    remediation: str("remediation"),
+    tool: str("tool") ?? tool,
+    phase: str("phase") ?? phaseId,
+    created_at: str("created_at") ?? now,
+    updated_at: str("updated_at") ?? now,
   }
 }
 
@@ -250,6 +313,26 @@ export class InProcessExecutor implements PhaseExecutor {
   private assessmentStartTime: number = 0
   /** Per-phase deadline (set at phase start). Used in both execute() and executeHybrid(). */
   private phaseDeadline: number = 0
+
+  /**
+   * Tool runs that returned unstructured text with no parsed findings. These
+   * are observations, never findings: raw stdout/stderr is frequently a CLI
+   * error (e.g. `unknown flag: --json`) and must not reach the report as a
+   * vulnerability.
+   */
+  readonly unstructuredOutput: Array<{ tool: string; phase: string; target: string; bytes: number; snippet: string }> = []
+
+  /** Record unstructured tool output as an observation. Never a finding. */
+  private recordUnstructuredOutput(tool: string, phaseId: string, target: string, text: string): void {
+    this.unstructuredOutput.push({
+      tool,
+      phase: phaseId,
+      target,
+      bytes: text.length,
+      snippet: text.trim().replace(/\s+/g, " ").slice(0, 200),
+    })
+    console.warn(`[executor]  ⚠ ${tool}: ${text.length} bytes of unstructured output on ${target} — recorded as an observation, not a finding`)
+  }
 
   /** Check if the current phase has exceeded its timeout (blocker 35). */
   private checkPhaseTimeout(): string | null {
@@ -703,39 +786,30 @@ export class InProcessExecutor implements PhaseExecutor {
         if (result.success) {
           this.toolHealth.recordSuccess(next.tool, durationMs)
 
-          // Parse findings from structured data
-          if (result.data) {
-            // Phase 4.5.5: Consume the "structured" key from MCP responses.
-            // The Python MCP server stores structured findings with proper
-            // severity, CWE, and evidence in mcp_result.data["structured"].
-            // These were previously bypassed because the executor only checked
-            // result.data for raw arrays or strings.
-            const structuredData = (result.data as any).structured as Array<Record<string, unknown>> | undefined
-            if (structuredData && Array.isArray(structuredData) && structuredData.length > 0) {
-              for (const finding of structuredData) {
-                const promoted = this.confidenceEngine.promote(finding as any)
-                findings.push({ ...finding, confidence: promoted } as any)
-              }
-            } else if (Array.isArray(result.data)) {
-              for (const finding of result.data) {
-                const promoted = this.confidenceEngine.promote(finding)
-                findings.push({ ...finding, confidence: promoted })
-              }
-            } else if (typeof result.data === "string" && result.data.length > 0) {
-              const baseConfidence = baselineConfidence(result.signalQuality)
-              findings.push({
-                id: `find-${next.tool}-${crypto.randomUUID()}`,
-                title: `${next.tool} scan against ${phase.target}`,
-                severity: 2,
-                confidence: baseConfidence,
-                status: "PENDING",
-                description: (result.data as string).slice(0, 500),
-                tool: next.tool,
-                phase: phase.phaseId,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              })
+          // Parse findings from structured data.
+          //
+          // Only *parsed* findings may become findings. The raw text payload
+          // (`data`) is stdout/stderr and is often just a CLI error — promoting
+          // it used to turn `unknown flag: --json` and `[FAIL] Unable to
+          // connect` into MEDIUM "tool scan against target" findings.
+          const structuredData = result.structured
+            ?? (result.data as { structured?: Array<Record<string, unknown>> } | undefined)?.structured
+          const parsedFindings = Array.isArray(structuredData) && structuredData.length > 0
+            ? structuredData
+            : (Array.isArray(result.data) ? result.data : null)
+          let unstructuredBytes = 0
+          if (parsedFindings) {
+            const baseConfidence = baselineConfidence(result.signalQuality)
+            for (const finding of parsedFindings) {
+              const normalized = normalizeParsedFinding(finding, next.tool, phase.phaseId)
+              normalized.confidence = this.confidenceEngine.promote(
+                { ...normalized, confidence: Math.max(normalized.confidence, baseConfidence) as Confidence },
+              )
+              findings.push(normalized)
             }
+          } else if (typeof result.data === "string" && result.data.length > 0) {
+            unstructuredBytes = result.data.length
+            this.recordUnstructuredOutput(next.tool, phase.phaseId, phase.target, result.data)
           }
 
           await this.bridge.agentObserve({
@@ -744,7 +818,8 @@ export class InProcessExecutor implements PhaseExecutor {
             success: true,
             durationMs,
             findingCount: findings.length,
-            summary: `${next.tool}: ${findings.length} findings`,
+            summary: `${next.tool}: ${findings.length} findings`
+              + (unstructuredBytes > 0 ? " (unstructured output recorded as an observation)" : ""),
           })
         } else {
           this.toolHealth.recordFailure(next.tool, result.error ?? "Unknown error")
@@ -927,36 +1002,31 @@ export class InProcessExecutor implements PhaseExecutor {
           this.throttleTracker.recordSuccess(phase.target)
         }
 
-        if (result.success && result.data) {
-          const data = result.data
+        // Only parsed findings may become findings. A raw string payload is
+        // stdout/stderr — often just a CLI error — and is recorded as an
+        // observation instead (see recordUnstructuredOutput).
+        const structuredData = result.structured
+          ?? (result.data as { structured?: Array<Record<string, unknown>> } | undefined)?.structured
+        const parsedFindings = Array.isArray(structuredData) && structuredData.length > 0
+          ? structuredData
+          : (Array.isArray(result.data) ? result.data : null)
+        if (result.success && parsedFindings) {
           const baseConfidence = baselineConfidence(result.signalQuality)
-          if (Array.isArray(data)) {
-            for (const finding of data) {
-              const conf = Math.max(finding.confidence ?? 0, baseConfidence)
-              const promoted = this.confidenceEngine.promote({ ...finding, confidence: conf })
-              findings.push({ ...finding, confidence: promoted })
-            }
-            this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
-            success = true
-            break
-          } else if (typeof data === "string" && data.length > 0) {
-            const truncated = data.length > 500 ? data.substring(0, 500) + "..." : data
-            findings.push({
-              id: `find-${tool.name}-${crypto.randomUUID()}`,
-              title: `${tool.name} scan against ${phase.target}`,
-              severity: 2,
-              confidence: baseConfidence,
-              status: "PENDING",
-              description: truncated,
-              tool: tool.name,
-              phase: phase.phaseId,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
-            success = true
-            break
+          for (const finding of parsedFindings) {
+            const normalized = normalizeParsedFinding(finding, tool.name, phase.phaseId)
+            normalized.confidence = this.confidenceEngine.promote(
+              { ...normalized, confidence: Math.max(normalized.confidence, baseConfidence) },
+            )
+            findings.push(normalized)
           }
+          this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
+          success = true
+          break
+        } else if (result.success && typeof result.data === "string" && result.data.length > 0) {
+          this.recordUnstructuredOutput(tool.name, phase.phaseId, phase.target, result.data)
+          this.toolHealth.recordSuccess(tool.name, Date.now() - attemptStartTime)
+          success = true
+          break
         }
         lastError = new Error(result.error ?? "Tool returned unsuccessful result")
         this.toolHealth.recordFailure(tool.name, lastError.message)
