@@ -78,6 +78,10 @@ async function appRuntime() {
  * this.
  */
 export async function disposePlannerRuntime(): Promise<void> {
+  // Any `opencode serve` this process started must not outlive it, whether or
+  // not the managed runtime was ever booted.
+  const { shutdownAcquiredServers } = await import("./opencode-server")
+  await shutdownAcquiredServers()
   if (!booted) return
   booted = false
   const mod = await import("@/effect/app-runtime")

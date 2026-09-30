@@ -18,6 +18,13 @@
 import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test"
 import { Effect, Layer } from "effect"
 
+// These tests drive the service against a mocked `@opencode-ai/llm`, so they must
+// stay on the direct transport. The default for an `opencode*` provider is the
+// server transport (see selectPlannerTransport), which spawns a real
+// `opencode serve` — a real server is not available in a unit test, and the
+// transport itself is covered by opencode-server.test.ts.
+process.env.ARGUS_LLM_TRANSPORT = "direct"
+
 // ── Mock Control Flags ───────────────────────────────────────────────
 // These module-level flags control the mocked generateObject behavior
 // from individual tests WITHOUT calling mock.module() again (which is

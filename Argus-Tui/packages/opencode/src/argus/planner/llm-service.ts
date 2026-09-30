@@ -34,6 +34,14 @@ import {
   listPlannerModels,
   resolvePlannerModel,
 } from "./model-registry"
+import {
+  acquireServer,
+  prompt as serverPrompt,
+  parseJsonObject,
+  OpencodeServerError,
+  type OpencodeServerHandle,
+  type ServerModelRef,
+} from "./opencode-server"
 
 // ── Structured Output Schemas ────────────────────────────────────────
 // These Effect Schemas define the shape of data the LLM must return.
@@ -89,6 +97,69 @@ export interface LLMPhaseSuggestionResult {
 const ENV_PLANNER_MODEL = PLANNER_MODEL_ENV_VAR
 const ENV_OPENCODE_MODEL = "OPENCODE_MODEL"
 
+// ── Transport selection ──────────────────────────────────────────────
+
+/** `ARGUS_LLM_TRANSPORT=server|direct|auto` (default `auto`). */
+export const LLM_TRANSPORT_ENV_VAR = "ARGUS_LLM_TRANSPORT"
+
+export type PlannerTransport = "server" | "direct"
+
+/**
+ * Where a planner call should be made.
+ *
+ * OpenCode's own gateways serve requests made by OpenCode itself and refuse
+ * them from this source tree (HTTP 403 `FreeTierError`, see blocker B9), so
+ * `opencode*` providers default to going through a local OpenCode server.
+ * Every other provider is a normal HTTP API that Argus can call directly.
+ */
+export function selectPlannerTransport(
+  providerID: string,
+  preference = process.env[LLM_TRANSPORT_ENV_VAR]?.trim().toLowerCase(),
+): PlannerTransport {
+  if (preference === "direct") return "direct"
+  if (preference === "server") return "server"
+  return providerID.startsWith("opencode") ? "server" : "direct"
+}
+
+/**
+ * JSON Schema for the phase-suggestion response — the wire form of
+ * `PhaseSuggestionResponseSchema` below, which cannot be sent to a provider as
+ * an Effect Schema. Keep the two in step.
+ */
+const PHASE_SUGGESTION_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    target_analysis: { type: "string" },
+    suggested_phases: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          capabilities: { type: "array", items: { type: "string" } },
+          reasoning: { type: "string" },
+        },
+        required: ["capabilities", "reasoning"],
+      },
+    },
+  },
+  required: ["target_analysis", "suggested_phases"],
+} as const
+
+/** JSON Schema for `ReplanSuggestionSchema`. Keep in step with it. */
+const REPLAN_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    next_capabilities: { type: "array", items: { type: "string" } },
+    reasoning: { type: "string" },
+    stop_assessment: { type: "boolean" },
+  },
+  required: ["next_capabilities", "reasoning", "stop_assessment"],
+} as const
+
+// Re-exported so callers have one import site for planner helpers; the
+// implementation lives with the transport that receives the text.
+export { parseJsonObject } from "./opencode-server"
+
 // ── LLM Planner Service ──────────────────────────────────────────────
 
 export class LLMPlannerService {
@@ -100,6 +171,16 @@ export class LLMPlannerService {
   private initialized = false
   private initError: string | null = null
   private available = false
+
+  /** How this planner reaches the model: a local OpenCode server, or direct. */
+  private transport: PlannerTransport = "direct"
+  /** The local OpenCode server, when the transport needs one. */
+  private server: OpencodeServerHandle | null = null
+  /** Why the server transport was unavailable, when it was wanted. */
+  private transportError: string | null = null
+
+  /** Directory the OpenCode server is asked to work in. */
+  private readonly directory: string = process.cwd()
 
   // Private constructor — use LLMPlannerService.lazy()
   private constructor() {}
@@ -140,6 +221,29 @@ export class LLMPlannerService {
       this.model = resolution.model
       this.modelRef = { providerID: resolution.providerID, modelID: resolution.modelID }
       this.resolutionSource = resolution.source
+
+      const wanted = selectPlannerTransport(resolution.providerID)
+      const explicit = process.env[LLM_TRANSPORT_ENV_VAR]?.trim().toLowerCase() === "server"
+      if (wanted === "server") {
+        try {
+          this.server = await acquireServer({ directory: this.directory })
+          this.transport = "server"
+        } catch (e) {
+          // An explicit request for the server transport cannot be silently
+          // downgraded: OpenCode's gateways reject direct calls from this build
+          // (blocker B9), so "direct" here would fail later and less clearly.
+          this.transportError = e instanceof OpencodeServerError ? e.message : String(e)
+          if (explicit) {
+            this.initError = `Planner LLM transport 'server' was requested but no OpenCode server is available: ${this.transportError}`
+            this.initialized = true
+            this.available = false
+            return false
+          }
+          console.warn(`[LLMPlanner] Falling back to a direct call: ${this.transportError}`)
+          this.transport = "direct"
+        }
+      }
+
       this.initialized = true
       this.available = true
       return true
@@ -168,8 +272,67 @@ export class LLMPlannerService {
    * Diagnostics: which registry entry the planner resolved to, and which
    * ambient provider env vars were ignored while doing so.
    */
-  getResolutionInfo(): { source: string | null; ignoredAmbientEnv: string[] } {
-    return { source: this.resolutionSource, ignoredAmbientEnv: [...this.ignoredAmbientEnv] }
+  getResolutionInfo(): {
+    source: string | null
+    ignoredAmbientEnv: string[]
+    transport: PlannerTransport
+    serverOrigin: string | null
+    transportError: string | null
+  } {
+    return {
+      source: this.resolutionSource,
+      ignoredAmbientEnv: [...this.ignoredAmbientEnv],
+      transport: this.transport,
+      serverOrigin: this.server?.origin ?? null,
+      transportError: this.transportError,
+    }
+  }
+
+  /**
+   * One planner call through the local OpenCode server.
+   *
+   * The model call is made by OpenCode itself, which is the only way its own
+   * gateways will serve it from this build (blocker B9).
+   */
+  private async callThroughServer(
+    systemPrompt: string,
+    userPrompt: string,
+    schema: Record<string, unknown>,
+  ): Promise<unknown> {
+    const server = this.server
+    const ref = this.modelRef
+    if (!server || !ref) throw new Error("OpenCode server transport is not initialized")
+
+    const result = await serverPrompt({
+      server,
+      directory: this.directory,
+      model: ref as ServerModelRef,
+      system: systemPrompt,
+      prompt: userPrompt,
+      schema,
+    })
+    if (process.env.ARGUS_DEBUG_PLANNER) {
+      console.log(
+        `[LLMPlanner] raw reply from ${result.providerID}/${result.modelID}: ` +
+          `structured=${result.structured === undefined ? "none" : JSON.stringify(result.structured).slice(0, 600)} ` +
+          `text=${JSON.stringify(result.text.slice(0, 600))} ` +
+          `tokens=${JSON.stringify(result.tokens)}`,
+      )
+    }
+
+    // Structured output when the model produced one; otherwise parse its text,
+    // so a smaller model that ignored the schema can still be understood.
+    if (result.structured !== undefined) return result.structured
+    const parsed = parseJsonObject(result.text)
+    if (parsed === undefined) {
+      // Say so loudly: a silently empty plan is indistinguishable from a planner
+      // that never ran, which is exactly the confusion this transport removes.
+      console.warn(
+        `[LLMPlanner] ${result.providerID}/${result.modelID} answered without usable JSON ` +
+          `(${result.text.length} chars): ${result.text.slice(0, 300)}`,
+      )
+    }
+    return parsed
   }
 
   // ── Planning Methods ──────────────────────────────────────────────
@@ -241,29 +404,36 @@ export class LLMPlannerService {
     ].join("\n")
 
     try {
-      const result = await Effect.runPromise(
-        LLM.generateObject({
-          model: this.model,
-          system: systemPrompt,
-          prompt: userPrompt,
-          schema: PhaseSuggestionResponseSchema as ToolSchema<unknown>,
-        }).pipe(
-          Effect.provide(LLMClient.layer),
-          Effect.provide(RequestExecutor.defaultLayer),
-        ),
-      )
+      const raw = this.server
+        ? await this.callThroughServer(systemPrompt, userPrompt, PHASE_SUGGESTION_JSON_SCHEMA)
+        : (
+            await Effect.runPromise(
+              LLM.generateObject({
+                model: this.model,
+                system: systemPrompt,
+                prompt: userPrompt,
+                schema: PhaseSuggestionResponseSchema as ToolSchema<unknown>,
+              }).pipe(
+                Effect.provide(LLMClient.layer),
+                Effect.provide(RequestExecutor.defaultLayer),
+              ),
+            )
+          ).object
 
-      const data = result.object as {
-        target_analysis: string
-        suggested_phases: Array<{ capabilities: string[]; reasoning: string }>
+      const data = raw as {
+        target_analysis?: string
+        suggested_phases?: Array<{ capabilities?: string[]; reasoning?: string }>
       }
+      if (!data || typeof data !== "object") return { targetAnalysis: "", suggestedPhases: [] }
 
       return {
-        targetAnalysis: data.target_analysis,
-        suggestedPhases: data.suggested_phases.map((p) => ({
-          capabilities: p.capabilities,
-          reasoning: p.reasoning,
-        })),
+        targetAnalysis: data.target_analysis ?? "",
+        suggestedPhases: (data.suggested_phases ?? [])
+          .filter((p) => p && typeof p === "object")
+          .map((p) => ({
+            capabilities: p.capabilities ?? [],
+            reasoning: p.reasoning ?? "",
+          })),
       }
     } catch (e) {
       console.warn(`[LLMPlanner] Phase suggestion failed: ${(e as Error).message}`)
@@ -345,28 +515,33 @@ export class LLMPlannerService {
     ].join("\n")
 
     try {
-      const result = await Effect.runPromise(
-        LLM.generateObject({
-          model: this.model,
-          system: systemPrompt,
-          prompt: userPrompt,
-          schema: ReplanSuggestionSchema as ToolSchema<unknown>,
-        }).pipe(
-          Effect.provide(LLMClient.layer),
-          Effect.provide(RequestExecutor.defaultLayer),
-        ),
-      )
+      const raw = this.server
+        ? await this.callThroughServer(systemPrompt, userPrompt, REPLAN_JSON_SCHEMA)
+        : (
+            await Effect.runPromise(
+              LLM.generateObject({
+                model: this.model,
+                system: systemPrompt,
+                prompt: userPrompt,
+                schema: ReplanSuggestionSchema as ToolSchema<unknown>,
+              }).pipe(
+                Effect.provide(LLMClient.layer),
+                Effect.provide(RequestExecutor.defaultLayer),
+              ),
+            )
+          ).object
 
-      const data = result.object as {
-        next_capabilities: string[]
-        reasoning: string
-        stop_assessment: boolean
+      const data = raw as {
+        next_capabilities?: string[]
+        reasoning?: string
+        stop_assessment?: boolean
       }
+      if (!data || typeof data !== "object") return null
 
       return {
-        nextCapabilities: data.next_capabilities,
-        reasoning: data.reasoning,
-        stopAssessment: data.stop_assessment,
+        nextCapabilities: data.next_capabilities ?? [],
+        reasoning: data.reasoning ?? "",
+        stopAssessment: data.stop_assessment ?? false,
       }
     } catch (e) {
       console.warn(`[LLMPlanner] Replan suggestion failed: ${(e as Error).message}`)
