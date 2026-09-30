@@ -458,11 +458,41 @@ never recorded an honest decision (`agent_decisions` held 35 rows, all `was_fall
   rows) while keeping the deterministic ones that did execute. Logging now happens the moment the
   action is chosen.
 
-**Known demo gap (open):** this evidence comes from the worker's own scan pipeline. The
-TUI/CLI demo path drives the worker over MCP (`agent_init`/`agent_next`), which builds `ReActAgent`
-instances with **no** `decision_repo`, and it cannot insert `ENG-…` ids into a `UUID NOT NULL`
-foreign key anyway (`InvalidTextRepresentation` reproduced). So an `assess --autonomous` run still
-records nothing; wiring that path is the next piece of Step 3.
+**Known demo gap (open):** this evidence comes from the worker's own scan pipeline. The TUI/CLI demo
+path drives the worker over MCP (`agent_init`/`agent_next`), which builds `ReActAgent` instances with
+**no** `decision_repo`, and it cannot insert `ENG-…` ids into a `UUID NOT NULL` foreign key anyway
+(`InvalidTextRepresentation` reproduced). So an `assess --autonomous` run still records nothing.
+
+Wiring that path turns out to be more than plumbing, because on the MCP path **there is no agentic
+tool selection to record yet**:
+
+- `handle_agent_init` builds the tool order with `_generate_plan`, whose docstring says
+  "For now, uses deterministic ordering. LLM integration will come later via the ReActAgent", and
+  `handle_agent_next` returns those steps as `"Deterministic plan step"`.
+- The LLM only participates in `_replan`, and `_replan` runs only when the deterministic plan is
+  **exhausted** *and* a trigger is set — `handle_agent_observe` sets `trigger="stuck"` when the
+  reported tool run failed and `trigger="new_finding"` when it found something.
+- The TS side does call `agentObserve` (the executor has seven call sites), so the trigger path is
+  reachable — but on a run where the plan never exhausts, no LLM ever picks a tool.
+
+So "make the demo run record decisions" has two honest shapes, and it is a choice, not a detail:
+
+1. **Attach the audit trail where the LLM already acts** — build an `AgentDecisionRepository` in the
+   MCP path, pass it to the `ReActAgent`s used by `_replan` (and the site near
+   `handle_agent_execute`), and log the deterministic plan steps as `was_fallback=true` so the trail
+   is complete rather than flattering. Small, truthful, and shows up whenever a replan happens.
+2. **Make `_generate_plan` agentic** — replace the deterministic ordering with
+   `ReActAgent.plan_next_action` per step, so every step is an LLM choice. This is what the Step 3
+   acceptance text actually describes ("the demo can point at recorded decisions proving the engine
+   chose tools"), and it is a feature, not a wiring fix: it changes when the demo spends LLM calls
+   (10–30 s each on the free tier) and needs the blocked-tool repetition seen in the evidence run
+   fixed first, or it will burn calls re-selecting a tool the scope guard already refused.
+
+Either shape also needs the id problem solved, since `agent_decisions.engagement_id` is
+`UUID NOT NULL REFERENCES engagements(id)` while local engagements are `ENG-…` in SQLite. Relaxing
+that column to `TEXT` and dropping the FK is honest for a dual-backend design (a local engagement has
+no Postgres row to reference); the alternative is minting a shadow Postgres engagement per local run,
+which re-introduces the `org_id`/`created_by` coupling the local mode deliberately avoids.
 - [x] A completed run leaves a report artifact on disk:
       `<data>/engagements/<id>/report.md`, written by both `assess` and `resume`, with the path
       announced on stderr. stdout printing is unchanged — an unattended or TUI run now has
