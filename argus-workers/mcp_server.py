@@ -232,9 +232,33 @@ class MCPToolResult:
 _mcp_cache = WorkerCache(ttl=300)
 
 
-def _mcp_cache_key(name: str, arguments: dict | None) -> str:
-    """Build a deterministic cache key from tool name and arguments."""
-    key_data = f"mcp:{name}:{json.dumps(arguments or {}, sort_keys=True)}"
+def _mcp_cache_key(
+    name: str,
+    arguments: dict | None,
+    tool: "ToolDefinition | None" = None,
+) -> str:
+    """Build a deterministic cache key from tool name, arguments and definition.
+
+    The tool's command, static args and parameter flags are folded into the key
+    so that editing a definition (for example adding a missing ``flag``)
+    invalidates entries produced by the previous definition instead of replaying
+    a stale result for up to the cache TTL.
+    """
+    definition = ""
+    if tool is not None:
+        definition = repr(
+            (
+                tool.command,
+                tuple(tool.args or ()),
+                tuple(
+                    (param.name, getattr(param, "flag", None))
+                    for param in (tool.parameters or ())
+                ),
+            )
+        )
+    key_data = (
+        f"mcp:{name}:{definition}:{json.dumps(arguments or {}, sort_keys=True)}"
+    )
     return hashlib.sha256(key_data.encode()).hexdigest()[:16]
 
 
@@ -838,7 +862,7 @@ class MCPServer:
 
         # Gap 4.4: Check cache before executing
         _cache_mode = (cache_mode or CacheMode.NORMAL.value)
-        _cache_key = _mcp_cache_key(name, arguments)
+        _cache_key = _mcp_cache_key(name, arguments, tool)
         if _cache_mode == CacheMode.NORMAL.value:
             _cached = _mcp_cache.get(_cache_key)
             if _cached is not None:
@@ -954,8 +978,10 @@ class MCPServer:
             if structured and success:
                 mcp_result.data["structured"] = [f.__dict__ for f in structured]
 
-            # Cache the result (NO_CACHE mode skips writes)
-            if _cache_mode != CacheMode.NO_CACHE.value:
+            # Cache the result (NO_CACHE mode skips writes). Failures are never
+            # cached: a transient or already-fixed failure must not be replayed
+            # for the next 5 minutes in place of a real attempt.
+            if _cache_mode != CacheMode.NO_CACHE.value and success:
                 _mcp_cache.set(_cache_key, mcp_result.to_dict(), ttl=300)
             return mcp_result.to_dict()
 

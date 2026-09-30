@@ -50,6 +50,31 @@ class TestMcpCacheKey:
         assert len(key) == 16
         int(key, 16)  # should not raise
 
+    def test_tool_definition_change_changes_key(self):
+        """Editing a definition must invalidate entries from the old one.
+
+        Regression: adding the missing ``--extra`` flag to the launcher
+        definitions left the previous results addressable, so a re-run within
+        the 5-minute TTL replayed the old phantom finding.
+        """
+        args = {"target": "http://example.com"}
+        before = ToolDefinition(
+            name="launcher",
+            command="python3",
+            args=["tools/run_agent_tool.py"],
+            parameters=[{"name": "extra", "type": "string"}],
+        )
+        after = ToolDefinition(
+            name="launcher",
+            command="python3",
+            args=["tools/run_agent_tool.py"],
+            parameters=[{"name": "extra", "type": "string", "flag": "--extra"}],
+        )
+
+        assert _mcp_cache_key("launcher", args, before) != _mcp_cache_key(
+            "launcher", args, after
+        )
+
 
 class TestCallToolNormalMode:
     """NORMAL mode: reads cache, writes cache."""
@@ -97,8 +122,8 @@ class TestCallToolNormalMode:
 
         server.call_tool("echo", {"msg": "unique"}, cache_mode="normal")
 
-        # Verify the key was computed from the arguments
-        expected_key = _mcp_cache_key("echo", {"msg": "unique"})
+        # Verify the key was computed from the arguments and definition
+        expected_key = _mcp_cache_key("echo", {"msg": "unique"}, server.get_tool("echo"))
         mock_get.assert_called_once_with(expected_key)
 
     def test_cache_miss_executes_and_writes(self, mocker):
@@ -117,7 +142,7 @@ class TestCallToolNormalMode:
         result = server.call_tool("echo", {"msg": "fresh"}, cache_mode="normal")
 
         assert result["isError"] is False
-        expected_key = _mcp_cache_key("echo", {"msg": "fresh"})
+        expected_key = _mcp_cache_key("echo", {"msg": "fresh"}, server.get_tool("echo"))
         mock_set.assert_called_once()
         # First arg to set is the key
         assert mock_set.call_args[0][0] == expected_key
@@ -300,6 +325,29 @@ class TestCallToolErrorNotCached:
 
         server.call_tool("nonexistent", cache_mode="normal")
 
+        mock_set.assert_not_called()
+
+    def test_failed_run_not_cached(self, mocker):
+        """A tool that exits non-zero should NOT write to cache.
+
+        Regression: a failing phase-3 launcher (argparse rejecting the
+        credentials payload) was cached for 5 minutes, so retries got the same
+        failure back without ever running the tool again.
+        """
+        server = _make_server()
+        mocker.patch("mcp_server._mcp_cache.get", return_value=None)
+        mock_set = mocker.patch("mcp_server._mcp_cache.set")
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 2
+        mock_result.stdout = ""
+        mock_result.stderr = (
+            "run_agent_tool.py: error: unrecognized arguments: {\"email\":\"a\"}"
+        )
+        mocker.patch("mcp_server.subprocess.run", return_value=mock_result)
+
+        result = server.call_tool("echo", {"msg": "fail"}, cache_mode="normal")
+
+        assert result["isError"] is True
         mock_set.assert_not_called()
 
     def test_disabled_tool_not_cached(self, mocker):
