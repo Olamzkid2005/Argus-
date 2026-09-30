@@ -4,9 +4,11 @@ Supports both async and sync calls with retry logic.
 
 API key resolution order (first found wins):
 1. Explicit api_key parameter passed to constructor
-2. LLM_API_KEY environment variable (Argus's own configuration)
-3. Database user_settings (scoped to user_email)
-4. Redis key settings:*:openrouter_api_key (configured via UI Settings page)
+2. Run-level config handed down by the driver in agent_init (the planner's
+   provider credential — see config/llm_env.py::set_worker_llm_config)
+3. LLM_API_KEY environment variable (Argus's own configuration)
+4. Database user_settings (scoped to user_email)
+5. Redis key settings:*:openrouter_api_key (configured via UI Settings page)
 
 Ambient provider variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...) belong to
 whichever tool exported them and are NOT used unless
@@ -22,7 +24,7 @@ import time
 from dataclasses import dataclass
 
 from config.constants import LLM_AGENT_COST_PER_1K_INPUT, LLM_AGENT_COST_PER_1K_OUTPUT
-from config.llm_env import resolve_llm_api_key
+from config.llm_env import resolve_llm_api_key, worker_llm_config
 from exceptions import LLMUnavailableError
 from utils.logging_utils import ScanLogger
 
@@ -61,11 +63,20 @@ class LLMClient:
         """
         Initialize LLM client.
 
+        Provider/model/URL resolution order:
+        1. Explicit arguments to this constructor
+        2. Run-level config handed down by the driver in agent_init
+           (config/llm_env.py::set_worker_llm_config) — the model the TypeScript
+           planner resolved from OpenCode's provider registry, so both runtimes
+           use the same model for a run
+        3. LLM_PROVIDER / LLM_MODEL / LLM_API_URL environment variables
+
         API key resolution order:
         1. Explicit api_key parameter
-        2. LLM_API_KEY environment variable (Argus's own configuration)
-        3. Database user_settings (scoped to user_email if provided)
-        4. Redis key settings:{user_email}:openrouter_api_key (from UI Settings page)
+        2. The run-level config's key (the planner's provider credential)
+        3. LLM_API_KEY environment variable (Argus's own configuration)
+        4. Database user_settings (scoped to user_email if provided)
+        5. Redis key settings:{user_email}:openrouter_api_key (from UI Settings page)
 
         Ambient provider variables are ignored unless ARGUS_ALLOW_AMBIENT_LLM_ENV=1
         (config/llm_env.py).
@@ -81,27 +92,55 @@ class LLMClient:
                         When set, keys are scoped to this user only, preventing
                         cross-tenant billing leakage.
         """
-        self.provider = provider or os.getenv("LLM_PROVIDER", "openai")
+        # Run-level config (agent_init handoff) beats env defaults: it names the
+        # exact model this run must use, and using a different one would make the
+        # worker disagree with the planner that orchestrated it.
+        run_config = worker_llm_config()
+        run_api_url = run_config.api_url if run_config else None
+        run_provider = run_config.provider if run_config else None
+        run_model = run_config.model if run_config else None
+        run_key = run_config.api_key if run_config else None
+
+        self.provider = provider or run_provider or os.getenv("LLM_PROVIDER", "openai")
         # Declare typed fields before conditional assignment blocks
-        self.api_url: str = api_url or ""
-        self.model: str = (model or os.getenv("LLM_MODEL")) or "gpt-4o-mini"
+        self.api_url: str = api_url or run_api_url or ""
+        self.model: str = (model or run_model or os.getenv("LLM_MODEL")) or "gpt-4o-mini"
         self.max_retries = max_retries
         self._user_email = user_email
 
-        # Resolve API key: explicit > Argus's own env vars > DB > Redis.
+        # True when the endpoint came from an explicit argument or the driver's
+        # handoff rather than being inferred from the key's prefix. Needed below
+        # so an sk-or- key cannot re-route the run away from the provider that the
+        # planner selected.
+        endpoint_from_config = bool(api_url or run_api_url)
+
+        # Resolve API key: explicit > driver handoff > Argus's own env vars > DB > Redis.
+        # The handoff key sits ahead of LLM_API_KEY because the handoff model may
+        # belong to a different provider than the one .env was written for.
         # Ambient provider vars are opt-in only (config/llm_env.py).
         # DB and Redis lookups are scoped to user_email when available (M-v5-01).
         resolved_key: str | None = (
-            resolve_llm_api_key(api_key)
+            (api_key if api_key and api_key.strip() else None)
+            or run_key
+            or resolve_llm_api_key()
             or self._load_key_from_db()
             or self._load_key_from_redis(redis_url)
         )
         self.api_key: str | None = resolved_key
+
+        if run_config:
+            logger.info(
+                "Using run-level LLM config from driver: provider_id=%s model=%s url=%s",
+                run_config.provider_id or run_config.source,
+                self.model,
+                self.api_url,
+            )
+
         # Auto-detect provider from API key prefix
         # Blocker 55: Validate API key prefix against known providers.
         # When the prefix doesn't match any known pattern, log a warning so
         # the operator knows to set LLM_PROVIDER explicitly.
-        if self.api_key:
+        if self.api_key and not endpoint_from_config:
             _known_prefix = True
             if self.api_key.startswith("sk-or-"):
                 # OpenRouter
@@ -177,13 +216,22 @@ class LLMClient:
                     self.api_key[:8],
                     self.provider,
                 )
-        else:
+        elif not self.api_key:
             self.api_url = (api_url or os.getenv(
                 "LLM_API_URL",
                 "https://api.openai.com/v1/chat/completions"
                 if self.provider == "openai"
                 else "",
             )) or ""
+        else:
+            # Endpoint declared explicitly (driver handoff or caller argument):
+            # keep it. Re-deriving the route from the key's prefix here is what
+            # used to send a planner-chosen model to some other provider's URL.
+            logger.debug(
+                "LLM endpoint supplied explicitly; keeping provider=%s url=%s",
+                self.provider,
+                self.api_url,
+            )
 
         # OpenAI SDK client (lazy init)
         self._openai_client = None

@@ -34,6 +34,7 @@ from agent.react_agent import ReActAgent
 from agent.session_store import AgentSessionStore, ToolExecution
 from agent.tool_registry import ToolRegistry
 from cache import CacheMode, WorkerCache
+from config.llm_env import InvalidWorkerLlmConfig, set_worker_llm_config
 from llm_client import LLMClient
 from tool_core.parser import dispatch
 from tools.scope_validator import ScopeViolationError
@@ -969,6 +970,29 @@ class MCPServer:
 
     def handle_agent_init(self, params: dict) -> dict:
         """Create session and generate hybrid plan (1 LLM call per phase)."""
+        # Adopt the model the planner resolved from OpenCode's provider registry.
+        # The planner is the only runtime that can see that registry, so its
+        # choice is authoritative for the whole run: the worker's own .env is
+        # only a fallback for runs started without a driver (CLI/celery).
+        llm_block = params.get("llm")
+        if llm_block is not None:
+            try:
+                adopted = set_worker_llm_config(llm_block)
+            except InvalidWorkerLlmConfig as e:
+                logger.error(
+                    "Ignoring invalid agent_init.llm block, falling back to this "
+                    "worker's own LLM configuration: %s",
+                    e,
+                )
+            else:
+                if adopted is not None:
+                    logger.info(
+                        "Adopted planner-resolved LLM config for this run: "
+                        "provider_id=%s model=%s",
+                        adopted.provider_id or adopted.source,
+                        adopted.model,
+                    )
+
         session_id = self.session_store.create(
             target=params.get("target", ""),
             phase=params.get("phase", ""),

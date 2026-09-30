@@ -5,13 +5,19 @@ to resolve its key as ``OPENAI_API_KEY or LLM_API_KEY``, so a key exported by an
 unrelated tool would silently become the provider Argus ran and billed.
 """
 
+import pytest
+
 from config.llm_env import (
     ALLOW_AMBIENT_ENV_VAR,
     AMBIENT_LLM_ENV_VARS,
+    InvalidWorkerLlmConfig,
     ambient_ignored_note,
     ambient_llm_env_allowed,
+    build_worker_llm_config,
     ignored_ambient_llm_env_vars,
     resolve_llm_api_key,
+    set_worker_llm_config,
+    worker_llm_config,
 )
 
 
@@ -82,3 +88,66 @@ class TestAmbientIgnoredNote:
 
     def test_note_is_empty_when_nothing_ignored(self):
         assert ambient_ignored_note({}) == ""
+
+
+_DriverLlmBlock = {
+    "provider": "openai-compatible",
+    "providerID": "opencode-go",
+    "model": "kimi-k2.7-code",
+    "apiKey": "driver-key",
+    "baseUrl": "https://opencode.ai/zen/go/v1",
+}
+
+
+class TestWorkerLlmConfig:
+    """The planner resolves the model; the worker must adopt that decision."""
+
+    def teardown_method(self):
+        set_worker_llm_config(None)
+
+    def test_builds_an_openai_compatible_endpoint(self):
+        config = build_worker_llm_config(_DriverLlmBlock)
+        assert config.provider == "generic"
+        assert config.model == "kimi-k2.7-code"
+        assert config.api_key == "driver-key"
+        assert config.api_url == "https://opencode.ai/zen/go/v1/chat/completions"
+        assert config.provider_id == "opencode-go"
+        assert config.source == "opencode-registry"
+
+    def test_chat_completions_path_is_not_duplicated(self):
+        config = build_worker_llm_config(
+            {**_DriverLlmBlock, "baseUrl": "https://example.test/v1/chat/completions"}
+        )
+        assert config.api_url == "https://example.test/v1/chat/completions"
+
+    def test_adopting_and_clearing_the_run_config(self):
+        assert worker_llm_config() is None
+        assert set_worker_llm_config(_DriverLlmBlock) is not None
+        assert worker_llm_config() is not None
+        assert set_worker_llm_config(None) is None
+        assert worker_llm_config() is None
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            None,
+            "not-an-object",
+            {**_DriverLlmBlock, "provider": "anthropic"},
+            {**_DriverLlmBlock, "model": ""},
+            {**_DriverLlmBlock, "apiKey": ""},
+            {**_DriverLlmBlock, "baseUrl": ""},
+            {**_DriverLlmBlock, "baseUrl": "ftp://example.test/v1"},
+        ],
+    )
+    def test_rejects_unusable_blocks(self, payload):
+        with pytest.raises(InvalidWorkerLlmConfig):
+            build_worker_llm_config(payload)
+
+    def test_malformed_block_does_not_replace_a_previous_one(self):
+        set_worker_llm_config(_DriverLlmBlock)
+        with pytest.raises(InvalidWorkerLlmConfig):
+            set_worker_llm_config({"provider": "anthropic"})
+        # The old config survives, so a bad handoff cannot leave the worker
+        # pointing at a half-configured model.
+        assert worker_llm_config() is not None
+        assert worker_llm_config().model == "kimi-k2.7-code"

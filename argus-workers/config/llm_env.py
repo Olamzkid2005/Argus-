@@ -22,6 +22,7 @@ same variable list, same opt-in flag, same default.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 
 #: Provider variables that identify an externally-configured provider.
 AMBIENT_LLM_ENV_VARS: tuple[str, ...] = (
@@ -119,3 +120,95 @@ def ambient_ignored_note(environ: os._Environ[str] | dict[str, str] | None = Non
         f"Ignored ambient {', '.join(ignored)} — Argus uses its own LLM configuration "
         f"(set {ALLOW_AMBIENT_ENV_VAR}=1 to opt in)."
     )
+
+
+# ── Run-level configuration handed down by the driver ────────────────
+
+
+@dataclass(frozen=True)
+class WorkerLlmConfig:
+    """The model this run must use, resolved by the TypeScript planner.
+
+    The planner is the runtime with access to OpenCode's provider registry, so
+    it resolves the model once and passes the concrete endpoint to this worker
+    through ``agent_init``. Without that, both runtimes would resolve
+    independently and could disagree — one run planned by one model and tool
+    selection performed by another.
+    """
+
+    provider: str
+    model: str
+    api_key: str
+    api_url: str
+    provider_id: str = ""
+    source: str = "opencode-registry"
+
+
+#: Set for the lifetime of the worker process once the driver declares it.
+_run_config: WorkerLlmConfig | None = None
+
+
+class InvalidWorkerLlmConfig(ValueError):
+    """Raised when the driver's LLM block is unusable."""
+
+
+def _chat_completions_url(base_url: str) -> str:
+    """Append the chat-completions path unless the URL already carries it."""
+    trimmed = base_url.rstrip("/")
+    if trimmed.endswith("/chat/completions"):
+        return trimmed
+    return f"{trimmed}/chat/completions"
+
+
+def build_worker_llm_config(payload: object) -> WorkerLlmConfig:
+    """Validate an ``agent_init`` ``llm`` block.
+
+    Only OpenAI-compatible chat is accepted, matching the worker's LLM client.
+
+    Raises:
+        InvalidWorkerLlmConfig: when required fields are missing or malformed.
+    """
+    if not isinstance(payload, dict):
+        raise InvalidWorkerLlmConfig("llm block must be an object")
+
+    provider = str(payload.get("provider") or "")
+    if provider != "openai-compatible":
+        raise InvalidWorkerLlmConfig(
+            f"unsupported llm provider {provider!r}; only 'openai-compatible' is supported"
+        )
+
+    model = str(payload.get("model") or "").strip()
+    api_key = str(payload.get("apiKey") or "").strip()
+    base_url = str(payload.get("baseUrl") or "").strip()
+
+    if not model:
+        raise InvalidWorkerLlmConfig("llm.model is required")
+    if not api_key:
+        raise InvalidWorkerLlmConfig("llm.apiKey is required")
+    if not base_url.startswith(("http://", "https://")):
+        raise InvalidWorkerLlmConfig("llm.baseUrl must be an http(s) URL")
+
+    return WorkerLlmConfig(
+        provider="generic",
+        model=model,
+        api_key=api_key,
+        api_url=_chat_completions_url(base_url),
+        provider_id=str(payload.get("providerID") or ""),
+    )
+
+
+def set_worker_llm_config(payload: object | None) -> WorkerLlmConfig | None:
+    """Adopt the driver's LLM block for this process.
+
+    Passing None clears it. Raises InvalidWorkerLlmConfig on a malformed block so
+    the caller can report it rather than silently running on a different model
+    than the planner.
+    """
+    global _run_config
+    _run_config = None if payload is None else build_worker_llm_config(payload)
+    return _run_config
+
+
+def worker_llm_config() -> WorkerLlmConfig | None:
+    """The run-level LLM configuration, or None when the driver did not send one."""
+    return _run_config

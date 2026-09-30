@@ -83,6 +83,26 @@ export async function disposePlannerRuntime(): Promise<void> {
   await mod.AppRuntime.dispose()
 }
 
+/**
+ * The model configuration handed to the Python worker at `agent_init`.
+ *
+ * Argus has two runtimes that both need an LLM: this planner and the Python
+ * engine that selects tools. Resolving the model twice would let them disagree
+ * (one run planning on OpenCode's provider and selecting tools on something
+ * else), so the planner resolves once and passes the concrete endpoint down.
+ * The worker has no provider registry of its own — OpenCode's lives in this
+ * process.
+ */
+export interface WorkerLlmConfig {
+  /** Protocol the worker may speak. Only OpenAI-compatible chat today. */
+  readonly provider: "openai-compatible"
+  readonly providerID: string
+  readonly model: string
+  readonly apiKey: string
+  /** Base URL; the worker appends `/chat/completions`. */
+  readonly baseUrl: string
+}
+
 export type PlannerModelResolution =
   | {
       readonly ok: true
@@ -91,8 +111,33 @@ export type PlannerModelResolution =
       readonly model: Model
       readonly source: "explicit" | "default" | "first-configured"
       readonly ignoredAmbientEnv: string[]
+      /** Present when the worker can be pointed at the same model. */
+      readonly handoff?: WorkerLlmConfig
+      /** Why the worker cannot use this model, when that is the case. */
+      readonly handoffUnsupportedReason?: string
     }
   | { readonly ok: false; readonly reason: string; readonly ignoredAmbientEnv: string[] }
+
+/**
+ * Map a registry model onto a worker-consumable endpoint.
+ *
+ * Only OpenAI-compatible chat is supported: the worker's LLM client speaks
+ * OpenAI chat-completions (or Anthropic's wire format when explicitly
+ * configured), so a provider on any other protocol cannot be handed over.
+ */
+function buildWorkerLlmConfig(model: Provider.Model, apiKey: string | undefined): WorkerLlmConfig | undefined {
+  const npm = model.api.npm
+  const url = model.api.url
+  if (!apiKey || !url) return undefined
+  if (npm !== "@ai-sdk/openai" && npm !== "@ai-sdk/openai-compatible") return undefined
+  return {
+    provider: "openai-compatible",
+    providerID: String(model.providerID),
+    model: model.api.id,
+    apiKey,
+    baseUrl: url,
+  }
+}
 
 /** Snapshot of the registry needed by both the resolver and the TUI list. */
 interface RegistrySnapshot {
@@ -160,7 +205,11 @@ function routeFor(snapshot: RegistrySnapshot, ref: ModelRef) {
 
     // `messages` is required by the shared adapter's input type but is not
     // read by `model()`; the session layer passes real messages here.
-    return LLMNative.model({ model: modelOption.value, apiKey, messages: [] })
+    return {
+      route: LLMNative.model({ model: modelOption.value, apiKey, messages: [] }),
+      model: modelOption.value,
+      apiKey,
+    }
   })
 }
 
@@ -168,8 +217,46 @@ function routeFor(snapshot: RegistrySnapshot, ref: ModelRef) {
  * Resolve the Argus planner model from OpenCode's provider registry.
  * Never reads ambient provider credentials.
  */
-export async function resolvePlannerModel(
+/**
+ * Resolutions are cached for the process: the registry does not change
+ * mid-run, and both the planner and the worker handoff must see the same
+ * answer. `switchModel()` invalidates it.
+ */
+const resolutionCache = new Map<string, Promise<PlannerModelResolution>>()
+
+export function invalidatePlannerModelCache(): void {
+  resolutionCache.clear()
+}
+
+export function resolvePlannerModel(
   preferred: string | undefined = process.env[PLANNER_MODEL_ENV_VAR],
+): Promise<PlannerModelResolution> {
+  const cacheKey = preferred ?? ""
+  const cached = resolutionCache.get(cacheKey)
+  if (cached) return cached
+
+  const pending = resolvePlannerModelUncached(preferred)
+  resolutionCache.set(cacheKey, pending)
+  return pending
+}
+
+/**
+ * The configuration to hand the Python worker so it runs on the same model as
+ * the planner. Resolves on first use and serves from the same cache.
+ */
+export async function resolveWorkerLlmConfig(): Promise<
+  { readonly config: WorkerLlmConfig } | { readonly reason: string }
+> {
+  const resolution = await resolvePlannerModel()
+  if (!resolution.ok) return { reason: resolution.reason }
+  if (!resolution.handoff) {
+    return { reason: resolution.handoffUnsupportedReason ?? "No worker-compatible endpoint for the resolved model." }
+  }
+  return { config: resolution.handoff }
+}
+
+async function resolvePlannerModelUncached(
+  preferred: string | undefined,
 ): Promise<PlannerModelResolution> {
   const ignoredAmbientEnv = ignoredAmbientLlmEnvVars()
   const allowAmbient = ambientEnvAllowed()
@@ -188,8 +275,8 @@ export async function resolvePlannerModel(
           return { ok: false as const, reason: selection.reason, ignoredAmbientEnv }
         }
 
-        const route = yield* routeFor(snapshot, selection.ref)
-        if (!route) {
+        const resolved = yield* routeFor(snapshot, selection.ref)
+        if (!resolved) {
           return {
             ok: false as const,
             reason:
@@ -199,6 +286,9 @@ export async function resolvePlannerModel(
           }
         }
 
+        const { route, model, apiKey } = resolved
+        const handoff = buildWorkerLlmConfig(model, apiKey)
+
         return {
           ok: true as const,
           providerID: selection.ref.providerID,
@@ -206,6 +296,14 @@ export async function resolvePlannerModel(
           model: route,
           source: selection.source,
           ignoredAmbientEnv,
+          ...(handoff ? { handoff } : {}),
+          ...(handoff
+            ? {}
+            : {
+                handoffUnsupportedReason:
+                  `Provider '${selection.ref.providerID}' (${model.api.npm}) is not OpenAI-compatible, ` +
+                  `so the Python worker cannot be pointed at the same model.`,
+              }),
         }
       }),
     )

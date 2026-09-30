@@ -199,6 +199,62 @@ class TestHandleAgentObserve:
         assert "error" in result
 
 
+class TestHandleAgentInitLlmHandoff:
+    """`agent_init.llm` decides which model the worker uses for this run.
+
+    The planner resolves the model (it can see OpenCode's provider registry) and
+    the worker adopts it, so one run cannot be planned by one model and executed
+    by another.
+    """
+
+    HANDOFF = {
+        "provider": "openai-compatible",
+        "providerID": "opencode-go",
+        "model": "kimi-k2.7-code",
+        "apiKey": "sk-driver-key-1234567890",
+        "baseUrl": "https://opencode.ai/zen/go/v1",
+    }
+
+    def teardown_method(self):
+        from config.llm_env import set_worker_llm_config
+
+        set_worker_llm_config(None)
+
+    def test_adopts_the_driver_model(self, server):
+        from config.llm_env import worker_llm_config
+
+        server.handle_agent_init(
+            {"target": "https://example.com", "phase": "recon", "llm": self.HANDOFF}
+        )
+
+        config = worker_llm_config()
+        assert config is not None
+        assert config.model == "kimi-k2.7-code"
+        assert config.api_url == "https://opencode.ai/zen/go/v1/chat/completions"
+
+    def test_no_llm_block_leaves_the_worker_config_alone(self, server):
+        from config.llm_env import set_worker_llm_config, worker_llm_config
+
+        set_worker_llm_config(self.HANDOFF)
+        server.handle_agent_init({"target": "https://example.com", "phase": "recon"})
+
+        assert worker_llm_config() is not None
+
+    def test_invalid_llm_block_is_ignored_not_fatal(self, server):
+        from config.llm_env import worker_llm_config
+
+        result = server.handle_agent_init(
+            {
+                "target": "https://example.com",
+                "phase": "recon",
+                "llm": {"provider": "anthropic", "model": "claude"},
+            }
+        )
+
+        assert "session_id" in result  # the phase still starts
+        assert worker_llm_config() is None  # but the bad block was not adopted
+
+
 class TestMCPToolResult:
     def test_to_dict_with_data(self):
         from mcp_server import MCPToolResult

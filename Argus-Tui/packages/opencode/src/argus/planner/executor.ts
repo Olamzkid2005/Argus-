@@ -8,6 +8,10 @@ import type { ProgressEvent, ErrorHintData } from "../shared/progress"
 import type { ToolDef } from "../workflows/tool-registry"
 import crypto from "crypto"
 import { Capability } from "../shared/capabilities"
+import { resolveWorkerLlmConfig, type WorkerLlmConfig } from "./model-registry"
+
+/** Shape of the LLM block sent to the worker in `agent_init`. */
+type AgentInitLlm = WorkerLlmConfig
 
 /**
  * Maximum parallelism for phases marked with `execution: parallel`.
@@ -254,6 +258,9 @@ export class InProcessExecutor implements PhaseExecutor {
     }
     return null
   }
+
+  /** Cached `agent_init` LLM block; `null` means "resolved as unavailable". */
+  private _workerLlm: Partial<{ llm: AgentInitLlm }> | null | undefined = undefined
 
   constructor(
     private toolRegistry: ToolRegistry,
@@ -516,6 +523,28 @@ export class InProcessExecutor implements PhaseExecutor {
     }
   }
 
+  /**
+   * The model the Python worker should use, resolved once per executor.
+   *
+   * The planner owns model resolution (it is the runtime with access to
+   * OpenCode's provider registry), so it hands the concrete endpoint to the
+   * worker through `agent_init`. Resolving twice would let the planner and the
+   * tool-selecting engine disagree about which model a run is using.
+   */
+  private async workerLlm(): Promise<Partial<{ llm: AgentInitLlm }> | undefined> {
+    if (this._workerLlm === undefined) {
+      const resolved = await resolveWorkerLlmConfig()
+      if ("config" in resolved) {
+        this._workerLlm = { llm: resolved.config }
+      } else {
+        // Fall back to the worker's own configuration, but say why.
+        console.warn(`[Argus] Worker LLM not handed over: ${resolved.reason}`)
+        this._workerLlm = null
+      }
+    }
+    return this._workerLlm ?? undefined
+  }
+
   async executeHybrid(phase: PhaseExecutionRequest, options?: ExecutionOptions): Promise<PhaseExecutionResult> {
     const execOptions = { ...this.executionOptions, ...options }
     const startTime = Date.now()
@@ -536,6 +565,7 @@ export class InProcessExecutor implements PhaseExecutor {
       pipeline,
       context: { previousFindings: phase.previousPhaseResults },
       engagementId: phase.config?.engagementId as string | undefined,
+      ...(await this.workerLlm()),
     })
     const hypotheses = session.hypotheses ?? []
 

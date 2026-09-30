@@ -680,6 +680,18 @@ export class WorkersBridge {
     pipeline?: any[]
     context?: Record<string, any>
     engagementId?: string
+    /**
+     * The model the Python worker should use. Supplied by the planner so one
+     * run uses one model — the worker has no provider registry of its own.
+     * Never logged: it carries an API key.
+     */
+    llm?: {
+      provider: "openai-compatible"
+      providerID: string
+      model: string
+      apiKey: string
+      baseUrl: string
+    }
   }): Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string; hypotheses?: Array<{ id: string; description: string; confidence: number; status: string }> }> {
     return this.sendRequest("agent_init", params) as Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string; hypotheses?: Array<{ id: string; description: string; confidence: number; status: string }> }>
   }

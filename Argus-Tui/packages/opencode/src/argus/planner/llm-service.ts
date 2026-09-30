@@ -28,7 +28,12 @@
 import { Effect, Schema } from "effect"
 import { LLM, type Model, type ToolSchema } from "@opencode-ai/llm"
 import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
-import { PLANNER_MODEL_ENV_VAR, listPlannerModels, resolvePlannerModel } from "./model-registry"
+import {
+  PLANNER_MODEL_ENV_VAR,
+  invalidatePlannerModelCache,
+  listPlannerModels,
+  resolvePlannerModel,
+} from "./model-registry"
 
 // ── Structured Output Schemas ────────────────────────────────────────
 // These Effect Schemas define the shape of data the LLM must return.
@@ -390,6 +395,8 @@ export class LLMPlannerService {
    */
   static switchModel(modelId: string): void {
     process.env[ENV_PLANNER_MODEL] = modelId
+    // The resolution (and therefore the worker handoff) is cached per model.
+    invalidatePlannerModelCache()
     const inst = LLMPlannerService.instance
     if (inst) {
       inst.model = null
