@@ -246,6 +246,40 @@ describe("formatFindingsSummary", () => {
     expect(result.engagementId).toBe("ENG-test-001")
   })
 
+  // Step 2 acceptance: an autonomous run refused by the scope guard must fail
+  // before any phase executes, and must not leave the engagement reading RUNNING.
+  test("autonomous scope refusal marks the engagement FAILED and runs no phase", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { resetTargetValidator } = await import("../../../src/argus/shared/target-validator")
+    const { mockEngagementStore, mockExecutor, deps } = makeDeps()
+    const { mkdtempSync, rmSync, writeFileSync } = await import("fs")
+    const { tmpdir } = await import("os")
+    const { join } = await import("path")
+
+    const dir = mkdtempSync(join(tmpdir(), "argus-autonomous-refusal-"))
+    writeFileSync(join(dir, "argus.config.yaml"), "security:\n  scope:\n    mode: warn\n", "utf-8")
+    const prevCwd = process.cwd()
+    const prevAutonomous = process.env.ARGUS_AUTONOMOUS
+    process.env.ARGUS_AUTONOMOUS = "1"
+    process.chdir(dir)
+    resetTargetValidator()
+    try {
+      const runner = new WorkflowRunner(deps)
+      await expect(runner.run({ target: "https://example.com" })).rejects.toThrow(
+        "must be explicitly set to 'allowlist'",
+      )
+      expect(mockEngagementStore.updateStatus).toHaveBeenCalledWith("ENG-test-001", "FAILED")
+      expect(mockExecutor.execute).not.toHaveBeenCalled()
+      expect(mockEngagementStore.saveFindings).not.toHaveBeenCalled()
+    } finally {
+      process.chdir(prevCwd)
+      resetTargetValidator()
+      if (prevAutonomous === undefined) delete process.env.ARGUS_AUTONOMOUS
+      else process.env.ARGUS_AUTONOMOUS = prevAutonomous
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test("uses existing engagementId when provided", async () => {
     const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
     const { mockEngagementStore, deps } = makeDeps()

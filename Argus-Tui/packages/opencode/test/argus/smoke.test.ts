@@ -24,9 +24,10 @@ afterAll(async () => {
 
 const ARGUS_ENTRY = path.resolve(import.meta.dirname, "../../src/argus/index.ts")
 
-async function runArgus(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+async function runArgus(args: string[], cwd?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn(["bun", "run", ARGUS_ENTRY, ...args], {
     stdio: ["ignore", "pipe", "pipe"],
+    ...(cwd ? { cwd } : {}),
     env: { ...process.env, ARGUS_MODE: "0", CI: "true", HOME: tmpDirPath },
   })
   const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()])
@@ -67,6 +68,27 @@ describe("CLI entry point", () => {
     const { exitCode, stdout, stderr } = await runArgus(["config"])
     expect(exitCode).toBe(0)
     expect(stdout.length + stderr.length).toBeGreaterThan(0)
+  })
+
+  // Step 2 acceptance: `assess --autonomous` must refuse to start when the
+  // scope mode is not an enforced allowlist, and the refusal must be visible to
+  // an unattended driver as a non-zero exit code.
+  it("assess --autonomous refuses to start under scope mode 'warn'", async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import("fs")
+    const os = await import("os")
+    const joinPath = await import("path")
+    const dir = mkdtempSync(joinPath.join(os.tmpdir(), "argus-smoke-scope-"))
+    writeFileSync(joinPath.join(dir, "argus.config.yaml"), "security:\n  scope:\n    mode: warn\n", "utf-8")
+    try {
+      const { exitCode, stderr } = await runArgus(
+        ["assess", "http://127.0.0.1:9", "--autonomous", "--deterministic"],
+        dir,
+      )
+      expect(exitCode).toBe(1)
+      expect(stderr).toContain("must be explicitly set to 'allowlist'")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 

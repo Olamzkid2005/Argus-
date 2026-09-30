@@ -942,6 +942,8 @@ export class WorkflowRunner {
       configLlmMaxReplans = parsed?.replan?.llm_max_cycles
     } catch (configErr) {
       if (isAutonomous) {
+        // Refused before it starts — do not leave the engagement reading RUNNING.
+        store.updateStatus(engagementId, "FAILED")
         throw new Error(
           "[Argus] ARGUS_AUTONOMOUS=1: config file 'argus.config.yaml' is missing or malformed. " +
           "A valid config file is required in autonomous mode. Fix the file or disable autonomous mode."
@@ -960,8 +962,15 @@ export class WorkflowRunner {
     // Resolved through the validator so ARGUS_SCOPE_MODE / ARGUS_ALLOWED_TARGETS
     // overrides are honoured — the same values the enforcer uses.
     if (isAutonomous) {
-      const resolvedScope = getTargetValidator().load().scope
-      validateAutonomousScopeMode(isAutonomous, resolvedScope?.mode, resolvedScope?.allowed_targets)
+      try {
+        const resolvedScope = getTargetValidator().load().scope
+        validateAutonomousScopeMode(isAutonomous, resolvedScope?.mode, resolvedScope?.allowed_targets)
+      } catch (scopeErr) {
+        // Same reason as above: a refused run never started, so it must not
+        // linger as RUNNING in `argus engagements`.
+        store.updateStatus(engagementId, "FAILED")
+        throw scopeErr
+      }
     }
 
     featureFlags.loadFromEnv()

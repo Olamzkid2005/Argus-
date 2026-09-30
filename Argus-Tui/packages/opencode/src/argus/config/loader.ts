@@ -19,17 +19,44 @@ import { Confidence } from "../shared/types"
 // ── Schema ──
 // Single source of truth: export the inferred type, never maintain a parallel interface.
 
+// `capture_threshold` is written by hand in argus.config.yaml, where the
+// readable name ("HIGH") is what operators reach for — `argus config` prints
+// exactly that spelling as the default. Every consumer wants the numeric
+// Confidence, so both shapes are accepted and normalised here (same
+// "both shapes accepted" convention as the worker's report ingestion).
+const CAPTURE_THRESHOLD_NAMES: Record<string, Confidence> = {
+  INFORMATIONAL: Confidence.INFORMATIONAL,
+  INFO: Confidence.INFORMATIONAL,
+  LOW: Confidence.LOW,
+  MEDIUM: Confidence.MEDIUM,
+  HIGH: Confidence.HIGH,
+  VERIFIED: Confidence.VERIFIED,
+  CONFIRMED: Confidence.CONFIRMED,
+}
+
+const CaptureThresholdSchema = z
+  .union([z.number().int().min(0).max(5), z.string()])
+  .transform((value, ctx): Confidence => {
+    if (typeof value === "number") return value as Confidence
+    const resolved = CAPTURE_THRESHOLD_NAMES[value.trim().toUpperCase()]
+    if (resolved === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          `Unknown evidence.capture_threshold "${value}" — use a level 0-5 or one of ` +
+          Object.keys(CAPTURE_THRESHOLD_NAMES).join(", "),
+      })
+      return z.NEVER
+    }
+    return resolved
+  })
+
 const EvidenceConfigSchema = z.object({
   retention_days: z.number().int().positive().default(30),
   max_engagement_size_mb: z.number().positive().default(500),
   capture_har: z.boolean().default(false),
   capture_video: z.boolean().default(false),
-  capture_threshold: z
-    .number()
-    .int()
-    .min(0)
-    .max(5)
-    .default(Confidence.HIGH),
+  capture_threshold: CaptureThresholdSchema.default(Confidence.HIGH),
 })
 
 const FeaturesConfigSchema = z.record(z.string(), z.boolean())

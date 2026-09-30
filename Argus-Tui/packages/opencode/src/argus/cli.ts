@@ -37,8 +37,15 @@ export const ArgusAssessCommand = {
     if (argv.autonomous === true) {
       process.env["ARGUS_AUTONOMOUS"] = "1"
       process.env["ARGUS_AUTO_APPROVE"] = "1"
-      process.env["ARGUS_ALLOW_UNSCOPED"] = "1"
-      process.stderr.write("[Argus] Autonomous mode enabled (ARGUS_AUTONOMOUS=1)\n")
+      // ARGUS_ALLOW_UNSCOPED is deliberately NOT set: the worker reads it as
+      // "no scope configured — all targets allowed", which would disable the
+      // allowlist that autonomous mode is required to run under.
+      // One line that proves the switches, for an unattended log.
+      process.stderr.write(
+        `[Argus] Autonomous mode enabled (ARGUS_AUTONOMOUS=1, ARGUS_AUTO_APPROVE=1, ` +
+          `scope=${process.env["ARGUS_SCOPE_MODE"] ?? "from config"}, ` +
+          `stdin=${process.stdin.isTTY ? "tty" : "non-tty"})\n`,
+      )
     }
 
     const flags = getFeatureFlags()
@@ -57,6 +64,7 @@ export const ArgusAssessCommand = {
       process.stderr.write("[Argus] WARNING: All feature flags are disabled — running in degraded mode.\n")
       process.stderr.write("[Argus] Pass --autonomous or set ARGUS_AUTONOMOUS=1 for full autonomous mode.\n")
     }
+
 
     // Build feature flag overrides from CLI
     const featureOverrides: Partial<Record<Feature, boolean>> = {}
@@ -79,7 +87,13 @@ export const ArgusAssessCommand = {
       verbose: argv.verbose as boolean,
       credsPath: argv.creds as string | undefined,
       features: featureOverrides,
-    }).catch((e: Error) => process.stderr.write(`[Argus] assess error: ${e.message}\n`))
+    }).catch((e: Error) => {
+      // A refused or failed run must be observable to an unattended driver —
+      // swallowing the error left `argus assess` exiting 0, so a scope guard
+      // refusal looked identical to a completed assessment.
+      process.stderr.write(`[Argus] assess error: ${e.message}\n`)
+      process.exitCode = 1
+    })
   },
 }
 

@@ -70,6 +70,29 @@ describe("ConfigLoader", () => {
     expect(result.evidence?.capture_threshold).toBe(Confidence.HIGH)
   })
 
+  // argus.config.yaml spells the threshold as a name ("HIGH") — that is what
+  // `argus config` prints and what operators write. The loader normalises both
+  // spellings to the numeric Confidence every consumer uses.
+  it("loadFrom() accepts evidence.capture_threshold as a severity name", () => {
+    const dir = makeDir()
+    const filePath = makeFile(dir, 'evidence:\n  capture_threshold: HIGH')
+    const result = ConfigLoader.loadFrom(filePath)
+    expect(result.evidence?.capture_threshold).toBe(Confidence.HIGH)
+  })
+
+  it("loadFrom() accepts evidence.capture_threshold as a numeric level", () => {
+    const dir = makeDir()
+    const filePath = makeFile(dir, 'evidence:\n  capture_threshold: 4')
+    const result = ConfigLoader.loadFrom(filePath)
+    expect(result.evidence?.capture_threshold).toBe(Confidence.VERIFIED)
+  })
+
+  it("loadFrom() rejects an unknown evidence.capture_threshold name", () => {
+    const dir = makeDir()
+    const filePath = makeFile(dir, 'evidence:\n  capture_threshold: HIGHEST')
+    expect(() => ConfigLoader.loadFrom(filePath)).toThrow(/capture_threshold/)
+  })
+
   it("loadFrom() parses storage.encryption.enabled", () => {
     const dir = makeDir()
     const filePath = makeFile(dir, 'storage:\n  encryption:\n    enabled: true')
