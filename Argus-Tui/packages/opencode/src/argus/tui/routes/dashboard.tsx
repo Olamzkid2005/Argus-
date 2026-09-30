@@ -10,9 +10,13 @@ import { useRoute } from "@tui/context/route"
 import { Toast, useToast } from "@tui/ui/toast"
 import { Tooltip } from "@tui/ui/tooltip"
 
-/** Read the current planner model from env vars — same pattern as the inline reads in the status bar. */
+/**
+ * Read the planner model selection. Provider credentials and the fallback
+ * model come from OpenCode's provider registry, not from the environment —
+ * see argus/planner/model-registry.
+ */
 function getCurrentModel(): string {
-  return process.env.ARGUS_PLANNER_MODEL?.trim() || process.env.OPENCODE_MODEL?.trim() || "gpt-4o-mini"
+  return process.env.ARGUS_PLANNER_MODEL?.trim() || process.env.OPENCODE_MODEL?.trim() || "OpenCode default"
 }
 
 interface EngagementSummary {
@@ -36,6 +40,8 @@ export function ArgusDashboard() {
   const route = useRoute()
   const [data, setData] = createSignal<DashboardData | null>(null)
   const [loading, setLoading] = createSignal(true)
+  /** Resolved planner model from OpenCode's provider registry, or null if unavailable. */
+  const [plannerModel, setPlannerModel] = createSignal<string | null>(null)
   const toast = useToast()
 
   const [encryptionStatus] = createResource(async () => {
@@ -59,6 +65,14 @@ export function ArgusDashboard() {
   })
 
   onMount(async () => {
+    try {
+      const { LLMPlannerService } = await import("@/argus/planner/llm-service")
+      const planner = LLMPlannerService.lazy()
+      if (await planner.isAvailable()) setPlannerModel(planner.getModelId())
+    } catch {
+      setPlannerModel(null)
+    }
+
     try {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
@@ -157,12 +171,13 @@ export function ArgusDashboard() {
                 <text fg={statusColor(eng.status)}>{eng.status.toLowerCase()}</text>
                 <text fg={theme.textMuted}>({eng.findingCount} findings)</text>
                 {/* Model used for this assessment */}
-                <Show when={process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENCODE_API_KEY}>
+                <Show when={plannerModel()}>
                   <Tooltip
                     value={
                       <box flexDirection="column" gap={1}>
                         <text fg={theme.text}><b>Assessment Model</b></text>
                         <text fg={theme.textMuted}>{`ARGUS_PLANNER_MODEL=${eng.plannerModel}`}</text>
+                        <text fg={theme.textMuted}>{`planner: ${plannerModel()} (OpenCode provider registry)`}</text>
                       </box>
                     }
                     placement="bottom"
@@ -181,19 +196,20 @@ export function ArgusDashboard() {
         <box flexDirection="row" justifyContent="space-between" border={["top"]} borderColor={theme.textMuted} paddingTop={1}>
           <box flexDirection="row" gap={2}>
             <text fg={theme.textMuted}>ARGUS v5</text>
-            {/* Subtle LLM model indicator — shows configured planner model when API key is present, with hover tooltip for full env config */}
-            <Show when={process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENCODE_API_KEY}>
+            {/* Subtle LLM model indicator — resolved from OpenCode's provider registry */}
+            <Show when={plannerModel()}>
               <Tooltip
                 value={
                   <box flexDirection="column" gap={1}>
                     <text fg={theme.text}><b>Planner Model</b></text>
-                    <text fg={theme.textMuted}>{`ARGUS_PLANNER_MODEL=${getCurrentModel()} (default: gpt-4o-mini, supports OpenAI-compatible and Anthropic models)`}</text>
+                    <text fg={theme.textMuted}>{`ARGUS_PLANNER_MODEL=${getCurrentModel()} (default: OpenCode's configured default model)`}</text>
+                    <text fg={theme.textMuted}>{`resolved: ${plannerModel()}`}</text>
                   </box>
                 }
                 placement="bottom"
                 gutter={4}
               >
-                <text fg={theme.textMuted}>{getCurrentModel()}</text>
+                <text fg={theme.textMuted}>{plannerModel()}</text>
               </Tooltip>
             </Show>
           </box>

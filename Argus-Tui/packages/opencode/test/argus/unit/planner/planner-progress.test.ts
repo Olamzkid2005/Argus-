@@ -4,10 +4,9 @@
  * Verifies that planner.plan() and planner.replan() emit the correct
  * ProgressEvent types in the right order when `onProgress` is provided.
  *
- * Strategy: Use mock.module() to replace the entire llm-service module
- * that the planner imports. This means the planner gets our controlled
- * mock without ever loading the real LLMPlannerService (and its
- * @opencode-ai/llm dependency chain).
+ * Strategy: pass a controlled LLM through WorkflowPlanner's `deps.llm` seam.
+ * (A process-global `mock.module()` of `./llm-service` would also replace the
+ * real service for every other test file in the same bun run.)
  */
 
 import { describe, expect, test, mock, beforeEach } from "bun:test"
@@ -15,11 +14,7 @@ import type { ProgressEvent } from "../../../../src/argus/shared/progress"
 import type { PlannerContext } from "../../../../src/argus/planner/types"
 import type { WorkflowDefinition } from "../../../../src/argus/workflows/types"
 
-// ── Mock LLMPlannerService module ────────────────────────────────────
-// This must be done BEFORE importing the planner (via dynamic import)
-// because static imports are hoisted and execute before module-scope code.
-// By using dynamic import(), mock.module() runs first, then the planner
-// resolves ./llm-service to our mocked version.
+// ── Stub LLM planner (injected, never mocked at module level) ────────
 
 const mockSuggestPhases = mock<(...args: any[]) => any>()
 const mockSuggestReplan = mock<(...args: any[]) => any>()
@@ -33,14 +28,8 @@ const mockLlmSvc = {
   getInitError: () => null,
 }
 
-mock.module("../../../../src/argus/planner/llm-service.ts", () => ({
-  LLMPlannerService: {
-    lazy: () => mockLlmSvc as any,
-    getModelEnvVarDescription: () => "ARGUS_PLANNER_MODEL=test-model (mock)",
-  },
-}))
+const plannerDeps = { llm: mockLlmSvc as any }
 
-// Dynamic import so mock.module() is set up BEFORE the planner module resolves
 const { WorkflowPlanner } = await import("../../../../src/argus/planner/planner")
 const { Capability } = await import("../../../../src/argus/planner/capabilities")
 
@@ -134,7 +123,7 @@ describe("WorkflowPlanner progress events", () => {
       }))
 
       const events: ProgressEvent[] = []
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       await planner.plan("https://example.com", undefined, {
         onProgress: (e) => events.push(e),
       })
@@ -151,7 +140,9 @@ describe("WorkflowPlanner progress events", () => {
       expect(complete.suggestions[1].reasoning).toContain("vulnerability")
       // Verify model fields are emitted in the event
       expect(complete.llmModel).toBe("openai/gpt-4o-mock")
-      expect(complete.modelEnvDescription).toBe("ARGUS_PLANNER_MODEL=test-model (mock)")
+      // modelEnvDescription comes from the real (env-derived) static helper, so
+      // assert its shape rather than a mocked literal.
+      expect(complete.modelEnvDescription).toStartWith("ARGUS_PLANNER_MODEL=")
     })
 
     test("emits llm_planning_complete with empty suggestions when LLM returns nothing", async () => {
@@ -161,7 +152,7 @@ describe("WorkflowPlanner progress events", () => {
       }))
 
       const events: ProgressEvent[] = []
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       await planner.plan("https://example.com", undefined, {
         onProgress: (e) => events.push(e),
       })
@@ -178,7 +169,7 @@ describe("WorkflowPlanner progress events", () => {
       })
 
       const events: ProgressEvent[] = []
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       await planner.plan("https://example.com", undefined, {
         onProgress: (e) => events.push(e),
       })
@@ -193,7 +184,7 @@ describe("WorkflowPlanner progress events", () => {
 
     test("does not emit LLM events when useLLM is false", async () => {
       const events: ProgressEvent[] = []
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       await planner.plan("https://example.com", undefined, {
         useLLM: false,
         onProgress: (e) => events.push(e),
@@ -208,7 +199,7 @@ describe("WorkflowPlanner progress events", () => {
         suggestedPhases: [{ capabilities: ["web_recon"], reasoning: "Test" }],
       }))
 
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       await expect(planner.plan("https://example.com")).resolves.toBeDefined()
     })
 
@@ -223,7 +214,7 @@ describe("WorkflowPlanner progress events", () => {
       }))
 
       const events: ProgressEvent[] = []
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       await planner.plan("https://api.example.com/graphql", undefined, {
         onProgress: (e) => events.push(e),
       })
@@ -248,7 +239,7 @@ describe("WorkflowPlanner progress events", () => {
       }))
 
       const events: ProgressEvent[] = []
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       const ctx = makeContext({
         findings: [sampleFinding],
         onProgress: (e) => events.push(e),
@@ -275,7 +266,7 @@ describe("WorkflowPlanner progress events", () => {
       }))
 
       const events: ProgressEvent[] = []
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       const ctx = makeContext({
         findings: [{ ...sampleFinding, confidence: 5 as any }],
         onProgress: (e) => events.push(e),
@@ -299,7 +290,7 @@ describe("WorkflowPlanner progress events", () => {
       })
 
       const events: ProgressEvent[] = []
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       const ctx = makeContext({
         findings: [sampleFinding],
         onProgress: (e) => events.push(e),
@@ -317,7 +308,7 @@ describe("WorkflowPlanner progress events", () => {
 
     test("does not emit LLM events when findings is empty", async () => {
       const events: ProgressEvent[] = []
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       const ctx = makeContext({
         findings: [],
         onProgress: (e) => events.push(e),
@@ -331,7 +322,7 @@ describe("WorkflowPlanner progress events", () => {
 
     test("does not emit LLM events when LLM budget is exhausted", async () => {
       const events: ProgressEvent[] = []
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       const ctx = makeContext({
         llmReplanCount: 10,
         llmMaxReplans: 10,
@@ -354,7 +345,7 @@ describe("WorkflowPlanner progress events", () => {
       }))
 
       const events: ProgressEvent[] = []
-      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any)
+      const planner = new WorkflowPlanner(makeRegistry() as any, makeToolRegistry() as any, plannerDeps)
       const ctx = makeContext({
         findings: [{
           ...sampleFinding,

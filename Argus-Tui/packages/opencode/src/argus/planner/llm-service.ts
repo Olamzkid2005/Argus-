@@ -9,22 +9,26 @@
  * Architecture:
  *   LLMPlannerService.lazy() → creates singleton instance
  *     ↓
- *   Uses openai/anthropic providers from @opencode-ai/llm/providers/*
- *     → openai.model("gpt-4o-mini", { apiKey }) returns a Model with route
- *     → Route has protocol (OpenAI Chat), endpoint, auth, transport
+ *   resolvePlannerModel() (./model-registry) → reads OpenCode's provider
+ *     registry (auth.json + models.dev) and lowers the selected model into an
+ *     @opencode-ai/llm route via LLMNative.model()
+ *     → Route has protocol, endpoint, auth, transport
  *     ↓
  *   LLM.generateObject() → forces structured output via synthetic tool call
  *     → Returns Effect<GenerateObjectResponse<T>>
  *     → Effect.runPromise wraps it for async/await usage
  *     ↓
  *   Returns structured capability suggestions for the planner
+ *
+ * Credentials and provider selection come from OpenCode's own configuration.
+ * Ambient provider env vars (OPENAI_API_KEY, OPENAI_BASE_URL, ...) are NOT
+ * used — see ./model-registry for why and how to opt back in.
  */
 
 import { Effect, Schema } from "effect"
 import { LLM, type Model, type ToolSchema } from "@opencode-ai/llm"
 import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
-import { openai } from "@opencode-ai/llm/providers/openai"
-import { anthropic } from "@opencode-ai/llm/providers/anthropic"
+import { PLANNER_MODEL_ENV_VAR, listPlannerModels, resolvePlannerModel } from "./model-registry"
 
 // ── Structured Output Schemas ────────────────────────────────────────
 // These Effect Schemas define the shape of data the LLM must return.
@@ -73,12 +77,11 @@ export interface LLMPhaseSuggestionResult {
   readonly suggestedPhases: LLMPhaseSuggestion[]
 }
 
-// ── Env Var Keys ─────────────────────────────────────────────────────
+// ── Model selection env keys ─────────────────────────────────────────
+// Only model *selection* is env-driven; provider credentials always come
+// from OpenCode's provider registry.
 
-const ENV_OPENAI_KEY = "OPENAI_API_KEY"
-const ENV_ANTHROPIC_KEY = "ANTHROPIC_API_KEY"
-const ENV_OPENCODE_KEY = "OPENCODE_API_KEY"
-const ENV_PLANNER_MODEL = "ARGUS_PLANNER_MODEL"
+const ENV_PLANNER_MODEL = PLANNER_MODEL_ENV_VAR
 const ENV_OPENCODE_MODEL = "OPENCODE_MODEL"
 
 // ── LLM Planner Service ──────────────────────────────────────────────
@@ -86,6 +89,9 @@ const ENV_OPENCODE_MODEL = "OPENCODE_MODEL"
 export class LLMPlannerService {
   private static instance: LLMPlannerService | null = null
   private model: Model | null = null
+  private modelRef: { providerID: string; modelID: string } | null = null
+  private resolutionSource: string | null = null
+  private ignoredAmbientEnv: string[] = []
   private initialized = false
   private initError: string | null = null
   private available = false
@@ -108,38 +114,27 @@ export class LLMPlannerService {
   // ── Initialization ───────────────────────────────────────────────
 
   /**
-   * Initialize the LLM client. Reads API keys and model config from
-   * environment variables — same ones OpenCode uses for its provider
-   * configuration (OPENAI_API_KEY, ANTHROPIC_API_KEY).
+   * Initialize the LLM client from OpenCode's provider registry.
    *
-   * Returns true if the LLM is available and ready.
+   * Returns true if the LLM is available and ready. Ambient provider env vars
+   * are deliberately ignored (see ./model-registry).
    */
   private async ensureInitialized(): Promise<boolean> {
     if (this.initialized) return this.available
 
     try {
-      const apiKey = this.resolveApiKey()
-      if (!apiKey) {
-        this.initError = [
-          `No LLM API key found. Set one of:`,
-          `  ${ENV_OPENAI_KEY}=sk-...`,
-          `  ${ENV_ANTHROPIC_KEY}=sk-ant-...`,
-          `  ${ENV_OPENCODE_KEY}=...`,
-        ].join("\n")
+      const resolution = await resolvePlannerModel()
+      this.ignoredAmbientEnv = resolution.ignoredAmbientEnv
+      if (!resolution.ok) {
+        this.initError = resolution.reason
         this.initialized = true
         this.available = false
         return false
       }
 
-      const configured = this.resolveModel(apiKey)
-      if (!configured) {
-        this.initError = `Could not create LLM model. Check ARGUS_PLANNER_MODEL env var.`
-        this.initialized = true
-        this.available = false
-        return false
-      }
-
-      this.model = configured
+      this.model = resolution.model
+      this.modelRef = { providerID: resolution.providerID, modelID: resolution.modelID }
+      this.resolutionSource = resolution.source
       this.initialized = true
       this.available = true
       return true
@@ -162,6 +157,14 @@ export class LLMPlannerService {
   /** Get the initialization error message, if any. */
   getInitError(): string | null {
     return this.initError
+  }
+
+  /**
+   * Diagnostics: which registry entry the planner resolved to, and which
+   * ambient provider env vars were ignored while doing so.
+   */
+  getResolutionInfo(): { source: string | null; ignoredAmbientEnv: string[] } {
+    return { source: this.resolutionSource, ignoredAmbientEnv: [...this.ignoredAmbientEnv] }
   }
 
   // ── Planning Methods ──────────────────────────────────────────────
@@ -371,6 +374,7 @@ export class LLMPlannerService {
    * Returns "unavailable" if not yet initialized.
    */
   getModelId(): string {
+    if (this.modelRef) return `${this.modelRef.providerID}/${this.modelRef.modelID}`
     if (!this.model) return "unavailable"
     return `${this.model.provider}/${this.model.id}`
   }
@@ -389,6 +393,8 @@ export class LLMPlannerService {
     const inst = LLMPlannerService.instance
     if (inst) {
       inst.model = null
+      inst.modelRef = null
+      inst.resolutionSource = null
       inst.initialized = false
       inst.available = false
       inst.initError = null
@@ -404,21 +410,12 @@ export class LLMPlannerService {
   }
 
   /**
-   * Get available model options based on configured API keys.
-   * Returns a sorted list of model ID strings the user can switch to.
+   * Get available model options from OpenCode's provider registry.
+   * Returns `provider/model` strings the user can switch to.
    * Always includes the currently active model (if any).
    */
-  static getAvailableModels(): string[] {
-    const hasOpenAI = !!(process.env[ENV_OPENAI_KEY]?.trim())
-    const hasAnthropic = !!(process.env[ENV_ANTHROPIC_KEY]?.trim())
-
-    const models: string[] = []
-    if (hasOpenAI) {
-      models.push("gpt-4o-mini", "gpt-4o", "gpt-4.1")
-    }
-    if (hasAnthropic) {
-      models.push("claude-sonnet-4-20250514", "claude-haiku-3-5-20241022")
-    }
+  static async getAvailableModels(): Promise<string[]> {
+    const models = await listPlannerModels()
 
     // Always include the currently active model so there's an in-list option
     const current = LLMPlannerService.getCurrentModelId()
@@ -433,60 +430,7 @@ export class LLMPlannerService {
    * Get which env var controls the planner model (for help/doctor displays).
    */
   static getModelEnvVarDescription(): string {
-    const current = process.env[ENV_PLANNER_MODEL]?.trim() || process.env[ENV_OPENCODE_MODEL]?.trim() || "not set"
-    return `ARGUS_PLANNER_MODEL=${current} (default: gpt-4o-mini, supports OpenAI-compatible and Anthropic models)`
-  }
-
-  // ── Private Helpers ───────────────────────────────────────────────
-
-  /**
-   * Resolve an API key from environment variables.
-   * Tries, in order: OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENCODE_API_KEY.
-   */
-  private resolveApiKey(): string | undefined {
-    const openaiKey = process.env[ENV_OPENAI_KEY]?.trim()
-    if (openaiKey) return openaiKey
-
-    const anthropicKey = process.env[ENV_ANTHROPIC_KEY]?.trim()
-    if (anthropicKey) return anthropicKey
-
-    const opencodeKey = process.env[ENV_OPENCODE_KEY]?.trim()
-    if (opencodeKey) return opencodeKey
-
-    return undefined
-  }
-
-  /**
-   * Create an LLM Model from the configured model string and API key.
-   * Uses the model specified in ARGUS_PLANNER_MODEL (or OPENCODE_MODEL),
-   * otherwise defaults to gpt-4o-mini.
-   *
-   * Detects Anthropic models vs OpenAI-compatible models by the model name.
-   *
-   * Configure via env var:
-   *   ARGUS_PLANNER_MODEL=claude-sonnet-4-20250514   → Anthropic
-   *   ARGUS_PLANNER_MODEL=gpt-4o-mini                 → OpenAI (default)
-   *   ARGUS_PLANNER_MODEL=accounts/fireworks/models/... → OpenAI-compatible
-   */
-  private resolveModel(apiKey: string): Model | undefined {
-    const modelStr =
-      process.env[ENV_PLANNER_MODEL]?.trim() ??
-      process.env[ENV_OPENCODE_MODEL]?.trim() ??
-      ""
-
-    // Anthropic models
-    if (
-      modelStr.toLowerCase().includes("claude") ||
-      modelStr.toLowerCase().includes("anthropic")
-    ) {
-      const modelId = modelStr || "claude-sonnet-4-20250514"
-      console.warn(`[LLMPlanner] Using Anthropic model: ${modelId}`)
-      return anthropic.model(modelId) as unknown as Model
-    }
-
-    // Default: OpenAI-compatible (OpenAI, Azure, Fireworks, etc.)
-    const modelId = modelStr || "gpt-4o-mini"
-    console.warn(`[LLMPlanner] Using OpenAI-compatible model: ${modelId}`)
-    return openai.model(modelId) as unknown as Model
+    const current = LLMPlannerService.getCurrentModelId() ?? "not set"
+    return `ARGUS_PLANNER_MODEL=${current} (default: OpenCode's configured default model)`
   }
 }

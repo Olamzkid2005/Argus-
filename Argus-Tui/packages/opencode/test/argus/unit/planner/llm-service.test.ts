@@ -113,6 +113,46 @@ mock.module("@opencode-ai/llm/schema", () => ({
   ProviderID: { make: (id: string) => id },
 }))
 
+// ── Registry mock ────────────────────────────────────────────────────
+// The planner resolves provider/model/credentials from OpenCode's provider
+// registry (argus/planner/model-registry). Mocking it here keeps these tests
+// offline while still exercising availability, caching and error paths.
+
+let registryAvailable = true
+let registrySource: "explicit" | "default" | "first-configured" = "default"
+let resolvedProviderID = "opencode"
+let resolvedModelID = "mimo-v2.5-free"
+let registryReason =
+  "No providers are configured in OpenCode. Run `opencode auth login` (or configure a provider " +
+  "in the OpenCode TUI) to make a model available to Argus."
+let ignoredAmbientEnv: string[] = []
+
+mock.module("../../../../src/argus/planner/model-registry", () => ({
+  PLANNER_MODEL_ENV_VAR: "ARGUS_PLANNER_MODEL",
+  ALLOW_AMBIENT_ENV_VAR: "ARGUS_ALLOW_AMBIENT_LLM_ENV",
+  AMBIENT_LLM_ENV_VARS: [
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "OPENAI_MODEL",
+    "ANTHROPIC_API_KEY",
+    "OPENCODE_API_KEY",
+  ],
+  resolvePlannerModel: async () =>
+    registryAvailable
+      ? {
+          ok: true,
+          providerID: resolvedProviderID,
+          modelID: resolvedModelID,
+          model: { id: resolvedModelID, provider: resolvedProviderID },
+          source: registrySource,
+          ignoredAmbientEnv,
+        }
+      : { ok: false, reason: registryReason, ignoredAmbientEnv },
+  listPlannerModels: async () => [`${resolvedProviderID}/${resolvedModelID}`],
+  ignoredAmbientLlmEnvVars: () => ignoredAmbientEnv,
+  ambientEnvAllowed: () => false,
+}))
+
 // ── Import the service AFTER mocks are set up ─────────────────────────
 import { LLMPlannerService } from "../../../../src/argus/planner/llm-service"
 
@@ -123,8 +163,12 @@ describe("LLMPlannerService", () => {
     // Reset the private singleton for clean test isolation
     ;(LLMPlannerService as any).instance = null
 
-    // Set a default API key for tests that need LLM available
-    process.env.OPENAI_API_KEY = "sk-test-key-for-unit-tests"
+    // Registry resolves a model by default
+    registryAvailable = true
+    registrySource = "default"
+    resolvedProviderID = "opencode"
+    resolvedModelID = "mimo-v2.5-free"
+    ignoredAmbientEnv = []
 
     // Reset mock control flags
     shouldLLMThrow = false
@@ -197,33 +241,57 @@ describe("LLMPlannerService", () => {
   // ── isAvailable ──────────────────────────────────────────────────
 
   describe("isAvailable()", () => {
-    test("returns true when OPENAI_API_KEY is set", async () => {
+    test("returns true when the OpenCode provider registry resolves a model", async () => {
       const svc = LLMPlannerService.lazy()
       const available = await svc.isAvailable()
       expect(available).toBe(true)
     })
 
-    test("returns true when ANTHROPIC_API_KEY is set (no OPENAI key)", async () => {
-      delete process.env.OPENAI_API_KEY
-      process.env.ANTHROPIC_API_KEY = "sk-ant-test-key"
+    // ── Regression: the ambient-credential leak ──────────────────────
+    // Argus used to pick its provider from whatever OPENAI_API_KEY /
+    // ANTHROPIC_API_KEY / OPENCODE_API_KEY the surrounding shell exported.
+    test("ignores ambient OPENAI_API_KEY", async () => {
+      process.env.OPENAI_API_KEY = "sk-harness-key"
+      registryAvailable = false
       const svc = LLMPlannerService.lazy()
-      const available = await svc.isAvailable()
-      expect(available).toBe(true)
+      expect(await svc.isAvailable()).toBe(false)
+      expect(svc.getInitError()).toContain("opencode auth login")
     })
 
-    test("returns true when OPENCODE_API_KEY is set", async () => {
-      delete process.env.OPENAI_API_KEY
-      process.env.OPENCODE_API_KEY = "oc-test-key"
+    test("ignores ambient ANTHROPIC_API_KEY", async () => {
+      process.env.ANTHROPIC_API_KEY = "sk-ant-harness-key"
+      registryAvailable = false
       const svc = LLMPlannerService.lazy()
-      const available = await svc.isAvailable()
-      expect(available).toBe(true)
+      expect(await svc.isAvailable()).toBe(false)
     })
 
-    test("returns false when no API key is set", async () => {
-      delete process.env.OPENAI_API_KEY
+    test("ignores ambient OPENCODE_API_KEY", async () => {
+      process.env.OPENCODE_API_KEY = "oc-harness-key"
+      registryAvailable = false
       const svc = LLMPlannerService.lazy()
-      const available = await svc.isAvailable()
-      expect(available).toBe(false)
+      expect(await svc.isAvailable()).toBe(false)
+    })
+
+    test("reports which ambient env vars were ignored", async () => {
+      process.env.OPENAI_API_KEY = "sk-harness-key"
+      ignoredAmbientEnv = ["OPENAI_API_KEY", "OPENAI_BASE_URL"]
+      const svc = LLMPlannerService.lazy()
+      await svc.isAvailable()
+      expect(svc.getResolutionInfo().ignoredAmbientEnv).toEqual(["OPENAI_API_KEY", "OPENAI_BASE_URL"])
+    })
+
+    test("reports the resolution source", async () => {
+      registrySource = "explicit"
+      const svc = LLMPlannerService.lazy()
+      await svc.isAvailable()
+      expect(svc.getResolutionInfo().source).toBe("explicit")
+      expect(svc.getModelId()).toBe("opencode/mimo-v2.5-free")
+    })
+
+    test("returns false when no provider is configured in OpenCode", async () => {
+      registryAvailable = false
+      const svc = LLMPlannerService.lazy()
+      expect(await svc.isAvailable()).toBe(false)
     })
 
     test("returns cached result on second call", async () => {
@@ -231,8 +299,8 @@ describe("LLMPlannerService", () => {
       const first = await svc.isAvailable()
       expect(first).toBe(true)
 
-      // Remove the API key — the cached result should still be true
-      delete process.env.OPENAI_API_KEY
+      // Registry becomes unavailable — the cached result should still be true
+      registryAvailable = false
       const second = await svc.isAvailable()
       expect(second).toBe(true) // cached
     })
@@ -263,14 +331,13 @@ describe("LLMPlannerService", () => {
       const desc = LLMPlannerService.getModelEnvVarDescription()
       expect(desc).toContain("ARGUS_PLANNER_MODEL")
       expect(desc).toContain("not set")
-      expect(desc).toContain("default: gpt-4o-mini")
+      expect(desc).toContain("OpenCode's configured default model")
     })
 
     test("returns description with configured model when set", () => {
-      process.env.ARGUS_PLANNER_MODEL = "claude-sonnet-4-20250514"
+      process.env.ARGUS_PLANNER_MODEL = "deepseek/deepseek-chat"
       const desc = LLMPlannerService.getModelEnvVarDescription()
-      expect(desc).toContain("claude-sonnet-4-20250514")
-      expect(desc).toContain("Anthropic")
+      expect(desc).toContain("deepseek/deepseek-chat")
     })
 
     test("falls back to OPENCODE_MODEL when ARGUS_PLANNER_MODEL is not set", () => {
@@ -298,15 +365,14 @@ describe("LLMPlannerService", () => {
       expect(svc.getInitError()).toBeNull()
     })
 
-    test("contains setup instructions when no API key", async () => {
-      delete process.env.OPENAI_API_KEY
+    test("explains the provider registry when no provider is configured", async () => {
+      registryAvailable = false
       const svc = LLMPlannerService.lazy()
       await svc.isAvailable()
       const error = svc.getInitError()
       expect(error).not.toBeNull()
-      expect(error).toContain("No LLM API key found")
-      expect(error).toContain("OPENAI_API_KEY")
-      expect(error).toContain("ANTHROPIC_API_KEY")
+      expect(error).toContain("No providers are configured in OpenCode")
+      expect(error).toContain("opencode auth login")
     })
   })
 
@@ -349,8 +415,8 @@ describe("LLMPlannerService", () => {
       }
     })
 
-    test("returns empty result when LLM is unavailable (no API key)", async () => {
-      delete process.env.OPENAI_API_KEY
+    test("returns empty result when LLM is unavailable (no configured provider)", async () => {
+      registryAvailable = false
       const svc = LLMPlannerService.lazy()
       const result = await svc.suggestPhases("https://example.com", "web_app")
 
@@ -445,7 +511,7 @@ describe("LLMPlannerService", () => {
     })
 
     test("returns null when LLM is unavailable", async () => {
-      delete process.env.OPENAI_API_KEY
+      registryAvailable = false
       const svc = LLMPlannerService.lazy()
       const findings = [
         {

@@ -129,8 +129,9 @@ export function ScanDashboard() {
     if (modelsLoading()) return
     setModelsLoading(true)
     modelsRefreshPromise = import("../../planner/llm-service")
-      .then(({ LLMPlannerService }) => {
-        setAvailableModels(LLMPlannerService.getAvailableModels())
+      .then(async ({ LLMPlannerService }) => {
+        // Models come from OpenCode's provider registry (async read).
+        setAvailableModels(await LLMPlannerService.getAvailableModels())
       })
       .catch(() => {})
       .finally(() => {

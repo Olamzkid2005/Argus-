@@ -23,7 +23,7 @@ import {
   ArgusToolsCommand,
 } from "./cli"
 
-yargs(hideBin(process.argv))
+const cli = yargs(hideBin(process.argv))
   .scriptName("argus")
   .command(ArgusAssessCommand)
   .command(ArgusDoctorCommand)
@@ -40,4 +40,16 @@ yargs(hideBin(process.argv))
   .demandCommand(1, "Usage: argus <command> [options]\n\nCommands: assess, doctor, report, resume, verify, evidence, config, encryption, engagements, findings, workflows, tools")
   .strict()
   .help()
-  .parse()
+
+// `parseAsync` so async handlers finish before cleanup.
+await cli.parseAsync()
+
+// Reading OpenCode's provider registry boots its managed Effect runtime.
+// This CLI owns the process, so release it — otherwise the process will not
+// terminate once anything has consulted the registry.
+try {
+  const { disposePlannerRuntime } = await import("./planner/model-registry")
+  await disposePlannerRuntime()
+} catch {
+  // Cleanup is best-effort; a disposed/absent runtime must not mask the command result.
+}

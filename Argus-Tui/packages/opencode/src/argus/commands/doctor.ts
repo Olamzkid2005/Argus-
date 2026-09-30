@@ -12,6 +12,11 @@ import { WorkersBridge } from "../bridge/mcp-client"
 import { PROJECT_ROOT } from "../shared/path"
 import { ToolRegistry } from "../workflows/tool-registry"
 import { LLMPlannerService } from "../planner/llm-service"
+import {
+  ALLOW_AMBIENT_ENV_VAR,
+  ignoredAmbientLlmEnvVars,
+  resolvePlannerModel,
+} from "../planner/model-registry"
 
 /**
  * Read provider credentials from OpenCode's own auth.json (stored in XDG data dir).
@@ -72,7 +77,7 @@ export async function doctorCommand(options?: {
   results.push(credCheck())
   results.push(envCheck())
   results.push(scopeCheck())
-  results.push(plannerLLMCheck())
+  results.push(await plannerLLMCheck())
   results.push(await dnsCheck())
   results.push(configValidationCheck())
   results.push(toolchainCheck())
@@ -325,92 +330,107 @@ function scopeCheck(): CheckResult {
 function envCheck(): CheckResult {
   const envPath = StoragePaths.env
   const localEnv = join(PROJECT_ROOT, ".env")
-  const envKeyFound = !!(process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)
+  const workerEnv = join(PROJECT_ROOT, "argus-workers", ".env")
+  const envFileFound = existsSync(envPath) || existsSync(localEnv) || existsSync(workerEnv)
 
-  // Check OpenCode's own provider registry as well
-  const openCodeKey = findOpenCodeApiKey()
+  // Argus's own convention (used by the Python worker) is LLM_API_KEY.
+  const argusOwnKey = !!process.env.LLM_API_KEY
+
+  // Ambient provider keys belong to whichever tool exported them — Argus no
+  // longer uses them, so they must not count as "configured".
+  const ignoredAmbient = ignoredAmbientLlmEnvVars()
+
+  // OpenCode's own provider registry is the supported source.
   const providers = readOpenCodeProviders()
   const providerCount = Object.keys(providers).length
   const providerNames = Object.keys(providers).join(", ")
-
-  if (existsSync(envPath) || existsSync(localEnv)) {
-    if (envKeyFound) {
-      return {
-        name: "Configuration",
-        status: "PASS",
-        message: "Environment file found with API key configured",
-      }
-    }
-
-    return {
-      name: "Configuration",
-      status: openCodeKey ? "PASS" : "WARN",
-      message: openCodeKey
-        ? `.env file found (no keys), but ${providerCount} provider(s) configured in OpenCode registry: ${providerNames}`
-        : "Environment file found but no LLM API key detected. Set LLM_API_KEY for LLM-powered assessments.",
-    }
-  }
+  const openCodeKey = findOpenCodeApiKey()
 
   if (openCodeKey) {
     return {
       name: "Configuration",
       status: "PASS",
-      message: `${providerCount} provider(s) configured via OpenCode registry: ${providerNames}`,
+      message: `${providerCount} provider(s) configured in OpenCode registry: ${providerNames}`,
     }
   }
 
-  if (envKeyFound) {
+  if (argusOwnKey) {
     return {
       name: "Configuration",
       status: "PASS",
-      message: "API key found in environment variables",
+      message: "LLM_API_KEY set in the environment (argus-workers convention)",
+    }
+  }
+
+  if (envFileFound) {
+    return {
+      name: "Configuration",
+      status: "WARN",
+      message: "Environment file found but no LLM provider configured. Configure a provider in OpenCode, or set LLM_API_KEY.",
+    }
+  }
+
+  if (ignoredAmbient.length > 0) {
+    return {
+      name: "Configuration",
+      status: "WARN",
+      message:
+        `No provider configured for Argus. Ignoring ambient ${ignoredAmbient.join(", ")} — ` +
+        `Argus uses OpenCode's provider registry only (set ${ALLOW_AMBIENT_ENV_VAR}=1 to opt in).`,
     }
   }
 
   return {
     name: "Configuration",
     status: "WARN",
-    message: "No .env file, OpenCode provider registry, or env var API key found. Deterministic mode will still work.",
+    message: "No .env file, OpenCode provider registry, or LLM_API_KEY found. Deterministic mode will still work.",
   }
 }
 
 /**
- * Check the planner LLM configuration (ARGUS_PLANNER_MODEL + API key).
- * This is a lightweight env-var check — it does NOT make an actual LLM
- * call (use --online for connectivity tests).
+ * Check the planner LLM configuration.
+ *
+ * The planner resolves provider, model and credentials from OpenCode's
+ * provider registry (auth.json + models.dev) — ambient provider env vars are
+ * ignored. This check reports exactly what the planner *will* use, so a
+ * mis-resolved provider can never be silent.
  */
-function plannerLLMCheck(): CheckResult {
+async function plannerLLMCheck(): Promise<CheckResult> {
   const modelDesc = LLMPlannerService.getModelEnvVarDescription()
+  const ignored = ignoredAmbientLlmEnvVars()
+  const ignoredNote = ignored.length
+    ? ` Ignored ambient ${ignored.join(", ")} — set ${ALLOW_AMBIENT_ENV_VAR}=1 to opt in.`
+    : ""
 
-  const apiKey =
-    process.env.OPENAI_API_KEY ||
-    process.env.ANTHROPIC_API_KEY ||
-    process.env.OPENCODE_API_KEY ||
-    process.env.LLM_API_KEY
+  try {
+    const resolution = await resolvePlannerModel()
 
-  if (!apiKey) {
+    if (!resolution.ok) {
+      return {
+        name: "Planner LLM",
+        status: "WARN",
+        message: `${modelDesc} — ${resolution.reason} Planner will use deterministic mode.${ignoredNote}`,
+      }
+    }
+
+    const sourceLabel =
+      resolution.source === "explicit"
+        ? "ARGUS_PLANNER_MODEL"
+        : resolution.source === "default"
+          ? "OpenCode default model"
+          : "first configured provider"
+
+    return {
+      name: "Planner LLM",
+      status: "PASS",
+      message: `Model: ${resolution.providerID}/${resolution.modelID} — from OpenCode provider registry (${sourceLabel}).${ignoredNote}`,
+    }
+  } catch (e) {
     return {
       name: "Planner LLM",
       status: "WARN",
-      message: `${modelDesc} — No API key found. Planner will use deterministic mode. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.`,
+      message: `Planner LLM check failed: ${(e as Error).message}`,
     }
-  }
-
-  const modelStr =
-    process.env.ARGUS_PLANNER_MODEL?.trim() ||
-    process.env.OPENCODE_MODEL?.trim() ||
-    "gpt-4o-mini (default)"
-
-  const source =
-    process.env.OPENAI_API_KEY ? "OPENAI_API_KEY" :
-    process.env.ANTHROPIC_API_KEY ? "ANTHROPIC_API_KEY" :
-    process.env.OPENCODE_API_KEY ? "OPENCODE_API_KEY" :
-    "LLM_API_KEY"
-
-  return {
-    name: "Planner LLM",
-    status: "PASS",
-    message: `Model: ${modelStr} — API key from ${source}`,
   }
 }
 
@@ -418,16 +438,18 @@ function plannerLLMCheck(): CheckResult {
  * Validate that key .env configuration values are consistent.
  * Checks:
  *  - POSTGRES_PASSWORD matches the password embedded in DATABASE_URL
- *  - NEXTAUTH_SECRET is not empty (required for NextAuth)
  *  - .env file exists (warn if it doesn't)
+ *  - REDIS_URL is set (Path B / Celery only)
  */
 function configValidationCheck(): CheckResult {
   const issues: string[] = []
 
-  // Check .env file exists in the project root (for docker-compose users)
+  // docker-compose reads a repo-root .env; the worker reads argus-workers/.env.
   const envPath = join(PROJECT_ROOT, ".env")
-  if (!existsSync(envPath)) {
-    issues.push("No .env file found at project root. Copy .env.example to .env before running docker-compose.")
+  const workerEnvPath = join(PROJECT_ROOT, "argus-workers", ".env")
+  const anyEnvFile = existsSync(envPath) || existsSync(workerEnvPath)
+  if (!anyEnvFile) {
+    issues.push("No .env file found at project root or argus-workers/.env. Copy .env.example to .env before running docker-compose.")
   }
 
   // Check POSTGRES_PASSWORD matches the password in DATABASE_URL
@@ -452,22 +474,9 @@ function configValidationCheck(): CheckResult {
     }
   }
 
-  // Check NEXTAUTH_SECRET is not empty
-  const nextAuthSecret = process.env.NEXTAUTH_SECRET
-  if (nextAuthSecret === undefined || nextAuthSecret === "" || nextAuthSecret?.trim() === "") {
-    issues.push("NEXTAUTH_SECRET is not set. NextAuth will fail at startup. Generate one with: openssl rand -base64 32")
-  }
-
-  // Check ARGUS_MODE=0 correctly disables Argus (fixed in footer.prompt/splash/app)
-  if (process.env.ARGUS_MODE === "0") {
-    issues.push(
-      'ARGUS_MODE=0 is set (disables Argus mode). Set ARGUS_MODE=1 to enable.'
-    )
-  }
-
-  // Check REDIS_URL is set for workflows (celery/cache need it)
+  // Check REDIS_URL is set for workflows (celery/cache need it — Path B only)
   if (!process.env.REDIS_URL) {
-    issues.push("REDIS_URL is not set. Celery workers and caching require Redis.")
+    issues.push("REDIS_URL is not set. The unattended Celery path requires Redis; the CLI paths (assess/report) do not.")
   }
 
   if (issues.length === 0) {

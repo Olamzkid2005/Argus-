@@ -9,6 +9,7 @@ import { planDeterministic } from "./planDeterministic"
 import { resolvePipeline, formatPipelineGaps } from "./pipeline"
 import { getTargetValidator } from "../shared/target-validator"
 import { LLMPlannerService } from "./llm-service"
+import type { LLMPhaseSuggestionResult, LLMReplanSuggestion } from "./llm-service"
 import type { ProgressEvent } from "../shared/progress"
 
 export const MAX_REPLANS = (() => {
@@ -31,11 +32,38 @@ interface PlanOptions {
   onProgress?: (event: ProgressEvent) => void
 }
 
+/**
+ * The planner-facing surface of LLMPlannerService.
+ *
+ * Declared here so the planner can be exercised with a substituted LLM via
+ * constructor injection instead of `mock.module()` — a process-global mock of
+ * `./llm-service` leaks into every other test file in the same bun run and
+ * silently replaces the real service (see planner LLM tests).
+ */
+export interface PlannerLLM {
+  suggestPhases(target: string, targetType: string, techStack?: string[]): Promise<LLMPhaseSuggestionResult>
+  suggestReplan(
+    target: string,
+    findings: ReadonlyArray<{ title: string; severity: number; subtype?: string; confidence: number }>,
+  ): Promise<LLMReplanSuggestion | null>
+  getModelId(): string
+}
+
+export interface PlannerDeps {
+  /** Override the LLM planner. Defaults to the real LLMPlannerService. */
+  llm?: PlannerLLM
+}
+
 export class WorkflowPlanner {
   constructor(
     private workflowRegistry: WorkflowRegistry,
     private toolRegistry: ToolRegistry,
+    private deps?: PlannerDeps,
   ) {}
+
+  private plannerLLM(): PlannerLLM {
+    return this.deps?.llm ?? LLMPlannerService.lazy()
+  }
 
   async plan(target: string, context?: Partial<PlannerContext>, options?: PlanOptions): Promise<AssessmentPlan> {
     const emitProgress = options?.onProgress
@@ -126,7 +154,7 @@ export class WorkflowPlanner {
     let llmSuggested: string[] = []
     emitProgress?.({ type: "llm_planning_start", phase: "initial" })
       try {
-        const llmSvc = LLMPlannerService.lazy()
+        const llmSvc = this.plannerLLM()
         const result = await llmSvc.suggestPhases(target, targetType, plannerContext.techStack)
         if (result.suggestedPhases.length > 0) {
           for (const phase of result.suggestedPhases) {
@@ -292,7 +320,7 @@ export class WorkflowPlanner {
     // Source 2: OpenCode Session LLM (local) — runs alongside MCP path
     if (!llmBudgetExhausted && context.findings.length > 0) {
       try {
-        const llmSvc = LLMPlannerService.lazy()
+        const llmSvc = this.plannerLLM()
         const llmReplan = await llmSvc.suggestReplan(context.target, context.findings)
         if (llmReplan && !llmReplan.stopAssessment) {
           for (const raw of llmReplan.nextCapabilities) {

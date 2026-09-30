@@ -1,41 +1,30 @@
 /**
  * WorkflowPlanner unit tests.
  *
- * Uses mock.module() to replace llm-service with a stub that always
- * returns "unavailable" — this is REQUIRED because other test files
- * (planner-progress.test.ts) also mock.module() the same module,
- * and bun's mock.module() is process-global and cannot be unset.
- * By providing our OWN mock, we override any leaked mock from other files.
+ * The LLM is substituted through `WorkflowPlanner`'s `deps.llm` seam, not
+ * `mock.module()`. A module-level mock of `./llm-service` is process-global in
+ * bun and replaces the real service for every other test file in the run —
+ * which is exactly how the planner LLM tests used to fail when the whole suite
+ * ran (they passed in isolation).
+ *
+ * The stub stands in for "no LLM configured" — the correct production
+ * behaviour when the provider registry resolves nothing.
  */
 
-import { describe, expect, test, mock } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import type { PlannerContext } from "../../../../src/argus/planner/types"
 import type { WorkflowDefinition } from "../../../../src/argus/workflows/types"
 import type { Capability as CapabilityType } from "../../../../src/argus/planner/capabilities"
 
-// ── Override any leaked LLM mock from other test files ────────────────
-// bun's mock.module() is process-global. If planner-progress.test.ts runs
-// first, it mocks llm-service.ts with a version whose suggestReplan()
-// returns mock capabilities. We override that here with a stub that always
-// returns "unavailable" — the correct production behavior when no LLM is
-// configured. This MUST be at module level before the dynamic import.
-mock.module("../../../../src/argus/planner/llm-service.ts", () => ({
-  LLMPlannerService: {
-    lazy: () => ({
-      suggestPhases: async () => ({ targetAnalysis: "", suggestedPhases: [] }),
-      suggestReplan: async () => null,
-      getModelId: () => "unavailable",
-      isAvailable: async () => false,
-      getInitError: () => "Mock: No LLM API key",
-    }),
-    switchModel: () => {},
-    getCurrentModelId: () => undefined,
-    getAvailableModels: () => [],
-    getModelEnvVarDescription: () => "ARGUS_PLANNER_MODEL=not set (mock)",
-  },
-}))
+/** Stub LLM planner: always unavailable, so the deterministic path runs. */
+const unavailableLLM = {
+  suggestPhases: async () => ({ targetAnalysis: "", suggestedPhases: [] }),
+  suggestReplan: async () => null,
+  getModelId: () => "unavailable",
+}
 
-// Dynamic import so mock.module() runs BEFORE the planner module resolves
+const plannerDeps = { llm: unavailableLLM }
+
 const { WorkflowPlanner, MAX_REPLANS } = await import("../../../../src/argus/planner/planner")
 const { Capability } = await import("../../../../src/argus/planner/capabilities")
 
@@ -86,7 +75,7 @@ describe("WorkflowPlanner", () => {
         findBestTools: () => [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 30 }],
         selectBest: () => [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 30 }],
       }
-      const planner = new WorkflowPlanner(registry as any, toolRegistry as any)
+      const planner = new WorkflowPlanner(registry as any, toolRegistry as any, plannerDeps)
       const plan = await planner.plan("https://example.com/api/v1")
 
       expect(plan).toHaveProperty("phases")
@@ -102,7 +91,7 @@ describe("WorkflowPlanner", () => {
         findBestTools: () => [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 30 }],
         selectBest: () => [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 30 }],
       }
-      const planner = new WorkflowPlanner(registry as any, toolRegistry as any)
+      const planner = new WorkflowPlanner(registry as any, toolRegistry as any, plannerDeps)
       const plan = await planner.plan("https://example.com")
 
       expect(plan.phases.length).toBeGreaterThan(0)
@@ -117,7 +106,7 @@ describe("WorkflowPlanner", () => {
     test("plan() uses deterministic fallback when useLLM is false", async () => {
       const registry = { findByCapabilities: () => null }
       const toolRegistry = { findBestTools: () => [], selectBest: () => [] }
-      const planner = new WorkflowPlanner(registry as any, toolRegistry as any)
+      const planner = new WorkflowPlanner(registry as any, toolRegistry as any, plannerDeps)
       const plan = await planner.plan("https://example.com", {}, { useLLM: false })
 
       expect(plan.workflow).toBe("deterministic")
@@ -126,7 +115,7 @@ describe("WorkflowPlanner", () => {
     test("plan() falls back to deterministic when no workflow matches", async () => {
       const registry = { findByCapabilities: () => null }
       const toolRegistry = { findBestTools: () => [], selectBest: () => [] }
-      const planner = new WorkflowPlanner(registry as any, toolRegistry as any)
+      const planner = new WorkflowPlanner(registry as any, toolRegistry as any, plannerDeps)
       const plan = await planner.plan("https://example.com")
 
       expect(plan.workflow).toBe("deterministic")
@@ -135,7 +124,7 @@ describe("WorkflowPlanner", () => {
 
   describe("replan()", () => {
     test("returns null when replanCount equals MAX_REPLANS", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         replanCount: MAX_REPLANS,
         findings: [
@@ -160,7 +149,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("returns null when replanCount exceeds MAX_REPLANS", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         replanCount: MAX_REPLANS + 1,
         findings: [
@@ -185,7 +174,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("returns null when no new capabilities found", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({ findings: [] })
       const result = await planner.replan(ctx)
 
@@ -193,7 +182,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("returns new phases for unhandled capabilities", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         findings: [
           {
@@ -224,7 +213,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("writes back incremented replanCount to context", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         findings: [
           {
@@ -250,7 +239,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("uses maxReplans from context when provided", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         replanCount: 1,
         maxReplans: 1,
@@ -299,7 +288,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("returns null when all new capabilities are already executed", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         findings: [
           {
@@ -325,7 +314,7 @@ describe("WorkflowPlanner", () => {
 
     // ── Independent budget logic ──
     test("returns null when both rule and LLM budgets are exhausted", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         replanCount: MAX_REPLANS,
         llmReplanCount: MAX_REPLANS,
@@ -352,7 +341,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("LLM suggestions produce phases when rule budget exhausted", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         replanCount: MAX_REPLANS,  // rule budget exhausted
         llmReplanCount: 0,          // LLM budget still available
@@ -367,7 +356,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("rule-based findings produce phases when LLM budget exhausted", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         llmReplanCount: MAX_REPLANS,  // LLM budget exhausted
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
@@ -397,7 +386,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("LLM-only suggestions produce phases without rule findings", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
         llmReplanCount: 0,
@@ -411,7 +400,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("both LLM and rule-based suggestions combine when both budgets available", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         findings: [
           {
@@ -441,7 +430,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("llmReplanCount increments when LLM produces phases", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         llmReplanCount: 0,
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
@@ -454,7 +443,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("llmReplanCount does not increment when all LLM suggestions already executed", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         llmReplanCount: 0,
         llmSuggestedCapabilities: ["POST_EXPLOIT"],
@@ -467,7 +456,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("llmMaxReplans from context caps LLM-driven replanning", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         llmReplanCount: 2,
         llmMaxReplans: 2,
@@ -488,7 +477,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("LLM suggestions with unknown capabilities are silently skipped", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         llmSuggestedCapabilities: ["UNKNOWN_CAP_X99"],
       })
@@ -499,7 +488,7 @@ describe("WorkflowPlanner", () => {
     })
 
     test("rule budget exhausted but LLM suggestions still produce phases — verifies replanCount not incremented for rule", async () => {
-      const planner = new WorkflowPlanner({} as any, {} as any)
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
       const ctx = makeContext({
         replanCount: MAX_REPLANS,
         llmReplanCount: 0,
@@ -551,7 +540,7 @@ describe("WorkflowPlanner", () => {
         loadAll: () => [],
         listWorkflows: () => [mockWorkflow()],
       }
-      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any)
+      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any, plannerDeps)
       const plan = await planner.plan("https://example.com", undefined, { useLLM: false })
       expect(plan.phases.length).toBeGreaterThanOrEqual(1)
       expect(plan.phases[0].phaseId).toMatch(/^phase-/)
@@ -573,7 +562,7 @@ describe("WorkflowPlanner", () => {
         loadAll: () => [],
         listWorkflows: () => [],
       }
-      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any)
+      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any, plannerDeps)
       const plan = await planner.plan("https://example.com", undefined, { useLLM: false })
       expect(plan).toBeDefined()
       expect(plan.workflow).toBe("deterministic")
@@ -596,7 +585,7 @@ describe("WorkflowPlanner", () => {
         loadAll: () => [],
         listWorkflows: () => [mockWorkflow()],
       }
-      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any)
+      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any, plannerDeps)
       const plan = await planner.plan("https://example.com", undefined, { useLLM: false })
       expect(plan.phases).toHaveLength(0)
     })
@@ -617,7 +606,7 @@ describe("WorkflowPlanner", () => {
         loadAll: () => [],
         listWorkflows: () => [],
       }
-      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any)
+      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any, plannerDeps)
       const plan = await planner.plan("https://example.com", undefined, { useLLM: false })
       expect(plan).toBeDefined()
       expect(typeof plan.errorRecovery).toBe("object")
@@ -640,7 +629,7 @@ describe("WorkflowPlanner", () => {
         loadAll: () => [],
         listWorkflows: () => [],
       }
-      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any)
+      const planner = new WorkflowPlanner(workflowRegistry as any, toolRegistry as any, plannerDeps)
       const plan = await planner.plan("https://example.com")
       expect(plan).toBeDefined()
       expect(plan.workflow).toBe("deterministic")
