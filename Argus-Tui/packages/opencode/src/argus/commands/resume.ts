@@ -273,7 +273,15 @@ export async function resumeCommand(
   if (!executionError) {
     const reportGen = new ReportGenerator()
     const report = reportGen.generateMarkdown(allFindings, engagementId, engagement.target, engagement.workflow)
-    return report
+    // Same reason as `assess`: a resumed run must leave its report on disk, not
+    // only in the terminal that happened to be watching.
+    try {
+      const reportPath = reportGen.writeArtifact(engagementId, report, "markdown")
+      return `${report}\n\nReport written: ${reportPath}`
+    } catch (err) {
+      console.warn(`Could not write the report artifact: ${(err as Error).message}`)
+      return report
+    }
   }
 
   return `Resume completed with errors: ${executionError.message}`

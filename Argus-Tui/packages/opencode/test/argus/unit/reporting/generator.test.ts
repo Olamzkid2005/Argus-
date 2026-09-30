@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs"
+import { tmpdir } from "os"
+import { join } from "path"
 import { ReportGenerator } from "../../../../src/argus/reporting/generator"
 import { Severity, Confidence } from "../../../../src/argus/planner/types"
 import type { NormalizedFinding } from "../../../../src/argus/planner/types"
@@ -351,6 +354,61 @@ describe("ReportGenerator", () => {
       expect(html).toContain("Fix 1")
       expect(html).toContain("ai-analysis")
       expect(html).toContain("gpt-4")
+    })
+  })
+
+  describe("writeArtifact()", () => {
+    function tempDir(): string {
+      return mkdtempSync(join(tmpdir(), "argus-report-"))
+    }
+
+    test("writes report.md and returns its path", () => {
+      const dir = tempDir()
+      try {
+        const generator = new ReportGenerator()
+        const path = generator.writeArtifact("eng-1", "# Report\n", "markdown", dir)
+        expect(path).toBe(join(dir, "report.md"))
+        expect(readFileSync(path, "utf-8")).toBe("# Report\n")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("creates the engagement directory when it does not exist yet", () => {
+      const dir = tempDir()
+      try {
+        const nested = join(dir, "engagements", "eng-9")
+        const generator = new ReportGenerator()
+        const path = generator.writeArtifact("eng-9", "{}", "json", nested)
+        expect(existsSync(path)).toBe(true)
+        expect(path).toBe(join(nested, "report.json"))
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("uses the format as the file extension", () => {
+      const dir = tempDir()
+      try {
+        const generator = new ReportGenerator()
+        expect(generator.writeArtifact("eng-1", "<html>", "html", dir)).toBe(join(dir, "report.html"))
+        expect(generator.writeArtifact("eng-1", "{}", "sarif", dir)).toBe(join(dir, "report.sarif"))
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("a report with zero findings still leaves an artifact", () => {
+      const dir = tempDir()
+      try {
+        const generator = new ReportGenerator()
+        const markdown = generator.generateMarkdown([], "eng-1", "https://test.com", "assessment")
+        const path = generator.writeArtifact("eng-1", markdown, "markdown", dir)
+        const written = readFileSync(path, "utf-8")
+        expect(written).toContain("Total Findings: 0")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
     })
   })
 })

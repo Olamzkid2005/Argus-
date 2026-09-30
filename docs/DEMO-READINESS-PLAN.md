@@ -429,6 +429,10 @@ Ordered so that each step is independently verifiable and unblocks the next.
 - [ ] Confirm `[SCAN_METRICS]` (`orchestrator.py::_emit_scan_metrics`) reports
       `agent_success_rate` / `agent_full_fallback_rate`.
 - [ ] Assert **≥1 non-fallback decision** and that phase advancement was engine-driven.
+- [x] A completed run leaves a report artifact on disk:
+      `<data>/engagements/<id>/report.md`, written by both `assess` and `resume`, with the path
+      announced on stderr. stdout printing is unchanged — an unattended or TUI run now has
+      something to show even when it found nothing.
 - **Acceptance:** the demo can point at recorded decisions proving the engine chose tools, plus a
   report artifact — not just a findings count.
 

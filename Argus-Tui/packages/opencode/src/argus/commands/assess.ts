@@ -69,9 +69,19 @@ export async function assessCommand(target: string, options?: {
     onProgress: options?.onProgress ?? cliProgress,
   })
 
+  // Render once and always leave the report on disk — stdout is easy to lose in
+  // an unattended run, and "0 findings" is exactly when an artifact matters.
+  const reportGen = new ReportGenerator()
+  const report = reportGen.generateMarkdown(result.allFindings, result.engagementId, target, "assessment")
+  try {
+    const reportPath = reportGen.writeArtifact(result.engagementId, report, "markdown")
+    process.stderr.write(`\n✓ Report written: ${reportPath}\n`)
+  } catch (err) {
+    process.stderr.write(`\n⚠ Could not write the report artifact: ${(err as Error).message}\n`)
+  }
+
+  // Keep stdout clean for piping/redirecting, and unchanged for TUI callers.
   if (result.allFindings.length > 0 && (options?.writeReport ?? true)) {
-    const reportGen = new ReportGenerator()
-    const report = reportGen.generateMarkdown(result.allFindings, result.engagementId, target, "assessment")
     process.stdout.write(report + "\n")
   }
 

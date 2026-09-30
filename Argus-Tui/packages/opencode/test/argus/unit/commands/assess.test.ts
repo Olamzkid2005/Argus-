@@ -7,26 +7,34 @@ import type { WorkflowRunResult } from "../../../../src/argus/workflow-runner"
 
 const mockRun = mock<(opts: any) => Promise<WorkflowRunResult>>()
 const mockGenerateMarkdown = mock<(findings: any[], engagementId: string, target: string, type: string) => string>()
+const mockWriteArtifact = mock<(engagementId: string, content: string, format?: string) => string>()
 
 let originalRun: any
 let originalGenerateMarkdown: any
+let originalWriteArtifact: any
 
 beforeEach(() => {
   // Save originals and patch prototype methods
   originalRun = WorkflowRunner.prototype.run
   originalGenerateMarkdown = ReportGenerator.prototype.generateMarkdown
+  originalWriteArtifact = ReportGenerator.prototype.writeArtifact
 
   WorkflowRunner.prototype.run = mockRun as any
   ReportGenerator.prototype.generateMarkdown = mockGenerateMarkdown as any
+  ReportGenerator.prototype.writeArtifact = mockWriteArtifact as any
 
   mockRun.mockReset()
   mockGenerateMarkdown.mockReset()
+  mockWriteArtifact.mockReset()
+  mockGenerateMarkdown.mockReturnValue("# Report content")
+  mockWriteArtifact.mockReturnValue("/tmp/argus/engagements/eng-1/report.md")
 })
 
 // Restore prototypes after each test to prevent leaking
 afterEach(() => {
   if (originalRun) WorkflowRunner.prototype.run = originalRun
   if (originalGenerateMarkdown) ReportGenerator.prototype.generateMarkdown = originalGenerateMarkdown
+  if (originalWriteArtifact) ReportGenerator.prototype.writeArtifact = originalWriteArtifact
 })
 
 const makeEmptyResult = (overrides: Partial<WorkflowRunResult> = {}): WorkflowRunResult => ({
@@ -76,13 +84,68 @@ describe("assessCommand", () => {
     expect(mockRun.mock.calls[0][0].cacheMode).toBe("no_cache")
   })
 
-  test("does NOT write markdown report when writeReport is false", async () => {
+  test("does NOT print the markdown report to stdout when writeReport is false", async () => {
+    const findings: any[] = [{ id: "f-1", title: "Test", severity: "HIGH" }]
+    mockRun.mockResolvedValue(makeEmptyResult({ allFindings: findings }))
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+    const originalStdoutWrite = process.stdout.write
+    const written: string[] = []
+    process.stdout.write = (chunk: any) => { written.push(String(chunk)); return true }
+
+    try {
+      await assessCommand("https://example.com", { writeReport: false })
+      expect(written.some((w) => w.includes("Report content"))).toBe(false)
+    } finally {
+      process.stdout.write = originalStdoutWrite
+    }
+  })
+
+  test("prints the markdown report to stdout by default when findings exist", async () => {
+    const findings: any[] = [{ id: "f-1", title: "Test", severity: "HIGH" }]
+    mockRun.mockResolvedValue(makeEmptyResult({ allFindings: findings }))
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+    const originalStdoutWrite = process.stdout.write
+    const written: string[] = []
+    process.stdout.write = (chunk: any) => { written.push(String(chunk)); return true }
+
+    try {
+      await assessCommand("https://example.com")
+      expect(written.some((w) => w.includes("Report content"))).toBe(true)
+    } finally {
+      process.stdout.write = originalStdoutWrite
+    }
+  })
+
+  test("writes the report artifact for every run, even with zero findings", async () => {
+    mockRun.mockResolvedValue(makeEmptyResult({ allFindings: [] }))
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+
+    await assessCommand("https://example.com")
+
+    expect(mockWriteArtifact).toHaveBeenCalledTimes(1)
+    const [engagementId, content, format] = mockWriteArtifact.mock.calls[0]
+    expect(engagementId).toBe("eng-1")
+    expect(content).toBe("# Report content")
+    expect(format).toBe("markdown")
+  })
+
+  test("writes the report artifact in TUI mode too", async () => {
     mockRun.mockResolvedValue(makeEmptyResult())
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
 
     await assessCommand("https://example.com", { writeReport: false })
 
-    expect(mockGenerateMarkdown).not.toHaveBeenCalled()
+    expect(mockWriteArtifact).toHaveBeenCalledTimes(1)
+  })
+
+  test("a failed artifact write does not fail the assessment", async () => {
+    mockRun.mockResolvedValue(makeEmptyResult())
+    mockWriteArtifact.mockImplementation(() => { throw new Error("read-only filesystem") })
+    const { assessCommand } = await import("../../../../src/argus/commands/assess")
+
+    const result = await assessCommand("https://example.com")
+
+    expect(result.engagementId).toBe("eng-1")
   })
 
   test("writes markdown report by default when findings exist", async () => {
@@ -218,12 +281,21 @@ describe("assessCommand", () => {
     expect(mockRun.mock.calls[0][0].features).toEqual(features)
   })
 
-  test("does NOT write markdown report when no findings exist", async () => {
+  test("does NOT print a markdown report when no findings exist (artifact is still written)", async () => {
     const emptyResult = makeEmptyResult()
     mockRun.mockResolvedValue(emptyResult)
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
-    await assessCommand("https://example.com")
-    expect(mockGenerateMarkdown).not.toHaveBeenCalled()
+    const originalStdoutWrite = process.stdout.write
+    const written: string[] = []
+    process.stdout.write = (chunk: any) => { written.push(String(chunk)); return true }
+
+    try {
+      await assessCommand("https://example.com")
+      expect(written.some((w) => w.includes("Report content"))).toBe(false)
+      expect(mockWriteArtifact).toHaveBeenCalledTimes(1)
+    } finally {
+      process.stdout.write = originalStdoutWrite
+    }
   })
 
   test("calls onProgress for ProgressEvent objects", async () => {

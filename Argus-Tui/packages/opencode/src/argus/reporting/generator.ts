@@ -1,4 +1,4 @@
-import { readFileSync } from "fs"
+import { mkdirSync, readFileSync, writeFileSync } from "fs"
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"
 import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
@@ -6,6 +6,7 @@ import { Severity, Confidence } from "../shared/types"
 import type { Report, ReportFormat, ReportSummary } from "./types"
 import { EngagementStore } from "../engagement/store"
 import type { IEngagementStore } from "../engagement/types"
+import { StoragePaths } from "../storage/paths"
 
 /** Resolve the current file's directory, compatible with both Bun and Node ESM. */
 const _dirname = dirname(fileURLToPath(import.meta.url))
@@ -59,6 +60,31 @@ export class ReportGenerator {
       case "html": return this.generateHTML(findings, engagementId, engagement.target, engagement.workflow)
       default: return this.generateMarkdown(findings, engagementId, engagement.target, engagement.workflow)
     }
+  }
+
+  /**
+   * Write a rendered report next to the engagement's own data.
+   *
+   * An assessment that only prints the report to stdout leaves nothing behind —
+   * an unattended or TUI run ends with no artifact to inspect, and a report with
+   * zero findings is the case where that matters most. The file sits beside the
+   * engagement database (`<base>/engagements/<id>/report.<ext>`) so a run's
+   * output travels with its data.
+   *
+   * Returns the path written.
+   */
+  writeArtifact(
+    engagementId: string,
+    content: string,
+    format: ReportFormat = "markdown",
+    dirOverride?: string,
+  ): string {
+    const dir = dirOverride ?? StoragePaths.engagementDir(engagementId)
+    mkdirSync(dir, { recursive: true })
+    const extension = format === "markdown" ? "md" : format
+    const reportPath = join(dir, `report.${extension}`)
+    writeFileSync(reportPath, content, "utf-8")
+    return reportPath
   }
 
   generate(findings: NormalizedFinding[], engagementId: string, target: string, workflow: string): Report {
