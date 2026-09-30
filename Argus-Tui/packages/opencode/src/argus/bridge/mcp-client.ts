@@ -118,6 +118,8 @@ export class WorkersBridge {
   private forwardingEnabled = false
   /** Flag to prevent restart races when disconnect is intentional */
   private _disconnecting = false
+  /** Single-flight guard so two restart triggers cannot kill each other's worker. */
+  private _restartInFlight = false
   /** Periodic health probe interval handle (blocker 15). */
   private _healthProbeTimer: ReturnType<typeof setInterval> | null = null
   /** Default health probe interval in ms (30s). */
@@ -239,16 +241,20 @@ export class WorkersBridge {
   }
 
   private async spawnChild(): Promise<void> {
-    this.process = spawn(this.pythonPath, [this.workersPath], {
+    // Hold the child in a local for this spawn: the exit handler must know
+    // which worker it belongs to, because a restart may have replaced it in
+    // `this.process` before the exit event is delivered.
+    const child = spawn(this.pythonPath, [this.workersPath], {
       stdio: ["pipe", "pipe", "pipe"],
       // Anchor the worker to the project root so it can resolve config files
       // and tool definitions relative to a known location regardless of where
       // the parent process was launched from.
       cwd: PROJECT_ROOT,
     })
+    this.process = child
 
     this.rl = createInterface({
-      input: this.process.stdout!,
+      input: child.stdout!,
     })
 
     // The worker may die at any moment (missing Python deps on CI, crash,
@@ -256,7 +262,7 @@ export class WorkersBridge {
     // the Writable stream; without a handler bun raises it as an uncaught
     // exception that takes down the whole process. Swallow it — pending
     // requests are rejected by the process 'exit' handler instead.
-    this.process.stdin?.on("error", (err: Error) => {
+    child.stdin?.on("error", (err: Error) => {
       if ((err as NodeJS.ErrnoException).code === "EPIPE") {
         // Expected when the worker exits — pending RPCs get rejected on exit.
         return
@@ -288,38 +294,57 @@ export class WorkersBridge {
       }
     })
 
-    this.process.on("exit", (code) => {
-      // Reject all pending requests — process is gone
-      for (const [id, pending] of this.pending) {
-        clearTimeout(pending.timer)
-        pending.reject(new Error(`Process exited with code ${code}`))
-      }
-      this.pending.clear()
-      this.pendingCount = 0
-      this.rl?.removeAllListeners()
-      this.rl?.close()
-      this.process?.stderr?.removeAllListeners()
-      if (code !== 0) {
-        if (stderrBuffer.length > 0) {
-          console.error(`[MCP Worker stderr]:\n${stderrBuffer.join("")}`)
-        }
-        console.warn(`[MCP] Worker exited with code ${code} — setting UNAVAILABLE`)
-        this.setLLMStatus("UNAVAILABLE")
-        if (!this._disconnecting) {
-          this.restartWorker().catch((err) => {
-            console.error(`[MCP] Worker restart failed after exit code ${code}:`, err)
-          })
-        }
-      }
-    })
+    child.on("exit", (code) => this.handleChildExit(child, code, stderrBuffer))
 
     const stderrBuffer: string[] = []
-    this.process.stderr?.on("data", (data: Buffer) => {
+    child.stderr?.on("data", (data: Buffer) => {
       stderrBuffer.push(data.toString())
     })
 
     await this.waitForReady()
     await this.getTools()
+  }
+
+  /**
+   * Handle a worker exiting.
+   *
+   * The exit event is bound to the child that produced it, because a restart
+   * replaces `this.process` before the old worker's exit is delivered. Acting on
+   * a stale exit is what used to kill the replacement worker: `this.rl` was by
+   * then the new worker's reader (so it was detached and the worker looked
+   * "unresponsive"), pending calls to the new worker were rejected, and the
+   * exit-triggered restart called killChild() — which acts on `this.process`,
+   * i.e. the fresh worker. Every subsequent tool call then failed with
+   * "Process not running" and the assessment finished with zero findings.
+   */
+  private handleChildExit(child: ChildProcess, code: number | null, stderrBuffer: string[]): void {
+    if (this.process !== child) return
+
+    // Reject all pending requests — process is gone
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer)
+      pending.reject(new Error(`Process exited with code ${code}`))
+    }
+    this.pending.clear()
+    this.pendingCount = 0
+    this.rl?.removeAllListeners()
+    this.rl?.close()
+    child.stderr?.removeAllListeners()
+    // Stop tracking the dead child so killChild() cannot act on it and a
+    // later exit check sees "no worker", not "this worker".
+    this.process = null
+    if (code !== 0) {
+      if (stderrBuffer.length > 0) {
+        console.error(`[MCP Worker stderr]:\n${stderrBuffer.join("")}`)
+      }
+      console.warn(`[MCP] Worker exited with code ${code} — setting UNAVAILABLE`)
+      this.setLLMStatus("UNAVAILABLE")
+      if (!this._disconnecting) {
+        this.restartWorker().catch((err) => {
+          console.error(`[MCP] Worker restart failed after exit code ${code}:`, err)
+        })
+      }
+    }
   }
 
   killChild(): void {
@@ -348,7 +373,16 @@ export class WorkersBridge {
   }
 
   async restartWorker(): Promise<void> {
-    await this.supervisor.restartWorker()
+    // Single-flight: the health probe and a worker exit can ask for a restart at
+    // the same moment. Two overlapping restarts race on `this.process`, and the
+    // loser's killChild() terminates the winner's freshly spawned worker.
+    if (this._restartInFlight) return
+    this._restartInFlight = true
+    try {
+      await this.supervisor.restartWorker()
+    } finally {
+      this._restartInFlight = false
+    }
   }
 
   async isHealthy(): Promise<boolean> {

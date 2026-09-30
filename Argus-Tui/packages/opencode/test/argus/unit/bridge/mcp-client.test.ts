@@ -775,6 +775,68 @@ describe("WorkersBridge — Edge cases", () => {
   })
 })
 
+describe("worker restart races", () => {
+  function fakeChild(pid: number): any {
+    return { pid, killed: false, exitCode: null, stderr: { removeAllListeners: () => {} } }
+  }
+
+  test("a superseded worker's exit does not touch or restart its replacement", async () => {
+    const { WorkersBridge } = await import("../../../../src/argus/bridge/mcp-client")
+    const bridge = new WorkersBridge("/path/to/mcp_server.py")
+    const stale = fakeChild(111)
+    const current = fakeChild(222)
+    ;(bridge as any).process = current
+    ;(bridge as any).pending = new Map()
+    ;(bridge as any).pendingCount = 0
+    let restarts = 0
+    ;(bridge as any).restartWorker = async () => { restarts++ }
+
+    ;(bridge as any).handleChildExit(stale, 1, [])
+
+    // The stale exit must be ignored: no restart, no state teardown.
+    expect(restarts).toBe(0)
+    expect((bridge as any).process).toBe(current)
+  })
+
+  test("the tracked worker's exit rejects its pending calls and restarts once", async () => {
+    const { WorkersBridge } = await import("../../../../src/argus/bridge/mcp-client")
+    const bridge = new WorkersBridge("/path/to/mcp_server.py")
+    const child = fakeChild(333)
+    ;(bridge as any).process = child
+    ;(bridge as any).pendingCount = 1
+    let restarts = 0
+    ;(bridge as any).restartWorker = async () => { restarts++ }
+    const rejections: Error[] = []
+    ;(bridge as any).pending = new Map([[
+      "1",
+      { timer: setTimeout(() => {}, 1000), reject: (e: Error) => rejections.push(e) },
+    ]])
+
+    ;(bridge as any).handleChildExit(child, 1, [])
+
+    expect((bridge as any).process).toBeNull()
+    expect(rejections).toHaveLength(1)
+    expect(rejections[0].message).toContain("exited with code 1")
+    expect(restarts).toBe(1)
+  })
+
+  test("overlapping restart triggers restart only once", async () => {
+    const { WorkersBridge } = await import("../../../../src/argus/bridge/mcp-client")
+    const bridge = new WorkersBridge("/path/to/mcp_server.py")
+    let supervisorRestarts = 0
+    ;(bridge as any).supervisor = {
+      restartWorker: async () => {
+        supervisorRestarts++
+        await new Promise((r) => setTimeout(r, 10))
+      },
+    }
+
+    await Promise.all([bridge.restartWorker(), bridge.restartWorker(), bridge.restartWorker()])
+
+    expect(supervisorRestarts).toBe(1)
+  })
+})
+
 describe("callTool response mapping", () => {
   test("forwards the worker's parsed findings as structured, not as data", async () => {
     const { WorkersBridge } = await import("../../../../src/argus/bridge/mcp-client")
