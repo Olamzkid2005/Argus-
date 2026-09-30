@@ -228,6 +228,34 @@ before the opt-in can work. `ScopeValidator.is_internal_address()` semantics mus
 (it is asserted True for loopback in `tests/test_scope_validator.py:326-329`); the block decision
 belongs in a new predicate that the only blocking call site (`orchestrator_pkg/scan.py:507`) uses.
 
+### B9 — No LLM credential on this machine can actually serve a request
+
+Found by making the first real planner call this repo has ever made (`c1cf6984`). The call now
+reaches the provider and returns a *provider-level* answer instead of a malformed-request error,
+which is what makes this credential problem visible rather than masked:
+
+| Model the registry offers | Real answer |
+|---|---|
+| `opencode-go/kimi-k2.7-code` | **403** — "an active OpenCode Go subscription is required to use Go models" |
+| `opencode/big-pickle` (free tier) | **403** — "OpenCode's free tier can only be used from within OpenCode" |
+| `deepseek/deepseek-v4-pro` | **402** — "Insufficient Balance" |
+| `xiaomi-token-plan-sgp/mimo-v2.6-pro` | **401** — "Invalid API Key" |
+
+The free-tier answer is **not** an Argus defect: OpenCode's own client on this machine returns the
+identical 403 (`bun run src/index.ts run --model opencode/big-pickle "…"`), and the account store
+(`~/.local/share/opencode/account.json`) holds per-service API keys but **no console account** — the
+device-code login that issues `access_token`/`refresh_token` (`src/account/`, `opencode console
+login`) has never been completed here. Go is a paid subscription the operator does not hold.
+
+Tried and ruled out as the cause: missing session header (fixed — `c1cf6984`), a dev-build
+`User-Agent` (`opencode/local/local/cli`, from this source checkout, versus a released version
+string — both 403 identically), and transmission loss (headers were verified on the wire against a
+local echo server before concluding anything).
+
+**Unblocking is an account action, not a code change:** sign in to OpenCode Console, subscribe to
+Go, or supply any working provider key. Until then no phase can make a real LLM call, and Step 3's
+`agent_decisions` evidence cannot exist.
+
 ---
 
 ## 4. Work plan
@@ -265,6 +293,8 @@ Ordered so that each step is independently verifiable and unblocks the next.
   and **refuses** to start when scope mode is `warn`/`open` (guardrail still live).
 
 ### Step 3 — Evidence the autonomy is real  *(2–4 days)*
+> **Blocked by B9.** The call path itself is proven — a real, bounded planner call executes end to
+> end and surfaces the provider's own error — but no credential here can complete a completion.
 - [ ] Confirm rows appear in `agent_decisions`
       (`database/migrations/012_add_agent_decision_log.sql`,
       `database/repositories/agent_decision_repository.py`) with `tool_selected`, `reasoning`,
