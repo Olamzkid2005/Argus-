@@ -385,9 +385,9 @@ export class WorkersBridge {
     }
   }
 
-  async isHealthy(): Promise<boolean> {
+  async isHealthy(timeoutMs?: number): Promise<boolean> {
     try {
-      const result = await this.sendRequest("ping", {})
+      const result = await this.sendRequest("ping", {}, timeoutMs)
       // The Python worker answers `ping` with {"pong": true, "timestamp": ...}
       // (mcp_transport.create_ping_handler), which MCPTransport._process_request
       // wraps as the JSON-RPC `result`. Older/alternative transports answer with
@@ -426,36 +426,52 @@ export class WorkersBridge {
   /** Periodic health probe — returns true if worker is responsive. */
   async probeHealth(): Promise<boolean> {
     try {
-      return await this.isHealthy()
+      return await this.isHealthy(WorkersBridge.HEALTH_PROBE_TIMEOUT_MS)
     } catch {
       return false
     }
   }
 
+  /** Probe ping timeout. A healthy *idle* worker answers in milliseconds, so a
+   *  short timeout keeps a probe from overlapping the next interval when the
+   *  worker is busy. */
+  private static readonly HEALTH_PROBE_TIMEOUT_MS = 5_000
+
+  /**
+   * Whether a failed probe justifies restarting the worker.
+   *
+   * A busy worker is not a dead worker: the worker executes tools in-process,
+   * one request at a time, so a long scan (nikto and nuclei run for minutes)
+   * blocks its `ping` until the scan returns. Restarting on that timeout used to
+   * SIGTERM the worker mid-scan — the in-flight call came back as "Process
+   * exited with code null" and every later tool failed with "Process not
+   * running". A worker that actually died is handled by its exit event, which
+   * restarts it regardless of this probe.
+   */
+  private shouldRestartAfterFailedProbe(): boolean {
+    if (this._disconnecting) return false
+    // Supervisor is handling recovery autonomously via _scheduleRecovery after
+    // the degraded cooldown — no need to trigger restarts from here.
+    if (this.supervisor.degraded) return false
+    if (this.pendingCount > 0) return false
+    return true
+  }
+
   /** Start periodic health probes every 30s while connected (blocker 15).
    *  If probeHealth() returns false, logs a warning and kicks off worker
-   *  restart via the supervisor. The supervisor handles its own recovery
-   *  from degraded mode, so this probe only triggers restarts when the
-   *  worker is NOT already in degraded mode. Uses unref() so the timer
-   *  doesn't keep the process alive. */
+   *  restart via the supervisor, unless the worker is busy or already
+   *  degraded. Uses unref() so the timer doesn't keep the process alive. */
   private _startHealthProbes(): void {
     this._stopHealthProbes()
     this._healthProbeTimer = setInterval(async () => {
       const healthy = await this.probeHealth()
-      if (!healthy) {
-        if (this.supervisor.degraded) {
-          // Supervisor is handling recovery autonomously via _scheduleRecovery
-          // after the degraded cooldown. No need to trigger restarts from here.
-          return
-        }
-        console.warn(`[MCP] Health probe failed — worker unresponsive, initiating restart`)
-        this.setLLMStatus("UNAVAILABLE")
-        if (!this._disconnecting) {
-          this.restartWorker().catch((err) => {
-            console.error(`[MCP] Worker restart from health probe failed:`, err)
-          })
-        }
-      }
+      if (healthy) return
+      if (!this.shouldRestartAfterFailedProbe()) return
+      console.warn(`[MCP] Health probe failed — worker unresponsive, initiating restart`)
+      this.setLLMStatus("UNAVAILABLE")
+      this.restartWorker().catch((err) => {
+        console.error(`[MCP] Worker restart from health probe failed:`, err)
+      })
     }, WorkersBridge.HEALTH_PROBE_INTERVAL_MS)
     this._healthProbeTimer.unref()
   }

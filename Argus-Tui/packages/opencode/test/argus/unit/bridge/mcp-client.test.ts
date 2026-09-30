@@ -775,6 +775,37 @@ describe("WorkersBridge — Edge cases", () => {
   })
 })
 
+describe("health probe restart policy", () => {
+  async function makeBridge() {
+    const { WorkersBridge } = await import("../../../../src/argus/bridge/mcp-client")
+    return new WorkersBridge("/path/to/mcp_server.py") as any
+  }
+
+  test("does not restart a busy worker — a long scan blocks the ping", async () => {
+    const bridge = await makeBridge()
+    bridge.pendingCount = 1
+    expect(bridge.shouldRestartAfterFailedProbe()).toBe(false)
+  })
+
+  test("restarts an idle worker that did not answer", async () => {
+    const bridge = await makeBridge()
+    bridge.pendingCount = 0
+    expect(bridge.shouldRestartAfterFailedProbe()).toBe(true)
+  })
+
+  test("does not restart while degraded or disconnecting", async () => {
+    const bridge = await makeBridge()
+    bridge.pendingCount = 0
+    bridge.supervisor = { degraded: true }
+    expect(bridge.shouldRestartAfterFailedProbe()).toBe(false)
+
+    const disconnecting = await makeBridge()
+    disconnecting.pendingCount = 0
+    disconnecting._disconnecting = true
+    expect(disconnecting.shouldRestartAfterFailedProbe()).toBe(false)
+  })
+})
+
 describe("worker restart races", () => {
   function fakeChild(pid: number): any {
     return { pid, killed: false, exitCode: null, stderr: { removeAllListeners: () => {} } }
