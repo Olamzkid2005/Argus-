@@ -13,8 +13,8 @@ Line numbers are from this working tree. Where something is *unverified*, it say
 
 | Tier | Definition | State |
 |---|---|---|
-| **P0 — Pipeline runs** | One command completes recon → scan → analyze → report on a local authorized target. | Reachable today, blocked by B1 |
-| **P1 — Agent decides** | Tool selection comes from the agent loop (`agent_decisions` rows written, not all `was_fallback`). | Machinery present, needs B1 + B4 |
+| **P0 — Pipeline runs** | One command completes recon → scan → analyze → report on a local authorized target. | Reachable — B1 fixed (`e4ed6102`), `doctor` 10 passed / 0 failed |
+| **P1 — Agent decides** | Tool selection comes from the agent loop (`agent_decisions` rows written, not all `was_fallback`). | Machinery present; B1 + B4 fixed, needs a run to evidence it |
 | **P2 — Signal-driven autonomy** | Phases activate from recon signals; run is unattended end-to-end; report + audit trail emitted. | **Recommended demo bar** |
 | **P3 — Multi-host red team** | Pivot/lateral movement across hosts. | Not a demo goal |
 
@@ -72,7 +72,7 @@ Verified working: `python -m cli --help` and `python -m cli list` both run.
 
 ## 3. Blockers, verified
 
-### B1 — MCP ping contract mismatch (CRITICAL, blocks all of Path A)
+### B1 — MCP ping contract mismatch (CRITICAL, blocks all of Path A) — *fixed `e4ed6102`*
 `isHealthy()` requires the literal string `"pong"`:
 
 - `Argus-Tui/packages/opencode/src/argus/bridge/mcp-client.ts:326`
@@ -242,19 +242,23 @@ which is what makes this credential problem visible rather than masked:
 | `xiaomi-token-plan-sgp/mimo-v2.6-pro` | **401** — "Invalid API Key" |
 
 The free-tier answer is **not an Argus defect**. The honest picture is narrower than "no OpenCode
-access": the **installed** OpenCode 1.18.33 *can* use Big Pickle on this machine, but only from
-this project directory —
+access": the **installed** OpenCode 1.18.33 *can* use the free tier on this machine —
 
 ```
-cd Argus-Tui/packages/opencode && opencode run --model opencode/big-pickle "Reply with exactly: PONG"
+cd Argus-Tui/packages/opencode && opencode run --model opencode/nemotron-3-ultra-free "Reply with exactly: PONG"
 → PONG                                             # works
-cd /tmp && opencode run --model opencode/big-pickle "…"
-→ 403 free tier can only be used from within OpenCode
 ```
 
-while **this source checkout** gets the 403 in either directory (`bun run src/index.ts run --model
-opencode/big-pickle "…"`). So the gate distinguishes *some* property of the official client that
-this fork does not reproduce. Ruled out by measurement, not assumption:
+…from any directory, `/tmp` included, while **this source checkout** gets the 403 in either
+directory (`bun run src/index.ts run --model opencode/big-pickle "…"`). So the gate distinguishes
+some property of the official client that this fork does not reproduce.
+
+> **Correction (measured later):** an earlier version of this section claimed the free tier worked
+> "only from this project directory". That was an artifact of `big-pickle` being intermittently
+> exhausted: the free tier is served to the installed client regardless of directory, and
+> `opencode/nemotron-3-ultra-free` answers consistently where `big-pickle` 403s on and off.
+
+Ruled out by measurement, not assumption:
 
 - **Headers.** A local capture server recorded both clients' real requests: header sets are
 equivalent (`Bearer public`, `x-opencode-client`, `x-opencode-project`, `x-opencode-request`,
@@ -284,19 +288,55 @@ subscription the operator does not hold.
 Until one of these happens no phase can make a real LLM call, and Step 3's `agent_decisions`
 evidence cannot exist.
 
+**Resolved (option 2): both runtimes now borrow the installed OpenCode client.** Argus starts — or
+reuses — a local `opencode serve` and asks *that* to make the call, so the request genuinely comes
+from OpenCode, with OpenCode's credentials:
+
+```
+Argus planner ─┐
+               ├─► local OpenCode server ─► the model OpenCode is configured to use
+Argus worker  ─┘        (installed CLI)
+```
+
+- **Planner** — `opencode-server.ts` plus the transport branch in `llm-service.ts` (`c4b9328c`).
+  Verified end to end: `MODEL_RESULT opencode/nemotron-3-ultra-free transport=server available=true
+  ms=82453 phases=9` from a real free-tier call.
+- **Worker** — `argus-workers/opencode_server_client.py`, selected by the `opencode-server` block
+  the planner hands over at `agent_init` (`75adf101`, `a7841de4`, `2c0e947e`). Verified end to end:
+  a worker call through a spawned server returned `{"tool": "httpx", "why": "Fast HTTP probing…"}`
+  in 41.8 s.
+
+Two details are load-bearing and were measured, not guessed:
+
+1. **Prompts use the read-only `plan` agent.** With the default `build` agent a free-tier reply
+   came back as a tool call instead of an answer; with *every tool denied* the request was refused
+   outright (403 `FreeTierError`). The gate wants ordinary coding-agent traffic, and `plan` is
+   both served and unable to modify anything.
+2. **The server answers HTTP 200 even when the model call fails**, reporting the provider's error
+   on `message.info.error`. Both clients read the error from the message rather than the status.
+
+What this option costs, stated plainly: an external binary is now a runtime dependency of both
+runtimes, and a free-tier call takes **30–95 s**. The budgets are written around that — 180 s per
+call, one retry at most, and a provider refusal is never retried (it would repeat identically).
+
+The other options remain open and unchanged: Go models still need a paid subscription (option 4),
+and the console device-code login (option 3) is still not completed.
+
 ---
 
 ## 4. Work plan
 
 Ordered so that each step is independently verifiable and unblocks the next.
 
-### Step 0 — Unblock Path A  *(hours)*
-- [ ] Fix **B1** (one of the two options above).
-- [ ] Add a contract test that **spawns the real worker** and asserts `isHealthy() === true`
-      against its actual `ping` payload — not a stubbed `sendRequest`.
-- [ ] Re-run `bun run src/argus/main.ts doctor`; expect MCP Worker → **PASS**.
-- **Acceptance:** doctor MCP check passes against the real `mcp_server.py`; the assertion fails if
-  either side's payload shape changes.
+### Step 0 — Unblock Path A  *(hours)*  ✅ done
+- [x] Fix **B1** (option A, both shapes accepted — `e4ed6102`).
+- [x] Add a contract test that **spawns the real worker** and asserts `isHealthy() === true`
+      against its actual `ping` payload — not a stubbed `sendRequest`
+      (`test/argus/integration/mcp-worker-contract.test.ts`).
+- [x] Re-run `bun run src/argus/main.ts doctor`; MCP Worker → **PASS**
+      (2026-09-29: 10 passed, 3 warnings, 0 failed).
+- **Acceptance met:** doctor MCP check passes against the real `mcp_server.py`; the assertion fails
+  if either side's payload shape changes.
 
 ### Step 1 — Prove the engine locally, no infra  *(1–2 days)*
 - [ ] Start an authorized local target: a `argus-workers/test_fixtures/*/app.py` Flask app
@@ -313,7 +353,8 @@ Ordered so that each step is independently verifiable and unblocks the next.
       error is no longer masked (closes **B3** — `b0a5a4fd`). Remaining: put real targets in
       `argus.config.yaml`; keep `require_confirmation` behaviour explicit.
 - [x] Model resolution fixed to OpenCode's registry in both runtimes, with the planner's choice
-      handed to the worker (closes **B4** — `0bd76813`/`b6a7a2a1`). Remaining: one real completion.
+      handed to the worker (closes **B4** — `0bd76813`/`b6a7a2a1`). A real completion now runs
+      through the local OpenCode server in both runtimes (**B9** resolved — `c4b9328c`/`2c0e947e`).
 - [x] Worker/planner interpreter selection is explicit and reported (`closes **B7**`).
 - [ ] Exercise `assess --autonomous` (implies `ARGUS_AUTONOMOUS=1` + `ARGUS_AUTO_APPROVE=1`) and
       confirm it is genuinely unattended: no prompt, no TTY dependency.
@@ -321,8 +362,16 @@ Ordered so that each step is independently verifiable and unblocks the next.
   and **refuses** to start when scope mode is `warn`/`open` (guardrail still live).
 
 ### Step 3 — Evidence the autonomy is real  *(2–4 days)*
-> **Blocked by B9.** The call path itself is proven — a real, bounded planner call executes end to
-> end and surfaces the provider's own error — but no credential here can complete a completion.
+
+> **Demo prerequisite, discovered by running `doctor`:** the registry's default model is
+> `opencode/big-pickle`, which the free tier serves *intermittently* (the same request 403s on and
+> off). Pin a model that answers for the demo:
+> `ARGUS_PLANNER_MODEL=opencode/nemotron-3-ultra-free`. `doctor` prints the model it resolved, so
+> confirm it there before starting.
+> **B9 is resolved** (`c4b9328c` planner, `2c0e947e` worker): real completions execute through a
+> local OpenCode server in both runtimes, so this step is no longer blocked by credentials. What it
+> still needs is an actual assessment run whose `agent_decisions` rows can be inspected — and the
+> latency to plan around: 30–95 s per free-tier call.
 - [ ] Confirm rows appear in `agent_decisions`
       (`database/migrations/012_add_agent_decision_log.sql`,
       `database/repositories/agent_decision_repository.py`) with `tool_selected`, `reasoning`,
