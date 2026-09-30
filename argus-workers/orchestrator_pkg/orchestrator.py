@@ -1278,8 +1278,12 @@ class Orchestrator:
                             try:
                                 created = repo.create(h)
                             except Exception as e:
-                                logger.warning(
-                                    "Hypothesis not persisted — will regenerate next cycle: %s",
+                                from database.connection import log_db_skip
+
+                                log_db_skip(
+                                    logger,
+                                    "Hypothesis not persisted — will regenerate "
+                                    "next cycle",
                                     e,
                                 )
                                 created = None
@@ -1378,9 +1382,9 @@ class Orchestrator:
                                     }
                                 )
                         except Exception as e:
-                            logger.warning(
-                                "Failed to persist hypothesis update: %s", e,
-                            )
+                            from database.connection import log_db_skip
+
+                            log_db_skip(logger, "Failed to persist hypothesis update", e)
                     # Update local hypotheses list for analysis result
                     _updated_ids = {u["hypothesis_id"] for u in updates}
                     for h in hypotheses:

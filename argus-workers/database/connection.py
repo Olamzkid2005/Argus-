@@ -22,6 +22,54 @@ logger = logging.getLogger(__name__)
 from exceptions import DatabaseConnectionError
 
 
+def local_mode_active() -> bool:
+    """True when this process runs an in-process (SQLite-backed) assessment.
+
+    Set by ``argus assess --local`` / ``argus resume --local`` (see
+    ``cli/_local_mode.py``). In that mode the engagement exists only in the
+    local SQLite database, so the PostgreSQL schema has nothing to hold for it
+    — and a call that reaches Postgres anyway fails with whatever the schema
+    happens to object to (a foreign key, a missing column, ``uuid "local"``)
+    instead of saying what is actually wrong.
+    """
+    return os.environ.get("ARGUS_LOCAL_MODE", "").lower() in ("1", "true")
+
+
+class LocalModeError(DatabaseConnectionError):
+    """Raised when a PostgreSQL connection is requested during a local run."""
+
+    def __init__(self):
+        super().__init__(
+            "ARGUS_LOCAL_MODE is set: this run keeps its state in the local "
+            "SQLite database and has no PostgreSQL engagement, so a Postgres "
+            "connection is not available. Skip the call, or run without --local."
+        )
+
+
+def log_db_skip(
+    log: logging.Logger, operation: str, exc: BaseException
+) -> None:
+    """Log a failed Postgres-only step at the level it deserves.
+
+    Callers wrap their work in ``except Exception`` and warn, which is right
+    when a store they need is broken. In a local run the store is not supposed
+    to exist at all, so the same failure is expected: log it at INFO (invisible
+    at the default CLI verbosity) instead of burying the run in warnings.
+
+    Args:
+        log: Logger of the component that skipped the step.
+        operation: What it was trying to do, e.g. "Failed to save remediation".
+        exc: The exception that stopped it.
+    """
+    if isinstance(exc, LocalModeError):
+        log.info(
+            "%s — skipped: local runs keep their state in SQLite, not Postgres",
+            operation,
+        )
+    else:
+        log.warning("%s: %s", operation, exc)
+
+
 class ConnectionManager:
     """
     Thread-safe singleton connection manager with PostgreSQL connection pooling.
@@ -97,6 +145,12 @@ class ConnectionManager:
 
     def _get_connection_string(self) -> str:
         """Get database connection string from environment with PgBouncer support"""
+        if local_mode_active():
+            # Even with DATABASE_URL present (a task module loads .env, so it
+            # comes back after the CLI pops it) a local run must not touch
+            # Postgres: the engagement is not there.
+            raise LocalModeError()
+
         conn_string = os.getenv("DATABASE_URL")
         if not conn_string:
             raise DatabaseConnectionError("DATABASE_URL environment variable not set")

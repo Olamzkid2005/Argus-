@@ -334,9 +334,11 @@ class CompliancePostureScorer:
                     return str(row[0])
                 return None
         except Exception as e:
-            logger.warning(
-                "Failed to save compliance posture snapshot for %s: %s",
-                self.engagement_id,
+            from database.connection import log_db_skip
+
+            log_db_skip(
+                logger,
+                f"Failed to save compliance posture snapshot for {self.engagement_id}",
                 e,
             )
             return None
@@ -666,9 +668,11 @@ class CompliancePostureScorer:
                 self.engagement_id,
             )
         except Exception as e:
-            logger.warning(
-                "Failed to save compliance control scores for %s: %s",
-                self.engagement_id,
+            from database.connection import log_db_skip
+
+            log_db_skip(
+                logger,
+                f"Failed to save compliance control scores for {self.engagement_id}",
                 e,
             )
         return saved

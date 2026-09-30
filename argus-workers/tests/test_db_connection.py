@@ -15,6 +15,7 @@ Covers:
 
 from __future__ import annotations
 
+import logging
 import os
 from unittest.mock import MagicMock, patch
 
@@ -23,8 +24,11 @@ import pytest
 from database.connection import (
     ConnectionManager,
     DatabaseConnectionError,
+    LocalModeError,
     connect,
     get_db,
+    local_mode_active,
+    log_db_skip,
 )
 
 
@@ -48,6 +52,63 @@ class TestConnectionManagerSingleton:
         db1 = get_db()
         db2 = get_db()
         assert db1 is db2
+
+
+class TestLocalMode:
+    """A local (SQLite-backed) run must not reach for PostgreSQL.
+
+    Regression: ``argus assess --local`` pops DATABASE_URL, but a task module
+    loads .env and brings it back, so the run wrote to Postgres anyway — with
+    failures that named foreign keys, a missing column and ``uuid "local"``
+    instead of saying there is no Postgres engagement in local mode.
+    """
+
+    def test_active_for_truthy_values(self):
+        with patch.dict(os.environ, {"ARGUS_LOCAL_MODE": "1"}, clear=False):
+            assert local_mode_active() is True
+        with patch.dict(os.environ, {"ARGUS_LOCAL_MODE": "TRUE"}, clear=False):
+            assert local_mode_active() is True
+
+    def test_inactive_by_default(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert local_mode_active() is False
+
+    def test_connection_string_refuses_postgres(self):
+        cm = ConnectionManager()
+        with patch.dict(
+            os.environ,
+            {
+                "ARGUS_LOCAL_MODE": "1",
+                "DATABASE_URL": "postgresql://user:pass@localhost/db",
+            },
+            clear=True,
+        ):
+            with pytest.raises(LocalModeError, match="ARGUS_LOCAL_MODE"):
+                cm._get_connection_string()
+
+    def test_error_stays_catchable_as_a_connection_error(self):
+        """Components that already degrade on connect failures keep degrading."""
+        assert issubclass(LocalModeError, DatabaseConnectionError)
+
+
+class TestLogDbSkip:
+    """The level a refused Postgres step deserves."""
+
+    def test_local_mode_skip_is_informational(self, caplog):
+        log = logging.getLogger("test.db_skip.local")
+        with caplog.at_level(logging.INFO, logger="test.db_skip.local"):
+            log_db_skip(log, "Failed to save remediation", LocalModeError())
+
+        assert [r.levelno for r in caplog.records] == [logging.INFO]
+        assert "local runs keep their state in SQLite" in caplog.text
+
+    def test_any_other_failure_still_warns(self, caplog):
+        log = logging.getLogger("test.db_skip.other")
+        with caplog.at_level(logging.INFO, logger="test.db_skip.other"):
+            log_db_skip(log, "Failed to save remediation", RuntimeError("boom"))
+
+        assert [r.levelno for r in caplog.records] == [logging.WARNING]
+        assert "Failed to save remediation: boom" in caplog.text
 
 
 class TestConnectionString:

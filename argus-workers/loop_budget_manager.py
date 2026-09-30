@@ -146,9 +146,11 @@ class LoopBudgetManager:
         except Exception as e:
             import logging
 
-            logging.getLogger(__name__).warning(
-                "Failed to persist budget for engagement %s: %s",
-                self.engagement_id,
+            from database.connection import log_db_skip
+
+            log_db_skip(
+                logging.getLogger(__name__),
+                f"Failed to persist budget for engagement {self.engagement_id}",
                 e,
             )
 

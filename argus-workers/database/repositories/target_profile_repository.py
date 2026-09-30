@@ -220,7 +220,9 @@ class TargetProfileRepository:
             return dict(zip(columns, row, strict=False)) if row else None
 
         except Exception as e:
-            logger.error("Failed to upsert target profile for %s: %s", domain, e)
+            from database.connection import log_db_skip
+
+            log_db_skip(logger, f"Failed to upsert target profile for {domain}", e)
             return None
 
     # ── Profile reading ─────────────────────────────────────────────
@@ -248,7 +250,9 @@ class TargetProfileRepository:
                 row = cursor.fetchone()
                 return dict(zip(columns, row, strict=False)) if row else None
         except Exception as e:
-            logger.warning("Could not load target profile: %s", e)
+            from database.connection import log_db_skip
+
+            log_db_skip(logger, "Could not load target profile", e)
             return None
 
     # ── LLM prompt section builder ──────────────────────────────────

@@ -109,7 +109,9 @@ class ToolAccuracyRepository:
                 )
                 return {row[0]: float(row[1]) for row in cursor.fetchall()}
         except Exception as e:
-            logger.warning("Could not load tool_accuracy: %s", e)
+            from database.connection import log_db_skip
+
+            log_db_skip(logger, "Could not load tool_accuracy", e)
             return {}
 
     # ── Save ML-estimated FP rates ──────────────────────────────────

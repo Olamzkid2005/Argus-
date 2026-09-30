@@ -12,6 +12,16 @@ import cli._local_mode as local_mode
 logger = logging.getLogger("cli.cmd")
 
 
+def _set_status(eng_repo, engagement_id: str, status: str) -> None:
+    """Record the assessment outcome, without failing the run over it."""
+    try:
+        eng_repo.update_by_id(engagement_id, {"status": status})
+    except Exception:
+        logger.debug(
+            "Could not mark engagement %s as %s", engagement_id, status, exc_info=True
+        )
+
+
 def cmd_assess(args: argparse.Namespace) -> int:
     """Run a full assessment: recon -> scan -> analyze -> report."""
     target = args.target
@@ -70,11 +80,15 @@ def cmd_assess(args: argparse.Namespace) -> int:
             trace_id=trace_id,
         )
 
+        # Reflect the outcome in the engagement row: `argus list` shows the
+        # status, and a run that never wrote it stayed "created" forever.
         if exit_code != 0:
+            _set_status(eng_repo, eng_id, "failed")
             return exit_code
 
         # Output results
         local_mode._output_results(eng_id, target, finding_repo, args.output)
+        _set_status(eng_repo, eng_id, "completed")
 
         # Clean up checkpoints
         if cp_mgr is not None:

@@ -12,7 +12,12 @@ import logging
 import uuid
 
 from attack_graph import AttackGraph
-from database.connection import connect, get_db
+from database.connection import (
+    LocalModeError,
+    connect,
+    get_db,
+    local_mode_active,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +43,16 @@ class AttackGraphRepository:
         self.db_conn_string = db_connection_string
 
     def _get_connection(self):
-        """Get a database connection."""
+        """Get a database connection.
+
+        An explicit connection string bypasses the shared pool, and with it the
+        pool's local-mode guard — measure without this check: a local run wrote
+        attack_paths into Postgres and died on the
+        attack_paths_engagement_id_fkey constraint instead of saying the
+        engagement is not there.
+        """
+        if local_mode_active():
+            raise LocalModeError()
         if self.db_conn_string:
             return connect(self.db_conn_string)
         return get_db().get_connection()
@@ -73,6 +87,16 @@ class AttackGraphRepository:
 
         _ = AG  # type hint reference, avoid redef
         # graph is already parameter of type AttackGraph
+
+        if local_mode_active():
+            # attack_paths is a Postgres store and local runs have no Postgres
+            # engagement. The graph itself is kept in memory by the caller.
+            logger.info(
+                "Local mode: attack paths for %s are in-memory only "
+                "(attack_paths is a Postgres store).",
+                engagement_id,
+            )
+            return 0
 
         conn = None
         cursor = None

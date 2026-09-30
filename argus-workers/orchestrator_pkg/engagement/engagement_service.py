@@ -36,10 +36,10 @@ class EngagementService:
                     return list(row[0])
                 return []
         except Exception as e:
-            logger.warning(
-                "Failed to load priority_vuln_classes for %s: %s",
-                engagement_id,
-                e,
+            from database.connection import log_db_skip
+
+            log_db_skip(
+                logger, f"Failed to load priority_vuln_classes for {engagement_id}", e
             )
             return []
 
@@ -93,11 +93,9 @@ class EngagementService:
                     return dict(scope_str)
                 return None
         except Exception as e:
-            logger.warning(
-                "Failed to load authorized_scope for %s: %s",
-                engagement_id,
-                e,
-            )
+            from database.connection import log_db_skip
+
+            log_db_skip(logger, f"Failed to load authorized_scope for {engagement_id}", e)
             return None
 
     @staticmethod
@@ -143,9 +141,11 @@ class EngagementService:
                     scope_config.get("mode", "unknown"),
                 )
             except Exception as e:
-                logger.warning(
-                    "Failed to persist scope config for %s: %s",
-                    engagement_id,
+                from database.connection import log_db_skip
+
+                log_db_skip(
+                    logger,
+                    f"Failed to persist scope config for {engagement_id}",
                     e,
                 )
             return
@@ -172,11 +172,9 @@ class EngagementService:
                     scope_config.get("mode", "unknown"),
                 )
         except Exception as e:
-            logger.warning(
-                "Failed to persist scope config for %s: %s",
-                engagement_id,
-                e,
-            )
+            from database.connection import log_db_skip
+
+            log_db_skip(logger, f"Failed to persist scope config for {engagement_id}", e)
 
     @staticmethod
     def load_scope_config(engagement_id: str, repo=None) -> dict | None:
@@ -205,10 +203,10 @@ class EngagementService:
                     stored = json.loads(stored)
                 return dict(stored) if isinstance(stored, dict) else None
             except Exception as e:
-                logger.warning(
-                    "Failed to load scope config for %s: %s",
-                    engagement_id,
-                    e,
+                from database.connection import log_db_skip
+
+                log_db_skip(
+                    logger, f"Failed to load scope config for {engagement_id}", e
                 )
                 return None
 
@@ -229,11 +227,9 @@ class EngagementService:
                         return dict(raw)
                 return None
         except Exception as e:
-            logger.warning(
-                "Failed to load scope config for %s: %s",
-                engagement_id,
-                e,
-            )
+            from database.connection import log_db_skip
+
+            log_db_skip(logger, f"Failed to load scope config for {engagement_id}", e)
             return None
 
     @staticmethod

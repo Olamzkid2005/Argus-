@@ -92,7 +92,9 @@ class CustomRulesService:
                 )
                 return org_rules
         except Exception as e:
-            logger.warning("Failed to load custom rules: %s", e)
+            from database.connection import log_db_skip
+
+            log_db_skip(logger, "Failed to load custom rules", e)
             return []
 
     @staticmethod

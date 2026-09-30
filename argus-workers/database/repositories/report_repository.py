@@ -156,7 +156,9 @@ class ReportRepository:
                 row = cursor.fetchone()
                 return str(row[0]) if row else None
         except Exception as e:
-            logger.warning("Failed to upsert report: %s", e)
+            from database.connection import log_db_skip
+
+            log_db_skip(logger, "Failed to upsert report", e)
             return None
 
     def get_report(self, engagement_id: str) -> dict | None:

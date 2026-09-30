@@ -410,11 +410,10 @@ class FindingPersistenceService:
                 )
                 return cursor.rowcount > 0
         except Exception as e:
-            logger.warning(
-                "Failed to save %s for finding %s: %s",
-                log_label,
-                finding_id,
-                e,
+            from database.connection import log_db_skip
+
+            log_db_skip(
+                logger, f"Failed to save {log_label} for finding {finding_id}", e
             )
             return False
 

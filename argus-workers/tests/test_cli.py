@@ -486,5 +486,86 @@ class TestCLIEdgeCases:
         assert args.db == "custom.db"
 
 
+class TestLocalRunReporting:
+    """A finished local run must be readable from the CLI.
+
+    Step 1 acceptance: findings land in SQLite and are retrievable via
+    ``argus list`` / ``argus report``.
+    """
+
+    def _seed(self, db_path: str, findings: int = 3) -> str:
+        from database.sqlite_backend import SQLiteEngagementRepo, SQLiteFindingRepo
+
+        engagement = SQLiteEngagementRepo(db_path).create(
+            {
+                "target_url": "http://127.0.0.1:9",
+                "org_id": "local",
+                "status": "created",
+                "scan_type": "url",
+                "created_by": "cli",
+            }
+        )
+        finding_repo = SQLiteFindingRepo(db_path)
+        for i in range(findings):
+            finding_repo.create_finding(
+                engagement_id=engagement["id"],
+                finding_type="OPEN_PORT",
+                severity="MEDIUM",
+                endpoint=f":{1000 + i}",
+                evidence={},
+                confidence=1.0,
+                source_tool="naabu",
+            )
+        return engagement["id"]
+
+    def test_list_counts_the_findings_it_reports(self, tmp_path, capsys):
+        from cli.cmd.list import cmd_list
+
+        db_path = str(tmp_path / "list.db")
+        self._seed(db_path, findings=3)
+
+        assert cmd_list(argparse.Namespace(local=False, db=db_path, limit=10)) == 0
+
+        out = capsys.readouterr().out
+        row = next(line for line in out.splitlines() if "127.0.0.1:9" in line)
+        assert row.split()[-1] == "3"  # findings column
+
+    def test_list_shows_zero_for_an_engagement_with_no_findings(
+        self, tmp_path, capsys
+    ):
+        from cli.cmd.list import cmd_list
+
+        db_path = str(tmp_path / "empty.db")
+        self._seed(db_path, findings=0)
+
+        assert cmd_list(argparse.Namespace(local=False, db=db_path, limit=10)) == 0
+        row = next(
+            line for line in capsys.readouterr().out.splitlines() if "127.0.0.1:9" in line
+        )
+        assert row.split()[-1] == "0"
+
+    def test_assess_records_the_outcome_on_the_engagement(self, tmp_path):
+        """`argus list` shows the status, so a finished run must set it."""
+        from cli.cmd.assess import _set_status
+        from database.sqlite_backend import SQLiteEngagementRepo
+
+        db_path = str(tmp_path / "status.db")
+        eng_repo = SQLiteEngagementRepo(db_path)
+        engagement_id = self._seed(db_path)
+
+        _set_status(eng_repo, engagement_id, "completed")
+
+        assert eng_repo.find_by_id(engagement_id)["status"] == "completed"
+
+    def test_status_update_failure_does_not_break_the_run(self):
+        from cli.cmd.assess import _set_status
+
+        class BrokenRepo:
+            def update_by_id(self, engagement_id, updates):
+                raise RuntimeError("database gone")
+
+        _set_status(BrokenRepo(), "eng-1", "completed")  # must not raise
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
