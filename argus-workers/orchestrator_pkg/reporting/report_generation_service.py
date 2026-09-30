@@ -91,9 +91,13 @@ class ReportGenerationService:
             )
             emit_thinking(self.engagement_id, "LLM report generated successfully")
         except Exception as e:
+            # Keep the traceback: without it a bare "'str' object has no attribute
+            # 'get'" says nothing about which step of the pipeline produced a
+            # string where a dict was expected.
             logger.warning(
                 "LLM report generation failed (non-fatal): %s",
                 e,
+                exc_info=True,
             )
 
         return report_data

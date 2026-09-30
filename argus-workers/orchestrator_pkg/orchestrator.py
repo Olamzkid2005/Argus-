@@ -50,6 +50,37 @@ from .repo_scan import execute_repo_scan
 
 logger = logging.getLogger(__name__)
 
+#: Severity ranks for the verification threshold. This is the numbering the
+#: TypeScript side uses (``shared/types.ts``: INFO 0 … CRITICAL 4), which is what
+#: ``run_verification``'s callers mean by ``threshold: 3``, and what
+#: ``repo_scan.py`` already maps findings onto.
+_SEVERITY_RANKS: dict[str, int] = {
+    "INFO": 0,
+    "LOW": 1,
+    "MEDIUM": 2,
+    "HIGH": 3,
+    "CRITICAL": 4,
+}
+
+
+def _severity_rank(value: object) -> int:
+    """Rank a severity given either as a name (``"HIGH"``) or as a rank (``3``).
+
+    Findings carry severity *names*, while ``run_verification``'s callers pass a
+    numeric threshold. Comparing the two forms directly raised ``TypeError`` on
+    every real run — auto-verification of HIGH/CRITICAL findings never happened,
+    and the run reported ``verified: 0`` — because the unit tests build findings
+    with numeric severities while the parsers emit names.
+
+    A severity that is neither a known name nor a number ranks below INFO, so an
+    unrecognized value is never verified by accident.
+    """
+    if isinstance(value, bool):  # bool is an int subclass; never a severity
+        return -1
+    if isinstance(value, (int, float)):
+        return int(value)
+    return _SEVERITY_RANKS.get(str(value or "").strip().upper(), -1)
+
 
 class Orchestrator:
     _atexit_registered = False
@@ -1533,9 +1564,10 @@ class Orchestrator:
             }
 
         # Filter findings by severity
+        threshold_rank = _severity_rank(threshold)
         candidates = [
             f for f in findings
-            if f.get("severity", 0) >= threshold
+            if _severity_rank(f.get("severity")) >= threshold_rank
         ]
 
         if not candidates:
@@ -1554,8 +1586,10 @@ class Orchestrator:
                 ),
             }
 
-        # Limit to max_to_verify most severe findings
-        candidates.sort(key=lambda f: f.get("severity", 0), reverse=True)
+        # Limit to max_to_verify most severe findings. Sorting the raw severity
+        # would order names alphabetically (MEDIUM before HIGH, INFO before
+        # CRITICAL), picking the wrong findings when max_to_verify bites.
+        candidates.sort(key=lambda f: _severity_rank(f.get("severity")), reverse=True)
         to_verify = candidates[:max_to_verify]
 
         # ── Phase 1: Run finding_verifier HTTP probes for verifiable types ──

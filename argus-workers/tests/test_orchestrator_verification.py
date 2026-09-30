@@ -48,7 +48,7 @@ _heavy_deps_patcher = patch.dict(
     },
 )
 _heavy_deps_patcher.start()
-from orchestrator_pkg.orchestrator import Orchestrator
+from orchestrator_pkg.orchestrator import Orchestrator, _severity_rank
 
 _heavy_deps_patcher.stop()
 # Avoid retaining an orchestrator imported while OpenTelemetry is mocked.
@@ -100,6 +100,78 @@ class TestRunVerification:
         assert result["status"] == "skipped"
         assert result["findings_to_verify"] == 0
         orch.ws_publisher.publish_scanner_activity.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("INFO", 0),
+            ("low", 1),
+            (" HIGH ", 3),
+            ("CRITICAL", 4),
+            (3, 3),
+            (4.0, 4),
+            ("nonsense", -1),
+            (None, -1),
+            (True, -1),
+        ],
+    )
+    def test_severity_rank_accepts_names_and_ranks(self, value, expected):
+        assert _severity_rank(value) == expected
+
+    def test_selects_named_severities_like_the_parsers_emit(self, orch):
+        """Findings carry names ("HIGH"), the threshold is a rank (3 = HIGH).
+
+        Comparing the two directly raised TypeError on every real run, so no
+        HIGH/CRITICAL finding was ever auto-verified — the unit tests here build
+        findings with numeric severities, which is why it shipped.
+        """
+
+        async def _vfy(finding, engagement_id=""):
+            return {
+                "id": finding.get("id"),
+                "type": "xss",
+                "endpoint": finding.get("endpoint", ""),
+                "verification": {"verified": True},
+            }
+
+        findings = [
+            {"id": "h1", "severity": "HIGH", "type": "XSS", "endpoint": "https://example.com"},
+            {"id": "c1", "severity": "CRITICAL", "type": "XSS", "endpoint": "https://example.com"},
+            {"id": "m1", "severity": "MEDIUM", "type": "XSS", "endpoint": "https://example.com"},
+        ]
+        with patch("tools.finding_verifier.verify_finding") as mock_vfy:
+            mock_vfy.side_effect = _vfy
+            result = Orchestrator.run_verification(
+                orch, {"findings": findings, "threshold": SEVERITY_HIGH, "max_to_verify": 10}
+            )
+
+        assert result["findings_to_verify"] == 2
+        assert set(result["verified_ids"]) == {"h1", "c1"}
+
+    def test_named_severities_sort_by_rank_not_alphabetically(self, orch):
+        """Alphabetically MEDIUM beats HIGH and INFO beats CRITICAL."""
+
+        async def _vfy(finding, engagement_id=""):
+            return {
+                "id": finding.get("id"),
+                "type": "xss",
+                "endpoint": finding.get("endpoint", ""),
+                "verification": {"verified": True},
+            }
+
+        findings = [
+            {"id": "m1", "severity": "MEDIUM", "type": "XSS", "endpoint": "https://example.com"},
+            {"id": "i1", "severity": "INFO", "type": "XSS", "endpoint": "https://example.com"},
+            {"id": "h1", "severity": "HIGH", "type": "XSS", "endpoint": "https://example.com"},
+            {"id": "c1", "severity": "CRITICAL", "type": "XSS", "endpoint": "https://example.com"},
+        ]
+        with patch("tools.finding_verifier.verify_finding") as mock_vfy:
+            mock_vfy.side_effect = _vfy
+            result = Orchestrator.run_verification(
+                orch, {"findings": findings, "threshold": SEVERITY_HIGH, "max_to_verify": 1}
+            )
+
+        assert result["verified_ids"] == ["c1"]
 
     def test_skips_when_all_below_threshold(self, orch):
         result = Orchestrator.run_verification(orch, {
