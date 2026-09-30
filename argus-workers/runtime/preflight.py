@@ -38,6 +38,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import ClassVar
 
+from config.llm_env import (
+    ALLOW_AMBIENT_ENV_VAR,
+    ambient_llm_env_allowed,
+    ignored_ambient_llm_env_vars,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -415,33 +421,63 @@ def _check_dns(timeout: float = 2.0) -> CheckResult:
 
 
 def _check_llm_config() -> CheckResult:
-    """Check if LLM API keys are configured.
+    """Check if the LLM is configured *for Argus*.
 
-    Checks for any of the supported LLM provider API keys in the environment.
+    Argus resolves its key from ``LLM_API_KEY``. Ambient provider variables
+    (``OPENAI_API_KEY`` and friends) belong to whichever tool exported them and
+    are ignored unless ``ARGUS_ALLOW_AMBIENT_LLM_ENV=1`` opted in — reporting OK
+    because of one of those would be misleading about which provider a run will
+    actually use. See config/llm_env.py.
+
     Does NOT make a network call — only checks env vars.
     """
-    _PROVIDER_ENV_KEYS = {
+    _OWN_ENV_KEYS = {
+        "LLM_API_KEY": "Argus LLM_API_KEY",
+    }
+    _AMBIENT_ENV_KEYS = {
         "OPENAI_API_KEY": "OpenAI",
         "ANTHROPIC_API_KEY": "Anthropic",
         "GEMINI_API_KEY": "Gemini",
         "OPENROUTER_API_KEY": "OpenRouter",
         "AZURE_OPENAI_API_KEY": "Azure OpenAI",
-        "LLM_API_KEY": "Generic LLM",
     }
 
-    configured = []
-    for env_key, provider in _PROVIDER_ENV_KEYS.items():
-        value = os.environ.get(env_key, "")
-        if value and not value.startswith("your_"):
-            # Mask the key for the report
-            masked = value[:8] + "..." + value[-4:] if len(value) > 12 else "(set)"
-            configured.append(f"{provider} ({masked})")
+    def _usable(value: str) -> bool:
+        return bool(value) and not value.startswith("your_")
+
+    def _mask(value: str) -> str:
+        return value[:8] + "..." + value[-4:] if len(value) > 12 else "(set)"
+
+    configured = [
+        f"{provider} ({_mask(os.environ.get(env_key, ''))})"
+        for env_key, provider in _OWN_ENV_KEYS.items()
+        if _usable(os.environ.get(env_key, ""))
+    ]
+
+    if ambient_llm_env_allowed():
+        configured.extend(
+            f"{provider} ({_mask(os.environ.get(env_key, ''))})"
+            for env_key, provider in _AMBIENT_ENV_KEYS.items()
+            if _usable(os.environ.get(env_key, ""))
+        )
 
     if configured:
         return CheckResult(
             name="llm_config",
             severity=CheckSeverity.OK,
             message=f"LLM configured: {', '.join(configured)}",
+        )
+
+    ignored = ignored_ambient_llm_env_vars()
+    if ignored:
+        return CheckResult(
+            name="llm_config",
+            severity=CheckSeverity.WARNING,
+            message="No LLM key configured for Argus",
+            detail=f"Ignoring ambient {', '.join(ignored)} — those belong to whichever tool "
+            f"exported them. Set LLM_API_KEY for Argus, or {ALLOW_AMBIENT_ENV_VAR}=1 to "
+            f"use the ambient key. Without an LLM the agent runs in fallback mode "
+            f"(deterministic tool execution, no intelligent replanning).",
         )
 
     return CheckResult(
@@ -451,7 +487,7 @@ def _check_llm_config() -> CheckResult:
         detail="No supported LLM provider API keys found in environment. "
         "Without an LLM, the agent will operate in fallback mode "
         "(deterministic tool execution, no intelligent replanning). "
-        "Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY.",
+        "Set LLM_API_KEY.",
     )
 
 

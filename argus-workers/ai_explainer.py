@@ -13,6 +13,8 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
+from config.llm_env import resolve_llm_api_key
+
 logger = logging.getLogger(__name__)
 
 
@@ -570,7 +572,7 @@ Keep response under 500 tokens. Be factual and specific."""
         # Try OpenRouter embeddings endpoint (for sk-or- keys)
         import os
 
-        api_key = getattr(self.llm_client, "api_key", None) or os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+        api_key = getattr(self.llm_client, "api_key", None) or resolve_llm_api_key()
         if api_key and api_key.startswith("sk-or-"):
             try:
                 import httpx

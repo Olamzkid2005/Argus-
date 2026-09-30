@@ -308,11 +308,33 @@ class TestCheckLLMConfig:
             assert result.severity == CheckSeverity.WARNING
             assert "No LLM API keys" in result.message
 
-    def test_with_openai_key_returns_ok(self):
-        """When OPENAI_API_KEY is set, returns OK."""
+    def test_with_llm_api_key_returns_ok(self):
+        """When Argus's own LLM_API_KEY is set, returns OK."""
+        from runtime.preflight import CheckSeverity, _check_llm_config
+
+        with patch.dict(os.environ, {"LLM_API_KEY": "sk-test-key-12345"}, clear=True):
+            result = _check_llm_config()
+            assert result.severity == CheckSeverity.OK
+            assert "LLM_API_KEY" in result.message
+
+    def test_with_only_ambient_key_returns_warning(self):
+        """An ambient OPENAI_API_KEY does not configure Argus, so it must not report OK."""
         from runtime.preflight import CheckSeverity, _check_llm_config
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key-12345"}, clear=True):
+            result = _check_llm_config()
+            assert result.severity == CheckSeverity.WARNING
+            assert "OPENAI_API_KEY" in (result.detail or "")
+
+    def test_with_ambient_key_and_opt_in_returns_ok(self):
+        """ARGUS_ALLOW_AMBIENT_LLM_ENV=1 makes the ambient key count."""
+        from runtime.preflight import CheckSeverity, _check_llm_config
+
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "sk-test-key-12345", "ARGUS_ALLOW_AMBIENT_LLM_ENV": "1"},
+            clear=True,
+        ):
             result = _check_llm_config()
             assert result.severity == CheckSeverity.OK
             assert "OpenAI" in result.message

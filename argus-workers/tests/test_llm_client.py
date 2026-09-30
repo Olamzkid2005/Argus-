@@ -51,10 +51,30 @@ class TestLLMClientInit:
             assert client.api_key == "sk-test-12345"
             assert client.is_available() is True
 
-    def test_api_key_from_env(self):
+    def test_ambient_openai_key_is_ignored_by_default(self):
+        # Regression: the worker used to pick OPENAI_API_KEY out of the ambient
+        # environment, silently running whichever provider exported it.
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-env-abc"}, clear=True):
             client = LLMClient()
+            assert client.api_key is None
+
+    def test_ambient_key_used_when_explicitly_opted_in(self):
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "sk-env-abc", "ARGUS_ALLOW_AMBIENT_LLM_ENV": "1"},
+            clear=True,
+        ):
+            client = LLMClient()
             assert client.api_key == "sk-env-abc"
+
+    def test_llm_api_key_preferred_over_ambient(self):
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "sk-ambient", "LLM_API_KEY": "sk-own"},
+            clear=True,
+        ):
+            client = LLMClient()
+            assert client.api_key == "sk-own"
 
     def test_api_key_llm_env(self):
         with patch.dict(os.environ, {"LLM_API_KEY": "sk-llm-key"}, clear=True):

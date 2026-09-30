@@ -4,9 +4,13 @@ Supports both async and sync calls with retry logic.
 
 API key resolution order (first found wins):
 1. Explicit api_key parameter passed to constructor
-2. OPENAI_API_KEY environment variable
-3. LLM_API_KEY environment variable
+2. LLM_API_KEY environment variable (Argus's own configuration)
+3. Database user_settings (scoped to user_email)
 4. Redis key settings:*:openrouter_api_key (configured via UI Settings page)
+
+Ambient provider variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...) belong to
+whichever tool exported them and are NOT used unless
+ARGUS_ALLOW_AMBIENT_LLM_ENV=1 is set — see config/llm_env.py.
 """
 
 import asyncio
@@ -18,6 +22,7 @@ import time
 from dataclasses import dataclass
 
 from config.constants import LLM_AGENT_COST_PER_1K_INPUT, LLM_AGENT_COST_PER_1K_OUTPUT
+from config.llm_env import resolve_llm_api_key
 from exceptions import LLMUnavailableError
 from utils.logging_utils import ScanLogger
 
@@ -58,10 +63,12 @@ class LLMClient:
 
         API key resolution order:
         1. Explicit api_key parameter
-        2. OPENAI_API_KEY environment variable
-        3. LLM_API_KEY environment variable
-        4. Database user_settings (scoped to user_email if provided)
-        5. Redis key settings:{user_email}:openrouter_api_key (from UI Settings page)
+        2. LLM_API_KEY environment variable (Argus's own configuration)
+        3. Database user_settings (scoped to user_email if provided)
+        4. Redis key settings:{user_email}:openrouter_api_key (from UI Settings page)
+
+        Ambient provider variables are ignored unless ARGUS_ALLOW_AMBIENT_LLM_ENV=1
+        (config/llm_env.py).
 
         Args:
             provider: "openai" or "generic". Auto-detects from env if None.
@@ -81,12 +88,11 @@ class LLMClient:
         self.max_retries = max_retries
         self._user_email = user_email
 
-        # Resolve API key: explicit > env var > DB (user_settings) > Redis (UI Settings)
+        # Resolve API key: explicit > Argus's own env vars > DB > Redis.
+        # Ambient provider vars are opt-in only (config/llm_env.py).
         # DB and Redis lookups are scoped to user_email when available (M-v5-01).
         resolved_key: str | None = (
-            api_key
-            or os.getenv("OPENAI_API_KEY")
-            or os.getenv("LLM_API_KEY")
+            resolve_llm_api_key(api_key)
             or self._load_key_from_db()
             or self._load_key_from_redis(redis_url)
         )

@@ -17,6 +17,19 @@ import time
 from pathlib import Path
 from typing import Any
 
+# Load Argus's own worker configuration (LLM_MODEL / LLM_API_KEY / DATABASE_URL)
+# from argus-workers/.env. Without this the worker only saw whatever the parent
+# shell exported, so it fell back to an ambient provider key — or to no key at
+# all. Ambient provider keys are additionally ignored by policy
+# (config/llm_env.py); an explicitly exported variable still wins because
+# load_dotenv() does not override existing values.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parent / ".env")
+except ImportError:  # python-dotenv is optional at runtime
+    pass
+
 from agent.react_agent import ReActAgent
 from agent.session_store import AgentSessionStore, ToolExecution
 from agent.tool_registry import ToolRegistry

@@ -878,7 +878,8 @@ class TestGenerateEmbedding:
         mock_httpx.AsyncClient.return_value.__aenter__.return_value.post = AsyncMock(
             return_value=mock_response
         )
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-or-v1-test-key"}):
+        # Argus's own key variable — an ambient OPENAI_API_KEY is ignored.
+        with patch.dict("os.environ", {"LLM_API_KEY": "sk-or-v1-test-key"}):
             with patch.dict("sys.modules", {"httpx": mock_httpx}):
                 result = await explainer.generate_embedding("test text")
                 assert result == [0.7, 0.8, 0.9]
