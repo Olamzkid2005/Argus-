@@ -241,20 +241,48 @@ which is what makes this credential problem visible rather than masked:
 | `deepseek/deepseek-v4-pro` | **402** — "Insufficient Balance" |
 | `xiaomi-token-plan-sgp/mimo-v2.6-pro` | **401** — "Invalid API Key" |
 
-The free-tier answer is **not** an Argus defect: OpenCode's own client on this machine returns the
-identical 403 (`bun run src/index.ts run --model opencode/big-pickle "…"`), and the account store
-(`~/.local/share/opencode/account.json`) holds per-service API keys but **no console account** — the
-device-code login that issues `access_token`/`refresh_token` (`src/account/`, `opencode console
-login`) has never been completed here. Go is a paid subscription the operator does not hold.
+The free-tier answer is **not an Argus defect**. The honest picture is narrower than "no OpenCode
+access": the **installed** OpenCode 1.18.33 *can* use Big Pickle on this machine, but only from
+this project directory —
 
-Tried and ruled out as the cause: missing session header (fixed — `c1cf6984`), a dev-build
-`User-Agent` (`opencode/local/local/cli`, from this source checkout, versus a released version
-string — both 403 identically), and transmission loss (headers were verified on the wire against a
-local echo server before concluding anything).
+```
+cd Argus-Tui/packages/opencode && opencode run --model opencode/big-pickle "Reply with exactly: PONG"
+→ PONG                                             # works
+cd /tmp && opencode run --model opencode/big-pickle "…"
+→ 403 free tier can only be used from within OpenCode
+```
 
-**Unblocking is an account action, not a code change:** sign in to OpenCode Console, subscribe to
-Go, or supply any working provider key. Until then no phase can make a real LLM call, and Step 3's
-`agent_decisions` evidence cannot exist.
+while **this source checkout** gets the 403 in either directory (`bun run src/index.ts run --model
+opencode/big-pickle "…"`). So the gate distinguishes *some* property of the official client that
+this fork does not reproduce. Ruled out by measurement, not assumption:
+
+- **Headers.** A local capture server recorded both clients' real requests: header sets are
+equivalent (`Bearer public`, `x-opencode-client`, `x-opencode-project`, `x-opencode-request`,
+`x-opencode-session`, same body keys, same model, same `stream_options`).
+- **User-Agent.** Four variants against the live gateway, including the working client's exact UA
+  string and no UA at all — all 403.
+- **The session header** (fixed — `c1cf6984`): that was a *different*, real defect
+  (`MissingSessionID`); fixing it is what let this credential question become visible.
+- **Transmission loss.** Headers were verified on the wire before any of the above was concluded.
+
+The account store (`~/.local/share/opencode/account.json`) holds per-service API keys but **no
+console account** — the device-code login that issues `access_token`/`refresh_token`
+(`src/account/`, `opencode console login`) has never been completed here — and Go is a paid
+subscription the operator does not hold.
+
+**Options, in order of what they cost:**
+
+1. **Supply any working key** — a provider key Argus can use directly. Both runtimes already run on
+   one model (`b6a7a2a1`), so this is a config change plus a verification run, not a build.
+2. **Route Argus's LLM calls through the installed, working OpenCode client** (e.g. its server
+   API) instead of calling a gateway directly. Keeps "OpenCode's own AI" literally, but is a design
+   decision — it makes an external binary a runtime dependency of both the planner and the worker.
+3. **Sign in to OpenCode Console** (device-code login) and retest; the free-tier gate may be tied
+   to that account identity rather than to anything visible in the request.
+4. **Subscribe to Go** — `opencode-go/kimi-k2.7-code` then works; its routing was verified fixed.
+
+Until one of these happens no phase can make a real LLM call, and Step 3's `agent_decisions`
+evidence cannot exist.
 
 ---
 
