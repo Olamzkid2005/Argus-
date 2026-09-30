@@ -120,6 +120,9 @@ describe("formatFindingsSummary", () => {
       findBestTools: mock(() => []),
       setConfig: mock(() => {}),
       getToolTimeout: mock(() => 120),
+      setWorkerToolStatus: mock(() => []),
+      getWorkerBlockReason: mock(() => undefined),
+      isWorkerBlocked: mock(() => false),
     }
 
     const mockPlanner = {

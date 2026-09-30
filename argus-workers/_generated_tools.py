@@ -51,7 +51,7 @@ _register(ToolDefinition(
     name="amass",
     description="Subdomain enumeration and reconnaissance tool",
     phases=["recon"],
-    default_args=["enum", "-json"],
+    default_args=["enum"],
     parameters=[
     ToolParameter(name="target", description="Target domain", required=True, flag="-d"),
     ToolParameter(name="brute", description="Enable brute forcing", flag="-brute"),
@@ -216,6 +216,7 @@ _register(ToolDefinition(
 ],
     timeout=120,
     signal_quality=SignalQuality.CANDIDATE,
+    required_env=("PDCP_API_KEY",),
     priority=30,
     cost="low",
     risk_level="low",
@@ -226,7 +227,6 @@ _register(ToolDefinition(
     name="cloud_enum",
     description="Cloud asset enumeration tool (AWS, Azure, GCP)",
     phases=["recon", "scan"],
-    default_args=["--json"],
     parameters=[
     ToolParameter(name="target", description="Target domain or keyword", required=True, flag="-k"),
 ],
@@ -475,12 +475,12 @@ _register(ToolDefinition(
     name="github-endpoints",
     description="Enumerate GitHub repositories and exposed endpoints for a target",
     phases=["recon"],
-    default_args=["--json"],
     parameters=[
-    ToolParameter(name="target", description="Target organization or domain", required=True),
+    ToolParameter(name="target", description="Target domain (github-endpoints searches for repos mentioning it)", required=True, flag="-d"),
 ],
     timeout=180,
     signal_quality=SignalQuality.CANDIDATE,
+    required_env=("GITHUB_TOKEN",),
     priority=30,
     cost="low",
     risk_level="low",
@@ -647,7 +647,7 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="masscan",
     description="Massive-scale port scanner (entire internet in minutes)",
-    phases=["recon"],
+    phases=[],
     default_args=["--rate", "1000", "--output-format", "json"],
     parameters=[
     ToolParameter(name="target", description="Target CIDR range or IP", required=True, flag="--range"),
@@ -886,9 +886,9 @@ _register(ToolDefinition(
     name="s3scanner",
     description="Amazon S3 bucket discovery and enumeration",
     phases=["recon", "scan"],
-    default_args=["--json"],
+    default_args=["-json"],
     parameters=[
-    ToolParameter(name="target", description="Bucket name or domain", required=True),
+    ToolParameter(name="target", description="Bucket name to check", required=True, flag="-bucket"),
 ],
     timeout=180,
     signal_quality=SignalQuality.CANDIDATE,
@@ -937,8 +937,8 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="shuffledns",
     description="Mass DNS resolver for resolved subdomain enumeration",
-    phases=["recon"],
-    default_args=["-silent", "-json"],
+    phases=[],
+    default_args=["-silent"],
     parameters=[
     ToolParameter(name="target", description="Subdomain list or domain", required=True, flag="-d"),
     ToolParameter(name="wordlist", description="Wordlist for brute forcing", flag="-w"),
@@ -1103,6 +1103,7 @@ _register(ToolDefinition(
 ],
     timeout=120,
     signal_quality=SignalQuality.CANDIDATE,
+    required_env=("SHODAN_API_KEY",),
     priority=25,
     cost="low",
     risk_level="low",

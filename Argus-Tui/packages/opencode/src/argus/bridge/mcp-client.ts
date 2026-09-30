@@ -702,12 +702,25 @@ export class WorkersBridge {
     const mcpTools = this._toolsEverFetched ? this._mcpToolsCache : await this.getTools()
     const regTools = this.toolsCache
 
+    const nameAndCaps = (t: ToolDefinition): string =>
+      `${t.name}:${[...(t.capabilities ?? [])].sort().join(",")}`
+
+    // Compare only dispatchable tools, on both sides. A tool the worker reports
+    // as unrunnable is not something the registry needs to agree about, so it
+    // is excluded from the MCP list *and* from the registry list — otherwise
+    // this check never returned true and every fifth phase paid for a full
+    // detectDrift().
+    const mcpBlocked = new Set(
+      mcpTools.filter((t) => t.disabled || t.available === false).map((t) => t.name),
+    )
     const mcpKey = mcpTools
-      .map((t) => `${t.name}:${[...(t.capabilities ?? [])].sort().join(",")}`)
+      .filter((t) => !mcpBlocked.has(t.name))
+      .map(nameAndCaps)
       .sort()
       .join("|")
     const regKey = regTools
-      .map((t) => `${t.name}:${[...(t.capabilities ?? [])].sort().join(",")}`)
+      .filter((t) => !mcpBlocked.has(t.name))
+      .map(nameAndCaps)
       .sort()
       .join("|")
 
@@ -722,9 +735,16 @@ export class WorkersBridge {
     const mcpNames = new Set(mcpTools.map((t) => t.name))
     const registryNames = new Set(this.toolsCache.map((t) => t.name))
 
+    // A tool the worker reports as disabled is not drift: it is a tool the
+    // worker itself refuses to run, so there is nothing for the planner to
+    // agree with. Without this the report permanently listed every in-process
+    // pipeline step (attack-graph, report-generator, the post-exploitation
+    // trio) as "missing from the registry", burying the real mismatches.
+    const dispatchable = mcpTools.filter((t) => !t.disabled && t.available !== false)
+
     // Detect capability gaps: tools that exist in both but have different capability sets
     const capabilityGaps: string[] = []
-    for (const mcpTool of mcpTools) {
+    for (const mcpTool of dispatchable) {
       const regTool = this.toolsCache.find((t) => t.name === mcpTool.name)
       if (regTool && JSON.stringify([...(mcpTool.capabilities ?? [])].sort()) !== JSON.stringify([...(regTool.capabilities ?? [])].sort())) {
         capabilityGaps.push(`${mcpTool.name}: MCP=${JSON.stringify(mcpTool.capabilities)} vs registry=${JSON.stringify(regTool.capabilities)}`)
@@ -732,7 +752,7 @@ export class WorkersBridge {
     }
 
     return {
-      missing_from_registry: mcpTools.filter((t) => !registryNames.has(t.name)).map((t) => t.name),
+      missing_from_registry: dispatchable.filter((t) => !registryNames.has(t.name)).map((t) => t.name),
       missing_from_mcp: this.toolsCache.filter((t) => !mcpNames.has(t.name)).map((t) => t.name),
       capability_gaps: capabilityGaps,
     }

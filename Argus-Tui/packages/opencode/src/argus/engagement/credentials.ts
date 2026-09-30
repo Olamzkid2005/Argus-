@@ -19,6 +19,23 @@ export interface CredentialFile {
 
 const DEFAULT_CREDS_PATH = StoragePaths.credentials
 
+/**
+ * File paths already warned about in this process.
+ *
+ * `load()` is called on every credential lookup, so the plaintext and
+ * permissions warnings repeated once per call: a single assessment produced
+ * ~36 copies of the same two lines. Keyed by `resolved|warningKind` so a real
+ * change (the file becomes encrypted, or the mode is fixed and then breaks
+ * again) still warns.
+ */
+const _warnedPaths = new Set<string>()
+
+function warnOnce(key: string, message: string): void {
+  if (_warnedPaths.has(key)) return
+  _warnedPaths.add(key)
+  console.warn(message)
+}
+
 export class CredentialStore {
   private data: CredentialFile = { roles: {} }
 
@@ -30,19 +47,30 @@ export class CredentialStore {
       this.data = { roles: {} }
       return this.data
     }
-    try {        // Try to read as binary and decrypt with master key
-      const masterKey = EncryptionManager.getCachedMasterKey()
+    try {
+      const rawBytes = readFileSync(resolved)
+
+      // Try to read as binary and decrypt with master key.
+      //
+      // `loadKeySync()` rather than `getCachedMasterKey()`: the cache TTL is
+      // 5 minutes and an assessment runs far longer, so after the first few
+      // minutes the cache is always empty. That made every later lookup warn
+      // "stored in plaintext", and — worse — made an *encrypted* file fail to
+      // decrypt and then be parsed as plaintext, i.e. read as empty.
+      // `loadKeySync` only ever reads an existing key; it never mints one.
+      const masterKey = EncryptionManager.loadKeySync()
       if (masterKey) {
         try {
-          const raw = readFileSync(resolved)
-          const decrypted = EncryptionManager.decryptCredentials(raw, masterKey)
+          const decrypted = EncryptionManager.decryptCredentials(rawBytes, masterKey)
           this.data = JSON.parse(decrypted.toString("utf-8")) as CredentialFile
           if (!this.data.roles) this.data.roles = {}
           return this.data
         } catch (decryptErr) {
-          // Decryption failed — file may be in legacy plaintext format.
-          // Log for debugging, then fall through to plaintext read.
-          console.warn(
+          // Decryption failed — file may be in legacy plaintext format, or it
+          // may have been written under a different master key. Log once per
+          // path, then fall through to the plaintext read.
+          warnOnce(
+            `${resolved}|decrypt`,
             `[Argus] WARNING: Failed to decrypt credentials file "${resolved}": ` +
             `${(decryptErr as Error).message}. Falling back to plaintext.`,
           )
@@ -50,12 +78,15 @@ export class CredentialStore {
       }
 
       // Legacy plaintext fallback (backward compatible)
-      this.data = JSON.parse(readFileSync(resolved, "utf-8")) as CredentialFile
+      this.data = JSON.parse(rawBytes.toString("utf-8")) as CredentialFile
       if (!this.data.roles) this.data.roles = {}
 
-      // Warn if running without encryption
-      if (!masterKey) {
-        console.warn(
+      // Warn once when the file really is plaintext. Previously this fired
+      // whenever the key cache happened to be cold, which is not the same
+      // question as "is this file encrypted".
+      if (!masterKey && !_isEncryptedPayload(rawBytes)) {
+        warnOnce(
+          `${resolved}|plaintext`,
           `[Argus] WARNING: Credentials file ${resolved} is stored in plaintext. ` +
           "Run `argus encryption init` to enable encryption at rest.",
         )
@@ -64,14 +95,16 @@ export class CredentialStore {
       try {
         const stats = statSync(resolved)
         if (stats.mode & 0o077) {
-          console.warn(
+          warnOnce(
+            `${resolved}|permissions`,
             `[Argus] WARNING: Credentials file ${resolved} has world-readable permissions ` +
             `(${(stats.mode & 0o777).toString(8)}). Run: chmod 0600 "${resolved}"`,
           )
         }
       } catch { /* stat check best-effort */ }
     } catch (e) {
-      console.warn(
+      warnOnce(
+        `${resolved}|parse`,
         `[Argus] WARNING: Failed to parse credentials file — resetting to empty: ${(e as Error).message}`,
       )
       this.data = { roles: {} }
@@ -112,15 +145,19 @@ export class CredentialStore {
     const dir = join(resolved, "..")
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
 
-    const masterKey = EncryptionManager.getCachedMasterKey()
+    // Same reason as load(): the cache is cold for most of a long run, and a
+    // cold cache must not silently downgrade a write to plaintext.
+    const masterKey = EncryptionManager.loadKeySync()
     if (masterKey) {
       // Encrypt credentials before writing
       const plaintext = Buffer.from(JSON.stringify(data, null, 2), "utf-8")
       const encrypted = EncryptionManager.encryptCredentials(plaintext, masterKey)
       writeFileSync(resolved, encrypted)
+      _warnedPaths.delete(`${resolved}|plaintext`)
     } else {
       // No master key available — write as plaintext with warning
-      console.warn(
+      warnOnce(
+        `${resolved}|plaintext-write`,
         `[Argus] WARNING: Saving credentials to ${resolved} in plaintext. ` +
         "Run `argus encryption init` to enable encryption at rest.",
       )
@@ -134,4 +171,22 @@ export class CredentialStore {
   static defaultPath(): string {
     return DEFAULT_CREDS_PATH
   }
+}
+
+/**
+ * Best-effort check for the encrypted credentials envelope.
+ *
+ * `encryptCredentials` writes a version-prefixed payload, never valid JSON.
+ * Distinguishing the two is what lets the plaintext warning be accurate
+ * instead of "the master key cache happened to be empty".
+ */
+function _isEncryptedPayload(raw: Buffer): boolean {
+  if (raw.length < 3) return false
+  const first = raw[0]
+  // Encrypted payloads start with a version byte (or a JSON-incompatible
+  // byte). Valid JSON must begin with '{' (0x7b) or whitespace.
+  if (first === 0x7b || first === 0x20 || first === 0x09 || first === 0x0a || first === 0x0d) {
+    return false
+  }
+  return true
 }

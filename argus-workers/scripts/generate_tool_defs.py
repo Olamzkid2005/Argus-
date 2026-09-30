@@ -133,18 +133,25 @@ def _build_tool_registration(data: dict) -> str:
     cost = data.get("cost")
     timeout = data.get("timeout", 300)
     requires_obj = _build_requires(data)
+    required_env = [str(v) for v in (data.get("required_env") or [])]
 
-    # Phases: use explicit YAML phases if provided, otherwise derive from capabilities
+    # Phases: use explicit YAML phases if provided, otherwise derive from
+    # capabilities. `disabled: true` is the only way to express "no phase":
+    # an empty `phases:` key is falsy and would be re-derived from
+    # capabilities, which is how a deliberately-disabled tool got scheduled.
     phases: list[str] = data.get("phases", [])
-    if not phases:
-        for cap in capabilities:
-            mapped = CAPABILITY_TO_PHASES.get(cap)
-            if mapped:
-                for p in mapped:
-                    if p not in phases:
-                        phases.append(p)
-    if not phases:
-        phases = ["scan"]
+    if not data.get("disabled"):
+        if not phases:
+            for cap in capabilities:
+                mapped = CAPABILITY_TO_PHASES.get(cap)
+                if mapped:
+                    for p in mapped:
+                        if p not in phases:
+                            phases.append(p)
+        if not phases:
+            phases = ["scan"]
+    else:
+        phases = []
 
     lines = ["_register(ToolDefinition("]
     lines.append(_indent(f'name="{name}",'))
@@ -166,6 +173,9 @@ def _build_tool_registration(data: dict) -> str:
         lines.append(_indent(f"signal_quality=SignalQuality.{signal_quality_str},"))
     if requires_obj:
         lines.append(_indent(f"requires={requires_obj},"))
+    if required_env:
+        env_str = ", ".join(f'"{v}"' for v in required_env)
+        lines.append(_indent(f"required_env=({env_str},),"))
     if priority is not None:
         lines.append(_indent(f"priority={priority},"))
     if cost:

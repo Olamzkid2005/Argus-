@@ -51,15 +51,30 @@ class TestMCPToolBridgeRegistration:
         assert tool is not None, f"{name} was skipped by the bridge"
         assert tool.command == "python3"
 
-    def test_pipeline_steps_are_never_exposed(self, bridge):
+    def test_pipeline_steps_are_exposed_but_never_dispatchable(self, bridge):
+        """Registered so the planner can see them; disabled so it cannot run them.
+
+        They used to be absent from the MCP registry entirely, which showed up
+        as drift (`missing_from_mcp`) and as "Unknown tool" when a plan named
+        one. Being absent also meant the TypeScript planner could not tell
+        "this is an in-process step" from "this tool exists but I have not heard
+        of it". Listing them with an explicit verdict fixes both.
+        """
         from mcp_server import get_mcp_server
 
         server = get_mcp_server()
+        advertised = {t["name"]: t for t in server.get_tools()}
         for name in sorted(_PIPELINE_STEP_TOOLS):
-            assert server.get_tool(name) is None, (
-                f"{name} is an in-process pipeline step and must not be "
-                f"advertised as an MCP tool"
-            )
+            entry = advertised.get(name)
+            assert entry is not None, f"{name} should be advertised"
+            assert entry["disabled"] is True, name
+            assert entry["pipeline_step"] is True, name
+            assert "pipeline step" in entry["disabled_reason"], name
+
+            # ...and calling one gives the reason, not "Unknown tool".
+            result = server.call_tool(name, {})
+            assert result["isError"] is True, name
+            assert "Unknown tool" not in result["content"][0]["text"], name
 
     def test_missing_binaries_are_reported_but_pipeline_steps_are_not(
         self, monkeypatch, caplog

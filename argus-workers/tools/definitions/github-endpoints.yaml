@@ -1,13 +1,15 @@
 name: github-endpoints
 command: github-endpoints
 description: "Enumerate GitHub repositories and exposed endpoints for a target"
-args:
-  - "--json"
+# No `--json`: the installed build's flags are -all/-d/-e/-k/-o/-q/-r/-raw/-t.
+# It printed "flag provided but not defined: -json" and exited before scanning.
+args: []
 parameters:
   - name: target
     type: string
-    description: "Target organization or domain"
+    description: "Target domain (github-endpoints searches for repos mentioning it)"
     required: true
+    flag: "-d"
 capabilities:
   - web_recon
 signal_quality: CANDIDATE
@@ -16,3 +18,8 @@ priority: 30
 cost: low
 enabled: true
 timeout: 180
+# Reads the token from GITHUB_TOKEN when -t is not passed. Without it the tool
+# cannot search anything, so the MCP server reports it disabled instead of the
+# planner scheduling a guaranteed failure.
+required_env:
+  - GITHUB_TOKEN

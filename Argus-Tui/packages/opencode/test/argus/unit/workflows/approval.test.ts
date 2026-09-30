@@ -110,7 +110,9 @@ describe("ApprovalService", () => {
       const gate = service.getGate("auth_testing")!
       expect(gate.require_confirmation).toBe(false)
       const result = await service.requestApproval(gate, "test", "target")
-      expect(result).toEqual({ approved: true })
+      // The decision is recorded with a reason so the audit trail shows *why*
+      // a gate was passed, not just that it was.
+      expect(result).toEqual({ approved: true, reason: "Gate does not require confirmation" })
     })
 
     test("Returns { approved: false, reason: \"User declined approval\" } for non-confirmed gates", async () => {
@@ -271,6 +273,111 @@ describe("ApprovalService", () => {
         process.stdin = origStdin
         process.stderr.write = origWrite
         ;(process.stdout as any).isTTY = origIsTTY
+      }
+    })
+  })
+  describe("decision audit trail", () => {
+    test("records an auto-approved destructive gate with its source", async () => {
+      const origAuto = process.env.ARGUS_AUTO_APPROVE
+      const origTTY = (process.stdout as any).isTTY
+      const origWrite = process.stderr.write
+      process.env.ARGUS_AUTO_APPROVE = "1"
+      ;(process.stdout as any).isTTY = false
+      process.stderr.write = (() => true) as any
+      try {
+        const service = new ApprovalService()
+        const gate = service.getGate("destructive_tools")!
+        const result = await service.requestApproval(gate, "vuln_scan", "https://example.com")
+
+        expect(result.approved).toBe(true)
+        expect(service.decisions).toHaveLength(1)
+        expect(service.decisions[0]).toMatchObject({
+          gate: "destructive_tools",
+          kind: "phase",
+          phase: "vuln_scan",
+          approved: true,
+          source: "auto-approve-env",
+        })
+        expect(service.destructiveDecisions).toHaveLength(1)
+      } finally {
+        process.env.ARGUS_AUTO_APPROVE = origAuto
+        if (origAuto === undefined) delete process.env.ARGUS_AUTO_APPROVE
+        ;(process.stdout as any).isTTY = origTTY
+        process.stderr.write = origWrite
+      }
+    })
+
+    test("ARGUS_DENY_DESTRUCTIVE refuses a destructive gate even with auto-approve on", async () => {
+      const origAuto = process.env.ARGUS_AUTO_APPROVE
+      const origDeny = process.env.ARGUS_DENY_DESTRUCTIVE
+      const origWrite = process.stderr.write
+      process.env.ARGUS_AUTO_APPROVE = "1"
+      process.env.ARGUS_DENY_DESTRUCTIVE = "1"
+      process.stderr.write = (() => true) as any
+      try {
+        const service = new ApprovalService()
+        const gate = service.getGate("destructive_tools")!
+        const result = await service.requestApproval(gate, "vuln_scan", "https://example.com")
+
+        expect(result.approved).toBe(false)
+        expect(result.reason).toContain("ARGUS_DENY_DESTRUCTIVE=1")
+        expect(service.decisions[0]).toMatchObject({
+          approved: false,
+          source: "deny-destructive-env",
+        })
+      } finally {
+        if (origAuto === undefined) delete process.env.ARGUS_AUTO_APPROVE
+        else process.env.ARGUS_AUTO_APPROVE = origAuto
+        if (origDeny === undefined) delete process.env.ARGUS_DENY_DESTRUCTIVE
+        else process.env.ARGUS_DENY_DESTRUCTIVE = origDeny
+        process.stderr.write = origWrite
+      }
+    })
+
+    test("a gate that does not require confirmation is recorded as not-required", async () => {
+      const service = new ApprovalService()
+      const gate = service.getGate("auth_testing")!
+      const result = await service.requestApproval(gate, "auth_detection", "https://example.com")
+
+      expect(result.approved).toBe(true)
+      expect(service.decisions[0]).toMatchObject({ source: "not-required", approved: true })
+    })
+
+    test("ARGUS_DENY_DESTRUCTIVE is not set by default — auto-approve still works", async () => {
+      const origDeny = process.env.ARGUS_DENY_DESTRUCTIVE
+      const origAuto = process.env.ARGUS_AUTO_APPROVE
+      const origTTY = (process.stdout as any).isTTY
+      const origWrite = process.stderr.write
+      delete process.env.ARGUS_DENY_DESTRUCTIVE
+      process.env.ARGUS_AUTO_APPROVE = "1"
+      ;(process.stdout as any).isTTY = false
+      process.stderr.write = (() => true) as any
+      try {
+        const service = new ApprovalService()
+        const result = await service.confirmDestructiveTool("sqlmap", "SQLMap", "https://example.com")
+        expect(result.approved).toBe(true)
+        expect(service.decisions[0]).toMatchObject({ gate: "sqlmap", kind: "tool", approved: true })
+      } finally {
+        if (origDeny === undefined) delete process.env.ARGUS_DENY_DESTRUCTIVE
+        else process.env.ARGUS_DENY_DESTRUCTIVE = origDeny
+        if (origAuto === undefined) delete process.env.ARGUS_AUTO_APPROVE
+        else process.env.ARGUS_AUTO_APPROVE = origAuto
+        ;(process.stdout as any).isTTY = origTTY
+        process.stderr.write = origWrite
+      }
+    })
+
+    test("ARGUS_DENY_DESTRUCTIVE refuses a destructive tool", async () => {
+      const origDeny = process.env.ARGUS_DENY_DESTRUCTIVE
+      process.env.ARGUS_DENY_DESTRUCTIVE = "1"
+      try {
+        const service = new ApprovalService()
+        const result = await service.confirmDestructiveTool("sqlmap", "SQLMap", "https://example.com")
+        expect(result.approved).toBe(false)
+        expect(service.decisions[0]).toMatchObject({ gate: "sqlmap", kind: "tool", source: "deny-destructive-env" })
+      } finally {
+        if (origDeny === undefined) delete process.env.ARGUS_DENY_DESTRUCTIVE
+        else process.env.ARGUS_DENY_DESTRUCTIVE = origDeny
       }
     })
   })

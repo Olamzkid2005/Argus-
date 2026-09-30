@@ -1,9 +1,13 @@
 name: shuffledns
 command: shuffledns
 description: "Mass DNS resolver for resolved subdomain enumeration"
+# `-json` does not exist on this build; -silent is the only modifier it needs.
 args:
   - "-silent"
-  - "-json"
+# Disabled: shuffledns is a massdns wrapper and refuses to run without a
+# resolvers file (-r), which Argus does not ship or request. It failed with a
+# resolvers error on every run. Re-enable by adding a resolvers file default.
+disabled: true
 parameters:
   - name: target
     type: string

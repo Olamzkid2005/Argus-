@@ -88,13 +88,78 @@ export interface GateContext {
   hasAnyCredentials?: boolean
 }
 
+/**
+ * Execution state the worker reports for one tool over MCP `list_tools`.
+ *
+ * Phase selection happens on this side, so the worker's own view of what it
+ * can run never reached the planner: `phases=[]` in
+ * `argus-workers/tool_definitions.py` had no effect and the run dispatched
+ * dnsx/gospider (both deliberately disabled) plus tools whose binary is not
+ * installed, collecting usage errors for each. These fields are the channel.
+ */
+export interface WorkerToolStatus {
+  name: string
+  /** Worker cannot run this tool at all (no phase, or an in-process step). */
+  disabled?: boolean
+  /** Why, in the worker's words — surfaced in the skip message. */
+  disabled_reason?: string
+  /** Entry names an in-process orchestrator step, not a subprocess. */
+  pipeline_step?: boolean
+  /** Tool binary is present on the worker's execution PATH. */
+  available?: boolean
+}
+
 export class ToolRegistry {
   private toolsByCapability = new Map<Capability, ToolDef[]>()
   private toolsByName = new Map<string, ToolDef>()
   private toolConfig: ToolConfig = new ToolConfig()
+  /** tool name → reason the worker cannot run it. Empty until the MCP
+   *  worker has reported its tool list; see setWorkerToolStatus(). */
+  private workerBlocked = new Map<string, string>()
 
   setConfig(tc: ToolConfig): void {
     this.toolConfig = tc
+  }
+
+  /**
+   * Record the worker's execution state for every tool it advertises.
+   *
+   * Call once the MCP bridge is connected and before tools are dispatched.
+   * Replaces any previous snapshot — the worker is restarted with a new build
+   * or a tool is installed mid-session. Tools the worker does not mention at
+   * all are left alone (an unreported tool is not evidence of breakage).
+   *
+   * @returns the tools newly blocked, for logging/audit.
+   */
+  setWorkerToolStatus(tools: WorkerToolStatus[]): Array<{ name: string; reason: string }> {
+    const blocked: Array<{ name: string; reason: string }> = []
+    this.workerBlocked.clear()
+    for (const tool of tools) {
+      if (tool.disabled) {
+        this.workerBlocked.set(tool.name, tool.disabled_reason ?? "disabled by the worker")
+        blocked.push({ name: tool.name, reason: this.workerBlocked.get(tool.name)! })
+      } else if (tool.available === false) {
+        const reason = "binary not installed on the worker PATH"
+        this.workerBlocked.set(tool.name, reason)
+        blocked.push({ name: tool.name, reason })
+      }
+    }
+    return blocked
+  }
+
+  /** Why the worker cannot run *toolName*, or undefined if it can. */
+  getWorkerBlockReason(toolName: string): string | undefined {
+    return this.workerBlocked.get(toolName)
+  }
+
+  /** True when the worker is known to be unable to run *toolName*. */
+  isWorkerBlocked(toolName: string): boolean {
+    return this.workerBlocked.has(toolName)
+  }
+
+  /** Every tool the worker has reported as unrunnable, with the reason. */
+  listWorkerBlocked(): Array<{ name: string; reason: string }> {
+    return Array.from(this.workerBlocked, ([name, reason]) => ({ name, reason }))
   }
 
   load(definitionsPath: string): void {
@@ -129,7 +194,7 @@ export class ToolRegistry {
 
   getToolsByCapability(cap: Capability): ToolDef[] {
     const all = this.toolsByCapability.get(cap) ?? []
-    return all.filter(t => this.toolConfig.isEnabled(t.name))
+    return all.filter(t => this.toolConfig.isEnabled(t.name) && !this.workerBlocked.has(t.name))
   }
 
   getCapabilities(toolName: string): string[] {
@@ -172,6 +237,10 @@ export class ToolRegistry {
     for (const cap of capabilities) {
       const tools = this.getToolsByCapability(cap)
       for (const tool of tools) {
+        // The worker's own verdict outranks this static registry: never plan a
+        // tool the worker cannot run (disabled, or its binary is absent).
+        if (this.workerBlocked.has(tool.name)) continue
+
         // Filter by target type (web vs api vs non-web)
         // detectTargetType returns "web_app"|"api"|"spa"|"unknown", not "web"
         if ((targetType === "web" || targetType === "web_app" || targetType === "spa") && tool.supports_web === false) {

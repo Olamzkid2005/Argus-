@@ -44,6 +44,39 @@ export const REPLAN_INSERTABLE: Record<string, Capability> = {
   exposed_secret: Capability.CREDENTIAL_REPLAY,
 }
 
+/**
+ * Finding subtypes that describe an observation, not a vulnerability.
+ *
+ * Every recon phase emits these (`OPEN_PORT`, `HTTP_ENDPOINT`,
+ * `CRAWLED_ENDPOINT`, `technology_detection`, `raw_output`, `port_open`,
+ * `web_vulnerability`), so they can never map to a replan capability and
+ * logging them buried the subtypes that genuinely have no mapping. Listed
+ * explicitly rather than pattern-matched so a new vulnerability subtype cannot
+ * slip in silently.
+ */
+const INFORMATIONAL_SUBTYPES = new Set([
+  "open_port",
+  "port_open",
+  "http_endpoint",
+  "crawled_endpoint",
+  "endpoint",
+  "technology_detection",
+  "technology",
+  "raw_output",
+  "web_vulnerability",
+  "info",
+  "informational",
+  "observation",
+])
+
+/**
+ * Subtypes already reported as unmapped in this process.
+ *
+ * `determineNewCapabilities()` runs after every phase, over every finding, so
+ * a single unmapped subtype printed its warning dozens of times per run.
+ */
+const reportedUnmappedSubtypes = new Set<string>()
+
 /** Confidence threshold for hypotheses to trigger replanning. */
 const HYPOTHESIS_CONFIDENCE_THRESHOLD = 0.6
 
@@ -91,8 +124,14 @@ export function determineNewCapabilities(context: PlannerContext): Set<Capabilit
         } else if (!context.executedCapabilities.has(cap)) {
           result.add(cap)
         }
-      } else {
-        console.debug(`[replan-rules] Unknown subtype "${subtype}" — no capability mapping (add to REPLAN_INSERTABLE if needed)`)
+      } else if (!INFORMATIONAL_SUBTYPES.has(subtype.toLowerCase())) {
+        // Deduplicated: one line per subtype per process instead of one per
+        // finding per phase. Informational recon subtypes are skipped entirely
+        // — they have no capability to map to by design.
+        if (!reportedUnmappedSubtypes.has(subtype)) {
+          reportedUnmappedSubtypes.add(subtype)
+          console.debug(`[replan-rules] Unknown subtype "${subtype}" — no capability mapping (add to REPLAN_INSERTABLE if needed)`)
+        }
       }
     }
   }

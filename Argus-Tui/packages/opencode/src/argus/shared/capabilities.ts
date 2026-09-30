@@ -9,6 +9,8 @@ export enum Capability {
   VULNERABILITY_SCANNING = "vulnerability_scanning",
   TEMPLATE_SCANNING = "template_scanning",
   BROWSER_VERIFICATION = "browser_verification",
+  /** Re-test a suspected finding with an independent method (finding_verifier). */
+  FINDING_VERIFICATION = "finding_verification",
   REPORT_GENERATION = "report_generation",
   SQLI_DETECTION = "sqli_detection",
   XSS_DETECTION = "xss_detection",

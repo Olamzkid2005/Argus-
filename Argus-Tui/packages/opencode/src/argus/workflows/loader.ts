@@ -45,6 +45,22 @@ export function loadWorkflowYaml(path: string): WorkflowDefinition {
   return workflow
 }
 
+/**
+ * Data files that live in the workflows directory but are not workflows.
+ *
+ * `loadAllWorkflows()` globs the directory, so these were parsed as workflows,
+ * rejected, and logged as "Skipping unparseable workflow YAML" on every run —
+ * two warnings that looked like errors but described a directory layout that is
+ * correct. Listing them explicitly keeps the warning meaningful for a file that
+ * really should have parsed.
+ */
+const NON_WORKFLOW_FILES = new Set([
+  "tool-definitions.yaml",
+  "tool-definitions.yml",
+  "approval-policies.yaml",
+  "approval-policies.yml",
+])
+
 export function loadAllWorkflows(workflowsDir: string): WorkflowDefinition[] {
   const workflows: WorkflowDefinition[] = []
   let files: string[]
@@ -58,6 +74,7 @@ export function loadAllWorkflows(workflowsDir: string): WorkflowDefinition[] {
 
   for (const file of files) {
     if (extname(file) === ".yaml" || extname(file) === ".yml") {
+      if (NON_WORKFLOW_FILES.has(file)) continue
       const fullPath = join(workflowsDir, file)
       try {
         const workflow = loadWorkflowYaml(fullPath)

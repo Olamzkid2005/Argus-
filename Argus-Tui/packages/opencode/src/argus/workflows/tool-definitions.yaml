@@ -397,6 +397,7 @@ tools:
   - name: semgrep
     label: Semgrep Static Analysis
     capabilities:
+      - sast
       - vulnerability_scanning
     requires_auth: false
     destructive: false
@@ -434,6 +435,7 @@ tools:
   - name: trivy
     label: Trivy Vulnerability Scanner
     capabilities:
+      - sca
       - vulnerability_scanning
     requires_auth: false
     destructive: false
@@ -451,6 +453,7 @@ tools:
   - name: bandit
     label: Bandit Python Linter
     capabilities:
+      - sast
       - vulnerability_scanning
     requires_auth: false
     destructive: false
@@ -471,6 +474,7 @@ tools:
   - name: pip-audit
     label: PIP Audit Dependency Scanner
     capabilities:
+      - sca
       - vulnerability_scanning
     requires_auth: false
     destructive: false
@@ -703,7 +707,6 @@ tools:
     description: Static AI attack-surface scanner — detects MCP servers, agent frameworks, LLM SDKs, model gateways, vector stores, AI provider keys, and API endpoints from source code
     capabilities:
       - ai_surface_mapping
-      - security_analysis
     requires_auth: false
     destructive: false
     supports_api: false
@@ -1254,3 +1257,87 @@ tools:
     signal_quality: CONFIRMED
     priority: 95
     cost: low
+
+  # ── Verification / browser-automation tools ──
+  # These four are registered by the MCP worker but were absent here, so
+  # `MCP drift detected` reported them as "missing_from_registry" on every run
+  # and the planner could never select them. Capabilities match the worker's
+  # YAML exactly (a mismatch is reported as a capability gap).
+
+  - name: finding_verifier
+    label: Finding Verifier
+    description: Re-test a suspected finding with an independent HTTP method to confirm or reject it
+    capabilities:
+      - finding_verification
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 60
+    scoring:
+      confidence_score: 90
+      coverage_score: 60
+    signal_quality: CONFIRMED
+    priority: 85
+    cost: low
+
+  - name: playwright-bola
+    label: Playwright BOLA Detector
+    description: Broken Object Level Authorization detection via browser automation
+    capabilities:
+      - browser_verification
+    requires_auth: true
+    credential_roles: [attacker, victim]
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 95
+      coverage_score: 70
+    signal_quality: CONFIRMED
+    priority: 80
+    cost: medium
+    requires:
+      target_scheme: [http, https]
+      credentials: true
+
+  - name: playwright-privesc
+    label: Playwright Privilege-Escalation Detector
+    description: Vertical privilege escalation detection via browser automation
+    capabilities:
+      - browser_verification
+    requires_auth: true
+    credential_roles: [attacker, victim]
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 95
+      coverage_score: 70
+    signal_quality: CONFIRMED
+    priority: 80
+    cost: medium
+    requires:
+      target_scheme: [http, https]
+      credentials: true
+
+  - name: playwright-xss
+    label: Playwright XSS Detector
+    description: Stored and DOM XSS detection via browser automation
+    capabilities:
+      - browser_verification
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 95
+      coverage_score: 70
+    signal_quality: CONFIRMED
+    priority: 80
+    cost: medium
+    requires:
+      target_scheme: [http, https]

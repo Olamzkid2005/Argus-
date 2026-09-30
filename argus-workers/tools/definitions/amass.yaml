@@ -1,9 +1,10 @@
 name: amass
 command: amass
 description: "Subdomain enumeration and reconnaissance tool"
+# `enum` subcommand only. `-json` is not a flag on the installed build
+# (amass printed "flag provided but not defined: -json" and exited).
 args:
   - "enum"
-  - "-json"
 parameters:
   - name: target
     type: string

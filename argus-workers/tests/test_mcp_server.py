@@ -1,6 +1,8 @@
 """Tests for mcp_server.py — MCPServer, ToolSchema, ToolDefinition, MCPToolResult."""
 
+import os
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 from mcp_server import (
@@ -1405,3 +1407,166 @@ class TestHandlePhaseComplete:
 
         assert result["next_capabilities"] == []
         assert result["stop"] is True
+
+
+class TestWorkerToolStatePublishedOverMCP:
+    """The planner is TypeScript; only this server knows what can run.
+
+    Phase selection happens in `Argus-Tui/.../planner`, so a worker-side
+    `phases=[]` had no effect: the run still dispatched dnsx and gospider (both
+    deliberately disabled) and tools whose binary is not installed, collecting a
+    usage error for each. `list_tools` is the channel that fixes that, so its
+    payload has to carry the worker's verdict.
+    """
+
+    @staticmethod
+    def _server():
+        return MCPServer()  # default tools_dir → declarative registry overlaid
+
+    def test_every_entry_states_whether_it_is_disabled(self):
+        tools = self._server().get_tools()
+        assert tools, "the default registry must not be empty"
+        for entry in tools:
+            assert "disabled" in entry, entry["name"]
+            assert isinstance(entry["disabled"], bool), entry["name"]
+
+    def test_a_tool_with_no_phase_is_disabled_with_a_reason(self):
+        by_name = {t["name"]: t for t in self._server().get_tools()}
+        # dnsx needs a wordlist and gospider's installed build segfaults; both
+        # are `phases=[]` in tool_definitions.py while their YAML says enabled.
+        for name in ("dnsx", "gospider", "nmap"):
+            entry = by_name[name]
+            assert entry["disabled"] is True, name
+            assert "no execution phase" in entry["disabled_reason"], name
+
+    def test_a_runnable_tool_is_not_disabled(self):
+        by_name = {t["name"]: t for t in self._server().get_tools()}
+        for name in ("httpx", "nuclei", "katana"):
+            assert by_name[name]["disabled"] is False, name
+            assert "disabled_reason" not in by_name[name], name
+
+    def test_declarative_only_tools_are_registered(self):
+        """These exist only as inline entries in tool_definitions.py.
+
+        `_load_yaml_tools()` reads tools/definitions/*.yaml, which has no file
+        for them, so the MCP registry never knew them and
+        `call_tool("credential_replay")` returned "Unknown tool".
+        """
+        names = {t["name"] for t in self._server().get_tools()}
+        for name in ("credential_replay", "post_exploitation", "internal_probe"):
+            assert name in names, name
+
+    def test_pipeline_steps_are_disabled_and_flagged(self):
+        """An in-process step can never be dispatched as a subprocess."""
+        by_name = {t["name"]: t for t in self._server().get_tools()}
+        for name in ("credential_replay", "internal_probe", "attack-graph"):
+            entry = by_name[name]
+            assert entry["pipeline_step"] is True, name
+            assert entry["disabled"] is True, name
+            assert "pipeline step" in entry["disabled_reason"], name
+
+    def test_availability_reflects_the_execution_path(self):
+        import shutil
+
+        from mcp_server import _augmented_tool_path
+
+        by_name = {t["name"]: t for t in self._server().get_tools()}
+        for entry in by_name.values():
+            assert isinstance(entry["available"], bool), entry["name"]
+        # `available` must agree with the PATH execution actually receives.
+        # venv/bin/httpx is the *Python* HTTPX CLI, which is why the augmented
+        # path puts ~/go/bin first — checking a different PATH than the one the
+        # subprocess gets is what made the availability report lie before.
+        expected = shutil.which("httpx", path=_augmented_tool_path()) is not None
+        assert by_name["httpx"]["available"] is expected
+
+    def test_a_missing_binary_is_reported_unavailable(self, mocker):
+        mocker.patch("mcp_server.shutil.which", return_value=None)
+        MCPServer._binary_cache.clear()
+        try:
+            server = MCPServer()
+            by_name = {t["name"]: t for t in server.get_tools()}
+            assert by_name["httpx"]["available"] is False
+        finally:
+            MCPServer._binary_cache.clear()
+
+
+class TestRequiredEnvDisablesATool:
+    """A tool whose API key is unset can only fail.
+
+    chaos/uncover/github-endpoints read their credential from the environment,
+    so with none configured every run collected "PDCP_API_KEY not specified"
+    and similar. Publishing them as disabled stops the planner scheduling them.
+    """
+
+    def _server_with_env(self, mocker, name, required_env, present):
+        import tool_definitions
+
+        # Isolate: build a server whose declarative registry has one tool with a
+        # required_env entry. Using the live registry would depend on the
+        # developer's own environment.
+        declared = tool_definitions.TOOLS[name]
+        mocker.patch.dict(
+            tool_definitions.TOOLS,
+            {name: replace(declared, required_env=tuple(required_env))},
+        )
+        if present:
+            mocker.patch.dict(os.environ, {present: "set"})
+        else:
+            mocker.patch.dict(os.environ, {}, clear=False)
+            os.environ.pop(required_env[0], None)
+        server = MCPServer()
+        return {t["name"]: t for t in server.get_tools()}[name]
+
+    def test_missing_env_marks_the_tool_disabled(self, mocker):
+        entry = self._server_with_env(mocker, "chaos", ["ARGUS_TEST_UNSET_KEY"], None)
+        assert entry["disabled"] is True
+        assert "ARGUS_TEST_UNSET_KEY" in entry["disabled_reason"]
+
+    def test_present_env_leaves_the_tool_dispatchable(self, mocker):
+        entry = self._server_with_env(mocker, "chaos", ["ARGUS_TEST_SET_KEY"], "ARGUS_TEST_SET_KEY")
+        assert entry["disabled"] is False
+
+
+class TestDisabledFlagInYaml:
+    """`disabled: true` is the only way a YAML file can express `phases=[]`.
+
+    An empty `phases:` key is falsy, so the generator re-derived phases from
+    capabilities — which is how a deliberately-disabled tool got scheduled.
+    """
+
+    def test_generator_emits_no_phases_for_a_disabled_yaml_tool(self):
+        from scripts.generate_tool_defs import _build_tool_registration
+
+        registration = _build_tool_registration({
+            "name": "disabled-tool",
+            "description": "nope",
+            "command": "disabled-tool",
+            "capabilities": ["web_recon"],
+            "disabled": True,
+        })
+        assert "phases=[]" in registration
+
+    def test_generator_derives_phases_when_not_disabled(self):
+        from scripts.generate_tool_defs import _build_tool_registration
+
+        registration = _build_tool_registration({
+            "name": "enabled-tool",
+            "description": "yes",
+            "command": "enabled-tool",
+            "capabilities": ["web_recon"],
+        })
+        assert 'phases=["recon"]' in registration
+
+    def test_shuffledns_and_masscan_are_disabled_in_the_live_registry(self):
+        import tool_definitions
+
+        for name in ("shuffledns", "masscan"):
+            assert tool_definitions.TOOLS[name].phases == [], name
+
+    def test_required_env_reaches_the_declarative_registry(self):
+        import tool_definitions
+
+        assert tool_definitions.TOOLS["chaos"].required_env
+        assert tool_definitions.TOOLS["uncover"].required_env
+        assert tool_definitions.TOOLS["github-endpoints"].required_env

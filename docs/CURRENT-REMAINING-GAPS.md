@@ -75,23 +75,42 @@ What broke and what is now fixed:
   worker child process kept the event loop alive forever (process sat at ~0% CPU after the error).
   Teardown now persists inside its own `try`, disconnects regardless, and reports a persistence failure
   as the run's error so an unattended driver exits non-zero instead of "succeeding" over an empty DB.
-- **Open — the TS planner still schedules tools the worker disabled or whose flags are broken.**
-  Phase selection is TS-side, so worker-side `phases=[]` does not stop dispatch. The run attempted
-  `dnsx` (needs a wordlist), `gospider`, `github-endpoints -json`, `amass -json`, `chaos`, `uncover`
-  (both need API keys), `cloud_enum`, `s3scanner`, `shuffledns`, `masscan` — all usage/flag failures.
-  Recon finished `28 finding(s), 13 error(s)`.
-- **Open — `auth_detection` FAILED** (`register`/`login` FORM_NOT_FOUND) and `credential_replay`
-  reported "Unknown tool".
-- **Open — registry drift is reported but not resolved:** `[executor] MCP drift detected`
-  (`missing_from_registry: finding_verifier, playwright-{bola,privesc,xss}`;
-  `missing_from_mcp: post_exploitation, credential_replay, internal_probe`; capability gaps for
-  `ai-surface`, `bandit`, `pip-audit`, `semgrep`, `trivy`).
-- **Open — log noise:** ~36 `credentials file … stored in plaintext` warnings, repeated
-  `Failed to decrypt credentials file … Unsupported state or unable to authenticate data`, and
-  `[replan-rules] Unknown subtype "…" — no capability mapping` for `OPEN_PORT`, `HTTP_ENDPOINT`,
-  `CRAWLED_ENDPOINT`, `port_open`, `technology_detection`, `raw_output`, `web_vulnerability`.
-- **Open — the vuln_scan phase was auto-approved** (`ARGUS_AUTO_APPROVE=1`), so destructive-tool
-  gating is still unproven rather than exercised.
+- **Fixed — the TS planner scheduled tools the worker disabled or whose flags were broken.**
+  Phase selection is TS-side, so worker-side `phases=[]` did not stop dispatch: the run attempted
+  `dnsx`, `gospider`, `github-endpoints -json`, `amass -json`, `chaos`, `uncover`, `cloud_enum`,
+  `s3scanner`, `shuffledns`, `masscan` and collected a usage error for each. The worker now publishes
+  its per-tool verdict over MCP (`disabled`/`disabled_reason`/`pipeline_step`/`available`),
+  `ToolRegistry.setWorkerToolStatus()` applies it before dispatch, and the broken invocations are
+  corrected or explicitly disabled. See §3 for the mechanism and the remaining provisioning gap.
+- **Fixed — `auth_detection` FAILED on a target with no auth surface.** `register`/`login` reported
+  `FORM_NOT_FOUND`, which is the *expected* result against the fixture (it has no registration or
+  login form), but the executor counted it as an error and failed the whole phase. Failures that
+  mean "the target does not have the thing you asked for" (`FORM_NOT_FOUND`, `NO_CREDENTIALS`,
+  `EMAIL_EXISTS`) are now classified as expected absences: recorded on `executor.expectedAbsences`
+  and reported as an observation, with the phase completing cleanly. A genuine failure still fails.
+  `credential_replay`'s "Unknown tool" is fixed by its registration in the MCP registry (§3).
+- **Fixed — registry drift is resolved, not just reported.** The four live tools the MCP worker had
+  that the TS registry lacked (`finding_verifier`, `playwright-bola`, `playwright-privesc`,
+  `playwright-xss`) were added to `tool-definitions.yaml` (with a new `finding_verification`
+  capability), and the SAST/SCA capability gaps were aligned. The three pipeline steps the TS
+  registry had that the MCP lacked are now registered *and* published as disabled, so they are
+  neither "missing" nor dispatchable. Drift comparison now ignores worker-disabled tools on both
+  sides — the report is empty: `missing_from_registry: []`, `missing_from_mcp: []`,
+  `capability_gaps: []`.
+- **Fixed — log noise.** The credentials warnings were one per `load()` call (~36 per run) and fired
+  whenever the master-key *cache* was cold rather than when the file was actually plaintext;
+  `CredentialStore` now uses `loadKeySync()` and warns once per path per kind, and only after
+  checking the file really is plaintext. `[replan-rules] Unknown subtype` is deduplicated per
+  subtype and silent for informational recon subtypes (`OPEN_PORT`, `HTTP_ENDPOINT`,
+  `CRAWLED_ENDPOINT`, `technology_detection`, `raw_output`, `port_open`, `web_vulnerability`). The
+  workflow loader no longer parses `tool-definitions.yaml`/`approval-policies.yaml` as workflows and
+  logs them as unparseable on every run.
+- **Addressed — destructive-tool gating was unproven under `ARGUS_AUTO_APPROVE=1`.** Every gate
+  decision is now recorded (`ApprovalService.decisions`, echoed as an `[approval] …` line and
+  summarized into the engagement audit log as `APPROVAL_DECISIONS`), so an unattended run shows the
+  gates were consulted rather than silently bypassed. `ARGUS_DENY_DESTRUCTIVE=1` makes destructive
+  gates and destructive tools refuse even with auto-approve on, which is what allows the block path
+  to be exercised end-to-end in an unattended run.
 
 ### 3. Tool availability is operationally incomplete
 
@@ -170,6 +189,53 @@ trivy takes image references such as `registry.example.com/image:tag`; only URLs
 scheme are rejected. The TS planner already excludes `supports_web: false` tools from web targets —
 this closes the same hole on the execution path. The YAML value survives the inline overrides
 because the merge treats `target_kind: any` as unset.
+
+**Fixed (2026-09-30, worker tool state reaches the planner):** *reporting* availability was not
+enough, because the run still dispatched tools the worker could not run. Phase selection happens on
+the TypeScript side, so `phases=[]` in `tool_definitions.py` had no effect at all: the run attempted
+`dnsx` and `gospider` (both deliberately disabled) and every tool whose binary is absent, then
+tallied each refusal as a phase error — recon came back `28 finding(s), 13 error(s)`.
+
+`MCPServer.get_tools()` now publishes the worker's verdict on every entry — `disabled` +
+`disabled_reason` (no execution phase, missing `required_env` API key, in-process pipeline step),
+`pipeline_step`, and `available` (binary present on the *execution* PATH, the same augmented PATH
+the subprocess receives). `MCPServer` also overlays the declarative registry on the YAML files, so
+`credential_replay`/`post_exploitation`/`internal_probe` exist (they had been called as "Unknown
+tool" because they have no YAML file) and the disabled state from `tool_definitions.TOOLS` is
+applied to the YAML-derived entries.
+
+On the TS side `ToolRegistry.setWorkerToolStatus()` records that snapshot and `selectBest()`,
+`getToolsByCapability()` and the executor's `pipelineSteps` path all refuse a blocked tool. The
+workflow runner applies the snapshot immediately after `bridge.connect()` and writes the result to
+the engagement audit log as `TOOL_AVAILABILITY`. Live on this machine that is 29 tools skipped with
+a reason, and the MCP drift report is now empty on all three lists (previously
+`missing_from_registry: [finding_verifier, playwright-bola, playwright-privesc, playwright-xss]`,
+`missing_from_mcp: [post_exploitation, credential_replay, internal_probe]`, plus 5 capability gaps —
+the four live tools were added to the TS registry and the SAST/SCA capabilities aligned).
+`scripts/argus-worker-status-check.ts` reproduces that check against the real worker.
+
+**Fixed (2026-09-30, usage-failure invocations):** the tools that failed on their own arguments are
+now either corrected or explicitly disabled, so the planner stops scheduling them:
+
+- `github-endpoints` had no `-json` flag and no input flag for its target — the URL was passed
+positionally. `-d` is now the target flag; it is disabled unless `GITHUB_TOKEN` is set.
+- `shuffledns` has no `-json` and cannot run without a resolvers file (`-r`), which Argus does not
+ship — disabled.
+- `masscan` needs root for raw sockets and a port range the planner never supplies — disabled;
+naabu covers port scanning.
+- `cloud_enum` was passed `--json`, which its argparse rejects before scanning (the usage error that
+was in the log); the keyword is the only required input.
+- `amass` was invoked with `-json`, which the installed build does not define. The inline entry that
+overrode the YAML also carried the stale `enum -json`, so it was removed entirely and the YAML is
+now the only definition.
+- `s3scanner` was passed the bucket name positionally → "exactly one of: -bucket, … required"; the
+target now carries `-bucket`.
+- `chaos` and `uncover` read their key from the environment and were attempted with none set. YAML
+tools can now declare `required_env:`; when a listed variable is unset the tool is published as
+disabled instead of the run collecting "PDCP_API_KEY not specified".
+
+A YAML file can also declare `disabled: true`, which is the only way to express `phases=[]`: an
+empty `phases:` key is falsy and the generator re-derived the phases from the tool's capabilities.
 
 What remains is provisioning, not reporting: 13 third-party binaries are genuinely absent here
 (`testssl`, `wpscan`, `trufflehog`, `commix`, `jwt_tool`, `brakeman`, `spotbugs`, `phpcs`, `eslint`,

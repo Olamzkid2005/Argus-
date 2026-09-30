@@ -430,4 +430,102 @@ describe("ToolRegistry", () => {
       }
     })
   })
+  describe("worker tool state", () => {
+    test("setWorkerToolStatus blocks a disabled tool from selection", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "tools.yaml")
+        writeFileSync(filePath, validToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+
+        // Before the worker reports anything, the tool is selectable.
+        expect(registry.selectBest([Capability.VULNERABILITY_SCANNING]).map((t) => t.name)).toContain("scanner")
+
+        registry.setWorkerToolStatus([
+          { name: "scanner", disabled: true, disabled_reason: "no execution phase in the worker registry" },
+        ])
+
+        expect(registry.isWorkerBlocked("scanner")).toBe(true)
+        expect(registry.getWorkerBlockReason("scanner")).toBe("no execution phase in the worker registry")
+        expect(registry.selectBest([Capability.VULNERABILITY_SCANNING]).map((t) => t.name)).not.toContain("scanner")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("a tool whose binary is missing is blocked too", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "tools.yaml")
+        writeFileSync(filePath, validToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+
+        registry.setWorkerToolStatus([{ name: "scanner", available: false }])
+
+        expect(registry.getWorkerBlockReason("scanner")).toBe("binary not installed on the worker PATH")
+        expect(registry.getTool("scanner")).toBeDefined()
+        expect(registry.selectBest([Capability.PORT_SCANNING]).map((t) => t.name)).not.toContain("scanner")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("tells the caller which tools it newly blocked, with the reason", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "tools.yaml")
+        writeFileSync(filePath, validToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+
+        const blocked = registry.setWorkerToolStatus([
+          { name: "scanner", disabled: true, disabled_reason: "no phase" },
+          { name: "recon_tool", available: true },
+        ])
+
+        expect(blocked).toEqual([{ name: "scanner", reason: "no phase" }])
+        expect(registry.isWorkerBlocked("recon_tool")).toBe(false)
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("setWorkerToolStatus replaces the previous snapshot", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "tools.yaml")
+        writeFileSync(filePath, validToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+
+        registry.setWorkerToolStatus([{ name: "scanner", disabled: true, disabled_reason: "no phase" }])
+        expect(registry.isWorkerBlocked("scanner")).toBe(true)
+
+        // Worker restarted with a fixed build — the tool is runnable again.
+        registry.setWorkerToolStatus([{ name: "scanner" }])
+        expect(registry.isWorkerBlocked("scanner")).toBe(false)
+        expect(registry.selectBest([Capability.VULNERABILITY_SCANNING]).map((t) => t.name)).toContain("scanner")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test("an unreported tool is left alone", () => {
+      const dir = makeTempDir()
+      try {
+        const filePath = join(dir, "tools.yaml")
+        writeFileSync(filePath, validToolsYaml, "utf-8")
+        const registry = new ToolRegistry()
+        registry.load(filePath)
+
+        // The worker only mentions `scanner`; recon_tool must stay selectable.
+        registry.setWorkerToolStatus([{ name: "scanner" }])
+        expect(registry.selectBest([Capability.WEB_RECON]).map((t) => t.name)).toContain("recon_tool")
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+  })
 })

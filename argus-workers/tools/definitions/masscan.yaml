@@ -1,6 +1,11 @@
 name: masscan
 command: masscan
 description: "Massive-scale port scanner (entire internet in minutes)"
+# Disabled: masscan opens raw sockets, so it needs root (or CAP_NET_RAW) and a
+# port range supplied by the caller. Argus runs tools unprivileged and the
+# planner never passes `ports`, so every invocation failed with "no ports".
+# naabu covers port scanning without either requirement.
+disabled: true
 args:
   - "--rate"
   - "1000"

@@ -1033,6 +1033,8 @@ export class WorkflowRunner {
     // ── 5. Connect bridge & execute ──
     const allFindings: NormalizedFinding[] = []
     let executionError: Error | null = null
+    // Set inside the try; read in the finally to record gate decisions.
+    let approvalAuditExecutor: InProcessExecutor | undefined
     const bridge = this.deps?.bridge ?? new WorkersBridge(workersPath)
     // Store bridge reference for mcpVerifyFindings() to access
     this.executorBridge = bridge
@@ -1041,6 +1043,30 @@ export class WorkflowRunner {
       emit(`⠋ Connecting MCP workers...`)
       await bridge.connect()
       emit(`✓ MCP workers connected`)
+
+      // ── Worker tool state → planner registry ──
+      // The plan above was built from the static TypeScript registry, which
+      // knows nothing about which tools the worker can actually run. Ask it
+      // once here so disabled tools (no execution phase worker-side) and tools
+      // whose binary is not installed stop being dispatched. Without this the
+      // run collected a usage/flag error for every one of them.
+      try {
+        const workerTools = await bridge.getTools()
+        const blocked = toolRegistry.setWorkerToolStatus(
+          workerTools as unknown as import("./workflows/tool-registry").WorkerToolStatus[],
+        )
+        if (blocked.length > 0) {
+          emit(`⚠ ${blocked.length} tool(s) the worker cannot run will be skipped`)
+          store.appendAuditLog(
+            engagementId,
+            "TOOL_AVAILABILITY",
+            blocked.map((b) => `${b.name}: ${b.reason}`).join("; "),
+          )
+        }
+      } catch (toolStatusErr) {
+        // Advisory: a worker that cannot list its tools must not fail the run.
+        emit(`⚠ Could not read worker tool state (${(toolStatusErr as Error).message}) — scheduling unfiltered`)
+      }
 
       // Phase 4.4.1: Acquire distributed lock before phase execution
       // In autonomous mode, fail hard if the lock can't be acquired (blocker 23)
@@ -1069,6 +1095,8 @@ export class WorkflowRunner {
 
       const confidenceEngine = this.deps?.confidenceEngine ?? new ConfidenceEngine()
       const executor = this.deps?.executor ?? new InProcessExecutor(toolRegistry, bridge, confidenceEngine, workflowRegistry)
+      // Reachable from the `finally` block for the approval-decision audit below.
+      approvalAuditExecutor = executor
       // Wire up tool config for drift detection, circuit-breaker config, and tool enable/disable
       const { ToolConfig } = await import("./config/tool-config")
       const toolConfig = await ToolConfig.load()
@@ -1384,6 +1412,27 @@ export class WorkflowRunner {
       // Persist results, but never let a storage failure escape the finally:
       // the MCP worker is a child process whose pipes keep the event loop
       // alive, so skipping bridge.disconnect() hangs the whole CLI run.
+      // Record every approval-gate decision. With ARGUS_AUTO_APPROVE=1 the
+      // prompts are silent, so without this there is no evidence that the
+      // destructive/privilege-escalation gates were consulted at all — which is
+      // why their behaviour was unproven. Refusals are included, so a run with
+      // ARGUS_DENY_DESTRUCTIVE=1 shows exactly what the gate blocked.
+      try {
+        const decisions = approvalAuditExecutor?.getApprovalDecisions() ?? []
+        if (decisions.length > 0) {
+          const refused = decisions.filter((d) => !d.approved)
+          store.appendAuditLog(
+            engagementId,
+            "APPROVAL_DECISIONS",
+            `${decisions.length} gate decision(s), ${refused.length} refused: ` +
+              decisions.map((d) => `${d.kind}:${d.gate}=${d.approved ? "approved" : "refused"}(${d.source})`).join("; "),
+          )
+          emit(`✓ ${decisions.length} approval gate decision(s) recorded${refused.length > 0 ? `, ${refused.length} refused` : ""}`)
+        }
+      } catch (auditErr) {
+        emit(`⚠ Could not record approval decisions: ${(auditErr as Error).message}`)
+      }
+
       let persistError: Error | null = null
       try {
         const allCompleted = Array.from(phaseRecords.values()).every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")

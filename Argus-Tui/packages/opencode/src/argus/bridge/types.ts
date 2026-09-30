@@ -20,6 +20,15 @@ export interface ToolDefinition {
   priority?: number
   /** Execution cost tier */
   cost?: "low" | "medium" | "high"
+  /**
+   * Worker-reported execution state. The worker publishes these on every
+   * `list_tools` entry; older worker builds omit them, which must read as
+   * "the worker did not say" rather than "the tool is fine".
+   */
+  disabled?: boolean
+  disabled_reason?: string
+  pipeline_step?: boolean
+  available?: boolean
 }
 
 export type SignalQuality = "CONFIRMED" | "PROBABLE" | "CANDIDATE"

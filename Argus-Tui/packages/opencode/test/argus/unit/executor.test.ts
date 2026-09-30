@@ -18,6 +18,10 @@ class MockToolRegistry {
   getToolTimeout(_name: string) { return 300 }
   listTools() { return [] }
   load() {}
+  // Worker tool state — nothing is blocked in these tests.
+  getWorkerBlockReason(_name: string) { return undefined }
+  setWorkerToolStatus() { return [] }
+  isWorkerBlocked(_name: string) { return false }
 }
 
 const mockBridge = {

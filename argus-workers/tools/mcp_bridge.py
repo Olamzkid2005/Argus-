@@ -9,6 +9,7 @@ truth) instead of duplicating metadata inline.  Adding a new tool in
 from __future__ import annotations
 
 import logging
+import os
 
 from mcp_server import get_mcp_server
 from tool_core.result import UnifiedToolResult
@@ -57,7 +58,41 @@ class MCPToolBridge:
         missing_binaries = []
         pipeline_steps = []
 
+        from tool_definitions import TOOLS as _DECLARED_TOOLS
+
+        unrunnable = []
         for tool_def in mcp_tools:
+            # The declarative registry decides first: `phases=[]` means the
+            # installed build cannot run the tool at all (dnsx needs a
+            # wordlist, gospider segfaults), and a tool reading its API key
+            # from the environment is unrunnable while that variable is unset.
+            # Registering these anyway re-exposed them to the planner, because
+            # MCPToolBridge derived its list from the registry rather than from
+            # what the MCP server had already decided.
+            declared = _DECLARED_TOOLS.get(tool_def.name)
+            if declared is not None and not declared.phases:
+                unrunnable.append(tool_def.name)
+                slog.info(
+                    "Not registering '%s' — no execution phase in "
+                    "tool_definitions.TOOLS",
+                    tool_def.name,
+                )
+                continue
+            missing_env = [
+                var
+                for var in getattr(declared, "required_env", ()) or ()
+                if not os.environ.get(var)
+            ]
+            if missing_env:
+                unrunnable.append(tool_def.name)
+                slog.info(
+                    "Not registering '%s' — required environment variable(s) "
+                    "not set: %s",
+                    tool_def.name,
+                    ", ".join(missing_env),
+                )
+                continue
+
             binary_name = getattr(tool_def, "binary", None) or tool_def.command
             if is_tool_available(binary_name):
                 self.mcp.register_tool(tool_def)
@@ -77,6 +112,14 @@ class MCPToolBridge:
 
             missing_binaries.append(tool_def.name)
             slog.info("Skipping tool '%s' — binary not found on PATH", tool_def.name)
+
+        if unrunnable:
+            logger.info(
+                "%d tool(s) not registered — the registry marks them "
+                "unrunnable: %s",
+                len(unrunnable),
+                ", ".join(sorted(unrunnable)),
+            )
 
         if missing_binaries:
             logger.warning(

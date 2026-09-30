@@ -28,6 +28,12 @@ const mockToolRegistry = {
   getToolTimeout: () => 120,
   listTools: () => [],
   load: () => {},
+  // Worker tool state (worker-reported disabled/unavailable tools). Undefined
+  // means "the worker has not blocked this tool", which is what these tests
+  // exercise.
+  getWorkerBlockReason: () => undefined,
+  setWorkerToolStatus: () => [],
+  isWorkerBlocked: () => false,
 }
 
 const mockBridge = {
@@ -315,6 +321,43 @@ describe("InProcessExecutor", () => {
       })
       await exec.execute(phase)
       expect(order).toEqual(["recon-tool", "scan-tool"])
+    })
+
+    test("skips a pipeline step the worker reports it cannot run", async () => {
+      const called: string[] = []
+      const bridge = {
+        ...mockBridge,
+        callTool: async (name: string) => {
+          called.push(name)
+          return { success: true, data: [], durationMs: 5 }
+        },
+      }
+      const toolRegistry = {
+        ...mockToolRegistry,
+        getTool: (name: string) => ({ name, capabilities: ["recon"], requires_auth: false, destructive: false, timeout_seconds: 30 }),
+        // The worker disabled one tool and has no binary for the other.
+        getWorkerBlockReason: (name: string) =>
+          name === "dnsx-like" ? "no execution phase in the worker registry"
+            : name === "not-installed" ? "binary not installed on the worker PATH"
+              : undefined,
+      }
+      const exec = new InProcessExecutor(toolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const phase = makePhase({
+        config: {
+          pipelineSteps: [
+            { tool: "dnsx-like", capabilities: ["recon"], consumes: [], provides: [] },
+            { tool: "not-installed", capabilities: ["recon"], consumes: [], provides: [] },
+            { tool: "httpx-like", capabilities: ["recon"], consumes: [], provides: [] },
+          ],
+        },
+      })
+      const result = await exec.execute(phase)
+
+      // Only the runnable tool is dispatched, and the phase is not failed by
+      // the two the worker cannot run.
+      expect(called).toEqual(["httpx-like"])
+      expect(result.errors).toEqual([])
     })
 
     test("missing tool in pipeline steps logs error", async () => {
@@ -1264,6 +1307,56 @@ describe("InProcessExecutor", () => {
       exec.loadGates("test")
       const result = await exec.execute(makePhase())
       expect(result.errors.length).toBeGreaterThan(0)
+    })
+  })
+  describe("expected absences (the target simply lacks the thing)", () => {
+    const absenceBridge = (message: string) => ({
+      ...mockBridge,
+      callTool: async () => ({ success: false, data: null, error: message, durationMs: 5 }),
+    })
+
+    test("FORM_NOT_FOUND from register/login does not fail the phase", async () => {
+      const exec = new InProcessExecutor(
+        mockToolRegistry as any,
+        absenceBridge("No registration/login form discovered on any common endpoint") as any,
+        new ConfidenceEngine(),
+        mockWorkflowRegistry as any,
+      )
+      exec.loadGates("test")
+      const result = await exec.execute(makePhase())
+
+      expect(result.errors).toEqual([])
+      expect(result.status).toBe("completed")
+      expect(exec.expectedAbsences).toHaveLength(1)
+      expect(exec.expectedAbsences[0].note).toContain("no auth surface")
+    })
+
+    test("NO_CREDENTIALS is an absence, not a failure", async () => {
+      const exec = new InProcessExecutor(
+        mockToolRegistry as any,
+        absenceBridge("No credentials available. Call register() first") as any,
+        new ConfidenceEngine(),
+        mockWorkflowRegistry as any,
+      )
+      exec.loadGates("test")
+      const result = await exec.execute(makePhase())
+
+      expect(result.errors).toEqual([])
+      expect(exec.expectedAbsences[0].note).toContain("no credentials configured")
+    })
+
+    test("a real tool failure is still a failure", async () => {
+      const exec = new InProcessExecutor(
+        mockToolRegistry as any,
+        absenceBridge("Socket hang up while contacting the target") as any,
+        new ConfidenceEngine(),
+        mockWorkflowRegistry as any,
+      )
+      exec.loadGates("test")
+      const result = await exec.execute(makePhase())
+
+      expect(result.errors.length).toBeGreaterThan(0)
+      expect(exec.expectedAbsences).toHaveLength(0)
     })
   })
 })

@@ -18,3 +18,7 @@ priority: 30
 cost: low
 enabled: true
 timeout: 120
+# chaos authenticates against ProjectDiscovery Cloud. Without the key it exits
+# with "PDCP_API_KEY not specified" and produces nothing.
+required_env:
+  - PDCP_API_KEY

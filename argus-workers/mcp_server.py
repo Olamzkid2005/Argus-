@@ -216,6 +216,9 @@ class ToolDefinition:
         credential_roles: list[str] = None,
         risk_level: str | None = None,
         target_kind: str = "any",
+        phases: list[str] = None,
+        pipeline_step: bool = False,
+        disabled_reason: str | None = None,
     ):
         self.name = name
         self.command = command
@@ -241,6 +244,22 @@ class ToolDefinition:
         #: (gitleaks/semgrep received one and failed with "stat http://...: no
         #: such file or directory").
         self.target_kind = target_kind or "any"
+        #: Phases the declarative registry (tool_definitions.TOOLS) assigns this
+        #: tool. ``[]`` means "not runnable in any phase" — see disabled_reason.
+        self.phases = phases
+        #: True when this entry names an in-process pipeline step rather than an
+        #: executable (see tool_definitions.is_pipeline_step).
+        self.pipeline_step = pipeline_step
+        #: Set when the worker cannot currently run this tool, with the reason.
+        #: Published over MCP so the TypeScript planner stops scheduling it:
+        #: phase selection happens TS-side, so a worker-side `phases=[]` had no
+        #: effect and dnsx/gospider were dispatched and failed on usage errors.
+        self.disabled_reason = disabled_reason
+
+    @property
+    def disabled(self) -> bool:
+        """True when the worker cannot run this tool at all right now."""
+        return bool(self.disabled_reason)
 
     def to_dict(self) -> dict:
         """Serialize to MCP tool schema format (includes planner metadata)."""
@@ -268,7 +287,17 @@ class ToolDefinition:
             "credential_roles": self.credential_roles,
             "risk_level": self.risk_level,
             "target_kind": self.target_kind,
+            # Execution truth the TS planner needs before it schedules a tool.
+            # `disabled` is always present (never stripped) so a consumer can
+            # tell "worker says runnable" from "worker said nothing" — the
+            # latter only happens against an older worker build.
+            "disabled": self.disabled,
+            "pipeline_step": self.pipeline_step,
         }
+        if self.disabled_reason:
+            result["disabled_reason"] = self.disabled_reason
+        if self.phases:
+            result["phases"] = self.phases
         # Strip None values for cleaner output
         return {k: v for k, v in result.items() if v is not None and v != []}
 
@@ -425,6 +454,11 @@ class MCPServer:
             os.path.dirname(__file__), "tools", "definitions"
         )
         self._load_yaml_tools()
+        # An explicit tools_dir selects an isolated registry (tests, alternate
+        # definition sets). Only the default deployment path overlays the
+        # declarative worker registry.
+        if tools_dir is None:
+            self._apply_declarative_registry()
         self._check_critical_tools()
         self.session_store = AgentSessionStore()
         # Proactive DNS check — warn at startup if DNS is broken.
@@ -680,8 +714,121 @@ class MCPServer:
             except Exception as e:
                 logger.warning("Failed to load tool %s: %s", yaml_file, e)
 
+    def _apply_declarative_registry(self) -> None:
+        """Merge the declarative worker registry (``tool_definitions.TOOLS``).
+
+        ``tools/definitions/*.yaml`` is the file-level source of truth for how a
+        tool is *invoked*; ``tool_definitions.TOOLS`` is the source of truth for
+        whether it is currently *runnable at all*. This server only ever read
+        the YAML, so two classes of tool ended up in the planner's hands that
+        the worker could not run:
+
+        - Tools that exist only as inline entries in ``tool_definitions.py``
+          (``post_exploitation``, ``credential_replay``, ``internal_probe``,
+          ``attack-graph``, ``report-generator`` and friends) were absent from
+          the MCP registry entirely, so calling one returned "Unknown tool".
+        - Tools whose YAML says ``enabled: true`` but whose registry entry is
+          ``phases=[]`` because their installed build does not work (``dnsx``
+          needs a wordlist, ``gospider`` segfaults). The YAML cannot express
+          this, so the planner kept scheduling them.
+
+        YAML invocation metadata is never overwritten here; the overlay only
+        adds missing names and stamps ``disabled_reason``/``pipeline_step``
+        onto entries it knows cannot run. Phase selection happens in
+        TypeScript, so this is the only channel that tells the planner.
+        """
+        try:
+            from tool_definitions import TOOLS as _DECLARED_TOOLS
+            from tool_definitions import is_pipeline_step
+        except Exception as e:  # pragma: no cover - import machinery failure
+            logger.debug("Declarative tool registry unavailable: %s", e)
+            return
+
+        missing = [name for name in _DECLARED_TOOLS if name not in self._tools]
+        if missing:
+            try:
+                from tool_definitions import build_mcp_tool_definitions
+
+                by_name = {t.name: t for t in build_mcp_tool_definitions()}
+                for name in missing:
+                    declared_def = by_name.get(name)
+                    if declared_def is None:
+                        continue
+                    self.register_tool(declared_def)
+                    logger.info("Registered declarative-only tool: %s", name)
+            except Exception as e:  # pragma: no cover - defensive
+                logger.warning("Could not register declarative-only tools: %s", e)
+
+        disabled: list[str] = []
+        for name, declared in _DECLARED_TOOLS.items():
+            tool = self._tools.get(name)
+            if tool is None:
+                continue
+            # A YAML target_kind restriction must survive: `any` is the lenient
+            # default and never widens a path/url/host-only tool.
+            declared_kind = getattr(declared, "target_kind", "any")
+            if declared_kind not in (None, "any"):
+                tool.target_kind = declared_kind
+            if declared.phases:
+                tool.phases = list(declared.phases)
+            missing_env = [
+                var
+                for var in getattr(declared, "required_env", ()) or ()
+                if not os.environ.get(var)
+            ]
+            if missing_env:
+                # The tool reads its credentials straight from the environment
+                # (chaos, uncover, github-endpoints), so running it without the
+                # key can only produce "PDCP_API_KEY not specified".
+                tool.disabled_reason = (
+                    f"requires environment variable(s) not set: "
+                    f"{', '.join(missing_env)}"
+                )
+                disabled.append(name)
+            elif is_pipeline_step(name):
+                # In-process step: the orchestrator runs it, and no install can
+                # make it a subprocess. Dispatching the name over MCP can only
+                # fail (that is how `credential_replay` reached the run as
+                # "Unknown tool").
+                tool.pipeline_step = True
+                tool.disabled_reason = (
+                    "in-process pipeline step — run by the orchestrator, not "
+                    "dispatchable as an MCP tool"
+                )
+                disabled.append(name)
+            elif not declared.phases:
+                tool.disabled_reason = (
+                    "no execution phase in the worker registry "
+                    "(tool_definitions.TOOLS)"
+                )
+                disabled.append(name)
+
+        if disabled:
+            logger.info(
+                "%d tool(s) marked disabled for planner dispatch: %s",
+                len(disabled),
+                ", ".join(sorted(disabled)),
+            )
+
     def register_tool(self, tool: ToolDefinition):
-        """Register a tool definition."""
+        """Register a tool definition.
+
+        Re-registering an existing name preserves the execution-state fields set
+        by ``_apply_declarative_registry()`` (``disabled_reason``,
+        ``pipeline_step``, ``phases``). Callers such as ``MCPToolBridge``
+        re-register from ``build_mcp_tool_definitions()``, which only carries
+        invocation metadata — without this, a second registration of ``dnsx``
+        would silently clear the "no execution phase" verdict and put the tool
+        back in front of the planner.
+        """
+        existing = self._tools.get(tool.name)
+        if existing is not None:
+            if tool.disabled_reason is None:
+                tool.disabled_reason = existing.disabled_reason
+            if not tool.pipeline_step:
+                tool.pipeline_step = existing.pipeline_step
+            if tool.phases is None:
+                tool.phases = existing.phases
         self._tools[tool.name] = tool
         self._execution_stats[tool.name] = {
             "calls": 0,
@@ -691,8 +838,39 @@ class MCPServer:
         }
 
     def get_tools(self) -> list[dict]:
-        """Get all tool definitions (mcp.tools/list equivalent)."""
-        return [t.to_dict() for t in self._tools.values() if t.enabled]
+        """Get all tool definitions (mcp.tools/list equivalent).
+
+        Each entry carries the worker's *execution truth* alongside the
+        static invocation metadata: ``disabled``/``disabled_reason`` (the
+        declarative registry gives this tool no phase), ``pipeline_step``
+        (in-process step, never runnable as a subprocess) and ``available``
+        (its binary exists on the augmented PATH). The TypeScript planner is
+        the component that picks phases and tools, so it can only avoid
+        dispatching dead tools if the worker tells it which ones are dead.
+        """
+        tools: list[dict] = []
+        for tool in self._tools.values():
+            if not tool.enabled:
+                continue
+            entry = tool.to_dict()
+            entry["available"] = self._tool_is_available(tool)
+            tools.append(entry)
+        return tools
+
+    def _tool_is_available(self, tool: ToolDefinition) -> bool:
+        """Whether *tool*'s binary is present on the execution PATH.
+
+        Cheap enough to call from ``get_tools()``: positive results are cached
+        for the process lifetime and negative results for
+        ``_BINARY_CACHE_MISS_TTL_SECS``, so a 70-tool list does not turn into
+        70 ``shutil.which`` calls on every poll.
+        """
+        binary = tool.binary or tool.command
+        if not binary:
+            # No command at all (agent-internal / pipeline step): nothing to
+            # shell out to, so nothing can be missing.
+            return True
+        return self._binary_on_path(binary) is not None
 
     def get_tool(self, name: str) -> ToolDefinition | None:
         """Get a tool definition by name."""
@@ -788,6 +966,16 @@ class MCPServer:
         if not tool.enabled:
             return MCPToolResult(
                 success=False, error=f"Tool disabled: {name}", tool=name
+            ).to_dict()
+        # The entry exists so the planner can see it and know not to schedule it
+        # (see _apply_declarative_registry). Calling it anyway gets the reason
+        # rather than a confusing "binary not found" for a name that is not a
+        # binary at all.
+        if tool.disabled_reason:
+            return MCPToolResult(
+                success=False,
+                error=f"Tool '{name}' is not runnable: {tool.disabled_reason}",
+                tool=name,
             ).to_dict()
 
         tool_signal_quality = (

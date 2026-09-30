@@ -172,6 +172,13 @@ class ToolDefinition:
     #: Activation gate — tool only runs when these conditions are met
     requires: ToolRequires | None = None
 
+    #: Environment variables the tool cannot run without (an API key it reads
+    #: from the environment, for example ``GITHUB_TOKEN`` or ``PDCP_API_KEY``).
+    #: When any of these is unset the MCP server reports the tool as disabled,
+    #: so the planner stops scheduling a tool whose only possible outcome is
+    #: ``PDCP_API_KEY not specified``.
+    required_env: tuple[str, ...] = ()
+
     #: Priority score for tool selection (higher = preferred)
     priority: int | None = None
 
@@ -396,20 +403,14 @@ _register(
     )
 )
 
-_register(
-    ToolDefinition(
-        name="amass",
-        description="Subdomain enumeration and reconnaissance",
-        phases=["recon"],
-        default_args=["enum", "-json"],
-        parameters=[
-            ToolParameter("target", "Target domain", flag="-d", required=True),
-            ToolParameter("brute", "Enable brute forcing", flag="-brute"),
-        ],
-        timeout=600,
-        signal_quality=SignalQuality.CANDIDATE,
-    )
-)
+# NOTE: amass is registered from tools/definitions/amass.yaml via
+# _generated_tools.py above. The hand-written _register() that used to live
+# here was removed: `amass` is a YAML-defined name, so its `default_args`
+# (inline policy) won over the YAML, and the inline copy passed
+# `enum -json` — a flag the installed build does not define, which made every
+# amass invocation exit with "flag provided but not defined: -json". The YAML
+# entry is a strict superset (priority, cost, risk_level, enabled), so the
+# inline copy contributed nothing but staleness. Keep it in the YAML.
 
 _register(
     ToolDefinition(

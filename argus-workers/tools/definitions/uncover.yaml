@@ -18,3 +18,7 @@ priority: 25
 cost: low
 enabled: true
 timeout: 120
+# Every uncover engine (shodan/fofa/censys/...) needs its own API key. With
+# none configured it cannot query anything.
+required_env:
+  - SHODAN_API_KEY

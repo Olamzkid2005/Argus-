@@ -1,13 +1,17 @@
 name: s3scanner
 command: s3scanner
 description: "Amazon S3 bucket discovery and enumeration"
+# -json is a valid global flag; the failure was the missing input flag: the
+# bucket name was passed positionally, so clap reported "exactly one of:
+# -bucket, -bucket-file, -mq required" and nothing was scanned.
 args:
-  - "--json"
+  - "-json"
 parameters:
   - name: target
     type: string
-    description: "Bucket name or domain"
+    description: "Bucket name to check"
     required: true
+    flag: "-bucket"
 capabilities:
   - web_recon
   - s3_scanning

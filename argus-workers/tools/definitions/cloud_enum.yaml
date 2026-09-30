@@ -1,8 +1,10 @@
 name: cloud_enum
 command: cloud_enum
 description: "Cloud asset enumeration tool (AWS, Azure, GCP)"
-args:
-  - "--json"
+# cloud_enum is argparse-based and has no --json; passing it produced
+# "usage: cloud_enum [-h] (-k KEYWORD | -kf KEYFILE) ..." and no scan.
+# The keyword is the only required input, so `-k <target>` alone is correct.
+args: []
 parameters:
   - name: target
     type: string

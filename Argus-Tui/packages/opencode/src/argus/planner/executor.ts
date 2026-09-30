@@ -162,6 +162,7 @@ export class ThrottleTracker {
 import { Confidence, Severity } from "../shared/types"
 import { ConfidenceEngine } from "../engagement/confidence"
 import { ApprovalService } from "../workflows/approval"
+import type { ApprovalDecision } from "../workflows/approval"
 import type { ApprovalGate } from "../workflows/types"
 import { WorkflowRegistry } from "../workflows/registry"
 import { Feature, type FeatureFlags } from "../config/feature-flags"
@@ -270,6 +271,42 @@ const RECOVERY_LABELS: Record<ErrorRecovery, string> = {
   fail_fast: "fail fast",
 }
 
+/**
+ * Tool messages that mean "the thing you asked for is not present here".
+ *
+ * Matched on the message text because the worker reports these as failures:
+ * the tool could not complete its task, but the reason is a property of the
+ * target rather than a fault. Keeping the list explicit means a genuinely
+ * unexpected error is still an error.
+ */
+const EXPECTED_ABSENCE_PATTERNS: Array<{ pattern: RegExp; note: string }> = [
+  {
+    pattern: /FORM_NOT_FOUND|No registration\/login form discovered/i,
+    note: "no registration or login form on this target — no auth surface to test",
+  },
+  {
+    pattern: /NO_CREDENTIALS|No credentials available/i,
+    note: "no credentials configured — nothing to log in with",
+  },
+  {
+    pattern: /EMAIL_EXISTS|already registered/i,
+    note: "account already exists from an earlier run",
+  },
+]
+
+/**
+ * Classify a tool failure message as an expected absence, or null.
+ *
+ * @returns A human-readable note when the message describes a missing thing
+ *          rather than a broken run.
+ */
+function classifyExpectedAbsence(message: string): string | null {
+  for (const { pattern, note } of EXPECTED_ABSENCE_PATTERNS) {
+    if (pattern.test(message)) return note
+  }
+  return null
+}
+
 export interface ScopeConfig {
   mode: "allowlist" | "allow_all"
   allowed_targets?: string[]
@@ -321,6 +358,13 @@ export class InProcessExecutor implements PhaseExecutor {
    * vulnerability.
    */
   readonly unstructuredOutput: Array<{ tool: string; phase: string; target: string; bytes: number; snippet: string }> = []
+
+  /**
+   * Tool runs that reported "the thing you asked about is not there": no
+   * registration form, no credentials to test with. These are results, not
+   * failures, and are carried on the result as observations.
+   */
+  readonly expectedAbsences: Array<{ tool: string; phase: string; target: string; note: string }> = []
 
   /** Record unstructured tool output as an observation. Never a finding. */
   private recordUnstructuredOutput(tool: string, phaseId: string, target: string, text: string): void {
@@ -432,6 +476,18 @@ export class InProcessExecutor implements PhaseExecutor {
 
   private gatesLoaded = false
 
+  /**
+   * Every approval-gate decision this executor's ApprovalService made.
+   *
+   * Read by the workflow runner at the end of a run so the decisions land in
+   * the engagement audit log. Under `ARGUS_AUTO_APPROVE=1` the gates are
+   * silent, so this is what proves they were consulted (and, with
+   * `ARGUS_DENY_DESTRUCTIVE=1`, what they blocked).
+   */
+  getApprovalDecisions(): ApprovalDecision[] {
+    return this.approvalService.decisions
+  }
+
   loadGates(workflowName: string): void {
     const workflow = this.workflowRegistry?.getWorkflow(workflowName)
     this.requiredGates = this.approvalService.getRequiredGates(workflow?.approval_required)
@@ -525,6 +581,18 @@ export class InProcessExecutor implements PhaseExecutor {
         const tool = this.toolRegistry.getTool(step.tool)
         if (!tool) {
           errors.push(`Tool ${step.tool} not found in registry`)
+          continue
+        }
+        // The plan was built before the MCP worker connected, so it can name a
+        // tool the worker has since reported it cannot run (dnsx/gospider are
+        // disabled worker-side; testssl/wpscan/trufflehog have no binary).
+        // Skipping is deliberate and not an error: the phase simply loses one
+        // candidate and its findings are not available to be missed.
+        const blockedBy = this.toolRegistry.getWorkerBlockReason(step.tool)
+        if (blockedBy) {
+          if (execOptions.verbose) {
+            console.log(`[executor]  Skipping ${step.tool}: worker cannot run it (${blockedBy})`)
+          }
           continue
         }
         const cap = (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability
@@ -1060,6 +1128,23 @@ export class InProcessExecutor implements PhaseExecutor {
     }
 
     if (!success && lastError) {
+      // A "not there" answer is a result. `register`/`login` report
+      // FORM_NOT_FOUND on any target without a registration or login form —
+      // the expected outcome for a static site or a JSON API — and recording
+      // it as an error marked the whole auth_detection phase FAILED, which is
+      // how a scan of a target with no auth surface came back with
+      // `auth_detection FAILED` instead of "no auth surface found".
+      const absence = classifyExpectedAbsence(lastError.message)
+      if (absence) {
+        this.expectedAbsences.push({
+          tool: tool.name,
+          phase: phase.phaseId,
+          target: phase.target,
+          note: absence,
+        })
+        console.log(`[executor]  ○ ${tool.name}: ${absence} — recorded as an observation, not a failure`)
+        return { findings, errors: [], failFast: false }
+      }
       return { findings, errors: [`Tool ${tool.name} failed after ${errorRecovery === "retry_once_then_skip" ? "1 retry" : "no retry"} (${RECOVERY_LABELS[errorRecovery]}): ${lastError.message}`], failFast: false }
     }
 
