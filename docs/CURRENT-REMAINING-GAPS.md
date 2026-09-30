@@ -141,6 +141,15 @@ findings or a non-empty raw string — so a legitimately empty result fell throu
 permutable labels). A clean exit with no output is now a terminal empty result — no retry, no
 error, and no `expectedAbsences` entry.
 
+Confirming that, a second and separate problem surfaced: the installed `waybackurls`
+(tomnomnom/waybackurls v0.1.0) is a silent no-op. It exits 0 in ~0.2 s with no output for a domain
+whose CDX query returns rows — the same
+`cdx/search/cdx?url=iana.org*&output=text&fl=original&collapse=urlkey` request returns results from
+`curl` in the same shell, and clearing proxy variables changes nothing, so it never completes a
+query. It must be verified or dropped: now that an empty result is correctly treated as success, a
+tool that never queries anything will *report* success and contribute nothing. The health probe
+cannot catch this, because it only checks that `--help` exits 0 (which it does).
+
 The same pass found the worker only converted *System A* parser output. The ~30 parsers under
 `parsers/parsers/` (System B — httpx, katana, naabu, gau, dalfox, trivy, bandit, subfinder, …)
 return plain dicts, while the MCP result builder reads `finding.__dict__`; every finding from those
