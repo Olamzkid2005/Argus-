@@ -125,8 +125,14 @@ this class of bug recurring.
 and mode is `warn`/`open`; `runtime/preflight.py` enforces the same on the Python side.
 So `assess --autonomous` cannot start until the config is set to `allowlist` + explicit targets.
 
+**Resolved (commit `b0a5a4fd`).** The guard now accepts an allowlist supplied by config *or* env
+(`ARGUS_SCOPE_MODE` / `ARGUS_ALLOWED_TARGETS`), the allowlist actually rejects out-of-scope
+targets (it previously compared patterns against the whole URL while the config documented
+hostnames), and the guard's error is no longer swallowed by a surrounding `catch` that rewrote it
+as "config missing". Still required for a demo run: real targets in `argus.config.yaml`.
+
 ### B4 — LLM key conventions are split across the two runtimes
-- TS planner reads `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENCODE_API_KEY`, model from
+- TS planner read `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENCODE_API_KEY`, model from
   `ARGUS_PLANNER_MODEL` / `OPENCODE_MODEL` (`planner/llm-service.ts:78-82`).
 - `argus-workers/.env` sets `LLM_API_KEY` + `LLM_MODEL` (Python's convention).
 - Bun auto-loads `.env` from the **process cwd** (the `opencode` package), so
@@ -134,6 +140,17 @@ So `assess --autonomous` cannot start until the config is set to `allowlist` + e
 
 Result: the planner silently runs deterministic even though a key is "configured".
 (Python-side use of `LLM_API_KEY` is a separate, also-unverified path.)
+
+**Resolved (`0bd76813`, `2f8906ac`, `60beab1a`, `b6a7a2a1`).** The model now comes from
+OpenCode's provider registry only — the same `Provider`/`Auth` services OpenCode's own agent uses,
+lowered through the shared `LLMNative.model()` adapter — and ambient provider credentials are
+ignored in both runtimes unless `ARGUS_ALLOW_AMBIENT_LLM_ENV=1`. Because the Python worker has no
+registry of its own, the planner resolves the model once and hands the worker the concrete
+OpenAI-compatible endpoint at `agent_init.llm`; `endpoint_from_config` stops the key's prefix from
+re-routing that handoff to a different provider. Verified handoff on this machine:
+`opencode-go/kimi-k2.7-code` → `https://opencode.ai/zen/go/v1`. Both runtimes therefore run the
+same model, and no ambient key is billed. **Not yet verified:** an actual completion from either
+runtime (only resolution + mocked calls have run so far).
 
 ### B5 — `doctor` warnings are partly stale, partly real gaps
 - Looks for `.env` at `PROJECT_ROOT` (`doctor.ts` `envCheck`, `configValidationCheck`) — so
@@ -236,11 +253,12 @@ Ordered so that each step is independently verifiable and unblocks the next.
   findings retrievable via `python -m cli list` / `report`.
 
 ### Step 2 — Autonomy switches  *(1–3 days)*
-- [ ] Set `security.scope.mode: allowlist` + explicit `allowed_targets` for the test target
-      (closes **B3**); keep `require_confirmation` behaviour explicit.
-- [ ] Export the TS-visible LLM key (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`) **and**
-      `ARGUS_PLANNER_MODEL`, or accept deterministic mode deliberately (closes **B4**).
-- [ ] Set `ARGUS_PYTHON` to `argus-workers/venv/bin/python` for determinism (closes **B7**).
+- [x] Scope guard is configurable (`ARGUS_SCOPE_MODE` / `ARGUS_ALLOWED_TARGETS`), enforced, and its
+      error is no longer masked (closes **B3** — `b0a5a4fd`). Remaining: put real targets in
+      `argus.config.yaml`; keep `require_confirmation` behaviour explicit.
+- [x] Model resolution fixed to OpenCode's registry in both runtimes, with the planner's choice
+      handed to the worker (closes **B4** — `0bd76813`/`b6a7a2a1`). Remaining: one real completion.
+- [x] Worker/planner interpreter selection is explicit and reported (`closes **B7**`).
 - [ ] Exercise `assess --autonomous` (implies `ARGUS_AUTONOMOUS=1` + `ARGUS_AUTO_APPROVE=1`) and
       confirm it is genuinely unattended: no prompt, no TTY dependency.
 - **Acceptance:** `ARGUS_AUTONOMOUS=1 ARGUS_AUTO_APPROVE=1` runs to completion with no interaction,
