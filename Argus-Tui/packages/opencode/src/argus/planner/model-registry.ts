@@ -28,6 +28,7 @@
 
 import { Effect } from "effect"
 import type { Model } from "@opencode-ai/llm"
+import { Installation } from "@/installation"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceRef } from "@/effect/instance-ref"
 import { Provider } from "@/provider/provider"
@@ -144,6 +145,69 @@ interface RegistrySnapshot {
   readonly configured: string[]
   readonly available: Record<string, { models: Record<string, unknown> }>
   readonly defaultModel: ModelRef | undefined
+  /** OpenCode project id — required by `opencode*` gateways. */
+  readonly projectID: string | undefined
+}
+
+/**
+ * Stable identifier for this planner conversation.
+ *
+ * `opencode*` gateways require a session id per conversation — the free tier
+ * rejects requests without one (`FreeTierError: OpenCode's free tier can only
+ * be used from within OpenCode`) and OpenCode Go rejects them with
+ * `MissingSessionID`. They also use it for prompt caching, so it must stay
+ * constant across the calls that make up one run. One planner process serves
+ * one assessment, so a process-lifetime id is the right scope.
+ */
+const PLANNER_SESSION_ID = `ses_argus-${crypto.randomUUID()}`
+
+/**
+ * Request headers for a provider, mirroring `session/llm/request.ts`.
+ *
+ * That is the one place in the codebase that knows how OpenCode identifies
+ * itself to its own gateways; the planner reaches the same gateways through the
+ * same credentials, so it must identify itself the same way instead of
+ * inheriting the generic SDK headers.
+ */
+export function buildRouteHeaders(input: {
+  readonly providerID: string
+  readonly projectID?: string
+  readonly sessionID: string
+  readonly userAgent: string
+}): Record<string, string> | undefined {
+  if (input.providerID.includes("github-copilot")) return undefined
+  return input.providerID.startsWith("opencode")
+    ? {
+        ...(input.projectID ? { "x-opencode-project": input.projectID } : {}),
+        "x-opencode-session": input.sessionID,
+        "x-opencode-client": "cli",
+        "User-Agent": input.userAgent,
+      }
+    : {
+        "x-session-affinity": input.sessionID,
+        "User-Agent": input.userAgent,
+      }
+}
+
+function routeHeaders(
+  providerID: string,
+  projectID: string | undefined,
+): Record<string, string> | undefined {
+  const headers = buildRouteHeaders({
+    providerID,
+    projectID,
+    sessionID: PLANNER_SESSION_ID,
+    userAgent: Installation.USER_AGENT,
+  })
+  if (!headers) return undefined
+  // Opt-in trace of how this run identifies itself. Header *names* only in the
+  // log line; the values are projection/session ids, never credentials (the key
+  // travels in `Authorization`, which is added by the route's auth layer).
+  if (process.env.ARGUS_DEBUG_LLM_HEADERS) {
+    console.log(`[Argus] LLM route headers for ${providerID}: ${Object.keys(headers).join(", ")}`)
+    console.log(`[Argus] LLM route user-agent: ${headers["User-Agent"]}`)
+  }
+  return headers
 }
 
 /**
@@ -175,6 +239,7 @@ async function withRegistry<T>(fn: (snapshot: RegistrySnapshot) => Effect.Effect
           configured,
           available: available as RegistrySnapshot["available"],
           defaultModel: def ? { providerID: String(def.providerID), modelID: String(def.modelID) } : undefined,
+          projectID: (ctx as { project?: { id?: string } }).project?.id,
         })
       }).pipe(Effect.provideService(InstanceRef, ctx), Effect.orDie),
     )
@@ -205,8 +270,13 @@ function routeFor(snapshot: RegistrySnapshot, ref: ModelRef) {
 
     // `messages` is required by the shared adapter's input type but is not
     // read by `model()`; the session layer passes real messages here.
+    // Headers go through the same second argument the session layer uses, so
+    // there is one definition of how a route is identified.
     return {
-      route: LLMNative.model({ model: modelOption.value, apiKey, messages: [] }),
+      route: LLMNative.model(
+        { model: modelOption.value, apiKey, messages: [] },
+        routeHeaders(ref.providerID, snapshot.projectID),
+      ),
       model: modelOption.value,
       apiKey,
     }
