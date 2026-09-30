@@ -14,6 +14,21 @@ from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
+
+def _log_internal_target(hostname: str, detail: str) -> None:
+    """Note an internal/SSRF target on the way to a decision.
+
+    ``is_internal_address`` is a classifier. It is called both by the guards
+    that block a target and by callers that permit one — an authorized target
+    with ``ARGUS_ALLOW_INTERNAL_TARGETS`` set — so announcing "Blocked ..."
+    here claimed a decision the caller had not made yet. Measured: a local run
+    logged "Blocked internal/SSRF hostname: 127.0.0.1" three times and then
+    scanned the target successfully. Every caller that really blocks a target
+    logs its own warning with the reason.
+    """
+    logger.debug("Internal/SSRF target: %s (%s)", hostname, detail)
+
+
 # Known cloud metadata / internal hostnames that must always be blocked (SSRF prevention)
 # Consolidated from react_agent.py _validate_arguments() and _browser_scan_worker.py
 _BLOCKED_METADATA_HOSTNAMES: frozenset = frozenset({
@@ -274,9 +289,7 @@ class ScopeValidator:
             return False
         if ScopeValidator.is_always_blocked_target(hostname, resolved_ip):
             return True
-        if authorized and ScopeValidator.internal_targets_opt_in():
-            return False
-        return True
+        return not (authorized and ScopeValidator.internal_targets_opt_in())
 
     @staticmethod
     def is_internal_address(hostname: str, resolved_ip: str | None = None) -> bool:
@@ -317,34 +330,28 @@ class ScopeValidator:
 
         # 1. Static hostname check (fast path -- no DNS resolution needed)
         if host_lower in _BLOCKED_METADATA_HOSTNAMES:
-            logger.warning(
-                "Blocked internal/SSRF hostname: %s", hostname
-            )
+            _log_internal_target(hostname, "metadata hostname")
             return True
 
         # 2. Direct IP address check
         try:
             ip = ipaddress.ip_address(hostname)
             if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
-                logger.warning(
-                    "Blocked internal IP: %s (private=%s, loopback=%s, link_local=%s, multicast=%s)",
-                    hostname, ip.is_private, ip.is_loopback, ip.is_link_local, ip.is_multicast,
+                _log_internal_target(
+                    hostname,
+                    f"private={ip.is_private} loopback={ip.is_loopback} "
+                    f"link_local={ip.is_link_local} multicast={ip.is_multicast}",
                 )
                 return True
             # Check additional ranges not covered by ipaddress module (CGNAT, benchmarking)
             if ScopeValidator._is_additional_blocked_ip(hostname):
-                logger.warning(
-                    "Blocked additional SSRF IP: %s (CGNAT/benchmarking)", hostname,
-                )
+                _log_internal_target(hostname, "CGNAT/benchmarking range")
                 return True
             # Check IPv4-mapped IPv6 addresses (e.g. ::ffff:10.0.0.1)
             if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
                 mapped = ipaddress.ip_address(ip.ipv4_mapped)
                 if mapped.is_private or mapped.is_loopback or mapped.is_link_local:
-                    logger.warning(
-                        "Blocked IPv4-mapped internal IP: %s -> %s",
-                        hostname, mapped,
-                    )
+                    _log_internal_target(hostname, f"IPv4-mapped {mapped}")
                     return True
             return False
         except ValueError:
@@ -364,22 +371,19 @@ class ScopeValidator:
                 return False
 
             if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
-                logger.warning(
-                    "Blocked hostname %s -- resolved to internal IP %s (DNS rebinding protection)",
-                    hostname, resolved_ip,
+                _log_internal_target(
+                    hostname, f"resolved to internal IP {resolved_ip}"
                 )
                 return True
             # Check additional ranges not covered by ipaddress module
             if ScopeValidator._is_additional_blocked_ip(resolved_ip):
-                logger.warning(
-                    "Blocked hostname %s -- resolved to additional blocked IP %s",
-                    hostname, resolved_ip,
+                _log_internal_target(
+                    hostname, f"resolved to CGNAT/benchmarking IP {resolved_ip}"
                 )
                 return True
             if resolved_ip == "169.254.169.254":
-                logger.warning(
-                    "Blocked hostname %s -- resolved to cloud metadata endpoint %s",
-                    hostname, resolved_ip,
+                _log_internal_target(
+                    hostname, f"resolved to cloud metadata endpoint {resolved_ip}"
                 )
                 return True
             return False
@@ -401,25 +405,22 @@ class ScopeValidator:
                 try:
                     ip = ipaddress.ip_address(ip_str)
                     if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
-                        logger.warning(
-                            "Blocked hostname %s -- resolved to internal IP %s (DNS rebinding protection)",
-                            hostname, ip_str,
+                        _log_internal_target(
+                            hostname, f"resolved to internal IP {ip_str}"
                         )
                         return True
                     # Check additional ranges not covered by ipaddress module
                     if ScopeValidator._is_additional_blocked_ip(ip_str):
-                        logger.warning(
-                            "Blocked hostname %s -- resolved to additional blocked IP %s",
-                            hostname, ip_str,
+                        _log_internal_target(
+                            hostname, f"resolved to CGNAT/benchmarking IP {ip_str}"
                         )
                         return True
                     # Check IPv4-mapped IPv6 addresses (e.g. ::ffff:10.0.0.1)
                     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
                         mapped = ipaddress.ip_address(ip.ipv4_mapped)
                         if mapped.is_private or mapped.is_loopback or mapped.is_link_local:
-                            logger.warning(
-                                "Blocked hostname %s -- resolved to IPv4-mapped internal IP %s -> %s",
-                                hostname, ip_str, mapped,
+                            _log_internal_target(
+                                hostname, f"resolved to IPv4-mapped {ip_str} -> {mapped}"
                             )
                             return True
                 except ValueError:
