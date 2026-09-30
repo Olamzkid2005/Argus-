@@ -349,6 +349,30 @@ describe("formatFindingsSummary", () => {
     expect(calls.some((s: string) => s.includes("failed"))).toBe(true)
   })
 
+  // Regression: a storage failure during teardown must not skip
+  // bridge.disconnect(). The MCP worker is a child process whose pipes keep the
+  // event loop alive, so a skipped disconnect hangs the CLI after
+  // "Assessment complete" (seen in the 2026-09-30 autonomous run, where the
+  // master-key cache TTL expired mid-run and saveFindings threw).
+  test("still disconnects the bridge when persisting findings throws", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { mockBridge, deps } = makeDeps()
+    deps.store.saveFindings = mock(() => { throw new Error("master key not loaded") })
+
+    const runner = new WorkflowRunner(deps)
+    const onProgress = mock(() => {})
+
+    const result = await runner.run({ target: "https://example.com", onProgress })
+
+    // Teardown must complete even though persistence failed
+    expect(mockBridge.disconnect).toHaveBeenCalled()
+    // ...and the run must not be reported as a success over an empty database
+    expect(result.success).toBe(false)
+    expect(String(result.error)).toContain("master key not loaded")
+    const calls = onProgress.mock.calls.map((c: any[]) => String(c[0]))
+    expect(calls.some((s: string) => s.includes("Failed to persist results"))).toBe(true)
+  })
+
   test("saves findings even when execution has error", async () => {
     const partialFindings = [
       {

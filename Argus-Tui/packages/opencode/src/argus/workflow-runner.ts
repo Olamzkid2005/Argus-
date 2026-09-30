@@ -1373,12 +1373,26 @@ export class WorkflowRunner {
       executionError = error as Error
       emit({ type: "scan_complete", totalFindings: allFindings.length })
       emit(`✗ Error: ${executionError.message}`)
-      store.appendAuditLog(engagementId, "RUNNER_ERROR",
-        `Workflow error: ${executionError.message}`)
+      try {
+        store.appendAuditLog(engagementId, "RUNNER_ERROR",
+          `Workflow error: ${executionError.message}`)
+      } catch {
+        // Audit logging is best-effort — a storage failure must never mask the
+        // original execution error (or skip the teardown below).
+      }
     } finally {
-      const allCompleted = Array.from(phaseRecords.values()).every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")
-      store.updateStatus(engagementId, executionError ? "FAILED" : allCompleted ? "COMPLETED" : "PAUSED")
-      store.saveFindings(engagementId, allFindings)
+      // Persist results, but never let a storage failure escape the finally:
+      // the MCP worker is a child process whose pipes keep the event loop
+      // alive, so skipping bridge.disconnect() hangs the whole CLI run.
+      let persistError: Error | null = null
+      try {
+        const allCompleted = Array.from(phaseRecords.values()).every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")
+        store.updateStatus(engagementId, executionError ? "FAILED" : allCompleted ? "COMPLETED" : "PAUSED")
+        store.saveFindings(engagementId, allFindings)
+      } catch (err) {
+        persistError = err as Error
+        emit(`✗ Failed to persist results: ${persistError.message}`)
+      }
 
       // Auto-prune evidence at end of assessment (blocker 61)
       try {
@@ -1394,6 +1408,13 @@ export class WorkflowRunner {
       }
 
       await bridge.disconnect()
+
+      // A run whose findings could not be saved is not a success — surface it
+      // so an unattended driver sees a non-zero exit instead of a clean result
+      // over an empty database.
+      if (persistError && !executionError) {
+        executionError = persistError
+      }
       if (!executionError) {
         emit({ type: "scan_complete", totalFindings: allFindings.length })
       }

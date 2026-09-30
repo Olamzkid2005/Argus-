@@ -58,6 +58,41 @@ Still requiring proof:
 
 Some execution paths still degrade to deterministic execution or stop rather than autonomously recover and continue.
 
+**Re-run evidence (2026-09-30, unattended `--autonomous` against the local Flask fixture).** A fresh
+run planned 9 phases (11 after replans), executed for ~12 minutes, reported
+`✓ Assessment complete — 45 total finding(s)`, and then broke. Artifacts: `/tmp/step2-rerun.log`.
+
+What broke and what is now fixed:
+
+- **Fixed — master-key cache expiry killed finalization.** `EncryptionManager.CACHE_TTL_MS` is 5
+  minutes and the run was 12, so the cached key was gone by teardown. `EngagementStore._getEngagementDb()`
+  is synchronous and only consulted `getCachedMasterKey()`, so it threw
+  `Cannot open encrypted engagement <id>: master key not loaded` — the findings were never written and
+  the per-engagement `findings` table stayed empty. Added `EncryptionManager.loadKeySync()` (a
+  read-only keychain reload that never mints a key) and used it in both encrypted open paths.
+- **Fixed — the same failure hung the CLI.** `store.saveFindings()` ran inside the runner's `finally`
+  block ahead of `await bridge.disconnect()`; when it threw, `disconnect()` was skipped and the MCP
+  worker child process kept the event loop alive forever (process sat at ~0% CPU after the error).
+  Teardown now persists inside its own `try`, disconnects regardless, and reports a persistence failure
+  as the run's error so an unattended driver exits non-zero instead of "succeeding" over an empty DB.
+- **Open — the TS planner still schedules tools the worker disabled or whose flags are broken.**
+  Phase selection is TS-side, so worker-side `phases=[]` does not stop dispatch. The run attempted
+  `dnsx` (needs a wordlist), `gospider`, `github-endpoints -json`, `amass -json`, `chaos`, `uncover`
+  (both need API keys), `cloud_enum`, `s3scanner`, `shuffledns`, `masscan` — all usage/flag failures.
+  Recon finished `28 finding(s), 13 error(s)`.
+- **Open — `auth_detection` FAILED** (`register`/`login` FORM_NOT_FOUND) and `credential_replay`
+  reported "Unknown tool".
+- **Open — registry drift is reported but not resolved:** `[executor] MCP drift detected`
+  (`missing_from_registry: finding_verifier, playwright-{bola,privesc,xss}`;
+  `missing_from_mcp: post_exploitation, credential_replay, internal_probe`; capability gaps for
+  `ai-surface`, `bandit`, `pip-audit`, `semgrep`, `trivy`).
+- **Open — log noise:** ~36 `credentials file … stored in plaintext` warnings, repeated
+  `Failed to decrypt credentials file … Unsupported state or unable to authenticate data`, and
+  `[replan-rules] Unknown subtype "…" — no capability mapping` for `OPEN_PORT`, `HTTP_ENDPOINT`,
+  `CRAWLED_ENDPOINT`, `port_open`, `technology_detection`, `raw_output`, `web_vulnerability`.
+- **Open — the vuln_scan phase was auto-approved** (`ARGUS_AUTO_APPROVE=1`), so destructive-tool
+  gating is still unproven rather than exercised.
+
 ### 3. Tool availability is operationally incomplete
 
 **Fixed (2026-09-30):** the registry no longer *reports* tools it actually has. A hand-written
@@ -237,6 +272,29 @@ Hashing and integrity verification exist, but complete forensic-chain proof stil
 - append-only and auditable event history,
 - signed authenticity rather than integrity-only hashes,
 - encrypted artifact lifecycle and recovery.
+
+**Encryption at rest leaks and destroys in practice (2026-09-30).** Three concrete failures, all
+reproduced locally:
+
+- **Plaintext leaks.** 822 non-empty `engagement.db.decrypted` files were found under
+  `~/.argus/engagements/`. `EncryptedDbHandle` decrypts to that temp path on open and only removes it
+  on a clean `close()`; any crash or SIGTERM (both of which happened during these runs) leaves the
+  engagement database in plaintext on disk. Startup should sweep `*.decrypted` / `*-enc.tmp` leftovers.
+- **The test suite destroys the operator's real master key.** `test/argus/helpers/encryption-test-utils.ts`
+  calls `EncryptionManager.destroy()` + `initialize()` against the shared `argus`/`master-key` keychain
+  entry, so every test run rotates the key that real encrypted engagements and evidence packages were
+  written with — they become permanently undecryptable. Tests must use a separate keychain service and
+  an isolated `ARGUS_DATA_DIR`.
+- **No data-dir isolation.** `StoragePaths.basePath` resolves to `~/.argus`, and the suites never set
+  `ARGUS_DATA_DIR`, so tests write into the operator's real data directory: 8,723 engagement
+  directories have accumulated. This also makes the encryption integration tests order-dependent —
+  `encryption-workflow.test.ts` > "preserves phases, status transitions, and workflow snapshots in
+  encrypted engagements" fails in a full-file run and passes in isolation.
+
+Operator impact: a test run during this investigation left `ENG-muoa5y14-1k` undecryptable
+(verified: it opened before the run and fails with `Unsupported state or unable to authenticate data`
+after). Findings loss was nil (the run above never persisted any), but the
+mechanism is data-destroying and should be fixed before any external demo.
 
 ### 11. Production LLM reliability is not proven at scale
 

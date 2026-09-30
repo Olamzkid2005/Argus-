@@ -23,7 +23,7 @@
  *   6. Concurrent encrypted + plaintext engagements
  *   7. Encryption flag toggling across sessions
  */
-import { beforeAll, afterAll, afterEach, expect } from "bun:test"
+import { beforeAll, afterAll, afterEach, expect, spyOn } from "bun:test"
 import { existsSync, readFileSync } from "node:fs"
 import { EngagementStore } from "../../../src/argus/engagement/store"
 import { EncryptionManager } from "../../../src/argus/storage/encryption"
@@ -209,11 +209,17 @@ itOnMac(
 )
 
 // ═══════════════════════════════════════════════
-// 3. Missing master key error
+// 3. Master key cache expiry (mid-assessment recovery)
 // ═══════════════════════════════════════════════
 
+// Regression: the master-key cache expires after CACHE_TTL_MS (5 minutes) and
+// an assessment routinely outlives that. Because _getEngagementDb() is
+// synchronous it used to only consult getCachedMasterKey() and threw "master
+// key not loaded" mid-run — losing the findings and hanging the CLI (2026-09-30
+// autonomous run). The store now refreshes the cache from the keychain via
+// EncryptionManager.loadKeySync().
 itOnMac(
-  "throws clear error when encrypted engagement is opened without a cached master key",
+  "recovers an expired master-key cache entry when opening an encrypted engagement",
   async () => {
     const dbPath = makeStorePath(tempDir)
 
@@ -222,7 +228,7 @@ itOnMac(
     const store = new EngagementStore(dbPath)
     withEncryption()
 
-    const eng = store.createEngagement("https://no-key-test.com", "assessment")
+    const eng = store.createEngagement("https://key-refresh-test.com", "assessment")
     store.saveFindings(eng.id, [{
       id: "find-nk-1", title: "Test", severity: 1, confidence: 1,
       status: "PENDING", description: "test", tool: "nuclei", phase: "p1",
@@ -230,14 +236,10 @@ itOnMac(
     }])
     store.close()
 
-    // Clear cache — key is gone
-    EncryptionManager.clearCache()
     // Disable encryption BEFORE construction: the constructor's
     // syncEncryptionFromConfig() auto-initializes the master key via
     // ensureKeySync() when encryptionEnabled is true (default), which would
-    // re-cache the key from the Keychain and defeat the clearCache() above.
-    // This test verifies the defensive error path when the key is genuinely
-    // not loaded — that requires the store to NOT auto-init on construction.
+    // re-cache the key and mask what we are trying to exercise.
     withoutEncryption()
     const store2 = new EngagementStore(dbPath)
     withEncryption()
@@ -245,10 +247,51 @@ itOnMac(
     // getEngagement works (root DB is plaintext)
     expect(store2.getEngagement(eng.id)).not.toBeNull()
 
-    // getFindings throws because key is not cached
-    expect(() => {
-      store2.getFindings(eng.id)
-    }).toThrow("master key not loaded")
+    // Simulate the TTL expiring mid-assessment
+    EncryptionManager.clearCache()
+    expect(EncryptionManager.getCachedMasterKey()).toBeNull()
+
+    // ...and the sync open path must recover the key from the keychain
+    expect(store2.getFindings(eng.id)).toHaveLength(1)
+    expect(EncryptionManager.getCachedMasterKey()).not.toBeNull()
+
+    store2.close()
+  },
+  30_000,
+)
+
+itOnMac(
+  "throws clear error when no master key exists at all",
+  async () => {
+    const dbPath = makeStorePath(tempDir)
+
+    await EncryptionManager.requireMasterKey()
+    const store = new EngagementStore(dbPath)
+    withEncryption()
+
+    const eng = store.createEngagement("https://no-key-test.com", "assessment")
+    store.saveFindings(eng.id, [{
+      id: "find-nokey-1", title: "Test", severity: 1, confidence: 1,
+      status: "PENDING", description: "test", tool: "nuclei", phase: "p1",
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }])
+    store.close()
+
+    withoutEncryption()
+    const store2 = new EngagementStore(dbPath)
+    withEncryption()
+
+    expect(store2.getEngagement(eng.id)).not.toBeNull()
+
+    // No key recoverable from the keychain → the defensive error must still fire.
+    const spy = spyOn(EncryptionManager, "loadKeySync").mockReturnValue(null)
+    try {
+      expect(() => {
+        store2.getFindings(eng.id)
+      }).toThrow("master key not loaded")
+    } finally {
+      spy.mockRestore()
+    }
 
     store2.close()
   },
@@ -458,20 +501,21 @@ itOnMac(
     expect(store2.getEngagement(eng1.id)!.storageVersion).toBe(3)
     store2.close()
 
-    // Session 3: Encryption OFF — encrypted engagement throws on access
-    EncryptionManager.clearCache()
-    // Disable encryption BEFORE construction so the constructor's
-    // syncEncryptionFromConfig() does NOT auto-init the master key via
-    // ensureKeySync() (which would re-cache it and defeat clearCache()).
+    // Session 3: encryption off + no key recoverable — encrypted engagement throws on access
     withoutEncryption()
     const store3 = new EngagementStore(dbPath)
 
     expect(store3.getEngagement(eng2.id)).not.toBeNull()
 
-    // getFindings on encrypted engagement without key should throw
-    expect(() => {
-      store3.getFindings(eng2.id)
-    }).toThrow()
+    // getFindings on an encrypted engagement without a recoverable key must throw.
+    const spy = spyOn(EncryptionManager, "loadKeySync").mockReturnValue(null)
+    try {
+      expect(() => {
+        store3.getFindings(eng2.id)
+      }).toThrow("master key not loaded")
+    } finally {
+      spy.mockRestore()
+    }
 
     store3.close()
   },

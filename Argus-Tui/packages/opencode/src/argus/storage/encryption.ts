@@ -628,6 +628,40 @@ export class EncryptionManager {
   }
 
   /**
+   * Synchronously (re)load the master key from the OS keychain into the cache.
+   *
+   * Unlike `ensureKeySync()`, this NEVER generates a key — it only reads an
+   * existing one. That distinction matters for long-running assessments: the
+   * cached key expires after CACHE_TTL_MS (5 minutes) while an assessment can
+   * easily outlive it, and sync callers (e.g. EngagementStore opening an
+   * encrypted DB) have no way to await `getMasterKey()`. Falling back to
+   * `ensureKeySync()` here would risk a transient keychain read failure
+   * minting a brand-new key and orphaning every encrypted engagement on disk.
+   *
+   * On file-based platforms (Linux/Windows) the passphrase must already be
+   * loaded — `initialize()` or `ensureKeySync()` does that on startup, and it
+   * stays in memory until `clearPassphrase()`.
+   *
+   * @returns The master key if one exists, otherwise null.
+   */
+  static loadKeySync(): Buffer | null {
+    const cached = this.getCachedMasterKey()
+    if (cached) return cached
+
+    try {
+      const hex = keychainGet(SERVICE_NAME, ACCOUNT_NAME)
+      if (hex === null) return null
+      const key = Buffer.from(hex, "hex")
+      if (key.length !== KEY_LEN) return null
+      this.cachedKey = { key, obtainedAt: Date.now() }
+      return key
+    } catch {
+      // A failed read must never fall through to key generation.
+      return null
+    }
+  }
+
+  /**
    * Get the master key from cache or OS keychain.
    * Returns null if no key exists.
    */

@@ -433,7 +433,10 @@ export class EngagementStore implements IEngagementStore {
 
     // ── Encrypted DB path (storage_version >= 3) ──
     if (EngagementStore._isEncrypted(eng)) {
-      const masterKey = EncryptionManager.getCachedMasterKey()
+      // loadKeySync() refreshes an expired cache entry (5-minute TTL) from the
+      // keychain; getCachedMasterKey() alone returns null once an assessment
+      // has been running longer than the TTL.
+      const masterKey = EncryptionManager.loadKeySync()
       if (!masterKey) {
         throw new Error(
           `Cannot open encrypted engagement ${engagementId}: master key not loaded. ` +
@@ -505,7 +508,7 @@ export class EngagementStore implements IEngagementStore {
     // the existing plaintext DB in-place and bump storage_version to 3.
     // Then _getEngagementDb will correctly open via the encrypted path.
     if (EngagementStore.encryptionEnabled && eng?.storageVersion === STORAGE_VERSION_PER_ENGAGEMENT) {
-      const masterKey = EncryptionManager.getCachedMasterKey()
+      const masterKey = EncryptionManager.loadKeySync()
       if (!masterKey) {
         throw new Error(
           `Cannot encrypt engagement ${engagementId}: master key not loaded. ` +
