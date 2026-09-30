@@ -349,7 +349,19 @@ _register(
         name="nikto",
         description="Web server vulnerability scanner",
         phases=["recon", "scan", "deep_scan"],
-        default_args=["-Format", "csv"],
+        # No -Format: nikto writes nicely-formatted output to a
+        # nikto_<host>_<timestamp>.<ext> file in the *current directory*
+        # rather than stdout, which both loses the findings and litters the
+        # working tree. Plain stdout is parsed by the nikto text parser.
+        default_args=[
+            "-Tuning",
+            "123456",
+            "-timeout",
+            "10",
+            "-ask",
+            "no",
+            "-nointeractive",
+        ],
         parameters=[
             ToolParameter("target", "Target URL", flag="-h", required=True),
         ],
@@ -482,11 +494,21 @@ _register(
         name="dalfox",
         description="XSS vulnerability scanner",
         phases=["scan", "deep_scan"],
-        default_args=["--json"],
+        # dalfox v2 is a Cobra CLI: the target belongs to the `url`
+        # subcommand, and JSON Lines output is `--format jsonl` (the old
+        # `--json` flag was removed). The JSONL schema is read by the
+        # dalfox parser, so keep the two in step.
+        default_args=[
+            "url",
+            "--format",
+            "jsonl",
+            "--no-color",
+            "--no-spinner",
+        ],
         parameters=[
             ToolParameter("target", "Target URL", required=True),
-            ToolParameter("blind", "Blind XSS mode", flag="-b"),
-            ToolParameter("deep_dom", "Deep DOM scanning", flag="--deep-dom"),
+            ToolParameter("blind", "Blind XSS callback URL", flag="-b"),
+            ToolParameter("deep_dom", "Deep DOM scanning", flag="--deep-domxss"),
         ],
         timeout=600,
         signal_quality=SignalQuality.PROBABLE,
@@ -652,11 +674,31 @@ _register(
     ToolDefinition(
         name="gitleaks",
         description="Git repository secret scanning",
+        # Secrets only (see tools/definitions/gitleaks.yaml). Claiming
+        # `vulnerability_scanning` made gitleaks eligible for the HTTP
+        # vulnerability-scan phase, which handed it a URL it can only reject
+        # ("stat http://...: no such file or directory") — gitleaks scans
+        # filesystem paths.
         phases=["repo_scan"],
-        default_args=["detect", "--verbose", "--no-color"],
+        # --no-git scans the path directly instead of requiring a git
+        # repository; --report-path - writes the JSON report to stdout where
+        # the parser can read it.
+        default_args=[
+            "detect",
+            "--no-git",
+            "--no-color",
+            "--report-format",
+            "json",
+            "--report-path",
+            "-",
+        ],
         parameters=[
-            ToolParameter("target", "Target path", flag="--source", required=True),
-            ToolParameter("report_format", "Report format", default="json"),
+            ToolParameter(
+                "target",
+                "Filesystem path or repository directory to scan",
+                flag="--source",
+                required=True,
+            ),
             ToolParameter(
                 "max_target_mb", "Max target size", flag="--max-target-megabytes"
             ),

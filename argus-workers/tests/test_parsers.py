@@ -13,6 +13,7 @@ from tool_core.parser.parsers import (
     sqlmap,
     whatweb,
 )
+from tool_core.parser.types import NormalizedFinding
 
 
 class TestNucleiParser:
@@ -275,6 +276,29 @@ class TestNiktoParser:
     def test_empty_output(self):
         assert nikto.parse("") == []
 
+    def test_text_report_keeps_only_tagged_findings(self):
+        """Banner lines share nikto's "+ " prefix but are not findings."""
+        output = "\n".join(
+            [
+                "- Nikto v2.6.0",
+                "---------------------------------------",
+                "+ Target IP:          127.0.0.1",
+                "+ Target Hostname:    127.0.0.1",
+                "+ Target Port:        55693",
+                "+ Server: Werkzeug/3.1.9 Python/3.14.4",
+                "+ [013587] /: Suggested security header missing: content-security-policy.",
+                "+ [013587] /: Suggested security header missing: x-content-type-options.",
+                "+ 4511 requests: 0 errors and 5 items reported on the remote host",
+                "+ End Time:           2026-09-30 06:34:29 (GMT-4) (12 seconds)",
+            ]
+        )
+
+        findings = nikto.parse(output)
+
+        assert len(findings) == 2
+        assert "content-security-policy" in findings[0].title
+        assert findings[0].evidence[0]["osvdb"] == "013587"
+
     def test_infer_severity_word_boundary(self):
         """'high' substring in 'higher' or 'highly' should not match \bhigh\b."""
         from tool_core.parser.parsers.nikto import _infer_severity
@@ -335,6 +359,68 @@ class TestGenericParser:
 
     def test_empty_output(self):
         assert generic.parse("") == []
+
+
+DALFOX_V2_LINE = json.dumps(
+    {
+        "type": "V",
+        "inject_type": "inHTML-URL",
+        "poc_type": "plain",
+        "method": "GET",
+        "data": "http://127.0.0.1:55701/reflect?q=test%3Cscript%3E",
+        "param": "q",
+        "payload": "</sCriPt><sCripT class=dalfox>alert(1)</sCriPt>",
+        "evidence": "6 line: u searched for: test",
+        "cwe": "CWE-79",
+        "severity": "High",
+        "message_id": 165,
+        "message_str": "Triggered XSS Payload (found DOM Object): q=...",
+    }
+)
+
+
+class TestDalfoxParser:
+    """dalfox v2 emits the URL as a *string* in `data` with param/payload at
+    the top level; the parser used to assume a nested `data` object and raised
+    AttributeError, losing every dalfox finding on the MCP path."""
+
+    def test_v2_jsonl_becomes_a_normalized_finding(self):
+        findings = dispatch("dalfox", DALFOX_V2_LINE)
+
+        assert len(findings) == 1
+        finding = findings[0]
+        assert isinstance(finding, NormalizedFinding)
+        assert finding.title == "Verified XSS in parameter 'q'"
+        assert finding.severity == 3  # dalfox reported High
+        assert finding.confidence == 5  # type V = verified
+        assert finding.cwe == "CWE-79"
+        assert "55701" in finding.description
+
+    def test_banner_lines_are_skipped(self):
+        output = "\n".join(
+            [
+                "       ░█▒",
+                "🎯  Target  http://x/y?q=1",
+                DALFOX_V2_LINE,
+            ]
+        )
+        assert len(dispatch("dalfox", output)) == 1
+
+
+class TestSystemBFindingConversion:
+    """System B parsers return dicts; the MCP result builder reads
+    ``finding.__dict__``, so passing dicts through made every System B-only
+    tool fail with "'dict' object has no attribute '__dict__'" instead of
+    delivering findings (httpx, katana, naabu, gau, dalfox, trivy, ...)."""
+
+    def test_system_b_output_is_converted_to_normalized_findings(self):
+        findings = dispatch("dalfox", DALFOX_V2_LINE)
+        assert findings and all(isinstance(f, NormalizedFinding) for f in findings)
+
+    def test_every_finding_survives_the_attribute_access_the_worker_does(self):
+        for finding in dispatch("dalfox", DALFOX_V2_LINE):
+            payload = finding.__dict__
+            assert payload["title"] and isinstance(payload["severity"], int)
 
 
 class TestLauncherEnvelopeIsNotAFinding:

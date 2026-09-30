@@ -3,12 +3,16 @@ command: gitleaks
 description: "Git repository secret scanning for hardcoded credentials"
 args:
   - "detect"
-  - "--verbose"
+  - "--no-git"
   - "--no-color"
+  - "--report-format"
+  - "json"
+  - "--report-path"
+  - "-"
 parameters:
   - name: target
     type: string
-    description: "Target path"
+    description: "Filesystem path or repository directory to scan (not a URL)"
     required: true
     flag: "--source"
   - name: max_target_mb
@@ -18,7 +22,6 @@ parameters:
     flag: "--max-target-megabytes"
 capabilities:
   - secret_detection
-  - vulnerability_scanning
 signal_quality: CONFIRMED
 risk_level: low
 priority: 85

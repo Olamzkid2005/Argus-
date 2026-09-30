@@ -2,12 +2,13 @@ name: nikto
 command: nikto
 description: "Nikto web server scanner for known vulnerabilities and misconfigurations"
 args:
-  - "-Format"
-  - "json"
   - "-Tuning"
   - "123456"
   - "-timeout"
   - "10"
+  - "-ask"
+  - "no"
+  - "-nointeractive"
 parameters:
   - name: target
     type: string

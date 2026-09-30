@@ -2,7 +2,11 @@ name: dalfox
 command: dalfox
 description: "XSS vulnerability scanner with DOM/param analysis"
 args:
-  - "--json"
+  - "url"
+  - "--format"
+  - "jsonl"
+  - "--no-color"
+  - "--no-spinner"
 parameters:
   - name: target
     type: string
@@ -15,9 +19,9 @@ parameters:
     flag: "-b"
   - name: deep_dom
     type: boolean
-    description: "Enable deep DOM scanning"
+    description: "Enable deep DOM XSS testing with more payloads (slow)"
     required: false
-    flag: "--deep-dom"
+    flag: "--deep-domxss"
 capabilities:
   - vulnerability_scanning
   - xss_detection

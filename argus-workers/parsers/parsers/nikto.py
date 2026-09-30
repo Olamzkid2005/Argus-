@@ -1,22 +1,39 @@
 """
-Parser for Nikto output. Handles both JSON and CSV formats.
+Parser for Nikto output. Handles JSON, CSV and plain-text formats.
 
-Nikto is invoked with -Format csv during recon, but the parser
-tries JSON first (for future compatibility) then falls back to CSV.
+Nikto is invoked without -Format so it prints its findings to stdout (with
+-Format it writes a nikto_<host>_<timestamp>.<ext> file in the current
+directory instead, which the worker never reads). The parser therefore tries
+JSON first, then CSV, then the plain-text report.
 """
 
 import csv
 import io
 import json
 import logging
+import re
 
 from parsers.parsers.base import BaseParser
 
 logger = logging.getLogger(__name__)
 
+# Nikto tags real findings with an OSVDB/plugin id: "+ [013587] /: <detail>".
+_NIKTO_FINDING_PATTERN = re.compile(r"^\+\s+\[(\d+)\]\s+(.*)$", re.MULTILINE)
+
+
+def _text_severity(msg: str) -> str:
+    lowered = msg.lower()
+    if re.search(r"\bcritical\b", lowered):
+        return "CRITICAL"
+    if re.search(r"\bhigh\b", lowered):
+        return "HIGH"
+    if re.search(r"\b(?:info|note)\b", lowered):
+        return "INFO"
+    return "MEDIUM"
+
 
 class NiktoParser(BaseParser):
-    """Parser for nikto output — tries JSON then CSV."""
+    """Parser for nikto output — tries JSON, then CSV, then text."""
 
     def parse(self, raw_output: str) -> list[dict]:
         # Try JSON first
@@ -27,7 +44,32 @@ class NiktoParser(BaseParser):
         except (json.JSONDecodeError, ValueError):
             pass
         # Fall back to CSV
-        return self._parse_csv(raw_output)
+        findings = self._parse_csv(raw_output)
+        if findings:
+            return findings
+        # Finally the plain-text report nikto prints when no -Format is given
+        return self._parse_text(raw_output)
+
+    def _parse_text(self, raw_output: str) -> list[dict]:
+        findings = []
+        for osvdb, content in _NIKTO_FINDING_PATTERN.findall(raw_output):
+            content = content.strip()
+            if not content:
+                continue
+            findings.append(
+                {
+                    "type": "WEB_SERVER_VULNERABILITY",
+                    "severity": _text_severity(content),
+                    "endpoint": "",
+                    "evidence": {
+                        "message": content,
+                        "osvdb": osvdb,
+                    },
+                    "confidence": 0.70,
+                    "tool": "nikto",
+                }
+            )
+        return findings
 
     def _parse_json(self, items: list) -> list[dict]:
         findings = []

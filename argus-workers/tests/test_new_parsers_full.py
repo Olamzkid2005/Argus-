@@ -101,6 +101,27 @@ class TestNiktoParser(unittest.TestCase):
     def test_parse_malformed(self):
         self.assertEqual(NiktoParser().parse("not json"), [])
 
+    def test_parse_plain_text_report(self):
+        """Nikto runs without -Format, so its findings arrive as text."""
+        raw = "\n".join(
+            [
+                "- Nikto v2.6.0",
+                "-------------------------------------",
+                "+ Target IP:          127.0.0.1",
+                "+ Target Port:        55693",
+                "+ Server: Werkzeug/3.1.9 Python/3.14.4",
+                "+ [013587] /: Suggested security header missing: content-security-policy.",
+                "+ 4511 requests: 0 errors and 1 item reported on the remote host",
+            ]
+        )
+
+        findings = NiktoParser().parse(raw)
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["type"], "WEB_SERVER_VULNERABILITY")
+        self.assertEqual(findings[0]["evidence"]["osvdb"], "013587")
+        self.assertNotIn("Target IP", findings[0]["evidence"]["message"])
+
 
 class TestAmassParser(unittest.TestCase):
     def test_parse_subdomain(self):

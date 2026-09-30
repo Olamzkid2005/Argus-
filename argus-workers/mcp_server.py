@@ -76,6 +76,20 @@ class ToolCost:
 logger = logging.getLogger(__name__)
 
 
+def _param_is_true(value: Any) -> bool:
+    """Interpret a boolean tool parameter from MCP arguments.
+
+    Callers pass booleans as real bools, but JSON round-trips can turn them
+    into strings; treat the usual spellings as true and everything else as
+    false rather than relying on Python truthiness of the string "false".
+    """
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 class ToolSchema:
     """JSON Schema definition for a tool parameter."""
 
@@ -773,6 +787,16 @@ class MCPServer:
         for param in tool.parameters:
             if param.name in arguments:
                 value = arguments[param.name]
+                # Boolean parameters are switches, not value options: emit the
+                # flag on its own when the value is truthy and never pass the
+                # bool through as an argument ("--deep-domxss True" is not
+                # something any CLI accepts).
+                if getattr(param, "type", None) == "boolean" or isinstance(
+                    value, bool
+                ):
+                    if _param_is_true(value) and param.flag:
+                        cmd.append(param.flag)
+                    continue
                 # Strip URL scheme for tools that expect bare hostnames/domains
                 # Tools like nikto (-h), nmap, subfinder (-d), amass (-d),
                 # dnsx (-d), naabu (-host) don't handle URL schemes.
@@ -786,11 +810,15 @@ class MCPServer:
                     from urllib.parse import urlparse
 
                     parsed = urlparse(value)
-                    # Tools that strictly expect bare hostnames/domains
+                    # Tools that strictly expect bare hostnames/domains.
+                    # NOTE: stripping also drops the port, which is harmless
+                    # for the domain-discovery tools here but would take the
+                    # service port away from a web scanner — nikto is therefore
+                    # NOT in this set and receives the full URL (its -h accepts
+                    # one and reports the right Target Port).
                     _HOSTNAME_TOOLS = frozenset(
                         {
                             "nmap",
-                            "nikto",
                             "subfinder",
                             "amass",
                             "dnsx",
@@ -976,7 +1004,11 @@ class MCPServer:
                 signal_quality=tool_signal_quality,
             )
             if structured and success:
-                mcp_result.data["structured"] = [f.__dict__ for f in structured]
+                # ``getattr`` keeps a parser that returns plain dicts from
+                # failing the whole tool run (see parser dispatcher).
+                mcp_result.data["structured"] = [
+                    getattr(f, "__dict__", f) for f in structured
+                ]
 
             # Cache the result (NO_CACHE mode skips writes). Failures are never
             # cached: a transient or already-fixed failure must not be replayed

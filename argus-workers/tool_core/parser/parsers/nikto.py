@@ -97,10 +97,38 @@ def _parse_csv(output: str) -> list[NormalizedFinding]:
     return findings
 
 
+# Nikto tags real findings with an OSVDB/plugin id: "+ [013587] /: <detail>".
+# The banner lines ("+ Target IP:", "+ Server:", "+ End Time:") share the same
+# prefix but are scan metadata, not findings.
+_NIKTO_FINDING_PATTERN = re.compile(r"^\+\s+\[(\d+)\]\s+(.*)$", re.MULTILINE)
+_NIKTO_ANY_LINE_PATTERN = re.compile(r"^[-+]\s+(.*)", re.MULTILINE)
+
+
 def _parse_text(output: str) -> list[NormalizedFinding]:
     findings: list[NormalizedFinding] = []
-    pattern = re.compile(r"^[-+]\s+(.*)", re.MULTILINE)
-    for match in pattern.finditer(output):
+
+    for osvdb, content in _NIKTO_FINDING_PATTERN.findall(output):
+        content = content.strip()
+        if not content:
+            continue
+        findings.append(
+            NormalizedFinding(
+                title=content[:120],
+                severity=_infer_severity(content),
+                confidence=2,
+                description=content,
+                tool="nikto",
+                evidence=[{"type": "http", "osvdb": osvdb, "message": content}],
+                subtype="web_vulnerability",
+            )
+        )
+
+    if findings:
+        return findings
+
+    # No tagged finding lines (older nikto, or filtered output) — fall back to
+    # the coarse "-/+ line" scan so nothing is silently dropped.
+    for match in _NIKTO_ANY_LINE_PATTERN.finditer(output):
         content = match.group(1).strip()
         if not content or len(content) < 10:
             continue

@@ -13,10 +13,70 @@ rich parsing the orchestrator path uses.
 import logging
 from typing import Any
 
+from .normalizer import normalize_confidence, normalize_severity
 from .parsers import generic, gitleaks, nikto, nmap, nuclei, semgrep, sqlmap, whatweb
 from .types import NormalizedFinding
 
 logger = logging.getLogger(__name__)
+
+
+def _confidence_to_int(value: Any) -> int:
+    """Map a System B confidence (usually a 0-1 float) onto the 1-5 scale."""
+    if isinstance(value, bool):
+        return 3
+    if isinstance(value, (int, float)):
+        scaled = value * 5 if 0 <= value <= 1 else value
+        return max(1, min(5, round(scaled)))
+    return normalize_confidence(str(value))
+
+
+def _to_normalized(finding: dict, tool_name: str) -> NormalizedFinding:
+    """Convert a System B (BaseParser) finding dict into a NormalizedFinding.
+
+    System B parsers return plain dicts while System A returns
+    NormalizedFinding objects. The MCP server's result builder reads
+    ``finding.__dict__``, so handing it a dict turns every System B parser's
+    findings into a tool failure ("'dict' object has no attribute '__dict__'")
+    — which silently cost the worker the ~30 tools that only have a System B
+    parser (httpx, katana, naabu, gau, dalfox, trivy, bandit, ...).
+    """
+    severity = finding.get("severity", "medium")
+    confidence = finding.get("confidence", "medium")
+
+    evidence = finding.get("evidence")
+    if evidence is None:
+        evidence_list: list[dict] = []
+    elif isinstance(evidence, list):
+        evidence_list = [
+            item if isinstance(item, dict) else {"content": item} for item in evidence
+        ]
+    elif isinstance(evidence, dict):
+        evidence_list = [evidence]
+    else:
+        evidence_list = [{"content": evidence}]
+
+    endpoint = finding.get("endpoint") or finding.get("url") or ""
+    description = str(finding.get("description") or "")
+    if endpoint and endpoint not in description:
+        description = f"{endpoint}: {description}".strip(": ")
+
+    return NormalizedFinding(
+        title=str(finding.get("title") or finding.get("type") or "Finding"),
+        severity=severity
+        if isinstance(severity, int) and not isinstance(severity, bool)
+        else normalize_severity(str(severity)),
+        confidence=_confidence_to_int(confidence)
+        if isinstance(confidence, (int, float))
+        else normalize_confidence(str(confidence)),
+        description=description,
+        tool=str(finding.get("tool") or tool_name),
+        cve=finding.get("cve"),
+        cwe=finding.get("cwe"),
+        owasp=finding.get("owasp"),
+        remediation=finding.get("remediation"),
+        evidence=evidence_list,
+        subtype=finding.get("subtype") or finding.get("type"),
+    )
 
 # ── System A: native module-level parsers ──
 _PARSERS = {
@@ -96,7 +156,7 @@ def dispatch(
     instance = extra.get(tool_name)
     if instance is not None:
         try:
-            return instance.parse(output)
+            return [_to_normalized(f, tool_name) for f in instance.parse(output)]
         except Exception as exc:
             logger.warning(
                 "System B parser '%s' failed: %s — falling back to generic",

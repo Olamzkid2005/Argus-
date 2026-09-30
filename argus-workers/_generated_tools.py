@@ -274,11 +274,11 @@ _register(ToolDefinition(
     name="dalfox",
     description="XSS vulnerability scanner with DOM/param analysis",
     phases=["scan", "deep_scan"],
-    default_args=["--json"],
+    default_args=["url", "--format", "jsonl", "--no-color", "--no-spinner"],
     parameters=[
     ToolParameter(name="target", description="Target URL", required=True),
     ToolParameter(name="blind", description="Blind XSS callback URL", flag="-b"),
-    ToolParameter(name="deep_dom", description="Enable deep DOM scanning", flag="--deep-dom"),
+    ToolParameter(name="deep_dom", description="Enable deep DOM XSS testing with more payloads (slow)", flag="--deep-domxss"),
 ],
     timeout=600,
     signal_quality=SignalQuality.PROBABLE,
@@ -485,10 +485,10 @@ _register(ToolDefinition(
 _register(ToolDefinition(
     name="gitleaks",
     description="Git repository secret scanning for hardcoded credentials",
-    phases=["repo_scan", "scan", "deep_scan"],
-    default_args=["detect", "--verbose", "--no-color"],
+    phases=["repo_scan"],
+    default_args=["detect", "--no-git", "--no-color", "--report-format", "json", "--report-path", "-"],
     parameters=[
-    ToolParameter(name="target", description="Target path", required=True, flag="--source"),
+    ToolParameter(name="target", description="Filesystem path or repository directory to scan (not a URL)", required=True, flag="--source"),
     ToolParameter(name="max_target_mb", description="Max target size in MB", flag="--max-target-megabytes"),
 ],
     timeout=300,
@@ -675,7 +675,7 @@ _register(ToolDefinition(
     name="nikto",
     description="Nikto web server scanner for known vulnerabilities and misconfigurations",
     phases=["recon", "scan", "deep_scan"],
-    default_args=["-Format", "json", "-Tuning", "123456", "-timeout", "10"],
+    default_args=["-Tuning", "123456", "-timeout", "10", "-ask", "no", "-nointeractive"],
     parameters=[
     ToolParameter(name="target", description="Target URL or host", required=True, flag="-h"),
 ],

@@ -534,6 +534,108 @@ class TestLauncherExtraArgument:
         assert argv.count("--extra") == 1
 
 
+class TestScannerInvocationDefinitions:
+    """The scanner definitions must match the CLIs that are actually installed.
+
+    Each of these shipped an argument its binary rejects, or omitted one it
+    needs, so the tool "ran", exited 0 and reported success while scanning
+    nothing — or scanned the wrong port entirely.
+    """
+
+    @staticmethod
+    def _definition(name):
+        from pathlib import Path
+
+        import yaml
+
+        path = (
+            Path(__file__).resolve().parent.parent
+            / "tools"
+            / "definitions"
+            / f"{name}.yaml"
+        )
+        return yaml.safe_load(path.read_text())
+
+    def test_dalfox_uses_the_url_subcommand_and_jsonl_format(self):
+        args = self._definition("dalfox")["args"]
+        assert args[0] == "url", "dalfox v2 requires the `url` subcommand"
+        assert "--json" not in args, "`--json` was removed in dalfox v2"
+        assert args[args.index("--format") + 1] == "jsonl", (
+            "the dalfox parser reads JSON Lines"
+        )
+
+    def test_dalfox_deep_dom_flag_is_deep_domxss(self):
+        params = {p["name"]: p for p in self._definition("dalfox")["parameters"]}
+        assert params["deep_dom"]["flag"] == "--deep-domxss"
+
+    def test_nikto_does_not_format_output_to_a_file(self):
+        # With -Format and no -output, nikto writes its report to a
+        # nikto_<host>_<timestamp>.<ext> file in the *current directory* and
+        # prints plain text to stdout, so the findings never reach the parser
+        # and the working tree fills with scan artifacts.
+        args = self._definition("nikto")["args"]
+        assert "-Format" not in args
+        assert "-nointeractive" in args, "nikto prompts for CIRT.net updates"
+
+    def test_gitleaks_scans_a_path_and_reports_json_to_stdout(self):
+        args = self._definition("gitleaks")["args"]
+        assert "--no-git" in args, "without it gitleaks requires a git repository"
+        assert args[args.index("--report-path") + 1] == "-", (
+            "the JSON report must go to stdout for the parser to see it"
+        )
+
+    def test_gitleaks_does_not_claim_http_vulnerability_scanning(self):
+        caps = self._definition("gitleaks")["capabilities"]
+        assert caps == ["secret_detection"], (
+            "gitleaks scans filesystem paths; claiming vulnerability_scanning "
+            "put it in HTTP phases that handed it a URL it could only reject"
+        )
+
+    def test_nikto_target_keeps_its_port(self, mocker):
+        import sys
+
+        mocker.patch("mcp_server.shutil.which", return_value=sys.executable)
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="nikto",
+            command=sys.executable,
+            args=["-c", "import sys; print('|'.join(sys.argv[1:]))"],
+            parameters=[ToolSchema(name="target", type="string", flag="-h")],
+        ))
+
+        result = server.call_tool("nikto", {"target": "http://127.0.0.1:55693/user?id=1"})
+
+        assert result["isError"] is False
+        argv = result["content"][0]["text"]
+        assert "55693" in argv, "stripping to the bare hostname dropped the port"
+
+    def test_boolean_parameter_emits_only_its_flag(self, mocker):
+        import sys
+
+        mocker.patch("mcp_server.shutil.which", return_value=sys.executable)
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="switch-tool",
+            command=sys.executable,
+            args=["-c", "import sys; print('|'.join(sys.argv[1:]))"],
+            parameters=[
+                ToolSchema(name="target", type="string"),
+                ToolSchema(name="deep", type="boolean", flag="--deep"),
+            ],
+        ))
+
+        on = server.call_tool("switch-tool", {"target": "x", "deep": True})
+        off = server.call_tool("switch-tool", {"target": "x", "deep": False})
+        as_string = server.call_tool("switch-tool", {"target": "x", "deep": "true"})
+
+        assert on["content"][0]["text"].strip().endswith("--deep")
+        assert "True" not in on["content"][0]["text"], (
+            "a switch must not receive the bool as its argument"
+        )
+        assert "--deep" not in off["content"][0]["text"]
+        assert as_string["content"][0]["text"].strip().endswith("--deep")
+
+
 class TestFindingsExitCodeWithoutFindings:
     """A findings-bearing exit code with nothing to parse is a CLI error.
 

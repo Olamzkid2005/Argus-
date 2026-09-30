@@ -413,8 +413,11 @@ tools:
 
   - name: gitleaks
     label: Gitleaks Secret Scanner
+    # Secrets only. It scans filesystem paths, never a URL, so claiming
+    # vulnerability_scanning made it eligible for HTTP phases that handed it a
+    # URL it could only reject ("stat http://...: no such file or directory").
     capabilities:
-      - vulnerability_scanning
+      - secret_detection
     requires_auth: false
     destructive: false
     supports_api: true

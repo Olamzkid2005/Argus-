@@ -68,6 +68,21 @@ exist and skipped the tool as "unavailable" — `browser_security_operator` and 
 `post_exploitation`, `intelligence-engine`, …) are now declared as pipeline steps instead of being
 reported as missing binaries (`7f800a33`).
 
+**Fixed (2026-09-30, scanner correctness):** three definitions invoked flags their installed binaries
+reject, so the tools reported success while scanning nothing — `dalfox --json` (removed in dalfox v2,
+which also requires the `url` subcommand), `gitleaks --source <URL>` (gitleaks scans filesystem paths,
+not URLs), and nikto losing the target's port to the URL normaliser, which made it scan `:80`. Nikto
+also wrote its `-Format json` report to a `nikto_<host>_<timestamp>.json` file in the current
+directory rather than stdout, littering the working tree; it now prints to stdout and the parser
+reads the text report.
+
+The same pass found the worker only converted *System A* parser output. The ~30 parsers under
+`parsers/parsers/` (System B — httpx, katana, naabu, gau, dalfox, trivy, bandit, subfinder, …)
+return plain dicts, while the MCP result builder reads `finding.__dict__`; every finding from those
+tools turned the whole run into `'dict' object has no attribute '__dict__'` instead of a finding.
+System B output is now converted to `NormalizedFinding`, so those tools deliver findings on the MCP
+path for the first time.
+
 What remains is provisioning, not reporting: 13 third-party binaries are genuinely absent here
 (`testssl`, `wpscan`, `trufflehog`, `commix`, `jwt_tool`, `brakeman`, `spotbugs`, `phpcs`, `eslint`,
 `dependency_check`, `sn1per`, `bucket_upload`, `ai-surface`), and the bridge names them in one

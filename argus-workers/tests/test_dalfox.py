@@ -33,4 +33,24 @@ class TestDalfoxParser:
         assert "severity" in result[0], "Finding should have a severity"
         assert "endpoint" in result[0], "Finding should have an endpoint"
 
+    def test_parses_dalfox_v2_jsonl(self):
+        """dalfox v2 puts the URL *string* in `data` and param/payload at the
+        top level (`dalfox url --format jsonl`)."""
+        raw = (
+            '{"type":"V","inject_type":"inHTML-URL","method":"GET",'
+            '"data":"http://t.com/reflect?q=%3Cscript%3E","param":"q",'
+            '"payload":"<sCripT class=dalfox>alert(1)</sCriPt>",'
+            '"cwe":"CWE-79","severity":"High","message_str":"Triggered XSS"}'
+        )
+
+        findings = self.parser.parse(raw)
+
+        assert len(findings) == 1
+        finding = findings[0]
+        assert finding["endpoint"] == "http://t.com/reflect?q=%3Cscript%3E"
+        assert finding["severity"] == "HIGH"
+        assert finding["confidence"] == 0.95  # type V
+        assert finding["title"] == "Verified XSS in parameter 'q'"
+        assert finding["evidence"]["payload"].startswith("<sCripT")
+
 
