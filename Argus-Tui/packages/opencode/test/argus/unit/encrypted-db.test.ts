@@ -6,14 +6,17 @@
  */
 import { beforeAll, afterAll, describe, expect, test } from "bun:test"
 import { platform } from "node:os"
-import { mkdtempSync, existsSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs"
+import { mkdtempSync, existsSync, readFileSync, rmSync, writeFileSync, mkdirSync, utimesSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 
 const { EncryptionManager } = await import("../../../src/argus/storage/encryption")
-const { EncryptedDbHandle, EncryptedDbError } = await import(
-  "../../../src/argus/storage/encrypted-db"
-)
+const {
+  EncryptedDbHandle,
+  EncryptedDbError,
+  sweepEngagementScratchFiles,
+  sweepEngagementsDir,
+} = await import("../../../src/argus/storage/encrypted-db")
 
 const isMacOS = platform() === "darwin"
 const macDescriptor = isMacOS ? describe : describe.skip
@@ -306,5 +309,126 @@ macDescriptor("EncryptedDbHandle — lifecycle (macOS only)", () => {
     expect(existsSync(dbPath + ".decrypted-wal")).toBe(false)
     expect(existsSync(dbPath + ".decrypted-shm")).toBe(false)
     expect(existsSync(dbPath + ".encrypting")).toBe(false)
+  })
+})
+
+describe("EncryptedDbHandle — plaintext scratch sweep", () => {
+  /**
+   * `open()` writes the decrypted database next to the encrypted one and only
+   * `close()` removes it. Every crash, SIGKILL, or killed run therefore left a
+   * plaintext copy of an engagement database on disk with nothing to clean it
+   * up — 950+ had accumulated in one data directory.
+   */
+  test("removes every scratch file this module writes, and nothing else", () => {
+    const dir = mkdtempSync(join(tmpdir(), "argus-sweep-"))
+    try {
+      const dbPath = join(dir, "engagement.db")
+      const scratch = [
+        dbPath + ".decrypted",
+        dbPath + ".decrypted-wal",
+        dbPath + ".decrypted-shm",
+        dbPath + ".encrypting",
+      ]
+      const precious = [dbPath, dbPath + ".backup", join(dir, "report.md")]
+      for (const f of [...scratch, ...precious]) writeFileSync(f, "x")
+
+      const removed = sweepEngagementScratchFiles(dbPath)
+
+      expect(removed.sort()).toEqual([...scratch].sort())
+      for (const f of scratch) expect(existsSync(f)).toBe(false)
+      for (const f of precious) expect(existsSync(f)).toBe(true)
+    } finally {
+      cleanupDir(dir)
+    }
+  })
+
+  test("is a no-op when there is nothing to sweep", () => {
+    const dir = mkdtempSync(join(tmpdir(), "argus-sweep-empty-"))
+    try {
+      expect(sweepEngagementScratchFiles(join(dir, "engagement.db"))).toEqual([])
+    } finally {
+      cleanupDir(dir)
+    }
+  })
+
+  test("sweeps every engagement directory, skipping non-directories", () => {
+    const engagements = mkdtempSync(join(tmpdir(), "argus-sweep-all-"))
+    try {
+      for (const id of ["ENG-a", "ENG-b", "ENG-c"]) {
+        const d = makeEngDir(engagements, id)
+        writeFileSync(join(d, "engagement.db"), "encrypted")
+        writeFileSync(join(d, "engagement.db.decrypted"), "plaintext")
+      }
+      // A stray file at the top level must not be treated as an engagement.
+      writeFileSync(join(engagements, "notes.txt"), "x")
+
+      const removed = sweepEngagementsDir(engagements, 0)
+
+      expect(removed).toHaveLength(3)
+      expect(existsSync(join(engagements, "notes.txt"))).toBe(true)
+      for (const id of ["ENG-a", "ENG-b", "ENG-c"]) {
+        expect(existsSync(join(engagements, id, "engagement.db"))).toBe(true)
+        expect(existsSync(join(engagements, id, "engagement.db.decrypted"))).toBe(false)
+      }
+    } finally {
+      cleanupDir(engagements)
+    }
+  })
+
+  test("directory sweep leaves a just-written scratch file alone (a live session may own it)", () => {
+    const engagements = mkdtempSync(join(tmpdir(), "argus-sweep-fresh-"))
+    try {
+      const dir = makeEngDir(engagements, "ENG-live")
+      writeFileSync(join(dir, "engagement.db"), "encrypted")
+      writeFileSync(join(dir, "engagement.db.decrypted"), "a session that is still running")
+
+      // Default age threshold: the file is seconds old, so it is preserved.
+      expect(sweepEngagementsDir(engagements)).toEqual([])
+      expect(existsSync(join(dir, "engagement.db.decrypted"))).toBe(true)
+    } finally {
+      cleanupDir(engagements)
+    }
+  })
+
+  test("a stale scratch file is swept by default, whatever its exact age", () => {
+    const engagements = mkdtempSync(join(tmpdir(), "argus-sweep-stale-"))
+    try {
+      const dir = makeEngDir(engagements, "ENG-crashed")
+      const scratch = join(dir, "engagement.db.decrypted")
+      writeFileSync(scratch, "left by a crashed run")
+      // Backdate well past the default threshold.
+      const old = new Date(Date.now() - 60 * 60_000)
+      utimesSync(scratch, old, old)
+
+      const removed = sweepEngagementsDir(engagements)
+      expect(removed).toEqual([scratch])
+      expect(existsSync(scratch)).toBe(false)
+    } finally {
+      cleanupDir(engagements)
+    }
+  })
+
+  test("sweepEngagementsDir is quiet when the directory does not exist", () => {
+    expect(sweepEngagementsDir(join(tmpdir(), "argus-sweep-missing-" + Date.now()))).toEqual([])
+  })
+
+  test("open() clears a stale plaintext copy before writing this session's", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "argus-sweep-open-"))
+    try {
+      const dbPath = join(dir, "engagement.db")
+      // A stale copy left by a previous crashed session, with content that
+      // must not survive into the new session.
+      writeFileSync(dbPath + ".decrypted", "stale plaintext from a crashed run")
+
+      const handle = await EncryptedDbHandle.open(dbPath, Buffer.alloc(32, 5), "ENG-stale")
+      const db = handle.getDatabase()
+      db.exec("CREATE TABLE IF NOT EXISTS t (v TEXT)")
+      db.exec("INSERT INTO t VALUES ('fresh')")
+      const rows = db.query("SELECT v FROM t").all() as Array<{ v: string }>
+      expect(rows.map((r) => r.v)).toEqual(["fresh"])
+      handle.close()
+    } finally {
+      cleanupDir(dir)
+    }
   })
 })

@@ -9,7 +9,7 @@
  * On first run, the OS may prompt for keychain access — approve it.
  * Tests are skipped on non-macOS platforms.
  */
-import { beforeAll, afterAll, describe, expect, test } from "bun:test"
+import { beforeAll, beforeEach, afterAll, describe, expect, test } from "bun:test"
 import { platform } from "node:os"
 import { mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -18,9 +18,10 @@ import crypto from "node:crypto"
 
 // Import the full module — pure methods (deriveEngagementKey, etc.) work on any platform.
 // Keychain-dependent methods throw UnsupportedPlatformError on non-macOS.
-const { EncryptionManager, EncryptionError } = await import(
-  "../../../src/argus/storage/encryption"
-)
+const { EncryptionManager, EncryptionError, keychainServiceName, keychainAccountName, usesIsolatedKeychain } =
+  await import("../../../src/argus/storage/encryption")
+
+import { assertIsolatedKeychain } from "../helpers/encryption-test-utils"
 
 const isMacOS = platform() === "darwin"
 
@@ -384,5 +385,62 @@ describe("EncryptionManager — pure derivation methods", () => {
     const masterKey = Buffer.alloc(32, 0xBB)
     expect(EncryptionManager.deriveEngagementKey(masterKey, "ENG-len").length).toBe(32)
     expect(EncryptionManager.deriveFileKey(masterKey, "ENG-len", "f").length).toBe(32)
+  })
+})
+
+// ── Keychain namespace isolation ──
+//
+// A test run that reaches the production keychain entry (service "argus",
+// account "master-key") can rotate the operator's real master key and orphan
+// every encrypted engagement. These tests pin the two defences: the suite-wide
+// preload namespace, and the guard in the encryption test helpers.
+
+describe("EncryptionManager — keychain namespace isolation", () => {
+  const originalService = process.env.ARGUS_KEYCHAIN_SERVICE
+  const originalAccount = process.env.ARGUS_KEYCHAIN_ACCOUNT
+
+  const restoreEnv = () => {
+    if (originalService === undefined) delete process.env.ARGUS_KEYCHAIN_SERVICE
+    else process.env.ARGUS_KEYCHAIN_SERVICE = originalService
+    if (originalAccount === undefined) delete process.env.ARGUS_KEYCHAIN_ACCOUNT
+    else process.env.ARGUS_KEYCHAIN_ACCOUNT = originalAccount
+  }
+
+  beforeEach(restoreEnv)
+  afterAll(restoreEnv)
+
+  test("the suite runs against an isolated keychain namespace", () => {
+    // If this fails, test/preload.ts stopped setting ARGUS_KEYCHAIN_SERVICE and
+    // every encryption test is now operating on the real master key.
+    expect(usesIsolatedKeychain()).toBe(true)
+    expect(keychainServiceName()).not.toBe("argus")
+  })
+
+  test("keychainServiceName honours the override and defaults to argus", () => {
+    process.env.ARGUS_KEYCHAIN_SERVICE = "argus-test-namespace"
+    expect(keychainServiceName()).toBe("argus-test-namespace")
+    delete process.env.ARGUS_KEYCHAIN_SERVICE
+    expect(keychainServiceName()).toBe("argus")
+    expect(usesIsolatedKeychain()).toBe(false)
+  })
+
+  test("keychainAccountName honours the override and defaults to master-key", () => {
+    process.env.ARGUS_KEYCHAIN_ACCOUNT = "some-other-account"
+    expect(keychainAccountName()).toBe("some-other-account")
+    delete process.env.ARGUS_KEYCHAIN_ACCOUNT
+    expect(keychainAccountName()).toBe("master-key")
+  })
+
+  test("assertIsolatedKeychain refuses to touch the production entry", () => {
+    // With no override the helper must refuse *before* any keychain call. The
+    // guard never reads or writes the keychain, so this test cannot rotate the
+    // real key even though it deliberately points at the production namespace.
+    delete process.env.ARGUS_KEYCHAIN_SERVICE
+    expect(() => assertIsolatedKeychain()).toThrow(/Refusing to destroy or initialize/)
+  })
+
+  test("assertIsolatedKeychain allows a namespaced entry", () => {
+    process.env.ARGUS_KEYCHAIN_SERVICE = "argus-test-namespace"
+    expect(() => assertIsolatedKeychain()).not.toThrow()
   })
 })

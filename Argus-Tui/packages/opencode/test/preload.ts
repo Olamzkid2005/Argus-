@@ -10,6 +10,16 @@ import { afterAll } from "bun:test"
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
 afterAll(async () => {
+  // Remove the test-only master key so a long-lived machine does not accumulate
+  // one keychain entry per suite run. Best-effort: this touches only the
+  // namespaced entry set above, never the production one.
+  try {
+    const { EncryptionManager } = await import("../src/argus/storage/encryption")
+    await EncryptionManager.destroy()
+  } catch {
+    /* keychain cleanup is best-effort */
+  }
+
   const busy = (error: unknown) =>
     typeof error === "object" && error !== null && "code" in error && error.code === "EBUSY"
   const rm = async (left: number): Promise<void> => {
@@ -31,6 +41,28 @@ process.env["XDG_DATA_HOME"] = path.join(dir, "share")
 process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
 process.env["XDG_STATE_HOME"] = path.join(dir, "state")
+
+// ── Argus data isolation ──
+// Every Argus storage path derives from StoragePaths.basePath, which falls back
+// to ~/.argus. Nothing in the suite set ARGUS_DATA_DIR, so any test that built
+// the default EngagementStore wrote real engagement directories into the
+// developer's home — ~9,000 of them had accumulated, plus ~950 plaintext
+// engagement.db.decrypted scratch copies. Pinning the base path here makes the
+// whole suite hermetic.
+process.env["ARGUS_DATA_DIR"] = path.join(dir, "argus-data")
+
+// ── Argus keychain isolation ──
+// EncryptionManager reads and writes the OS keychain under service "argus",
+// account "master-key". The encryption suites call destroy() + initialize() to
+// get a clean key, so running them *rotated the developer's real master key*,
+// making every previously encrypted engagement and evidence package
+// undecryptable. A per-process namespace keeps the production entry
+// untouchable while still exercising the real keychain code path.
+//
+// Set unconditionally (not via ??=): the point is that a stray environment
+// variable cannot re-point the test suite at the real key.
+process.env["ARGUS_KEYCHAIN_SERVICE"] = `argus-test-${process.pid}`
+process.env["ARGUS_KEYCHAIN_ACCOUNT"] = "master-key"
 process.env["OPENCODE_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtures", "models-api.json")
 process.env["OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"] = "true"
 process.env["OPENCODE_EXPERIMENTAL_WORKSPACES"] = "true"

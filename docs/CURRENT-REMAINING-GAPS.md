@@ -362,6 +362,45 @@ Operator impact: a test run during this investigation left `ENG-muoa5y14-1k` und
 after). Findings loss was nil (the run above never persisted any), but the
 mechanism is data-destroying and should be fixed before any external demo.
 
+**Fixed (2026-09-30).** The three failure modes above no longer reproduce:
+
+- **Keychain namespace isolation.** `storage/encryption.ts` now resolves the keychain identity per
+  call via `keychainServiceName()` / `keychainAccountName()` (`ARGUS_KEYCHAIN_SERVICE` /
+  `ARGUS_KEYCHAIN_ACCOUNT`), with `usesIsolatedKeychain()` to detect a non-production namespace.
+  `test/preload.ts` sets `ARGUS_DATA_DIR` to a temp directory and `ARGUS_KEYCHAIN_SERVICE` to
+  `argus-test-<pid>` before any module loads, and destroys that test key in `afterAll`.
+  `encryption-test-utils.ts` gained `assertIsolatedKeychain()`, which throws if a test tries to
+  `initialize()`/`destroy()` the encryption manager against the production entry — so a future test
+  cannot silently reintroduce the rotation.
+- **Plaintext sweep.** `EncryptedDbHandle` now exports `sweepEngagementScratchFiles()` /
+  `sweepEngagementsDir()` and sweeps `*.decrypted` / `*.decrypted-wal` / `*.decrypted-shm` /
+  `*.encrypting` in `_open()` **before both** the create-fresh and open-existing branches (a stale
+  plaintext file reused by the create branch previously produced `SQLITE_NOTADB: file is not a
+  database`), and uses the same helper on `close()`. Those per-handle sweeps are immediate, since
+  the caller holds that engagement open and any scratch copy of it is stale by definition.
+  `workflow-runner.ts` additionally sweeps `StoragePaths.engagementsDir` as a Step 0 before creating
+  the engagement, so a normal run self-heals leftovers from a previous crash — but that
+  directory-wide pass skips scratch files younger than 60 seconds
+  (`MIN_DIRECTORY_SWEEP_AGE_MS`), so a concurrently running session cannot have its working
+  plaintext file deleted out from under it.
+- **Startup key rotation / hang.** `EngagementStore.syncEncryptionFromConfig()` no longer calls
+  `ensureKeySync()`. It uses `loadKeySync()` and, when no key is present, degrades to
+  `encryptionEnabled = false` with a one-time stderr warning naming the keychain service/account and
+  `argus encryption init`. This removes the path that minted a replacement key on a failed keychain
+  read and — on macOS — blocked indefinitely in the keychain authorization dialog
+  (`SecKeychainAddGenericPassword → defaultKeychainUI → AuthorizationCopyRights`). Ordinary commands
+  such as `argus engagements` no longer hang; `ensureKeySync()` is now documented as explicit-init-only.
+
+Verification: the production fingerprint (`service=argus account=master-key`, sha256 prefix
+`30af2c50e8a451b0`) is identical before and after running the encryption suites; `~/.argus/engagements`
+held 8,972 entries throughout. The focused encryption files pass 87/87, and the full `test/argus/`
+suite is now **1,451 pass, 2 skip, 0 fail** (baseline before this work: 1,438 pass / 3 fail / 2 skip) —
+the previously hanging `engagements handles empty state gracefully` and `llmStatus reflects crash when
+worker exits immediately` tests now pass. Residual: the 961 stale `.decrypted` files already under
+`~/.argus` are removed by the next run's Step 0 sweep (they are hours old, so the 60-second grace
+period does not spare them), and engagements encrypted with the old (pre-rotation) master key
+remain permanently undecryptable — that part is irreversible.
+
 ### 11. Production LLM reliability is not proven at scale
 
 Fallbacks and retry logic exist, but these areas remain insufficiently validated:

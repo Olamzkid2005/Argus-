@@ -14,7 +14,7 @@ import { join } from "node:path"
 import { tmpdir, platform } from "node:os"
 import crypto from "node:crypto"
 import { EngagementStore } from "../../../src/argus/engagement/store"
-import { EncryptionManager } from "../../../src/argus/storage/encryption"
+import { EncryptionManager, usesIsolatedKeychain } from "../../../src/argus/storage/encryption"
 import { EvidenceCollector } from "../../../src/argus/evidence/collector"
 import { EncryptedFileHandle } from "../../../src/argus/storage/encrypted-file"
 
@@ -63,6 +63,29 @@ export function makeStorePath(tempDir?: string): string {
 const DEFAULT_PASSPHRASE = "encryption-test-passphrase-2024"
 
 /**
+ * Refuse to operate on the production keychain entry.
+ *
+ * `destroy()` + `initialize()` against service `argus` / account `master-key`
+ * rotates the developer's real master key: every engagement and evidence
+ * package encrypted under the old key becomes permanently undecryptable. That
+ * is not a hypothetical — it is how the key was rotated before, orphaning an
+ * engagement mid-investigation.
+ *
+ * `test/preload.ts` points the suite at a per-process namespace, so this guard
+ * passes there. It exists so that using these helpers from anywhere else fails
+ * loudly instead of destroying data.
+ */
+export function assertIsolatedKeychain(): void {
+  if (usesIsolatedKeychain()) return
+  throw new Error(
+    "[encryption-test-utils] Refusing to destroy or initialize the production master key " +
+    "(service 'argus', account 'master-key'). Set ARGUS_KEYCHAIN_SERVICE to a test-only " +
+    "namespace — test/preload.ts does this for the whole suite — or the run would rotate " +
+    "the real key and orphan every encrypted engagement on this machine.",
+  )
+}
+
+/**
  * Initialize the EncryptionManager with a fresh key.
  *
  * Works on all platforms:
@@ -75,6 +98,7 @@ const DEFAULT_PASSPHRASE = "encryption-test-passphrase-2024"
  * @returns The master key Buffer (32 bytes)
  */
 export async function initEncryptionManager(passphrase?: string): Promise<Buffer> {
+  assertIsolatedKeychain()
   if (!process.env.ARGUS_KEY_PASSPHRASE) {
     process.env.ARGUS_KEY_PASSPHRASE = passphrase ?? DEFAULT_PASSPHRASE
   }
@@ -88,6 +112,7 @@ export async function initEncryptionManager(passphrase?: string): Promise<Buffer
  * Best-effort — does not throw on failure.
  */
 export async function destroyEncryptionManager(): Promise<void> {
+  assertIsolatedKeychain()
   try { await EncryptionManager.destroy() } catch { /* best-effort */ }
   EncryptionManager.clearCache()
 }

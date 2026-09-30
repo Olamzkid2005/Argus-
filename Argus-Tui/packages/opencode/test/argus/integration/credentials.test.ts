@@ -4,6 +4,7 @@ import { join } from "path"
 import { tmpdir } from "os"
 import { CredentialStore } from "../../../src/argus/engagement/credentials"
 import { EncryptionManager } from "../../../src/argus/storage/encryption"
+import { StoragePaths } from "../../../src/argus/storage/paths"
 
 let tmpDir: string
 
@@ -134,8 +135,13 @@ describe("CredentialStore", () => {
     expect(parsed.roles.deep.username).toBe("d")
   })
 
-  test("static defaultPath() returns expected path", () => {
+  test("static defaultPath() derives from the resolved data directory", () => {
+    // Not a hardcoded `~/.argus/credentials.json`: the test suite pins
+    // ARGUS_DATA_DIR (test/preload.ts) so it cannot touch the developer's real
+    // credentials — asserting the legacy home path only passed because the
+    // suite was reading and writing the real one.
     const path = CredentialStore.defaultPath()
-    expect(path).toMatch(/\.argus[/\\]credentials\.json$/)
+    expect(path).toBe(join(StoragePaths.basePath, "credentials.json"))
+    expect(path).toMatch(/credentials\.json$/)
   })
 })

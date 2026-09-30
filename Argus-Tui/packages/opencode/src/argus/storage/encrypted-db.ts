@@ -35,8 +35,8 @@
  *     { db, drizzle, lastAccessed, encryptedHandle }
  */
 
-import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs"
-import { dirname } from "node:path"
+import { existsSync, readFileSync, writeFileSync, renameSync, rmSync, readdirSync, statSync } from "node:fs"
+import { dirname, join } from "node:path"
 import { createRequire } from "node:module"
 import { EncryptionManager, EncryptionError } from "./encryption"
 
@@ -64,6 +64,94 @@ const TEMP_SUFFIX = ".decrypted"
 
 /** Extension for the atomic-write temp file (during save). */
 const ENC_TMP_SUFFIX = ".encrypting"
+
+/**
+ * Unencrypted scratch files this module can leave on disk.
+ *
+ * `.decrypted` holds the whole engagement database in the clear, so it is the
+ * one that matters: it is written on every `open()` and removed only by a clean
+ * `close()`. Any crash, SIGKILL, or killed run leaves it behind, and nothing
+ * ever cleaned it up — 950+ of them had accumulated in one data directory.
+ */
+const SCRATCH_SUFFIXES = [
+  TEMP_SUFFIX,
+  `${TEMP_SUFFIX}-wal`,
+  `${TEMP_SUFFIX}-shm`,
+  ENC_TMP_SUFFIX,
+] as const
+
+/**
+ * Directory-wide sweeps skip scratch files younger than this.
+ *
+ * `_open()` and `close()` sweep the single file they own and are always
+ * immediate — the caller holds that engagement open, so any scratch copy of it
+ * is stale by definition. A sweep of the whole engagements directory is
+ * different: another process (an open TUI session, a parallel run) may
+ * legitimately be holding an engagement whose plaintext file was just written.
+ * Skipping recent files keeps the startup cleanup from deleting the working
+ * files of a live session; anything older is treated as a leftover.
+ */
+const MIN_DIRECTORY_SWEEP_AGE_MS = 60_000
+
+/**
+ * Remove the scratch files for one encrypted DB path.
+ *
+ * @param encryptedDbPath path to the encrypted `.db` (not the scratch file)
+ * @param olderThanMs only remove scratch files at least this old (0 = all)
+ * @returns the paths removed
+ */
+export function sweepEngagementScratchFiles(encryptedDbPath: string, olderThanMs = 0): string[] {
+  const removed: string[] = []
+  for (const suffix of SCRATCH_SUFFIXES) {
+    const candidate = encryptedDbPath + suffix
+    try {
+      if (!existsSync(candidate)) continue
+      if (olderThanMs > 0 && Date.now() - statSync(candidate).mtimeMs < olderThanMs) continue
+      rmSync(candidate, { force: true })
+      removed.push(candidate)
+    } catch {
+      /* best-effort: a locked file is retried on the next open */
+    }
+  }
+  return removed
+}
+
+/**
+ * Sweep every engagement directory for leftover plaintext scratch files.
+ *
+ * Called once at startup so a crashed session's plaintext copy of an
+ * engagement database does not outlive the crash. Only files this module
+ * created are removed (`engagement.db.decrypted` and its SQLite companions,
+ * plus the `.encrypting` atomic-write intermediate); the encrypted `.db` and
+ * anything else in the directory is left alone.
+ *
+ * @param engagementsDir `<basePath>/engagements`
+ * @param olderThanMs only remove scratch files at least this old
+ *   (default: {@link MIN_DIRECTORY_SWEEP_AGE_MS}, so a live session's file is safe)
+ * @returns the paths removed
+ */
+export function sweepEngagementsDir(
+  engagementsDir: string,
+  olderThanMs = MIN_DIRECTORY_SWEEP_AGE_MS,
+): string[] {
+  const removed: string[] = []
+  let entries: string[]
+  try {
+    entries = readdirSync(engagementsDir)
+  } catch {
+    return removed // no engagements directory yet
+  }
+  for (const entry of entries) {
+    const dir = join(engagementsDir, entry)
+    try {
+      if (!statSync(dir).isDirectory()) continue
+    } catch {
+      continue
+    }
+    removed.push(...sweepEngagementScratchFiles(join(dir, "engagement.db"), olderThanMs))
+  }
+  return removed
+}
 
 /**
  * Error thrown when the encrypted DB file is missing or corrupted.
@@ -156,6 +244,20 @@ export class EncryptedDbHandle {
     if (this._isOpen) return
     const BunSqliteDatabase = _loadBunSqlite()
 
+    const dir = dirname(this.encryptedDbPath)
+    if (!existsSync(dir)) {
+      throw new EncryptedDbError(
+        `Engagement directory does not exist: ${dir}`,
+        "DIR_NOT_FOUND",
+      )
+    }
+
+    // A crash or SIGKILL during a previous session leaves the plaintext copy
+    // behind. Clear it before either branch touches the temp path: the decrypt
+    // branch overwrites it, but the create-fresh branch *opens* it — and a
+    // stale file would then be read as if it were a database (SQLITE_NOTADB).
+    sweepEngagementScratchFiles(this.encryptedDbPath)
+
     if (existsSync(this.encryptedDbPath)) {
       // ── Existing encrypted DB — decrypt and load ──
       const encrypted = readFileSync(this.encryptedDbPath)
@@ -174,24 +276,10 @@ export class EncryptedDbHandle {
         )
       }
 
-      const dir = dirname(this.encryptedDbPath)
-      if (!existsSync(dir)) {
-        throw new EncryptedDbError(
-          `Engagement directory does not exist: ${dir}`,
-          "DIR_NOT_FOUND",
-        )
-      }
       writeFileSync(this.tempPath, decrypted, { mode: 0o600 })
       this.db = new BunSqliteDatabase(this.tempPath)
     } else {
       // ── No encrypted DB yet — create fresh database at temp path ──
-      const dir = dirname(this.encryptedDbPath)
-      if (!existsSync(dir)) {
-        throw new EncryptedDbError(
-          `Engagement directory does not exist: ${dir}`,
-          "DIR_NOT_FOUND",
-        )
-      }
       this.db = new BunSqliteDatabase(this.tempPath)
     }
 
@@ -291,9 +379,7 @@ export class EncryptedDbHandle {
     }
 
     // Clean up any residual files:
-    for (const suffix of [TEMP_SUFFIX, TEMP_SUFFIX + "-wal", TEMP_SUFFIX + "-shm", ENC_TMP_SUFFIX]) {
-      try { rmSync(this.encryptedDbPath + suffix, { force: true }) } catch { /* best-effort */ }
-    }
+    sweepEngagementScratchFiles(this.encryptedDbPath)
   }
 
   /**

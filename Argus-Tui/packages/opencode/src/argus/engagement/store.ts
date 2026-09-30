@@ -68,7 +68,7 @@ import {
   STORAGE_VERSION_ENCRYPTED,
 } from "./schema.sql"
 import { EncryptedDbHandle } from "../storage/encrypted-db"
-import { EncryptionManager } from "../storage/encryption"
+import { EncryptionManager, keychainAccountName, keychainServiceName } from "../storage/encryption"
 import type { EngagementState, PhaseRecord, EngagementStatus, PhaseStatus, IEngagementStore } from "./types"
 import type { ExecutionMode } from "../shared/types"
 import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
@@ -299,10 +299,52 @@ export class EngagementStore implements IEngagementStore {
     }
     // If neither is set, remains at default (true)
 
-    // Auto-initialize master key when encryption is enabled
+    // Load an existing master key. Never create one here.
+    //
+    // This runs from the EngagementStore constructor, which is on the path of
+    // every command — including read-only ones like `argus engagements` and
+    // `doctor`. It used to call `ensureKeySync()`, which *mints* a key when it
+    // cannot read one, and that had two consequences:
+    //
+    //   1. On macOS the write goes through SecKeychainAddGenericPassword, which
+    //      can block indefinitely on the keychain authorization dialog.
+    //      Reproduced: `argus engagements` hung in `defaultKeychainUI →
+    //      AuthorizationCopyRights` with no output, from a plain listing.
+    //   2. Worse, "cannot read" is not "does not exist". A process whose HOME
+    //      has no keychain search list fails the read, so a *brand-new* key was
+    //      generated and stored — silently rotating the master key and making
+    //      every previously encrypted engagement and evidence package
+    //      undecryptable. That is the same data-destroying failure the test
+    //      suite caused, reachable from ordinary command startup.
+    //
+    // Creating a key is `argus encryption init`'s job (commands/encryption.ts).
     if (EngagementStore.encryptionEnabled) {
-      EncryptionManager.ensureKeySync()
+      if (EncryptionManager.loadKeySync() === null) {
+        // Without a key the encrypted DB paths throw, and the store would then
+        // fail every read and write. Degrade to plaintext for this process and
+        // say so, rather than half-working.
+        EngagementStore.encryptionEnabled = false
+        EngagementStore.warnMissingMasterKeyOnce()
+      }
     }
+  }
+
+  /**
+   * Tell the operator, once per process, that encryption is configured but no
+   * master key could be loaded. Without this the store would quietly fall back
+   * to plaintext.
+   */
+  private static _warnedMissingKey = false
+  private static warnMissingMasterKeyOnce(): void {
+    if (EngagementStore._warnedMissingKey) return
+    EngagementStore._warnedMissingKey = true
+    process.stderr.write(
+      `[Argus] WARNING: storage.encryption.enabled is true but no master key could be loaded ` +
+      `(keychain service "${keychainServiceName()}", account "${keychainAccountName()}").\n` +
+      `         Encryption at rest is OFF for this run; engagement databases will be written in ` +
+      `plaintext.\n` +
+      `         Run \`argus encryption init\` to create a master key.\n`,
+    )
   }
 
   private static finalizer = new FinalizationRegistry((sqlite: { close(): void }) => {

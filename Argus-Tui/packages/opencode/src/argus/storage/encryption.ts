@@ -38,8 +38,39 @@ const SALT_LEN = 16
 const IV_LEN = 12
 const TAG_LEN = 16
 const VERSION_BYTE = 0x01
-const SERVICE_NAME = "argus"
-const ACCOUNT_NAME = "master-key"
+const DEFAULT_SERVICE_NAME = "argus"
+const DEFAULT_ACCOUNT_NAME = "master-key"
+
+/**
+ * Keychain service name for the master key.
+ *
+ * Overridable via `ARGUS_KEYCHAIN_SERVICE` so a test or CI process can be
+ * pointed at its own keychain entry. Without that, a test suite calling
+ * `EncryptionManager.destroy()` + `initialize()` operates on the developer's
+ * *production* entry: it silently rotates the real master key, and every
+ * engagement or evidence package encrypted under the old one becomes
+ * undecryptable. A namespace is cheap; an unrecoverable engagement is not.
+ *
+ * Resolved per call (not as a module constant) so tests can set the variable
+ * in a preload, before or after importing this module.
+ */
+export function keychainServiceName(): string {
+  return process.env.ARGUS_KEYCHAIN_SERVICE?.trim() || DEFAULT_SERVICE_NAME
+}
+
+/** Account name within {@link keychainServiceName}. Same override rationale. */
+export function keychainAccountName(): string {
+  return process.env.ARGUS_KEYCHAIN_ACCOUNT?.trim() || DEFAULT_ACCOUNT_NAME
+}
+
+/**
+ * True when this process is using a non-default keychain namespace — i.e. it
+ * cannot read or clobber the real master key. Exported so a caller can state
+ * which namespace it is operating on instead of assuming the default.
+ */
+export function usesIsolatedKeychain(): boolean {
+  return keychainServiceName() !== DEFAULT_SERVICE_NAME
+}
 
 // ── Platform detection ──
 
@@ -579,7 +610,7 @@ export class EncryptionManager {
     const masterKey = crypto.randomBytes(KEY_LEN)
     const hex = masterKey.toString("hex")
 
-    keychainSet(SERVICE_NAME, ACCOUNT_NAME, hex)
+    keychainSet(keychainServiceName(), keychainAccountName(), hex)
 
     // Update cache
     this.cachedKey = { key: masterKey, obtainedAt: Date.now() }
@@ -600,7 +631,7 @@ export class EncryptionManager {
    * unless a backup was previously exported.
    */
   static async destroy(): Promise<void> {
-    keychainDelete(SERVICE_NAME, ACCOUNT_NAME)
+    keychainDelete(keychainServiceName(), keychainAccountName())
     this.cachedKey = null
   }
 
@@ -649,7 +680,7 @@ export class EncryptionManager {
     if (cached) return cached
 
     try {
-      const hex = keychainGet(SERVICE_NAME, ACCOUNT_NAME)
+      const hex = keychainGet(keychainServiceName(), keychainAccountName())
       if (hex === null) return null
       const key = Buffer.from(hex, "hex")
       if (key.length !== KEY_LEN) return null
@@ -683,7 +714,7 @@ export class EncryptionManager {
    * Retrieve the master key from the OS keychain (bypass cache).
    */
   private static async rawGetMasterKey(): Promise<string | null> {
-    return keychainGet(SERVICE_NAME, ACCOUNT_NAME)
+    return keychainGet(keychainServiceName(), keychainAccountName())
   }
 
   /**
@@ -796,7 +827,7 @@ export class EncryptionManager {
     const masterKey = Buffer.concat([decipher.update(ciphertext), decipher.final()])
 
     // Store in keychain
-    keychainSet(SERVICE_NAME, ACCOUNT_NAME, masterKey.toString("hex"))
+    keychainSet(keychainServiceName(), keychainAccountName(), masterKey.toString("hex"))
 
     // Update cache
     this.cachedKey = { key: masterKey, obtainedAt: Date.now() }
@@ -911,9 +942,19 @@ export class EncryptionManager {
   /**
    * Ensure a master key exists, auto-generating one if needed.
    *
-   * Designed for the case where `storage.encryption.enabled` defaults to `true`
-   * but no master key has been initialized yet. Generates a random 256-bit
-   * key and stores it in the OS keychain (macOS) or encrypted file (Linux/Windows).
+   * ⚠️ Call this only from an explicit key-creation path (`argus encryption
+   * init`). It writes to the OS keychain, and it mints a *new* key whenever a
+   * read fails — so calling it from ordinary command startup silently rotates
+   * the master key of anyone whose keychain is not readable at that moment
+   * (for example a process whose HOME has no keychain search list), orphaning
+   * every engagement and evidence package already encrypted. It can also block
+   * indefinitely on the macOS keychain authorization dialog.
+   *
+   * `EngagementStore.syncEncryptionFromConfig()` used to call this on every
+   * store construction; it now uses the read-only `loadKeySync()`.
+   *
+   * Generates a random 256-bit key and stores it in the OS keychain (macOS) or
+   * encrypted file (Linux/Windows).
    *
    * On file-based platforms without a configured passphrase, this method:
    * 1. First checks for an existing auto-passphrase file (`~/.argus/.auto-passphrase`)
@@ -950,7 +991,7 @@ export class EncryptionManager {
     // ── Check if key already exists (passphrase now loaded if needed) ──
     let existingHex: string | null = null
     try {
-      existingHex = keychainGet(SERVICE_NAME, ACCOUNT_NAME)
+      existingHex = keychainGet(keychainServiceName(), keychainAccountName())
     } catch {
       // keychainGet may throw if passphrase is wrong or file is corrupted.
       // Fall through to key generation to recover.
@@ -988,7 +1029,7 @@ export class EncryptionManager {
     try {
       const masterKey = crypto.randomBytes(KEY_LEN)
       const hex = masterKey.toString("hex")
-      keychainSet(SERVICE_NAME, ACCOUNT_NAME, hex)
+      keychainSet(keychainServiceName(), keychainAccountName(), hex)
       this.cachedKey = { key: masterKey, obtainedAt: Date.now() }
       return true
     } catch (err) {

@@ -900,6 +900,23 @@ export class WorkflowRunner {
     const workflowsDir = options.workflowsDir ?? resolve(PROJECT_ROOT, "Argus-Tui/packages/opencode/src/argus/workflows")
     const toolsPath = join(workflowsDir, "tool-definitions.yaml")
 
+    // ── 0. Sweep plaintext scratch files from any previous session ──
+    // `EncryptedDbHandle` writes the decrypted engagement database next to the
+    // encrypted one while a session is open, and only a clean `close()` removes
+    // it. Every crash or SIGKILL therefore left a plaintext copy of an
+    // engagement database on disk permanently (950+ had accumulated here). The
+    // encrypted `.db` is not touched.
+    try {
+      const { sweepEngagementsDir } = await import("./storage/encrypted-db")
+      const { StoragePaths } = await import("./storage/paths")
+      const swept = sweepEngagementsDir(StoragePaths.engagementsDir)
+      if (swept.length > 0) {
+        emit(`✓ Removed ${swept.length} leftover plaintext engagement file(s) from previous sessions`)
+      }
+    } catch (sweepErr) {
+      emit(`⚠ Plaintext scratch sweep skipped: ${(sweepErr as Error).message}`)
+    }
+
     // ── 1. Create or use existing engagement ──
     const store = this.deps?.store ?? new EngagementStore()
     // Register exit handler for clean SQLite shutdown (blocker 41)
