@@ -129,9 +129,13 @@ class LLMClient:
             (api_key if api_key and api_key.strip() else None)
             or run_key
             or resolve_llm_api_key()
-            or self._load_key_from_db()
-            or self._load_key_from_redis(redis_url)
         )
+        if not resolved_key and not self._uses_opencode_server:
+            # The DB and Redis keys exist to find a credential to call a
+            # provider with. Through the local OpenCode server there is none to
+            # find — OpenCode holds it — so do not reach outside this process
+            # for one (and do not log a scary un-scoped lookup either).
+            resolved_key = self._load_key_from_db() or self._load_key_from_redis(redis_url)
         self.api_key: str | None = resolved_key
 
         if run_config:

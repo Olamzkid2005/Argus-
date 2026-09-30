@@ -151,6 +151,23 @@ class TestOpencodeServerHandoff:
         # Available even without a key: OpenCode holds the credential.
         assert client.is_available() is True
 
+    def test_no_credential_lookup_is_attempted(self, monkeypatch):
+        # The server transport needs no key, so the worker must not query the
+        # database or Redis looking for one. It used to, and logged an un-scoped
+        # "loading API key from database" warning on a correctly configured run.
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        set_worker_llm_config(SERVER_HANDOFF)
+
+        with (
+            patch.object(LLMClient, "_load_key_from_db") as from_db,
+            patch.object(LLMClient, "_load_key_from_redis") as from_redis,
+        ):
+            client = LLMClient(redis_url="redis://127.0.0.1:6379/0")
+
+        from_db.assert_not_called()
+        from_redis.assert_not_called()
+        assert not client.api_key
+
     def test_own_key_cannot_reroute_the_server_transport(self, no_db_or_redis, monkeypatch):
         # An sk-or- key used to force the OpenRouter URL; a handoff that names a
         # transport must not be rewritten into a direct call to someone else.
