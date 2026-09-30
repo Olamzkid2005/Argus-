@@ -36,7 +36,7 @@ _register(ToolDefinition(
     phases=["recon"],
     default_args=["-silent"],
     parameters=[
-    ToolParameter(name="target", description="Root domain to generate permutations for", required=True, flag="-d"),
+    ToolParameter(name="target", description="Root domain(s) to generate permutations for (comma-separated or file)", required=True, flag="-l"),
 ],
     timeout=120,
     signal_quality=SignalQuality.CANDIDATE,
@@ -520,7 +520,7 @@ _register(ToolDefinition(
     name="gospider",
     description="Web spider for endpoint and parameter discovery",
     phases=["recon", "scan"],
-    default_args=["-q", "-j"],
+    default_args=["-q", "--json"],
     parameters=[
     ToolParameter(name="target", description="Target URL", required=True, flag="-s"),
     ToolParameter(name="depth", description="Crawl depth", flag="-d", default=3),
@@ -726,7 +726,7 @@ _register(ToolDefinition(
     name="nuclei",
     description="Nuclei vulnerability scanner using customizable YAML templates",
     phases=["scan", "deep_scan"],
-    default_args=["-json", "-silent", "-timeout", "10", "-retries", "1", "-bulk-size", "25", "-concurrency", "10"],
+    default_args=["-jsonl", "-silent", "-timeout", "10", "-retries", "1", "-bulk-size", "25", "-concurrency", "10"],
     parameters=[
     ToolParameter(name="target", description="Target URL or host to scan", required=True, flag="-u"),
     ToolParameter(name="severity", description="Severity filter (info, low, medium, high, critical)", flag="-severity"),
@@ -1166,7 +1166,6 @@ _register(ToolDefinition(
     name="whatweb",
     description="WhatWeb technology detection and fingerprinting",
     phases=["recon"],
-    default_args=["--color=never", "--log-json=/dev/stdout"],
     parameters=[
     ToolParameter(name="target", description="Target URL to fingerprint", required=True),
 ],

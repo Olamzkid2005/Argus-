@@ -247,6 +247,31 @@ class TestWhatwebParser:
     def test_empty_output(self):
         assert whatweb.parse("") == []
 
+    def test_parses_the_text_line_the_installed_whatweb_prints(self):
+        # The installed whatweb accepts only a positional target and prints
+        # this line instead of JSON; --format=json and Ruby WhatWeb's
+        # --log-json are both rejected as unrecognized arguments.
+        output = (
+            "http://127.0.0.1:55693/ [404 Not Found] "
+            "HTTPServer[Werkzeug/3.1.9 Python/3.14.4]  Title[404 Not Found]"
+        )
+        findings = whatweb.parse(output)
+        assert len(findings) == 1
+        assert "HTTPServer" in findings[0].title
+        plugins = findings[0].evidence[0]["plugins"]
+        assert plugins["Title"] == "404 Not Found"
+
+    def test_parses_ruby_whatweb_colored_line(self):
+        output = (
+            "\x1b[1mhttp://example.com\x1b[0m [200 OK] Apache[2.4.41], "
+            "Country[RESERVED][ZZ], Title[Example Domain]"
+        )
+        findings = whatweb.parse(output)
+        assert len(findings) == 1
+        plugins = findings[0].evidence[0]["plugins"]
+        assert plugins["Apache"] == "2.4.41"
+        assert plugins["Title"] == "Example Domain"
+
 
 class TestNiktoParser:
     def test_parse_json(self):

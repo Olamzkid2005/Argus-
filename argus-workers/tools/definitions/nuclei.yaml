@@ -2,7 +2,7 @@ name: nuclei
 command: nuclei
 description: "Nuclei vulnerability scanner using customizable YAML templates"
 args:
-  - "-json"
+  - "-jsonl"
   - "-silent"
   - "-timeout"
   - "10"

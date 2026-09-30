@@ -76,6 +76,39 @@ class ToolCost:
 logger = logging.getLogger(__name__)
 
 
+def _augmented_tool_path() -> str:
+    """PATH used for BOTH tool discovery and tool execution.
+
+    ``~/go/bin`` comes first on purpose. The venv ships Python console scripts
+    whose names collide with the ProjectDiscovery binaries — ``venv/bin/httpx``
+    is the *Python* HTTPX CLI — so with the venv first, a call to ``httpx``
+    executed the Python CLI and failed with ``Usage: httpx [OPTIONS] URL /
+    Error: No such option: -s`` while the availability check (which looked in
+    ``~/go/bin``) reported the tool as present. Discovery and execution now
+    share this helper so they cannot disagree; ``ARGUS_EXTRA_PATH`` is honored
+    by both (previously it was only consulted for discovery).
+    """
+    _go_bin = os.path.expanduser("~/go/bin")
+    _venv_bin = str(Path(sys.executable).parent)
+    _homebrew_bin = "/opt/homebrew/bin"
+    _project_venv = str(Path(__file__).resolve().parent.parent / "venv" / "bin")
+    _pip_scripts = sysconfig.get_path("scripts")
+    parts = [
+        _go_bin,
+        _venv_bin,
+        _homebrew_bin,
+        _project_venv,
+        _pip_scripts,
+        "/snap/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        os.environ.get("ARGUS_EXTRA_PATH", ""),
+        os.environ.get("PATH", ""),
+    ]
+    return os.pathsep.join(part for part in parts if part)
+
+
 def _param_is_true(value: Any) -> bool:
     """Interpret a boolean tool parameter from MCP arguments.
 
@@ -397,10 +430,9 @@ class MCPServer:
         re-checked afterwards, so a tool installed while the server is running
         (or a fixed PATH) is discovered without a restart.
 
-        The augmented PATH includes venv, go, homebrew, pip user scripts, and
-        common system paths.
+        The augmented PATH is built by ``_augmented_tool_path()`` and is the
+        same PATH tool execution receives.
         """
-        _sep = os.pathsep
         _cache = self.__class__._binary_cache
         _now = time.monotonic()
         _cached = _cache.get(name)
@@ -408,20 +440,7 @@ class MCPServer:
             _path, _checked_at = _cached
             if _path is not None or (_now - _checked_at) < self._BINARY_CACHE_MISS_TTL_SECS:
                 return _path
-        _venv_bin = str(Path(sys.executable).parent)
-        _go_bin = os.path.expanduser("~/go/bin")
-        _homebrew_bin = "/opt/homebrew/bin"
-        _project_venv = str(
-            Path(__file__).resolve().parent.parent / "venv" / "bin"
-        )
-        _pip_scripts = sysconfig.get_path("scripts")
-        _existing_path = os.environ.get("PATH", "")
-        _extra_path = os.environ.get("ARGUS_EXTRA_PATH", "")
-        _augmented_path = _sep.join([
-            _venv_bin, _go_bin, _homebrew_bin, _project_venv, _pip_scripts,
-            "/usr/local/bin", "/usr/bin", "/bin",
-            _extra_path, _existing_path,
-        ])
+        _augmented_path = _augmented_tool_path()
         _found = shutil.which(name, path=_augmented_path)
         _cache[name] = (_found, time.monotonic())
         return _found
@@ -929,20 +948,10 @@ class MCPServer:
             }
             for _key in BLOCKED_ENV_VARS:
                 _env.pop(_key, None)
-            # Add venv + pip scripts to PATH so pip-installed tools are findable
-            _sep = os.pathsep
-            _venv_bin = str(Path(sys.executable).parent)
-            _go_bin = os.path.expanduser("~/go/bin")
-            _homebrew_bin = "/opt/homebrew/bin"
-            _project_venv = str(Path(__file__).resolve().parent.parent / "venv" / "bin")
-            _pip_scripts = sysconfig.get_path("scripts")
-            # Preserve any existing PATH customizations (e.g. from start-argus.sh)
-            _existing_path = _env.get("PATH", "")
-            _env["PATH"] = _sep.join([
-                _venv_bin, _go_bin, _homebrew_bin, _project_venv, _pip_scripts,
-                "/snap/bin", "/usr/local/bin", "/usr/bin", "/bin",
-                _existing_path,
-            ])
+            # Use the same augmented PATH as the availability check so the
+            # binary that was found is the binary that runs (see
+            # _augmented_tool_path).
+            _env["PATH"] = _augmented_tool_path()
             _env["PYTHONDONTWRITEBYTECODE"] = "1"
 
             result = subprocess.run(  # noqa: S603 — safe: cmd is list form, validated by _validate_args_safe()
@@ -951,6 +960,12 @@ class MCPServer:
                 text=True,
                 timeout=timeout or tool.timeout,
                 env=_env,
+                # Never hand the worker's stdin to a scanner: tools like alterx
+                # switch to stdin input mode when stdin is any pipe (even at
+                # EOF) and then report "no input found" instead of using their
+                # flags. The MCP path never feeds stdin deliberately, so
+                # /dev/null is both deterministic and correct.
+                stdin=subprocess.DEVNULL,
             )
             duration_ms = int((time.time() - start) * 1000)
 

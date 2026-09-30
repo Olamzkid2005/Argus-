@@ -1,9 +1,10 @@
 name: whatweb
 command: whatweb
 description: "WhatWeb technology detection and fingerprinting"
-args:
-  - "--color=never"
-  - "--log-json=/dev/stdout"
+# No default args: the installed whatweb accepts only a positional target.
+# Ruby WhatWeb's --color=never/--log-json=FILE are rejected as unrecognized
+# arguments, and the text line both builds print is handled by the parser.
+args: []
 parameters:
   - name: target
     type: string

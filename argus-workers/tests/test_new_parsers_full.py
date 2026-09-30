@@ -173,6 +173,19 @@ class TestWhatwebParser(unittest.TestCase):
         findings = WhatwebParser().parse(raw)
         self.assertEqual(len(findings), 2)
 
+    def test_parse_text_line(self):
+        # What the installed whatweb prints (no --log-json support).
+        raw = (
+            "http://127.0.0.1:55693/ [404 Not Found] "
+            "HTTPServer[Werkzeug/3.1.9]  Title[404 Not Found]"
+        )
+        findings = WhatwebParser().parse(raw)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["type"], "TECHNOLOGY_DETECTED")
+        self.assertEqual(
+            findings[0]["evidence"]["plugins"]["HTTPServer"], "Werkzeug/3.1.9"
+        )
+
 
 class TestJwtToolParser(unittest.TestCase):
     def test_parse_vulnerable_line(self):

@@ -83,6 +83,48 @@ tools turned the whole run into `'dict' object has no attribute '__dict__'` inst
 System B output is now converted to `NormalizedFinding`, so those tools deliver findings on the MCP
 path for the first time.
 
+**Fixed (2026-09-30, recon invocation pass):** every YAML-defined tool was also written inline in
+`tool_definitions.py`, and the inline copies won wholesale. They turned out to be the staler copies,
+so the effective registry silently lost data the YAML carried:
+
+- `httpx` lost `target`'s `-u` flag, so the URL was appended positionally — ProjectDiscovery httpx
+exits 0 with **no output** for a bare positional URL, which is indistinguishable from "no findings".
+- The 17 launcher tools lost the `extra` parameter, so the `--extra` credentials-JSON fix in the
+YAML never reached the MCP bridge and credentialed phases still failed on argv.
+- `cloud_metadata_probe` lost `--extra`; `testssl` lost `jsonfile`.
+
+`_register()` now merges a re-registration with its YAML definition: parameters the inline entry
+omits are appended, a same-named parameter that lost its CLI flag regains it, and `binary`/empty
+`default_args`/unset metadata are inherited. Inline policy still wins where it is deliberate
+(phases, args, timeout, `requires`) — nmap stays disabled, the SAST tools stay out of HTTP phases,
+and the playwright scheme gate is not resurrected.
+
+The verification (running each tool through `MCPServer.call_tool`, the path the worker uses) also
+found several invocations that were wrong independently of the merge:
+
+- **Tool PATH shadowing:** the execution PATH put the venv first, and `venv/bin/httpx` is the
+*Python* HTTPX CLI. The availability check looked in `~/go/bin` and passed, then execution ran the
+Python CLI and failed with `Usage: httpx [OPTIONS] URL / Error: No such option: -s`. `~/go/bin` now
+precedes the venv, and discovery and execution share one `_augmented_tool_path()` (so
+`ARGUS_EXTRA_PATH` is honored by both).
+- **Inherited stdin:** `alterx` switches to stdin mode when stdin is any pipe, even at EOF, and then
+reports ``[FTL] alterx: no input found`` despite `-l`. Scanner subprocesses now get
+`stdin=DEVNULL`.
+- **Stale flags:** nuclei v3 removed `-json` (→ `-jsonl`, now 11 findings on the fixture); whatweb
+rejects `--format=json` and Ruby WhatWeb's `--log-json` (both text and JSON formats are now parsed,
+so it yields a finding); gospider's `-j` is an unknown shorthand (→ `--json`); alterx dropped `-d`
+(→ `-l`).
+- **Disabled for cause, like nmap:** `dnsx` (v1.2+ requires `-w` with `-d`, or a list file/stdin,
+neither of which the arg builder can supply) and `gospider` (the installed build segfaults in an
+ioctl path and otherwise exits 0 with no output — a silent no-op success). Both keep their
+corrected flags so a newer build only needs the phase re-enabled.
+
+Live result for the recon set (`MCPServer.call_tool` against the local fixtures): httpx, katana,
+whatweb, wafw00f, nikto (5 findings), naabu, nuclei (11), alterx (111) and ffuf all run and parse;
+subfinder runs but external sources exceed 60 s (network-bound, not a flag bug); amass was not run
+(600 s budget); masscan, shuffledns, chaos, cloud_enum, uncover, s3scanner and github-endpoints need
+root, credentials or external APIs — their built argv was verified, execution was not.
+
 What remains is provisioning, not reporting: 13 third-party binaries are genuinely absent here
 (`testssl`, `wpscan`, `trufflehog`, `commix`, `jwt_tool`, `brakeman`, `spotbugs`, `phpcs`, `eslint`,
 `dependency_check`, `sn1per`, `bucket_upload`, `ai-surface`), and the bridge names them in one

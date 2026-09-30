@@ -6,9 +6,9 @@ args:
 parameters:
   - name: target
     type: string
-    description: "Root domain to generate permutations for"
+    description: "Root domain(s) to generate permutations for (comma-separated or file)"
     required: true
-    flag: "-d"
+    flag: "-l"
 capabilities:
   - web_recon
 signal_quality: CANDIDATE

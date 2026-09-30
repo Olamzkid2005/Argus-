@@ -489,7 +489,33 @@ class TestLauncherExtraArgument:
     call: ``run_agent_tool.py: error: unrecognized arguments: {"email": ...}``.
     That is how executive_report_generator and engagement_analytics_engine
     failed every reporting phase.
+
+    Fixing the YAML alone was not enough: every launcher is ALSO written inline
+    in tool_definitions.py, and those copies lacked the parameter entirely, so
+    the live registry (and the MCP bridge built from it) still dropped the
+    credentials JSON. The final test here asserts the path the worker calls, not
+    just the YAML file.
     """
+
+    LAUNCHERS = [
+        "assessment_orchestrator",
+        "attack_path_generator",
+        "attack_surface_mapper",
+        "browser_security_operator",
+        "cloud_metadata_probe",
+        "engagement_analytics_engine",
+        "evidence_intelligence_engine",
+        "executive_report_generator",
+        "finding_correlation_engine",
+        "infrastructure_security_analyzer",
+        "login",
+        "register",
+        "secure_code_intelligence_engine",
+        "threat_intelligence_aggregator",
+        "verification_agent",
+        "vulnerability_knowledge_engine",
+        "workflow_intelligence_engine",
+    ]
 
     def test_every_extra_parameter_in_the_definitions_has_the_cli_flag(self):
         from pathlib import Path
@@ -504,6 +530,22 @@ class TestLauncherExtraArgument:
                 if param.get("name") == "extra" and param.get("flag") != "--extra":
                     offenders.append(path.name)
         assert offenders == [], f"extra parameter without the --extra flag: {offenders}"
+
+    def test_the_live_registry_exposes_extra_for_every_launcher(self):
+        """build_mcp_tool_definitions() is what MCPToolBridge registers."""
+        from tool_definitions import build_mcp_tool_definitions
+
+        by_name = {t.name: t for t in build_mcp_tool_definitions()}
+        offenders = []
+        for name in self.LAUNCHERS:
+            extra = next(
+                (p for p in by_name[name].parameters if p.name == "extra"), None
+            )
+            if extra is None or extra.flag != "--extra":
+                offenders.append(name)
+        assert offenders == [], (
+            f"the live registry drops the credentials JSON for: {offenders}"
+        )
 
     def test_extra_is_passed_as_a_flag_not_positionally(self, mocker):
         import sys
@@ -591,6 +633,32 @@ class TestScannerInvocationDefinitions:
             "put it in HTTP phases that handed it a URL it could only reject"
         )
 
+    def test_nuclei_uses_jsonl_because_v3_removed_json(self):
+        # nuclei v3.7.1: `-json` is gone; `-jsonl`/`-j` writes JSON Lines.
+        args = self._definition("nuclei")["args"]
+        assert "-json" not in args, (
+            "nuclei v3 rejects -json with `flag provided but not defined`"
+        )
+        assert "-jsonl" in args
+
+    def test_gospider_json_flag_is_the_long_form(self):
+        args = self._definition("gospider")["args"]
+        assert "-j" not in args, "gospider rejects -j: unknown shorthand flag"
+        assert "--json" in args
+
+    def test_alterx_takes_its_input_with_l_not_d(self):
+        params = {p["name"]: p for p in self._definition("alterx")["parameters"]}
+        assert params["target"]["flag"] == "-l", (
+            "alterx v0.0.4+ dropped -d: flag provided but not defined; -l "
+            "accepts comma-separated input"
+        )
+
+    def test_whatweb_has_no_default_args(self):
+        # The installed whatweb accepts only a positional target. Both
+        # --format=json and Ruby WhatWeb's --color/--log-json forms are
+        # rejected, and the text line it prints is parsed instead.
+        assert self._definition("whatweb")["args"] == []
+
     def test_nikto_target_keeps_its_port(self, mocker):
         import sys
 
@@ -634,6 +702,82 @@ class TestScannerInvocationDefinitions:
         )
         assert "--deep" not in off["content"][0]["text"]
         assert as_string["content"][0]["text"].strip().endswith("--deep")
+
+
+class TestAugmentedToolPath:
+    """Discovery and execution must agree on which binary a name resolves to.
+
+    ``venv/bin/httpx`` is the Python HTTPX CLI while ``~/go/bin/httpx`` is the
+    ProjectDiscovery scanner. With the venv first the worker executed the
+    Python CLI — ``Usage: httpx [OPTIONS] URL / Error: No such option: -s`` —
+    even though the availability check reported the tool as present.
+    """
+
+    def test_go_bin_precedes_the_venv(self):
+        import os
+        import sys
+
+        from mcp_server import _augmented_tool_path
+
+        parts = _augmented_tool_path().split(os.pathsep)
+        go_bin = os.path.expanduser("~/go/bin")
+        venv_bin = str(Path(sys.executable).parent)
+        assert parts.index(go_bin) < parts.index(venv_bin)
+
+    def test_extra_path_is_honored_for_discovery_and_execution(self, monkeypatch):
+        import os
+
+        from mcp_server import _augmented_tool_path
+
+        monkeypatch.setenv("ARGUS_EXTRA_PATH", "/custom/argus-tools")
+        assert "/custom/argus-tools" in _augmented_tool_path().split(os.pathsep)
+
+    def test_execution_path_uses_the_same_augmented_path(self, mocker):
+        import os
+        import sys
+
+        mocker.patch("mcp_server.shutil.which", return_value=sys.executable)
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="pathtool",
+            command=sys.executable,
+            args=["-c", "import os; print(os.environ.get('PATH', ''))"],
+            parameters=[],
+        ))
+
+        result = server.call_tool("pathtool", {}, cache_mode="no_cache")
+
+        assert result["isError"] is False
+        parts = result["content"][0]["text"].strip().split(os.pathsep)
+        go_bin = os.path.expanduser("~/go/bin")
+        venv_bin = str(Path(sys.executable).parent)
+        assert parts.index(go_bin) < parts.index(venv_bin)
+
+
+class TestToolSubprocessStdin:
+    """Scanner subprocesses must not inherit the worker's stdin.
+
+    alterx switches to stdin input mode when stdin is any pipe (even at EOF)
+    and then ignores its flags with ``[FTL] alterx: no input found``. Handing
+    every tool ``/dev/null`` keeps flag-based invocations deterministic.
+    """
+
+    def test_tools_get_devnull_stdin(self, mocker):
+        import sys
+
+        mocker.patch("mcp_server.shutil.which", return_value=sys.executable)
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="stdin-probe",
+            command=sys.executable,
+            args=["-c", "import sys; print('empty' if sys.stdin.read() == '' else 'data')"],
+            parameters=[],
+        ))
+
+        result = server.call_tool("stdin-probe", {}, cache_mode="no_cache")
+
+        assert result["isError"] is False
+        assert result["content"][0]["text"].strip() == "empty"
 
 
 class TestFindingsExitCodeWithoutFindings:

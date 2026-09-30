@@ -3,7 +3,7 @@ command: gospider
 description: "Web spider for endpoint and parameter discovery"
 args:
   - "-q"
-  - "-j"
+  - "--json"
 parameters:
   - name: target
     type: string

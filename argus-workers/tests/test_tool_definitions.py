@@ -6,6 +6,7 @@ import pytest
 
 from tool_definitions import (
     _PIPELINE_STEP_TOOLS,
+    _YAML_DEFINED,
     ALL_PHASES,
     TOOLS,
     SignalQuality,
@@ -326,6 +327,113 @@ class TestReregistrationKeepsGeneratedFields:
             "browser_security_operator",
         ]
         assert by_name["npm-audit"].command == "npm"
+
+
+class TestInlineOverridesDoNotLoseYamlData:
+    """An inline override may change policy, but it must not drop YAML data.
+
+    The inline blocks are the newer, verified invocation (they disable nmap,
+    keep the SAST tools out of HTTP phases, drop the playwright auto-generated
+    scheme gate), so their policy fields win. Everything they simply left
+    unset — parameters, the CLI flag of a same-named parameter, binary,
+    metadata — must survive from the YAML definition. Two live bugs came from
+    the old wholesale replacement: httpx received its target positionally and
+    exited 0 having scanned nothing, and the launcher tools lost ``extra``, so
+    the credentials JSON was rejected as an unrecognized argument.
+    """
+
+    @staticmethod
+    def _param(tool_name: str, param_name: str):
+        tool = TOOLS[tool_name]
+        return next(p for p in tool.parameters if p.name == param_name)
+
+    def test_httpx_target_keeps_its_u_flag(self):
+        assert self._param("httpx", "target").flag == "-u", (
+            "without -u httpx treats the URL as a stray positional argument "
+            "and exits 0 with no output"
+        )
+
+    def test_mcp_definition_for_httpx_carries_the_flag(self):
+        by_name = {t.name: t for t in build_mcp_tool_definitions()}
+        flag = next(
+            p.flag for p in by_name["httpx"].parameters if p.name == "target"
+        )
+        assert flag == "-u"
+
+    def test_cloud_metadata_probe_extra_keeps_its_flag(self):
+        assert self._param("cloud_metadata_probe", "extra").flag == "--extra"
+
+    def test_testssl_jsonfile_parameter_is_restored(self):
+        assert self._param("testssl", "jsonfile").flag == "--jsonfile"
+
+    def test_alterx_target_gets_its_l_flag(self):
+        # alterx v0.0.4+ dropped -d; -l is the current input flag.
+        assert self._param("alterx", "target").flag == "-l"
+
+    def test_parameter_declared_only_inline_is_kept(self):
+        assert self._param("login", "email") is not None
+        assert self._param("login", "password") is not None
+
+    def test_yaml_metadata_is_inherited_when_inline_leaves_it_unset(self):
+        assert TOOLS["httpx"].priority == 80
+        assert TOOLS["nuclei"].priority == 95
+        assert TOOLS["httpx"].cost == "low"
+
+    def test_inline_policy_is_not_overwritten(self):
+        # nmap is deliberately disabled: no nmap parser exists.
+        assert TOOLS["nmap"].phases == []
+        assert TOOLS["nmap"].timeout == 600
+        assert TOOLS["nmap"].default_args == ["-oX", "-"]
+        # dnsx is deliberately disabled: v1.2+ needs `-w` with `-d`, or a
+        # list file/stdin, none of which the arg builder can supply.
+        assert TOOLS["dnsx"].phases == []
+        # gospider is deliberately disabled: the installed build segfaults or
+        # exits 0 with no output, which would look like a successful crawl.
+        assert TOOLS["gospider"].phases == []
+        # The installed whatweb accepts only a positional target.
+        assert TOOLS["whatweb"].default_args == []
+        # Path-only tools stay out of the HTTP phases.
+        assert TOOLS["bandit"].phases == ["repo_scan"]
+        # playwright-* removed the auto-generated scheme gate on purpose.
+        assert TOOLS["playwright-xss"].requires is None
+        # pip-audit audits the current directory when no target is given.
+        assert self._param("pip-audit", "target").required is False
+
+    def test_merge_rules_on_a_synthetic_pair(self):
+        name = "__test_yaml_merge__"
+        try:
+            _register(
+                ToolDefinition(
+                    name=name,
+                    description="from yaml",
+                    parameters=[
+                        ToolParameter("target", "t", flag="-u", required=True),
+                        ToolParameter("extra", "e", flag="--extra"),
+                    ],
+                    priority=90,
+                )
+            )
+            _YAML_DEFINED.add(name)
+            _register(
+                ToolDefinition(
+                    name=name,
+                    description="inline",
+                    phases=[],
+                    parameters=[ToolParameter("target", "t")],
+                )
+            )
+
+            td = TOOLS[name]
+            # Inline policy wins...
+            assert td.description == "inline"
+            assert td.phases == []
+            # ...but nothing the YAML carried is lost.
+            assert next(p.flag for p in td.parameters if p.name == "target") == "-u"
+            assert next(p.name for p in td.parameters if p.name == "extra")
+            assert td.priority == 90
+        finally:
+            TOOLS.pop(name, None)
+            _YAML_DEFINED.discard(name)
 
 
 class TestPipelineStepTools:
