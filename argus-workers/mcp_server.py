@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -74,6 +75,34 @@ class ToolCost:
 
 
 logger = logging.getLogger(__name__)
+
+#: A URL with an explicit scheme (``http://``, ``https://``, ``ftp://``, ...).
+#: Only scheme-bearing URLs are rejected for ``target_kind == "path"``: bare
+#: host-shaped values ARE valid path-kind targets for some tools (govulncheck
+#: takes Go module paths, trivy takes ``registry.example.com/image:tag``), so
+#: those must stay allowed.
+_URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+
+
+def _target_kind_violation(tool: "ToolDefinition", arguments: dict | None) -> str | None:
+    """Return a refusal message when ``target`` contradicts the definition.
+
+    ``target_kind`` is part of the tool definition so the guard lives in one
+    place instead of being patched into each path-only parser or caller. A
+    ``path`` tool that receives a URL is rejected before any subprocess runs;
+    ``url``/``host`` tools are only advisory today because their CLIs accept
+    bare hosts as well as full URLs.
+    """
+    kind = getattr(tool, "target_kind", "any") or "any"
+    if kind != "path":
+        return None
+    raw = (arguments or {}).get("target")
+    if not isinstance(raw, str) or not _URL_SCHEME_RE.match(raw):
+        return None
+    return (
+        f"Tool '{tool.name}' scans filesystem paths (target_kind=path); "
+        f"it cannot be handed the URL '{raw}'. Pass a local path instead."
+    )
 
 
 def _augmented_tool_path() -> str:
@@ -186,6 +215,7 @@ class ToolDefinition:
         cost: str = None,
         credential_roles: list[str] = None,
         risk_level: str | None = None,
+        target_kind: str = "any",
     ):
         self.name = name
         self.command = command
@@ -206,6 +236,11 @@ class ToolDefinition:
         self.cost = cost
         self.credential_roles = credential_roles or []
         self.risk_level = risk_level
+        #: What kind of value ``target`` is: "any" | "url" | "host" | "path".
+        #: Enforced before execution: a "path" tool handed a URL is rejected
+        #: (gitleaks/semgrep received one and failed with "stat http://...: no
+        #: such file or directory").
+        self.target_kind = target_kind or "any"
 
     def to_dict(self) -> dict:
         """Serialize to MCP tool schema format (includes planner metadata)."""
@@ -232,6 +267,7 @@ class ToolDefinition:
             "cost": self.cost,
             "credential_roles": self.credential_roles,
             "risk_level": self.risk_level,
+            "target_kind": self.target_kind,
         }
         # Strip None values for cleaner output
         return {k: v for k, v in result.items() if v is not None and v != []}
@@ -788,6 +824,18 @@ class MCPServer:
                     tool=name,
                     signal_quality=tool_signal_quality,
                 ).to_dict()
+
+        # Reject a target whose kind contradicts the definition before any
+        # subprocess runs (path-only tools must never receive a URL).
+        _kind_error = _target_kind_violation(tool, arguments)
+        if _kind_error:
+            logger.warning("Target kind mismatch for tool '%s': %s", name, _kind_error)
+            return MCPToolResult(
+                success=False,
+                error=_kind_error,
+                tool=name,
+                signal_quality=tool_signal_quality,
+            ).to_dict()
 
         # Build command line from tool definition + arguments
         cmd = [tool.command]

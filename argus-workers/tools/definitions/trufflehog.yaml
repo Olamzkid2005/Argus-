@@ -20,6 +20,7 @@ parameters:
     description: "Max commit depth"
     required: false
     flag: "--max-depth"
+target_kind: path
 capabilities:
   - secret_detection
   - vulnerability_scanning

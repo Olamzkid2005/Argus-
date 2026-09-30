@@ -13,6 +13,7 @@ parameters:
     description: "Rule config path"
     required: false
     flag: "--config"
+target_kind: path
 capabilities:
   - sast
   - vulnerability_scanning

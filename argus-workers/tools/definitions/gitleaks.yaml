@@ -20,6 +20,7 @@ parameters:
     description: "Max target size in MB"
     required: false
     flag: "--max-target-megabytes"
+target_kind: path
 capabilities:
   - secret_detection
 signal_quality: CONFIRMED

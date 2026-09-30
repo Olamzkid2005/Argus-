@@ -9,6 +9,7 @@ parameters:
     type: string
     description: "Target Go module path"
     required: true
+target_kind: path
 capabilities:
   - sca
   - vulnerability_scanning

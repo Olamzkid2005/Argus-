@@ -125,6 +125,17 @@ subfinder runs but external sources exceed 60 s (network-bound, not a flag bug);
 (600 s budget); masscan, shuffledns, chaos, cloud_enum, uncover, s3scanner and github-endpoints need
 root, credentials or external APIs — their built argv was verified, execution was not.
 
+**Fixed (2026-09-30, target_kind):** path-only tools are now defined with `target_kind: path` in
+their YAML (`semgrep`, `bandit`, `pip-audit`, `npm-audit`, `gitleaks`, `trivy`, `trufflehog`,
+`gosec`, `brakeman`, `govulncheck`, `phpcs`, `eslint`, `spotbugs`, `dependency_check`,
+`ai-surface`), and `MCPServer.call_tool` refuses a scheme-bearing URL *before* spawning anything:
+``Tool 'gitleaks' scans filesystem paths (target_kind=path); it cannot be handed the URL ...``.
+The rule deliberately allows bare host-shaped values, because govulncheck takes Go module paths and
+trivy takes image references such as `registry.example.com/image:tag`; only URLs with an explicit
+scheme are rejected. The TS planner already excludes `supports_web: false` tools from web targets —
+this closes the same hole on the execution path. The YAML value survives the inline overrides
+because the merge treats `target_kind: any` as unset.
+
 What remains is provisioning, not reporting: 13 third-party binaries are genuinely absent here
 (`testssl`, `wpscan`, `trufflehog`, `commix`, `jwt_tool`, `brakeman`, `spotbugs`, `phpcs`, `eslint`,
 `dependency_check`, `sn1per`, `bucket_upload`, `ai-surface`), and the bridge names them in one

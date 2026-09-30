@@ -15,6 +15,7 @@ parameters:
     description: "Severity filter level"
     required: false
     flag: "-ll"
+target_kind: path
 capabilities:
   - sast
   - vulnerability_scanning

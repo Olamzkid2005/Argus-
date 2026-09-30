@@ -10,6 +10,7 @@ parameters:
     description: "Target project directory"
     required: true
     flag: "--scan"
+target_kind: path
 capabilities:
   - sca
   - vulnerability_scanning

@@ -10,6 +10,7 @@ parameters:
     type: string
     description: "Target path (JAR/WAR/class directory)"
     required: true
+target_kind: path
 capabilities:
   - sast
   - vulnerability_scanning

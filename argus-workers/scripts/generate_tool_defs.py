@@ -153,6 +153,9 @@ def _build_tool_registration(data: dict) -> str:
         lines.append(_indent(f'binary="{command}",'))
     phases_str = ", ".join(f'"{p}"' for p in phases)
     lines.append(_indent(f"phases=[{phases_str}],"))
+    target_kind = data.get("target_kind")
+    if target_kind:
+        lines.append(_indent(f'target_kind="{target_kind}",'))
     if args:
         args_str = ", ".join(f'"{a}"' for a in args)
         lines.append(_indent(f"default_args=[{args_str}],"))

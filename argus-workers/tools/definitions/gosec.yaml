@@ -9,6 +9,7 @@ parameters:
     type: string
     description: "Target Go package path"
     required: true
+target_kind: path
 capabilities:
   - sast
   - vulnerability_scanning

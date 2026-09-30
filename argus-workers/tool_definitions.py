@@ -146,6 +146,14 @@ class ToolDefinition:
     #: Parameter schemas
     parameters: list[ToolParameter] = field(default_factory=list)
 
+    #: What kind of value ``target`` is: "any" | "url" | "host" | "path".
+    #: The MCP server refuses to run a "path" tool when the target is a
+    #: scheme-bearing URL (gitleaks/semgrep received one and failed with
+    #: "stat http://...: no such file or directory"); bare host-shaped values
+    #: stay allowed because govulncheck takes Go module paths and trivy takes
+    #: image references like ``registry.example.com/image:tag``.
+    target_kind: str = "any"
+
     #: Timeout in seconds
     timeout: int = 300
 
@@ -289,10 +297,20 @@ def _register(tool: ToolDefinition) -> None:
         for f in fields(ToolDefinition):
             if f.name in _INLINE_POLICY_FIELDS or f.name == "parameters":
                 continue
-            if getattr(tool, f.name, None) is None and getattr(
-                existing, f.name, None
-            ) is not None:
-                filled[f.name] = getattr(existing, f.name)
+            _written_value = getattr(tool, f.name, None)
+            _declared_value = getattr(existing, f.name, None)
+            if f.name == "target_kind":
+                # "any" is the unset/lenient default: a YAML path/url/host
+                # restriction survives an inline block that does not restate
+                # it (no inline block can quietly widen a path-only tool).
+                if _written_value in (None, "any") and _declared_value not in (
+                    None,
+                    "any",
+                ):
+                    filled[f.name] = _declared_value
+                continue
+            if _written_value is None and _declared_value is not None:
+                filled[f.name] = _declared_value
         if filled:
             notes.extend(sorted(filled))
         if notes:
@@ -1872,6 +1890,7 @@ def build_mcp_tool_definitions() -> list:
                 capabilities=getattr(tool, 'capabilities', None),
                 credential_roles=getattr(tool, 'credential_roles', None),
                 risk_level=tool.risk_level,
+                target_kind=getattr(tool, 'target_kind', 'any'),
             )
         )
     return mcp_tools

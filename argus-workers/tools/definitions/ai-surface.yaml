@@ -29,6 +29,7 @@ parameters:
     required: false
     flag: "--verbose"
     default: false
+target_kind: path
 capabilities:
   - ai_surface_mapping
 signal_quality: CONFIRMED

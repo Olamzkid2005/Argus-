@@ -780,6 +780,97 @@ class TestToolSubprocessStdin:
         assert result["content"][0]["text"].strip() == "empty"
 
 
+class TestTargetKindEnforcement:
+    """A path-only tool must never be handed a URL.
+
+    The planner or a ReAct step can pass any string as target. Without a guard
+    the URL reached gitleaks/semgrep and the run failed only after spawning the
+    tool ("stat http://...: no such file or directory"). The refusal comes from
+    the definition's target_kind, so one place covers every path-only tool.
+    """
+
+    @staticmethod
+    def _server(mocker, target_kind):
+        import sys
+
+        mocker.patch("mcp_server.shutil.which", return_value=sys.executable)
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="kind-tool",
+            command=sys.executable,
+            args=["-c", "import sys; print('|'.join(sys.argv[1:]))"],
+            parameters=[ToolSchema(name="target", type="string", flag="--target")],
+            target_kind=target_kind,
+        ))
+        return server
+
+    def test_path_tool_rejects_scheme_bearing_urls(self, mocker):
+        server = self._server(mocker, "path")
+        for target in (
+            "http://127.0.0.1:55693/",
+            "https://example.com/user?id=1",
+            "ftp://host/dir",
+        ):
+            result = server.call_tool(
+                "kind-tool", {"target": target}, cache_mode="no_cache"
+            )
+            assert result["isError"] is True, target
+            assert "target_kind=path" in result["content"][0]["text"]
+
+    def test_path_tool_accepts_a_real_path(self, mocker):
+        server = self._server(mocker, "path")
+        result = server.call_tool(
+            "kind-tool", {"target": "/tmp"}, cache_mode="no_cache"
+        )
+        assert result["isError"] is False
+        # The probe joins argv with "|" so both flag and value are visible.
+        assert "--target|/tmp" in result["content"][0]["text"]
+
+    def test_path_tool_accepts_a_bare_module_path(self, mocker):
+        # govulncheck takes Go module paths and trivy image references; only
+        # scheme-bearing URLs are refused, or those calls would break too.
+        server = self._server(mocker, "path")
+        result = server.call_tool(
+            "kind-tool",
+            {"target": "example.com/my/module"},
+            cache_mode="no_cache",
+        )
+        assert result["isError"] is False
+
+    def test_any_tool_still_accepts_a_url(self, mocker):
+        server = self._server(mocker, "any")
+        result = server.call_tool(
+            "kind-tool",
+            {"target": "http://127.0.0.1:55693/"},
+            cache_mode="no_cache",
+        )
+        assert result["isError"] is False
+
+    def test_the_live_registry_marks_the_path_only_tools(self):
+        from tool_definitions import build_mcp_tool_definitions
+
+        by_name = {t.name: t for t in build_mcp_tool_definitions()}
+        for name in (
+            "semgrep",
+            "bandit",
+            "gitleaks",
+            "pip-audit",
+            "npm-audit",
+            "trivy",
+            "trufflehog",
+            "gosec",
+            "brakeman",
+            "govulncheck",
+            "phpcs",
+            "eslint",
+            "spotbugs",
+            "dependency_check",
+            "ai-surface",
+        ):
+            assert by_name[name].target_kind == "path", name
+        assert by_name["httpx"].target_kind == "any"
+
+
 class TestFindingsExitCodeWithoutFindings:
     """A findings-bearing exit code with nothing to parse is a CLI error.
 

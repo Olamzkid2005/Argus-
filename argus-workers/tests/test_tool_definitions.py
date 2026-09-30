@@ -379,6 +379,20 @@ class TestInlineOverridesDoNotLoseYamlData:
         assert TOOLS["nuclei"].priority == 95
         assert TOOLS["httpx"].cost == "low"
 
+    def test_path_only_tools_keep_their_target_kind(self):
+        # The inline blocks all default to target_kind="any"; a YAML path
+        # restriction must survive them or the URL guard is dead on arrival.
+        for name in (
+            "semgrep",
+            "bandit",
+            "gitleaks",
+            "pip-audit",
+            "trivy",
+            "trufflehog",
+        ):
+            assert TOOLS[name].target_kind == "path", name
+        assert TOOLS["httpx"].target_kind == "any"
+
     def test_inline_policy_is_not_overwritten(self):
         # nmap is deliberately disabled: no nmap parser exists.
         assert TOOLS["nmap"].phases == []
@@ -411,6 +425,7 @@ class TestInlineOverridesDoNotLoseYamlData:
                         ToolParameter("extra", "e", flag="--extra"),
                     ],
                     priority=90,
+                    target_kind="path",
                 )
             )
             _YAML_DEFINED.add(name)
@@ -431,6 +446,7 @@ class TestInlineOverridesDoNotLoseYamlData:
             assert next(p.flag for p in td.parameters if p.name == "target") == "-u"
             assert next(p.name for p in td.parameters if p.name == "extra")
             assert td.priority == 90
+            assert td.target_kind == "path"
         finally:
             TOOLS.pop(name, None)
             _YAML_DEFINED.discard(name)
