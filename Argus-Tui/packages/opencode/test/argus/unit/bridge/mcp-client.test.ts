@@ -28,7 +28,35 @@ describe("WorkersBridge — static validation", () => {
     const bridge = new WorkersBridge("/path/to/mcp_server.py")
     expect(bridge).toBeDefined()
     expect((bridge as any).workersPath).toBe("/path/to/mcp_server.py")
-    expect((bridge as any).pythonPath).toBe("python3")
+    // The interpreter is resolved (ARGUS_PYTHON -> repo venv -> python3), not
+    // hardcoded: depending on bare `python3` is environmental luck.
+    expect(typeof (bridge as any).pythonPath).toBe("string")
+    expect((bridge as any).pythonPath.length).toBeGreaterThan(0)
+  })
+
+  test("resolveDefaultPython honours ARGUS_PYTHON", async () => {
+    const { resolveDefaultPython } = await import("../../../../src/argus/bridge/mcp-client")
+    const previous = process.env.ARGUS_PYTHON
+    try {
+      process.env.ARGUS_PYTHON = "/custom/python"
+      expect(resolveDefaultPython()).toBe("/custom/python")
+    } finally {
+      if (previous === undefined) delete process.env.ARGUS_PYTHON
+      else process.env.ARGUS_PYTHON = previous
+    }
+  })
+
+  test("resolveDefaultPython prefers the repo venv over bare python3", async () => {
+    const { resolveDefaultPython } = await import("../../../../src/argus/bridge/mcp-client")
+    const previous = process.env.ARGUS_PYTHON
+    try {
+      delete process.env.ARGUS_PYTHON
+      const resolved = resolveDefaultPython()
+      // Either the repo venv (usual case in this checkout) or a bare fallback.
+      expect(resolved === "python3" || resolved.includes("argus-workers/venv") || resolved.includes("argus-workers\\venv")).toBe(true)
+    } finally {
+      if (previous !== undefined) process.env.ARGUS_PYTHON = previous
+    }
   })
 
   test("WorkersBridge can be instantiated with custom pythonPath", async () => {

@@ -119,27 +119,48 @@ export interface WorkflowRunResult {
 }
 
 /**
- * Validate that scope.mode is 'allowlist' when running in autonomous mode.
- * Fails hard with a descriptive error message if scope.mode is 'warn' or 'open'.
- * This is the pure-logic extraction of the blocker 36 guard so it can be unit
- * tested independently without a full WorkflowRunner or config file.
+ * Validate that scope is explicitly configured before an autonomous run.
+ *
+ * Fails hard when:
+ *   - scope.mode is 'warn' or 'open' (nothing is enforced), or
+ *   - scope.mode is 'allowlist' but no allowed targets are configured.
+ *
+ * The second case matters because the two enforcement layers disagree by
+ * default: the TS validator treats an empty allowlist as "no restriction" while
+ * the Python workers reject every target ("allowlist mode with no
+ * allowed_targets configured"). Without this check an autonomous run would
+ * start and then scan nothing.
+ *
+ * Pure logic so it can be unit tested without a WorkflowRunner or config file.
  *
  * @param isAutonomous - Whether ARGUS_AUTONOMOUS mode is active
- * @param scopeMode - The parsed security.scope.mode value (or undefined/unset)
- * @throws Error if autonomous and scopeMode is 'warn' or 'open'
+ * @param scopeMode - The resolved security.scope.mode (or undefined/unset)
+ * @param allowedTargets - The resolved security.scope.allowed_targets
+ * @throws Error if autonomous and the scope is not explicitly configured
  */
 export function validateAutonomousScopeMode(
   isAutonomous: boolean,
   scopeMode: string | undefined,
+  allowedTargets?: string[],
 ): void {
   if (!isAutonomous) return
+
   const mode = scopeMode ?? "warn"
   if (mode === "warn" || mode === "open") {
     throw new Error(
       "[Argus] ARGUS_AUTONOMOUS=1: security.scope.mode must be explicitly set to 'allowlist' " +
       "in autonomous mode. Current mode is '" + mode + "'. " +
       "Set 'scope.mode: allowlist' and 'scope.allowed_targets' in argus.config.yaml " +
+      "(or ARGUS_SCOPE_MODE=allowlist with ARGUS_ALLOWED_TARGETS=host1,host2) " +
       "to define the authorized scope, or disable autonomous mode."
+    )
+  }
+
+  if (mode === "allowlist" && !(allowedTargets && allowedTargets.length > 0)) {
+    throw new Error(
+      "[Argus] ARGUS_AUTONOMOUS=1: scope.mode is 'allowlist' but no authorized targets are " +
+      "configured, so every target would be rejected. Set 'security.scope.allowed_targets' in " +
+      "argus.config.yaml or ARGUS_ALLOWED_TARGETS=host1,host2 before running autonomously."
     )
   }
 }
@@ -919,10 +940,6 @@ export class WorkflowRunner {
       }
       configMaxReplans = parsed?.replan?.max_cycles
       configLlmMaxReplans = parsed?.replan?.llm_max_cycles
-
-      // In autonomous mode, scope.mode must be explicitly set to 'allowlist'
-      // so out-of-scope targets are rejected instead of warned (blocker 36 fix).
-      validateAutonomousScopeMode(isAutonomous, parsed?.security?.scope?.mode)
     } catch (configErr) {
       if (isAutonomous) {
         throw new Error(
@@ -934,6 +951,19 @@ export class WorkflowRunner {
       console.warn("Config file missing or invalid, using defaults:", (configErr as Error).message)
       /* config file missing or invalid — use defaults */
     }
+
+    // Autonomous mode requires scope to be explicitly configured so out-of-scope
+    // targets are rejected instead of warned (blocker 36 fix). This runs OUTSIDE
+    // the try above — otherwise its own error is swallowed and re-reported as a
+    // "config file missing or malformed" failure.
+    //
+    // Resolved through the validator so ARGUS_SCOPE_MODE / ARGUS_ALLOWED_TARGETS
+    // overrides are honoured — the same values the enforcer uses.
+    if (isAutonomous) {
+      const resolvedScope = getTargetValidator().load().scope
+      validateAutonomousScopeMode(isAutonomous, resolvedScope?.mode, resolvedScope?.allowed_targets)
+    }
+
     featureFlags.loadFromEnv()
 
     const credStore = this.deps?.credStore ?? new CredentialStore()

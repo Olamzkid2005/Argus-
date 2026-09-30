@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from "child_process"
 import { createInterface } from "readline"
 import { accessSync, constants } from "fs"
+import { join } from "path"
 import type { ToolDefinition, ToolResult, MCPError, DriftReport, CacheMode } from "./types"
 import { LLMUnavailableError } from "./types"
 import { WorkerSupervisor } from "./supervisor"
@@ -28,6 +29,34 @@ interface RPCResponse {
 
 const LLM_STATUS = ["AVAILABLE", "DEGRADED", "UNAVAILABLE"] as const
 type LLMStatus = (typeof LLM_STATUS)[number]
+
+/**
+ * Resolve the interpreter used to spawn the Python worker.
+ *
+ * Order: `ARGUS_PYTHON` → the repo virtualenv (`argus-workers/venv`) → bare
+ * `python3`.
+ *
+ * The venv matters for reproducibility: defaulting to bare `python3` means a
+ * run depends on the worker's dependencies happening to be installed on the
+ * system interpreter, which is environmental luck rather than a configuration.
+ */
+export function resolveDefaultPython(): string {
+  const explicit = process.env.ARGUS_PYTHON?.trim()
+  if (explicit) return explicit
+
+  const venv = join(PROJECT_ROOT, "argus-workers", "venv")
+  const candidates = [join(venv, "bin", "python"), join(venv, "Scripts", "python.exe")]
+  for (const candidate of candidates) {
+    try {
+      accessSync(candidate, constants.X_OK)
+      return candidate
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return "python3"
+}
 
 export class WorkersBridge {
   private process: ChildProcess | null = null
@@ -96,7 +125,7 @@ export class WorkersBridge {
 
   constructor(
     private workersPath: string,
-    private pythonPath: string = "python3",
+    private pythonPath: string = resolveDefaultPython(),
     options?: { maxPending?: number },
   ) {
     this.maxPending = options?.maxPending ?? 10
@@ -109,6 +138,8 @@ export class WorkersBridge {
 
   private validatePaths(): void {
     const VALID_PYTHON = new Set(["python3", "python", "python3.12"])
+    // ARGUS_PYTHON (and the default venv path) may be an absolute executable;
+    // those are validated by the accessSync check below.
     if (!VALID_PYTHON.has(this.pythonPath)) {
       try {
         accessSync(this.pythonPath, constants.X_OK)

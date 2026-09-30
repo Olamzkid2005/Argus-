@@ -1191,10 +1191,24 @@ describe("validateAutonomousScopeMode", () => {
     validateAutonomousScopeMode(false, undefined)
   })
 
-  test("accepts allowlist in autonomous mode", async () => {
+  test("accepts allowlist with authorized targets in autonomous mode", async () => {
     const { validateAutonomousScopeMode } =
       await import("../../../src/argus/workflow-runner")
-    validateAutonomousScopeMode(true, "allowlist")
+    validateAutonomousScopeMode(true, "allowlist", ["127.0.0.1"])
+  })
+
+  // An empty allowlist is not a configured scope: the TS validator treats it as
+  // "no restriction" while the Python workers reject every target, so an
+  // autonomous run would start and then scan nothing.
+  test("rejects allowlist with no authorized targets in autonomous mode", async () => {
+    const { validateAutonomousScopeMode } =
+      await import("../../../src/argus/workflow-runner")
+    expect(() => validateAutonomousScopeMode(true, "allowlist", [])).toThrow(
+      "no authorized targets are configured"
+    )
+    expect(() => validateAutonomousScopeMode(true, "allowlist", undefined)).toThrow(
+      "no authorized targets are configured"
+    )
   })
 
   test("rejects warn in autonomous mode", async () => {

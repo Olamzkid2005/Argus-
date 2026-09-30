@@ -49,6 +49,16 @@ export interface GitHostPolicy {
 }
 
 export interface ScopeConfig {
+  /**
+   * Enforcement mode.
+   *   "warn"      — evaluate scope but only report violations (default)
+   *   "allowlist" — only targets matching allowed_targets may run
+   *   "open"      — no allowlist enforcement
+   *
+   * Autonomous runs (ARGUS_AUTONOMOUS=1) must use "allowlist" — see
+   * validateAutonomousScopeMode() in workflow-runner.ts.
+   */
+  mode?: string
   /** Glob patterns for targets that ARE allowed (e.g. ["*.example.com"]) */
   allowed_targets?: string[]
   /** Glob patterns for targets that are NEVER allowed (e.g. ["*.internal.corp"]) */
@@ -101,10 +111,30 @@ export function isGitHostAllowed(host: string, config?: GitHostPolicy): boolean 
 const DEFAULT_CONFIG: SecurityConfig = {
   allowed_git_hosts: [],
   scope: {
+    mode: "warn",
     allowed_targets: [],
     blocked_targets: [],
     require_confirmation: false,
   },
+}
+
+/**
+ * Environment overrides for scope configuration.
+ *
+ * These exist so an authorized run can be scoped without editing the committed
+ * `argus.config.yaml` (which must stay safe by default), and so `doctor` and the
+ * autonomous-mode guard read the same values the enforcer uses.
+ */
+export const SCOPE_MODE_ENV_VAR = "ARGUS_SCOPE_MODE"
+export const ALLOWED_TARGETS_ENV_VAR = "ARGUS_ALLOWED_TARGETS"
+
+function envAllowedTargets(): string[] | undefined {
+  const raw = process.env[ALLOWED_TARGETS_ENV_VAR]?.trim()
+  if (!raw) return undefined
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
 }
 
 /* ── Target Validator ──────────────────────────────────────────────── */
@@ -159,6 +189,7 @@ export class TargetValidator {
         this.config = {
           allowed_git_hosts: gitHosts,
           scope: {
+            mode: sec.scope?.mode ?? "warn",
             allowed_targets: sec.scope?.allowed_targets ?? [],
             blocked_targets: sec.scope?.blocked_targets ?? [],
             require_confirmation: sec.scope?.require_confirmation ?? false,
@@ -172,6 +203,21 @@ export class TargetValidator {
     } catch {
       // Config file missing or invalid — use defaults silently
       // This is expected for fresh installs and CI environments
+    }
+
+    // Environment overrides win over the file, and apply even when no config
+    // file exists at all.
+    const envMode = process.env[SCOPE_MODE_ENV_VAR]?.trim()
+    const envTargets = envAllowedTargets()
+    if (envMode || envTargets) {
+      this.config = {
+        ...this.config,
+        scope: {
+          ...this.config.scope,
+          ...(envMode ? { mode: envMode } : {}),
+          ...(envTargets ? { allowed_targets: envTargets } : {}),
+        },
+      }
     }
 
     this.loaded = true
@@ -211,7 +257,7 @@ export class TargetValidator {
     // 1. Blocked targets check (always enforced)
     if (scope?.blocked_targets && scope.blocked_targets.length > 0) {
       for (const pattern of scope.blocked_targets) {
-        if (this.matchesGlob(target, pattern)) {
+        if (this.matchesTargetOrHost(target, pattern)) {
           return {
             valid: false,
             reason: "blocked_target",
@@ -224,7 +270,7 @@ export class TargetValidator {
     // 2. Allowed targets check (only enforced when configured)
     if (scope?.allowed_targets && scope.allowed_targets.length > 0) {
       const isAllowed = scope.allowed_targets.some((pattern) =>
-        this.matchesGlob(target, pattern),
+        this.matchesTargetOrHost(target, pattern),
       )
       if (!isAllowed) {
         return {
@@ -300,13 +346,27 @@ export class TargetValidator {
 
     // If target is explicitly in allowed list, no confirmation needed
     if (scope.allowed_targets && scope.allowed_targets.length > 0) {
-      return !scope.allowed_targets.some((pattern) => this.matchesGlob(target, pattern))
+      return !scope.allowed_targets.some((pattern) => this.matchesTargetOrHost(target, pattern))
     }
 
     return false
   }
 
   /* ── Helpers ─────────────────────────────────────────────────────── */
+
+  /**
+   * Match a configured pattern against both the raw target and its hostname.
+   *
+   * Patterns are documented as "Glob patterns: *.example.com, example.*, *
+   * (all), or exact hostnames" (argus.config.yaml), so the hostname form must
+   * work: `example.com` has to match `https://example.com/path`. The Python
+   * workers match on hostname, and the two enforcement layers must agree —
+   * otherwise a scope the operator declared is silently never satisfied.
+   */
+  private matchesTargetOrHost(target: string, pattern: string): boolean {
+    if (this.matchesGlob(target, pattern)) return true
+    return this.matchesGlob(this.extractHostname(target), pattern)
+  }
 
   private extractHostname(target: string): string {
     // Strip protocol
