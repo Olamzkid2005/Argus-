@@ -152,6 +152,28 @@ What broke and what is now fixed:
   labelled everything it did not choose (including all of `api_exploitation`) as deterministic. See
   `DEMO-READINESS-PLAN.md` Step 3.
 
+**Path B (Celery) now runs unattended and asserts itself — 2026-10-01.** Brought up natively
+(Postgres 15 + Redis from MacPorts, celery from `argus-workers/venv`, no Docker) and driven by
+`scripts/livefire/run-livefire.sh`, which is now a test rather than a reporter:
+`scripts/livefire/assert-livefire.py` writes `verdict.json`, stores a per-label baseline, and the
+harness exits on its verdict. Latest run: **PASS (9/9 criteria)** — pipeline complete, target
+actually scanned, 9 findings, 0 scope violations, 0 orphan scanners, worker peak 109 MB, 11
+engine-chosen decisions of 52 (`/tmp/livefire-run8.log`). Reaching that required fixing, among
+others: a worker that subscribed to none of the phase queues (`task_routes` fans phases out to
+`recon`/`scan`/`analyze`/`report` while both documented startups consumed only `celery`); a job
+payload whose own `blocked_targets: ["*"]` denied its target; an allowlist pattern (`host:port`) that
+matched no form the validator accepts; and `BaseRepository.update_by_id()` handing psycopg2 a dict
+(`can't adapt type 'dict'`), which silently dropped the persisted scope — and with it every
+auto-dispatched `deep_scan`, which carries no scope of its own and fails closed with 0 findings.
+
+**Open — the database's migration ledger is mostly failures.** 26 of 28 `_migrations` rows are
+`failed` (`001_base_schema`, `012_agent_decision_log`, `022_add_engagement_columns`, …): they were
+applied by mixed roles and died on ownership, so tables the code depends on were never created —
+`engagements.metadata` and `feature_flags` had to be created by hand to get Path B to scan anything,
+and `022` had partially applied (its `ALTER`s landed, its data step did not). The runner also skips
+anything recorded, failures included, so it will not self-heal. A clean `createdb` + migrate under
+one role is the fix, and until then any environment built this way is carrying unknown schema drift.
+
 ### 3. Tool availability is operationally incomplete
 
 **Fixed (2026-09-30):** the registry no longer *reports* tools it actually has. A hand-written

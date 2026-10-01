@@ -98,3 +98,6 @@ NUL
 argus-workers/=*
 # L-01: nuclei-templates should be a git submodule (large YAML data ~1.5M LOC)
 argus-workers/tool_assets/nuclei-templates/
+
+# Live-fire validation artifacts (run logs, post-mortems, verdicts, baselines)
+livefire-runs/

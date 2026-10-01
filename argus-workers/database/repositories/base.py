@@ -12,7 +12,7 @@ from contextlib import contextmanager, suppress
 from typing import Any
 
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import Json, RealDictCursor
 from psycopg2.sql import SQL, Identifier
 
 from database.connection import get_db
@@ -410,7 +410,16 @@ class BaseRepository:
         set_parts = [SQL("{} = %s").format(Identifier(key)) for key in updates]
         if "updated_at" not in updates:
             set_parts.append(SQL("updated_at = NOW()"))
-        values = list(updates.values()) + [id]
+        # Dicts and lists go to jsonb columns, and psycopg2 cannot adapt them on
+        # its own: passing one raised "can't adapt type 'dict'" inside whatever
+        # caller was writing JSON, which is how the engagement's persisted scope
+        # config silently never landed — leaving the secondary task paths
+        # (deep_scan, auth_focused_scan) with no scope to fall back on, where
+        # fail-closed means scanning nothing.
+        values = [
+            Json(value) if isinstance(value, (dict, list)) else value
+            for value in updates.values()
+        ] + [id]
 
         with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (
             conn,

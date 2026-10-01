@@ -167,6 +167,26 @@ runtime (only resolution + mocked calls have run so far).
 `docker-compose.yml` requires `POSTGRES_PASSWORD` and `DATABASE_URL` (fail-fast `:?`), and Path B
 needs Postgres + Redis + a worker. None are running here, and there is no repo-root `.env`.
 
+**Resolved 2026-10-01 — brought up without Docker.** Docker is not installed on this machine, but
+nothing in Path B requires it: Postgres 15 and Redis run natively (MacPorts), celery 5.6.3 is in
+`argus-workers/venv`, so a repo-root `.env` plus a worker started from the venv is enough. The
+harness now supports that (`PSQL`, `PYTHON`, `WORKER_LOG`, `WORKER_PID`), and the README documents it.
+Two environment facts cost most of the bring-up time and are worth knowing:
+
+- **Celery must be told which queues to consume.** `task_routes` fans phases out to
+  `recon`/`scan`/`analyze`/`report`, but a worker only subscribes to queues it knows about. Both
+  documented startups (`docker-compose.yml`'s Dockerfile CMD and `make worker`) started a worker on
+  the `celery` queue alone, so every dispatched phase waited in its own queue forever — Path B could
+  never have completed a run. `celery_app.py` now declares `task_queues`, so a plain worker picks
+  them up (`scripts/mac/start-argus.sh` already passed them with `-Q`).
+- **Most of `_migrations` is recorded `failed`** (26 rows: `001_base_schema`, `012_agent_decision_log`,
+  `022_add_engagement_columns`, …). This database was migrated by a mix of roles and failed on
+  ownership, so tables the code needs were never created: `engagements.metadata` (what the scope
+  chain reads) and `feature_flags` (what the verifier checks) were both missing, and `022` had
+  partially applied — its `ALTER`s landed, then its data step failed on the missing column. Both were
+  created/applied by hand here; a fresh `createdb` + migrate as one role is the real fix, and the
+  drift is worth its own pass.
+
 ### B7 — Interpreter selection is implicit
 `WorkersBridge` defaults to bare `python3` (`mcp-client.ts:99`), and `doctor.resolvePython()`
 honours `ARGUS_PYTHON` first. On this host system `python3` happens to have the deps
@@ -538,14 +558,41 @@ run: the next `assess` should report phase-complete suggestions instead of a tim
   report artifact — not just a findings count.
 
 ### Step 4 — Unattended (Celery) path + assertions  *(3–7 days)*
-- [ ] Bring up Path B: repo-root `.env`, `docker compose up -d postgres redis worker`.
-- [ ] Run `scripts/livefire/run-livefire.sh` end to end against Juice Shop.
-- [ ] Turn the harness into a test: today it **asserts nothing** while
-      `scripts/livefire/README.md` pre-commits success criteria (swarm 3/3, 10–25 findings,
-      ≥2 CRITICAL/HIGH, 0% fallback, >30% HIGH+ verified, 0 orphan processes, <500 MB worker,
-      0 scope violations, 11–31 min). Add the assertions and emit a baseline JSON per run.
-- **Acceptance:** one recorded live-fire run that passes or fails on its own criteria, with a
-  stored baseline to diff against.
+- [x] Bring up Path B: repo-root `.env`, Postgres + Redis + a worker — natively, since Docker is not
+      installed here (see **B6**). Redis was already running; the worker runs from the venv with
+      `ARGUS_ALLOW_INTERNAL_TARGETS=1` (loopback targets are refusals without it) and `--pool=solo`
+      (macOS aborts Celery's prefork children with `objc_initializeAfterForkError`).
+- [x] Run `scripts/livefire/run-livefire.sh` end to end. **Not against Juice Shop**: the only
+      documented way to get it is a container or a source checkout, and this host has neither. The
+      run targets the local Flask fixture (`TARGET_LABEL=fixture`), which is why the verdict applies
+      the target-independent criteria and diffs against a `fixture` baseline instead of Juice Shop's
+      ranges. A Juice Shop run still needs Docker (or a checkout) to happen.
+- [x] Turn the harness into a test: `scripts/livefire/assert-livefire.py` applies the criteria to the
+      run's own artifacts and database rows, writes `verdict.json` next to them, stores
+      `livefire-runs/baseline-<label>.json` on first run, and fails later runs that drift more than
+      ±50% from it. `run-livefire.sh` now exits on that verdict instead of always exiting 0.
+- **Acceptance:** met — `/tmp/livefire-run8.log`, engagement
+  `a1b2c3d4-1111-4000-8000-000000000001`, **verdict PASS (9/9 criteria)**: pipeline complete, target
+  actually scanned (not refused by the scope guard), 9 findings persisted, 0 scope violations, 0
+  orphan scanner processes, worker peak 109 MB, 11 engine-chosen decisions of 52, and findings/memory
+  within the stored baseline. Earlier runs of the same harness failed on real defects, which is what
+  turned it from a reporter into a test:
+
+  1. **The harness denied its own target.** The job payload set `blocked_targets: ["*"]`, and blocked
+     patterns are matched before the allowlist — every phase completed green while scanning nothing.
+  2. **The allowlist pattern matched nothing.** `127.0.0.1:3001` matches neither
+     `http://127.0.0.1:3001` nor host `127.0.0.1`, so the default Juice Shop target would have been
+     denied too. The scope block is now derived from `TARGET_URL` as written.
+  3. **Scope never persisted, so the deep scan had nothing to fall back on.**
+     `EngagementService.store_scope_config()`'s repo path wrote `metadata` through
+     `BaseRepository.update_by_id()`, which handed psycopg2 a `dict` — `can't adapt type 'dict'`,
+     caught and logged as non-fatal. Auto-dispatched `tasks.scan.deep_scan` carries no scope in its
+     payload, so it fell back to the (missing) persisted scope, hit fail-closed, and reported 0
+     findings in 0 ms. `update_by_id` now wraps dict/list values in `Json`.
+  4. Minor but real: the dispatch result was parsed from `stdout` *and* `stderr` merged, so the task
+     id was always `unknown`; the reset step and post-mortem queried `engagements.started_at`, which
+     does not exist; and `trace_id` was `livetrace-<time>` where the log table wants a UUID (every
+     log write errored).
 
 ### Step 5 — Make the guardrails trustworthy  *(ongoing)*
 - [ ] **Test determinism:** `pytest-randomly` is auto-loaded, producing two orderings and two

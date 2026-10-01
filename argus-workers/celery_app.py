@@ -14,6 +14,7 @@ import threading
 
 from celery import Celery
 from dotenv import load_dotenv
+from kombu import Queue
 
 from tool_core._compat import utc
 from tracing import setup_tracing
@@ -258,6 +259,21 @@ app.conf.update(
         "fanout_prefix": True,
         "fanout_patterns": True,
     },
+    # Queues a worker consumes by default. `task_routes` below fans the phases
+    # out to recon/scan/analyze/report, but a worker only subscribes to queues it
+    # knows about: without this, `celery -A celery_app worker` started the way
+    # the Dockerfile and `make worker` document sat on the `celery` queue alone
+    # and every dispatched phase waited in its own queue forever. The host
+    # startup scripts pass the same list explicitly with -Q.
+    task_queues=(
+        Queue("celery"),
+        Queue("recon"),
+        Queue("scan"),
+        Queue("analyze"),
+        Queue("report"),
+        Queue("repo_scan"),
+    ),
+    task_default_queue="celery",
     # Task Routes (for future queue separation)
     # Time limits are set per-task via @app.task decorator or globally above
     task_routes={
