@@ -506,6 +506,22 @@ What changed:
   `browser_security_operator | was_fallback=false | 4614 in / 76 out | $0.000738 | "Recon found 0 live
   endpoints, 0 parameter-bearing URLs…"`, followed by the `playwright-bola` / `playwright-privesc`
   `was_fallback=true` rows with NULL tokens.
+
+**Evidence — `assess --autonomous` itself** (`/tmp/step3-assess2.log`, engagement `ENG-muot0po3-1o`,
+18/18 phases, `✓ Assessment complete — 91 total finding(s)`, report written to
+`~/.argus/engagements/ENG-muot0po3-1o/report.md`). Both `llm_driven` phases ran to completion, where
+the previous run had died inside `agent_init`:
+
+- `phase-4-web_exploitation-7a56b796` — 6 rows in `agent_decisions`, one of them the engine's
+  (`browser_security_operator | was_fallback=false | 14662 in / 8 out | $0.002204 | "Recon found 0 live
+  endpoints, 0 parameter-bearing URLs, and no tech stack detected…"`), the other five labelled
+  `Deterministic plan step`.
+- `phase-5-api_exploitation-bc6344d5` — 2 rows (`arjun`, `sqlmap`), both `was_fallback=true`: the
+  engine contributed nothing for that phase and the trail says so instead of implying a choice.
+
+One related gap stays open: `phase_complete` and `get_attack_graph` are still on the generic 30 s RPC
+timeout and both logged `timed out after 30000ms` (as non-blocking), so their LLM-backed work is still
+being cut off — they need the same treatment the `agent_*` family just got.
 - [x] A completed run leaves a report artifact on disk:
       `<data>/engagements/<id>/report.md`, written by both `assess` and `resume`, with the path
       announced on stderr. stdout printing is unchanged — an unattended or TUI run now has

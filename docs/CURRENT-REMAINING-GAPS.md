@@ -145,7 +145,11 @@ What broke and what is now fixed:
   10-minute cap instead of the generic 30 s one, because the first live run died exactly there
   (`Request agent_init timed out after 30000ms`, then `Assessment failed`). Verified live over the
   real bridge and worker: init returned in 147.7 s, the engine chose `browser_security_operator`
-  (`was_fallback=false`, 4614/76 tokens, $0.000738) and the rest were labelled deterministic — see
+  (`was_fallback=false`, 4614/76 tokens, $0.000738) and the rest were labelled deterministic. Then
+  verified on the demo path itself — `assess --autonomous` over 18/18 phases (engagement
+  `ENG-muot0po3-1o`, 91 findings, report on disk) recorded the engine's
+  `browser_security_operator` choice for `web_exploitation` with 14662/8 tokens and $0.002204, and
+  labelled everything it did not choose (including all of `api_exploitation`) as deterministic. See
   `DEMO-READINESS-PLAN.md` Step 3.
 
 ### 3. Tool availability is operationally incomplete
