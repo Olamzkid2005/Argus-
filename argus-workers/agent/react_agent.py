@@ -797,7 +797,7 @@ class ReActAgent:
             )
             return None
 
-    def _record_decision(self, action: AgentAction, iteration: int) -> None:
+    def record_decision(self, action: AgentAction, iteration: int) -> None:
         """Persist one agent decision to ``agent_decisions``.
 
         `was_fallback` records provenance, not reachability: an LLM that is
@@ -821,7 +821,7 @@ class ReActAgent:
                 tool_selected=action.tool,
                 arguments=action.arguments,
                 reasoning=action.reasoning,
-                was_fallback=self._is_fallback_action(action),
+                was_fallback=self.is_fallback_action(action),
                 input_tokens=getattr(action, "input_tokens", 0) or None,
                 output_tokens=getattr(action, "output_tokens", 0) or None,
             )
@@ -829,7 +829,7 @@ class ReActAgent:
             logger.warning("Failed to log decision: %s", e)
 
     @staticmethod
-    def _is_fallback_action(action: AgentAction) -> bool:
+    def is_fallback_action(action: AgentAction) -> bool:
         """Whether the deterministic planner chose this tool, not the LLM.
 
         Both audit records (`agent_decisions` and the SSE decision event) must
@@ -1836,7 +1836,7 @@ Based on these findings, what capabilities should the next phase use?
             # were exactly the rows missing from a live scan, while the
             # deterministic phase-tool iterations that *did* execute were the
             # only ones present).
-            self._record_decision(action, iteration)
+            self.record_decision(action, iteration)
 
             # ── Track cost regardless of governance mode ──
             # Cost tracking must run BEFORE the governance cost guard check, so it's
@@ -1934,7 +1934,7 @@ Based on these findings, what capabilities should the next phase use?
                         reasoning=action.reasoning,
                         # Same provenance rule as agent_decisions: the
                         # deterministic plan after an LLM failure is a fallback.
-                        was_fallback=self._is_fallback_action(action),
+                        was_fallback=self.is_fallback_action(action),
                     )
             except Exception:
                 logger.warning(

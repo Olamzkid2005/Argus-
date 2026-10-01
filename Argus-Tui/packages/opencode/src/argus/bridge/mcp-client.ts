@@ -31,6 +31,22 @@ const LLM_STATUS = ["AVAILABLE", "DEGRADED", "UNAVAILABLE"] as const
 type LLMStatus = (typeof LLM_STATUS)[number]
 
 /**
+ * Timeout for the `agent_*` RPCs. They are not plain tool dispatches: the
+ * worker's engine does the thinking in them.
+ *
+ * `agent_init` has the engine choose the phase's tools, which is one LLM call
+ * per planned tool, and `agent_next`/`agent_observe` can re-plan off a stuck or
+ * failed tool. The 30s default cut `agent_init` off mid-planning and failed the
+ * whole `llm_driven` phase — no tool choice was ever recorded for it. Measured
+ * against the free gateway this run's demo uses, one planning call took 145s.
+ *
+ * Ten minutes is the same ceiling `callTool` gives a security tool, and it
+ * clears the worker's own `ARGUS_PLAN_BUDGET_SECONDS` (90s) plus the slowest
+ * call that budget can still be waiting on.
+ */
+const AGENT_PLANNING_TIMEOUT_MS = 600_000
+
+/**
  * Resolve the interpreter used to spawn the Python worker.
  *
  * Order: `ARGUS_PYTHON` → the repo virtualenv (`argus-workers/venv`) → bare
@@ -791,7 +807,7 @@ export class WorkersBridge {
           directory: string
         }
   }): Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string; hypotheses?: Array<{ id: string; description: string; confidence: number; status: string }> }> {
-    return this.sendRequest("agent_init", params) as Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string; hypotheses?: Array<{ id: string; description: string; confidence: number; status: string }> }>
+    return this.sendRequest("agent_init", params, AGENT_PLANNING_TIMEOUT_MS) as Promise<{ session_id: string; plan: string[]; reasoning: string; phase: string; hypotheses?: Array<{ id: string; description: string; confidence: number; status: string }> }>
   }
 
   async agentNext(params: {
@@ -800,7 +816,7 @@ export class WorkersBridge {
     /** Max iterations for this agent session — TS caps the Python loop (blocker 32). */
     max_iterations?: number
   }): Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }> {
-    return this.sendRequest("agent_next", params) as Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }>
+    return this.sendRequest("agent_next", params, AGENT_PLANNING_TIMEOUT_MS) as Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }>
   }
 
   async agentObserve(params: {
@@ -813,7 +829,7 @@ export class WorkersBridge {
     findingCount?: number
     summary?: string
   }): Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }> {
-    return this.sendRequest("agent_observe", params) as Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }>
+    return this.sendRequest("agent_observe", params, AGENT_PLANNING_TIMEOUT_MS) as Promise<{ tool?: string; session_id: string; reasoning: string; done: boolean }>
   }
 
   /**

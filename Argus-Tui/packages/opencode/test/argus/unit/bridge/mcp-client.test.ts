@@ -504,6 +504,33 @@ describe("WorkersBridge — Agent methods", () => {
     expect(result.done).toBe(true)
   })
 
+  test("agent RPCs allow engine planning time instead of the 30s default", async () => {
+    const { WorkersBridge } = await import("../../../../src/argus/bridge/mcp-client")
+    const bridge = new WorkersBridge("/path/to/mcp_server.py")
+
+    const captured: Array<{ method: string; timeoutMs?: number }> = []
+    ;(bridge as any).sendRequest = async (method: string, _params: unknown, timeoutMs?: number) => {
+      captured.push({ method, timeoutMs })
+      return { session_id: "sess-1", plan: [], reasoning: "", phase: "recon", done: true }
+    }
+
+    await bridge.agentInit({ target: "example.com", phase: "recon" })
+    await bridge.agentNext({ session_id: "sess-1" })
+    await bridge.agentObserve({ session_id: "sess-1", tool: "nuclei", success: true })
+
+    // The worker's engine does the thinking inside these RPCs; the generic 30s
+    // RPC timeout cut agent_init off mid-planning and failed the whole
+    // llm_driven phase before a single tool choice was recorded.
+    expect(captured.map((call) => call.method)).toEqual([
+      "agent_init",
+      "agent_next",
+      "agent_observe",
+    ])
+    for (const call of captured) {
+      expect(call.timeoutMs).toBeGreaterThan(30000)
+    }
+  })
+
   test("agentObserve() sends agent_observe RPC with tool/success/duration fields", async () => {
     const { WorkersBridge } = await import("../../../../src/argus/bridge/mcp-client")
     const bridge = new WorkersBridge("/path/to/mcp_server.py")

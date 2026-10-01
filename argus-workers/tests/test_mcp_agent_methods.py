@@ -27,7 +27,9 @@ class TestHandleAgentInit:
         assert result["phase"] == "recon"
         assert "plan" in result
 
-    def test_plan_from_pipeline(self, server):
+    @patch("mcp_server.LLMClient")
+    def test_plan_from_pipeline(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
         result = server.handle_agent_init(
             {
                 "target": "https://example.com",
@@ -37,7 +39,9 @@ class TestHandleAgentInit:
         )
         assert result["plan"] == ["nuclei", "nmap"]
 
-    def test_plan_skips_unknown_tools(self, server):
+    @patch("mcp_server.LLMClient")
+    def test_plan_skips_unknown_tools(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
         result = server.handle_agent_init(
             {
                 "target": "https://example.com",
@@ -129,7 +133,9 @@ class TestHandleAgentNext:
 
 
 class TestHandleAgentObserve:
-    def test_records_execution(self, server):
+    @patch("mcp_server.LLMClient")
+    def test_records_execution(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
         init = server.handle_agent_init(
             {
                 "target": "https://example.com",
@@ -156,7 +162,9 @@ class TestHandleAgentObserve:
         assert session.tool_history[0].success is True
         assert "Found 2 vulnerabilities" in session.observations
 
-    def test_failure_triggers_stuck(self, server):
+    @patch("mcp_server.LLMClient")
+    def test_failure_triggers_stuck(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
         init = server.handle_agent_init(
             {
                 "target": "https://example.com",

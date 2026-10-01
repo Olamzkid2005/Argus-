@@ -47,6 +47,17 @@ class AgentSession:
     trigger: str | None = None
     # Shared iteration counter for TS/Python coordination (blocker 32)
     execution_iteration: int = 0
+    # Engagement this phase belongs to. The driver passes it in `agent_init`;
+    # without it the agent cannot load the persisted ReconContext (so the LLM
+    # selection branch never reacts to recon) and cannot record decisions.
+    engagement_id: str = ""
+    # Who authored `current_plan`: "llm" or "deterministic". Overall provenance
+    # for logs; the audit trail uses the per-step `plan_sources` instead, since
+    # a plan can start with engine choices and end with deterministic ones.
+    plan_source: str = ""
+    # Per-step provenance, parallel to `current_plan`: "llm" for a tool the
+    # engine chose, "deterministic" for one the fallback order supplied.
+    plan_sources: list[str] = field(default_factory=list)
 
 
 class AgentSessionStore:
@@ -78,6 +89,7 @@ class AgentSessionStore:
         target: str,
         phase: str,
         tech_stack: list[str] | None = None,
+        engagement_id: str | None = None,
     ) -> str:
         """Create a new agent session and return its session_id.
 
@@ -85,6 +97,8 @@ class AgentSessionStore:
             target: The target being assessed (URL, repo path, etc.).
             phase: The assessment phase (e.g. \"recon\", \"vuln-scan\").
             tech_stack: Technology stack detected for the target.
+            engagement_id: Engagement this phase belongs to, so the persisted
+                recon context can be loaded and decisions can be recorded.
 
         Returns:
             A unique session identifier (uuid4 hex string).
@@ -100,6 +114,7 @@ class AgentSessionStore:
                 created_at=now,
                 last_accessed_at=now,
                 tech_stack=tech_stack or [],
+                engagement_id=engagement_id or "",
             )
         return session_id
 
@@ -211,12 +226,20 @@ class AgentSessionStore:
             session = self._get_and_touch(session_id)
             session.observations.append(observation)
 
-    def set_plan(self, session_id: str, plan: list[str]) -> None:
+    def set_plan(
+        self,
+        session_id: str,
+        plan: list[str],
+        sources: list[str] | None = None,
+    ) -> None:
         """Set the current hybrid plan for the session and reset step counter.
 
         Args:
             session_id: The session identifier.
             plan: Ordered list of tool names to execute.
+            sources: Per-step provenance parallel to ``plan`` ("llm" or
+                "deterministic"). Defaults to deterministic for every step:
+                an unlabelled plan must not read as engine-chosen.
 
         Raises:
             ValueError: If the session does not exist.
@@ -224,7 +247,21 @@ class AgentSessionStore:
         with self._lock:
             session = self._get_and_touch(session_id)
             session.current_plan = plan
+            session.plan_sources = (
+                list(sources) if sources else ["deterministic"] * len(plan)
+            )
             session.plan_step = 0
+
+    def set_plan_provenance(self, session_id: str, source: str) -> None:
+        """Record the plan's overall provenance: "llm" or "deterministic".
+
+        Informational: the audit trail labels each step from `plan_sources`.
+        This is for logs and callers that need a single-word summary of whether
+        the engine contributed to the plan at all.
+        """
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            session.plan_source = source
 
     def advance_plan(self, session_id: str) -> str | None:
         """Return the next tool name in the plan, or None if complete.
@@ -249,6 +286,38 @@ class AgentSessionStore:
                 tool = session.current_plan[session.plan_step]
                 session.plan_step += 1
                 return tool
+        return None
+
+    def advance_plan_with_source(self, session_id: str) -> tuple[str, str] | None:
+        """Return the next tool and who chose it, or None if the plan is done.
+
+        Prefer this over ``advance_plan`` when the caller must label the step in
+        the audit trail: a plan can mix engine choices with deterministic ones,
+        and only the step's own source answers "did the engine choose this?".
+
+        Args:
+            session_id: The session identifier.
+
+        Returns:
+            ``(tool_name, source)``, or None if all steps have been consumed.
+
+        Raises:
+            ValueError: If the session does not exist.
+        """
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            if session.current_plan is not None and session.plan_step < len(
+                session.current_plan
+            ):
+                index = session.plan_step
+                tool = session.current_plan[index]
+                source = (
+                    session.plan_sources[index]
+                    if index < len(session.plan_sources)
+                    else "deterministic"
+                )
+                session.plan_step += 1
+                return tool, source
         return None
 
     def add_finding(self, session_id: str, finding: dict) -> None:

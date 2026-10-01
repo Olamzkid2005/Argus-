@@ -458,43 +458,54 @@ never recorded an honest decision (`agent_decisions` held 35 rows, all `was_fall
   rows) while keeping the deterministic ones that did execute. Logging now happens the moment the
   action is chosen.
 
-**Known demo gap (open):** this evidence comes from the worker's own scan pipeline. The TUI/CLI demo
-path drives the worker over MCP (`agent_init`/`agent_next`), which builds `ReActAgent` instances with
-**no** `decision_repo`, and it cannot insert `ENG-…` ids into a `UUID NOT NULL` foreign key anyway
-(`InvalidTextRepresentation` reproduced). So an `assess --autonomous` run still records nothing.
+**Resolved — the demo path records tool choices** (implemented 2026-09-30). The TUI/CLI demo path
+drives the worker over MCP (`agent_init`/`agent_next`), and it used to record nothing: the plan was
+`_generate_plan`'s deterministic re-ordering of the driver's own pipeline, the `ReActAgent`s it built
+had **no** `decision_repo`, the LLM only ran in `_replan` — and only once the deterministic plan was
+**exhausted** *and* a trigger was set — and `agent_decisions.engagement_id` was
+`UUID NOT NULL REFERENCES engagements(id)`, which cannot hold a local `ENG-…` id
+(`InvalidTextRepresentation` reproduced).
 
-Wiring that path turns out to be more than plumbing, because on the MCP path **there is no agentic
-tool selection to record yet**:
+Of the two honest shapes, this took **shape 2 — make plan generation agentic** — because Step 3's
+acceptance text is "the demo can point at recorded decisions proving the engine chose tools", and
+shape 1 (audit only where the LLM already acts) would leave the recorded choices dependent on a plan
+exhausting first.
 
-- `handle_agent_init` builds the tool order with `_generate_plan`, whose docstring says
-  "For now, uses deterministic ordering. LLM integration will come later via the ReActAgent", and
-  `handle_agent_next` returns those steps as `"Deterministic plan step"`.
-- The LLM only participates in `_replan`, and `_replan` runs only when the deterministic plan is
-  **exhausted** *and* a trigger is set — `handle_agent_observe` sets `trigger="stuck"` when the
-  reported tool run failed and `trigger="new_finding"` when it found something.
-- The TS side does call `agentObserve` (the executor has seven call sites), so the trigger path is
-  reachable — but on a run where the plan never exhausts, no LLM ever picks a tool.
+What changed:
 
-So "make the demo run record decisions" has two honest shapes, and it is a choice, not a detail:
+- **`_agentic_plan` (`mcp_server.py`).** `handle_agent_init` asks the engine to choose the phase's
+  tools, in order: `ReActAgent.plan_next_action` per step, candidates limited to the phase's own
+  pipeline (`_planning_registry`), and each choice written to `agent_decisions` the moment it is made
+  — with that call's tokens, cost and the model's reasoning. The engine tapping out, the
+  `ARGUS_PLAN_BUDGET_SECONDS` budget (default 90 s) running out, or no LLM being available all append
+  the pipeline tools it did not reach and label them deterministic, so a partly agentic plan is never
+  recorded as a fully agentic one.
+- **Per-step provenance.** `AgentSession.plan_sources` runs parallel to `current_plan`;
+  `advance_plan_with_source` drives `handle_agent_next`'s per-step `"Engine-chosen plan step"` /
+  `"Deterministic plan step"` wording, `_replan` carries the same distinction, and deterministic steps
+  are logged with `was_fallback=true` so the trail is complete rather than flattering.
+- **Migration `026_agent_decisions_accept_local_engagement_ids.sql`** — `engagement_id` relaxed to
+  `TEXT` and the FK dropped (applied, recorded in `_migrations`). A local engagement has no Postgres
+  row to reference, and minting a shadow one re-introduces the `org_id`/`created_by` coupling that
+  local mode deliberately avoids.
+- **`AGENT_PLANNING_TIMEOUT_MS` (`mcp-client.ts`).** `agent_init`/`agent_next`/`agent_observe` get a
+  10-minute cap instead of the generic 30 s one, because init now blocks on the engine. The first
+  live run died exactly there — `Error: Request agent_init timed out after 30000ms`, then
+  `Assessment failed` — with nothing recorded; the same run measured 145 s for a single planning call.
 
-1. **Attach the audit trail where the LLM already acts** — build an `AgentDecisionRepository` in the
-   MCP path, pass it to the `ReActAgent`s used by `_replan` (and the site near
-   `handle_agent_execute`), and log the deterministic plan steps as `was_fallback=true` so the trail
-   is complete rather than flattering. Small, truthful, and shows up whenever a replan happens.
-2. **Make `_generate_plan` agentic** — replace the deterministic ordering with
-   `ReActAgent.plan_next_action` per step, so every step is an LLM choice. This is what the Step 3
-   acceptance text actually describes ("the demo can point at recorded decisions proving the engine
-   chose tools"), and it is a feature, not a wiring fix: it changes when the demo spends LLM calls
-   (10–30 s each on the free tier). The blocked-tool repetition that made this expensive is fixed —
-   a selection naming an already-tried tool is rejected and the iteration falls to the deterministic
-   plan, and a DEGRADED LLM success rate now actually switches the ordering instead of only being
-   reported.
+**Evidence — real bridge → real worker → real model** over the `web_exploitation` capability set
+(`browser_verification`, `xss_detection`, `sqli_detection`, `command_injection`):
 
-Either shape also needs the id problem solved, since `agent_decisions.engagement_id` is
-`UUID NOT NULL REFERENCES engagements(id)` while local engagements are `ENG-…` in SQLite. Relaxing
-that column to `TEXT` and dropping the FK is honest for a dual-backend design (a local engagement has
-no Postgres row to reference); the alternative is minting a shadow Postgres engagement per local run,
-which re-introduces the `org_id`/`created_by` coupling the local mode deliberately avoids.
+- `agent_init` returned in **147.7 s** with a 7-tool pipeline (`browser_security_operator`,
+  `playwright-bola`, `playwright-privesc`, `playwright-xss`, `dalfox`, `sqlmap`, `commix`) — i.e. past
+  the old 30 s cap.
+- The engine chose `browser_security_operator`, with its own reasoning (recon found no live endpoints
+  or tech stack, so active browsing was preferred); the six it did not reach were labelled
+  deterministic and consumed as `"Deterministic plan step"`.
+- Rows in `agent_decisions` for engagement `ENG-live-fire-agentic-1`:
+  `browser_security_operator | was_fallback=false | 4614 in / 76 out | $0.000738 | "Recon found 0 live
+  endpoints, 0 parameter-bearing URLs…"`, followed by the `playwright-bola` / `playwright-privesc`
+  `was_fallback=true` rows with NULL tokens.
 - [x] A completed run leaves a report artifact on disk:
       `<data>/engagements/<id>/report.md`, written by both `assess` and `resume`, with the path
       announced on stderr. stdout printing is unchanged — an unattended or TUI run now has

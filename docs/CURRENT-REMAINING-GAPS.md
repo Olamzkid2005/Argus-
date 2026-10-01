@@ -130,13 +130,23 @@ What broke and what is now fixed:
   ordering" policy below a 50% LLM success rate is finally consumed instead of only recorded. The
   re-run advances through ten *distinct* tools and records 2 non-fallback decisions (the LLM's real
   choices, with tokens and cost) alongside 8 honestly-labelled fallbacks.
-- **Open — the demo path still records nothing.** That evidence comes from the worker's own scan
-  pipeline. The TUI/CLI drives the worker over MCP (`agent_init`/`agent_next`), which constructs
-  `ReActAgent` without a `decision_repo`, and `agent_decisions.engagement_id` is `UUID NOT NULL
-  REFERENCES engagements(id)` while demo engagement ids are `ENG-…` (the insert is rejected with
-  `InvalidTextRepresentation`, and `log_decision` swallows the error). Until that is wired, pointing
-  the demo at `agent_decisions` requires a run through the worker pipeline rather than
-  `assess --autonomous`.
+- **Fixed (2026-09-30) — the demo path records tool choices.** The TUI/CLI drives the worker over MCP
+  (`agent_init`/`agent_next`), and that path used to record nothing for three reasons: the plan was a
+  deterministic re-ordering of the driver's pipeline, the `ReActAgent`s it built had no
+  `decision_repo`, and `agent_decisions.engagement_id` was `UUID NOT NULL REFERENCES engagements(id)`
+  while demo engagement ids are `ENG-…` (the insert is rejected with `InvalidTextRepresentation`).
+  Plan generation is now agentic — `_agentic_plan` asks the engine to choose the phase's tools one at
+  a time and writes each choice, with tokens and cost, as it is made; whatever the engine does not
+  reach (it can stop, or spend the `ARGUS_PLAN_BUDGET_SECONDS` budget of 90 s) is appended and
+  labelled deterministic, and `AgentSession.plan_sources` carries that per-step provenance into
+  `handle_agent_next`'s `"Engine-chosen plan step"` / `"Deterministic plan step"` wording. Migration
+  `026_agent_decisions_accept_local_engagement_ids.sql` relaxed `engagement_id` to `TEXT` and dropped
+  the FK. The bridge also needed its own fix: `agent_init`/`agent_next`/`agent_observe` now use a
+  10-minute cap instead of the generic 30 s one, because the first live run died exactly there
+  (`Request agent_init timed out after 30000ms`, then `Assessment failed`). Verified live over the
+  real bridge and worker: init returned in 147.7 s, the engine chose `browser_security_operator`
+  (`was_fallback=false`, 4614/76 tokens, $0.000738) and the rest were labelled deterministic — see
+  `DEMO-READINESS-PLAN.md` Step 3.
 
 ### 3. Tool availability is operationally incomplete
 

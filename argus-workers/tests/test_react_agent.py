@@ -297,7 +297,7 @@ class TestActionProvenance:
         assert action.tool == "httpx"
         assert action.reasoning == "probe the health endpoint"
         assert action.source == "llm"
-        assert ReActAgent._is_fallback_action(action) is False
+        assert ReActAgent.is_fallback_action(action) is False
         # The counts must survive to the audit row, not just to governance.
         assert (action.input_tokens, action.output_tokens) == (321, 45)
 
@@ -309,11 +309,11 @@ class TestActionProvenance:
 
         assert action is not None
         assert action.source != "llm"
-        assert ReActAgent._is_fallback_action(action) is True
+        assert ReActAgent.is_fallback_action(action) is True
 
     def test_action_without_provenance_counts_as_a_fallback(self):
         action = AgentAction("httpx", {}, "Trying httpx")
-        assert ReActAgent._is_fallback_action(action) is True
+        assert ReActAgent.is_fallback_action(action) is True
         assert (action.input_tokens, action.output_tokens) == (0, 0)
         assert action.to_dict()["source"] == ""
 
@@ -362,7 +362,7 @@ class TestTriedToolEnforcement:
 
         assert action is not None
         assert action.tool != "nuclei"
-        assert ReActAgent._is_fallback_action(action) is True
+        assert ReActAgent.is_fallback_action(action) is True
         assert agent._llm_failure_count == 1
 
     def test_a_degraded_run_stops_consulting_the_llm(self):
@@ -391,7 +391,7 @@ class TestTriedToolEnforcement:
 
         assert client.calls == 0
         assert action is not None
-        assert ReActAgent._is_fallback_action(action) is True
+        assert ReActAgent.is_fallback_action(action) is True
         assert agent._llm_failure_count == 0
 
     def test_an_untried_selection_is_still_accepted(self):

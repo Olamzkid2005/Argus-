@@ -13,8 +13,17 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent.agent_action import AgentAction
 from mcp_server import MCPServer, _canonical_phase_name
+
+
+@pytest.fixture(autouse=True)
+def _no_real_decision_log():
+    """Keep replan tests off Postgres; they assert selection, not persistence."""
+    with patch("mcp_server._agent_decision_repo", return_value=None):
+        yield
 
 
 def _server() -> MCPServer:
@@ -54,10 +63,10 @@ class TestReplanReconContext:
         assert call_kwargs["recon_context"].target_url == "https://example.com"
 
     def test_replan_builds_minimal_context_without_engagement(self):
-        """Sessions carry no engagement_id — the minimal-context fallback must engage."""
+        """Sessions default to an empty engagement_id — the minimal-context fallback must engage."""
         server = _server()
         session = _session(server)
-        assert getattr(session, "engagement_id", None) is None
+        assert not getattr(session, "engagement_id", None)
 
         mock_action = AgentAction(tool="nuclei", arguments={}, reasoning="x")
         with patch("mcp_server.LLMClient", return_value=_mock_llm_available()):

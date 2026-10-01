@@ -412,6 +412,51 @@ class _PlanningOnlyToolRunner:
         )
 
 
+#: Cap on how many tools the LLM chooses per phase when the MCP path builds a
+#: plan. Each choice is one LLM call (seconds to tens of seconds on free tiers),
+#: and the deterministic order covers whatever the cap leaves out.
+_MAX_PLANNED_TOOLS = int(os.getenv("ARGUS_MAX_PLANNED_TOOLS", "6"))
+
+#: Wall-clock cap on plan generation. `agent_init` is blocked on this work and
+#: the engine may spend one LLM call per planned tool, so the loop stops asking
+#: once the budget is spent and labels the rest of the phase deterministic. A
+#: provider slow enough to exhaust it still gets the phase run with a recorded
+#: partial plan, instead of the driver's RPC timing out. Zero disables the cap.
+_PLAN_BUDGET_SECONDS = float(os.getenv("ARGUS_PLAN_BUDGET_SECONDS", "90"))
+
+
+def _planning_noop(**_kwargs) -> dict:
+    """Stand-in callable for a tool registered for selection only.
+
+    The MCP path selects tools; the driver executes them. Registration exists so
+    an LLM choice passes the registry check in `_call_llm_for_action`, which
+    rejects any tool the registry does not know.
+    """
+    return {}
+
+
+def _agent_decision_repo():
+    """An `AgentDecisionRepository` when a database is configured, else None.
+
+    `agent_decisions` is the audit log for tool selection, so it pays to write
+    whenever DATABASE_URL is available — for the worker that is the normal case,
+    since `argus-workers/.env` provides it. Constructing the repository does not
+    open a connection; `log_decision` does that per row and swallows its own
+    failures.
+    """
+    if not os.getenv("DATABASE_URL"):
+        return None
+    try:
+        from database.repositories.agent_decision_repository import (
+            AgentDecisionRepository,
+        )
+
+        return AgentDecisionRepository()
+    except Exception as exc:  # pragma: no cover - depends on deployment
+        logger.debug("Agent decision logging unavailable: %s", exc)
+        return None
+
+
 class MCPServer:
     """
     MCP Protocol Server for tool execution.
@@ -1321,10 +1366,14 @@ class MCPServer:
                         adopted.model,
                     )
 
+        # The engagement id travels on the session: without it the agent cannot
+        # load the persisted ReconContext (so the LLM branch of
+        # plan_next_action never sees real recon) and cannot record decisions.
         session_id = self.session_store.create(
             target=params.get("target", ""),
             phase=params.get("phase", ""),
             tech_stack=params.get("techStack", []),
+            engagement_id=params.get("engagementId"),
         )
 
         # Store TS-side max iterations in the session (blocker 32).
@@ -1360,10 +1409,42 @@ class MCPServer:
                 session_id,
             )
 
-        # Generate ordered plan (deterministic for now — LLM integration later)
-        plan = self._generate_plan(session_id, pipeline, context)
-
-        self.session_store.set_plan(session_id, plan["tool_order"])
+        # Ask the engine to choose this phase's tools, in order.
+        #
+        # This used to be a deterministic re-ordering of the driver's own
+        # pipeline, so an `assess` run executed a plan nobody chose: the
+        # selection prompt, the recon context and the decision log all existed,
+        # but the LLM was never asked. `_agentic_plan` asks it and records each
+        # choice; when it cannot (no LLM, no candidates, provider failure) the
+        # deterministic order is used and labelled as such, so a fallback is
+        # never dressed up as an engine decision.
+        session = self.session_store.get(session_id)
+        plan = self._agentic_plan(session, pipeline) or self._generate_plan(
+            session_id, pipeline, context
+        )
+        sources = plan.get("sources") or ["deterministic"] * len(plan["tool_order"])
+        engine_chosen = sum(1 for source in sources if source == "llm")
+        self.session_store.set_plan(session_id, plan["tool_order"], sources=sources)
+        self.session_store.set_plan_provenance(
+            session_id, plan.get("source", "deterministic")
+        )
+        if engine_chosen:
+            logger.info(
+                "Session %s: engine chose %d of %d tool(s) for phase %s: %s",
+                session_id,
+                engine_chosen,
+                len(plan["tool_order"]),
+                session.phase,
+                ", ".join(plan["tool_order"]),
+            )
+        else:
+            logger.info(
+                "Session %s: deterministic plan for phase %s (%d tool(s)) — %s",
+                session_id,
+                session.phase,
+                len(plan["tool_order"]),
+                plan.get("reasoning", "no LLM plan available"),
+            )
 
         # Attach active hypotheses from Postgres so the TypeScript
         # planner can use them for replan decisions.
@@ -1397,11 +1478,210 @@ class MCPServer:
             ],
         }
 
-    def _generate_plan(self, session_id: str, pipeline: list, context: dict) -> dict:
-        """Generate an ordered plan from the available pipeline.
+    def _planning_registry(self, pipeline: list) -> ToolRegistry:
+        """Registry holding this phase's candidate tools, for selection only.
 
-        For now, uses deterministic ordering. LLM integration will come later
-        via the ReActAgent. Returns tool_order and reasoning.
+        `_call_llm_for_action` rejects any tool the registry does not know, so
+        the candidates have to be registered before the LLM is asked. They are
+        the phase's pipeline steps: the set the driver is actually willing to
+        run. Offering the whole tool catalogue would let the model pick a tool
+        this phase cannot execute.
+        """
+        registry = ToolRegistry()
+        for step in pipeline or []:
+            name = step.get("tool") if isinstance(step, dict) else None
+            if not name:
+                continue
+            tool = self._tools.get(name)
+            if tool is None:
+                logger.warning(
+                    "Pipeline references unknown tool '%s', skipping", name
+                )
+                continue
+            registry.register(
+                name,
+                _planning_noop,
+                {
+                    "name": name,
+                    "description": tool.description or "",
+                    "parameters": [
+                        {
+                            "name": param.name,
+                            "type": param.type,
+                            "description": param.description,
+                            "required": param.required,
+                        }
+                        for param in (tool.parameters or [])
+                    ],
+                    "phases": list(tool.phases or []),
+                },
+            )
+        return registry
+
+    def _recon_context_for(self, session):
+        """The recon context the agent reasons over, or a minimal stand-in.
+
+        The persisted context is what lets the selection branch react to what
+        recon actually found. A bare `ReconContext` keeps the branch engaged for
+        phases that run before recon or without it.
+        """
+        engagement_id = getattr(session, "engagement_id", "") or ""
+        if engagement_id:
+            try:
+                from tasks.utils import load_recon_context
+
+                loaded = load_recon_context(engagement_id)
+                if loaded is not None:
+                    return loaded
+            except Exception as exc:
+                logger.debug(
+                    "Could not load recon context for %s: %s", engagement_id, exc
+                )
+        if getattr(session, "target", None):
+            from models.recon_context import ReconContext
+
+            return ReconContext(target_url=session.target)
+        return None
+
+    def _agentic_plan(self, session, pipeline: list) -> dict | None:
+        """Let the engine choose the phase's tools, in order; None if it cannot.
+
+        One tool per LLM call, each recorded as a decision the moment it is
+        chosen — with the tokens the call cost and the model's own reasoning.
+        The loop stops as soon as the engine stops contributing, or once
+        `_PLAN_BUDGET_SECONDS` is spent, so a partly agentic plan is never
+        presented as a fully agentic one: the caller falls back to the
+        deterministic order and labels it.
+        """
+        if not pipeline:
+            return None
+
+        try:
+            llm_client = LLMClient()
+        except Exception as exc:
+            logger.debug("No LLM client for plan generation: %s", exc)
+            return None
+        if not llm_client.is_available():
+            logger.info(
+                "No LLM available for plan generation — using the pipeline order"
+            )
+            return None
+
+        registry = self._planning_registry(pipeline)
+        if not registry.list_tools():
+            return None
+
+        agent = ReActAgent(
+            registry,
+            llm_client=llm_client,
+            decision_repo=_agent_decision_repo(),
+            engagement_id=getattr(session, "engagement_id", "") or None,
+            phase=_canonical_phase_name(session.phase),
+        )
+        recon_context = self._recon_context_for(session)
+        task = f"{session.phase}: {session.target}"
+
+        deadline = (
+            time.monotonic() + _PLAN_BUDGET_SECONDS
+            if _PLAN_BUDGET_SECONDS > 0
+            else None
+        )
+        order: list[str] = []
+        reasons: list[str] = []
+        tried: set[str] = set()
+        for _ in range(_MAX_PLANNED_TOOLS):
+            if deadline is not None and time.monotonic() >= deadline:
+                logger.info(
+                    "Plan generation budget (%.0fs) spent after %d tool(s) — "
+                    "running the rest of the phase deterministically",
+                    _PLAN_BUDGET_SECONDS,
+                    len(order),
+                )
+                break
+            try:
+                action = agent.plan_next_action(
+                    task=task,
+                    context="Choosing this phase's tools and the order to run them.",
+                    tried_tools=set(tried),
+                    recon_context=recon_context,
+                )
+            except Exception as exc:
+                logger.warning("Plan generation failed: %s", exc)
+                break
+            if action is None or ReActAgent.is_fallback_action(action):
+                break
+            order.append(action.tool)
+            if action.reasoning:
+                reasons.append(action.reasoning)
+            tried.add(action.tool)
+            agent.record_decision(action, len(order) - 1)
+
+        if not order:
+            # The engine contributed nothing — let the caller use (and label)
+            # the deterministic order.
+            return None
+
+        # The engine can stop early: the cap, a provider failure, or its own
+        # answer that nothing more is needed. Keep the phase's coverage by
+        # running the pipeline tools it did not reach, and label those steps
+        # deterministic so a stop is visible rather than silently shrinking the
+        # phase to the tools chosen so far.
+        engine_chosen = len(order)
+        remainder = [
+            step.get("tool")
+            for step in pipeline
+            if isinstance(step, dict)
+            and step.get("tool") in self._tools
+            and step.get("tool") not in tried
+        ]
+        order.extend(remainder)
+
+        return {
+            "tool_order": order,
+            "sources": ["llm"] * engine_chosen
+            + ["deterministic"] * len(remainder),
+            "reasoning": "; ".join(reasons)[:500]
+            or f"Engine chose {engine_chosen} tool(s)",
+            "source": "llm",
+        }
+
+    def _record_plan_step(
+        self, session, tool_name: str, iteration: int, source: str
+    ) -> None:
+        """Record a deterministic plan step as a fallback decision.
+
+        Steps the engine chose are recorded when it chose them. Steps from the
+        deterministic order are recorded here as they are consumed, so the trail
+        shows a labelled fallback instead of an unexplained gap.
+
+        `source` is passed in rather than read off the session: callers hold a
+        deep copy, so a plan set moments ago would not be visible on it.
+        """
+        if session is None or source == "llm":
+            return
+        engagement_id = getattr(session, "engagement_id", "") or ""
+        repo = _agent_decision_repo()
+        if repo is None or not engagement_id:
+            return
+        try:
+            repo.log_decision(
+                engagement_id=engagement_id,
+                phase=_canonical_phase_name(session.phase),
+                iteration=iteration,
+                tool_selected=tool_name,
+                arguments={"target": session.target},
+                reasoning=f"Deterministic plan step for {session.phase}",
+                was_fallback=True,
+            )
+        except Exception as exc:
+            logger.warning("Failed to record plan step: %s", exc)
+
+    def _generate_plan(self, session_id: str, pipeline: list, context: dict) -> dict:
+        """Generate an ordered plan from the pipeline, deterministically.
+
+        The fallback for when no engine choice is available: the driver's own
+        pipeline order, marked `source="deterministic"` so the audit trail does
+        not present it as an engine decision.
         """
         session = self.session_store.get(session_id)
 
@@ -1426,7 +1706,9 @@ class MCPServer:
 
         return {
             "tool_order": tool_order,
+            "sources": ["deterministic"] * len(tool_order),
             "reasoning": f"Deterministic plan for {session.phase}: {len(tool_order)} tools",
+            "source": "deterministic",
         }
 
     def handle_agent_next(self, params: dict) -> dict:
@@ -1484,13 +1766,22 @@ class MCPServer:
             )
             return {"done": True, "session_id": session_id}
 
-        # Normal case: advance through the deterministic plan
-        next_tool = self.session_store.advance_plan(session_id)
-        if next_tool:
+        # Normal case: advance through the plan
+        advanced = self.session_store.advance_plan_with_source(session_id)
+        if advanced:
+            next_tool, step_source = advanced
+            self._record_plan_step(
+                session, next_tool, current_iteration, step_source
+            )
+            reasoning = (
+                "Engine-chosen plan step"
+                if step_source == "llm"
+                else "Deterministic plan step"
+            )
             return {
                 "tool": next_tool,
                 "session_id": session_id,
-                "reasoning": "Deterministic plan step",
+                "reasoning": reasoning,
                 "done": False,
                 "iteration": current_iteration,
             }
@@ -1501,9 +1792,17 @@ class MCPServer:
             new_plan = self._replan(session)
             if new_plan.get("done"):
                 return {"done": True, "session_id": session_id}
-            self.session_store.set_plan(session_id, new_plan["tool_order"])
-            next_tool = self.session_store.advance_plan(session_id)
-            if next_tool:
+            replan_source = new_plan.get("source", "llm")
+            self.session_store.set_plan(
+                session_id, new_plan["tool_order"], sources=[replan_source]
+            )
+            self.session_store.set_plan_provenance(session_id, replan_source)
+            advanced = self.session_store.advance_plan_with_source(session_id)
+            if advanced:
+                next_tool, step_source = advanced
+                self._record_plan_step(
+                    session, next_tool, current_iteration, step_source
+                )
                 return {
                     "tool": next_tool,
                     "session_id": session_id,
@@ -1560,12 +1859,18 @@ class MCPServer:
         # normalized so legacy TS names (e.g. "vulnerability_scanning") map to
         # canonical keys and still register their tools.
         phase = _canonical_phase_name(session.phase)
+        # A replan is also a tool selection, so it belongs in the same audit log
+        # as the initial plan; without the repo attached the engine's choices
+        # during replanning were invisible.
+        decision_repo = _agent_decision_repo()
+        engagement_id = getattr(session, "engagement_id", "") or None
         try:
             agent = ReActAgent.create_for_phase(
                 phase=phase,
                 tool_runner=_PlanningOnlyToolRunner(),
                 llm_client=llm_client,
-                engagement_id=getattr(session, "engagement_id", None),
+                engagement_id=engagement_id,
+                decision_repo=decision_repo,
             )
         except Exception as e:
             logger.debug(
@@ -1577,7 +1882,8 @@ class MCPServer:
             agent = ReActAgent(
                 registry,
                 llm_client=llm_client,
-                engagement_id=getattr(session, "engagement_id", None),
+                engagement_id=engagement_id,
+                decision_repo=decision_repo,
                 phase=phase,
             )
 
@@ -1621,9 +1927,13 @@ class MCPServer:
             return {"done": True, "reasoning": "Agent decided to stop"}
 
         logger.info("Replan selected tool: %s (%s)", action.tool, action.reasoning)
+        agent.record_decision(action, getattr(session, "execution_iteration", 0) or 0)
         return {
             "tool_order": [action.tool],
             "reasoning": action.reasoning or f"ReActAgent selected {action.tool}",
+            "source": "deterministic"
+            if ReActAgent.is_fallback_action(action)
+            else "llm",
         }
 
     def handle_agent_observe(self, params: dict) -> dict:
