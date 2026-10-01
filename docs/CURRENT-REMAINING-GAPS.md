@@ -166,6 +166,18 @@ matched no form the validator accepts; and `BaseRepository.update_by_id()` handi
 (`can't adapt type 'dict'`), which silently dropped the persisted scope — and with it every
 auto-dispatched `deep_scan`, which carries no scope of its own and fails closed with 0 findings.
 
+**Open — live specialist swarm is not exercised by the harness (investigated 2026-09-30).**
+The saved run `livefire-fixture-20260930-221601` dispatched `aggressiveness=moderate`; the worker's
+specialist pass only runs at `high`/`extreme`. Its recon context also had no API/auth/parameter signals
+and only one crawled URL, so simply raising aggressiveness would still activate 0/3. The harness
+hardcodes those settings with no override; `scan_mode=swarm` is only another value on the same
+agent-first route. The route is wired and verified by isolated activation/parallel-dispatch tests
+with stubbed specialist bodies, but a real specialist scan remains unproven. `swarm_events` counts
+log lines, not active agents, and the verdict asserts no swarm requirement. Local specialist target
+filtering ignores `ARGUS_ALLOW_INTERNAL_TARGETS`, with inconsistent Auth/API endpoint re-addition,
+so the next step is explicit harness opt-in, structured per-specialist assertions, consistent scope
+handling, and a target whose recon supplies API/auth signals. See `scripts/livefire/README.md`.
+
 **Open — the database's migration ledger is mostly failures.** 26 of 28 `_migrations` rows are
 `failed` (`001_base_schema`, `012_agent_decision_log`, `022_add_engagement_columns`, …): they were
 applied by mixed roles and died on ownership, so tables the code depends on were never created —

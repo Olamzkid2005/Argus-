@@ -679,8 +679,16 @@ the work plan (test determinism).
   (see B6 and Step 4) — that bullet is retired — but the container path itself is still untested.
 - LLM calls have been observed succeeding from both runtimes (B9, via the local OpenCode server), and
   the paid/console-account paths remain unverified, as does any interactive login.
-- **Swarm behaviour is unverified.** The live-fire run recorded 0 `Swarm:` events, so "3/3 specialist
-  agents activate" is unevidenced in both paths.
+- **Live swarm behaviour is unverified; its absence on Path B is explained.** Investigation of
+  `livefire-fixture-20260930-221601` found the harness hardcodes `aggressiveness=moderate`, while
+  `_run_swarm_specialists` requires `high`/`extreme`. The saved recon context also has no API/auth/
+  parameter signals and only one crawled URL: raising aggressiveness alone would still activate
+  0/3. `scan_mode=swarm` uses the ordinary agent-first branch, not a separate swarm route, and the
+  harness exposes no override for either field. Isolated tests verify the real activation/parallel
+  dispatch path at high/extreme with API signals (specialist bodies stubbed), not live scanning.
+  The verdict only counts `Swarm:` log lines and asserts no swarm criterion. Specialist local-target
+  filtering also ignores the internal-target opt-in, so activation alone would not prove useful
+  loopback work. See `scripts/livefire/README.md` **Swarm reachability** for evidence and next steps.
 - The `agent_*` payload shapes were once reviewed only for `ping`/`list_tools`/`call_tool`. Since then
   `agent_init`, `agent_next` and `agent_observe` have been exercised for real over the bridge (the
   Step 3 assess run), so that caution is retired for those three — but `phase_complete` was observed
