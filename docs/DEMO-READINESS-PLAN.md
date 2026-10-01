@@ -13,13 +13,29 @@ Line numbers are from this working tree. Where something is *unverified*, it say
 
 | Tier | Definition | State |
 |---|---|---|
-| **P0 — Pipeline runs** | One command completes recon → scan → analyze → report on a local authorized target. | Reachable — B1 fixed (`e4ed6102`), `doctor` 10 passed / 0 failed |
-| **P1 — Agent decides** | Tool selection comes from the agent loop (`agent_decisions` rows written, not all `was_fallback`). | Machinery present; B1 + B4 fixed, needs a run to evidence it |
-| **P2 — Signal-driven autonomy** | Phases activate from recon signals; run is unattended end-to-end; report + audit trail emitted. | **Recommended demo bar** |
+| **P0 — Pipeline runs** | One command completes recon → scan → analyze → report on a local authorized target. | **Proven on both paths** — Path A `assess --autonomous` (18/18 phases, report on disk) and Path B live-fire (verdict PASS 9/9) |
+| **P1 — Agent decides** | Tool selection comes from the agent loop (`agent_decisions` rows written, not all `was_fallback`). | **Proven** — engine-chosen rows with tokens and cost on both paths: `browser_security_operator` for `web_exploitation` (Path A), 11 of 52 decisions engine-chosen (Path B) |
+| **P2 — Signal-driven autonomy** | Phases activate from recon signals; run is unattended end-to-end; report + audit trail emitted. | **Recommended demo bar — unattended and audited are proven; the signal-driven part is only partly shown** (see the scoring note below) |
 | **P3 — Multi-host red team** | Pivot/lateral movement across hosts. | Not a demo goal |
 
 Language to use: *"target-scoped autonomous assessment with early post-exploitation"*.
 Not: *"fully autonomous red team"*.
+
+### How close, per demo pillar  *(assessed 2026-10-01)*
+
+| Pillar | Weight in the P2 bar | State | Score |
+|---|---|---|---|
+| One command runs recon → scan → analyze → report unattended | high | Proven on both paths, loopback target only | 90% |
+| The engine chooses tools, with an audit trail | high | Proven: engine-chosen rows with tokens and cost, deterministic steps labelled as such | 90% |
+| Phases activate from recon signals | medium | Partly shown: the adaptive planner activated `infrastructure_scan` from 12 non-standard ports and replan phases chained; swarm activation is unevidenced | 55% |
+| Report + audit artifacts | medium | Proven: a report on disk for both paths, plus `verdict.json` and a stored baseline for Path B | 95% |
+| Guardrails you can trust (tests, reproducibility) | high | The live-fire harness now asserts itself, but the Python suite has 6 order-contamination failures, the TS suite has 25, and `_migrations` is 26/28 failed | 50% |
+
+**Overall: ~80% of the stated demo bar.** The runnable, auditable core exists and has been
+demonstrated end to end; most of what is left is *proof on a real target* and *hygiene*, not missing
+features. The three moves that shift it most: a Juice Shop live-fire (target realism plus the
+signal-driven criteria), the test-determinism pass (Step 5), and rebuilding the schema under one role
+(closes the drift risk).
 
 ---
 
@@ -655,14 +671,18 @@ the work plan (test determinism).
 
 ## 6. Explicitly unverified (do not claim these work)
 
-- No live scan against any real target has been run in this checkout. The only whole-engine run is
-  Step 1's, against `test_fixtures/simple-web-app` on loopback.
-- No `docker compose up` of the full stack; no CI run; Path B never executed here.
-- LLM calls *have* now been observed succeeding from both runtimes (B9, via the local OpenCode
-  server): a planner call returned 9 phases and a worker call returned a tool choice. What is still
-  unverified is the paid/console-account paths and any interactive login.
-- No `livefire-runs/` directory exists → **no recorded successful live-fire run**.
-- The propagation of `agent_init`/`agent_next`/`agent_observe`/`phase_complete` payload shapes
-  was reviewed only for `ping`, `list_tools`, and `call_tool`. **Diff the remaining four handlers**
-  (`mcp_server.py:1810-1833`) against `mcp-client.ts` before trusting Path A end to end — B1 shows
-  this boundary is exactly where silent mismatches live.
+- **No live scan against a real (non-loopback) target**, and **no Juice Shop run**. Every whole-engine
+  run so far is against `test_fixtures/simple-web-app` on loopback: Path A's assess run and Path B's
+  live-fire. The pre-committed live-fire numbers (swarm 3/3, 10–25 findings, ≥2 CRITICAL/HIGH,
+  11–31 min) describe Juice Shop and have not been exercised.
+- **No `docker compose up` of the full stack and no CI run.** Path B now *has* executed, natively
+  (see B6 and Step 4) — that bullet is retired — but the container path itself is still untested.
+- LLM calls have been observed succeeding from both runtimes (B9, via the local OpenCode server), and
+  the paid/console-account paths remain unverified, as does any interactive login.
+- **Swarm behaviour is unverified.** The live-fire run recorded 0 `Swarm:` events, so "3/3 specialist
+  agents activate" is unevidenced in both paths.
+- The `agent_*` payload shapes were once reviewed only for `ping`/`list_tools`/`call_tool`. Since then
+  `agent_init`, `agent_next` and `agent_observe` have been exercised for real over the bridge (the
+  Step 3 assess run), so that caution is retired for those three — but `phase_complete` was observed
+  only as a 30 s timeout. Its cap is raised and unit-tested, and **the next assess run should confirm
+  it returns suggestions instead of timing out**.
