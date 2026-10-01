@@ -47,6 +47,20 @@ type LLMStatus = (typeof LLM_STATUS)[number]
 const AGENT_PLANNING_TIMEOUT_MS = 600_000
 
 /**
+ * Timeout for the RPCs whose work is one long call to the worker's LLM — and
+ * for the graph requests queued behind them.
+ *
+ * `phase_complete` asks the model what to do next with every finding so far,
+ * and the worker's transport answers one request at a time, so a following
+ * `get_attack_graph` waits for that call to finish. Both were being cut off at
+ * the generic 30s while still working, logged as non-blocking, so runs quietly
+ * continued without their output. Five minutes clears the slowest call measured
+ * on the same free gateway (145s) with margin, without parking a genuinely
+ * stuck request for the ten minutes a security tool is allowed.
+ */
+const ENGINE_ANALYSIS_TIMEOUT_MS = 300_000
+
+/**
  * Resolve the interpreter used to spawn the Python worker.
  *
  * Order: `ARGUS_PYTHON` → the repo virtualenv (`argus-workers/venv`) → bare
@@ -861,7 +875,7 @@ export class WorkersBridge {
       description: string
     }>
   }> {
-    return this.sendRequest("get_attack_graph", params) as Promise<any>
+    return this.sendRequest("get_attack_graph", params, ENGINE_ANALYSIS_TIMEOUT_MS) as Promise<any>
   }
 
   /**
@@ -903,7 +917,7 @@ export class WorkersBridge {
       chainsDetected: number
     }
   }> {
-    return this.sendRequest("get_attack_graph_snapshot", params) as Promise<any>
+    return this.sendRequest("get_attack_graph_snapshot", params, ENGINE_ANALYSIS_TIMEOUT_MS) as Promise<any>
   }
 
   /** Phase 4.1.4: Get completed tool list for a given phase (for checkpoint resume). */
@@ -954,7 +968,7 @@ export class WorkersBridge {
     stop: boolean
     fallback?: boolean  // true when LLM was unavailable (blocker 16)
   }> {
-    return this.sendRequest("phase_complete", params) as Promise<{
+    return this.sendRequest("phase_complete", params, ENGINE_ANALYSIS_TIMEOUT_MS) as Promise<{
       next_capabilities: string[]
       reasoning: string
       stop: boolean

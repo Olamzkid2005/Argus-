@@ -563,6 +563,35 @@ describe("WorkersBridge — Agent methods", () => {
   })
 })
 
+describe("WorkersBridge — engine-backed phase RPCs", () => {
+  test("phaseComplete() and the graph fetches allow one long engine call", async () => {
+    const { WorkersBridge } = await import("../../../../src/argus/bridge/mcp-client")
+    const bridge = new WorkersBridge("/path/to/mcp_server.py")
+
+    const captured: Array<{ method: string; timeoutMs?: number }> = []
+    ;(bridge as any).sendRequest = async (method: string, _params: unknown, timeoutMs?: number) => {
+      captured.push({ method, timeoutMs })
+      return { chains: [], paths: [], chain_plans: [], next_capabilities: [], reasoning: "", stop: false }
+    }
+
+    await bridge.phaseComplete({ engagement_id: "ENG-1", phase: "recon", target: "example.com", findings: [] })
+    await bridge.getAttackGraph({ engagement_id: "ENG-1" })
+    await bridge.getAttackGraphSnapshot({ engagement_id: "ENG-1" })
+
+    // phase_complete is one long LLM call over every finding so far, and the
+    // worker answers one request at a time, so the graph request behind it
+    // waits too — both were cut off at the generic 30s while still working.
+    expect(captured.map((call) => call.method)).toEqual([
+      "phase_complete",
+      "get_attack_graph",
+      "get_attack_graph_snapshot",
+    ])
+    for (const call of captured) {
+      expect(call.timeoutMs).toBeGreaterThan(30000)
+    }
+  })
+})
+
 describe("WorkersBridge — Signal forwarding", () => {
   afterEach(() => {
     const { WorkersBridge } = require("../../../../src/argus/bridge/mcp-client")

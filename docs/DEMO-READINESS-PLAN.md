@@ -398,8 +398,11 @@ Ordered so that each step is independently verifiable and unblocks the next.
       (`bcdbf80c`; the smoke test pins exit 1 plus the guard message). The CLI also stopped
       exporting `ARGUS_ALLOW_UNSCOPED=1` — the worker reads that as "no scope configured, all
       targets allowed", which silently disabled the allowlist autonomous mode must run under.
-- [ ] Exercise `assess --autonomous` (implies `ARGUS_AUTONOMOUS=1` + `ARGUS_AUTO_APPROVE=1`) and
-      confirm it is genuinely unattended: no prompt, no TTY dependency.
+- [x] Exercise `assess --autonomous` (implies `ARGUS_AUTONOMOUS=1` + `ARGUS_AUTO_APPROVE=1`) and
+      confirm it is genuinely unattended: no prompt, no TTY dependency. **Confirmed 2026-10-01** by
+      the Step 3 evidence run below (`/tmp/step3-assess2.log`, engagement `ENG-muot0po3-1o`),
+      launched detached with `stdin` on `/dev/null`: the run completed all 18 phases, auto-approved
+      all three `destructive_tools` gates with nothing able to answer a prompt, and wrote its report.
       Scope comes from the environment
       (`ARGUS_SCOPE_MODE=allowlist ARGUS_ALLOWED_TARGETS=127.0.0.1`) — the committed
       `argus.config.yaml` stays `warn` with no targets, as `scope-resolution.test.ts` requires.
@@ -421,7 +424,8 @@ Ordered so that each step is independently verifiable and unblocks the next.
 > **B9 is resolved** (`c4b9328c` planner, `2c0e947e` worker): real completions execute through a
 > local OpenCode server in both runtimes, so this step is no longer blocked by credentials. What it
 > still needs is an actual assessment run whose `agent_decisions` rows can be inspected — and the
-> latency to plan around: 30–95 s per free-tier call.
+> latency to plan around: 30–95 s per free-tier call, with 145 s measured once for a planning call
+> that carries the phase's whole tool list (see the plan-budget note below).
 - [x] Confirm rows appear in `agent_decisions`
       (`database/migrations/012_add_agent_decision_log.sql`,
       `database/repositories/agent_decision_repository.py`) with `tool_selected`, `reasoning`,
@@ -519,9 +523,13 @@ the previous run had died inside `agent_init`:
 - `phase-5-api_exploitation-bc6344d5` — 2 rows (`arjun`, `sqlmap`), both `was_fallback=true`: the
   engine contributed nothing for that phase and the trail says so instead of implying a choice.
 
-One related gap stays open: `phase_complete` and `get_attack_graph` are still on the generic 30 s RPC
-timeout and both logged `timed out after 30000ms` (as non-blocking), so their LLM-backed work is still
-being cut off — they need the same treatment the `agent_*` family just got.
+**Fixed in the same pass — the last two 30 s timeouts.** The same run logged `phase_complete` and
+`get_attack_graph` as `timed out after 30000ms` (non-blocking, so the run continued without their
+output). `phase_complete` is one long LLM call over every finding so far, and the worker's transport
+answers one request at a time — which is why the graph fetch behind it timed out too.
+`phaseComplete()` / `getAttackGraph()` / `getAttackGraphSnapshot()` now use a five-minute cap
+(`ENGINE_ANALYSIS_TIMEOUT_MS`), pinned by a test in `mcp-client.test.ts`. Not yet re-observed on a live
+run: the next `assess` should report phase-complete suggestions instead of a timeout.
 - [x] A completed run leaves a report artifact on disk:
       `<data>/engagements/<id>/report.md`, written by both `assess` and `resume`, with the path
       announced on stderr. stdout printing is unchanged — an unattended or TUI run now has
