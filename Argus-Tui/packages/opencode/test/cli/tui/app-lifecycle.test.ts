@@ -1,4 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test"
+import { Effect } from "effect"
+import { pollWithTimeout } from "../../lib/effect"
 import { createTestRenderer } from "@opentui/core/testing"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
@@ -40,6 +42,43 @@ afterEach(async () => {
   await Bun.sleep(20)
   await current?.tmp?.[Symbol.asyncDispose]()
   await TuiPluginRuntime.dispose().catch(() => {})
+})
+
+test("Argus home mounts an assessment prompt without a render error", async () => {
+  const mode = process.env.ARGUS_MODE
+  const route = process.env.OPENCODE_ROUTE
+  const data = process.env.ARGUS_DATA_DIR
+  await using home = await tmpdir()
+  await Bun.write(path.join(home.path, "config.yaml"), "storage:\n  encryption:\n    enabled: false\n")
+  process.env.ARGUS_DATA_DIR = home.path
+  process.env.ARGUS_MODE = "1"
+  process.env.OPENCODE_ROUTE = '{"type":"home"}'
+  try {
+    const app = await startTui()
+    app.theme.resolve("dark")
+    await app.handle.ready
+    await Effect.runPromise(
+      pollWithTimeout(
+        Effect.promise(async () => {
+          await app.setup.renderOnce()
+          const frame = app.setup.captureCharFrame()
+          if (frame.includes("fatal error")) throw new Error(frame)
+          return frame.includes("/assess") ? frame : undefined
+        }),
+        "Argus assessment prompt did not mount",
+      ),
+    )
+    const output = app.setup.captureCharFrame()
+    expect(output).toContain("/assess")
+    expect(output).not.toContain("fatal error")
+  } finally {
+    if (mode === undefined) delete process.env.ARGUS_MODE
+    else process.env.ARGUS_MODE = mode
+    if (route === undefined) delete process.env.OPENCODE_ROUTE
+    else process.env.OPENCODE_ROUTE = route
+    if (data === undefined) delete process.env.ARGUS_DATA_DIR
+    else process.env.ARGUS_DATA_DIR = data
+  }
 })
 
 test("returns a handle immediately and resolves ready after async mount setup", async () => {
@@ -151,6 +190,19 @@ test("SIGHUP exits after ready and removes its listener", async () => {
   expect(process.listenerCount("SIGHUP")).toBe(beforeSighup)
 })
 
+test("SIGTERM restores the terminal and removes its listener", async () => {
+  const before = process.listenerCount("SIGTERM")
+  const app = await startTui()
+
+  app.theme.resolve("dark")
+  await app.handle.ready
+  process.emit("SIGTERM")
+  await app.handle.done
+
+  expect(app.setup.renderer.isDestroyed).toBe(true)
+  expect(process.listenerCount("SIGTERM")).toBe(before)
+})
+
 test("plugin, audio, and keymap cleanup run exactly once", async () => {
   const originalRegister = TuiKeymap.registerOpencodeKeymap
   let unregisterKeymapCalls = 0
@@ -187,7 +239,7 @@ test("plugin, audio, and keymap cleanup run exactly once", async () => {
 async function startTui(options: { rejectTheme?: Error } = {}) {
   const tmp = await tmpdir()
   const restore = await isolateGlobalPaths(tmp.path)
-  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false, maxFps: Number.POSITIVE_INFINITY })
+  const setup = await createTestRenderer({ width: 120, height: 50, useThread: false, maxFps: Number.POSITIVE_INFINITY })
   const theme = deferred<"dark" | "light" | null>()
   const waitForThemeMode = spyOn(setup.renderer, "waitForThemeMode").mockImplementation(() => {
     if (options.rejectTheme) return Promise.reject(options.rejectTheme)
