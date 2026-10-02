@@ -20,6 +20,7 @@ import {
   sanitizedProcessEnv,
 } from "@opencode-ai/core/util/opencode-process"
 import { validateSession } from "./validate-session"
+import { makeRuntime } from "@/effect/run-service"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -135,6 +136,7 @@ export const TuiThreadCommand = cmd({
         process.chdir(next)
       } catch {
         UI.error("Failed to change directory to " + next)
+        process.exitCode = 1
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
@@ -186,48 +188,48 @@ export const TuiThreadCommand = cmd({
         worker.terminate()
       }
 
-      const prompt = await input(args.prompt)
-      const config = await (TuiConfig as any).get()
-
-      const network = resolveNetworkOptionsNoConfig(args)
-      const external =
-        process.argv.includes("--port") ||
-        process.argv.includes("--hostname") ||
-        process.argv.includes("--mdns") ||
-        network.mdns ||
-        network.port !== 0 ||
-        network.hostname !== "127.0.0.1"
-
-      const transport = external
-        ? {
-            url: (await client.call("server", network)).url,
-            fetch: undefined,
-            events: undefined,
-          }
-        : {
-            url: "http://opencode.internal",
-            fetch: createWorkerFetch(client),
-            events: createEventSource(client),
-          }
-
       try {
-        await validateSession({
-          url: transport.url,
-          sessionID: args.session,
-          directory: cwd,
-          fetch: transport.fetch,
-        })
-      } catch (error) {
-        UI.error(errorMessage(error))
-        process.exitCode = 1
-        return
-      }
+        const prompt = await input(args.prompt)
+        const config = await makeRuntime(TuiConfig.Service, TuiConfig.defaultLayer).runPromise((svc) => svc.get())
 
-      setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
-      }, 1000).unref?.()
+        const network = resolveNetworkOptionsNoConfig(args)
+        const external =
+          process.argv.includes("--port") ||
+          process.argv.includes("--hostname") ||
+          process.argv.includes("--mdns") ||
+          network.mdns ||
+          network.port !== 0 ||
+          network.hostname !== "127.0.0.1"
 
-      try {
+        const transport = external
+          ? {
+              url: (await client.call("server", network)).url,
+              fetch: undefined,
+              events: undefined,
+            }
+          : {
+              url: "http://opencode.internal",
+              fetch: createWorkerFetch(client),
+              events: createEventSource(client),
+            }
+
+        try {
+          await validateSession({
+            url: transport.url,
+            sessionID: args.session,
+            directory: cwd,
+            fetch: transport.fetch,
+          })
+        } catch (error) {
+          UI.error(errorMessage(error))
+          process.exitCode = 1
+          return
+        }
+
+        setTimeout(() => {
+          client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+        }, 1000).unref?.()
+
         const { createTuiRenderer, tui } = await import("./app")
         const renderer = await createTuiRenderer(config)
         const handle = tui({
