@@ -17,9 +17,7 @@
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { EOL } from "os"
-import { spawn } from "child_process"
-import { fileURLToPath } from "url"
-import { dirname, join } from "path"
+import { launchTui } from "./launcher"
 import {
   ArgusAssessCommand,
   ArgusDoctorCommand,
@@ -44,44 +42,12 @@ function show(out: string) {
   process.stderr.write(out)
 }
 
-/**
- * Launch the interactive Argus TUI (OpenCode TUI with Argus branding).
- *
- * The TUI uses SolidJS via @opentui/solid for a rich terminal interface.
- * When ARGUS_MODE=1, the home screen shows ArgusDashboard and all
- * Argus routes (scan, findings, engagements, workspace) are available.
- */
-function launchTui() {
-  const _dirname = dirname(fileURLToPath(import.meta.url))
-  const entry = join(_dirname, "../../src/index.ts")
-  const pkgDir = join(_dirname, "../..")
-
-  const child = spawn(process.execPath, ["run", "--conditions=browser", entry, "run", "--interactive"], {
-    stdio: "inherit",
-    cwd: pkgDir,
-    env: { ...process.env, ARGUS_MODE: "1" },
-  })
-
-  child.on("error", (err) => {
-    console.error("Failed to launch TUI:", err.message)
-    process.exit(1)
-  })
-
-  child.on("exit", (code, signal) => {
-    if (signal) {
-      process.kill(process.pid, signal)
-      return
-    }
-    process.exit(typeof code === "number" ? code : 0)
-  })
-}
-
 async function main() {
-  if (args.length === 0) {
+  if (args.length === 0 || (args[0].startsWith("-") && !["--help", "-h", "--version", "-v"].includes(args[0]))) {
     // No arguments: launch the rich TUI directly.
     // The TUI's home route shows ArgusDashboard (via ARGUS_MODE=1) with
     // stats loaded from the engagement store, so no need to pre-render here.
-    launchTui()
+    launchTui(args)
   } else if (args[0] === "--help" || args[0] === "-h") {
     show(formatCliHelp())
   } else {
