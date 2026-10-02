@@ -1,5 +1,12 @@
 # Argus — Demo Readiness Plan
 
+> **New implementation plan (2026-09-30):** See
+> [Trustworthy Terminal-First Demo Implementation Plan](WORKING-DEMO-IMPLEMENTATION-PLAN.md)
+> for the user-selected `argus` → interactive TUI → autonomous web/API demo and its
+> stricter execution, proof, safety, recovery, and separate swarm acceptance gates.
+> The percentages and completion claims below are historical records, not acceptance
+> evidence for that new demo bar.
+
 **Goal:** reach a defensible, working demo of an autonomous security-assessment run:
 one command starts an assessment, the **engine decides which tools to run** (not a hard-coded
 list), phases advance without a human, a report artifact is produced, and scope is enforced.
