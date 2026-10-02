@@ -855,6 +855,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
     }
   }
 
+  revealCharIndex = 0
   return (
     <box ref={(item: BoxRenderable) => (box = item)}>
       <box
@@ -866,7 +867,6 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
         zIndex={1}
         onMouse={mouse}
       />
-      {revealCharIndex = 0}
       <For each={ctx.shape.left}>
         {(line, index) => (
           <box flexDirection="row" gap={1}>
