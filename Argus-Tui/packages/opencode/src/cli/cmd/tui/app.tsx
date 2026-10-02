@@ -252,13 +252,7 @@ async function mountTui(input: TuiInput & { keymap: ReturnType<typeof createDefa
               <KVProvider>
                 <ToastProvider>
                   <RouteProvider
-                    initialRoute={
-                      input.args.continue
-                        ? { type: "session", sessionID: "dummy" }
-                        : process.env.ARGUS_MODE === "1"
-                          ? { type: "dashboard" }
-                          : undefined
-                    }
+                    initialRoute={input.args.continue ? { type: "session", sessionID: "dummy" } : undefined}
                   >
                     <TuiConfigProvider config={input.config}>
                       <SDKProvider
