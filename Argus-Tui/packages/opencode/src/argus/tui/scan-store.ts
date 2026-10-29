@@ -35,7 +35,7 @@ export interface LLMReplanEntry {
 export interface ScanState {
   target: string
   engagementId: string
-  status: "idle" | "running" | "completed" | "failed"
+  status: "idle" | "running" | "completed" | "partial" | "stopped" | "failed"
   phases: ScanPhase[]
   totalFindings: number
   currentPhase: number
@@ -200,9 +200,10 @@ export function appendLog(msg: string) {
   setScanState("log", (prev) => [...prev, msg])
 }
 
-export function completeScan(success: boolean) {
+export function completeScan(result: boolean | "completed" | "partial" | "stopped" | "failed") {
   persistActive()
-  setScanState("status", success ? "completed" : "failed")
+  const status = typeof result === "boolean" ? (result ? "completed" : "failed") : result
+  setScanState("status", status)
   setScanState("durationMs", Date.now() - scanState.startTime)
 }
 

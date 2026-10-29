@@ -211,6 +211,12 @@ export function ScanDashboard() {
         <Show when={scanState.status === "failed"}>
           <text fg={theme.error}>✗ Failed</text>
         </Show>
+        <Show when={scanState.status === "partial"}>
+          <text fg={theme.warning}>⚠ Partial</text>
+        </Show>
+        <Show when={scanState.status === "stopped"}>
+          <text fg={theme.textMuted}>■ Stopped</text>
+        </Show>
       </box>
 
       <Show when={!loading() && !error()} fallback={
