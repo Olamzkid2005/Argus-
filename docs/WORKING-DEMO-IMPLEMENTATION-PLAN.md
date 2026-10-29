@@ -137,7 +137,13 @@ Truthfulness and stop: the adapter classifies each run as `completed`, `partial`
 
 Isolated-environment result (fresh temp `HOME`, `ARGUS_DATA_DIR`, `XDG_*`, `OPENCODE_AUTH_CONTENT={}`; worker deps present only in the repo venv): exit 0 after 27s, `7 passed, 6 warnings, 0 failed`; the warnings are the expected unconfigured Redis/credentials/provider entries and a `trivy` version floor. Lookups that are genuinely absent fail loudly (`MCP Worker` FAIL with the worker's stderr) rather than silently passing.
 
+**`assess` exit-path check (2026-10-29).** A completed assessment exits through the same one-shot path, so it was exercised end-to-end against a local target in an isolated `HOME`/workspace. Two CLI defects surfaced first and are fixed: `--no-cache` is a real option name but yargs' boolean-negation turned it into an unknown `cache` argument under `.strict()`, and the failure handler printed help while leaving the exit status at 0, so an unattended driver read a usage error as a completed command. `src/argus/index.ts` now disables boolean negation and exits 1 after printing the usage message.
+
+Full run (`http://127.0.0.1:9`, `--deterministic --no-cache`): exit 0 after 379s, `✓ Assessment complete — 25 total finding(s)`, `report.md` written under `engagements/ENG-…/`, and **0** `mcp_server.py` and **0** scanner processes remained after exit (also verified live afterwards). The 25 findings are raw observations from a closed port, not proof — proof status is Stage 4 work, not a claim about this run.
+
 Evidence commands (from `Argus-Tui/packages/opencode/`):
+
+- `bun test ./test/argus/e2e/cli-args.test.ts --timeout 120000` — 2 pass / 0 fail. Asserts `--no-cache` parses to the command (not an unknown-argument screen) and that a usage error exits 1.
 
 - `bun test ./test/argus/e2e/cli-doctor.test.ts --timeout 150000` — 1 pass / 0 fail (28.5s). Spawns the real binary in an isolated home, asserts the run reaches its summary line, exits within budget (the pre-fix behavior is a hang), and reports `(via <resolveDefaultPython()>)`.
 - `bun test ./test/argus/integration/doctor-flow.test.ts --timeout 60000` — 15 pass / 0 fail.
