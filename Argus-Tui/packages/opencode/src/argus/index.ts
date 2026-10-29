@@ -74,6 +74,11 @@ async function main(): Promise<boolean> {
   } else {
     const cli = yargs(args)
       .scriptName("argus")
+      // `--no-cache` is a real option name, not a negation of `cache`. With
+      // yargs' default boolean-negation, `.strict()` rejected it as an unknown
+      // `cache` argument, printed help, and exited 0 — a documented flag that
+      // silently did nothing.
+      .parserConfiguration({ "boolean-negation": false })
       .wrap(100)
       .help("help", "show help")
       .alias("help", "h")
@@ -94,7 +99,11 @@ async function main(): Promise<boolean> {
       .command(ArgusWorkflowsCommand)
       .fail((msg, err) => {
         if (err) throw err
+        // A usage error is a failure: an unattended driver must not read
+        // "printed help, exited 0" as a completed command.
+        process.stderr.write(`[Argus] ${msg}\n`)
         cli.showHelp(show)
+        process.exitCode = 1
       })
       .strict()
     await cli.parse()
