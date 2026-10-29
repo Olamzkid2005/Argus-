@@ -72,7 +72,7 @@ Each numbered package is one focused change. Split it further if implementation 
 
 Work in this order; each task has its own acceptance evidence. Completing launcher work does not complete Stage 1 or authorize a scan.
 
-**Progress (2026-10-01):** tasks 1–3 have passing automated evidence; task 4 is implemented but its automated PTY gate is slow/flaky (manual terminal proof only); tasks 5–7 not started; task 8 checkpoint open. Launcher completion is not Stage 1 completion and does not authorize a scan.
+**Progress (2026-10-29):** tasks 1–3 have passing automated evidence; task 4 is implemented but its automated PTY gate is slow/flaky (manual terminal proof only); tasks 5–7 are done with passing tests (success, failure, partial, duplicate, and cooperative stop); task 8 checkpoint stays open because `/doctor` in an isolated worker environment is unverified. Launcher completion is not Stage 1 completion and does not authorize a scan.
 
 1. **Launcher routing:** add a regression showing bare `argus` selects the full-screen default TUI, not `run --interactive`; preserve caller cwd, Argus mode, and TUI options such as `--model`. **Done — see 1.1 evidence.**
 2. **Foreground lifecycle:** test and implement signal forwarding, failed spawn/nonzero child status propagation, and listener cleanup at both launcher layers. Keep CLI help and existing assessment/report/resume/doctor commands on their current command path. **Done — see 1.1 evidence.**
@@ -80,7 +80,7 @@ Work in this order; each task has its own acceptance evidence. Completing launch
 4. **Terminal smoke gate:** launch the real binary in an isolated pseudo-terminal from the repository root and another workspace; verify the Argus prompt responds and exits cleanly. Do not invoke assessments or provider calls. **Implemented, but the automated PTY pass is slow/flaky and not yet a reliable pass; manual terminal proof only — see 1.1 evidence.**
 5. **One assessment service:** replace duplicated slash/natural-language launch branches with one policy/service boundary; preserve model, credential references, cache mode, engagement identity, and limits. Tests assert exactly one runner invocation.
 6. **Typed UI progress:** send structured events to the scan store/dashboard, never scanner output to `session.prompt`; test that assessment traffic cannot invoke the coding agent.
-7. **Truthful results and stop:** render failed/partial outcomes as such, preserve persisted state, and wire graceful stop. Tests cover success, failure, partial result, duplicate submission, and cancellation using a controlled runner.
+7. **Truthful results and stop:** render failed/partial outcomes as such, preserve persisted state, and wire graceful stop. Tests cover success, failure, partial result, duplicate submission, and cancellation using a controlled runner. **Done — see 1.2 evidence.**
 8. **Stage 1 checkpoint:** run relevant handler/launcher tests and package typecheck; verify `/doctor` in an explicitly approved isolated worker environment. Keep the checkpoint open until all evidence is recorded. **Open:** launcher tests and package typecheck pass, but `/doctor` in an isolated worker environment is not yet verified.
 
 #### 1.1 Make bare `argus` enter the assessment-capable TUI
@@ -110,13 +110,23 @@ Evidence commands and results (from `Argus-Tui/packages/opencode/`):
 
 #### 1.2 Use one TUI assessment handler
 
-- [ ] Route slash commands and recognized natural-language requests through the same assessment service/policy; preserve the selected model, credentials, cache mode, engagement ID, and limits.
-- [ ] Render typed progress directly in the scan UI. Do not call `session.prompt` to feed scanner logs back into a general coding agent as user instructions.
-- [ ] Check `result.success` and partial/failed state before displaying completion; do not launch duplicate engagements or print raw report text into the terminal renderer.
+- [x] Route slash commands and recognized natural-language requests through the same assessment service/policy; preserve the selected model, credentials, cache mode, engagement ID, and limits.
+- [x] Render typed progress directly in the scan UI. Do not call `session.prompt` to feed scanner logs back into a general coding agent as user instructions.
+- [x] Check `result.success` and partial/failed state before displaying completion; do not launch duplicate engagements or print raw report text into the terminal renderer.
 
-**Likely files:** `src/cli/cmd/tui/component/prompt/index.tsx`, `src/argus/tui-commands.ts`, `src/argus/commands/assess.ts`, `src/argus/tui/scan-store.ts`; command tests.
+**Evidence (2026-10-29).** `src/argus/assessment/service.ts` is now the single policy boundary (`runAssessment`, `parseAssessmentArgs`). `/assess`, `/scan`, `/recon`, recognized natural-language intent, and the CLI's `assessCommand` all call it; the prompt's two duplicated `new WorkflowRunner()` IIFEs and its `formatFindingsSummary` rendering are gone. The service trims and rejects an empty target, hands the selected `provider/model` to `LLMPlannerService.switchModel()` before launch, and forwards credentials, cache mode, feature overrides, and an optional existing engagement ID. Per-run limits do not exist yet (Stage 6), so there is nothing to preserve there.
 
-**Verification:** component/handler tests for exactly-one launch, model handoff, structured progress, failed result, and graceful stop. TUI launch proves routing only, not autonomous pentesting.
+`src/argus/tui/assessment-run.ts` is the TUI adapter: `initScan` → `handleProgressEvent` for structured events, `appendLog` for plain strings, `completeScan(result.success)` at the end, and a serialized queue so a late failure cannot be flipped back to “completed” by an in-flight `scan_complete`. Assessment paths no longer call `session.prompt`; non-assessment slash commands keep their existing output path. `WorkflowRunner` gained an `onEngagement` hook, so the runner remains the only engagement creator (the prompt's duplicate `createEngagement` is removed) while the TUI still attaches and navigates immediately.
+
+Evidence commands (from `Argus-Tui/packages/opencode/`):
+
+- `bun test ./test/argus/unit/assessment/service.test.ts ./test/argus/unit/tui/assessment-run.test.ts ./test/argus/unit/tui-commands-assessment.test.ts ./test/argus/unit/commands/assess.test.ts ./test/argus/unit/tui-commands.test.ts ./test/argus/unit/tui/scan-store.test.ts ./test/argus/unit/workflow-runner.test.ts ./test/argus/unit/intent-classifier.test.ts` — 211 pass / 0 fail. Covers exactly-one launch, model handoff order, policy forwarding, typed progress into the scan store, failed/partial/stopped truthfulness, duplicate single-flight, cooperative stop, and a guard that the assessment modules never import `sdk.client`.
+- `bun test ./test/cli/tui/app-lifecycle.test.ts` — 11 pass / 0 fail; the Argus home still mounts the prompt (~1.2s).
+- `bun run typecheck` — passes.
+
+Truthfulness and stop: the adapter classifies each run as `completed`, `partial`, `stopped`, or `failed`. A phase error or a `PARTIAL` phase makes the overall status `partial`; a cooperative stop sets `WorkflowRunResult.stopped`, marks remaining phase records `SKIPPED`, moves the engagement to `PAUSED`, and is never reported as success. `/stop` calls `requestAssessmentStop()`; the runner checks `options.shouldStop()` at each phase boundary. Duplicate submissions for the same target join the in-flight run instead of starting a second engagement.
+
+**Not yet evidenced.** No component-level mount test exercises the prompt's slash/NL dispatch itself. Cancellation is cooperative at phase boundaries — it does not yet abort an in-flight tool or kill its process group (Stage 6.2). `/doctor` in an isolated worker environment is still unverified, so **Checkpoint 1 stays open**.
 
 **Checkpoint 1:** `argus` opens the correct interface, `/doctor` works, and a stubbed assessment cannot falsely display success. Do not run live scans yet.
 
