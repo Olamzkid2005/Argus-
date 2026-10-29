@@ -65,6 +65,18 @@ export interface WorkflowRunOptions {
    */
   engagementId?: string
   /**
+   * Called once the engagement is resolved (created or reused) and before any
+   * phase runs. Lets UI callers attach to the engagement without creating it
+   * themselves — engagement creation stays here, not in the caller.
+   */
+  onEngagement?: (engagement: { id: string; target: string; created: boolean }) => void
+  /**
+   * Cooperative stop: checked before each phase starts. A true result stops at
+   * a phase boundary, marks remaining phases SKIPPED, and returns
+   * `stopped: true` with `success: false`.
+   */
+  shouldStop?: () => boolean
+  /**
    * Path to credentials JSON file to load for authenticated testing.
    */
   credsPath?: string
@@ -113,6 +125,8 @@ export interface WorkflowRunResult {
   info: number
   durationMs: number
   success: boolean
+  /** True when a cooperative stop ended the run at a phase boundary. */
+  stopped?: boolean
   error?: string
   /** All findings with promoted confidence, for rendering summaries */
   allFindings: NormalizedFinding[]
@@ -929,11 +943,13 @@ export class WorkflowRunner {
         throw new Error(`Engagement ${engagementId} not found in store`)
       }
       store.updateStatus(engagementId, "RUNNING")
+      options.onEngagement?.({ id: engagementId, target, created: false })
       emit(`✓ Using existing engagement: \`${engagementId}\``)
     } else {
       const engagement = store.createEngagement(target, "assessment")
       engagementId = engagement.id
       store.updateStatus(engagementId, "RUNNING")
+      options.onEngagement?.({ id: engagementId, target, created: true })
       emit(`✓ Engagement created: \`${engagementId}\``)
     }
 
@@ -1050,6 +1066,7 @@ export class WorkflowRunner {
     // ── 5. Connect bridge & execute ──
     const allFindings: NormalizedFinding[] = []
     let executionError: Error | null = null
+    let stopped = false
     // Set inside the try; read in the finally to record gate decisions.
     let approvalAuditExecutor: InProcessExecutor | undefined
     const bridge = this.deps?.bridge ?? new WorkersBridge(workersPath)
@@ -1141,6 +1158,24 @@ export class WorkflowRunner {
       while (i < plan.phases.length) {
         const phase = plan.phases[i]
         const phaseName = phase.name
+
+        if (options.shouldStop?.()) {
+          stopped = true
+          emit(`⚠ Stop requested — not starting phase ${phaseName}`)
+          try {
+            store.appendAuditLog(engagementId, "STOP_REQUESTED", `Stopped before phase ${phaseName}`)
+          } catch {
+            // Audit logging is best-effort — never block the stop.
+          }
+          for (let j = i; j < plan.phases.length; j++) {
+            const pending = phaseRecords.get(plan.phases[j].phaseId)
+            if (!pending || pending.status !== "PENDING") continue
+            pending.status = "SKIPPED"
+            pending.completedAt = new Date().toISOString()
+            store.savePhase(engagementId, pending)
+          }
+          break
+        }
 
         emit({ type: "phase_start", phaseId: phase.phaseId, name: phaseName, total: plan.phases.length, phaseIndex: i })
         // Phase 4.2.3: In degraded mode, skip LLM-driven phases but continue
@@ -1453,7 +1488,7 @@ export class WorkflowRunner {
       let persistError: Error | null = null
       try {
         const allCompleted = Array.from(phaseRecords.values()).every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")
-        store.updateStatus(engagementId, executionError ? "FAILED" : allCompleted ? "COMPLETED" : "PAUSED")
+        store.updateStatus(engagementId, executionError ? "FAILED" : allCompleted && !stopped ? "COMPLETED" : "PAUSED")
         store.saveFindings(engagementId, allFindings)
       } catch (err) {
         persistError = err as Error
@@ -1481,10 +1516,10 @@ export class WorkflowRunner {
       if (persistError && !executionError) {
         executionError = persistError
       }
-      if (!executionError) {
+      if (!executionError && !stopped) {
         emit({ type: "scan_complete", totalFindings: allFindings.length })
       }
-      emit(`✓ Assessment ${executionError ? "failed" : "complete"}`)
+      emit(`✓ Assessment ${executionError ? "failed" : stopped ? "stopped" : "complete"}`)
     }
 
     // ── 8. Collate and return results ──
@@ -1497,7 +1532,8 @@ export class WorkflowRunner {
       low: allFindings.filter((f) => f.severity === 1).length,
       info: allFindings.filter((f) => f.severity === 0).length,
       durationMs: Date.now() - startTime,
-      success: !executionError,
+      success: !executionError && !stopped,
+      stopped: stopped || undefined,
       error: executionError?.message,
       allFindings,
     }
