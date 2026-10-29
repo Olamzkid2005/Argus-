@@ -42,14 +42,35 @@ function show(out: string) {
   process.stderr.write(out)
 }
 
-async function main() {
+/** Wait until everything written to a stream has been handed to the OS. */
+function drain(stream: { write(chunk: string, callback: () => void): unknown }): Promise<void> {
+  return new Promise((resolve) => stream.write("", () => resolve()))
+}
+
+/**
+ * Exit once a one-shot command is done.
+ *
+ * Some commands lazily boot OpenCode's runtime to read the provider registry
+ * (the planner check in `doctor` does). That runtime owns long-lived watchers
+ * and timers by design, so the event loop never drains on its own and the
+ * command would appear to hang after printing its results. Flush the streams
+ * first so nothing is truncated, then exit with the status the command set.
+ */
+async function exitWhenDone(): Promise<never> {
+  await Promise.all([drain(process.stdout), drain(process.stderr)])
+  process.exit(process.exitCode ?? 0)
+}
+
+async function main(): Promise<boolean> {
   if (args.length === 0 || (args[0].startsWith("-") && !["--help", "-h", "--version", "-v"].includes(args[0]))) {
     // No arguments: launch the rich TUI directly.
     // The TUI's home route shows ArgusDashboard (via ARGUS_MODE=1) with
     // stats loaded from the engagement store, so no need to pre-render here.
     launchTui(args)
+    return false
   } else if (args[0] === "--help" || args[0] === "-h") {
     show(formatCliHelp())
+    return true
   } else {
     const cli = yargs(args)
       .scriptName("argus")
@@ -77,11 +98,17 @@ async function main() {
       })
       .strict()
     await cli.parse()
+    return true
   }
 }
 
-main().catch((e) => {
-  const message = e instanceof Error ? e.message : String(e)
-  UI.error(message)
-  process.exitCode = 1
-})
+main()
+  .then(async (oneShot) => {
+    if (oneShot) await exitWhenDone()
+  })
+  .catch(async (e) => {
+    const message = e instanceof Error ? e.message : String(e)
+    UI.error(message)
+    process.exitCode = 1
+    await exitWhenDone()
+  })
