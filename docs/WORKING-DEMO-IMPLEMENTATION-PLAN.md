@@ -150,13 +150,25 @@ Evidence commands (from `Argus-Tui/packages/opencode/`):
 
 #### 2.1 Repair Python tool dispatch
 
-- [ ] Keep execution timeout separate from tool-schema arguments; invalid parameters fail once rather than retrying because the error contains `timeout`.
-- [ ] Build CLI arguments from the canonical tool definitions, preserving supported named parameters and required flags instead of forwarding only a bare target.
-- [ ] Register login/register through the normal factory and use the auth-aware wrapper consistently.
+- [x] Keep execution timeout separate from tool-schema arguments; invalid parameters fail once rather than retrying because the error contains `timeout`.
+- [x] Build CLI arguments from the canonical tool definitions, preserving supported named parameters and required flags instead of forwarding only a bare target.
+- [x] Register login/register through the normal factory and use the auth-aware wrapper consistently.
 
 **Likely files:** `argus-workers/agent/react_agent.py`, `agent/tool_registry.py`, existing canonical argument builder; `tests/test_react_agent.py` and factory/contract tests.
 
-**Verification:** the actual phase factory reaches a fake runner once with correct arjun parameters; schema errors do not retry; login/register are available. No external scanners required.
+**Evidence (2026-10-29).** The first regression test exposed a worse defect than the audit described: `ToolRegistry.call(tool, timeout=...)` validated `timeout` as a **tool parameter**, so every call to a tool with a declared schema failed with `received unknown parameter 'timeout'`. That message contains a retryable word, so `_execute_with_recovery` retried three times and reported a failure for arguments the binary never received.
+
+- `ToolRegistry.call` now takes `timeout` as its own keyword, outside the validated parameter set, and forwards it to the runner. A tool that declares a `timeout` parameter still receives the value as an argument. Validation failures return `AgentResult(retryable=False)`, and recovery returns immediately instead of burning retries (a rejected `connection_timeout` name no longer reads as transient).
+- `agent/tool_arguments.py` (`build_tool_argv`) mirrors the MCP server's command builder: `default_args`, then each declared parameter's flag and value in declaration order, with booleans as switches and positional targets kept positional. `set_tool_runner` uses it instead of `[target] + args`, so a validated `threads` reaches arjun as `-t 20` and arjun/nuclei targets arrive as `-u <url>`.
+- `create_for_phase` no longer carries a near-copy of the registration loop. It constructs the agent and calls `set_tool_runner`, which means the phase factory now registers `login`/`register` through the auth-aware wrapper and injects the authenticated session into every tool that supports it — the factory copy did neither.
+
+Evidence commands (from `argus-workers/`):
+
+- `./venv/bin/python -m pytest tests/test_react_agent.py tests/test_tool_registry.py tests/test_tool_arguments.py -q -p no:randomly` — 48 pass / 0 fail.
+- `./venv/bin/python -m pytest tests/test_agent_planning.py tests/test_agent_pipeline_integration.py tests/test_scope_integration.py tests/test_tool_registry.py tests/test_react_agent.py tests/test_tool_arguments.py -q -p no:randomly` — 113 pass / 17 skipped (pre-existing OpenTelemetry import skips) / 3 xpassed.
+- `./venv/bin/python -m ruff check --no-cache agent/tool_arguments.py agent/tool_registry.py agent/agent_result.py agent/react_agent.py tests/test_tool_arguments.py tests/test_react_agent.py` — clean.
+
+The new tests assert the factory reaches a recording runner exactly once with `["-m", "GET", "-u", <target>, "-t", "20"]`, that `login`/`register` are registered on a factory-created scan agent, and that an invalid parameter is attempted once. No external scanners were involved.
 
 #### 2.2 Freeze the next/observe/action protocol
 
