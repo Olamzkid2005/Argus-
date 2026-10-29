@@ -1,4 +1,5 @@
-import { WorkflowRunner, type WorkflowRunResult } from "../workflow-runner"
+import { runAssessment } from "../assessment/service"
+import type { WorkflowRunResult } from "../workflow-runner"
 import { ReportGenerator } from "../reporting/generator"
 import type { Feature } from "../config/feature-flags"
 import type { ProgressEvent } from "../shared/progress"
@@ -57,17 +58,18 @@ export async function assessCommand(target: string, options?: {
    */
   writeReport?: boolean
 }): Promise<WorkflowRunResult> {
-  const runner = new WorkflowRunner()
-  const result = await runner.run({
-    target,
-    useLLM: options?.useLLM,
-    workersPath: options?.workersPath,
-    credsPath: options?.credsPath,
-    cacheMode: options?.cacheMode,
-    verbose: options?.verbose,
-    features: options?.features,
-    onProgress: options?.onProgress ?? cliProgress,
-  })
+  const result = await runAssessment(
+    {
+      target,
+      useLLM: options?.useLLM,
+      workersPath: options?.workersPath,
+      credsPath: options?.credsPath,
+      cacheMode: options?.cacheMode,
+      verbose: options?.verbose,
+      features: options?.features,
+    },
+    { onProgress: options?.onProgress ?? cliProgress },
+  )
 
   // Render once and always leave the report on disk — stdout is easy to lose in
   // an unattended run, and "0 findings" is exactly when an artifact matters.
