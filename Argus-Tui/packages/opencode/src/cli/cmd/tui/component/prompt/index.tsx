@@ -22,10 +22,25 @@ import { Spinner } from "@tui/component/spinner"
 // Slash commands handled by the Argus TUI directly (not dispatched to server).
 // Must be kept in sync with the `slashes` array in src/argus/tui-commands.ts
 const ARGUS_TUI_COMMANDS = new Set([
-  "assess", "scan", "recon", "doctor", "health",
-  "status", "findings", "engagements", "report",
-  "verify", "evidence", "workspace", "tools",
-  "workflows", "config", "resume", "help", "open",
+  "assess",
+  "scan",
+  "recon",
+  "doctor",
+  "health",
+  "status",
+  "findings",
+  "engagements",
+  "report",
+  "stop",
+  "verify",
+  "evidence",
+  "workspace",
+  "tools",
+  "workflows",
+  "config",
+  "resume",
+  "help",
+  "open",
 ])
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -1206,75 +1221,50 @@ export function Prompt(props: PromptProps) {
         const isArgusSlash = inputText.startsWith("/") && firstWord.length > 1
 
         if (isArgusSlash) {
-        const cmdName = firstWord.slice(1).toLowerCase()
-        const { findArgusTuiCommand } = await import("@/argus/tui-commands")
-        const argusCmd = findArgusTuiCommand(cmdName)
-        if (argusCmd) {
-          argusHandled = true
-          const arg = firstLine.slice(firstWord.length).trim()
-          // Navigate to scan dashboard for assess/recon commands
-          // Lifted to outer scope so the runner.run() IIFE below can access it
-          let strippedTarget: string | undefined
-          let scanEngagementId: string | undefined
-          let cacheMode: "no_cache" | "refresh" | undefined
-          let verbose = false
-          if (cmdName === "assess" || cmdName === "scan" || cmdName === "recon") {
-            // Strip CLI flags (--no-cache, --refresh-cache, etc.) from the target
-            // so they don't become part of the engagement's target URL in SQLite.
-            // Also detect flags to pass to the executor.
-            const { stripFlags, detectCacheMode, hasVerboseFlag } = await import("@/cli/cmd/tui/util/flag-strip")
-            strippedTarget = stripFlags(arg)
-            cacheMode = detectCacheMode(arg)
-            verbose = hasVerboseFlag(arg)
-            if (!strippedTarget) {
-              toast.show({ variant: "error", title: "Assessment Error", message: "Usage: /assess <target> [--no-cache] [--refresh-cache]" })
-              return
-            }
-            const target = strippedTarget
-            try {
-              const { navigateTo } = await import("@/argus/tui/navigator")
-              const { EngagementStore } = await import("@/argus/engagement/store")
-              const store = new EngagementStore()
-              const eng = store.createEngagement(target, "assessment")
-              scanEngagementId = eng.id
-              navigateTo({ type: "scan", target, engagementId: eng.id })
-            } catch (e) {
-              console.error("Failed to navigate to scan dashboard:", e)
-            }
-          }
-          void (async () => {
-            try {
-              let output: string
-              if (cmdName === "assess" || cmdName === "scan" || cmdName === "recon") {
-                const { WorkflowRunner, formatFindingsSummary } = await import("@/argus/workflow-runner")
-                const runner = new WorkflowRunner()
-                // Send progress updates as streaming messages
-                const progressMessages: string[] = []
-                const result = await runner.run({
-                  target: strippedTarget ?? arg,
-                  cacheMode,
-                  verbose,
-                  engagementId: scanEngagementId,
-                  useLLM: cmdName === "assess" || cmdName === "scan",
-                  onProgress: (status: any) => {
-                    progressMessages.push(status)
-                    // Batch progress updates into the session
-                    if (progressMessages.length >= 3) {
-                      const batch = progressMessages.splice(0, 3).join("\n")
-                      void sdk.client.session.prompt({
-                        sessionID,
-                        ...selectedModel,
-                        messageID: MessageID.ascending(),
-                        agent: agent.name,
-                        model: selectedModel,
-                        variant,
-                        parts: [{ id: PartID.ascending(), type: "text" as const, text: batch }],
-                      })
-                    }
-                  },
+          const cmdName = firstWord.slice(1).toLowerCase()
+          const { findArgusTuiCommand } = await import("@/argus/tui-commands")
+          const argusCmd = findArgusTuiCommand(cmdName)
+          if (argusCmd) {
+            argusHandled = true
+            const arg = firstLine.slice(firstWord.length).trim()
+            const isAssessment = cmdName === "assess" || cmdName === "scan" || cmdName === "recon"
+
+            if (isAssessment) {
+              // One assessment service for slash, natural language, and the CLI.
+              // Typed progress goes to the scan UI — never to session.prompt, so
+              // assessment traffic cannot become coding-agent instructions.
+              const { parseAssessmentArgs } = await import("@/argus/assessment/service")
+              const parsed = parseAssessmentArgs(arg)
+              if (!parsed.target) {
+                toast.show({
+                  variant: "error",
+                  title: "Assessment Error",
+                  message: "Usage: /assess <target> [--no-cache] [--refresh-cache]",
                 })
-                // Flush remaining progress
-                if (progressMessages.length > 0) {
+                return false
+              }
+              void (async () => {
+                try {
+                  const { runTuiAssessment } = await import("@/argus/tui/assessment-run")
+                  await runTuiAssessment({
+                    target: parsed.target,
+                    mode: cmdName === "recon" ? "recon" : "assess",
+                    cacheMode: parsed.cacheMode,
+                    verbose: parsed.verbose,
+                    model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+                  })
+                } catch (err) {
+                  toast.show({
+                    variant: "error",
+                    title: "Assessment Error",
+                    message: err instanceof Error ? err.message : String(err),
+                  })
+                }
+              })()
+            } else {
+              void (async () => {
+                try {
+                  const output = await argusCmd.handler(arg)
                   void sdk.client.session.prompt({
                     sessionID,
                     ...selectedModel,
@@ -1282,37 +1272,24 @@ export function Prompt(props: PromptProps) {
                     agent: agent.name,
                     model: selectedModel,
                     variant,
-                    parts: [{ id: PartID.ascending(), type: "text" as const, text: progressMessages.join("\n") }],
+                    parts: [{ id: PartID.ascending(), type: "text" as const, text: output }],
+                  })
+                } catch (err) {
+                  const errMsg = err instanceof Error ? err.message : String(err)
+                  void sdk.client.session.prompt({
+                    sessionID,
+                    ...selectedModel,
+                    messageID: MessageID.ascending(),
+                    agent: agent.name,
+                    model: selectedModel,
+                    variant,
+                    parts: [{ id: PartID.ascending(), type: "text" as const, text: `**Error:** ${errMsg}` }],
                   })
                 }
-                output = formatFindingsSummary(result.allFindings, result.engagementId, strippedTarget ?? arg)
-              } else {
-                output = await argusCmd.handler(arg)
-              }
-              void sdk.client.session.prompt({
-                sessionID,
-                ...selectedModel,
-                messageID: MessageID.ascending(),
-                agent: agent.name,
-                model: selectedModel,
-                variant,
-                parts: [{ id: PartID.ascending(), type: "text" as const, text: output }],
-              })
-            } catch (err) {
-              const errMsg = err instanceof Error ? err.message : String(err)
-              void sdk.client.session.prompt({
-                sessionID,
-                ...selectedModel,
-                messageID: MessageID.ascending(),
-                agent: agent.name,
-                model: selectedModel,
-                variant,
-                parts: [{ id: PartID.ascending(), type: "text" as const, text: `**Error:** ${errMsg}` }],
-              })
+              })()
             }
-          })()
+          }
         }
-      }
       }
 
       // Check for natural language assessment intent (only in Argus mode)
@@ -1321,87 +1298,19 @@ export function Prompt(props: PromptProps) {
         const intent = classify(inputText)
         if (intent.type === "assessment") {
           argusHandled = true
-          // Navigate to scan dashboard
-          let nlEngagementId: string | undefined
-          try {
-            const { navigateTo } = await import("@/argus/tui/navigator")
-            const { EngagementStore } = await import("@/argus/engagement/store")
-            const store = new EngagementStore()
-            const eng = store.createEngagement(intent.target, "assessment")
-            nlEngagementId = eng.id
-            navigateTo({ type: "scan", target: intent.target, engagementId: eng.id })
-          } catch (e) {
-            console.error("Failed to navigate to scan dashboard:", e)
-          }
           void (async () => {
-            void sdk.client.session.prompt({
-              sessionID,
-              ...selectedModel,
-              messageID: MessageID.ascending(),
-              agent: agent.name,
-              model: selectedModel,
-              variant,
-              parts: [{
-                id: PartID.ascending(),
-                type: "text" as const,
-                text: `Starting assessment against ${intent.target}...`,
-              }],
-            })
             try {
-              const { WorkflowRunner, formatFindingsSummary } = await import("@/argus/workflow-runner")
-              const runner = new WorkflowRunner()
-              const progressMessages: string[] = []
-              const result = await runner.run({
+              const { runTuiAssessment } = await import("@/argus/tui/assessment-run")
+              await runTuiAssessment({
                 target: intent.target,
-                engagementId: nlEngagementId,
-                useLLM: intent.useLLM,
-                onProgress: (status: any) => {
-                  progressMessages.push(status)
-                  if (progressMessages.length >= 3) {
-                    const batch = progressMessages.splice(0, 3).join("\n")
-                    void sdk.client.session.prompt({
-                      sessionID,
-                      ...selectedModel,
-                      messageID: MessageID.ascending(),
-                      agent: agent.name,
-                      model: selectedModel,
-                      variant,
-                      parts: [{ id: PartID.ascending(), type: "text" as const, text: batch }],
-                    })
-                  }
-                },
-              })
-              if (progressMessages.length > 0) {
-                void sdk.client.session.prompt({
-                  sessionID,
-                  ...selectedModel,
-                  messageID: MessageID.ascending(),
-                  agent: agent.name,
-                  model: selectedModel,
-                  variant,
-                  parts: [{ id: PartID.ascending(), type: "text" as const, text: progressMessages.join("\n") }],
-                })
-              }
-              const output = formatFindingsSummary(result.allFindings, result.engagementId, intent.target)
-              void sdk.client.session.prompt({
-                sessionID,
-                ...selectedModel,
-                messageID: MessageID.ascending(),
-                agent: agent.name,
-                model: selectedModel,
-                variant,
-                parts: [{ id: PartID.ascending(), type: "text" as const, text: output }],
+                mode: intent.useLLM ? "assess" : "recon",
+                model: `${selectedModel.providerID}/${selectedModel.modelID}`,
               })
             } catch (err) {
-              const errMsg = err instanceof Error ? err.message : String(err)
-              void sdk.client.session.prompt({
-                sessionID,
-                ...selectedModel,
-                messageID: MessageID.ascending(),
-                agent: agent.name,
-                model: selectedModel,
-                variant,
-                parts: [{ id: PartID.ascending(), type: "text" as const, text: `**Assessment Error:** ${errMsg}` }],
+              toast.show({
+                variant: "error",
+                title: "Assessment Error",
+                message: err instanceof Error ? err.message : String(err),
               })
             }
           })()
