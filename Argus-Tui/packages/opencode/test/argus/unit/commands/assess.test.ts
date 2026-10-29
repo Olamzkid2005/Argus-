@@ -187,11 +187,12 @@ describe("assessCommand", () => {
     expect(result.engagementId).toBe("eng-42")
   })
 
-  test("handles empty target string gracefully", async () => {
+  test("rejects an empty target before launching the runner", async () => {
     mockRun.mockResolvedValue(makeEmptyResult())
     const { assessCommand } = await import("../../../../src/argus/commands/assess")
 
-    await expect(assessCommand("")).resolves.toBeDefined()
+    await expect(assessCommand("")).rejects.toThrow("authorized target")
+    expect(mockRun).not.toHaveBeenCalled()
   })
 
   test("passes verbose option to WorkflowRunner", async () => {

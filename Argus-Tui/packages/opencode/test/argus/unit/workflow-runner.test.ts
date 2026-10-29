@@ -249,6 +249,23 @@ describe("formatFindingsSummary", () => {
     expect(result.engagementId).toBe("ENG-test-001")
   })
 
+  test("a cooperative stop skips remaining phases and reports stopped", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { mockEngagementStore, mockExecutor, deps } = makeDeps()
+
+    const runner = new WorkflowRunner(deps)
+    const result = await runner.run({ target: "https://example.com", shouldStop: () => true })
+
+    expect(mockExecutor.execute).not.toHaveBeenCalled()
+    expect(result.stopped).toBe(true)
+    expect(result.success).toBe(false)
+    expect(mockEngagementStore.updateStatus).toHaveBeenCalledWith("ENG-test-001", "PAUSED")
+    expect(mockEngagementStore.savePhase).toHaveBeenCalledWith(
+      "ENG-test-001",
+      expect.objectContaining({ status: "SKIPPED" }),
+    )
+  })
+
   // Step 2 acceptance: an autonomous run refused by the scope guard must fail
   // before any phase executes, and must not leave the engagement reading RUNNING.
   test("autonomous scope refusal marks the engagement FAILED and runs no phase", async () => {
