@@ -23,7 +23,26 @@
 
 import { navigateTo } from "./tui/navigator"
 import { MCP_WORKER_PATH } from "./shared/path"
+import { parseAssessmentArgs, type AssessmentRequest } from "./assessment/service"
 import type { ToolDefinition } from "./bridge/types"
+
+type AssessmentLauncher = (request: AssessmentRequest) => Promise<import("./tui/assessment-run").TuiAssessmentOutcome>
+
+// Kept lazy so CLI help does not load the whole workflow runner.
+const defaultAssessmentLauncher: AssessmentLauncher = async (request) => {
+  const { runTuiAssessment } = await import("./tui/assessment-run")
+  return runTuiAssessment(request)
+}
+
+/**
+ * Test seam: assess/recon handlers launch through the shared assessment
+ * service. Tests inject a fake so they never start a real workflow.
+ */
+let assessmentLauncher = defaultAssessmentLauncher
+
+export function setAssessmentLauncher(launcher: AssessmentLauncher | undefined): void {
+  assessmentLauncher = launcher ?? defaultAssessmentLauncher
+}
 
 export interface ArgusTuiCommand {
   /** Unique command name (without leading /) */
@@ -48,21 +67,11 @@ const commands: ArgusTuiCommand[] = [
     slashes: ["assess", "scan"],
     needsTarget: true,
     handler: async (args: string) => {
-      // Parse flags from the argument string
-      // e.g., /assess https://target.com --no-cache
-      const parts = args.trim().split(/\s+/)
-      const target = parts.find(p => !p.startsWith("--"))
+      const { target, cacheMode } = parseAssessmentArgs(args)
       if (!target) return "Usage: /assess <target> [--no-cache] [--refresh-cache]"
-      const noCache = parts.includes("--no-cache")
-      const refreshCache = parts.includes("--refresh-cache")
-      const { assessCommand } = await import("./commands/assess")
-      const result = await assessCommand(target, {
-        useLLM: true,
-        cacheMode: noCache ? "no_cache" : refreshCache ? "refresh" : undefined,
-        writeReport: false, // TUI manages its own output — don't write raw markdown to stdout
-      })
-      if (!result.success) throw new Error(result.error ?? "Assessment failed")
-      return `Assessment completed against ${target}${noCache ? " (no cache)" : refreshCache ? " (refresh cache)" : ""}`
+      const outcome = await assessmentLauncher({ target, mode: "assess", cacheMode })
+      if (!outcome.result.success) throw new Error(outcome.result.error ?? "Assessment failed")
+      return `Assessment completed against ${target}${cacheMode === "no_cache" ? " (no cache)" : cacheMode === "refresh" ? " (refresh cache)" : ""}`
     },
   },
   {
@@ -94,19 +103,24 @@ const commands: ArgusTuiCommand[] = [
     slashes: ["recon"],
     needsTarget: true,
     handler: async (args: string) => {
-      const parts = args.trim().split(/\s+/)
-      const target = parts.find(p => !p.startsWith("--"))
+      const { target, cacheMode } = parseAssessmentArgs(args)
       if (!target) return "Usage: /recon <target> [--no-cache] [--refresh-cache]"
-      const noCache = parts.includes("--no-cache")
-      const refreshCache = parts.includes("--refresh-cache")
-      const { assessCommand } = await import("./commands/assess")
-      const result = await assessCommand(target, {
-        useLLM: false,
-        cacheMode: noCache ? "no_cache" : refreshCache ? "refresh" : undefined,
-        writeReport: false, // TUI manages its own output
-      })
-      if (!result.success) throw new Error(result.error ?? "Recon failed")
-      return `Recon completed against ${target}${noCache ? " (no cache)" : refreshCache ? " (refresh cache)" : ""}`
+      const outcome = await assessmentLauncher({ target, mode: "recon", cacheMode })
+      if (!outcome.result.success) throw new Error(outcome.result.error ?? "Recon failed")
+      return `Recon completed against ${target}${cacheMode === "no_cache" ? " (no cache)" : cacheMode === "refresh" ? " (refresh cache)" : ""}`
+    },
+  },
+  {
+    name: "stop",
+    title: "Stop the running assessment",
+    description: "Request a cooperative stop at the next phase boundary",
+    slashes: ["stop"],
+    needsTarget: false,
+    handler: async () => {
+      const { requestAssessmentStop } = await import("./tui/assessment-run")
+      return requestAssessmentStop()
+        ? "Stop requested — the current phase finishes, then Argus stops."
+        : "No assessment is running."
     },
   },
   {
