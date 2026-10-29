@@ -14,6 +14,7 @@ class AgentResult:
         error: str = "",
         duration_ms: int = 0,
         findings: list = None,
+        retryable: bool | None = None,
     ):
         self.tool = tool
         self.success = success
@@ -21,6 +22,9 @@ class AgentResult:
         self.error = error
         self.duration_ms = duration_ms
         self.findings = findings or []
+        # None means "decide from the failure message"; False means the call was
+        # rejected before it ran (invalid arguments), so retrying is pointless.
+        self.retryable = retryable
 
     def to_dict(self) -> dict:
         return {

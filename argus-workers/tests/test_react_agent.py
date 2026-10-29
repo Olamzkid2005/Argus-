@@ -409,3 +409,109 @@ class TestTriedToolEnforcement:
         assert action.tool == "nuclei"
         assert action.source == "llm"
         assert agent._llm_failure_count == 0
+
+
+# ── Plan 2.1: canonical dispatch and non-retryable schema errors ──────
+
+
+class _RecordingRunner:
+    """Minimal ToolRunner stand-in that records the argv it receives."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, list[str]]] = []
+
+    def run(self, tool, args, timeout=180, cache_mode=None):
+        self.calls.append((tool, list(args)))
+        from agent.agent_result import AgentResult
+
+        return AgentResult(tool=tool, success=True, output="ok")
+
+
+class TestPhaseFactoryDispatch:
+    """The phase factory must dispatch like a live agent, not a weaker copy."""
+
+    def test_scan_agent_registers_login_and_register(self):
+        """They are internal tools, but the factory still has to expose them."""
+        agent = ReActAgent.create_for_phase("scan", tool_runner=_RecordingRunner())
+
+        assert agent.registry.get_tool("login") is not None
+        assert agent.registry.get_tool("register") is not None
+        assert agent.registry.get_tool("arjun") is not None
+
+    def test_named_parameters_reach_the_runner_as_declared_flags(self):
+        """`threads` used to be validated and then dropped before execution."""
+        runner = _RecordingRunner()
+        agent = ReActAgent.create_for_phase("scan", tool_runner=runner)
+
+        result = agent._execute_with_recovery(
+            AgentAction(
+                tool="arjun",
+                arguments={"target": "http://lab.local/login", "threads": 20},
+            )
+        )
+
+        assert result.success is True
+        assert runner.calls == [
+            ("arjun", ["-m", "GET", "-u", "http://lab.local/login", "-t", "20"])
+        ]
+
+
+class _CountingRegistry(ToolRegistry):
+    def __init__(self):
+        super().__init__()
+        self.attempts = 0
+
+    def call(self, name, **kwargs):
+        self.attempts += 1
+        return super().call(name, **kwargs)
+
+
+class TestInvalidArgumentsDoNotRetry:
+    """A rejected parameter is not transient, whatever words it contains."""
+
+    def _agent(self):
+        registry = _CountingRegistry()
+        executed: list[dict] = []
+
+        def tool_fn(**kwargs):
+            executed.append(kwargs)
+            from agent.agent_result import AgentResult
+
+            return AgentResult(tool="arjun", success=True)
+
+        registry.register(
+            "arjun",
+            tool_fn,
+            {
+                "name": "arjun",
+                "parameters": [
+                    {"name": "target", "required": True},
+                    {"name": "threads", "required": False},
+                ],
+            },
+        )
+        return ReActAgent(registry), registry, executed
+
+    def test_unknown_parameter_with_a_retryable_word_runs_once(self):
+        """`connection_timeout` reads like a transient error but is a schema error."""
+        agent, registry, executed = self._agent()
+
+        result = agent._execute_with_recovery(
+            AgentAction(
+                tool="arjun",
+                arguments={"target": "http://lab.local", "connection_timeout": 5},
+            )
+        )
+
+        assert executed == []
+        assert registry.attempts == 1
+        assert result.success is False
+        assert result.error.startswith("Invalid arguments")
+
+    def test_the_registry_marks_validation_failures_non_retryable(self):
+        _agent, registry, _executed = self._agent()
+
+        result = registry.call("arjun", target="http://lab.local", bogus="x")
+
+        assert result.retryable is False
+        assert result.error.startswith("Invalid arguments")

@@ -100,15 +100,47 @@ class ToolRegistry:
                     f"Tool '{name}' parameter '{pname}' value {value} below min {min_val}"
                 )
 
-    def call(self, name: str, **kwargs) -> AgentResult:
-        """Call a tool function by name with arguments."""
+    def call(self, name: str, timeout: float | None = None, **kwargs) -> AgentResult:
+        """Call a tool function by name with arguments.
+
+        ``timeout`` is the execution timeout, not a tool parameter. It stayed in
+        ``kwargs`` before, so schema validation rejected every call with
+        ``received unknown parameter 'timeout'`` — an error that mentions a
+        retryable word and therefore burned all retries on arguments the tool
+        never got. A tool that declares its own ``timeout`` parameter still
+        receives the value as an argument.
+        """
         start = time.time()
         func = self._tools.get(name)
         if not func:
             return AgentResult(tool=name, success=False, error=f"Unknown tool: {name}")
+
+        metadata_parameters = self._tool_metadata.get(name, {}).get("parameters", [])
+        if timeout is not None and any(
+            p.get("name") == "timeout" for p in metadata_parameters
+        ):
+            kwargs["timeout"] = timeout
+            timeout = None
+
         try:
             self._validate_arguments(name, kwargs)
-            result = func(**kwargs)
+        except ValueError as e:
+            # The call never reached the tool. Retrying cannot change a
+            # parameter that does not exist or is over its limit, and the
+            # message alone must not decide that: a rejected name such as
+            # `connection_timeout` reads like a transient failure.
+            return AgentResult(
+                tool=name,
+                success=False,
+                error=f"Invalid arguments: {e}",
+                duration_ms=int((time.time() - start) * 1000),
+                retryable=False,
+            )
+        call_kwargs = dict(kwargs)
+        if timeout is not None:
+            call_kwargs["timeout"] = timeout
+        try:
+            result = func(**call_kwargs)
             duration = int((time.time() - start) * 1000)
             if isinstance(result, AgentResult):
                 result.duration_ms = duration

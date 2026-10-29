@@ -46,6 +46,7 @@ from .agent_prompts import (
     build_tool_selection_prompt,
 )
 from .agent_result import AgentResult
+from .tool_arguments import build_tool_argv
 from .tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -147,65 +148,6 @@ class ReActAgent:
             Configured ReActAgent
         """
         registry = ToolRegistry()
-        cls._ensure_phase_tools()
-        phase_tools = cls.PHASE_TOOLS.get(phase, [])
-
-        if tool_runner:
-            try:
-                from tool_definitions import TOOLS
-            except ImportError:
-                TOOLS = {}
-
-            for tool_name in phase_tools:
-                # register and login are agent-internal tools, not external binaries.
-                # They are registered in set_tool_runner() which has access to self.
-                if tool_name in ("register", "login"):
-                    continue
-
-                def make_runner(tn):
-                    def run_tool(target: str = "", **kwargs):
-                        args = kwargs.pop("args", [])
-                        timeout = kwargs.pop("timeout", 300)
-                        if target:
-                            args = [target] + (args or [])
-                        return tool_runner.run(tn, args, timeout=timeout)
-
-                    run_tool.__name__ = tn
-                    return run_tool
-
-                tool_def = TOOLS.get(tool_name)
-                if tool_def:
-                    description = tool_def.description
-                    try:
-                        parameters = [
-                            {
-                                "name": p.name,
-                                "description": p.description,
-                                "required": p.required,
-                            }
-                            for p in tool_def.parameters
-                        ]
-                    except Exception:
-                        parameters = []
-                else:
-                    description = f"Security tool: {tool_name}"
-                    parameters = [
-                        {
-                            "name": "target",
-                            "description": "Target URL or path",
-                            "required": True,
-                        }
-                    ]
-
-                registry.register(
-                    tool_name,
-                    make_runner(tool_name),
-                    {
-                        "name": tool_name,
-                        "description": description,
-                        "parameters": parameters,
-                    },
-                )
 
         agent = cls(
             registry,
@@ -219,6 +161,13 @@ class ReActAgent:
             engagement_state=engagement_state,
             degradation_awareness=degradation_awareness,
         )
+        # Register through the same path an existing agent uses. The phase
+        # factory used to carry a near-copy of this loop that skipped login and
+        # register (they need the agent instance for auth context) and never
+        # injected an authenticated session, so agents created here could not
+        # log in and never sent sessions to the tools that support them.
+        if tool_runner:
+            agent.set_tool_runner(tool_runner)
         return agent
 
     def __init__(
@@ -535,10 +484,13 @@ class ReActAgent:
 
             def make_runner(tn):
                 def run_tool(target: str = "", **kwargs):
-                    args = kwargs.pop("args", [])
                     timeout = kwargs.pop("timeout", 300)
-                    if target:
-                        args = [target] + (args or [])
+                    extra = kwargs.pop("args", []) or []
+                    # Named parameters the registry validated must reach the
+                    # binary as their declared flags; a bare target alone drops
+                    # them and misplaces targets that are flags (-u).
+                    args = build_tool_argv(tn, target=target, parameters=kwargs)
+                    args.extend(str(arg) for arg in extra)
                     # Inject auth context for tools that support it
                     if self._auth_context:
                         from agent.auth_injectors import inject_auth
@@ -1510,6 +1462,16 @@ Based on these findings, what capabilities should the next phase use?
                 # Tool ran but failed — check if retryable
                 error_msg = getattr(result, "error", "") or getattr(result, "stderr", "") or ""
                 last_error = error_msg[:200]
+
+                # Rejected before dispatch (schema/argument validation): the
+                # same arguments will be rejected again, so do not spend a
+                # retry — or a longer timeout — on them.
+                if getattr(result, "retryable", None) is False:
+                    logger.warning(
+                        "Tool '%s' rejected its arguments (not retryable): %s",
+                        tool, last_error[:120],
+                    )
+                    return AgentResult(tool=tool, success=False, error=last_error)
 
                 if attempt >= max_retries:
                     logger.warning(
