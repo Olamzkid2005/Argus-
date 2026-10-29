@@ -3,12 +3,12 @@ import { existsSync, readFileSync, readdirSync } from "fs"
 import { join, resolve } from "path"
 import { homedir } from "os"
 import { StoragePaths } from "../storage/paths"
-import { spawn, execFile, execFileSync } from "child_process"
+import { spawn, execFileSync } from "child_process"
 import { connect as tcpConnect } from "net"
 import { xdgData } from "xdg-basedir"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
-import { WorkersBridge } from "../bridge/mcp-client"
+import { WorkersBridge, resolveDefaultPython } from "../bridge/mcp-client"
 import { PROJECT_ROOT } from "../shared/path"
 import { ToolRegistry } from "../workflows/tool-registry"
 import { LLMPlannerService } from "../planner/llm-service"
@@ -99,27 +99,28 @@ function runtimeCheck(): CheckResult {
 }
 
 async function pythonCheck(pythonPath?: string): Promise<CheckResult> {
-  const pys = pythonPath ? [pythonPath] : ["python3", "python"]
+  // Check exactly the interpreter the worker bridge will spawn, not a separate
+  // search order — a passing check on a different Python proves nothing about
+  // the one that has to import the worker's dependencies.
+  const py = pythonPath ?? resolveDefaultPython()
 
-  for (const py of pys) {
-    try {
-      const version = await execCapture(py, ["--version"])
-      if (version) {
-        return {
-          name: "Python Runtime",
-          status: "PASS",
-          message: `${version.trim()} (via ${py})`,
-        }
+  try {
+    const version = await execCapture(py, ["--version"])
+    if (version) {
+      return {
+        name: "Python Runtime",
+        status: "PASS",
+        message: `${version.trim()} (via ${py})`,
       }
-    } catch (error) {
-      process.stderr.write(`[doctor] python check failed for ${py}: ${(error as Error).message}\n`)
     }
+  } catch (error) {
+    process.stderr.write(`[doctor] python check failed for ${py}: ${(error as Error).message}\n`)
   }
 
   return {
     name: "Python Runtime",
     status: "FAIL",
-    message: "No Python runtime found. Set ARGUS_PYTHON env var or install python3.",
+    message: `No usable Python runtime at ${py}. Set ARGUS_PYTHON or install python3.`,
   }
 }
 
@@ -142,20 +143,22 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
     }
   }
 
-  const py = pythonPath ?? (await resolvePython())
+  const py = pythonPath ?? resolveDefaultPython()
   const bridge = new WorkersBridge(wp, py)
-  let connected = false
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
     // Timeout the MCP connect/health check at 10s — Python worker startup
     // can hang if the interpreter or worker script has issues.
+    const connected = bridge.connect().then(async () => bridge.isHealthy())
+    // The losing side of the race still settles (or rejects) after we stop
+    // awaiting it; swallow it so a timed-out connect cannot surface as an
+    // unhandled rejection.
+    connected.catch(() => {})
     await Promise.race([
-      bridge.connect().then(async () => {
-        connected = true
-        return bridge.isHealthy()
+      connected,
+      new Promise<boolean>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("MCP worker connect timed out after 10s")), 10000)
       }),
-      new Promise<boolean>((_, reject) =>
-        setTimeout(() => reject(new Error("MCP worker connect timed out after 10s")), 10000),
-      ),
     ])
     return {
       name: "MCP Worker",
@@ -169,7 +172,11 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
       message: `Worker error: ${(error as Error).message}`,
     }
   } finally {
-    if (connected) await bridge.disconnect()
+    if (timer) clearTimeout(timer)
+    // Always tear down, even when connect never resolved: the spawned worker's
+    // stdio pipes keep the process alive, so a timed-out health check would
+    // otherwise leave `argus doctor` hanging forever.
+    await bridge.disconnect().catch(() => {})
   }
 }
 
@@ -494,38 +501,6 @@ function configValidationCheck(): CheckResult {
   }
 }
 
-async function resolvePython(): Promise<string> {
-  // Task 0.6: Check ARGUS_PYTHON env var first for explicit override
-  const envPython = process.env.ARGUS_PYTHON
-  if (envPython) {
-    try {
-      execFileSync(envPython, ["--version"], { encoding: "utf-8", timeout: 5000, stdio: "ignore" })
-      return envPython
-    } catch {
-      process.stderr.write(`[doctor] ARGUS_PYTHON=${envPython} specified but not found — falling back to auto-detection\n`)
-    }
-  }
-
-  // Cross-platform discovery: try platform-specific names first
-  // Use execFileSync (synchronous) for fast python detection — it's a startup
-  // check and the sync call avoids async process spawn overhead.
-  const candidates: string[] = []
-  if (process.platform === "win32") {
-    candidates.push("python", "python3", "py")
-  } else if (process.platform === "darwin") {
-    candidates.push("python3", "python3.12", "python3.11", "python")
-  } else {
-    candidates.push("python3", "python", "python3.12", "python3.11")
-  }
-
-  for (const py of candidates) {
-    try {
-      execFileSync(py, ["--version"], { encoding: "utf-8", timeout: 3000, stdio: "ignore" })
-      return py
-    } catch {}
-  }
-  return "python3"
-}
 
 function credCheck(): CheckResult {
   const credStore = new CredentialStore()
