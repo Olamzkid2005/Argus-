@@ -72,7 +72,7 @@ Each numbered package is one focused change. Split it further if implementation 
 
 Work in this order; each task has its own acceptance evidence. Completing launcher work does not complete Stage 1 or authorize a scan.
 
-**Progress (2026-10-29):** tasks 1–3 have passing automated evidence; task 4 is implemented but its automated PTY gate is slow/flaky (manual terminal proof only); tasks 5–7 are done with passing tests (success, failure, partial, duplicate, and cooperative stop); task 8 checkpoint stays open because `/doctor` in an isolated worker environment is unverified. Launcher completion is not Stage 1 completion and does not authorize a scan.
+**Progress (2026-10-29):** tasks 1–3 and 5–8 have passing automated evidence. Task 4 is implemented but its automated PTY gate is slow/flaky (manual terminal proof only). Checkpoint 1 is met: launcher/handler tests and typecheck pass, and `/doctor` was verified in an isolated worker environment. Launcher completion is not Stage 1 completion and does not authorize a scan.
 
 1. **Launcher routing:** add a regression showing bare `argus` selects the full-screen default TUI, not `run --interactive`; preserve caller cwd, Argus mode, and TUI options such as `--model`. **Done — see 1.1 evidence.**
 2. **Foreground lifecycle:** test and implement signal forwarding, failed spawn/nonzero child status propagation, and listener cleanup at both launcher layers. Keep CLI help and existing assessment/report/resume/doctor commands on their current command path. **Done — see 1.1 evidence.**
@@ -81,7 +81,7 @@ Work in this order; each task has its own acceptance evidence. Completing launch
 5. **One assessment service:** replace duplicated slash/natural-language launch branches with one policy/service boundary; preserve model, credential references, cache mode, engagement identity, and limits. Tests assert exactly one runner invocation.
 6. **Typed UI progress:** send structured events to the scan store/dashboard, never scanner output to `session.prompt`; test that assessment traffic cannot invoke the coding agent.
 7. **Truthful results and stop:** render failed/partial outcomes as such, preserve persisted state, and wire graceful stop. Tests cover success, failure, partial result, duplicate submission, and cancellation using a controlled runner. **Done — see 1.2 evidence.**
-8. **Stage 1 checkpoint:** run relevant handler/launcher tests and package typecheck; verify `/doctor` in an explicitly approved isolated worker environment. Keep the checkpoint open until all evidence is recorded. **Open:** launcher tests and package typecheck pass, but `/doctor` in an isolated worker environment is not yet verified.
+8. **Stage 1 checkpoint:** run relevant handler/launcher tests and package typecheck; verify `/doctor` in an explicitly approved isolated worker environment. **Done — see 1.3 evidence.**
 
 #### 1.1 Make bare `argus` enter the assessment-capable TUI
 
@@ -102,7 +102,7 @@ Evidence commands and results (from `Argus-Tui/packages/opencode/`):
 
 **Operator terminal proof.** With `~/.bun/bin/argus` symlinked to `Argus-Tui/packages/opencode/bin/argus` (user-approved, user-level only — no package install and no shell-profile change), typing bare `argus` from `$HOME` opened the branded home TUI: ARGUS logo, “Operational”, Quick Actions including `/assess <target>`, all-green System Status, and the “Ask anything…” prompt.
 
-**Not yet evidenced.** The automated real-PTY gate (`test/argus/e2e/launcher.test.ts`) is slow/flaky on a loaded machine — cold start measured at ~24s idle and past 180s under load, and Bun's PTY never answers terminal capability queries — so it is not currently a reliable pass; the deterministic prompt assertion lives in the in-process `app-lifecycle` test. `/doctor` in an isolated worker environment is unverified, and Stage 1.2 is untouched. **Checkpoint 1 therefore stays open.**
+**Not yet evidenced.** The automated real-PTY gate (`test/argus/e2e/launcher.test.ts`) is slow/flaky on a loaded machine — cold start measured at ~24s idle and past 180s under load, and Bun's PTY never answers terminal capability queries — so it is not currently a reliable pass; the deterministic prompt assertion lives in the in-process `app-lifecycle` test. §1.3 records the `/doctor` isolation proof.
 
 **Likely files:** `Argus-Tui/packages/opencode/bin/argus`, `src/argus/index.ts`, `src/index.ts`, `src/cli/cmd/tui/thread.ts`; launcher tests.
 
@@ -126,9 +126,25 @@ Evidence commands (from `Argus-Tui/packages/opencode/`):
 
 Truthfulness and stop: the adapter classifies each run as `completed`, `partial`, `stopped`, or `failed`. A phase error or a `PARTIAL` phase makes the overall status `partial`; a cooperative stop sets `WorkflowRunResult.stopped`, marks remaining phase records `SKIPPED`, moves the engagement to `PAUSED`, and is never reported as success. `/stop` calls `requestAssessmentStop()`; the runner checks `options.shouldStop()` at each phase boundary. Duplicate submissions for the same target join the in-flight run instead of starting a second engagement.
 
-**Not yet evidenced.** No component-level mount test exercises the prompt's slash/NL dispatch itself. Cancellation is cooperative at phase boundaries — it does not yet abort an in-flight tool or kill its process group (Stage 6.2). `/doctor` in an isolated worker environment is still unverified, so **Checkpoint 1 stays open**.
+**Not yet evidenced.** No component-level mount test exercises the prompt's slash/NL dispatch itself. Cancellation is cooperative at phase boundaries — it does not yet abort an in-flight tool or kill its process group (Stage 6.2).
 
-**Checkpoint 1:** `argus` opens the correct interface, `/doctor` works, and a stubbed assessment cannot falsely display success. Do not run live scans yet.
+#### 1.3 Prove `/doctor` in an isolated worker environment
+
+**Evidence (2026-10-29).** Running the real `argus doctor` under an isolated `HOME`/XDG tree (no credentials, no provider registry) exposed two defects that the in-process tests could not see, both now fixed:
+
+- **The check used a different Python than the worker.** `commands/doctor.ts` carried its own interpreter search (bare `python3`), while `WorkersBridge` resolves `ARGUS_PYTHON` → repo virtualenv → `python3`. The doctor therefore spawned the worker with the system interpreter and reported `MCP Worker: FAIL — timed out after 10s` while the traceback showed `ModuleNotFoundError: psycopg2`, even though `argus-workers/venv` had the dependency. `pythonCheck`/`mcpCheck` now both use the bridge's `resolveDefaultPython()`, so the check describes exactly the interpreter the worker will spawn. In the isolated run the worker now starts: `✓ [MCP Worker] Worker responding via stdio JSON-RPC`.
+- **The CLI never exited.** Reading the planner's model boots OpenCode's runtime for the provider registry; that runtime owns long-lived watchers/timers, so `argus doctor` printed all checks and the summary and then hung until killed. `src/argus/index.ts` now flushes stdout/stderr and exits with the command's status once a one-shot command returns (bare `argus` still returns to the child TUI unchanged).
+
+Isolated-environment result (fresh temp `HOME`, `ARGUS_DATA_DIR`, `XDG_*`, `OPENCODE_AUTH_CONTENT={}`; worker deps present only in the repo venv): exit 0 after 27s, `7 passed, 6 warnings, 0 failed`; the warnings are the expected unconfigured Redis/credentials/provider entries and a `trivy` version floor. Lookups that are genuinely absent fail loudly (`MCP Worker` FAIL with the worker's stderr) rather than silently passing.
+
+Evidence commands (from `Argus-Tui/packages/opencode/`):
+
+- `bun test ./test/argus/e2e/cli-doctor.test.ts --timeout 150000` — 1 pass / 0 fail (28.5s). Spawns the real binary in an isolated home, asserts the run reaches its summary line, exits within budget (the pre-fix behavior is a hang), and reports `(via <resolveDefaultPython()>)`.
+- `bun test ./test/argus/integration/doctor-flow.test.ts --timeout 60000` — 15 pass / 0 fail.
+- `bun test ./test/argus/unit/launcher.test.ts ./test/cli/tui/thread.test.ts ./test/cli/tui/app-lifecycle.test.ts --timeout 60000` — 17 pass / 0 fail.
+- `bun run typecheck` — passes.
+
+**Checkpoint 1 (met 2026-10-29):** `argus` opens the correct interface, `/doctor` works in an isolated worker environment, and a stubbed assessment cannot falsely display success. The real-PTY automation remains a manual gate (§1.1). Do not run live scans yet.
 
 ### Stage 2 — Correct execution across the boundary
 
