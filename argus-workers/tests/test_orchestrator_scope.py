@@ -95,7 +95,16 @@ class TestOrchestratorScope:
     @pytest.fixture
     def orchestrator(self):
         """Create a minimal Orchestrator instance with patched dependencies."""
-        return Orchestrator(engagement_id="eng-test-scope-1", trace_id="trace-scope-1")
+        # Import here (not at module top): test_orchestrator_verification pops
+        # ``orchestrator_pkg.orchestrator`` from sys.modules at collection time,
+        # so a module-level binding can point at a stale module instance while
+        # test-time patch() targets resolve to the current one. Resolving both
+        # at test time keeps the class and its patches on one instance.
+        from orchestrator_pkg.orchestrator import Orchestrator as _LiveOrchestrator
+
+        return _LiveOrchestrator(
+            engagement_id="eng-test-scope-1", trace_id="trace-scope-1"
+        )
 
     def test_run_scan_sets_scope_mode_from_job(self, orchestrator):
         """run_scan() sets self.scope_mode from job['scope']['mode']."""

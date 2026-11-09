@@ -1,5 +1,7 @@
 """Tests for agent.react_agent — Category: class"""
 
+import os
+
 import pytest
 
 from agent.agent_action import AgentAction
@@ -430,7 +432,28 @@ class _RecordingRunner:
 class TestPhaseFactoryDispatch:
     """The phase factory must dispatch like a live agent, not a weaker copy."""
 
-    def test_scan_agent_registers_login_and_register(self):
+    @pytest.fixture
+    def _arjun_stub_on_path(self, tmp_path, monkeypatch):
+        """Provide an executable `arjun` stub so SSOT availability filtering
+
+        (which checks the real PATH) keeps the scan-phase tool registered.
+        The `_RecordingRunner` never executes anything, so the stub only
+        needs to exist and be executable — no real binary required. The
+        phase-tools cache is rebuilt around the stub to stay hermetic under
+        random test ordering."""
+        stub = tmp_path / "arjun"
+        stub.write_text("#!/bin/sh\nexit 0\n")
+        stub.chmod(0o755)
+        monkeypatch.setenv(
+            "PATH", str(tmp_path) + os.pathsep + os.environ.get("PATH", "")
+        )
+        ReActAgent._phase_tools_loaded = False
+        ReActAgent.PHASE_TOOLS = {}
+        yield
+        ReActAgent._phase_tools_loaded = False
+        ReActAgent.PHASE_TOOLS = {}
+
+    def test_scan_agent_registers_login_and_register(self, _arjun_stub_on_path):
         """They are internal tools, but the factory still has to expose them."""
         agent = ReActAgent.create_for_phase("scan", tool_runner=_RecordingRunner())
 
@@ -438,7 +461,9 @@ class TestPhaseFactoryDispatch:
         assert agent.registry.get_tool("register") is not None
         assert agent.registry.get_tool("arjun") is not None
 
-    def test_named_parameters_reach_the_runner_as_declared_flags(self):
+    def test_named_parameters_reach_the_runner_as_declared_flags(
+        self, _arjun_stub_on_path
+    ):
         """`threads` used to be validated and then dropped before execution."""
         runner = _RecordingRunner()
         agent = ReActAgent.create_for_phase("scan", tool_runner=runner)

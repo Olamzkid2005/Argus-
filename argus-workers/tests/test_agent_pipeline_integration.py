@@ -126,7 +126,6 @@ class TestFullAgentScan:
             f"Expected 2 tools, got {len(called_tools)}: {called_tools}"
         )
 
-    @pytest.mark.xfail(reason="Requires LLM", strict=False)
     def test_full_agent_scan_fallback_on_llm_error(self, tool_registry, recon_context):
         """When LLM errors, all deterministic phase tools (that are registered) should be called."""
         mock_llm = Mock()
@@ -225,7 +224,6 @@ class TestFullAgentScan:
 class TestAgentFallbackRegression:
     """Regression tests: system behaves identically when agent mode is off."""
 
-    @pytest.mark.xfail(reason="Requires LLM", strict=False)
     def test_no_llm_client_uses_deterministic(self, tool_registry):
         """With no LLM client, deterministic path should run all registered phase tools."""
         agent = ReActAgent(tool_registry, llm_client=None, phase="scan")
@@ -235,7 +233,6 @@ class TestAgentFallbackRegression:
             f"Expected {registered} registered tools, got {len(results)}"
         )
 
-    @pytest.mark.xfail(reason="Requires LLM", strict=False)
     def test_agent_mode_false_bypasses_llm(self, tool_registry, recon_context):
         """When agent_mode is conceptually False (no llm_client), skip LLM."""
         agent = ReActAgent(tool_registry, llm_client=None, phase="scan")

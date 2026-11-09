@@ -1766,12 +1766,19 @@ class MCPServer:
             )
             return {"done": True, "session_id": session_id}
 
-        # Normal case: advance through the plan
+        # Normal case: advance through the plan. This is the single
+        # advancement owner (2.2): only `agent_next` consumes a plan step.
+        # `agent_observe` records the result and acknowledges it without
+        # advancing, so the driver must call `agent_next` again for the
+        # following action.
         advanced = self.session_store.advance_plan_with_source(session_id)
         if advanced:
             next_tool, step_source = advanced
             self._record_plan_step(
                 session, next_tool, current_iteration, step_source
+            )
+            action_id = self.session_store.record_issued_action(
+                session_id, next_tool
             )
             reasoning = (
                 "Engine-chosen plan step"
@@ -1779,9 +1786,16 @@ class MCPServer:
                 else "Deterministic plan step"
             )
             return {
+                "action_id": action_id,
                 "tool": next_tool,
+                # Validated arguments reach the runner unchanged except this
+                # documented normalization: the target comes from the session
+                # the driver authorized, never from model free-text.
+                "arguments": {"target": session.target},
                 "session_id": session_id,
+                "engagement_id": getattr(session, "engagement_id", "") or "",
                 "reasoning": reasoning,
+                "provenance": step_source,
                 "done": False,
                 "iteration": current_iteration,
             }
@@ -1803,10 +1817,17 @@ class MCPServer:
                 self._record_plan_step(
                     session, next_tool, current_iteration, step_source
                 )
+                action_id = self.session_store.record_issued_action(
+                    session_id, next_tool
+                )
                 return {
+                    "action_id": action_id,
                     "tool": next_tool,
+                    "arguments": {"target": session.target},
                     "session_id": session_id,
+                    "engagement_id": getattr(session, "engagement_id", "") or "",
                     "reasoning": new_plan.get("reasoning", "Re-plan after trigger"),
+                    "provenance": step_source,
                     "done": False,
                 }
 
@@ -1937,7 +1958,14 @@ class MCPServer:
         }
 
     def handle_agent_observe(self, params: dict) -> dict:
-        """Record tool execution result and decide next action.
+        """Record a tool execution result and acknowledge it.
+
+        Single-advancement-owner protocol (2.2): this method records the
+        observation and returns an acknowledgement. It never consumes another
+        plan step — the driver calls `agent_next` for the following action,
+        so an observation can no longer silently skip the middle action.
+        An explicit but unknown `action_id` (or a tool mismatching the
+        outstanding action) is rejected instead of recorded.
 
         If the session was cancelled (via cancel RPC), skips recording
         and returns done=True immediately (blocker 38).
@@ -1954,9 +1982,28 @@ class MCPServer:
             logger.info("Session %s was cancelled — returning done=True", session_id)
             return {"done": True, "session_id": session_id}
 
+        action_error = self.session_store.validate_observed_action(
+            session_id, params.get("action_id"), params.get("tool")
+        )
+        if action_error:
+            return {
+                "error": action_error,
+                "recorded": False,
+                "session_id": session_id,
+                "done": False,
+            }
+
+        observed_arguments = params.get("arguments", {})
+        if not isinstance(observed_arguments, dict):
+            return {
+                "error": "Invalid arguments: observation arguments must be an object",
+                "recorded": False,
+                "session_id": session_id,
+                "done": False,
+            }
         execution = ToolExecution(
             tool=params.get("tool", ""),
-            arguments=params.get("arguments", {}),
+            arguments=observed_arguments,
             reasoning=params.get("reasoning", ""),
             success=params.get("success", False),
             duration_ms=params.get("durationMs", 0),
@@ -1969,16 +2016,14 @@ class MCPServer:
         # Increment shared TS/Python iteration counter (blocker 32)
         iteration = self.session_store.increment_iteration(session_id)
 
-        # Check if we need to involve the LLM
-        trigger = None
-        if not params.get("success", True):
-            trigger = "stuck"
-        elif params.get("findingCount", 0) > 0:
-            trigger = "new_finding"
-
-        next_result = self.handle_agent_next({"session_id": session_id, "trigger": trigger})
-        next_result["iteration"] = iteration
-        return next_result
+        return {
+            "recorded": True,
+            "session_id": session_id,
+            "engagement_id": getattr(session, "engagement_id", "") or "",
+            "action_id": params.get("action_id", ""),
+            "iteration": iteration,
+            "done": False,
+        }
 
     def handle_phase_complete(self, params: dict) -> dict:
         """Receive all findings from a completed phase and determine next capabilities.

@@ -20,6 +20,35 @@ type AgentInitLlm = WorkerLlmConfig
 const MAX_PARALLEL_TOOLS = 4
 
 /**
+ * 2.3: explicit per-action outcome for the hybrid (`agent_next`/`observe`)
+ * loop. Every selected action ends in exactly one terminal state so
+ * coverage accounting can distinguish "ran and found nothing"
+ * (`succeeded-empty`) from "never really ran" (`blocked`/`skipped`/).
+ * Raw stdout is never a finding — see the structured-only parsing below.
+ */
+export type HybridActionOutcome =
+  | "selected"
+  | "started"
+  | "succeeded-empty"
+  | "succeeded-with-findings"
+  | "failed"
+  | "blocked"
+  | "skipped"
+  | "timed-out"
+
+export interface HybridActionRecord {
+  actionId?: string
+  tool: string
+  capability: string
+  outcome: HybridActionOutcome
+  detail?: string
+}
+
+function isTimeoutMessage(message: string): boolean {
+  return /\btimed?-?out\b|\bETIMEDOUT\b|deadline exceeded/i.test(message)
+}
+
+/**
  * Cross-tool rate limiter — sliding window that limits requests per second
  * across ALL tools targeting a given target (blocker 44).
  * Prevents tools like nuclei (150 req/s) + ffuf (200 req/s) from
@@ -621,6 +650,26 @@ export class InProcessExecutor implements PhaseExecutor {
 
     if (execOptions.verbose) console.log(`[executor]  ${toolConfigs.length} tool(s) configured for this phase`)
 
+    // 2.3 guardrail: zero configured tools for a phase that requires
+    // capabilities (e.g. SAST/SCA with no runner present) is a failed
+    // readiness result — never a clean completion with zero findings.
+    // Existing per-step errors (e.g. `Tool X not found in registry`) are
+    // preserved first so the cause stays specific.
+    if (toolConfigs.length === 0 && phase.requiredCapabilities.length > 0) {
+      if (errors.length === 0) {
+        const missing = phase.requiredCapabilities.join(", ")
+        errors.push(`No tools configured for required capabilities (${missing}) — readiness failed, not a clean completion`)
+      }
+      return {
+        phaseId: phase.phaseId,
+        status: "failed",
+        findings,
+        artifacts: [],
+        errors,
+        durationMs: Date.now() - startTime,
+      }
+    }
+
     // Execute tools: parallel for `parallel` phases, sequential for `sequential` phases
 
     if (phase.toolExecution === "parallel") {
@@ -708,6 +757,33 @@ export class InProcessExecutor implements PhaseExecutor {
       return tools.map(t => ({ tool: t.name, capabilities: [cap] }))
     })
 
+    // 2.3 guardrail: a phase whose required capabilities resolve to no tools
+    // (absent runner — e.g. SAST/SCA with nothing registered) fails readiness
+    // here. It must never report success with zero executions.
+    if (pipeline.length === 0 && phase.requiredCapabilities.length > 0) {
+      const missing = phase.requiredCapabilities.join(", ")
+      return {
+        phaseId: phase.phaseId,
+        status: "failed",
+        findings,
+        artifacts: [],
+        errors: [`No tools registered for required capabilities (${missing}) — readiness failed, not a clean completion`],
+        durationMs: Date.now() - startTime,
+      }
+    }
+
+    // 2.3: per-action outcome ledger. Only `succeeded-*` outcomes cover the
+    // capability they ran for; `blocked`/`skipped`/failed outcomes leave a
+    // gap that forces partial/failed instead of completed.
+    const actionRecords: HybridActionRecord[] = []
+    const coveredCapabilities = new Set<string>()
+    const recordOutcome = (record: HybridActionRecord) => {
+      actionRecords.push(record)
+      if (record.outcome === "succeeded-empty" || record.outcome === "succeeded-with-findings") {
+        coveredCapabilities.add(record.capability)
+      }
+    }
+
     // 2. LLM creates plan (or deterministic default for now)
     const session = await this.bridge.agentInit({
       target: phase.target,
@@ -728,6 +804,11 @@ export class InProcessExecutor implements PhaseExecutor {
       const n = Number(raw)
       return Number.isFinite(n) && n > 0 ? n : 50
     })()
+    // 2.2/2.3: replan hint for the worker. `stuck`/`new_finding` only take
+    // effect when the plan is exhausted (bounded: one replan per exhaustion,
+    // and the loop still ends at maxIterations), so failed/skipped work stays
+    // eligible for replanning without unbounded retries.
+    let nextTrigger: "stuck" | "new_finding" | undefined = undefined
 
     while (!done) {
       if (++iterations >= maxIterations) {
@@ -739,11 +820,46 @@ export class InProcessExecutor implements PhaseExecutor {
       const next = await this.bridge.agentNext({
         session_id: session.session_id,
         max_iterations: maxIterations,
+        ...(nextTrigger ? { trigger: nextTrigger } : {}),
       })
       if (next.done || !next.tool) {
         done = true
         break
       }
+
+      // 2.2: validate the selected action before dispatch. Unknown tools
+      // (not in the registry and with no fallback for their capability) are
+      // rejected here — never executed — and reported through `observe` so
+      // the worker's audit trail shows the rejection.
+      const selectedCap = pipeline.find(p => p.tool === next.tool)?.capabilities?.[0] ?? Capability.WEB_RECON
+      const selectedDef = this.toolRegistry.getTool(next.tool)
+      const selectedFallback = selectedDef ? undefined : this.findFallbackTool(next.tool, selectedCap)
+      if (!selectedDef && !selectedFallback) {
+        const rejection = `Unknown action '${next.tool}' — no registered tool or fallback; rejected before dispatch`
+        nextTrigger = "stuck"
+        errors.push(rejection)
+        recordOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "blocked", detail: rejection })
+        await this.bridge.agentObserve({
+          session_id: session.session_id,
+          action_id: next.action_id,
+          tool: next.tool,
+          arguments: { target: phase.target },
+          reasoning: next.reasoning,
+          success: false,
+          summary: rejection,
+        })
+        continue
+      }
+
+      // 2.2: the driver-authorized target wins. The worker echoes the
+      // session target it was initialized with; if it ever disagrees with
+      // the phase target, the phase target is used and the normalization is
+      // recorded in the observation (documented normalization exception to
+      // "arguments reach the runner unchanged").
+      const plannedTarget = next.arguments?.target
+      const normalizedTargetNote = plannedTarget && plannedTarget !== phase.target
+        ? ` (planned target '${plannedTarget}' normalized to authorized '${phase.target}')`
+        : ""
 
       // 3b. Check phase timeout before executing next tool (blocker 35)
       const pto = this.checkPhaseTimeout()
@@ -763,12 +879,30 @@ export class InProcessExecutor implements PhaseExecutor {
           const fallbackResult = await this.executeTool(fallback, cap as Capability, phase, startTime, execOptions)
           findings.push(...fallbackResult.findings)
           errors.push(...fallbackResult.errors)
+          // The fallback is a different binary than the issued action, so it
+          // is observed without the outstanding action_id (which names the
+          // circuit-broken tool, observed as blocked below); the summary ties
+          // the two together for the audit trail.
+          const fallbackOutcome = fallbackResult.findings.length > 0 ? "succeeded-with-findings"
+            : fallbackResult.errors.length === 0 ? "succeeded-empty" : "failed"
+          recordOutcome({ actionId: next.action_id, tool: fallback.name, capability: cap, outcome: fallbackOutcome, detail: `fallback for ${next.tool}` })
+          recordOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: "blocked", detail: "circuit breaker open — hybrid fallback executed" })
+          nextTrigger = fallbackResult.findings.length > 0 ? "new_finding" : undefined
+          await this.bridge.agentObserve({
+            session_id: session.session_id,
+            action_id: next.action_id,
+            tool: next.tool,
+            arguments: { target: phase.target },
+            reasoning: next.reasoning,
+            success: false,
+            summary: `${next.tool} circuit-broken — fallback ${fallback.name}: ${fallbackResult.findings.length} findings`,
+          })
           await this.bridge.agentObserve({
             session_id: session.session_id,
             tool: fallback.name,
             success: fallbackResult.findings.length > 0 || fallbackResult.errors.length === 0,
             findingCount: fallbackResult.findings.length,
-            summary: `${fallback.name} (fallback): ${fallbackResult.findings.length} findings`,
+            summary: `${fallback.name} (fallback for ${next.tool}): ${fallbackResult.findings.length} findings`,
           })
           continue
         }
@@ -777,9 +911,14 @@ export class InProcessExecutor implements PhaseExecutor {
           ? Math.max(0, Math.ceil((300_000 - (Date.now() - status.circuitOpenedAt)) / 1000))
           : 300
         errors.push(`Tool ${next.tool} is circuit-broken (retry in ${retryAfter}s)`)
+        nextTrigger = "stuck"
+        recordOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "blocked", detail: "circuit breaker open, no fallback" })
         await this.bridge.agentObserve({
           session_id: session.session_id,
+          action_id: next.action_id,
           tool: next.tool,
+          arguments: { target: phase.target },
+          reasoning: next.reasoning,
           success: false,
           summary: `Circuit breaker open for ${next.tool}`,
         })
@@ -798,9 +937,14 @@ export class InProcessExecutor implements PhaseExecutor {
           if (!toolApproval.approved) {
             const reason = toolApproval.reason ?? "Skipped by user"
             errors.push(`Destructive tool ${next.tool} skipped: ${reason}`)
+            nextTrigger = undefined
+            recordOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "skipped", detail: reason })
             await this.bridge.agentObserve({
               session_id: session.session_id,
+              action_id: next.action_id,
               tool: next.tool,
+              arguments: { target: phase.target },
+              reasoning: next.reasoning,
               success: false,
               summary: reason,
             })
@@ -880,26 +1024,44 @@ export class InProcessExecutor implements PhaseExecutor {
             this.recordUnstructuredOutput(next.tool, phase.phaseId, phase.target, result.data)
           }
 
-          await this.bridge.agentObserve({
+          // 2.3: only parsed findings count. Exit 0 with no findings is
+          // `succeeded-empty` (a result, not a failure); findings-bearing
+          // success is `succeeded-with-findings`. Both cover the capability.
+          const succeededOutcome = parsedFindings ? "succeeded-with-findings" : "succeeded-empty"
+          nextTrigger = parsedFindings ? "new_finding" : undefined
+          recordOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: succeededOutcome })
+          const observeAck = await this.bridge.agentObserve({
             session_id: session.session_id,
+            action_id: next.action_id,
             tool: next.tool,
+            arguments: { target: phase.target },
+            reasoning: next.reasoning,
             success: true,
             durationMs,
             findingCount: findings.length,
             summary: `${next.tool}: ${findings.length} findings`
-              + (unstructuredBytes > 0 ? " (unstructured output recorded as an observation)" : ""),
+              + (unstructuredBytes > 0 ? " (unstructured output recorded as an observation)" : "")
+              + normalizedTargetNote,
           })
+          if (observeAck.error) errors.push(`Observe rejected for ${next.tool}: ${observeAck.error}`)
         } else {
           this.toolHealth.recordFailure(next.tool, result.error ?? "Unknown error")
           errors.push(`Tool ${next.tool} failed: ${result.error}`)
 
-          await this.bridge.agentObserve({
+          const failedOutcome = isTimeoutMessage(result.error ?? "") ? "timed-out" : "failed"
+          nextTrigger = "stuck"
+          recordOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: failedOutcome, detail: result.error ?? undefined })
+          const observeAck = await this.bridge.agentObserve({
             session_id: session.session_id,
+            action_id: next.action_id,
             tool: next.tool,
+            arguments: { target: phase.target },
+            reasoning: next.reasoning,
             success: false,
             durationMs,
-            summary: `${next.tool} failed: ${result.error}`,
+            summary: `${next.tool} failed: ${result.error}${normalizedTargetNote}`,
           })
+          if (observeAck.error) errors.push(`Observe rejected for ${next.tool}: ${observeAck.error}`)
         }
       } catch (error) {
         if (error instanceof LLMUnavailableError) {
@@ -908,9 +1070,14 @@ export class InProcessExecutor implements PhaseExecutor {
           // The circuit recovers naturally via half-open semantics after the
           // cooldown expires and a probe succeeds.
           errors.push(`Tool ${next.tool} skipped — LLM ${error.status}${error.retryAfter ? ` (retry in ${error.retryAfter}s)` : ""}`)
+          nextTrigger = undefined
+          recordOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "skipped", detail: `LLM ${error.status}` })
           await this.bridge.agentObserve({
             session_id: session.session_id,
+            action_id: next.action_id,
             tool: next.tool,
+            arguments: { target: phase.target },
+            reasoning: next.reasoning,
             success: false,
             summary: `LLM ${error.status} — skipping`,
           })
@@ -925,18 +1092,43 @@ export class InProcessExecutor implements PhaseExecutor {
         this.toolHealth.recordFailure(next.tool, errorMsg)
         errors.push(`Tool ${next.tool} error: ${errorMsg}`)
 
+        nextTrigger = "stuck"
+        recordOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: isTimeoutMessage(errorMsg) ? "timed-out" : "failed", detail: errorMsg })
         await this.bridge.agentObserve({
           session_id: session.session_id,
+          action_id: next.action_id,
           tool: next.tool,
+          arguments: { target: phase.target },
+          reasoning: next.reasoning,
           success: false,
           summary: errorMsg,
         })
       }
     }
 
+    // 2.3 honest accounting. Zero executed actions is never success; a phase
+    // whose required capabilities were never successfully performed reports a
+    // gap (partial when something was found, failed otherwise) — never a
+    // clean completion. Raw stdout never became a finding (structured-only
+    // parsing above), so `succeeded-empty` stays a covered result, not an error.
+    let hybridStatus: "completed" | "failed" | "partial" = "completed"
+    if (actionRecords.length === 0) {
+      errors.push("No tools executed in hybrid phase — agent success requires at least one executed action")
+      hybridStatus = "failed"
+    } else {
+      const uncovered = phase.requiredCapabilities.filter(c => !coveredCapabilities.has(c))
+      if (uncovered.length > 0) {
+        errors.push(`Coverage gap: required capabilities never successfully performed (${uncovered.join(", ")}); ` +
+          `outcomes: ${actionRecords.map(r => `${r.tool}=${r.outcome}`).join(", ")}`)
+        hybridStatus = findings.length > 0 ? "partial" : "failed"
+      } else if (errors.length > 0) {
+        hybridStatus = findings.length > 0 ? "partial" : "failed"
+      }
+    }
+
     return {
       phaseId: phase.phaseId,
-      status: errors.length > 0 && findings.length === 0 ? "failed" : errors.length > 0 && findings.length > 0 ? "partial" : "completed",
+      status: hybridStatus,
       findings,
       artifacts: [],
       errors,

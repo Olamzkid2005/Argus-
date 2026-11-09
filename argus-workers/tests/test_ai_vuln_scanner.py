@@ -449,7 +449,6 @@ class TestInformationDisclosure:
 class TestScan:
     """scan() orchestrates discovery, injection tests, disclosure tests."""
 
-    @pytest.mark.xfail(reason="Requires LLM", strict=False)
     def test_full_scan_with_active_endpoint(self):
         scanner = AIVulnScanner()
 

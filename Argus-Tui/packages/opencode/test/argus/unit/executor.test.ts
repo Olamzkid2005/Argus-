@@ -13,8 +13,14 @@ import type { ProgressEvent, ErrorHintData } from "../../../src/argus/shared/pro
 import { Capability } from "../../../src/argus/shared/capabilities"
 
 class MockToolRegistry {
-  getToolsByCapability() { return [] }
-  getTool(_name: string) { return undefined }
+  // 2.2/2.3: the hybrid loop rejects actions for tools that are neither
+  // registered nor covered by a fallback, so the mock registers test-tool —
+  // mirroring a real readiness where the planned tool exists.
+  getToolsByCapability() { return [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 300 }] }
+  getTool(name: string) {
+    if (name === "test-tool") return { name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, timeout_seconds: 300 }
+    return undefined
+  }
   getToolTimeout(_name: string) { return 300 }
   listTools() { return [] }
   load() {}

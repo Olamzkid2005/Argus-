@@ -524,7 +524,6 @@ class TestCoordinatorAgent:
 class TestOrchestratorScanFlow:
     """Test the orchestrator scan pipeline with mocked subprocess."""
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     def test_orchestrator_init(self):
         """Test that Orchestrator initializes with MCP and streaming."""
         from orchestrator_pkg import Orchestrator
@@ -534,7 +533,6 @@ class TestOrchestratorScanFlow:
         assert hasattr(orch, "mcp")
         assert hasattr(orch, "stream")
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     @patch("subprocess.run")
     def test_mcp_tool_execution_via_orchestrator(self, mock_run):
         """Test executing a tool through MCP via orchestrator."""
@@ -559,7 +557,6 @@ class TestOrchestratorScanFlow:
         assert "content" in result
         assert not result.get("isError", False)
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     def test_mcp_tools_pre_registered(self):
         """Test that Orchestrator pre-registers standard tools with MCP."""
         from orchestrator_pkg import Orchestrator
@@ -570,13 +567,10 @@ class TestOrchestratorScanFlow:
         # Verify tools are pre-registered (actual tool names may vary)
         assert len(tool_names) > 0
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     @patch("tracing.get_trace_id")
-    @patch("orchestrator_pkg.orchestrator.get_websocket_publisher")
-    def test_run_recon_skipped_with_no_target(self, mock_get_ws, mock_trace_id):
+    def test_run_recon_skipped_with_no_target(self, mock_trace_id):
         """Test that recon phase is skipped when no target is provided."""
         mock_trace_id.return_value = "test-trace"
-        mock_get_ws.return_value = MagicMock()
         from orchestrator_pkg import Orchestrator
 
         orch = Orchestrator(engagement_id="test-123")
@@ -585,7 +579,6 @@ class TestOrchestratorScanFlow:
         assert result["phase"] == "recon"
         assert result["findings_count"] == 0
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     def test_unknown_job_type_raises_error(self):
         """Test that an unknown job type raises ValueError."""
         from orchestrator_pkg import Orchestrator
@@ -594,7 +587,6 @@ class TestOrchestratorScanFlow:
         with pytest.raises(ValueError, match="Unknown job type"):
             orch.run({"type": "unknown_phase"})
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     def test_orchestrator_has_tool_runner(self):
         """Test that Orchestrator has a ToolRunner instance."""
         from orchestrator_pkg import Orchestrator
@@ -611,7 +603,6 @@ class TestOrchestratorScanFlow:
 class TestFullPipelineIntegration:
     """Full pipeline integration test with mocked subprocess."""
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     @patch("subprocess.run")
     def test_end_to_end_orchestrator_wiring(self, mock_run):
         """Test that orchestrator, MCP, and streaming are all wired together."""
@@ -637,7 +628,6 @@ class TestFullPipelineIntegration:
         tools = orch.mcp.get_tools()
         assert len(tools) >= 1
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     def test_pipeline_phase_sequence(self):
         """Test that the pipeline phase sequence is valid."""
         from agent_loop import CoordinatorAgent
@@ -653,7 +643,6 @@ class TestFullPipelineIntegration:
 
         assert coord.current_phase == "report"
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     @patch("subprocess.run")
     def test_mcp_call_then_orchestrator_run(self, mock_run):
         """Test that MCP tool call and orchestrator run are compatible."""
@@ -677,7 +666,6 @@ class TestFullPipelineIntegration:
         mcp_result = orch.mcp_run("compat-test", {"input": "data"})
         assert not mcp_result.get("isError", False)
 
-    @pytest.mark.xfail(reason="Requires full integration setup", strict=False)
     @pytest.mark.skipif(
         not os.getenv("REDIS_URL") and not os.getenv("DATABASE_URL"),
         reason="REDIS_URL or DATABASE_URL not set",
@@ -763,6 +751,7 @@ class TestCreatePhaseAgent:
         }
 
         original_tools = ReActAgent.PHASE_TOOLS.copy()
+        original_loaded = ReActAgent._phase_tools_loaded
         ReActAgent.PHASE_TOOLS = {"recon": ["httpx", "katana"]}
         ReActAgent._phase_tools_loaded = True
         try:
@@ -771,7 +760,11 @@ class TestCreatePhaseAgent:
             assert len(tools) == 2
             assert len(tools) > 0
         finally:
+            # Restore the loaded flag too: leaving it True with restored
+            # (possibly empty) tools makes _ensure_phase_tools() short-circuit
+            # and breaks order-dependent readers of PHASE_TOOLS.
             ReActAgent.PHASE_TOOLS = original_tools
+            ReActAgent._phase_tools_loaded = original_loaded
 
 
 # ──────────────────────────────────────────────

@@ -11,12 +11,38 @@ built from the session target).
 from __future__ import annotations
 
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from agent.agent_action import AgentAction
 from mcp_server import MCPServer, _canonical_phase_name
+
+
+@pytest.fixture(autouse=True)
+def _stub_registered_tool_binaries(tmp_path, monkeypatch):
+    """Provide executable stubs for binaries the LLM path must validate.
+
+    Phase-tool registration filters to binaries found on PATH, but these
+    tests never execute anything (mocked LLM, planning-only runner), so
+    stubs keep them hermetic on machines — and CI — without real scanners.
+    The ReActAgent phase-tools cache is rebuilt around the stub PATH so the
+    tests hold under random ordering."""
+    from agent.react_agent import ReActAgent
+
+    for _name in ("nuclei",):
+        _stub = tmp_path / _name
+        _stub.write_text("#!/bin/sh\nexit 0\n")
+        _stub.chmod(0o755)
+    monkeypatch.setenv(
+        "PATH", str(tmp_path) + os.pathsep + os.environ.get("PATH", "")
+    )
+    ReActAgent._phase_tools_loaded = False
+    ReActAgent.PHASE_TOOLS = {}
+    yield
+    ReActAgent._phase_tools_loaded = False
+    ReActAgent.PHASE_TOOLS = {}
 
 
 @pytest.fixture(autouse=True)

@@ -58,6 +58,13 @@ class AgentSession:
     # Per-step provenance, parallel to `current_plan`: "llm" for a tool the
     # engine chose, "deterministic" for one the fallback order supplied.
     plan_sources: list[str] = field(default_factory=list)
+    # 2.2 protocol: exactly one advancement owner. `agent_next` issues an
+    # action (with a stable action_id); `agent_observe` only acknowledges it.
+    # The last issued action is remembered so an observation for an unknown
+    # or already-consumed action can be rejected instead of silently skipped.
+    last_action_id: str = ""
+    last_action_tool: str = ""
+    action_counter: int = 0
 
 
 class AgentSessionStore:
@@ -319,6 +326,50 @@ class AgentSessionStore:
                 session.plan_step += 1
                 return tool, source
         return None
+
+    def record_issued_action(self, session_id: str, tool: str) -> str:
+        """Remember the action just issued by `agent_next` and return its id.
+
+        The id is stable for the observation that follows: exactly one
+        outstanding action exists per session, so a second `agent_next`
+        without an intervening `agent_observe` replaces it and the older
+        id becomes unknown.
+        """
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            session.action_counter += 1
+            action_id = f"{session_id[:8]}-{session.action_counter:04d}"
+            session.last_action_id = action_id
+            session.last_action_tool = tool
+            return action_id
+
+    def validate_observed_action(
+        self, session_id: str, action_id: str | None, tool: str | None
+    ) -> str | None:
+        """Return an error message when the observed action is unknown.
+
+        `None` means the observation may be recorded. Callers without an
+        `action_id` (pre-protocol drivers) are still accepted so the
+        acknowledgement path stays backward compatible; once an id is
+        issued, an explicit but mismatched id is rejected.
+        """
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            if not action_id:
+                return None
+            if not session.last_action_id:
+                return f"Unknown action '{action_id}': no action was issued for this session"
+            if action_id != session.last_action_id:
+                return (
+                    f"Unknown action '{action_id}': expected outstanding "
+                    f"action '{session.last_action_id}' (tool '{session.last_action_tool}')"
+                )
+            if tool and tool != session.last_action_tool:
+                return (
+                    f"Tool mismatch for action '{action_id}': observed '{tool}' "
+                    f"but issued '{session.last_action_tool}'"
+                )
+            return None
 
     def add_finding(self, session_id: str, finding: dict) -> None:
         """Append a finding to the session's accumulated findings.

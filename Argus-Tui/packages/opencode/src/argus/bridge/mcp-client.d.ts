@@ -123,13 +123,19 @@ export declare class WorkersBridge {
         /** Max iterations for this agent session — TS caps the Python loop (blocker 32). */
         max_iterations?: number;
     }): Promise<{
+        action_id?: string;
         tool?: string;
+        arguments?: Record<string, string>;
         session_id: string;
+        engagement_id?: string;
         reasoning: string;
+        provenance?: string;
         done: boolean;
+        iteration?: number;
     }>;
     agentObserve(params: {
         session_id: string;
+        action_id?: string;
         tool: string;
         arguments?: Record<string, string>;
         reasoning?: string;
@@ -138,10 +144,13 @@ export declare class WorkersBridge {
         findingCount?: number;
         summary?: string;
     }): Promise<{
-        tool?: string;
+        recorded?: boolean;
         session_id: string;
-        reasoning: string;
+        engagement_id?: string;
+        action_id?: string;
+        iteration?: number;
         done: boolean;
+        error?: string;
     }>;
     /**
      * Fetch the attack graph for an engagement from the Python MCP worker.

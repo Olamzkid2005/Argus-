@@ -131,7 +131,12 @@ class TestSqlmapJsonProbe:
         fake_result = type(
             "R", (), {"stdout": "--output-format=json  Format of the output", "stderr": ""}
         )()
-        with patch("subprocess.run", return_value=fake_result):
+        # The probe gates on binary resolution before invoking subprocess;
+        # pretend sqlmap is installed so the version-parsing logic is exercised.
+        with (
+            patch("tools.tool_utils.resolve_tool_binary", return_value="/usr/bin/sqlmap"),
+            patch("subprocess.run", return_value=fake_result),
+        ):
             assert scan_mod._sqlmap_supports_json() is True
 
     def test_probe_reports_unsupported_build(self):

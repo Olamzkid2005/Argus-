@@ -109,9 +109,19 @@ describe("MCP worker payload contract — real worker", () => {
     })
     expect(typeof next.done).toBe("boolean")
     if (!next.done) expect(typeof next.tool).toBe("string")
+    // 2.2 protocol: every issued action carries a stable id, validated
+    // arguments from the authorized session target, chooser provenance,
+    // and the engagement identity.
+    if (!next.done) {
+      expect(typeof next.action_id).toBe("string")
+      expect(next.arguments!).toMatchObject({ target: "http://127.0.0.1:1" })
+      expect(["llm", "deterministic"]).toContain(next.provenance!)
+      expect(typeof next.session_id).toBe("string")
+    }
 
     const observed = await bridge.agentObserve({
       session_id: session.session_id,
+      action_id: next.action_id,
       tool: next.tool ?? "nuclei",
       arguments: {},
       reasoning: "contract check",
@@ -121,6 +131,17 @@ describe("MCP worker payload contract — real worker", () => {
       summary: "contract check",
     })
     expect(typeof observed.done).toBe("boolean")
+    // 2.2 protocol: observe acknowledges without advancing; the ack echoes
+    // the action it recorded.
+    expect(observed.recorded).toBe(true)
+    if (next.action_id) expect(observed.action_id).toBe(next.action_id)
+
+    // The acknowledgement consumed no plan step, so the loop continues to
+    // a well-formed next action (the no-skip ordering itself is pinned by
+    // `test_three_actions_execute_exactly_once_in_order` on the worker).
+    const following = await bridge.agentNext({ session_id: session.session_id })
+    expect(typeof following.done).toBe("boolean")
+    if (!following.done) expect(typeof following.tool).toBe("string")
   }, 60_000)
 
   test("phase_complete returns next_capabilities / reasoning / stop", async () => {

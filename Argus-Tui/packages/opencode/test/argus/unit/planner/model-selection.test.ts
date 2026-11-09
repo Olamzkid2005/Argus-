@@ -10,14 +10,20 @@
  */
 
 import { describe, expect, test } from "bun:test"
-import {
+// Import the policy through a fresh bundle, not the static module graph:
+// other test files mock ../../../../src/argus/planner/model-registry with
+// mock.module(), which is process-global in bun and leaks into static
+// imports here (llm-service.test.ts's registry mock replaces these exact
+// bindings). The reimport helper exists for precisely this hazard.
+import { reimport } from "../helpers/reimport"
+const {
   ALLOW_AMBIENT_ENV_VAR,
   AMBIENT_LLM_ENV_VARS,
   ambientEnvAllowed,
   ignoredAmbientLlmEnvVars,
   isSelectableProviderID,
   selectPlannerModelRef,
-} from "../../../../src/argus/planner/model-selection"
+} = await reimport("../../../../src/argus/planner/model-selection.ts")
 
 const provider = (models: string[]) => ({ models: Object.fromEntries(models.map((m) => [m, {}])) })
 

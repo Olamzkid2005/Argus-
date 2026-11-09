@@ -163,7 +163,9 @@ class TestHandleAgentObserve:
         assert "Found 2 vulnerabilities" in session.observations
 
     @patch("mcp_server.LLMClient")
-    def test_failure_triggers_stuck(self, mock_llm, server):
+    def test_observe_acknowledges_without_advancing(self, mock_llm, server):
+        """2.2: `agent_observe` records the result and acknowledges it — it
+        must not consume the next plan step. Only `agent_next` advances."""
         mock_llm.return_value.is_available.return_value = False
         init = server.handle_agent_init(
             {
@@ -174,11 +176,14 @@ class TestHandleAgentObserve:
         )
         sid = init["session_id"]
 
-        # Observe triggers handle_agent_next which advances the plan
-        # and returns the next tool (advancing past the failed tool)
+        first = server.handle_agent_next({"session_id": sid})
+        assert first["tool"] == "nuclei"
+
+        # A failed observation is acknowledged, not advanced past.
         result = server.handle_agent_observe(
             {
                 "session_id": sid,
+                "action_id": first["action_id"],
                 "tool": "nuclei",
                 "success": False,
                 "summary": "Tool failed",
@@ -186,11 +191,107 @@ class TestHandleAgentObserve:
                 "durationMs": 500,
             }
         )
+        assert result.get("recorded") is True
+        assert result.get("error") is None
+        assert "tool" not in result
 
-        # The plan advances to the next tool (nmap) or signals done
-        assert not result.get("error")
-        assert result.get("done") is False
-        assert result.get("tool") is not None
+        # The middle action was not skipped: the next step is nmap.
+        second = server.handle_agent_next({"session_id": sid})
+        assert second["tool"] == "nmap"
+        assert second["action_id"] != first["action_id"]
+
+    @patch("mcp_server.LLMClient")
+    def test_three_actions_execute_exactly_once_in_order(self, mock_llm, server):
+        """2.2 verification: next/observe/next/observe/next runs three
+        planned actions exactly once each, in plan order."""
+        mock_llm.return_value.is_available.return_value = False
+        server.register_tool(ToolDefinition(name="httpx", command="httpx"))
+        init = server.handle_agent_init(
+            {
+                "target": "https://example.com",
+                "phase": "scan",
+                "pipeline": [{"tool": "nuclei"}, {"tool": "nmap"}, {"tool": "httpx"}],
+            }
+        )
+        sid = init["session_id"]
+
+        seen = []
+        for _ in range(3):
+            nxt = server.handle_agent_next({"session_id": sid})
+            assert nxt["done"] is False
+            seen.append(nxt["tool"])
+            ack = server.handle_agent_observe(
+                {
+                    "session_id": sid,
+                    "action_id": nxt["action_id"],
+                    "tool": nxt["tool"],
+                    "arguments": nxt["arguments"],
+                    "success": True,
+                    "summary": f"{nxt['tool']} ok",
+                    "findingCount": 0,
+                    "durationMs": 100,
+                }
+            )
+            assert ack.get("recorded") is True
+
+        assert seen == ["nuclei", "nmap", "httpx"]
+        assert server.handle_agent_next({"session_id": sid})["done"] is True
+        session = server.session_store.get(sid)
+        assert [ex.tool for ex in session.tool_history] == seen
+
+    @patch("mcp_server.LLMClient")
+    def test_next_carries_action_id_arguments_and_provenance(self, mock_llm, server):
+        """2.2: the issued action carries its id, validated arguments,
+        reasoning, chooser provenance, and engagement identity."""
+        mock_llm.return_value.is_available.return_value = False
+        init = server.handle_agent_init(
+            {
+                "target": "https://example.com",
+                "phase": "scan",
+                "engagementId": "ENG-123",
+                "pipeline": [{"tool": "nuclei"}],
+            }
+        )
+        sid = init["session_id"]
+        nxt = server.handle_agent_next({"session_id": sid})
+        assert nxt["action_id"]
+        # Arguments reach the runner from the authorized session target —
+        # never from model free-text.
+        assert nxt["arguments"] == {"target": "https://example.com"}
+        assert nxt["provenance"] in ("llm", "deterministic")
+        assert nxt["reasoning"]
+        assert nxt["engagement_id"] == "ENG-123"
+
+    @patch("mcp_server.LLMClient")
+    def test_unknown_action_is_rejected(self, mock_llm, server):
+        """2.2: an observation for an unknown action_id is rejected and not
+        recorded."""
+        mock_llm.return_value.is_available.return_value = False
+        init = server.handle_agent_init(
+            {
+                "target": "https://example.com",
+                "phase": "scan",
+                "pipeline": [{"tool": "nuclei"}],
+            }
+        )
+        sid = init["session_id"]
+        server.handle_agent_next({"session_id": sid})
+
+        result = server.handle_agent_observe(
+            {
+                "session_id": sid,
+                "action_id": "deadbeef-9999",
+                "tool": "nuclei",
+                "success": True,
+                "summary": "spoofed",
+                "findingCount": 0,
+                "durationMs": 10,
+            }
+        )
+        assert result.get("recorded") is False
+        assert "Unknown action" in (result.get("error") or "")
+        session = server.session_store.get(sid)
+        assert len(session.tool_history) == 0
 
     def test_missing_session_returns_error(self, server):
         result = server.handle_agent_observe(
