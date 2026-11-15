@@ -71,7 +71,7 @@ def scope_validator_for_engagement(engagement_id: str):
 
 # Tools that stream findings and can be told to stop early without losing what
 # they already printed. Bounded by ARGUS_TOOL_WALL_SECONDS (default 240).
-WALL_LIMITED_TOOLS = frozenset({"nuclei", "dalfox"})
+WALL_LIMITED_TOOLS = frozenset({"nuclei", "dalfox", "nikto"})
 
 
 class SignalQuality:
