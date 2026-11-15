@@ -108,11 +108,17 @@ class LLMService:
         # Token tracking for governance integration (blocker 48)
         self._last_input_tokens: int = 0
         self._last_output_tokens: int = 0
+        self._last_cost_usd: float = 0.0
 
     @property
     def last_input_tokens(self) -> int:
         """Input tokens from the most recent successful LLM call."""
         return self._last_input_tokens
+
+    @property
+    def last_cost_usd(self) -> float:
+        """Actual cost of the most recent LLM call, for the budget ledger."""
+        return self._last_cost_usd
 
     @property
     def last_output_tokens(self) -> int:
@@ -130,6 +136,7 @@ class LLMService:
         *,
         max_tokens: int = 500,
         temperature: float | None = None,
+        timeout: float | None = None,
     ) -> dict | list:
         """
         Call LLM and return parsed JSON dict.
@@ -149,6 +156,8 @@ class LLMService:
         )
         start = _time.time()
 
+        self._last_cost_usd = 0.0
+
         if not self._client.is_available():
             slog.llm_result("LLM not available")
             return self._fallback("LLM not available")
@@ -162,7 +171,9 @@ class LLMService:
                 temperature=temperature or self._config.temperature,
                 max_tokens=max_tokens,
                 response_format={"type": "json_object"},
-                timeout=self._config.timeout,
+                # The caller may clamp this to the engagement deadline; the
+                # configured timeout remains the default.
+                timeout=timeout if timeout is not None else self._config.timeout,
             )
 
             response_text = raw.text if isinstance(raw, LLMResponse) else str(raw)
@@ -177,6 +188,7 @@ class LLMService:
                 return self._fallback("Cost cap exceeded")
 
             self._cost_tracker.add(cost)
+            self._last_cost_usd = cost
 
             try:
                 parsed = self._extract_json(response_text)
