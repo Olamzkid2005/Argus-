@@ -126,8 +126,12 @@ if __name__ == "__main__":
     parser.add_argument("--victim-password", default=None, help="Victim password")
     parser.add_argument(
         "--resource-pattern",
-        default="/api/users/{username}/details",
-        help="URL pattern for victim resource (use {username} placeholder)",
+        default=None,
+        help=(
+            "URL pattern for victim resource (use {username} placeholder). "
+            "Defaults to the 'resource_pattern' key in the credentials file, "
+            "then to /api/users/{username}/details"
+        ),
     )
     parser.add_argument(
         "--username-selector",
@@ -171,11 +175,20 @@ if __name__ == "__main__":
             " and --victim-username/--victim-password must be provided"
         )
 
+    # The pattern names the victim's own resource (an id, a slug, a path). Only
+    # the operator running the engagement knows it, and a wrong default silently
+    # 404s and reports "no BOLA": let the roles file carry it.
+    resource_pattern = (
+        args.resource_pattern
+        or creds.get("resource_pattern")
+        or "/api/users/{username}/details"
+    )
+
     findings = check_bola(
         args.target,
         creds["attacker"],
         creds["victim"],
-        args.resource_pattern,
+        resource_pattern,
         args.username_selector,
         args.password_selector,
         args.submit_selector,

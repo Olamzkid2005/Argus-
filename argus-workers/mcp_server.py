@@ -1180,6 +1180,19 @@ class MCPServer:
             and os.path.isdir(_templates_dir)
         ):
             cmd.extend(["-t", _templates_dir])
+            # The official template set is ~14k files. Unfiltered, a single-host
+            # scan runs well past the MCP call timeout (measured: killed at 150s
+            # with only severities filtered, and still enumerating), so the
+            # phase recorded a timeout instead of findings. The classes below
+            # are the ones whose output an operator acts on; a caller that wants
+            # a wider or narrower set passes `tags` or `severity` itself.
+            if "-tags" not in cmd and "tags" not in (arguments or {}):
+                cmd.extend(
+                    [
+                        "-tags",
+                        "cve,default-login,exposure,misconfig,panel,takeover",
+                    ]
+                )
 
         # Map named arguments to CLI flags
         arguments = arguments or {}

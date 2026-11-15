@@ -816,7 +816,34 @@ class TestAugmentedToolPath:
 
         assert result["isError"] is False, result
         argv = json.loads(result["content"][0]["text"].strip().splitlines()[-1])
-        assert argv == ["-t", str(tmp_path)], argv
+        # The official template set is ~14k files; unfiltered it outlives the
+        # MCP call timeout (measured: still scanning at 150s), so the injected
+        # directory comes with the high-signal tag classes.
+        assert argv == [
+            "-t",
+            str(tmp_path),
+            "-tags",
+            "cve,default-login,exposure,misconfig,panel,takeover",
+        ], argv
+
+    def test_nuclei_default_tags_yield_to_the_caller(self, monkeypatch, tmp_path):
+        import json
+        import sys
+
+        monkeypatch.setenv("ARGUS_NUCLEI_TEMPLATES", str(tmp_path))
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="nuclei",
+            command=sys.executable,
+            args=["-c", "import json,sys; print(json.dumps(sys.argv[1:]))"],
+            parameters=[],
+        ))
+
+        result = server.call_tool("nuclei", {"tags": "sqli"})
+
+        assert result["isError"] is False, result
+        argv = json.loads(result["content"][0]["text"].strip().splitlines()[-1])
+        assert "-tags" not in argv, argv
 
     def test_nuclei_keeps_caller_templates(self, monkeypatch, tmp_path):
         import json

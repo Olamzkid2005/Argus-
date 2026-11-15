@@ -15,6 +15,28 @@ DEFAULT_ADMIN_PATHS = [
 ]
 
 
+def _single_login(creds, source: str) -> dict:
+    """Reduce a credentials file to the one login this verifier needs.
+
+    The executor writes credentials as a role map (``{"attacker": {...}}``)
+    because the BOLA verifier needs two logins. Reading that map as a login
+    raised ``KeyError: 'username'`` after the browser had already started, which
+    looked like a broken scanner instead of a config mismatch.
+    """
+    if not isinstance(creds, dict):
+        raise SystemExit(f"{source}: expected a JSON object")
+    if "username" in creds:
+        return creds
+    for key in ("low-priv", "low_priv", "attacker", "user", "default"):
+        entry = creds.get(key)
+        if isinstance(entry, dict) and "username" in entry:
+            return entry
+    for entry in creds.values():
+        if isinstance(entry, dict) and "username" in entry:
+            return entry
+    raise SystemExit(f"{source}: no entry with a 'username' field")
+
+
 def _check_auth_success(page, target: str) -> bool:
     """Verify authentication succeeded by checking multiple signals.
 
@@ -143,7 +165,7 @@ if __name__ == "__main__":
 
     if args.creds_file:
         with open(args.creds_file) as fp:
-            creds = json.load(fp)
+            creds = _single_login(json.load(fp), args.creds_file)
     elif args.low_priv_username and args.low_priv_password:
         creds = {"username": args.low_priv_username, "password": args.low_priv_password}
     else:

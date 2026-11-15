@@ -228,6 +228,31 @@ export interface ExecutionOptions {
  *   CANDIDATE  → LOW     (e.g. ffuf, nikto, passive recon)
  *   undefined  → INFORMATIONAL (legacy — no signal_quality metadata)
  */
+/**
+ * Tools that look up cloud assets by *name*.
+ *
+ * cloud_enum and s3scanner take a keyword or a bucket name and ask the public
+ * clouds about it. Handed a bare IP they ask about a name that cannot exist:
+ * cloud_enum walks all 1837 S3 buckets it ships (measured: still enumerating
+ * after 100s) and holds the whole phase open until its timeout. Measured in
+ * this repo: a loopback lab run sat in recon for over seven minutes with no
+ * tool subprocess left running, which is what made the TUI look hung.
+ */
+const NAME_BASED_CLOUD_TOOLS = new Set(["cloud_enum", "s3scanner"])
+
+function targetNotApplicable(tool: string, target: string): string | undefined {
+  if (!NAME_BASED_CLOUD_TOOLS.has(tool)) return undefined
+  let host: string
+  try {
+    host = new URL(target.includes("://") ? target : `http://${target}`).hostname
+  } catch {
+    return undefined
+  }
+  const isIpLiteral = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith("[") || host.includes(":")
+  if (!isIpLiteral) return undefined
+  return `target ${host} is an IP literal; ${tool} enumerates cloud assets by name`
+}
+
 function baselineConfidence(signalQuality: SignalQuality | undefined): number {
   switch (signalQuality) {
     case "CONFIRMED": return Confidence.HIGH
@@ -629,6 +654,10 @@ export class InProcessExecutor implements PhaseExecutor {
       })
     }
     const calledTools = new Set<string>()
+    // Steps skipped on purpose — the worker cannot run them, or the target makes
+    // them meaningless. A phase whose every candidate was skipped this way has
+    // nothing to execute and nothing to miss: it must not fail readiness.
+    let deliberatelySkipped = 0
 
     const toolConfigs: { tool: ToolDef; cap: Capability }[] = []
     const pipelineSteps = phase.config.pipelineSteps as PipelineStep[] | undefined
@@ -654,6 +683,29 @@ export class InProcessExecutor implements PhaseExecutor {
             console.log(`[executor]  Skipping ${step.tool}: worker cannot run it (${blockedBy})`)
           }
           recordDeterministicOutcome(step.tool, (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability, "blocked", `worker cannot run it (${blockedBy})`)
+          deliberatelySkipped++
+          continue
+        }
+        const notApplicable = targetNotApplicable(step.tool, phase.target)
+        if (notApplicable) {
+          if (execOptions.verbose) {
+            console.log(`[executor]  Skipping ${step.tool}: ${notApplicable}`)
+          }
+          recordDeterministicOutcome(step.tool, (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability, "blocked", notApplicable)
+          deliberatelySkipped++
+          continue
+        }
+        // A credentialed verifier (playwright-bola, playwright-xss) takes its
+        // logins from a file built from the operator's credential store. With
+        // no store the tool is invoked without `--creds-file`, argparse exits 2
+        // with a usage dump, and the phase records an error that reads like a
+        // broken scanner. Skip it and say why.
+        const missingRoles = await this.missingCredentialRoles(step.tool)
+        if (missingRoles) {
+          const reason = `requires ${missingRoles.join(", ")} credentials — none configured`
+          if (execOptions.verbose) console.log(`[executor]  Skipping ${step.tool}: ${reason}`)
+          recordDeterministicOutcome(step.tool, (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability, "blocked", reason)
+          deliberatelySkipped++
           continue
         }
         const cap = (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability
@@ -674,6 +726,14 @@ export class InProcessExecutor implements PhaseExecutor {
         for (const tool of tools) {
           if (calledTools.has(tool.name)) continue
           calledTools.add(tool.name)
+          const missingRoles = await this.missingCredentialRoles(tool.name)
+          if (missingRoles) {
+            const reason = `requires ${missingRoles.join(", ")} credentials — none configured`
+            if (execOptions.verbose) console.log(`[executor]  Skipping ${tool.name}: ${reason}`)
+            recordDeterministicOutcome(tool.name, cap, "blocked", reason)
+            deliberatelySkipped++
+            continue
+          }
           toolConfigs.push({ tool, cap })
           if (execOptions.verbose) console.log(`[executor]  Tool: ${tool.name} (capability: ${cap})`)
         }
@@ -688,6 +748,24 @@ export class InProcessExecutor implements PhaseExecutor {
     // Existing per-step errors (e.g. `Tool X not found in registry`) are
     // preserved first so the cause stays specific.
     if (toolConfigs.length === 0 && phase.requiredCapabilities.length > 0) {
+      if (errors.length === 0 && deliberatelySkipped > 0) {
+        // Every candidate for this phase was skipped deliberately (binary
+        // absent, target makes the tool meaningless, credentials not supplied).
+        // Nothing ran and nothing could run, so this is a clean zero-finding
+        // phase, not a readiness failure.
+        if (execOptions.verbose) {
+          console.log(`[executor]  All ${deliberatelySkipped} candidate tool(s) skipped — phase completes with no work to do`)
+        }
+        return {
+          phaseId: phase.phaseId,
+          status: "completed",
+          findings,
+          artifacts: [],
+          errors,
+          durationMs: Date.now() - startTime,
+          actionRecords,
+        }
+      }
       if (errors.length === 0) {
         const missing = phase.requiredCapabilities.join(", ")
         errors.push(`No tools configured for required capabilities (${missing}) — readiness failed, not a clean completion`)
@@ -1494,6 +1572,25 @@ export class InProcessExecutor implements PhaseExecutor {
   }
 
   /**
+   * Credential roles a tool declares but the operator has not configured.
+   *
+   * Returns null when the tool needs no credentials or every role it names is
+   * present, so callers can treat a returned list as "cannot run this tool".
+   */
+  private async missingCredentialRoles(toolName: string): Promise<string[] | null> {
+    const required = this.toolRegistry.getTool(toolName)?.credential_roles
+    if (!required || required.length === 0) return null
+    const { CredentialStore } = await import("../engagement/credentials")
+    const store = new CredentialStore()
+    store.load()
+    const configured = Object.keys(store.getAllCredentials()).map(k => k.toLowerCase())
+    const missing = required.filter(
+      role => !configured.some(key => key === role.toLowerCase() || key.includes(role.toLowerCase())),
+    )
+    return missing.length > 0 ? missing : null
+  }
+
+  /**
    * Build a temporary JSON credentials file for tools that accept
    * `--creds-file` (e.g. playwright-bola). The file is written with
    * mode 0o600 and tracked for cleanup.
@@ -1523,9 +1620,15 @@ export class InProcessExecutor implements PhaseExecutor {
 
     if (Object.keys(selected).length === 0) return null
 
+    // Verifiers that request the victim's own resource need to be told which
+    // resource that is; the engagement's credentials file declares it.
+    const resourcePattern = credStore.getResourcePattern()
+    const payload: Record<string, unknown> = { ...selected }
+    if (resourcePattern) payload.resource_pattern = resourcePattern
+
     const tmpDir = await mkdtemp(join(tmpdir(), "argus-creds-"))
     const credsPath = join(tmpDir, "credentials.json")
-    await writeFile(credsPath, JSON.stringify(selected, null, 2), { mode: 0o600 })
+    await writeFile(credsPath, JSON.stringify(payload, null, 2), { mode: 0o600 })
     this.tempCredFiles.push(credsPath)
     return credsPath
   }

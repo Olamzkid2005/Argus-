@@ -15,6 +15,15 @@ export interface CredentialEntry {
 export interface CredentialFile {
   roles: Record<string, CredentialEntry>
   default_role?: string
+  /**
+   * The victim's own resource, as the authenticated object-access verifiers
+   * (playwright-bola) should request it — a path template such as
+   * `/api/data/10` or `/api/users/{username}/details`.
+   *
+   * Only the operator knows it, and a wrong guess 404s and is reported as
+   * "no BOLA", so the engagement's credentials file declares it.
+   */
+  resource_pattern?: string
 }
 
 const DEFAULT_CREDS_PATH = StoragePaths.credentials
@@ -126,6 +135,11 @@ export class CredentialStore {
 
   getDefaultRole(): string | undefined {
     return this.data.default_role
+  }
+
+  getResourcePattern(): string | undefined {
+    const pattern = this.data.resource_pattern
+    return typeof pattern === "string" && pattern.length > 0 ? pattern : undefined
   }
 
   getDefaultCredentials(): CredentialEntry | null {

@@ -147,6 +147,26 @@ for (let run = 1; run <= RUNS; run++) {
   const home = mkdtempSync(path.join(tmpdir(), `gate-a-${run}-`))
   mkdirSync(path.join(home, "argus"), { recursive: true })
   writeFileSync(path.join(home, "argus/config.yaml"), "storage:\n  encryption:\n    enabled: false\n")
+  // The lab's accounts, declared the way an operator declares them before an
+  // authenticated assessment. Without them the browser verifiers have nothing
+  // to log in with, are skipped, and the run can never produce a HIGH finding.
+  // `resource_pattern` is the victim's own object, which is what the BOLA
+  // verifier asks the attacker session to request.
+  writeFileSync(
+    path.join(home, "argus/credentials.json"),
+    JSON.stringify(
+      {
+        roles: {
+          attacker: { username: "user2", password: "welcome2" },
+          victim: { username: "user1", password: "welcome1" },
+        },
+        resource_pattern: "/api/data/10",
+      },
+      null,
+      2,
+    ),
+    { mode: 0o600 },
+  )
   const transcript = path.join(outDir, `run-${run}.pty.log`)
   writeFileSync(transcript, "")
 
