@@ -181,9 +181,25 @@ async function executeTuiAssessment(
   // nothing, so anything watching the log for a completion marker (the Gate A
   // harness, an operator reading the transcript) saw the run hang forever even
   // though the scan dashboard had already flipped to COMPLETED.
-  if (status === "completed") {
-    appendLog(`Assessment complete — ${result.findings} finding(s) (${result.high} high, ${result.medium} medium)`)
-  }
+  const summary =
+    `Assessment complete — ${result.findings} finding(s) (${result.high} high, ${result.medium} medium)`
+  if (status === "completed") appendLog(summary)
+
+  // Also write the terminal line to the terminal itself. The scan screen is a
+  // rendered view: when its render loop stops (observed: the screen froze after
+  // a mid-run approval while the assessment kept going), a log line that only
+  // exists in that view is never drawn and the run looks hung. A line on the
+  // terminal is the operator's guarantee that the run ended and how.
+  const terminalLine =
+    status === "completed"
+      ? summary
+      : status === "partial"
+        ? `Assessment finished — partial coverage (${result.findings} finding(s), ${result.high} high)`
+        : status === "stopped"
+          ? `Assessment stopped at a phase boundary (${result.findings} finding(s))`
+          : `Assessment failed: ${result.error ?? "unknown error"}`
+  process.stderr.write(`\n${terminalLine}\n`)
+  trace("terminal line written")
 
   return { result, engagementId, status }
 }
