@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -60,6 +61,32 @@ class BrowserScanner(AbstractTool):
     """
 
     tool_name: str = "browser_scanner"
+
+    def _browser_scope_payload(self, ctx: ToolContext) -> dict | None:
+        """Authorization handed to the browser subprocess.
+
+        Prefers the scope on the tool context (the orchestrator sets it from the
+        engagement record or the job payload) and falls back to the run scope
+        published in this process. ``None`` means no explicit scope: the worker
+        then pins the scan target's own origin, which can only narrow what it
+        reaches.
+        """
+        from tools import browser_scope
+        from tools.scope_validator import process_scope
+
+        if ctx.authorized_scope:
+            payload = browser_scope.parse_scope_payload(ctx.authorized_scope)
+            if payload is not None:
+                return payload.as_dict()
+
+        published = process_scope(ctx.engagement_id or "")
+        if published:
+            return {
+                "mode": published.get("mode", "allowlist"),
+                "allowed_targets": list(published.get("allowed_targets") or []),
+                "blocked_targets": list(published.get("blocked_targets") or []),
+            }
+        return None
 
     def execute(self, ctx: ToolContext) -> UnifiedToolResult:
         """
@@ -113,11 +140,21 @@ class BrowserScanner(AbstractTool):
             subprocess_args = [sys.executable, str(worker), target_url]
             if tech_stack:
                 subprocess_args.append(json.dumps(tech_stack))
+            # The worker is a separate process, so it cannot read this process's
+            # published run scope. Hand it the authorization explicitly instead
+            # of leaving it to trust the URL it was given.
+            env = os.environ.copy()
+            scope_payload = self._browser_scope_payload(ctx)
+            if scope_payload is not None:
+                from tools.browser_scope import SCOPE_ENV_VAR
+
+                env[SCOPE_ENV_VAR] = json.dumps(scope_payload)
             proc_result = subprocess.run(  # noqa: S603
                 subprocess_args,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                env=env,
             )
         except FileNotFoundError:
             msg = f"Python interpreter not found at {sys.executable}"

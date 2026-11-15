@@ -12,6 +12,7 @@ import pytest
 # Attempt module-level import — if it fails, all tests in this file skip
 try:
     from orchestrator_pkg.orchestrator import Orchestrator
+    assert Orchestrator is not None
     _HAVE_ORCHESTRATOR = True
 except ImportError:
     _HAVE_ORCHESTRATOR = False

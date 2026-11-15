@@ -124,3 +124,200 @@ class TestIsInternalAddressSemanticsUnchanged:
 
     def test_public_still_external(self, opt_in):
         assert ScopeValidator.is_internal_address("example.com") is False
+
+
+# ── Path coverage: the policy must reach the agents and the web scanner ──
+
+
+class TestReactAgentInternalPolicy:
+    """agent/react_agent.py: authorized + opted-in internal targets must work."""
+
+    def _registry(self):
+        from agent.tool_registry import ToolRegistry
+
+        registry = ToolRegistry()
+        registry.register(
+            "nuclei",
+            lambda *_: None,
+            {
+                "name": "nuclei",
+                "parameters": [
+                    {"name": "target", "param_type": "string", "required": True}
+                ],
+            },
+        )
+        return registry
+
+    def _action(self, target):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(tool="nuclei", arguments={"target": target})
+
+    def _agent(self, monkeypatch, scope):
+        from agent.react_agent import ReActAgent
+        from orchestrator_pkg.engagement import EngagementService
+
+        monkeypatch.setattr(
+            EngagementService,
+            "load_authorized_scope",
+            staticmethod(lambda _engagement_id: scope),
+        )
+        return ReActAgent(self._registry(), engagement_id="eng-1")
+
+    def test_authorized_opted_in_internal_target_is_allowed(self, opt_in, monkeypatch):
+        agent = self._agent(monkeypatch, {"domains": ["127.0.0.1"], "ipRanges": []})
+        assert agent._validate_arguments(self._action("http://127.0.0.1:8080/")) is True
+
+    def test_opt_in_alone_is_not_authorization(self, opt_in, monkeypatch):
+        agent = self._agent(monkeypatch, None)
+        assert agent._validate_arguments(self._action("http://127.0.0.1:8080/")) is False
+
+    def test_authorized_without_opt_in_is_refused(self, no_opt_in, monkeypatch):
+        agent = self._agent(monkeypatch, {"domains": ["127.0.0.1"], "ipRanges": []})
+        assert agent._validate_arguments(self._action("http://127.0.0.1:8080/")) is False
+
+    def test_metadata_stays_blocked_when_authorized_and_opted_in(
+        self, opt_in, monkeypatch
+    ):
+        agent = self._agent(
+            monkeypatch, {"domains": ["169.254.169.254"], "ipRanges": []}
+        )
+        action = self._action("http://169.254.169.254/latest/meta-data/")
+        assert agent._validate_arguments(action) is False
+
+
+class TestSwarmInternalPolicy:
+    """agent/swarm.py: one decision for targets, peers and specialist tools."""
+
+    @pytest.fixture(autouse=True)
+    def clean_scope(self):
+        from tools.scope_validator import clear_process_scope
+
+        clear_process_scope()
+        yield
+        clear_process_scope()
+
+    def _publish(self, monkeypatch, allowed):
+        from tools.scope_validator import set_process_scope
+
+        monkeypatch.setenv("ARGUS_ALLOW_INTERNAL_TARGETS", "1")
+        set_process_scope("eng-1", "allowlist", allowed)
+
+    def test_authorized_opted_in_internal_target_is_allowed(self, monkeypatch):
+        from agent.swarm import _is_authorized_target
+
+        self._publish(monkeypatch, ["http://127.0.0.1:9000"])
+        assert _is_authorized_target("http://127.0.0.1:9000/api", "eng-1") is True
+
+    def test_opt_in_alone_is_not_authorization(self, monkeypatch):
+        from agent.swarm import _is_authorized_target
+
+        self._publish(monkeypatch, [])
+        assert _is_authorized_target("http://127.0.0.1:9000/api", "eng-1") is False
+
+    def test_authorized_without_opt_in_is_refused(self, no_opt_in):
+        from agent.swarm import _is_authorized_target
+        from tools.scope_validator import set_process_scope
+
+        set_process_scope("eng-1", "allowlist", ["http://127.0.0.1:9000"])
+        assert _is_authorized_target("http://127.0.0.1:9000/api", "eng-1") is False
+
+    def test_metadata_stays_blocked(self, monkeypatch):
+        from agent.swarm import _is_authorized_target
+
+        self._publish(monkeypatch, ["http://169.254.169.254"])
+        assert (
+            _is_authorized_target("http://169.254.169.254/latest/meta-data/", "eng-1")
+            is False
+        )
+
+
+class TestWebScannerInternalPolicy:
+    """tools/web_scanner.py: the same opt-in + authorization decision."""
+
+    @pytest.fixture(autouse=True)
+    def clean_scope(self):
+        from tools.scope_validator import clear_process_scope
+
+        clear_process_scope()
+        yield
+        clear_process_scope()
+
+    def _scanner(self, engagement_id="eng-1"):
+        from tools.web_scanner import WebScanner
+
+        scanner = object.__new__(WebScanner)
+        scanner.engagement_id = engagement_id
+        return scanner
+
+    def test_authorized_opted_in_internal_target_is_allowed(self, opt_in):
+        from tools.scope_validator import set_process_scope
+
+        set_process_scope("eng-1", "allowlist", ["http://127.0.0.1:9000"])
+        assert (
+            self._scanner()._internal_target_authorized("http://127.0.0.1:9000") is True
+        )
+
+    def test_opt_in_alone_is_not_authorization(self, opt_in):
+        assert (
+            self._scanner()._internal_target_authorized("http://127.0.0.1:9000") is False
+        )
+
+    def test_no_engagement_cannot_authorize_an_internal_target(self, opt_in):
+        from tools.scope_validator import set_process_scope
+
+        set_process_scope("eng-1", "allowlist", ["http://127.0.0.1:9000"])
+        assert (
+            self._scanner(engagement_id="")._internal_target_authorized(
+                "http://127.0.0.1:9000"
+            )
+            is False
+        )
+
+
+class TestWebScannerRedirectPolicy:
+    """A redirect hop follows the same opt-in + authorization rule."""
+
+    @pytest.fixture(autouse=True)
+    def clean_scope(self):
+        from tools.scope_validator import clear_process_scope
+
+        clear_process_scope()
+        yield
+        clear_process_scope()
+
+    def test_authorized_opted_in_internal_redirect_is_allowed(self, opt_in):
+        from tools.scope_validator import set_process_scope
+        from tools.web_scanner import _validate_redirect_chain
+
+        set_process_scope("eng-1", "allowlist", ["http://127.0.0.1:9000"])
+        assert (
+            _validate_redirect_chain(
+                "http://127.0.0.1:9000/admin", "http://127.0.0.1:9000", "eng-1"
+            )
+            is True
+        )
+
+    def test_internal_redirect_without_authorization_is_refused(self, opt_in):
+        from tools.web_scanner import _validate_redirect_chain
+
+        assert (
+            _validate_redirect_chain(
+                "http://127.0.0.1:9000/admin", "http://127.0.0.1:9000", "eng-1"
+            )
+            is False
+        )
+
+    def test_metadata_redirect_stays_blocked_when_authorized(self, opt_in):
+        from tools.scope_validator import set_process_scope
+        from tools.web_scanner import _validate_redirect_chain
+
+        set_process_scope("eng-1", "allowlist", ["http://169.254.169.254"])
+        assert (
+            _validate_redirect_chain(
+                "http://169.254.169.254/latest/meta-data/",
+                "http://169.254.169.254",
+                "eng-1",
+            )
+            is False
+        )

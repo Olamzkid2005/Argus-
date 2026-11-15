@@ -6,8 +6,9 @@ Prevents prompt injection from tricking the agent into scanning unauthorized tar
 import json
 import logging
 import os
+from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from exceptions import ScopeViolationError
 from utils.logging_utils import ScanLogger
@@ -523,9 +524,19 @@ class ScopeValidator:
         fallback is intentionally removed to prevent bypass via `*` matching
         across DNS label boundaries (e.g., `foo.*.com` matching `foo.evil.com`).
         """
+        from urllib.parse import urlparse
+
         hostname = hostname.lower()
         for domain in self._scope.get("domains", []):
-            domain = domain.lower()
+            domain = str(domain).strip().lower()
+            # The job schema and the harness allow an exact origin as a scope
+            # entry; comparing it as a literal hostname rejected the run's own
+            # target. Typed origin permissions are enforced by
+            # _target_authorized_by on the destination path.
+            if "://" in domain:
+                domain = urlparse(domain).hostname or ""
+            if not domain:
+                continue
             if hostname == domain:
                 return True
             if domain.startswith("*."):
@@ -556,6 +567,275 @@ class ScopeValidator:
         return False
 
 
+# ── Parsed targets and typed permissions ─────────────────────────────
+#
+# Authorization used to be decided by string comparison: a target was
+# authorized when an allowed pattern was a prefix of it (``startswith(pattern
+# + "/")``), or when its hostname equalled the host of an allowed URL. Both
+# tests are textual, and both cross an authorization boundary — a prefix test
+# ignores scheme and port, and the derived bare host let one host:port
+# permission authorize every other port on that host. Parsing the target once
+# and asking a typed permission about its components (scheme, host, port,
+# path) removes both, because nothing is compared as a string any more.
+
+_MAX_PORT = 65535
+_NAME_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-._")
+
+
+class TargetParseError(ValueError):
+    """Target cannot be authorized: malformed, scheme-less, or unsupported."""
+
+
+@dataclass(frozen=True)
+class ParsedTarget:
+    """A target reduced to the parts authorization compares."""
+
+    hostname: str
+    scheme: str = ""
+    port: int | None = None
+    path: str = "/"
+    url: str | None = None
+    host_form: bool = False
+
+    @property
+    def request_target(self) -> str:
+        """The normalized target handed to the scope checks."""
+        if self.url:
+            return self.url
+        host = f"[{self.hostname}]" if ":" in self.hostname else self.hostname
+        return f"{host}:{self.port}" if self.port is not None else host
+
+
+def _valid_hostname(host: str) -> bool:
+    """Whether a parsed host is a plausible DNS name or IP literal."""
+    if not host or len(host) > 253:
+        return False
+    if ":" in host:  # IPv6 literal
+        import ipaddress
+
+        try:
+            ipaddress.IPv6Address(host)
+            return True
+        except ValueError:
+            return False
+    if not set(host) <= _NAME_CHARS:
+        return False
+    return all(
+        label and not label.startswith("-") and not label.endswith("-")
+        for label in host.split(".")
+    )
+
+
+def parse_target(
+    raw: str, base_url: str | None = None, require_http_scheme: bool = True
+) -> ParsedTarget:
+    """Parse a CLI target argument, a discovered URL, or a redirect Location.
+
+    One parser for every target shape the pipeline handles, so no caller has to
+    invent its own comparison. A relative reference is resolved against
+    ``base_url`` first (redirect ``Location`` headers), and everything else is
+    validated rather than interpreted leniently.
+
+    Raises:
+        TargetParseError: empty input, whitespace or control characters, an
+        unsupported scheme, a missing or malformed host, an out-of-range port,
+        or a scheme-less value that is more than ``host[:port]``
+        (``example.com/path`` cannot be authorized: its scheme is unknown).
+    """
+    if not isinstance(raw, str):
+        raise TargetParseError(f"target must be a string, got {type(raw).__name__}")
+    text = raw.strip()
+    if not text:
+        raise TargetParseError("empty target")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in text):
+        raise TargetParseError(
+            f"target contains control characters: {text[:80]!r}"
+        )
+    if "://" not in text and any(ch.isspace() for ch in text):
+        raise TargetParseError(
+            f"scheme-less target contains whitespace: {text[:80]!r}"
+        )
+    if "\\" in text:
+        raise TargetParseError(f"target contains a backslash: {text[:80]!r}")
+
+    if base_url and "://" not in text:
+        text = urljoin(base_url, text)
+
+    if "://" in text:
+        parsed = urlparse(text)
+        scheme = (parsed.scheme or "").lower()
+        if require_http_scheme and scheme not in ("http", "https"):
+            raise TargetParseError(f"unsupported URL scheme {scheme!r}")
+        if not scheme:
+            raise TargetParseError(f"missing URL scheme: {text[:80]!r}")
+        if parsed.username or parsed.password:
+            raise TargetParseError("targets carrying credentials are not authorized")
+        host = (parsed.hostname or "").rstrip(".").lower()
+        try:
+            explicit_port = parsed.port
+        except ValueError as exc:
+            raise TargetParseError(f"invalid port in {text[:80]!r}") from exc
+        if not _valid_hostname(host):
+            raise TargetParseError(f"invalid host {host!r} in {text[:80]!r}")
+        if explicit_port is not None and not (0 < explicit_port <= _MAX_PORT):
+            raise TargetParseError(f"port out of range in {text[:80]!r}")
+        default_port = 443 if scheme == "https" else 80
+        port = explicit_port if explicit_port is not None else (
+            default_port if scheme in ("http", "https") else None
+        )
+        path = parsed.path or "/"
+        host_for_url = f"[{host}]" if ":" in host else host
+        netloc = host_for_url if explicit_port is None else f"{host_for_url}:{explicit_port}"
+        url = f"{scheme}://{netloc}{path}"
+        if parsed.query:
+            url = f"{url}?{parsed.query}"
+        return ParsedTarget(
+            hostname=host, scheme=scheme, port=port, path=path, url=url
+        )
+
+    # Host form: what a port scanner or a bare CLI target looks like.
+    if any(ch in text for ch in "/?#@"):
+        raise TargetParseError(
+            f"scheme-less target with a path or query is not valid: {text[:80]!r}"
+        )
+    if text.startswith("["):
+        end = text.find("]")
+        if end == -1:
+            raise TargetParseError(f"unterminated IPv6 literal: {text[:80]!r}")
+        host = text[1:end].lower()
+        remainder = text[end + 1 :]
+        if remainder and not remainder.startswith(":"):
+            raise TargetParseError(f"invalid port in {text[:80]!r}")
+        port_text = remainder[1:] if remainder else ""
+    else:
+        host, _, port_text = text.partition(":")
+        host = host.rstrip(".").lower()
+    if not _valid_hostname(host):
+        raise TargetParseError(f"invalid host {host!r} in {text[:80]!r}")
+    if port_text:
+        if not port_text.isdigit() or not (0 < int(port_text) <= _MAX_PORT):
+            raise TargetParseError(f"invalid port {port_text!r} in {text[:80]!r}")
+        port = int(port_text)
+    else:
+        port = None
+    return ParsedTarget(hostname=host, port=port, host_form=True)
+
+
+@dataclass(frozen=True)
+class TargetPermission:
+    """One authorized scope entry, interpreted as the kind of grant it states."""
+
+    kind: str  # "origin" | "host" | "path"
+    hostname: str
+    scheme: str | None = None
+    port: int | None = None
+    path: str = "/"
+    pattern: str = ""
+
+
+def parse_scope_entry(entry: str) -> TargetPermission | None:
+    """Interpret one allowed scope entry, or None when it is an explicit glob.
+
+    ``None`` means the operator wrote a wildcard pattern (``*example.com*``);
+    the caller applies it as a glob, which is an explicit statement of intent
+    rather than an incidental substring test on a parsed target.
+    """
+    text = str(entry or "").strip()
+    if not text:
+        return None
+    if text.startswith("*.") and "://" not in text:
+        host = text[2:].rstrip(".").lower()
+        if not host or "*" in host or "?" in host:
+            return None
+        return TargetPermission(
+            kind="host", hostname=f"*.{host}", pattern=text
+        )
+    if "*" in text or "?" in text or "[" in text:
+        return None
+    try:
+        parsed = parse_target(text, require_http_scheme=False)
+    except TargetParseError:
+        return None
+    if parsed.host_form:
+        return TargetPermission(
+            kind="host", hostname=parsed.hostname, port=parsed.port, pattern=text
+        )
+    after_scheme = text.split("://", 1)[1]
+    slash = after_scheme.find("/")
+    path = after_scheme[slash:] if slash != -1 else ""
+    path = path.split("?", 1)[0].split("#", 1)[0]
+    if path and path != "/":
+        return TargetPermission(
+            kind="path",
+            hostname=parsed.hostname,
+            scheme=parsed.scheme,
+            port=parsed.port,
+            path=path,
+            pattern=text,
+        )
+    return TargetPermission(
+        kind="origin",
+        hostname=parsed.hostname,
+        scheme=parsed.scheme,
+        port=parsed.port,
+        pattern=text,
+    )
+
+
+def _host_matches_permission(permission_host: str, hostname: str) -> bool:
+    """Exact host, or exactly one DNS label for a ``*.example.com`` entry."""
+    if permission_host == hostname:
+        return True
+    if permission_host.startswith("*."):
+        suffix = permission_host[1:]
+        if hostname.endswith(suffix):
+            prefix = hostname[: -len(suffix)]
+            return bool(prefix) and "." not in prefix
+    return False
+
+
+def permission_authorizes(permission: TargetPermission, target: ParsedTarget) -> bool:
+    """Whether one typed permission authorizes one parsed target.
+
+    * **origin** (``https://example.com``, ``https://example.com:8443``) grants
+      scheme + host + port for any path. It does not grant another scheme,
+      another port, or a sibling origin such as ``https://api.example.com``.
+    * **host** (``example.com``, ``example.com:8443``, ``*.example.com``) grants
+      that host for any scheme and any path, restricted to the stated port when
+      one is given.
+    * **path** (``https://example.com/app``) grants the origin plus that path on
+      a segment boundary: ``/app/x`` matches, ``/application`` does not.
+    """
+    if not _host_matches_permission(permission.hostname, target.hostname):
+        return False
+    if permission.kind == "host":
+        return not (
+            permission.port is not None
+            and target.port is not None
+            and permission.port != target.port
+        )
+
+    # Origin and path permissions name exactly one origin.
+    if target.scheme and target.scheme != permission.scheme:
+        return False
+    if target.port is None:
+        # Deliberate, pinned exception: a port scanner is handed a bare host
+        # rather than a URL, so it cannot name a port to compare. The entry's
+        # port is inherited rather than treated as "any port", and
+        # ``authorize_target`` reports it as ``inherited_port`` so the caller
+        # uses that port instead of choosing its own; a target that names any
+        # port must still match the entry exactly (checked just below).
+        # Without this the earlier measured behaviour returns: sqlmap-style
+        # URLs, ffuf and every port scanner were skipped in an authorized run.
+        return permission.kind == "origin"
+    if target.port != permission.port:
+        return False
+    if permission.kind == "origin":
+        return True
+    base = permission.path.rstrip("/")
+    return target.path == base or target.path.startswith(base + "/")
+
+
 def _match_glob(pattern: str, target: str) -> bool:
     """Check if target matches a glob pattern (fnmatch-style)."""
     import fnmatch
@@ -578,33 +858,34 @@ def _check_blocked(target: str, blocked_targets: list[str] | None) -> bool:
 
 
 def _target_authorized_by(pattern: str, target: str) -> bool:
-    """Whether one allowed pattern authorizes a target.
+    """Whether one allowed entry authorizes a target.
 
-    A direct glob match is the main case. Two derived forms are also accepted,
-    because tools are handed concrete resources rather than the base an operator
-    typed, and denying them silently removed tools from an authorized run
-    (measured: sqlmap-style parameter URLs, ffuf's ``/FUZZ`` and every port
-    scanner were skipped while the rest of the pipeline ran):
+    The entry is interpreted as a typed permission (see ``parse_scope_entry``)
+    and compared component by component against the parsed target. Strings are
+    never compared by prefix: ``http://127.0.0.1:8877`` authorizes the paths of
+    that origin, not ``127.0.0.1:8877.evil.test`` and not another port, and it
+    authorizes a bare ``127.0.0.1`` only because a port-scanner target inherits
+    the entry's port rather than opening every port on the host.
 
-    * a **path under** the pattern — ``http://host:port/user?id=1`` and
-      ``http://host:port/FUZZ`` are the authorized resource reached through an
-      authorized base;
-    * the **bare host** of an authorized URL — port scanners take a host rather
-      than a URL, so ``127.0.0.1`` is authorized by ``http://127.0.0.1:8877``.
-
-    Nothing here widens scope to another host or port: the subtree form requires
-    a full string prefix ending on a path boundary, and the bare host must equal
-    a pattern's host exactly.
+    Tools are handed derived resources rather than the base an operator typed,
+    which is why an origin permission covers any path (``/FUZZ``,
+    ``/user?id=1``) and a bare host without a port is accepted — denying those
+    silently removed sqlmap-style URLs, ffuf and every port scanner from an
+    authorized run. An entry that is itself a wildcard pattern is applied as a
+    glob, because that is the operator explicitly stating intent.
     """
-    if _match_glob(pattern, target):
-        return True
+    try:
+        parsed_target = parse_target(target, require_http_scheme=False)
+    except TargetParseError as exc:
+        logger.warning("Target %r rejected: %s", target, exc)
+        return False
 
-    base = pattern.rstrip("/")
-    if target.lower().startswith(base.lower() + "/"):
-        return True
-
-    pattern_host = urlparse(pattern if "//" in pattern else f"//{pattern}").hostname
-    return bool(pattern_host) and target.lower() == pattern_host.lower()
+    permission = parse_scope_entry(pattern)
+    if permission is None:
+        return _match_glob(pattern, target) or _match_glob(
+            pattern, parsed_target.hostname
+        )
+    return permission_authorizes(permission, parsed_target)
 
 
 def _check_allowed(target: str, allowed_targets: list[str] | None, mode: str) -> bool | None:
@@ -654,36 +935,61 @@ def _check_allowed(target: str, allowed_targets: list[str] | None, mode: str) ->
 # run cannot be authorized at the phase level and then denied at the tool level
 # — which is what happened on the SQLite/local path, where no engagement record
 # ever carried a scope (found by running step 1 of docs/DEMO-READINESS-PLAN.md).
-_run_scope: dict[str, Any] = {}
+_run_scopes: dict[str, dict[str, Any]] = {}
+
+
+def _scope_key(engagement_id: str | None) -> str:
+    return str(engagement_id or "").strip()
 
 
 def set_process_scope(
+    engagement_id: str,
     mode: str = "allowlist",
     allowed_targets: list[str] | None = None,
     blocked_targets: list[str] | None = None,
 ) -> None:
-    """Publish the run's scope for this process.
+    """Publish one engagement's run scope for this process.
 
     Called by the orchestrator when it reads the job payload, following the
     same run-level-config convention as ``config.llm_env.set_worker_llm_config``.
+
+    The scope is keyed by engagement: a single-slot process-global value let a
+    concurrent run inherit whichever authorization was published last, so a
+    caller could be authorized by another engagement's scope. A publication
+    without an owner is refused rather than stored unkeyed.
     """
-    global _run_scope
-    _run_scope = {
+    key = _scope_key(engagement_id)
+    if not key:
+        raise ValueError(
+            "set_process_scope requires an engagement_id: an authorization "
+            "without an owner could be borrowed by the next run in this process"
+        )
+    _run_scopes[key] = {
         "mode": mode or "allowlist",
         "allowed_targets": list(allowed_targets or []),
         "blocked_targets": list(blocked_targets or []),
     }
 
 
-def clear_process_scope() -> None:
-    """Forget the published run scope (tests, and process teardown)."""
-    global _run_scope
-    _run_scope = {}
+def clear_process_scope(engagement_id: str | None = None) -> None:
+    """Forget one engagement's published scope, or every one (tests/teardown)."""
+    if engagement_id is None:
+        _run_scopes.clear()
+    else:
+        _run_scopes.pop(_scope_key(engagement_id), None)
 
 
-def process_scope() -> dict[str, Any] | None:
-    """The published run scope, or None when this process has none."""
-    return dict(_run_scope) if _run_scope else None
+def process_scope(engagement_id: str | None = None) -> dict[str, Any] | None:
+    """The scope published for this engagement, or None.
+
+    There is deliberately no unkeyed lookup: a caller that cannot name its
+    engagement has no published authorization it may borrow.
+    """
+    key = _scope_key(engagement_id)
+    if not key:
+        return None
+    scope = _run_scopes.get(key)
+    return dict(scope) if scope else None
 
 
 def validate_target_scope(
@@ -760,11 +1066,20 @@ def validate_target_scope(
     # the job payload) means "use this run's scope". Without this fallback such a
     # call would deny every target under the default allowlist mode.
     if allowed_targets is None and blocked_targets is None:
-        published = process_scope()
+        published = process_scope(engagement_id)
         if published:
             mode = published.get("mode", mode)
             allowed_targets = published.get("allowed_targets")
             blocked_targets = published.get("blocked_targets")
+
+    # A target that cannot be parsed cannot be authorized, in any mode: the
+    # old code let an unparseable string fall through to string matching, where
+    # a lookalike could land inside an allowed pattern's text.
+    try:
+        parse_target(target, require_http_scheme=False)
+    except TargetParseError as exc:
+        logger.warning("Target %r rejected: %s", target, exc)
+        return False
 
     if _check_blocked(target, blocked_targets):
         return False
@@ -774,3 +1089,140 @@ def validate_target_scope(
 
     result = _check_allowed(target, allowed_targets, mode)
     return result if result is not None else True
+
+
+@dataclass(frozen=True)
+class TargetAuthorization:
+    """The decision for one target, plus the parsed target it was made about."""
+
+    authorized: bool
+    target: ParsedTarget | None
+    reason: str
+    #: Port a port-less host target inherits from the entry that authorized it.
+    #: A caller acting on such a target must use this port; it is never "any
+    #: port". ``None`` when the target named its own port or no port applies.
+    inherited_port: int | None = None
+
+
+def authorize_target(
+    target: str,
+    engagement_id: str | None = None,
+    *,
+    mode: str = "allowlist",
+    allowed_targets: list[str] | None = None,
+    blocked_targets: list[str] | None = None,
+    base_url: str | None = None,
+    allow_origin: str | None = None,
+    reject_internal: bool = True,
+) -> TargetAuthorization:
+    """Parse a target and decide whether it is authorized — the one entry point.
+
+    Every path that authorizes a target calls this: CLI target arguments,
+    discovered URLs (crawl links, peer/endpoint discovery) and redirect
+    ``Location`` hops. Callers get a decision plus the parsed target, so none of
+    them needs its own string comparison.
+
+    Parsing happens first and failure is a denial, not a fallback: an empty,
+    scheme-less-with-path, control-character or non-HTTP target is rejected
+    before any scope matching, which is what the old prefix/host-suffix tests
+    failed to do.
+
+    Args:
+        target: CLI target, discovered URL, host or ``host:port``, or a redirect
+            ``Location`` value.
+        engagement_id: Engagement whose published run scope applies.
+        mode / allowed_targets / blocked_targets: Explicit rules; when no rules
+            are supplied the engagement's published scope is used.
+        base_url: Base to resolve a relative reference against (redirect hops).
+        allow_origin: The scan target's own URL. With no engagement there is no
+            authoritative scope, so the scan target's origin is the only origin
+            a discovered URL or redirect may reach; a sibling origin, another
+            scheme or another port is refused. Ignored once an engagement (and
+            therefore a real scope) is in play, so this can only narrow.
+        reject_internal: Apply the internal/cloud-metadata policy.
+
+    Returns:
+        TargetAuthorization with the decision, the parsed target (None when it
+        could not be parsed) and a human-readable reason.
+    """
+    try:
+        parsed = parse_target(target, base_url=base_url)
+    except TargetParseError as exc:
+        logger.warning("Target %r rejected: %s", target, exc)
+        return TargetAuthorization(False, None, str(exc))
+
+    authorized = validate_target_scope(
+        parsed.request_target,
+        engagement_id,
+        mode=mode,
+        allowed_targets=allowed_targets,
+        blocked_targets=blocked_targets,
+    )
+
+    if (
+        not authorized
+        and allow_origin
+        and not engagement_id
+        and allowed_targets is None
+        and blocked_targets is None
+    ):
+        try:
+            origin = parse_target(allow_origin)
+        except TargetParseError:
+            origin = None
+        # Origin equality on parsed parts: same scheme, same host, same port.
+        if (
+            origin is not None
+            and not origin.host_form
+            and parsed.scheme == origin.scheme
+            and parsed.hostname == origin.hostname
+            and parsed.port == origin.port
+        ):
+            authorized = True
+
+    inherited_port = _inherited_port(parsed, engagement_id, allowed_targets, blocked_targets)
+
+    if reject_internal and ScopeValidator.is_blocked_internal_target(
+        parsed.hostname, authorized=authorized
+    ):
+        return TargetAuthorization(
+            False,
+            parsed,
+            "internal or cloud-metadata target: requires the internal-target "
+            "opt-in and an explicit scope entry",
+            inherited_port,
+        )
+
+    return TargetAuthorization(
+        authorized,
+        parsed,
+        "authorized" if authorized else "not in authorized scope",
+        inherited_port,
+    )
+
+
+def _inherited_port(
+    parsed: ParsedTarget,
+    engagement_id: str | None,
+    allowed_targets: list[str] | None,
+    blocked_targets: list[str] | None,
+) -> int | None:
+    """The port a bare-host target inherits from the entry that authorized it.
+
+    This is the explicit form of the one exception in ``permission_authorizes``:
+    a port scanner is handed ``host`` rather than ``host:port``, so the decision
+    reports which port the run authorized and the scanner is expected to use it.
+    """
+    if not parsed.host_form or parsed.port is not None:
+        return None
+    candidates = allowed_targets
+    if candidates is None and blocked_targets is None:
+        published = process_scope(engagement_id)
+        candidates = (published or {}).get("allowed_targets")
+    for entry in candidates or []:
+        permission = parse_scope_entry(entry)
+        if permission is None or permission.kind != "origin" or not permission.port:
+            continue
+        if _host_matches_permission(permission.hostname, parsed.hostname):
+            return permission.port
+    return None

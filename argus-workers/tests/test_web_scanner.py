@@ -134,7 +134,7 @@ class TestScanValidation:
         scan() returns [] without making requests."""
         scanner = WebScanner(engagement_id="eng-1")
 
-        with patch("tools.web_scanner.validate_target_scope", return_value=False):
+        with patch("tools.scope_validator.validate_target_scope", return_value=False):
             with patch.object(scanner, "_safe_request") as mock_req:
                 findings = scanner.scan("https://out-of-scope.example.com")
 

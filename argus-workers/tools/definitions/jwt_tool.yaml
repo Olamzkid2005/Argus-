@@ -9,7 +9,7 @@ parameters:
     type: string
     description: "Target URL"
     required: true
-    flag: "-u"
+    flag: "-t"
 capabilities:
   - jwt_analysis
 signal_quality: PROBABLE

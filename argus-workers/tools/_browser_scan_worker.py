@@ -4,10 +4,13 @@
 import contextlib
 import json
 import logging
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
+from tools import browser_scope
+from tools.browser_scope import SCOPE_ENV_VAR, BrowserScopePayload, parse_scope_payload
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
@@ -57,7 +60,17 @@ def _validate_url(url: str) -> str:
     return url
 
 
-def scan(target_url: str, tech_stack: list) -> list[dict]:
+def scan(
+    target_url: str, tech_stack: list, scope: BrowserScopePayload | None = None
+) -> list[dict]:
+    """Scan the target in a browser, bounded by the run's authorization.
+
+    ``scope`` is the authorization the parent passed (``ARGUS_BROWSER_SCOPE``).
+    Every URL this process navigates to, and every request the page makes on its
+    own (subresources, XHR, iframes, redirect hops), is decided by
+    ``browser_scope.request_authorized``. With no scope the target's own origin
+    is the only origin reachable, so the worker never authorizes itself.
+    """
     slog = ScanLogger("browser_scan_worker")
     findings: list[dict] = []
     browser = None
@@ -66,11 +79,40 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
     except ValueError as ve:
         slog.warn("URL validation failed: %s", ve)
         return findings
+
+    # The subprocess had no authorization of its own before this: it scanned
+    # whatever URL it was handed. The top-level URL is now checked against the
+    # run scope the parent passed, not against the URL's own shape.
+    if not browser_scope.navigation_authorized(target_url, target_url, scope):
+        slog.warn("Target %s is outside the run's browser scope", target_url)
+        return findings
+    if scope is not None and scope.configured:
+        slog.info(
+            "Browser scope: mode=%s allowed=%d blocked=%d",
+            scope.mode,
+            len(scope.allowed_targets),
+            len(scope.blocked_targets),
+        )
+
     slog.tool_start("browser_scan", target=target_url)
     with sync_playwright() as p:
         try:
             browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
             page = browser.new_page()
+
+            def on_route(route, request):
+                url = request.url
+                if not url.lower().startswith(("http://", "https://")):
+                    route.continue_()
+                    return
+                if browser_scope.request_authorized(url, target_url, scope):
+                    route.continue_()
+                    return
+                slog.warn("Blocked out-of-scope browser request: %s", url)
+                logger.warning("Blocked out-of-scope browser request: %s", url)
+                route.abort("blockedbyclient")
+
+            page.route("**/*", on_route)
             # Use a fresh list per payload to avoid TOCTOU race between
             # collecting errors and checking them (M7 fix)
             page.goto(target_url, timeout=30000, wait_until="networkidle")
@@ -85,7 +127,9 @@ def scan(target_url: str, tech_stack: list) -> list[dict]:
             for payload in ["<img src=x onerror=alert(1)>", "javascript:alert(1)"]:
                 current_errors = []
                 payload_url = f"{target_url}?q={payload}"
-                if not payload_url.startswith(("http://", "https://")):
+                if not browser_scope.navigation_authorized(
+                    payload_url, target_url, scope
+                ):
                     continue
                 page.goto(payload_url, timeout=10000)
                 if any("alert" in e.lower() for e in current_errors):
@@ -116,5 +160,6 @@ if __name__ == "__main__":
         sys.exit(1)
     target = sys.argv[1]
     tech_stack = json.loads(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] else []
-    results = scan(target, tech_stack)
+    scope = parse_scope_payload(os.environ.get(SCOPE_ENV_VAR))
+    results = scan(target, tech_stack, scope)
     print(json.dumps(results))

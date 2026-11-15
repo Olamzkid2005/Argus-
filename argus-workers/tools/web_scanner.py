@@ -54,7 +54,7 @@ from tool_core.finding_builder import FindingBuilder
 from tool_core.result import ToolStatus, UnifiedToolResult
 from tools.scope_validator import (  # M-25: scope validation
     ScopeValidator,
-    validate_target_scope,
+    authorize_target,
 )
 from tools.web_scanner_checks._helpers import test_jwt_alg_none
 from utils.logging_utils import ScanLogger
@@ -62,53 +62,38 @@ from utils.logging_utils import ScanLogger
 logger = logging.getLogger(__name__)
 
 
-def _is_private_ip(hostname: str) -> bool:
-    """Check if a hostname resolves to a private/loopback/link-local IP.
+def _validate_redirect_chain(
+    url: str, target_url: str, engagement_id: str | None = None
+) -> bool:
+    """Validate one hop of a redirect chain against scope and SSRF policy.
 
-    Delegates to the consolidated ScopeValidator.is_internal_address()
-    from tools/scope_validator.py (SSOT).
+    Delegates the whole decision to ``authorize_target``: the hop is parsed (a
+    malformed ``Location`` is refused rather than matched), authorized against
+    the engagement's scope, and checked against the internal/metadata policy.
+
+    Without an engagement there is no authoritative scope, so the scan target's
+    own origin is the only one a hop may reach — a hop to another scheme, port
+    or host is refused, including one that only shares a hostname suffix.
+
+    Returns True when the hop may be followed.
     """
-    from tools.scope_validator import ScopeValidator
+    return authorize_target(
+        url, engagement_id, allow_origin=target_url
+    ).authorized
 
-    return ScopeValidator.is_internal_address(hostname)
 
+def _is_in_scope(
+    url: str, target_url: str | None = None, engagement_id: str | None = None
+) -> bool:
+    """Whether a discovered URL may be used (crawl links, follow-ups).
 
-def _validate_redirect_chain(url: str, target_url: str) -> bool:
-    """Validate a redirect target against scope and private IP checks.
-
-    Returns True if the redirect is safe (in scope and not a private IP),
-    False otherwise.
+    Same single entry point as the redirect guard: parsed, scope-authorized and
+    SSRF-checked, with the scan target's origin as the fallback when no
+    engagement scope exists. H-v3-12.
     """
-    try:
-        parsed = urlparse(url)
-        hostname = parsed.hostname or ""
-        if not hostname:
-            return False
-        # Check private IP first (fail-closed)
-        if _is_private_ip(hostname):
-            return False
-        # Check scope
-        return _is_in_scope(url, target_url)
-    except Exception:
-        return False
-
-
-def _is_in_scope(url: str, target_url: str) -> bool:
-    """Check if a URL is within the scan scope using proper host matching.
-
-    Uses parsed hostname comparison rather than string prefix matching to
-    prevent scope escape via subdomain squatting (e.g., example.com.evil.com
-    matching example.com). H-v3-12.
-    """
-    try:
-        parsed_url = urlparse(url)
-        parsed_target = urlparse(target_url)
-        # Allow same host or subdomains of the target host
-        url_host = parsed_url.hostname or ""
-        target_host = parsed_target.hostname or ""
-        return url_host == target_host or url_host.endswith("." + target_host)
-    except Exception:
-        return False
+    return authorize_target(
+        url, engagement_id, allow_origin=target_url
+    ).authorized
 
 
 class WebScanner(AbstractTool):
@@ -611,6 +596,19 @@ class WebScanner(AbstractTool):
                     logger.debug("Error closing pooled session", exc_info=True)
             logger.debug("Closed %s/%s pooled sessions", closed, self._pool_size)
 
+    def _internal_target_authorized(self, target_url: str) -> bool:
+        """Whether an internal target is explicitly authorized for this scan.
+
+        Opt-in (``ARGUS_ALLOW_INTERNAL_TARGETS``) is not authorization on its
+        own: the target must also be in the engagement's (or published run)
+        scope. With no engagement identity there is nothing to authorize it, so
+        the internal guard keeps refusing it (fail closed).
+        """
+        return bool(
+            self.engagement_id
+            and authorize_target(target_url, self.engagement_id).authorized
+        )
+
     def _run_scan_impl(self, target_url: str) -> None:
         """
         Core scan logic — SSRF prevention, scope validation, SSL test, then
@@ -641,7 +639,7 @@ class WebScanner(AbstractTool):
         # re-denying it. Cloud metadata / link-local remain blocked regardless.
         _internal_opted_in = ScopeValidator.internal_targets_opt_in()
         if hostname and ScopeValidator.is_blocked_internal_target(
-            hostname, authorized=_internal_opted_in
+            hostname, authorized=self._internal_target_authorized(target_url)
         ):
             logger.warning(
                 "Target %s is an internal/SSRF target — scan aborted. "
@@ -654,7 +652,7 @@ class WebScanner(AbstractTool):
         if (
             self.engagement_id
             and not _internal_opted_in
-            and not validate_target_scope(target_url, self.engagement_id)
+            and not authorize_target(target_url, self.engagement_id).authorized
         ):
             logger.warning(
                 "Target %s is outside authorized scope for engagement %s — scan aborted (M-25)",
@@ -868,7 +866,9 @@ class WebScanner(AbstractTool):
             # Resolve relative redirects
             redirect_url = urljoin(current.url, location)
 
-            if not _validate_redirect_chain(redirect_url, self.target_url):
+            if not _validate_redirect_chain(
+                redirect_url, self.target_url, self.engagement_id
+            ):
                 logger.warning(
                     "Redirect blocked — target %s is out of scope or resolves to private IP "
                     "(original target: %s)",
@@ -1786,7 +1786,9 @@ class WebScanner(AbstractTool):
                 # H-v3-12: Use URL-parsed host matching, not string prefix,
                 # to prevent scope escape via subdomain squatting (e.g.
                 # https://example.com.evil.com matching https://example.com)
-                if absolute not in crawled and _is_in_scope(absolute, self.target_url):
+                if absolute not in crawled and _is_in_scope(
+                    absolute, self.target_url, self.engagement_id
+                ):
                     to_crawl.append(absolute)
 
         # Store discovered parameters for use by other checks

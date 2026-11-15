@@ -38,6 +38,7 @@ from tools.circuit_breaker import (
     CircuitOpenError,
     ToolCircuitBreakerManager,
 )
+from tools.process_ownership import get_process_registry
 from tracing import ExecutionSpan, StructuredLogger
 from utils.error_hints import build_error_hint
 from utils.logging_utils import ScanLogger
@@ -222,6 +223,19 @@ class ToolRunner:
             )
         return None
 
+    def _egress_block(self, tool: str, args: list[str]):
+        """Egress-policy verdict for this invocation (Stage 3.2 item 3).
+
+        External tools make their own connections, so the only control point is
+        before the process starts. The policy parses every destination in the
+        argv and delegates the scope decision to ``_scope_block_reason`` — one
+        authorization source — while excluding tools whose traffic cannot stay
+        on the target and refusing vendor-update flags.
+        """
+        from tools.egress_policy import authorize_tool_egress
+
+        return authorize_tool_egress(tool, args, target_check=self._scope_block_reason)
+
     # File extensions that appear in tool args but are NOT valid TLDs.
     # Used by _extract_target to filter out non-target args like .nse scripts,
     # .txt wordlists, .json configs, .yaml templates, etc.
@@ -274,16 +288,15 @@ class ToolRunner:
         while i < len(args):
             arg = args[i]
             # Handle --flag=value combined format
-            if "=" in arg:
-                flag_part = arg.split("=", 1)[0]
-                if flag_part in self._TARGET_FLAGS:
-                    value = arg.split("=", 1)[1]
-                    if value:
-                        return value
+            if "=" in arg and arg.split("=", 1)[0] in self._TARGET_FLAGS:
+                return arg.split("=", 1)[1]
             # Handle -flag value separate format
-            elif arg in self._TARGET_FLAGS:
-                if i + 1 < len(args) and not args[i + 1].startswith("-"):
-                    return args[i + 1]
+            elif (
+                arg in self._TARGET_FLAGS
+                and i + 1 < len(args)
+                and not args[i + 1].startswith("-")
+            ):
+                return args[i + 1]
             i += 1
 
         # Third pass: look for hostnames/IPs, filtering out non-target patterns
@@ -574,6 +587,29 @@ class ToolRunner:
             SecurityError: If dangerous payload detected
             subprocess.TimeoutExpired: If execution times out
         """
+        # Egress policy — decided before the process exists, because an external
+        # tool's own connections cannot be intercepted once it is running. It
+        # comes first so a tool that can never meet the policy says so, instead
+        # of being reported as an ordinary out-of-scope target. Its target check
+        # delegates to _scope_block_reason, so scope is still enforced here.
+        egress = self._egress_block(tool, args)
+        if not egress.allowed:
+            status = (
+                ToolStatus.SKIPPED
+                if egress.tool_class == "third_party"
+                else ToolStatus.SCOPE_ERROR
+            )
+            logger.warning("Egress policy blocked %s: %s", tool, egress.reason)
+            result = UnifiedToolResult(
+                tool_name=tool,
+                stdout="",
+                stderr=egress.reason,
+                exit_code=1,
+                status=status,
+            )
+            result.mark_finished()
+            return result
+
         # Scope validation — keep LLM-selected tools within authorized boundaries
         # MUST run before cache check to prevent stale-cached results from
         # bypassing scope enforcement when the authorized scope changes.
@@ -671,13 +707,12 @@ class ToolRunner:
                 # high-cost tools (sqlmap, masscan, etc.) to avoid saturating CPU/memory.
                 _sem = HIGH_COST_SEMAPHORE if tool in HIGH_COST_TOOLS else SUBPROCESS_SEMAPHORE
                 with _sem:
-                    proc_result: subprocess.CompletedProcess[str] = subprocess.run(  # noqa: S603 — safe: list form, tool_path resolved internally, args validated by is_dangerous()
+                    proc_result: subprocess.CompletedProcess[str] = self._run_bounded(
                         [tool_path] + args,
-                        capture_output=True,
-                        text=True,
                         timeout=timeout,
                         cwd=str(self.sandbox_dir),
                         env=env,
+                        max_output_bytes=max_output_bytes,
                     )
                 # Truncate oversized output to prevent memory exhaustion.
                 # Use byte-level truncation on the encoded string to handle
@@ -880,11 +915,125 @@ class ToolRunner:
                     error_message=str(e),
                 )
 
+    def _run_bounded(
+        self,
+        cmd: list[str],
+        *,
+        timeout: int,
+        cwd: str,
+        env: dict,
+        max_output_bytes: int,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run a tool while never buffering more than ``max_output_bytes``.
+
+        ``subprocess.run(capture_output=True)`` reads the entire output into
+        memory before the caller can truncate it, so a chatty scanner could
+        exhaust memory despite the post-hoc limit. This reads both pipes in
+        bounded chunks, keeps at most the cap from each, and kills the
+        engagement-owned process group once the cap is exceeded — draining the
+        rest so the child cannot block on a full pipe.
+        """
+        proc = subprocess.Popen(  # noqa: S603 — list form, validated args, resolved tool path
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=cwd,
+            env=env,
+            start_new_session=True,
+        )
+        owner = self.engagement_id or f"unowned-{proc.pid}"
+        registry = get_process_registry()
+        registry.register(owner, proc)
+
+        buffers: dict[str, list[str]] = {"stdout": [], "stderr": []}
+        sizes: dict[str, int] = {"stdout": 0, "stderr": 0}
+        over_limit = {"stdout": False, "stderr": False}
+
+        def pump(name: str) -> None:
+            stream = getattr(proc, name)
+            assert stream is not None
+            while True:
+                chunk = stream.read(65536)
+                if not chunk:
+                    return
+                encoded = len(chunk.encode("utf-8"))
+                remaining = max_output_bytes - sizes[name]
+                if remaining > 0:
+                    buffers[name].append(chunk[:remaining])
+                sizes[name] += encoded
+                if sizes[name] > max_output_bytes and not over_limit[name]:
+                    over_limit[name] = True
+                    logger.warning(
+                        "%s exceeded %d byte output limit — killing process group %d",
+                        name,
+                        max_output_bytes,
+                        proc.pid,
+                    )
+                    try:
+                        os.killpg(os.getpgid(proc.pid), 9)
+                    except Exception:
+                        proc.kill()
+
+        import threading
+
+        readers = [
+            threading.Thread(target=pump, args=(name,), daemon=True)
+            for name in ("stdout", "stderr")
+        ]
+        for reader in readers:
+            reader.start()
+
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(proc.pid), 9)
+            except Exception:
+                proc.kill()
+            for reader in readers:
+                reader.join(timeout=5)
+            raise
+        finally:
+            for reader in readers:
+                reader.join(timeout=5)
+            registry.unregister(owner, proc)
+
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=proc.returncode,
+            stdout="".join(buffers["stdout"]),
+            stderr="".join(buffers["stderr"]),
+        )
+
+    def cancel_engagement(self, engagement_id: str, *, grace_seconds: float = 2.0):
+        """Stop only the tools owned by this engagement; reports cleanup."""
+        return get_process_registry().terminate_engagement(
+            engagement_id, grace_seconds=grace_seconds
+        )
+
     def run_streaming(
         self, tool: str, args: list[str], timeout: int, on_line: Callable[[str], Any]
     ) -> UnifiedToolResult:
         """Stream tool output line by line, calling on_line() for each."""
         tool_path = self._resolve_tool_path(tool)
+
+        # Egress policy — mirror run()'s pre-spawn check, in the same order
+        egress = self._egress_block(tool, args)
+        if not egress.allowed:
+            status = (
+                ToolStatus.SKIPPED
+                if egress.tool_class == "third_party"
+                else ToolStatus.SCOPE_ERROR
+            )
+            logger.warning("Egress policy blocked %s: %s", tool, egress.reason)
+            return UnifiedToolResult(
+                tool_name=tool,
+                stdout="",
+                stderr=egress.reason,
+                exit_code=1,
+                status=status,
+            )
 
         # Scope validation — mirror run()'s scope guard
         target = self._extract_target(args)
@@ -932,7 +1081,13 @@ class ToolRunner:
             text=True,
             cwd=str(self.sandbox_dir),
             env=env,
+            # Own process group: cancellation signals exactly this engagement's
+            # children and never another run's scanner.
+            start_new_session=True,
         )
+        _owner = self.engagement_id or f"unowned-{proc.pid}"
+        _registry = get_process_registry()
+        _registry.register(_owner, proc)
 
         try:
             assert proc.stdout is not None, "stdout pipe required for streaming"
@@ -1049,6 +1204,7 @@ class ToolRunner:
                         reap_err,
                     )
             finally:
+                _registry.unregister(_owner, proc)
                 _sem.release()
 
         stdout = "".join(stdout_lines)

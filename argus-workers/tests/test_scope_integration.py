@@ -567,16 +567,16 @@ class TestWebScannerScope:
 
     def test_passes_safe_public_target(self, mock_validate_target_scope):
         """Safe public target passes SSRF + scope checks, proceeds to scan."""
-        # WebScanner imports validate_target_scope at module level, so we
-        # must patch the module-level reference in web_scanner, not the
-        # definition site in scope_validator.
+        # The scanner authorizes through tools.scope_validator.authorize_target,
+        # which consults validate_target_scope there; patching the definition
+        # site covers the whole decision.
         from tools.web_scanner import WebScanner
         sc = WebScanner(engagement_id="eng-test")
         sc._builder = mock.MagicMock()
         sc._builder.findings = []
         sc._base_response = None
 
-        with mock.patch("tools.web_scanner.validate_target_scope", return_value=True):
+        with mock.patch("tools.scope_validator.validate_target_scope", return_value=True):
             sc._run_scan_impl("https://example.com")
             # target_url is only set after SSRF + scope checks pass
             assert sc.target_url == "https://example.com"
@@ -813,10 +813,15 @@ class TestRedirectChainScope:
         from tools.web_scanner import _validate_redirect_chain
         assert _validate_redirect_chain("https://example.com/api/v2", "https://example.com") is True
 
-    def test_allows_redirect_to_subdomain(self):
-        """Redirect to subdomain of target passes both checks."""
+    def test_blocks_redirect_to_subdomain(self):
+        """Redirect to a subdomain is a different origin and is refused.
+
+        Hostname-suffix matching used to authorize this; it is not the same
+        origin, so without an engagement scope that explicitly authorizes the
+        subdomain the hop must be refused (Stage 3.2 item 1).
+        """
         from tools.web_scanner import _validate_redirect_chain
-        assert _validate_redirect_chain("https://api.example.com/v1", "https://example.com") is True
+        assert _validate_redirect_chain("https://api.example.com/v1", "https://example.com") is False
 
     def test_blocks_cross_origin_redirect(self):
         """Redirect to different origin is blocked by scope check (even though SSRF passes)."""
