@@ -21,6 +21,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from tool_core._compat import UTC
@@ -78,42 +79,15 @@ class MigrateResult:
 
 # M-v4-13/M-v4-14: Renamed from 'decision_snapshots' to avoid collision with
 # schema.sql which defines a different table with the same name.
-# Uses UUID PKs with defaults instead of bare TEXT PKs.
-_DECISION_SNAPSHOTS_DDL = """
-CREATE TABLE IF NOT EXISTS agent_decision_log (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    engagement_id   UUID NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
-    action_id       UUID NOT NULL,
-    observation_hash TEXT NOT NULL,
-    reasoning_hash  TEXT NOT NULL,
-    selected_tool   TEXT NOT NULL,
-    arguments       JSONB,
-    tool_cost_usd   NUMERIC(10,4) DEFAULT 0,
-    state_version   INTEGER NOT NULL DEFAULT 0,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    execution_success BOOLEAN,
-    execution_error TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_agent_decision_log_engagement
-    ON agent_decision_log (engagement_id);
-CREATE INDEX IF NOT EXISTS idx_agent_decision_log_action
-    ON agent_decision_log (action_id);
-"""
-
-# M-v4-13/M-v4-14: Renamed from 'engagement_state_snapshots' to avoid collision.
-# Uses UUID PK with default generation.
-_ENGAGEMENT_STATE_SNAPSHOTS_DDL = """
-CREATE TABLE IF NOT EXISTS agent_state_log (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    engagement_id   UUID NOT NULL UNIQUE REFERENCES engagements(id) ON DELETE CASCADE,
-    state_version   INTEGER NOT NULL DEFAULT 0,
-    snapshot_data   JSONB NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_agent_state_log_eid
-    ON agent_state_log (engagement_id);
-"""
+# The canonical DDL lives in migration 032 so the migration ledger, fresh
+# databases, and runtime bootstrapping cannot drift apart.
+_RUNTIME_TABLES_DDL_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "database"
+    / "migrations"
+    / "032_runtime_logging_tables.sql"
+)
+_RUNTIME_TABLES_DDL = _RUNTIME_TABLES_DDL_PATH.read_text(encoding="utf-8")
 
 
 def ensure_tables() -> bool:
@@ -128,8 +102,7 @@ def ensure_tables() -> bool:
         from database.connection import db_cursor
 
         with db_cursor(commit=True) as cursor:
-            cursor.execute(_DECISION_SNAPSHOTS_DDL)
-            cursor.execute(_ENGAGEMENT_STATE_SNAPSHOTS_DDL)
+            cursor.execute(_RUNTIME_TABLES_DDL)
         logger.info("Migration tables verified/created")
         return True
     except Exception as e:

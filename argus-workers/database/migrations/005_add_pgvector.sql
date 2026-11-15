@@ -18,7 +18,7 @@ ADD COLUMN IF NOT EXISTS embedding vector(1536);
 DO $$
 BEGIN
     -- Try to create HNSW index (PostgreSQL 15+)
-    IF substring(current_setting('server_version_num'))::int >= 150000 THEN
+    IF substring(current_setting('server_version_num') FROM 1)::int >= 150000 THEN
         CREATE INDEX IF NOT EXISTS idx_findings_embedding_hnsw
         ON findings USING hnsw (embedding vector_cosine_ops)
         WITH (m = 16, ef_construction = 64);
