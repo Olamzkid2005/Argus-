@@ -2,7 +2,7 @@
 
 > **Status:** Current gap register
 >
-> **Verified:** 2026-09-01 (after the collection-order and migration-test fixes)
+> **Verified:** 2026-11-15 (full Python, TypeScript, Ruff, typecheck, and lint validation)
 >
 > **Purpose:** Record the work that remains before Argus can honestly be described as fully autonomous, production-grade AI red-team pentesting software.
 >
@@ -12,6 +12,21 @@
 
 ### 1. Full test suite is not clean
 
+**Current validation (2026-11-15).** The service-independent suites now pass:
+
+- Python: `5454 passed, 60 skipped, 39 deselected, 14 xfailed` with
+  `HOME=/tmp/argus-test-home ./venv/bin/python -m pytest tests/ -m 'not requires_db and not docker' -q --timeout=180`.
+- TypeScript unit: `1390 passed, 49 skipped, 0 failed` across 85 files, with process exit `0`.
+- TypeScript integration: `156 passed, 8 skipped, 0 failed` across 13 files, with process exit `0`.
+- TypeScript regression plus smoke: `51 passed, 0 failed` across 2 files, with process exit `0`.
+- Python Ruff: all checks pass.
+- TypeScript typecheck: passes.
+- JavaScript/TypeScript lint: `0 errors` and `4433` pre-existing warnings.
+
+A CLI smoke-test cleanup also fixed a test-order artifact: the doctor handler intentionally sets `process.exitCode = 1` when a health check fails, which previously left an otherwise all-green TypeScript unit invocation exiting nonzero. The CLI smoke tests now restore `process.exitCode = 0` after each test.
+
+This item remains open because the repository-workspace `bare Argus terminal` PTY gate reaches its own 180-second timeout without displaying `/assess`, while the in-process TUI lifecycle suite passes. Database, Docker, and live Gate A/B checks also remain unrun/blocked in this environment. The suites above were run as separate service-independent invocations because of the five-minute limit on an individual validation command.
+
 The prior full Python worker-suite run reported:
 
 - 4,908 passed
@@ -20,7 +35,7 @@ The prior full Python worker-suite run reported:
 - 27 xpassed
 - 4 unexpected failures
 
-The formerly reported DB-context failure and three E2E failures now pass in targeted regression runs. A full-suite rerun is still required before this item can be marked closed.
+The formerly reported DB-context failure and three E2E failures now pass in targeted regression runs. The 2026-11-15 full-suite rerun above supersedes those older counts for the service-independent selection.
 
 Three failures were collection-order contamination in the full-scan E2E tests:
 
