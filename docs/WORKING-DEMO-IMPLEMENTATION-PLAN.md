@@ -5,7 +5,7 @@
 **Basis:** Source audit and targeted mocked reproductions, not historical documentation scores.  
 **User-selected scope:** A trustworthy web/API demo, launched by typing `argus` in a terminal, with an OpenCode-like interactive experience.
 
-> **Current-status notice (verified 2026-11-09 against source and test runs):** §1.1–1.3, §2.1, §2.2, and §2.3 evidence below matches the current codebase, and Checkpoint 2 is met (real bridge→worker contract, executor suites, typecheck — see §2.3 evidence). Stages 3–8 remain unchecked work: e.g. `ARGUS_ALLOW_UNSCOPED` auto-enabling and the process-global scope fallback still exist in `argus-workers/feature_flags.py` and `argus-workers/tools/scope_validator.py`, so Stage 3 is not complete. Checkboxes are evidence only where their listed verification commands pass.
+> **Current-status notice (verified 2026-11-15 against source and test runs):** Stages 1–7 carry their task-level evidence below and every task checkbox is checked; Checkpoints 1 and 2 are explicitly met, and Checkpoints 3–7 record their evidence with the live Gate B run still outstanding. Stage 8.1 is complete (see its 2026-11-15 evidence); Stages 8.2 and 8.3 are blocked on a provisioned environment and on operator approval, so Checkpoint 8 is not met. Checkboxes are evidence only where their listed verification commands pass.
 
 This plan supersedes earlier demo-readiness percentages and acceptance claims for the next demo. Historical logs remain useful evidence of individual behaviors, not proof of the stricter bar below.
 
@@ -437,13 +437,21 @@ Every one of those outcomes is now asserted through `execute()`, not just implem
 
 #### 8.1 Make the UI/report reflect the proof ledger
 
-- [ ] Show action reason/provenance, actual execution status, auth identity label, budget, proof status, and coverage gaps; do not display secrets or fabricated success rates.
-- [ ] Save a report from the same persisted findings/proof ledger, including reproducible controls and evidence links. Failed storage/report generation is visible and fails the demo gate.
-- [ ] Verify evidence/report redaction and file permissions; where encryption is requested, missing keys fail closed or pause instead of silently writing plaintext.
+- [x] Show action reason/provenance, actual execution status, auth identity label, budget, proof status, and coverage gaps; do not display secrets or fabricated success rates.
+- [x] Save a report from the same persisted findings/proof ledger, including reproducible controls and evidence links. Failed storage/report generation is visible and fails the demo gate.
+- [x] Verify evidence/report redaction and file permissions; where encryption is requested, missing keys fail closed or pause instead of silently writing plaintext.
 
 **Likely files:** existing TUI scan/finding/report routes, scan store, report generator, evidence collector; report/UI tests.
 
 **Verification:** TUI, persisted store, report, and harness agree after restart; hashes reference real artifacts; credential/secret canaries do not appear in exported artifacts.
+
+**Evidence — provenance, identity, budget, and coverage (2026-11-15).** `src/argus/planner/action-provenance.ts` classifies each hybrid action as `llm`, `deterministic` or `fallback` (`normalizeActionSource`) and derives a non-secret identity label from the action's arguments (`identityFromActionArguments`), so `provenanceForAction()` records source, identity, reasoning and detail per action. `workflow-runner.ts` merges that with the worker's ledger: `workerBudgetFor()` calls the new `WorkersBridge.budgetStatus()` (`agent_budget` RPC), whose reply is validated by `normalizeWorkerBudgetStatus()` (a malformed ledger throws instead of being persisted), and `authIdentities` combines the checkpoint's identities with `worker:<identity>` entries. `persistedReportOptions(store, engagementId)` rebuilds the report's execution snapshot from the latest checkpoint and runs `reconcileCheckpointBudget(checkpoint.budgetUsage, checkpoint.workerBudget)`, so the worker ledger stays authoritative for hybrid agent sessions and any driver-versus-worker difference is listed rather than averaged away. Markdown/JSON/SARIF/HTML then render `Budget: <source>: tool calls …, requests …, LLM calls … (… failures), tokens …, cost …` (cost reads `unknown (worker ledger authoritative)` when the TypeScript side cannot price the worker's calls), `Worker tool calls`, an explicit `Budget reconciliation` list, and each phase action as `<tool>: <status> (<source>, <identity>)` with the last three provenance actions and their outcomes. The TUI finding detail shows the same record — proof status, verifier, confidence, control count, verification time, summary, and the failing step when a verification stopped.
+
+**Evidence — report from the persisted ledger (2026-11-15).** `commands/report.ts` and `commands/assess.ts` both build content through `persistedReportOptions()`, so coverage gaps, evidence links and the execution snapshot come from the engagement store itself and cannot diverge between CLI, TUI and direct generator calls. `coverageGapsFromPhases()` converts every non-`COMPLETED` phase into an explicit gap ("was skipped", "is partial/failed", "did not complete") and keeps a completed phase's own `coverage gap` error, so a clean zero-finding report cannot hide an unrun phase. Each finding is listed with its evidence packages, artifact paths and hashes. Failures stay visible: a checkpoint write failure is promoted to the run's `executionError` (`FAILED` plus a `CHECKPOINT_SAVE_FAILED` audit entry), and a report write error reaches the caller and exits non-zero instead of reporting success.
+
+**Evidence — redaction, permissions, fail-closed encryption (2026-11-15).** `src/argus/shared/redaction.ts` (`redactSecrets`) strips bearer tokens, cookies, AWS keys, embedded URL credentials and private keys. It runs at the reporting boundary (`ReportGenerator.setAnalyses` sanitizes analyses without mutating the caller's objects), on analysis text in `finding-analyzer.ts`, and on provenance `reasoning`/`detail` while the execution snapshot is assembled; stored findings stay raw. `evidence/collector.ts` treats encryption as a precondition — with encryption requested and no cached master key it throws ("Encryption requested … but master key is not cached") instead of writing plaintext — and writes every artifact, screenshot and manifest as `0600` inside `0700` directories whose mode is re-applied with `chmod`. `evidence/integrity.ts` verifies encrypted packages are mode `600` and reports `insecure permissions: expected mode 600, found …`; plaintext verification stays permission-agnostic so historical packages remain verifiable.
+
+Verified 2026-11-15: `bun run typecheck` exit 0; `bun test test/argus/unit` 1390 pass / 49 skip / 0 fail (exit 0); `bun test test/argus/integration` 156 pass / 8 skip / 0 fail; regression plus smoke 51 pass; `bun run lint` 0 errors with 4433 pre-existing warnings; full service-independent Python suite 5454 passed / 60 skipped / 39 deselected / 14 xfailed; `ruff check` clean. Covering suites: `test/argus/unit/reporting/generator.test.ts`, `unit/commands/report.test.ts`, `unit/bridge/budget-status.test.ts`, `unit/planner/action-provenance.test.ts`, `unit/engagement/checkpoint.test.ts`, `unit/shared/redaction.test.ts`, `unit/evidence/collector.test.ts`, `integration/encrypted-evidence-flow.test.ts`, `integration/resume-flow.test.ts` and `integration/resume-readonly-retry.test.ts`.
 
 #### 8.2 Freeze one reproducible demo environment
 
@@ -455,6 +463,8 @@ Every one of those outcomes is now asserted through `execute()`, not just implem
 
 **Verification:** fresh environment reaches readiness without manual SQL patching or editing secrets into tracked files. If Docker is chosen, also fix non-root binary locations, worker config and browser installation, and add worker-context build exclusions. A source-checkout demo need not become a cross-platform distributable in this stage.
 
+**Blocked (2026-11-15).** `commands/doctor.ts` already checks the exact interpreter the bridge spawns, the MCP worker handshake, Playwright CLI presence, a Redis `PING` when `REDIS_URL` is configured, encryption and credential state, and planner model resolution, but the pinned-version readiness subset with fixture probes is not added, and this workspace has no disposable PostgreSQL, Redis, Docker or browser installation to freeze against. Tool availability gaps remain tracked in `CURRENT-REMAINING-GAPS.md` §3. No PATH installation or shell-profile change has been made; that requires explicit operator approval.
+
 #### 8.3 Rehearse the exact product and failure paths
 
 - [ ] Run Gate A three times from bare `argus` through `/assess`, with fresh lab state, real worker, and real selected model; run Gate B three times separately.
@@ -463,7 +473,11 @@ Every one of those outcomes is now asserted through `execute()`, not just implem
 
 **Verification:** release requires every final matrix row above. A timeout/missing dependency is a failed gate, not a skipped benchmark. Keep required acceptance tests distinct from optional external integrations.
 
+**Blocked (2026-11-15).** None of the three can run here: the repository-workspace `bare Argus terminal` PTY gate reaches its own 180-second limit without displaying `/assess` (the in-process TUI lifecycle suite passes), there is no live model or real worker stack, and PostgreSQL, Redis and Docker are unavailable. Individual commands are capped at five minutes, so the service-independent suites were run as separate invocations with the counts recorded in 8.1 rather than as one full-suite pass, and the randomized collection-order CI job remains non-blocking (`CURRENT-REMAINING-GAPS.md` §12).
+
 **Checkpoint 8 — demo ready:** three cold primary runs and three cold swarm runs pass; negative controls never become confirmed findings; recovery and safety evidence is attached. Only then describe the scoped feature as a working demo.
+
+**Status (2026-11-15): not met.** 8.1 is complete with the evidence and suite results above; 8.2 and 8.3 remain blocked on a provisioned environment (PostgreSQL, Redis, Docker, a live model, a working PTY launch) and on operator approval for an install/PATH change. The scoped feature must not yet be described as a working demo.
 
 ## 4. Test strategy
 
