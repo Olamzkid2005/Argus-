@@ -60,6 +60,36 @@ const AGENT_PLANNING_TIMEOUT_MS = 600_000
  */
 const ENGINE_ANALYSIS_TIMEOUT_MS = 300_000
 
+/** Authoritative worker execution ledger for one engagement. */
+export interface WorkerBudgetStatus {
+  engagementId: string
+  toolCalls: number
+  executedTools: string[]
+  identities: string[]
+  sessions: number
+}
+
+/** Validate the worker ledger before it enters a checkpoint or report. */
+export function normalizeWorkerBudgetStatus(input: unknown): WorkerBudgetStatus {
+  const record = (input ?? {}) as Partial<Record<keyof WorkerBudgetStatus, unknown>>
+  const isText = (value: unknown): value is string => typeof value === "string" && value.length > 0
+  const engagementId = typeof record.engagementId === "string" ? record.engagementId : ""
+  const toolCalls = typeof record.toolCalls === "number" ? record.toolCalls : Number.NaN
+  const sessions = typeof record.sessions === "number" ? record.sessions : Number.NaN
+  const executedTools = Array.isArray(record.executedTools) ? record.executedTools.filter(isText) : undefined
+  const identities = Array.isArray(record.identities) ? record.identities.filter(isText) : undefined
+  if (engagementId.length === 0 || !Number.isInteger(toolCalls) || toolCalls < 0 || executedTools === undefined || identities === undefined || !Number.isInteger(sessions) || sessions < 0) {
+    throw new Error("Worker returned a malformed agent_budget ledger")
+  }
+  return {
+    engagementId,
+    toolCalls,
+    executedTools: [...new Set(executedTools)].sort(),
+    identities: [...new Set(identities)].sort(),
+    sessions,
+  }
+}
+
 /**
  * Resolve the interpreter used to spawn the Python worker.
  *
@@ -556,7 +586,7 @@ export class WorkersBridge {
     }
   }
 
-  async callTool(name: string, args: unknown, timeoutMs?: number, cacheMode?: CacheMode): Promise<ToolResult> {
+  async callTool(name: string, args: unknown, timeoutMs?: number, cacheMode?: CacheMode, engagementId?: string): Promise<ToolResult> {
     const now = Date.now()
     // Circuit breaker check — only for LLM-related tools (Gap 9.2 fix)
     // Non-LLM tools (nmap, nuclei, gau, etc.) bypass this check entirely
@@ -567,7 +597,14 @@ export class WorkersBridge {
     }
 
     try {
-      const raw = await this.sendRequest("call_tool", { name, arguments: args, cache_mode: cacheMode }, timeoutMs ?? 600000) // default 10min for security tools
+      // The engagement is carried on every tool call so the worker can build the
+      // run's scope validator from the same record the initial run used: a
+      // resumed run has no alternate authorization path.
+      const raw = await this.sendRequest(
+        "call_tool",
+        { name, arguments: args, cache_mode: cacheMode, ...(engagementId ? { engagement_id: engagementId } : {}) },
+        timeoutMs ?? 600000,
+      ) // default 10min for security tools
       // Success — reset circuit breaker
       if (this.circuitFailures > 0) {
         this.circuitFailures = 0
@@ -839,12 +876,26 @@ export class WorkersBridge {
     tool: string
     arguments?: Record<string, string>
     reasoning?: string
+    identity?: string
     success: boolean
     durationMs?: number
     findingCount?: number
     summary?: string
   }): Promise<{ recorded?: boolean; session_id: string; engagement_id?: string; action_id?: string; iteration?: number; done: boolean; error?: string }> {
     return this.sendRequest("agent_observe", params, AGENT_PLANNING_TIMEOUT_MS) as Promise<{ recorded?: boolean; session_id: string; engagement_id?: string; action_id?: string; iteration?: number; done: boolean; error?: string }>
+  }
+
+  /**
+   * Fetch the worker's engagement-scoped execution ledger.
+   *
+   * The response covers hybrid agent sessions only: deterministic or direct
+   * tool calls do not appear there. Callers reconcile—not replace—their
+   * local usage count with this ledger.
+   */
+  async budgetStatus(engagementId: string): Promise<WorkerBudgetStatus> {
+    const status = await this.sendRequest("agent_budget", { engagement_id: engagementId }, ENGINE_ANALYSIS_TIMEOUT_MS) as Partial<WorkerBudgetStatus> & { error?: string }
+    if (status?.error) throw new Error(status.error)
+    return normalizeWorkerBudgetStatus(status)
   }
 
   /**
