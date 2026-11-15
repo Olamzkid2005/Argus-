@@ -757,8 +757,10 @@ class TestCreatePhaseAgent:
         try:
             agent = create_phase_agent("recon", tool_runner=mock_runner)
             tools = agent.registry.list_tools()
-            assert len(tools) == 2
-            assert len(tools) > 0
+            names = {tool["name"] for tool in tools}
+            # Phase tools plus the in-process web_scanner that the prompt
+            # offers and the LLM can select.
+            assert names == {"httpx", "katana", "web_scanner"}
         finally:
             # Restore the loaded flag too: leaving it True with restored
             # (possibly empty) tools makes _ensure_phase_tools() short-circuit

@@ -540,3 +540,254 @@ class TestInvalidArgumentsDoNotRetry:
 
         assert result.retryable is False
         assert result.error.startswith("Invalid arguments")
+
+
+# ── Stage 5.1/5.2: action policy, stop coverage, observations, auth ──
+
+
+class _RecordingDecisionRepo:
+    def __init__(self):
+        self.records = []
+
+    def log_decision(self, **kwargs):
+        self.records.append(kwargs)
+
+
+class TestStage5ActionPolicyAndStop:
+    def test_identical_action_is_refused_and_new_arguments_are_a_revisit(self):
+        agent = ReActAgent(ToolRegistry(), engagement_id="ENG-1")
+        agent.action_policy.record("nuclei", {"target": "https://example.com"})
+
+        duplicate = agent.action_policy.check("nuclei", {"target": "https://example.com"})
+        assert duplicate.allowed is False
+
+        revisit = agent.action_policy.check("nuclei", {"target": "https://example.com/admin"})
+        assert revisit.allowed is True
+        assert revisit.revisit is True
+
+    def test_stop_without_required_coverage_continues_and_records_the_deferral(self):
+        registry = ToolRegistry()
+        registry.register(
+            "nuclei",
+            lambda **_kwargs: {"success": True},
+            {
+                "name": "nuclei",
+                "description": "scan",
+                "parameters": [{"name": "target", "required": True}],
+            },
+        )
+        agent = ReActAgent(registry, engagement_id="ENG-1", phase="scan")
+        agent.set_required_coverage(["nuclei"])
+        agent.request_stop()
+
+        action = agent.plan_next_action("scan: https://example.com", "", set())
+
+        assert agent.last_stop_decision.stop is False
+        assert agent.last_stop_decision.missing == ("nuclei",)
+        assert action is not None  # the required action is still issued
+
+    def test_stop_with_complete_coverage_ends_the_loop(self):
+        agent = ReActAgent(ToolRegistry(), engagement_id="ENG-1")
+        agent.action_policy.record("nuclei", {"target": "https://example.com"})
+        agent.set_required_coverage(["nuclei"])
+        agent.request_stop()
+
+        assert agent.plan_next_action("scan: https://example.com", "", set()) is None
+        assert agent.last_stop_decision.stop is True
+
+    def test_decision_arguments_are_redacted_in_the_audit_log(self):
+        agent = ReActAgent(ToolRegistry(), engagement_id="ENG-1")
+        repo = _RecordingDecisionRepo()
+        agent.decision_repo = repo
+        agent.record_decision(
+            AgentAction(
+                tool="sqlmap",
+                arguments={"target": "https://example.com", "password": "hunter2"},
+            ),
+            1,
+        )
+        assert repo.records
+        assert repo.records[0]["arguments"]["password"] == "***REDACTED***"
+        assert repo.records[0]["arguments"]["target"] == "https://example.com"
+
+
+class TestStage5AuthSessions:
+    def _agent(self):
+        return ReActAgent(ToolRegistry(), engagement_id="ENG-AUTH")
+
+    def _context(self, email, cookie):
+        from agent.auth_context import AuthContext
+
+        return AuthContext(
+            session=object(),
+            cookie_string=cookie,
+            email=email,
+            password="pw",
+        )
+
+    def test_two_identities_never_share_headers(self):
+        agent = self._agent()
+        agent.set_auth_context(self._context("alice@example.com", "sid=alice"))
+        agent.set_auth_context(self._context("bob@example.com", "sid=bob"))
+
+        assert agent.auth_headers_for("alice@example.com")["Cookie"] == "sid=alice"
+        assert agent.auth_headers_for("bob@example.com")["Cookie"] == "sid=bob"
+
+    def test_action_identity_selects_that_users_context_for_injection(self):
+        agent = self._agent()
+        agent.set_auth_context(self._context("alice@example.com", "sid=alice"))
+        agent.set_auth_context(self._context("bob@example.com", "sid=bob"))
+
+        assert agent.auth_context_for("alice@example.com").cookie_string == "sid=alice"
+        # An action naming bob injects bob's session, not the last login.
+        agent._active_identity = agent._identity_for_action({"email": "bob@example.com"})
+        assert agent.auth_context_for().cookie_string == "sid=bob"
+        assert agent._identity_for_action({"target": "https://example.com"}) == ""
+
+    def test_an_unknown_identity_gets_nothing(self):
+        from agent.auth_sessions import AuthSessionError
+
+        agent = self._agent()
+        agent.set_auth_context(self._context("alice@example.com", "sid=alice"))
+        with pytest.raises(AuthSessionError):
+            agent.auth_headers_for("mallory@example.com")
+
+    def test_expired_session_is_refreshed_once_then_pauses(self):
+        from agent.auth_sessions import AuthExpiredError, AuthSessionError
+
+        agent = self._agent()
+        agent.set_auth_context(self._context("alice@example.com", "sid=old"))
+        state = {"valid": False, "refreshes": 0}
+
+        def refresh(session):
+            state["refreshes"] += 1
+            state["valid"] = True
+            return self._context("alice@example.com", "sid=new")
+
+        session = agent.verify_auth_session(
+            "alice@example.com", lambda _ctx: state["valid"], refresh
+        )
+        assert session.context.cookie_string == "sid=new"
+        assert state["refreshes"] == 1
+        assert agent.auth_headers_for("alice@example.com")["Cookie"] == "sid=new"
+
+        with pytest.raises(AuthExpiredError):
+            agent.verify_auth_session(
+                "alice@example.com",
+                lambda _ctx: False,
+                lambda _session: self._context("alice@example.com", "sid=still-bad"),
+            )
+        assert state["refreshes"] == 1  # never a second refresh
+        with pytest.raises(AuthExpiredError):
+            agent.auth_headers_for("alice@example.com")
+        assert AuthSessionError  # exported error type is part of the contract
+
+
+# ── Stage 6.1: cumulative budget, deadline and LLM accounting ──
+
+
+class TestStage6Budget:
+    @staticmethod
+    def _registry():
+        registry = ToolRegistry()
+        calls: list[dict] = []
+
+        def nuclei(**kwargs):
+            calls.append(kwargs)
+            from agent.agent_result import AgentResult
+
+            return AgentResult(tool="nuclei", success=True, output="ok")
+
+        registry.register(
+            "nuclei",
+            nuclei,
+            {
+                "name": "nuclei",
+                "description": "scan",
+                "parameters": [{"name": "target", "required": True}],
+            },
+        )
+        return registry, calls
+
+    @staticmethod
+    def _deadline_in(seconds: float) -> str:
+        from datetime import UTC, datetime, timedelta
+
+        return (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat()
+
+    def test_action_selection_refuses_after_the_deadline(self):
+        from runtime.engagement_budget import STOP_DEADLINE, EngagementBudgetLedger
+
+        registry, _calls = self._registry()
+        agent = ReActAgent(registry, engagement_id="ENG-6")
+        agent.set_budget_ledger(
+            EngagementBudgetLedger("ENG-6", deadline_at=self._deadline_in(-1))
+        )
+
+        assert agent.plan_next_action("scan: https://example.com", "", set()) is None
+        assert agent.last_budget_stop == STOP_DEADLINE
+
+    def test_cancellation_is_a_budget_stop_with_no_fallback(self):
+        from runtime.engagement_budget import STOP_CANCELLED
+
+        registry, _calls = self._registry()
+        agent = ReActAgent(registry, engagement_id="ENG-6")
+        agent.cancel()
+
+        assert agent.plan_next_action("scan: https://example.com", "", set()) is None
+        assert agent.last_budget_stop == STOP_CANCELLED
+
+    def test_tool_timeout_cannot_outlive_the_deadline(self):
+        from runtime.engagement_budget import EngagementBudgetLedger
+
+        registry, calls = self._registry()
+        agent = ReActAgent(registry, engagement_id="ENG-6")
+        agent.set_budget_ledger(
+            EngagementBudgetLedger("ENG-6", deadline_at=self._deadline_in(5))
+        )
+
+        result = agent._execute_with_recovery(
+            AgentAction(tool="nuclei", arguments={"target": "https://example.com", "timeout": 300})
+        )
+
+        assert result.success is True
+        assert calls and calls[0]["timeout"] <= 5
+
+    def test_llm_calls_are_recorded_including_fallbacks_and_malformed(self):
+        from runtime.engagement_budget import EngagementBudgetLedger
+
+        registry, _calls = self._registry()
+        agent = ReActAgent(registry, engagement_id="ENG-6")
+        ledger = EngagementBudgetLedger("ENG-6")
+        agent.set_budget_ledger(ledger)
+
+        class FakeService:
+            last_input_tokens = 100
+            last_output_tokens = 20
+            last_cost_usd = 0.02
+
+        agent._record_llm_outcome({"tool": "nuclei"}, FakeService())
+        agent._record_llm_outcome(
+            {"_fallback": True, "_reason": "JSON parse error: no object"}, FakeService()
+        )
+
+        assert ledger.usage.llm_calls == 2
+        assert ledger.usage.input_tokens == 200
+        assert ledger.usage.output_tokens == 40
+        assert ledger.usage.cost_usd == pytest.approx(0.04)
+        assert ledger.usage.llm_fallbacks == 1
+        assert ledger.usage.llm_malformed == 1
+
+    def test_run_stops_before_any_tool_after_the_deadline(self):
+        from runtime.engagement_budget import EngagementBudgetLedger
+
+        registry, calls = self._registry()
+        agent = ReActAgent(registry, engagement_id="ENG-6", max_iterations=3)
+        agent.set_budget_ledger(
+            EngagementBudgetLedger("ENG-6", deadline_at=self._deadline_in(-1))
+        )
+
+        results = agent.run("scan: https://example.com")
+
+        assert results == []
+        assert calls == []

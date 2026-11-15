@@ -26,7 +26,10 @@ class AgentAction:
         self.tool = tool
         self.arguments = arguments
         self.reasoning = reasoning
-        self.cost_usd = cost_usd
+        # LLM clients can return a Decimal cost; adding that to the float
+        # accumulator later raised "Decimal + float" and silently sent every
+        # subsequent selection to the deterministic fallback.
+        self.cost_usd = float(cost_usd or 0.0)
         self.confidence = confidence
         self.estimated_runtime = estimated_runtime
         self.expected_signal = expected_signal

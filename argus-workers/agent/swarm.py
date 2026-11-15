@@ -12,6 +12,7 @@ Specialist agents:
 
 import concurrent.futures
 import copy
+import json
 import logging
 import os
 import tempfile
@@ -31,10 +32,14 @@ from streaming import (
     emit_swarm_merge_complete,
     emit_swarm_metrics,
 )
-from tools.scope_validator import ScopeValidator, validate_target_scope
+from tools import scope_validator
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
+
+
+class _SkipTool(Exception):
+    """Internal control flow: this tool does not apply to this target."""
 
 TOOL_TIMEOUT_DEFAULT = 180
 TOOL_TIMEOUT_LONG = 600
@@ -59,6 +64,8 @@ class SwarmMetrics:
     # Per-agent results
     per_agent_findings: dict[str, int] = field(default_factory=dict)
     per_agent_tools: dict[str, list[str]] = field(default_factory=dict)
+    per_agent_executed_tools: dict[str, list[str]] = field(default_factory=dict)
+    per_agent_proof_status: dict[str, dict[str, int]] = field(default_factory=dict)
     per_agent_errors: dict[str, int] = field(default_factory=dict)
     per_agent_timeouts: dict[str, int] = field(default_factory=dict)
 
@@ -67,6 +74,9 @@ class SwarmMetrics:
     deduped_findings_total: int = 0
     dedup_removed: int = 0
     dedup_ratio: float = 0.0
+
+    # This specialist suite is hardcoded; it is not an LLM tool choice.
+    suite_selection: str = "deterministic"
 
     # Peer intel
     peer_intel_exchanges: int = 0
@@ -82,16 +92,82 @@ class SwarmMetrics:
             "inactive_agents": self.inactive_agents,
             "per_agent_findings": self.per_agent_findings,
             "per_agent_tools": self.per_agent_tools,
+            "per_agent_executed_tools": self.per_agent_executed_tools,
+            "per_agent_proof_status": self.per_agent_proof_status,
             "per_agent_errors": self.per_agent_errors,
             "per_agent_timeouts": self.per_agent_timeouts,
             "raw_findings_total": self.raw_findings_total,
             "deduped_findings_total": self.deduped_findings_total,
             "dedup_removed": self.dedup_removed,
             "dedup_ratio": round(self.dedup_ratio, 3),
+            "suite_selection": self.suite_selection,
             "peer_intel_exchanges": self.peer_intel_exchanges,
             "orphan_cleanup_ran": self.orphan_cleanup_ran,
             "orphans_killed": self.orphans_killed,
         }
+
+
+def _emit_swarm_event(engagement_id: str, domain: str, event: str, **fields) -> None:
+    """Emit one structured, log-parsable swarm event.
+
+    The live-fire harness asserts on these lines: activation, a tool selection,
+    an actual execution with its outcome, and a truthful completion. JSON keeps
+    them machine-readable without importing the worker.
+    """
+    payload = {
+        "engagement_id": engagement_id,
+        "domain": domain,
+        "event": event,
+        **fields,
+    }
+    logger.info("[SWARM_EVENT] %s", json.dumps(payload, sort_keys=True, default=str))
+
+
+def _agent_complete(
+    engagement_id: str,
+    domain: str,
+    *,
+    status: str,
+    findings_count: int = 0,
+    proof_status: dict[str, int] | None = None,
+) -> None:
+    emit_swarm_agent_complete(engagement_id, domain, findings_count=findings_count)
+    _emit_swarm_event(
+        engagement_id,
+        domain,
+        "agent_completed",
+        status=status,
+        findings_count=findings_count,
+        proof_status=proof_status or {},
+    )
+
+
+def _is_authorized_target(target: str, engagement_id: str | None) -> bool:
+    """Single decision for a swarm target: parse, scope authorization, SSRF policy.
+
+    Every peer/endpoint/fallback path goes through the shared
+    ``authorize_target`` entry point, so swarm discovery cannot reach a target
+    the rest of the pipeline would refuse: the value is parsed (a malformed or
+    scheme-less-with-path value is refused), authorized against the engagement
+    scope, and checked against the internal/metadata policy. Opt-in
+    (``ARGUS_ALLOW_INTERNAL_TARGETS``) is not authorization on its own.
+    """
+    # Resolve through the module so the decision can be patched/overridden in one
+    # place (and so every path really consults the shared validator).
+    return scope_validator.authorize_target(target, engagement_id).authorized
+
+
+def _proof_status_counts(findings: list[dict]) -> dict[str, int]:
+    """Per-specialist proof status, counted from what the findings actually say."""
+    counts: dict[str, int] = {}
+    for finding in findings:
+        label = str(
+            finding.get("proof_status")
+            or finding.get("verification_status")
+            or ("verified" if finding.get("verified") else "unverified")
+        )
+        counts[label] = counts.get(label, 0) + 1
+    return counts
 
 
 class SpecialistAgent(ABC):
@@ -126,6 +202,7 @@ class SpecialistAgent(ABC):
         self.findings: list[dict] = []
         self._parser = None
         self.tools_attempted: set[str] = set()
+        self.tools_executed: set[str] = set()
         # In-flight cross-agent learning: shared signal store
         self.swarm_memory = swarm_memory
 
@@ -138,6 +215,14 @@ class SpecialistAgent(ABC):
     def run(self) -> list[dict]:
         """Run this specialist's tool suite. Returns raw finding dicts."""
         ...
+
+    def _begin(self) -> None:
+        emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
+        _emit_swarm_event(self.engagement_id, self.DOMAIN, "agent_started")
+
+    def _authorized(self, targets: list[str]) -> list[str]:
+        """The one scope decision, applied to every target this agent adds."""
+        return [target for target in targets if _is_authorized_target(target, self.engagement_id)]
 
     @property
     def parser(self):
@@ -176,6 +261,7 @@ class SpecialistAgent(ABC):
         self.tools_attempted.add(tool_name)
         findings = []
         success = False
+        error = ""
         try:
             emit_swarm_agent_action(
                 self.engagement_id,
@@ -183,22 +269,65 @@ class SpecialistAgent(ABC):
                 tool_name,
                 reasoning=f"Running {tool_name} with args: {' '.join(args[:4])}...",
             )
-            result = self.tool_runner.run(tool_name, args, timeout=timeout)
-            success = result.success
-            if result.success and result.stdout:
-                parsed = self.parser.parse(tool_name, result.stdout)
-                for p in parsed:
-                    findings.append(p)
-            elif result.stderr:
-                logger.debug(
-                    "%s/%s stderr: %s", self.DOMAIN, tool_name, result.stderr[:200]
+            _emit_swarm_event(
+                self.engagement_id,
+                self.DOMAIN,
+                "tool_selected",
+                tool=tool_name,
+                # The specialist suites are fixed, so this is not evidence of
+                # LLM tool selection; label it instead of implying otherwise.
+                selection="deterministic",
+            )
+            from tools.tool_runner import ToolRunner
+
+            if tool_name == "web_scanner" and isinstance(
+                self.tool_runner, ToolRunner
+            ):
+                # web_scanner is registered as an in-process AbstractTool, not
+                # an executable; ToolRunner can only resolve a binary and would
+                # report NOT_INSTALLED. Run the scanner directly. Test doubles
+                # that provide their own runner still exercise the runner path.
+                from tools.web_scanner import WebScanner
+
+                scanner = WebScanner(
+                    engagement_id=self.engagement_id,
+                    timeout=min(timeout, 300),
                 )
+                findings = scanner.scan(str(args[0]))
+                # An in-process scan that yields nothing (e.g. refused by the
+                # scope guard) is not proof of execution.
+                success = bool(findings)
+                if success:
+                    self.tools_executed.add(tool_name)
+            else:
+                result = self.tool_runner.run(tool_name, args, timeout=timeout)
+                success = result.success
+                if not success:
+                    error = (result.stderr or "")[:500]
+                if success:
+                    self.tools_executed.add(tool_name)
+                if result.success and result.stdout:
+                    parsed = self.parser.parse(tool_name, result.stdout)
+                    findings.extend(parsed)
+                elif result.stderr:
+                    logger.debug(
+                        "%s/%s stderr: %s", self.DOMAIN, tool_name, result.stderr[:200]
+                    )
         except ImportError as e:
             logger.error("%s/%s missing dependency: %s", self.DOMAIN, tool_name, e)
         except Exception as e:
             logger.warning("%s/%s failed: %s", self.DOMAIN, tool_name, e)
         finally:
             self._log_decision(tool_name, args, len(findings), success)
+            _emit_swarm_event(
+                self.engagement_id,
+                self.DOMAIN,
+                "tool_executed",
+                tool=tool_name,
+                status="success" if success else "failed",
+                findings=len(findings),
+                **({"error": error} if error else {}),
+            )
         return findings
 
     def _get_targets(self) -> list[str]:
@@ -227,16 +356,9 @@ class SpecialistAgent(ABC):
                     )
         if not targets and hasattr(rc, "target_url") and rc.target_url:
             targets = [rc.target_url]
-        # Filter to authorized scope + SSRF prevention
-        from urllib.parse import urlparse
-
-        from tools.scope_validator import ScopeValidator, validate_target_scope
-
+        # Filter to authorized scope + SSRF prevention through the one entry point
         def _safe(t: str) -> bool:
-            hostname = urlparse(t).hostname or t.split("/")[0].split(":")[0]
-            if hostname and ScopeValidator.is_internal_address(hostname):
-                return False
-            return validate_target_scope(t, self.engagement_id)
+            return _is_authorized_target(t, self.engagement_id)
 
         return [t for t in targets if _safe(t)]
 
@@ -371,8 +493,6 @@ class SpecialistAgent(ABC):
             return targets
 
         # Deduplicate and merge
-        from urllib.parse import urlparse
-
         existing = {t.rstrip("/") for t in targets}
         # Validate scope for peer-discovered endpoints
         safe_new: list[str] = []
@@ -380,10 +500,7 @@ class SpecialistAgent(ABC):
             ep_clean = ep.rstrip("/")
             if ep_clean in existing:
                 continue
-            hostname = urlparse(ep_clean).hostname
-            if hostname and ScopeValidator.is_internal_address(hostname):
-                continue
-            if validate_target_scope(ep_clean, self.engagement_id):
+            if _is_authorized_target(ep_clean, self.engagement_id):
                 safe_new.append(ep_clean)
                 existing.add(ep_clean)
 
@@ -414,17 +531,12 @@ class SpecialistAgent(ABC):
         """
         if not self.swarm_memory:
             return []
-        from urllib.parse import urlparse
-
         peer_eps = self.swarm_memory.get_new_endpoints(self.DOMAIN)
         new_targets: list[str] = []
         for ep in peer_eps:
             if ep in processed:
                 continue
-            hostname = urlparse(ep).hostname
-            if hostname and ScopeValidator.is_internal_address(hostname):
-                continue
-            if validate_target_scope(ep, self.engagement_id):
+            if _is_authorized_target(ep, self.engagement_id):
                 new_targets.append(ep)
         return new_targets
 
@@ -462,7 +574,7 @@ class IDORAgent(SpecialistAgent):
         )
 
     def run(self) -> list[dict]:
-        emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
+        self._begin()
         all_findings: list[dict] = []
 
         # ── Phase 1: Initial targets ──
@@ -510,18 +622,21 @@ class IDORAgent(SpecialistAgent):
             except Exception as e:
                 logger.warning("[IDOR] arjun failed for %s: %s", target, e)
 
-            # 2. jwt_tool for token manipulation (IDOR via JWT)
-            logger.info("[IDOR] Running jwt_tool on %s", target)
-            try:
-                jwt_findings = self._run_tool(
-                    "jwt_tool",
-                    [target, "-C", "-d"],
-                    timeout=120,
-                )
-                all_findings.extend(jwt_findings)
-                self._publish_findings_signals(jwt_findings)
-            except Exception as e:
-                logger.warning("[IDOR] jwt_tool failed for %s: %s", target, e)
+            # 2. jwt_tool for token manipulation (IDOR via JWT). There is
+            # nothing to forge without an authenticated session, and the tool
+            # exits non-zero when no token is present.
+            if self.auth_config:
+                logger.info("[IDOR] Running jwt_tool on %s", target)
+                try:
+                    jwt_findings = self._run_tool(
+                        "jwt_tool",
+                        ["-t", target, "-C", "-d"],
+                        timeout=120,
+                    )
+                    all_findings.extend(jwt_findings)
+                    self._publish_findings_signals(jwt_findings)
+                except Exception as e:
+                    logger.warning("[IDOR] jwt_tool failed for %s: %s", target, e)
 
         # ── Phase 2: web_scanner on initial targets ──
         if targets:
@@ -585,7 +700,7 @@ class AuthAgent(SpecialistAgent):
         )
 
     def run(self) -> list[dict]:
-        emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
+        self._begin()
         all_findings: list[dict] = []
 
         # ── Phase 1: Initial targets ──
@@ -597,13 +712,13 @@ class AuthAgent(SpecialistAgent):
             else []
         )
 
-        scan_targets = list(set(targets + auth_endpoints))
+        scan_targets = self._authorized(list(set(targets + auth_endpoints)))
         if (
             not scan_targets
             and self.recon_context
             and hasattr(self.recon_context, "target_url")
         ):
-            scan_targets = [self.recon_context.target_url]
+            scan_targets = self._authorized([self.recon_context.target_url])
 
         processed_targets: set[str] = set(scan_targets) if scan_targets else set()
 
@@ -613,22 +728,31 @@ class AuthAgent(SpecialistAgent):
             logger.info("[Auth] Peer tech context: %s", tech_ctx)
 
         for target in scan_targets:
-            # 1. jwt_tool checks on auth endpoints
-            logger.info("[Auth] Running jwt_tool on %s", target)
-            try:
-                jwt_findings = self._run_tool(
-                    "jwt_tool",
-                    [target, "-C", "-d"],
-                    timeout=120,
-                )
-                all_findings.extend(jwt_findings)
-                self._publish_findings_signals(jwt_findings)
-            except Exception as e:
-                logger.warning("[Auth] jwt_tool failed for %s: %s", target, e)
+            # 1. jwt_tool checks on auth endpoints. Skip when the run has no
+            # token/session to inspect; jwt_tool exits non-zero without one.
+            if self.auth_config:
+                logger.info("[Auth] Running jwt_tool on %s", target)
+                try:
+                    jwt_findings = self._run_tool(
+                        "jwt_tool",
+                        ["-t", target, "-C", "-d"],
+                        timeout=120,
+                    )
+                    all_findings.extend(jwt_findings)
+                    self._publish_findings_signals(jwt_findings)
+                except Exception as e:
+                    logger.warning("[Auth] jwt_tool failed for %s: %s", target, e)
 
             # 2. nuclei auth-related templates
-            logger.info("[Auth] Running nuclei auth templates on %s", target)
+            # Skip fuzzed URLs carrying bracket payloads: nuclei rejects them
+            # as invalid targets, and the failure is not a scanner defect.
+            if "[" in target or "]" in target:
+                logger.info("[Auth] nuclei skipped for parameterized target %s", target)
+            else:
+                logger.info("[Auth] Running nuclei auth templates on %s", target)
             try:
+                if "[" in target or "]" in target:
+                    raise _SkipTool
                 from orchestrator_pkg.utils import get_nuclei_templates_path
 
                 templates_path = get_nuclei_templates_path()
@@ -640,7 +764,9 @@ class AuthAgent(SpecialistAgent):
                     "-severity",
                     "medium,high,critical",
                 ]
-                if templates_path.exists():
+                if templates_path.exists() and any(
+                    templates_path.rglob("*.yaml")
+                ):
                     nuclei_cmd.extend(["-t", str(templates_path)])
                 nuclei_cmd.extend(
                     [
@@ -655,6 +781,8 @@ class AuthAgent(SpecialistAgent):
                 )
                 all_findings.extend(nuclei_findings)
                 self._publish_findings_signals(nuclei_findings)
+            except _SkipTool:
+                pass
             except Exception as e:
                 logger.warning("[Auth] nuclei failed for %s: %s", target, e)
 
@@ -736,7 +864,7 @@ class APIAgent(SpecialistAgent):
         )
 
     def run(self) -> list[dict]:
-        emit_swarm_agent_started(self.engagement_id, self.DOMAIN)
+        self._begin()
         all_findings: list[dict] = []
 
         # ── Phase 1: Initial targets ──
@@ -753,13 +881,13 @@ class APIAgent(SpecialistAgent):
             else []
         )
 
-        scan_targets = list(set(targets + api_endpoints))
+        scan_targets = self._authorized(list(set(targets + api_endpoints)))
         if (
             not scan_targets
             and self.recon_context
             and hasattr(self.recon_context, "target_url")
         ):
-            scan_targets = [self.recon_context.target_url]
+            scan_targets = self._authorized([self.recon_context.target_url])
 
         processed_targets: set[str] = set(scan_targets) if scan_targets else set()
 
@@ -799,8 +927,13 @@ class APIAgent(SpecialistAgent):
                 logger.warning("[API] arjun failed for %s: %s", target, e)
 
             # 2. nuclei API-* tagged templates
-            logger.info("[API] Running nuclei API templates on %s", target)
+            if "[" in target or "]" in target:
+                logger.info("[API] nuclei skipped for parameterized target %s", target)
+            else:
+                logger.info("[API] Running nuclei API templates on %s", target)
             try:
+                if "[" in target or "]" in target:
+                    raise _SkipTool
                 from orchestrator_pkg.utils import get_nuclei_templates_path
 
                 templates_path = get_nuclei_templates_path()
@@ -812,7 +945,9 @@ class APIAgent(SpecialistAgent):
                     "-severity",
                     "medium,high,critical",
                 ]
-                if templates_path.exists():
+                if templates_path.exists() and any(
+                    templates_path.rglob("*.yaml")
+                ):
                     nuclei_cmd.extend(["-t", str(templates_path)])
                 nuclei_cmd.extend(
                     [
@@ -827,6 +962,8 @@ class APIAgent(SpecialistAgent):
                 )
                 all_findings.extend(nuclei_findings)
                 self._publish_findings_signals(nuclei_findings)
+            except _SkipTool:
+                pass
             except Exception as e:
                 logger.warning("[API] nuclei failed for %s: %s", target, e)
 
@@ -845,17 +982,10 @@ class APIAgent(SpecialistAgent):
 
             # 4. sqlmap injection testing on API params
             # Re-validate target (SSRF + scope) before sqlmap execution
-            from urllib.parse import urlparse
-
-            hostname = urlparse(target).hostname or target.split("/")[0].split(":")[0]
-            if hostname and ScopeValidator.is_internal_address(hostname):
+            if not _is_authorized_target(target, self.engagement_id):
                 logger.warning(
-                    "[API] Skipping sqlmap for %s — blocked internal/SSRF target", target
-                )
-                continue
-            if not validate_target_scope(target, self.engagement_id):
-                logger.warning(
-                    "[API] Skipping sqlmap for %s — not in authorized scope", target
+                    "[API] Skipping sqlmap for %s — not authorized (scope/internal policy)",
+                    target,
                 )
                 continue
 
@@ -904,11 +1034,7 @@ class APIAgent(SpecialistAgent):
 
                 # Run remaining tools (nuclei, dalfox, sqlmap) against new target
                 # Re-validate target before tool runs
-                from urllib.parse import urlparse
-                hostname = urlparse(target).hostname or target.split("/")[0].split(":")[0]
-                if hostname and ScopeValidator.is_internal_address(hostname):
-                    continue
-                if not validate_target_scope(target, self.engagement_id):
+                if not _is_authorized_target(target, self.engagement_id):
                     continue
 
                 # Nuclei
@@ -1042,6 +1168,10 @@ class SwarmOrchestrator:
 
         if not active:
             logger.info("Swarm: no specialists activated")
+            _emit_swarm_event(
+                engagement_id, "swarm", "no_specialists_activated",
+                required=[],
+            )
             logger.info("[SWARM_METRICS] %s", metrics.to_dict())
             slog.info("No specialists activated")
             if engagement_id:
@@ -1091,10 +1221,14 @@ class SwarmOrchestrator:
                                 domain,
                                 len(result),
                             )
-                            emit_swarm_agent_complete(
+                            proof = _proof_status_counts(result)
+                            metrics.per_agent_proof_status[domain] = proof
+                            _agent_complete(
                                 active[0].engagement_id,
                                 domain,
+                                status="completed",
                                 findings_count=len(result),
+                                proof_status=proof,
                             )
                             agent_findings_count[domain] = len(result)
                             with all_findings_lock:
@@ -1102,9 +1236,10 @@ class SwarmOrchestrator:
                             completed.add(domain)
                         else:
                             logger.info("Specialist %s returned no findings", domain)
-                            emit_swarm_agent_complete(
+                            _agent_complete(
                                 active[0].engagement_id,
                                 domain,
+                                status="completed",
                                 findings_count=0,
                             )
                             agent_findings_count[domain] = 0
@@ -1120,16 +1255,21 @@ class SwarmOrchestrator:
                             domain,
                             per_agent_timeout,
                         )
-                        emit_swarm_agent_complete(
-                            active[0].engagement_id, domain, findings_count=0
+                        _agent_complete(
+                            active[0].engagement_id,
+                            domain,
+                            status="timeout",
                         )
                         agent_findings_count[domain] = 0
                         agent_timeouts[domain] = agent_timeouts.get(domain, 0) + 1
                         completed.add(domain)
                     except Exception as e:
                         logger.warning("Swarm agent %s failed: %s", domain, e)
-                        emit_swarm_agent_complete(
-                            active[0].engagement_id, domain, findings_count=0
+                        _agent_complete(
+                            active[0].engagement_id,
+                            domain,
+                            status="error",
+                            findings_count=0,
                         )
                         agent_findings_count[domain] = 0
                         agent_errors[domain] = agent_errors.get(domain, 0) + 1
@@ -1140,8 +1280,10 @@ class SwarmOrchestrator:
                     logger.warning(
                         "Swarm: agent %s timed out — global timeout reached", domain
                     )
-                    emit_swarm_agent_complete(
-                        active[0].engagement_id, domain, findings_count=0
+                    _agent_complete(
+                        active[0].engagement_id,
+                        domain,
+                        status="timeout",
                     )
                     agent_findings_count[domain] = 0
                     agent_timeouts[domain] = agent_timeouts.get(domain, 0) + 1
@@ -1226,6 +1368,8 @@ class SwarmOrchestrator:
         for agent in self.agents:
             tools: set[str] = getattr(agent, "tools_attempted", set())
             metrics.per_agent_tools[agent.DOMAIN] = sorted(tools)
+            executed: set[str] = getattr(agent, "tools_executed", set())
+            metrics.per_agent_executed_tools[agent.DOMAIN] = sorted(executed)
 
         # Populate metrics struct
         metrics.per_agent_findings = agent_findings_count

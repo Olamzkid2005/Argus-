@@ -26,6 +26,7 @@ Assertions per phase:
 
 from __future__ import annotations
 
+import contextlib
 import fnmatch
 import os
 import sys
@@ -44,6 +45,64 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 # Module-level mocks — applied to every test  (same pattern as
 # test_orchestrator_integration.py's mock_heavy_deps)
 # ═══════════════════════════════════════════════════════════════════
+
+
+_TASK_MODULE_TASKS = {
+    "tasks.analyze": "run_analysis",
+    "tasks.recon": "run_recon",
+    "tasks.scan": "run_scan",
+    "tasks.report": "generate_report",
+}
+_TASK_NAMES = {
+    "tasks.analyze.run_analysis",
+    "tasks.recon.run_recon",
+    "tasks.scan.run_scan",
+    "tasks.report.generate_report",
+}
+
+
+def _evict_task_module(module_name: str) -> None:
+    sys.modules.pop(module_name, None)
+    package_name, _, submodule_name = module_name.partition(".")
+    tasks_pkg = sys.modules.get(package_name)
+    if tasks_pkg is not None:
+        tasks_pkg.__dict__.pop(submodule_name, None)
+
+
+def _fresh_task_modules() -> dict:
+    """Evict cached task modules and their Celery registrations.
+
+    Celery keeps the first task object registered under a task name. Simply
+    popping ``sys.modules`` therefore leaves later imports executing the
+    first imported function object while tests patch the replacement module.
+    Unregistering first makes the import inside each test register the
+    function object that test actually patches.
+    """
+    from celery_app import app as celery_app
+
+    saved = {}
+    for task_name in _TASK_NAMES:
+        try:
+            saved[task_name] = celery_app.tasks[task_name]
+        except celery_app.tasks.NotRegistered:
+            pass
+        else:
+            celery_app.tasks.unregister(task_name)
+    for module_name in _TASK_MODULE_TASKS:
+        _evict_task_module(module_name)
+    return saved
+
+
+def _restore_task_modules(saved: dict) -> None:
+    from celery_app import app as celery_app
+
+    for task_name in _TASK_NAMES:
+        with contextlib.suppress(celery_app.tasks.NotRegistered):
+            celery_app.tasks.unregister(task_name)
+    for module_name in _TASK_MODULE_TASKS:
+        _evict_task_module(module_name)
+    for task in saved.values():
+        celery_app.tasks.register(task)
 
 
 @pytest.fixture(autouse=True)
@@ -86,15 +145,11 @@ def mock_heavy_deps():
             "tools.tool_runner": MagicMock(),
         },
     ):
-        # Tests that import tasks.analyze with mocked Celery can leave a
-        # plain-function module attached to the tasks package. Evict that
-        # cached module before each E2E test so the active mocked dependencies
-        # determine a consistent task wrapper.
-        sys.modules.pop("tasks.analyze", None)
-        tasks_pkg = sys.modules.get("tasks")
-        if tasks_pkg is not None:
-            tasks_pkg.__dict__.pop("analyze", None)
-        yield
+        saved_tasks = _fresh_task_modules()
+        try:
+            yield
+        finally:
+            _restore_task_modules(saved_tasks)
 
 
 # ═══════════════════════════════════════════════════════════════════

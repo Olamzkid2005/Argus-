@@ -126,9 +126,15 @@ class TestSwarmMerge:
 
 
 class TestSwarmLocalTargets:
-    def test_internal_target_opt_in_does_not_reach_specialist_target_filter(
+    def test_internal_target_opt_in_with_authorization_reaches_scope_filter(
         self, monkeypatch
     ):
+        """Opt-in plus an authorized scope is permission; opt-in alone is not.
+
+        The specialist path used to hard-block internal addresses before the
+        scope decision, so an authorized, opted-in target could never run. It
+        now asks the same validator as every other target (plan 3.1.3).
+        """
         from agent.swarm import IDORAgent
 
         monkeypatch.setenv("ARGUS_ALLOW_INTERNAL_TARGETS", "1")
@@ -140,8 +146,23 @@ class TestSwarmLocalTargets:
         agent = IDORAgent(None, None, rc, "swarm-test-001")
         with patch("tools.scope_validator.validate_target_scope", return_value=True) as scope:
             assert agent.should_activate() is True
+            assert agent._get_targets() == ["http://127.0.0.1:55693/api/users"]
+        scope.assert_called()
+
+    def test_internal_target_opt_in_without_authorization_is_refused(
+        self, monkeypatch
+    ):
+        from agent.swarm import IDORAgent
+
+        monkeypatch.setenv("ARGUS_ALLOW_INTERNAL_TARGETS", "1")
+        rc = ReconContext(
+            target_url="http://127.0.0.1:55693",
+            live_endpoints=["http://127.0.0.1:55693/api/users"],
+            has_api=True,
+        )
+        agent = IDORAgent(None, None, rc, "swarm-test-001")
+        with patch("tools.scope_validator.validate_target_scope", return_value=False):
             assert agent._get_targets() == []
-        scope.assert_not_called()
 
 
 class TestSwarmRouting:

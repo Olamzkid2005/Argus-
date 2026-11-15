@@ -184,6 +184,7 @@ class Orchestrator:
             from tools.scope_validator import set_process_scope
 
             set_process_scope(
+                self.engagement_id,
                 getattr(self, "scope_mode", "allowlist"),
                 getattr(self, "allowed_targets", None),
                 getattr(self, "blocked_targets", None),
@@ -1157,6 +1158,23 @@ class Orchestrator:
             slog.tool_complete(
                 "deterministic_fallback", success=True, findings=len(result)
             )
+
+            # The specialist swarm is part of the scan contract, not a reward
+            # for the agent path: running it only after agent success meant the
+            # high-aggressiveness proof silently disappeared whenever the agent
+            # fell back.
+            swarm_findings = self._run_swarm_specialists(
+                recon_context,
+                aggressiveness,
+                auth_config=auth_config,
+                bug_bounty_mode=bug_bounty_mode,
+            )
+            for sf in swarm_findings:
+                norm = self._normalize_finding(
+                    sf, sf.get("source_tool") or sf.get("tool") or "swarm"
+                )
+                if norm:
+                    result.append(norm)
 
             # Emit scan metrics even on fallback
             _emit_scan_metrics(

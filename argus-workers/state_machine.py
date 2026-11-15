@@ -112,6 +112,15 @@ class EngagementStateMachine:
         "complete": [],
     }
 
+    def record_tried_tools(self, tools: set[str]) -> None:
+        """Remember tools an agent run used, for safety-net de-duplication."""
+        current = getattr(self, "_agent_tried_tools", set())
+        self._agent_tried_tools = set(current) | set(tools)
+
+    @property
+    def tried_tools(self) -> set[str]:
+        return set(getattr(self, "_agent_tried_tools", set()))
+
     def __init__(
         self,
         engagement_id: str,

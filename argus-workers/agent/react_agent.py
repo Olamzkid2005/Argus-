@@ -30,11 +30,17 @@ from config.constants import (
 from feature_flags import is_enabled as _ff_enabled
 from llm_service import LLMService
 from runtime.degradation_awareness import DegradationAwareness, DegradationLevel
+from runtime.engagement_budget import (
+    STOP_BUDGET,
+    EngagementBudgetLedger,
+    PostgresBudgetLedgerStore,
+)
 from runtime.engagement_state import OBSERVATION_TRUNCATION_LIMIT
 from streaming import emit_error_hint
 from utils.error_hints import ErrorHint
 from utils.logging_utils import ScanLogger
 
+from .action_policy import ActionPolicy, CoveragePolicy
 from .agent_action import AgentAction
 from .agent_prompts import (
     BUGBOUNTY_TOOL_SELECTION_SYSTEM_PROMPT,
@@ -46,6 +52,8 @@ from .agent_prompts import (
     build_tool_selection_prompt,
 )
 from .agent_result import AgentResult
+from .auth_sessions import EngagementAuthSessions, redact_arguments
+from .engagement_observations import extract_observations, get_observation_store
 from .tool_arguments import build_tool_argv
 from .tool_registry import ToolRegistry
 
@@ -183,6 +191,7 @@ class ReActAgent:
         memory_retriever: Any = None,
         engagement_state: Any = None,
         degradation_awareness: Any = None,
+        budget_ledger: Any = None,
     ):
         self.registry = registry
         self.max_iterations = max_iterations
@@ -205,23 +214,179 @@ class ReActAgent:
         self._degradation_awareness = degradation_awareness
         # Adaptive plan text from the orchestrator's WorkflowPlanner
         self._adaptive_plan_text: str = ""
+        # Stage 5.1: whole-action identity, bounded revisits and coverage.
+        self.action_policy = ActionPolicy()
+        self.coverage_policy = CoveragePolicy()
+        self._stop_requested = False
+        self.last_stop_decision = None
+        self.last_budget_stop = None
+        # Structured observations are engagement-keyed and survive phases.
+        self.observation_store = get_observation_store()
+        # Stage 6.1: one cumulative budget for the engagement, including the
+        # wall-clock deadline and failed/fallback LLM accounting. Persisted when
+        # a real engagement has a store; tests inject an in-memory ledger.
+        self.budget = budget_ledger or self._build_budget_ledger(engagement_id)
+        # Stage 5.2: identity-scoped sessions, never one shared AuthContext.
+        self.auth_sessions = EngagementAuthSessions()
+        self._current_identity = ""
+        self._active_identity = ""
         if self._degradation_awareness is None and engagement_id:
             try:
                 self._degradation_awareness = DegradationAwareness(engagement_id)
             except Exception:
                 self._degradation_awareness = None
 
+    @staticmethod
+    def _build_budget_ledger(engagement_id: str | None):
+        import os
+
+        def _env_float(name: str, default: float | None = None):
+            raw = os.environ.get(name)
+            if not raw:
+                return default
+            try:
+                return float(raw)
+            except ValueError:
+                return default
+
+        def _env_int(name: str):
+            raw = os.environ.get(name)
+            if not raw:
+                return None
+            try:
+                return int(raw)
+            except ValueError:
+                return None
+
+        store = None
+        if engagement_id and os.environ.get("DATABASE_URL"):
+            try:
+                store = PostgresBudgetLedgerStore()
+            except Exception:
+                store = None
+        return EngagementBudgetLedger(
+            engagement_id or "",
+            deadline_at=os.environ.get("ARGUS_DEADLINE_AT") or None,
+            max_seconds=_env_float("ARGUS_MAX_RUNTIME_SECONDS"),
+            max_cost_usd=_env_float("ARGUS_MAX_COST_USD", LLM_AGENT_MAX_COST_USD),
+            max_tool_calls=_env_int("ARGUS_MAX_TOOL_CALLS"),
+            max_llm_calls=_env_int("ARGUS_MAX_LLM_CALLS"),
+            store=store,
+        )
+
+    def _record_llm_outcome(self, result, llm_service) -> None:
+        """Record one LLM call in the engagement ledger (Stage 6.1 item 1).
+
+        Fallback/malformed/failed calls are recorded too, not only priced
+        successes — otherwise the persisted usage understates what a run spent.
+        """
+        tokens_in = int(getattr(llm_service, "last_input_tokens", 0) or 0)
+        tokens_out = int(getattr(llm_service, "last_output_tokens", 0) or 0)
+        cost = getattr(llm_service, "last_cost_usd", None)
+        if isinstance(result, dict) and result.get("_fallback"):
+            reason = str(result.get("_reason", ""))
+            self.budget.record_llm_call(
+                success=False,
+                fallback=True,
+                reason=reason,
+                input_tokens=tokens_in,
+                output_tokens=tokens_out,
+                cost_usd=cost if cost else None,
+            )
+            return
+        if result is None:
+            self.budget.record_llm_call(
+                success=False,
+                reason="no decision returned",
+                input_tokens=tokens_in,
+                output_tokens=tokens_out,
+                cost_usd=cost if cost else None,
+            )
+            return
+        self.budget.record_llm_call(
+            success=True,
+            input_tokens=tokens_in,
+            output_tokens=tokens_out,
+            cost_usd=cost if cost is not None else None,
+        )
+
+    def set_budget_ledger(self, ledger) -> None:
+        """Attach the engagement budget (tests and resumed runs)."""
+        self.budget = ledger
+
+    def budget_status(self) -> dict:
+        return self.budget.status()
+
     def set_candidate_list(self, candidate_list) -> None:
         """Accept a CandidateList from the scan phase for agent reasoning."""
         self._candidate_list = candidate_list
 
-    def set_auth_context(self, ctx: AuthContext) -> None:
-        """Store an authenticated AuthContext for all subsequent tool calls.
+    def set_auth_context(self, ctx: AuthContext, identity: str | None = None) -> None:
+        """Store an authenticated AuthContext for subsequent tool calls.
 
-        Once set, the tool wrappers automatically inject cookies/headers
-        into CLI arguments for tools like sqlmap, nuclei, dalfox, etc.
+        Stage 5.2: when an engagement and identity are known the context is
+        stored identity-scoped, so a second login does not replace the first
+        and a tool can be handed exactly one user's session.
         """
+        identity = identity or getattr(ctx, "email", "") or "default"
+        self._current_identity = identity
         self._auth_context = ctx
+        if self.engagement_id:
+            self.auth_sessions.store(self.engagement_id, identity, ctx)
+
+    def auth_context_for(self, identity: str | None = None) -> AuthContext | None:
+        """The AuthContext of exactly this identity (Stage 5.2 item 4).
+
+        Falls back to the single legacy context only when no identity-scoped
+        session applies, so an action tagged with one user never borrows
+        another user's session.
+        """
+        identity = identity or getattr(self, "_active_identity", "") or self._current_identity
+        if self.engagement_id and identity:
+            scoped = self.auth_sessions.context_for(self.engagement_id, identity)
+            if scoped is not None:
+                return scoped
+        return self._auth_context
+
+    @staticmethod
+    def _identity_for_action(arguments: dict | None) -> str:
+        """Which identity an action names, if any."""
+        if not isinstance(arguments, dict):
+            return ""
+        for key in ("identity", "email", "username", "user"):
+            value = arguments.get(key)
+            if isinstance(value, str) and value:
+                return value
+        return ""
+
+    def auth_headers_for(self, identity: str | None = None) -> dict[str, str]:
+        """Headers for exactly this identity, never a mixed or other session."""
+        identity = identity or self._current_identity
+        if self.engagement_id and identity:
+            return self.auth_sessions.headers_for(self.engagement_id, identity)
+        ctx = self._auth_context
+        if ctx is None:
+            return {}
+        headers: dict[str, str] = {}
+        if ctx.cookie_string:
+            headers["Cookie"] = ctx.cookie_string
+        if ctx.authorization:
+            headers["Authorization"] = ctx.authorization
+        return headers
+
+    def verify_auth_session(self, identity: str | None = None, check=None, refresh=None):
+        """Verify (and at most once refresh) a stored identity session."""
+        identity = identity or self._current_identity
+        if not self.engagement_id or not identity:
+            raise ValueError("auth session verification requires an engagement and identity")
+        return self.auth_sessions.verify(self.engagement_id, identity, check, refresh)
+
+    def request_stop(self) -> None:
+        """Ask the loop to stop; honoured only when coverage is complete."""
+        self._stop_requested = True
+
+    def set_required_coverage(self, tools: list[str]) -> None:
+        self.coverage_policy = CoveragePolicy(tools)
 
     def cancel(self) -> None:
         """Signal the agent to stop after the current iteration."""
@@ -491,11 +656,14 @@ class ReActAgent:
                     # them and misplaces targets that are flags (-u).
                     args = build_tool_argv(tn, target=target, parameters=kwargs)
                     args.extend(str(arg) for arg in extra)
-                    # Inject auth context for tools that support it
-                    if self._auth_context:
+                    # Inject auth context for tools that support it.
+                    # Identity-scoped: the session injected is the one the
+                    # current action names, never simply the last login.
+                    auth_context = self.auth_context_for()
+                    if auth_context:
                         from agent.auth_injectors import inject_auth
 
-                        args = inject_auth(tn, args, self._auth_context)
+                        args = inject_auth(tn, args, auth_context)
                     return tool_runner.run(tn, args, timeout=timeout)
 
                 run_tool.__name__ = tn
@@ -582,6 +750,44 @@ class ReActAgent:
                     },
                 )
 
+        # web_scanner is an in-process AbstractTool, not one of the YAML
+        # tool_definitions phase tools, so the loop above never registers it.
+        # The prompt offers it and the LLM selects it, but the registry then
+        # rejected the choice as unknown and every scan fell back to the
+        # deterministic planner — which is exactly what agent_decisions showed.
+        if self.registry.get_tool("web_scanner") is None:
+
+            def run_web_scanner(target: str = "", **kwargs):
+                kwargs.pop("timeout", None)
+                from tools.web_scanner import WebScanner
+
+                findings = WebScanner().scan(target)
+                return AgentResult(
+                    tool="web_scanner",
+                    success=bool(findings),
+                    output=f"web_scanner found {len(findings)} finding(s)",
+                    findings=findings,
+                )
+
+            self.registry.register(
+                "web_scanner",
+                run_web_scanner,
+                {
+                    "name": "web_scanner",
+                    "description": (
+                        "In-process web vulnerability scanner for access-control, "
+                        "authentication and API checks."
+                    ),
+                    "parameters": [
+                        {
+                            "name": "target",
+                            "description": "Target URL or path",
+                            "required": True,
+                        }
+                    ],
+                },
+            )
+
     def _get_system_prompt(self, recon_context: Any = None) -> str:
         """
         Return the correct system prompt based on scan type and mode.
@@ -641,11 +847,22 @@ class ReActAgent:
         # (e.g., reflected XSS payloads, crawled endpoints with injected content).
         # Uses the comprehensive _sanitize_for_llm() from agent_prompts which handles
         # backtick fences, prompt override patterns, and command injection patterns (H-v4-07).
+        # Structured observations discovered so far (Stage 5.1 item 1): the next
+        # choice sees endpoints, parameters, auth, findings and failures from
+        # earlier executions, keyed by engagement rather than phase-local prose.
+        observed_section = (
+            self.observation_store.prompt_section(self.engagement_id)
+            if getattr(self, "engagement_id", "")
+            else "No structured observations have been recorded yet."
+        )
         recon_section = f"""=== RECON FINDINGS (STRUCTURED) ===
 {_sanitize_for_llm(str(recon_structured))}
 
 === RECON SUMMARY (PROSE) ===
-{_sanitize_for_llm(str(recon_summary))}"""
+{_sanitize_for_llm(str(recon_summary))}
+
+=== STRUCTURED OBSERVATIONS (ENGAGEMENT {self.engagement_id or "unknown"}) ===
+{_sanitize_for_llm(observed_section)}"""
 
         # Load Bug-Reaper methodology context in bug bounty mode
         bugbounty_context = ""
@@ -709,7 +926,10 @@ class ReActAgent:
                 user_prompt=user_prompt,
                 max_tokens=400,  # slightly more room for reasoning
                 temperature=LLM_AGENT_TEMPERATURE,
+                # No in-flight model call may outlive the engagement deadline.
+                timeout=self.budget.bounded_timeout(300) or 1,
             )
+            self._record_llm_outcome(decision, llm_service)
 
             if not isinstance(decision, dict):
                 return None
@@ -743,6 +963,7 @@ class ReActAgent:
             )
 
         except Exception as e:
+            self.budget.record_llm_call(success=False, reason=str(e)[:200])
             logger.warning(
                 "LLM tool selection failed: %s. Using deterministic fallback.",
                 e,
@@ -771,7 +992,9 @@ class ReActAgent:
                 phase=self._phase,
                 iteration=iteration,
                 tool_selected=action.tool,
-                arguments=action.arguments,
+                # Stage 5.2 item 6: decision arguments are persisted, so a
+                # password/token in them must never reach the audit log.
+                arguments=redact_arguments(action.arguments),
                 reasoning=action.reasoning,
                 was_fallback=self.is_fallback_action(action),
                 input_tokens=getattr(action, "input_tokens", 0) or None,
@@ -892,9 +1115,24 @@ class ReActAgent:
                         # as paths — .hostname is None. Use raw split instead.
                         hostname = target.split("/")[0].split(":")[0]
 
-                    if ScopeValidator.is_internal_address(hostname):
+                    # Internal targets are permitted only with BOTH the operator's
+                    # explicit opt-in (ARGUS_ALLOW_INTERNAL_TARGETS) and an explicit
+                    # scope entry; cloud metadata/link-local stay blocked regardless.
+                    # Opt-in alone is not authorization, and the decision travels the
+                    # same way as for any other target (the engagement validator).
+                    _authorized_internal = False
+                    if _scope_validator is not None:
+                        try:
+                            _authorized_internal = _scope_validator.is_in_scope(target)
+                        except Exception:
+                            _authorized_internal = False
+                    if ScopeValidator.is_blocked_internal_target(
+                        hostname, authorized=_authorized_internal
+                    ):
                         logger.warning(
-                            "Blocked internal target '%s' (param=%s) for tool '%s'",
+                            "Blocked internal target '%s' (param=%s) for tool '%s' — "
+                            "requires ARGUS_ALLOW_INTERNAL_TARGETS=1 and an explicit "
+                            "scope entry",
                             target,
                             param_name,
                             action.tool,
@@ -1038,7 +1276,9 @@ Based on these findings, what capabilities should the next phase use?
                 user_prompt=user_prompt,
                 max_tokens=400,
                 temperature=0.3,
+                timeout=self.budget.bounded_timeout(300) or 1,
             )
+            self._record_llm_outcome(result, llm_service)
 
             if not isinstance(result, dict):
                 return self._deterministic_next_phase(findings, phase)
@@ -1140,6 +1380,28 @@ Based on these findings, what capabilities should the next phase use?
         """
         tried_tools = tried_tools or set()
         llm_client = llm_client or self.llm_client
+
+        # Stage 6.1 item 2: a hard budget/deadline/cancel stop ends the run.
+        # No LLM call and no deterministic fallback may run past it.
+        budget_stop = self.budget.stop_reason(cancelled=self._cancelled)
+        if budget_stop:
+            logger.info("Budget stop (%s) — no further action selected", budget_stop)
+            self.last_budget_stop = budget_stop
+            return None
+
+        # Stage 5.1 item 3: a stop decision is explicit. It is honoured when the
+        # required coverage is complete; otherwise the run continues and the
+        # deferral (with the missing capabilities) is recorded, never silently
+        # overridden.
+        if self._stop_requested:
+            stop_decision = self.coverage_policy.can_stop(
+                True, self.action_policy.executed_tools
+            )
+            self.last_stop_decision = stop_decision
+            if stop_decision.stop:
+                logger.info("Stop decision honoured: %s", stop_decision.reason)
+                return None
+            logger.info("Stop deferred: %s", stop_decision.reason)
         # Set when the LLM proposed a tool that must not run again; the
         # deterministic plan is used instead and the generic "returned None"
         # diagnostics are suppressed so the log says what actually happened.
@@ -1185,21 +1447,20 @@ Based on these findings, what capabilities should the next phase use?
                     self._degradation_awareness.record_llm_result(success=True)
                 return None
             if action is not None:
-                if action.tool in tried_tools:
-                    # Enforce the exclusion the prompt only asks for.
-                    #
-                    # `tried_tools` is rendered into the selection prompt, but a
-                    # small model ignores it: on a live scan the agent proposed
-                    # `nuclei` ten iterations in a row, and every one was
-                    # refused by scope validation before it could run. Each
-                    # repeat cost an LLM call and advanced nothing, because the
-                    # tool was already in `tried_tools` — and a tool blocked by
-                    # scope validation can never succeed on retry, so there was
-                    # nothing to wait for. Rejecting the selection here hands the
-                    # iteration to the deterministic plan, which does skip tried
-                    # tools, so the run moves on instead of spinning.
+                # Stage 5.1 item 3: dedupe by whole action, not by tool name.
+                # An identical call is refused; the same tool with different
+                # arguments (a newly discovered endpoint) is a legitimate
+                # revisit, bounded per tool.
+                policy_decision = self.action_policy.check(
+                    action.tool, action.arguments
+                )
+                if not policy_decision.allowed or (
+                    action.tool in tried_tools and not policy_decision.revisit
+                ):
                     rejection = (
-                        f"re-selected already-tried tool '{action.tool}'"
+                        policy_decision.reason
+                        if not policy_decision.allowed
+                        else f"re-selected already-tried tool '{action.tool}'"
                     )
                     self._llm_failure_count += 1
                     logger.warning(
@@ -1275,7 +1536,26 @@ Based on these findings, what capabilities should the next phase use?
             except Exception:
                 logger.debug("Failed to emit fallback error hint", exc_info=True)
 
-        return self._deterministic_plan(task, tried_tools)
+        fallback = self._deterministic_plan(task, tried_tools)
+        if fallback is None:
+            return None
+        fallback_decision = self.action_policy.check(
+            fallback.tool, fallback.arguments
+        )
+        if fallback_decision.allowed:
+            return fallback
+        # The next-best deterministic tool may still be fresh; otherwise stop
+        # rather than replay a refused action.
+        alternate = self._deterministic_plan(task, tried_tools | {fallback.tool})
+        if alternate is not None and self.action_policy.check(
+            alternate.tool, alternate.arguments
+        ).allowed:
+            return alternate
+        logger.info(
+            "Action policy refused the deterministic fallback: %s",
+            fallback_decision.reason,
+        )
+        return None
 
     def _update_hypotheses_from_result(
         self, tool_name: str, result: AgentResult
@@ -1450,6 +1730,9 @@ Based on these findings, what capabilities should the next phase use?
         last_error = ""
         for attempt in range(max_retries + 1):
             timeout = original_timeout * (2 ** attempt) if attempt > 0 else original_timeout
+            # Stage 6.1 item 2: no tool may run past the engagement deadline,
+            # including the doubled timeout of a retry.
+            timeout = self.budget.bounded_timeout(timeout) or 1
 
             _retry_args = args.copy()
             try:
@@ -1727,8 +2010,15 @@ Based on these findings, what capabilities should the next phase use?
                 slog.warning("Failed to restore auth checkpoint: %s", exc)
 
         for iteration in range(self.max_iterations):
-            if self._cancelled:
-                logger.info("Agent: cancelled at iteration %d", iteration)
+            # Stage 6.1 item 2: the deadline, cumulative budget and cancellation
+            # all stop the loop here — before another model or tool call starts,
+            # and without falling through to a deterministic remainder.
+            budget_stop = self.budget.stop_reason(cancelled=self._cancelled)
+            if budget_stop:
+                self.last_budget_stop = budget_stop
+                logger.info(
+                    "Agent: budget stop (%s) at iteration %d", budget_stop, iteration
+                )
                 break
 
             # Check if engagement state signals completion
@@ -1844,22 +2134,18 @@ Based on these findings, what capabilities should the next phase use?
                 _ff_enabled("GOVERNANCE_V2", default=False)
                 and self.governance is not None
             ) and total_cost_usd > LLM_AGENT_MAX_COST_USD:
+                # Stage 6.1 item 2: a hard cost stop has no deterministic
+                # remainder. Running every remaining phase tool after the budget
+                # is exhausted is exactly the unbounded spend the budget exists
+                # to prevent.
+                self.last_budget_stop = STOP_BUDGET
                 logger.warning(
-                    "Cost guard: $%.4f exceeds $%.4f (engagement %s). "
-                    "Switching to deterministic for remaining tools.",
+                    "Cost guard: $%.4f exceeds $%.4f (engagement %s) — stopping, "
+                    "no deterministic remainder will run.",
                     total_cost_usd,
                     LLM_AGENT_MAX_COST_USD,
                     self.engagement_id,
                 )
-                for tool_name in self.PHASE_TOOLS.get(self._phase, []):
-                    if (
-                        tool_name not in tried_tools
-                        and self.registry.get_tool(tool_name) is not None
-                    ):
-                        result = self.registry.call(
-                            tool_name, target=initial_target
-                        )
-                        results.append(result)
                 break
 
             slog.agent_iteration(
@@ -1903,6 +2189,10 @@ Based on these findings, what capabilities should the next phase use?
                     "Agent: failed to emit decision event (non-fatal)", exc_info=True
                 )
 
+            # Stage 5.2 item 4: remember which identity this action is for, so
+            # auth injection and verifiers use that user's session only.
+            self._active_identity = self._identity_for_action(action.arguments)
+
             # Execute tool with scope validation
             if not self._validate_arguments(action):
                 logger.warning(
@@ -1930,6 +2220,7 @@ Based on these findings, what capabilities should the next phase use?
                 self.governance.start_active_timer()
             try:
                 result = self._execute_with_recovery(action)
+                self.budget.record_tool_call()
             finally:
                 if (
                     _ff_enabled("GOVERNANCE_V2", default=False)
@@ -2110,6 +2401,22 @@ Based on these findings, what capabilities should the next phase use?
             # FIX: build meaningful observation from actual output content
             observation = build_observation_summary(action.tool, result)
             self.add_to_history("observation", observation)
+
+            # Stage 5.1: one executed action, one signature recorded, and typed
+            # observations stored for the engagement (endpoints, parameters,
+            # auth, findings, failures) so later phases and decisions see them.
+            self.action_policy.record(action.tool, action.arguments)
+            if self.engagement_id:
+                records = extract_observations(
+                    self.engagement_id,
+                    action.tool,
+                    redact_arguments(action.arguments),
+                    success=result.success,
+                    summary=observation,
+                    result={"findings": result.findings, "output": result.output},
+                    action_id=getattr(action, "action_id", ""),
+                )
+                self.observation_store.record_many(records)
 
             # ── Update hypothesis state after tool result ──
             if _ff_enabled("HYPOTHESIS_ENGINE", default=True):
