@@ -259,8 +259,8 @@ YAML never reached the MCP bridge and credentialed phases still failed on argv.
 `_register()` now merges a re-registration with its YAML definition: parameters the inline entry
 omits are appended, a same-named parameter that lost its CLI flag regains it, and `binary`/empty
 `default_args`/unset metadata are inherited. Inline policy still wins where it is deliberate
-(phases, args, timeout, `requires`) — nmap stays disabled, the SAST tools stay out of HTTP phases,
-and the playwright scheme gate is not resurrected.
+(phases, args, timeout, `requires`) — the SAST tools stay out of HTTP phases, and the playwright
+scheme gate is not resurrected.
 
 The verification (running each tool through `MCPServer.call_tool`, the path the worker uses) also
 found several invocations that were wrong independently of the merge:
@@ -277,7 +277,7 @@ reports ``[FTL] alterx: no input found`` despite `-l`. Scanner subprocesses now 
 rejects `--format=json` and Ruby WhatWeb's `--log-json` (both text and JSON formats are now parsed,
 so it yields a finding); gospider's `-j` is an unknown shorthand (→ `--json`); alterx dropped `-d`
 (→ `-l`).
-- **Disabled for cause, like nmap:** `dnsx` (v1.2+ requires `-w` with `-d`, or a list file/stdin,
+- **Disabled for cause:** `dnsx` (v1.2+ requires `-w` with `-d`, or a list file/stdin,
 neither of which the arg builder can supply) and `gospider` (the installed build segfaults in an
 ioctl path and otherwise exits 0 with no output — a silent no-op success). Both keep their
 corrected flags so a newer build only needs the phase re-enabled.
@@ -287,6 +287,32 @@ whatweb, wafw00f, nikto (5 findings), naabu, nuclei (11), alterx (111) and ffuf 
 subfinder runs but external sources exceed 60 s (network-bound, not a flag bug); amass was not run
 (600 s budget); masscan, shuffledns, chaos, cloud_enum, uncover, s3scanner and github-endpoints need
 root, credentials or external APIs — their built argv was verified, execution was not.
+
+**Participation, not just installation (2026-11-15).** Reaching a green doctor check only proves a
+binary is on `PATH`, so both tools were traced through the execution path. `trivy` is declared
+`target_kind: path` and runs only in `repo_scan`, so a URL assessment refuses it before any process
+starts (`Tool 'trivy' scans filesystem paths (target_kind=path); it cannot be handed the URL
+'http://127.0.0.1:18080'`). That is correct by design — trivy scans filesystems and images, never an
+HTTP endpoint — and it does participate for repository targets:
+`MCPServer.call_tool("trivy", {"target": "/tmp/trivy-secret", "scanners": "secret"})` returned a
+Slack-webhook secret finding. `nmap` was the real gap: its inline registration carried `phases=[]`
+with the note "no nmap parser exists", but `parsers/parsers/nmap.py` exists and is auto-discovered
+into the parser registry, so the note was stale and the tool was in no phase at all. It now runs in
+`recon` with `-sT -Pn -oX - -T4 --top-ports 200` (`-sT`/`-Pn` because the worker is unprivileged and
+raw-socket SYN scanning needs `CAP_NET_RAW`); `nmap.yaml` and the inline block agree, and
+`scripts/generate_tool_defs.py --check` passes. Verified end to end:
+`MCPServer.call_tool("nmap", {"target": "127.0.0.1", "ports": "18080"})` returns a structured
+`port_open` finding for `18080/tcp`. The install also needs `nmap-common`: without its
+`/usr/share/nmap` data nmap fails `--top-ports` with "Unable to use --top-ports ... with an old style
+(no-ratio) services file", which is how the missing package was found.
+
+One live Gate A assessment (`RUNS=1`, 2026-11-15) confirmed nmap in situ: the engagement's
+`findings` table holds three `nmap` rows — `Open port: 22/tcp (ssh)`, `5432/tcp (postgresql)` and
+`9090/tcp (zeus-admin)` — all recorded in `phase-0-recon`, next to katana (14), naabu (2) and 12
+generic rows. That run did not reach the Gate A driver's `Assessment complete` marker: the TUI
+process sat idle after the assessment's `reporting` phase had reached COMPLETED, so the run was
+stopped. That is an open driver/UI question, not evidence about the tool wiring — the engagement
+rows settle the wiring — and it is deliberately not counted as a passing run.
 
 **Fixed (2026-09-30, target_kind):** path-only tools are now defined with `target_kind: path` in
 their YAML (`semgrep`, `bandit`, `pip-audit`, `npm-audit`, `gitleaks`, `trivy`, `trufflehog`,

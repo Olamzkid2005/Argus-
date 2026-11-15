@@ -104,6 +104,8 @@ runs must stay within ±50% of it.
 
 `bash scripts/livefire/install-tools.sh` puts `trivy` and `nmap` into `.livefire/bin` (and `.livefire/tools/nmap`), which is what `argus doctor`'s toolchain check reads through `PATH`. Trivy is the upstream static release asset, resolved from the latest GitHub tag; nmap has no static build for Ubuntu, so the noble `nmap` package and the libraries it links (`libssh2-1t64`, `liblinear4`, `liblua5.4-0`, `libblas3`, `libgfortran5`) are unpacked with `dpkg-deb -x` and reached through a wrapper that sets `LD_LIBRARY_PATH` and `NMAPDIR`. Nothing is installed system-wide and no root is needed. Raw-socket scans still require `CAP_NET_RAW`; unprivileged TCP connect scans (`-sT`) work. `FORCE=1` refreshes both.
 
+Both are exercised by an assessment, not merely installed. `nmap` runs in the `recon` phase and its XML is parsed into `OPEN_PORT` findings (`parsers/parsers/nmap.py`). `trivy` runs in `repo_scan` for filesystem or image targets; it is declared `target_kind: path`, so a URL assessment refuses it before spawning anything.
+
 Each run creates a **fresh engagement** unless you pass `ENGAGEMENT_ID` explicitly, and it never
 deletes findings. The effective options, scope, feature flags and IDs are saved as
 `${LOG_DIR}/effective-config.json`, so a verdict can be reproduced from the artifact rather than
