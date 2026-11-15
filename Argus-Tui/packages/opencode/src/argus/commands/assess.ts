@@ -58,6 +58,8 @@ export async function assessCommand(target: string, options?: {
    * to false to avoid raw markdown polluting the terminal UI.
    */
   writeReport?: boolean
+  /** Cooperative cancellation, checked by the runner at each phase boundary. */
+  shouldStop?: () => boolean
 }): Promise<WorkflowRunResult> {
   const result = await runAssessment(
     {
@@ -68,6 +70,7 @@ export async function assessCommand(target: string, options?: {
       cacheMode: options?.cacheMode,
       verbose: options?.verbose,
       features: options?.features,
+      shouldStop: options?.shouldStop,
     },
     { onProgress: options?.onProgress ?? cliProgress },
   )

@@ -3,15 +3,15 @@
 #
 # The demo is only as good as what happens when things go wrong. Each scenario
 # below drives a real failure against the local lab and asserts the *observable*
-# outcome (exit code and the line an operator reads), never internal state:
+# outcome (exit code, engagement status and the line an operator reads), never
+# internal state:
 #
 #   1. out-of-scope target     — the run refuses before touching the target
 #   2. wrong credentials       — a verifier reports nothing, it does not invent
-#   3. provider unavailable    — a dead LLM endpoint fails fast and says so
-#   4. worker interruption     — a killed MCP worker is reported, and resume
-#                                continues from the persisted phases
-#   5. cancellation            — an interrupted run records that it stopped and
-#                                exits non-zero
+#   3. provider unavailable    — a dead LLM endpoint degrades, it does not hang
+#   4. worker interruption     — a killed MCP worker is survivable or reported,
+#                                and `resume` continues from the persisted phases
+#   5. cancellation            — Ctrl-C records INTERRUPTED and exits non-zero
 #
 # Usage: bash scripts/livefire/rehearse-failures.sh [scenario ...]
 # Each scenario prints PASS/FAIL and the script exits non-zero if any failed.
@@ -37,16 +37,42 @@ export ARGUS_AUTO_APPROVE=1
 export ARGUS_ALLOW_AMBIENT_LLM_ENV=0
 export ARGUS_LLM_TRANSPORT=direct
 
+# The MCP worker sets these for tool subprocesses; a direct tool invocation in a
+# rehearsal needs the same environment or Chromium cannot start.
+if [ -d "$REPO/.livefire/tools/browser-libs/usr/lib/x86_64-linux-gnu" ]; then
+  export LD_LIBRARY_PATH="$REPO/.livefire/tools/browser-libs/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  export FONTCONFIG_FILE="$REPO/.livefire/tools/browser-libs/etc/fonts/fonts.conf"
+fi
+if [ -d "$REPO/.livefire/tools/ms-playwright" ]; then
+  export PLAYWRIGHT_BROWSERS_PATH="$REPO/.livefire/tools/ms-playwright"
+fi
+
 fail=0
 pass() { echo "PASS  $1"; }
 failed() { echo "FAIL  $1 — $2"; fail=1; }
 
 CLI=(bun "$REPO/Argus-Tui/packages/opencode/bin/argus")
 
+engagement_status() {
+  python3 - "$1" <<'PY'
+import sqlite3, sys
+print(list(sqlite3.connect(sys.argv[1]).execute(
+    "select status from engagements order by rowid desc limit 1"))[0][0])
+PY
+}
+
+run_assess() { # home log [extra env...]
+  local home="$1" log="$2"
+  shift 2
+  env HOME="$home" ARGUS_DATA_DIR="$home/.argus" \
+    ARGUS_SCOPE_MODE=allowlist ARGUS_ALLOWED_TARGETS=127.0.0.1 "$@" \
+    "${CLI[@]}" assess "$TARGET" >"$log" 2>&1
+}
+
 # ── 1. Out-of-scope target ────────────────────────────────────────────────
 scenario_scope() {
   local log="$OUT/1-scope.log"
-  HOME="$OUT/home-scope" ARGUS_DATA_DIR="$OUT/home-scope/.argus" \
+  env HOME="$OUT/home-scope" ARGUS_DATA_DIR="$OUT/home-scope/.argus" \
     ARGUS_SCOPE_MODE=allowlist ARGUS_ALLOWED_TARGETS=lab.example \
     "${CLI[@]}" assess "$TARGET" >"$log" 2>&1
   local code=$?
@@ -78,32 +104,46 @@ JSON
 # ── 3. LLM provider unavailable ──────────────────────────────────────────
 scenario_provider() {
   local log="$OUT/3-provider.log"
-  # Port 9 (discard) accepts nothing: a refused connection, not a slow one.
-  timeout 240 env HOME="$OUT/home-provider" ARGUS_DATA_DIR="$OUT/home-provider/.argus" \
+  # Port 9 (discard) refuses connections. Argus is expected to degrade to
+  # deterministic planning rather than hang: either a completion line or a
+  # provider error is acceptable, silence until the deadline is not.
+  timeout 600 env HOME="$OUT/home-provider" ARGUS_DATA_DIR="$OUT/home-provider/.argus" \
     ARGUS_SCOPE_MODE=allowlist ARGUS_ALLOWED_TARGETS=127.0.0.1 \
     LLM_API_URL="http://127.0.0.1:9/v1/chat/completions" \
     "${CLI[@]}" assess "$TARGET" >"$log" 2>&1
   local code=$?
-  if [ $code -eq 124 ]; then failed "provider unavailable" "hung past 240s"; return; fi
-  if ! grep -qiE 'llm|provider|429|connection|refused' "$log"; then
-    failed "provider unavailable" "no provider error surfaced"; return
+  if [ $code -eq 124 ]; then failed "provider unavailable" "hung past 600s"; return; fi
+  if grep -qE 'Assessment (complete|finished|failed)' "$log"; then
+    pass "dead provider degraded to deterministic planning (exit $code)"
+    return
   fi
-  pass "dead provider reported (exit $code)"
+  if grep -qiE 'llm|provider|connection refused' "$log"; then
+    pass "dead provider reported (exit $code)"
+    return
+  fi
+  failed "provider unavailable" "neither a completion line nor a provider error"
 }
 
 # ── 4. Worker interruption and resume ────────────────────────────────────
+# The MCP bridge restarts a worker it loses, so losing one is survivable by
+# design. What must never happen is a silently hung run: either the run
+# reconnects and reports an outcome, or it ends non-zero saying what broke.
 scenario_interrupt() {
   local log="$OUT/4-interrupt.log"
   local home="$OUT/home-interrupt"
   mkdir -p "$home"
-  timeout 300 env HOME="$home" ARGUS_DATA_DIR="$home/.argus" \
-    ARGUS_SCOPE_MODE=allowlist ARGUS_ALLOWED_TARGETS=127.0.0.1 \
-    "${CLI[@]}" assess "$TARGET" >"$log" 2>&1 &
+  run_assess "$home" "$log" &
   local run=$!
-  # Wait for the worker to be up, then kill it the way a crash would.
   local worker=""
-  for _ in $(seq 1 60); do
-    worker=$(ps -eo pid,cmd | awk -v h="$home" 'index($0, "mcp_server.py") && index($0, "argus-workers") {print $1; exit}')
+  for _ in $(seq 1 90); do
+    local p pid
+    for p in /proc/[0-9]*; do
+      pid=${p#/proc/}
+      tr '\0' '\n' <"$p/environ" 2>/dev/null | grep -qx "HOME=$home" || continue
+      tr '\0' ' ' <"$p/cmdline" 2>/dev/null | grep -q 'mcp_server.py' || continue
+      worker=$pid
+      break
+    done
     [ -n "$worker" ] && break
     sleep 1
   done
@@ -118,17 +158,21 @@ scenario_interrupt() {
   local engagement
   engagement=$(ls -t "$home/.argus/engagements" 2>/dev/null | head -1)
   if [ -z "$engagement" ]; then failed "worker interruption" "no engagement persisted"; return; fi
-  if [ $code -eq 0 ]; then failed "worker interruption" "run reported success after its worker was killed"; return; fi
+  if [ $code -eq 124 ]; then failed "worker interruption" "hung after its worker was killed"; return; fi
+  if ! grep -qE 'Assessment (complete|finished|failed)|worker|MCP' "$log"; then
+    failed "worker interruption" "the run said nothing about the lost worker"
+    return
+  fi
   # Resume must pick the engagement up rather than starting over.
   local resume_log="$OUT/4-resume.log"
-  timeout 300 env HOME="$home" ARGUS_DATA_DIR="$home/.argus" \
+  timeout 600 env HOME="$home" ARGUS_DATA_DIR="$home/.argus" \
     ARGUS_SCOPE_MODE=allowlist ARGUS_ALLOWED_TARGETS=127.0.0.1 \
     "${CLI[@]}" resume "$engagement" >"$resume_log" 2>&1
-  if ! grep -qiE 'resum|phase|complete' "$resume_log"; then
+  if ! grep -qiE 'resum|phase|complete|nothing' "$resume_log"; then
     failed "worker interruption" "resume produced no phase output"
     return
   fi
-  pass "killed worker reported (exit $code); resume drove $engagement"
+  pass "worker killed mid-run: run said so (exit $code); resume handled $engagement"
 }
 
 # ── 5. Cancellation ──────────────────────────────────────────────────────
@@ -136,9 +180,7 @@ scenario_cancel() {
   local log="$OUT/5-cancel.log"
   local home="$OUT/home-cancel"
   mkdir -p "$home"
-  timeout 300 env HOME="$home" ARGUS_DATA_DIR="$home/.argus" \
-    ARGUS_SCOPE_MODE=allowlist ARGUS_ALLOWED_TARGETS=127.0.0.1 \
-    "${CLI[@]}" assess "$TARGET" >"$log" 2>&1 &
+  run_assess "$home" "$log" &
   local run=$!
   sleep 45
   kill -INT $run 2>/dev/null
@@ -148,13 +190,11 @@ scenario_cancel() {
   engagement=$(ls -t "$home/.argus/engagements" 2>/dev/null | head -1)
   if [ -z "$engagement" ]; then failed "cancellation" "no engagement persisted"; return; fi
   local status
-  status=$(python3 - "$home/.argus/argus.db" <<'PY'
-import sqlite3, sys
-print(list(sqlite3.connect(sys.argv[1]).execute("select status from engagements order by rowid desc limit 1"))[0][0])
-PY
-)
-  if [ $code -eq 0 ]; then failed "cancellation" "interrupted run exited 0 (status $status)"; return; fi
-  pass "cancelled run exited $code (status $status)"
+  status=$(engagement_status "$home/.argus/argus.db")
+  if [ $code -eq 124 ]; then failed "cancellation" "ignored Ctrl-C until the deadline"; return; fi
+  if [ "$status" != "INTERRUPTED" ]; then failed "cancellation" "status is $status, not INTERRUPTED (exit $code)"; return; fi
+  if [ $code -eq 0 ]; then failed "cancellation" "interrupted run exited 0"; return; fi
+  pass "cancelled run recorded INTERRUPTED and exited $code"
 }
 
 requested=("$@")

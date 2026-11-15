@@ -81,12 +81,31 @@ export const ArgusAssessCommand = {
       }
     }
 
+    // Ctrl-C must be a cancellation the run can honour, not a silent no-op:
+    // the runner checks this flag at each phase boundary, records the
+    // engagement as stopped and leaves its findings on disk. Without it SIGINT
+    // was ignored and an interrupted run kept scanning and exited 0.
+    const stop = { requested: false }
+    const requestStop = () => {
+      if (stop.requested) return
+      stop.requested = true
+      process.stderr.write("\n[Argus] Cancellation requested — stopping after the current phase\n")
+    }
+    process.once("SIGINT", requestStop)
+    process.once("SIGTERM", requestStop)
+
     await assessCommand(target, {
       useLLM: !argv.deterministic,
       cacheMode: argv.noCache ? "no_cache" as const : argv.refreshCache ? "refresh" as const : undefined,
       verbose: argv.verbose as boolean,
       credsPath: argv.creds as string | undefined,
       features: featureOverrides,
+      shouldStop: () => stop.requested,
+    }).then((result) => {
+      if (result?.stopped) {
+        process.stderr.write("[Argus] Run stopped at a phase boundary; findings so far are saved\n")
+        process.exitCode = 130
+      }
     }).catch((e: Error) => {
       // A refused or failed run must be observable to an unattended driver —
       // swallowing the error left `argus assess` exiting 0, so a scope guard
