@@ -116,3 +116,27 @@ describe("EngagementStore getFindingEngagementId", () => {
     expect(engId).toBe(eng.id)
   })
 })
+
+describe("finding endpoint persistence", () => {
+  test("keeps the discovered url across save and reload", () => {
+    // Object-access verification reads the endpoint after loading the finding
+    // from storage; losing it would force a guess (Stage 4.2).
+    const store = makeStore()
+    const eng = store.createEngagement("https://example.com", "assessment")
+    const finding = makeFinding({ url: "https://example.com/api/invoices/42" })
+
+    store.saveFindings(eng.id, [finding])
+
+    expect(store.getFinding(finding.id)?.url).toBe("https://example.com/api/invoices/42")
+  })
+
+  test("findings saved without a url reload without one", () => {
+    const store = makeStore()
+    const eng = store.createEngagement("https://example.com", "assessment")
+    const finding = makeFinding()
+
+    store.saveFindings(eng.id, [finding])
+
+    expect(store.getFinding(finding.id)?.url).toBeUndefined()
+  })
+})

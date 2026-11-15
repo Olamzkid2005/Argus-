@@ -50,6 +50,8 @@ export const findings = sqliteTable("findings", {
   remediation: text(),
   tool: text(),
   phase: text(),
+  /** Discovered endpoint the finding refers to (Stage 4.2). */
+  url: text(),
   created_at: integer().notNull().$default(() => Date.now()),
   updated_at: integer().notNull().$onUpdate(() => Date.now()),
   finalized_at: integer(),
@@ -90,6 +92,16 @@ export const workflow_snapshots = sqliteTable("workflow_snapshots", {
   created_at: integer().notNull().$default(() => Date.now()),
 }, (table) => [
   index("idx_workflow_snapshots_engagement").on(table.engagement_id),
+])
+
+export const engagement_checkpoints = sqliteTable("engagement_checkpoints", {
+  id: text().primaryKey(),
+  engagement_id: text().notNull().references(() => engagements.id, { onDelete: "cascade" }),
+  created_at: integer().notNull().$default(() => Date.now()),
+  /** Full checkpoint payload (Stage 6.2): plan, policy, actions, usage. */
+  payload: text({ mode: "json" }).$type<Record<string, unknown>>().notNull(),
+}, (table) => [
+  index("idx_engagement_checkpoints_engagement").on(table.engagement_id),
 ])
 
 export const phases = sqliteTable("phases", {

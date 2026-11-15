@@ -5,7 +5,14 @@ export function validateWorkflowVersion(engagement: EngagementState, currentVers
 }
 
 export function canResume(engagement: EngagementState): boolean {
-  return engagement.status === "RUNNING" || engagement.status === "PAUSED"
+  // Stage 6.2 item 4: an interrupted or partially-completed run is resumable;
+  // COMPLETED and FAILED are terminal, and CREATED was never started.
+  return (
+    engagement.status === "RUNNING" ||
+    engagement.status === "PAUSED" ||
+    engagement.status === "INTERRUPTED" ||
+    engagement.status === "PARTIAL"
+  )
 }
 
 export function canRetryPhase(status: PhaseStatus): boolean {

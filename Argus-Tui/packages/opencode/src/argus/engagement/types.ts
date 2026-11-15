@@ -1,7 +1,16 @@
 import type { ExecutionMode } from "../shared/types"
 import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
 
-export type EngagementStatus = "CREATED" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED"
+export type EngagementStatus =
+  | "CREATED"
+  | "RUNNING"
+  | "PAUSED"
+  /** A cooperative stop or operator interruption, not a failure. */
+  | "INTERRUPTED"
+  /** Every phase is terminal, but at least one failed, was skipped or partial. */
+  | "PARTIAL"
+  | "COMPLETED"
+  | "FAILED"
 export type PhaseStatus = "PENDING" | "RUNNING" | "COMPLETED" | "PARTIAL" | "FAILED" | "SKIPPED"
 export type FindingStatus = "PENDING" | "CONFIRMED" | "REJECTED" | "FINALIZED" | "DISMISSED"
 
@@ -44,6 +53,10 @@ export interface IEngagementStore {
   saveEngagement(engagement: EngagementState): void
   updateStatus(id: string, status: EngagementStatus): void
   listEngagements(): EngagementState[]
+
+  // ── Checkpoints (per-engagement DB, Stage 6.2) ──
+  saveCheckpoint(checkpoint: import("./checkpoint").EngagementCheckpoint): void
+  getLatestCheckpoint(engagementId: string): import("./checkpoint").EngagementCheckpoint | null
 
   // ── Phases (per-engagement DB) ──
   savePhases(id: string, records: PhaseRecord[]): void

@@ -53,6 +53,9 @@ let _engagementSeq = 0
 // millisecond-precision `created_at` timestamp sort deterministically
 // when ordered by `id DESC`.
 let _auditSeq = 0
+
+// Monotonic counter for checkpoint rows created in the same millisecond.
+let _checkpointSeq = 0
 import {
   engagements,
   findings as findingsTable,
@@ -63,6 +66,7 @@ import {
   workflow_snapshots,
   finding_analysis,
   extracted_credentials,
+  engagement_checkpoints as engagementCheckpointsTable,
   STORAGE_VERSION_LEGACY,
   STORAGE_VERSION_PER_ENGAGEMENT,
   STORAGE_VERSION_ENCRYPTED,
@@ -70,6 +74,7 @@ import {
 import { EncryptedDbHandle } from "../storage/encrypted-db"
 import { EncryptionManager, keychainAccountName, keychainServiceName } from "../storage/encryption"
 import type { EngagementState, PhaseRecord, EngagementStatus, PhaseStatus, IEngagementStore } from "./types"
+import type { EngagementCheckpoint } from "./checkpoint"
 import type { ExecutionMode } from "../shared/types"
 import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
 
@@ -96,6 +101,12 @@ const ADD_VERSION_COLUMN_SQL = `ALTER TABLE engagements ADD COLUMN version INTEG
  *  if the column already exists. */
 const ADD_STORAGE_VERSION_COLUMN_SQL = `ALTER TABLE engagements ADD COLUMN storage_version INTEGER NOT NULL DEFAULT ${STORAGE_VERSION_LEGACY}`
 
+/** Migration: persist the discovered endpoint of a finding (Stage 4.2).
+ *  Object-access verification needs the URL the scanner actually observed, and
+ *  a finding reloaded from storage must not lose it. ALTER TABLE is run in a
+ *  try/catch, so existing databases get the column and new ones skip this. */
+const ADD_FINDING_URL_COLUMN_SQL = `ALTER TABLE findings ADD COLUMN url TEXT`
+
 /**
  * Per-engagement DB schema — all tables except engagements.
  * These are plain SQL strings passed directly to bun:sqlite's exec()
@@ -107,7 +118,7 @@ const PER_ENGAGEMENT_TABLE_SQL = [
     id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL,
     title TEXT NOT NULL, severity INTEGER NOT NULL, confidence INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'PENDING', description TEXT, subtype TEXT, cve TEXT, cwe TEXT,
-    owasp TEXT, remediation TEXT, tool TEXT, phase TEXT, created_at INTEGER NOT NULL,
+    owasp TEXT, remediation TEXT, tool TEXT, phase TEXT, url TEXT, created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL, finalized_at INTEGER, negative INTEGER NOT NULL DEFAULT 0
   )`,
   `CREATE INDEX IF NOT EXISTS idx_findings_engagement ON findings(engagement_id)`,
@@ -167,6 +178,11 @@ const PER_ENGAGEMENT_TABLE_SQL = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_extracted_creds_engagement ON extracted_credentials(engagement_id)`,
   `CREATE INDEX IF NOT EXISTS idx_extracted_creds_type ON extracted_credentials(credential_type)`,
+  `CREATE TABLE IF NOT EXISTS engagement_checkpoints (
+    id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL, payload TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_engagement_checkpoints_engagement ON engagement_checkpoints(engagement_id)`,
 ]
 
 function toEngagementState(row: typeof engagements.$inferSelect): EngagementState {
@@ -215,6 +231,7 @@ function toFindingRow(finding: NormalizedFinding, engagementId: string): typeof 
     remediation: finding.remediation,
     tool: finding.tool,
     phase: finding.phase,
+    url: finding.url,
     negative: finding.negative ?? false,
     created_at: finding.created_at ? new Date(finding.created_at).getTime() : Date.now(),
     updated_at: finding.updated_at ? new Date(finding.updated_at).getTime() : Date.now(),
@@ -237,6 +254,7 @@ function toNormalizedFinding(row: typeof findingsTable.$inferSelect): Normalized
     remediation: row.remediation ?? undefined,
     tool: row.tool ?? "unknown",
     phase: row.phase ?? "unknown",
+    url: row.url ?? undefined,
     negative: row.negative ? true : undefined,
     created_at: new Date(row.created_at).toISOString(),
     updated_at: new Date(row.updated_at).toISOString(),
@@ -799,6 +817,12 @@ export class EngagementStore implements IEngagementStore {
     for (const stmt of PER_ENGAGEMENT_TABLE_SQL) {
       sqlite.exec(stmt)
     }
+    // Migration for engagement DBs created before `url` was persisted.
+    try {
+      sqlite.exec(ADD_FINDING_URL_COLUMN_SQL)
+    } catch {
+      // Column already exists — safe to ignore
+    }
   }
 
   private _seedCounters(): void {
@@ -960,6 +984,33 @@ export class EngagementStore implements IEngagementStore {
         replan_cycle: record.replanCycle ? 1 : 0,
       },
     }).run()
+  }
+
+  // ── Checkpoints (Stage 6.2) ──
+
+  saveCheckpoint(checkpoint: EngagementCheckpoint): void {
+    const pe = this._ensureEngagementDb(checkpoint.engagementId)
+    pe.drizzle.insert(engagementCheckpointsTable).values({
+      id: `CHK-${Date.now().toString(36)}-${(_checkpointSeq++).toString(36)}`,
+      engagement_id: checkpoint.engagementId,
+      created_at: Date.now(),
+      payload: checkpoint as unknown as Record<string, unknown>,
+    }).run()
+  }
+
+  getLatestCheckpoint(engagementId: string): EngagementCheckpoint | null {
+    const pe = this._getEngagementDb(engagementId)
+    if (!pe) return null
+    const rows = pe.drizzle.select().from(engagementCheckpointsTable)
+      .where(eq(engagementCheckpointsTable.engagement_id, engagementId))
+      .orderBy(
+        desc(engagementCheckpointsTable.created_at),
+        desc(engagementCheckpointsTable.id),
+      )
+      .limit(1)
+      .all()
+    if (rows.length === 0) return null
+    return rows[0].payload as unknown as EngagementCheckpoint
   }
 
   getPhases(id: string): PhaseRecord[] {
