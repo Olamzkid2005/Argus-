@@ -90,10 +90,17 @@ export async function resumeCommand(
   }
 
   const workflowDef = workflowRegistry.getWorkflow(checkpoint.workflow)
+  // `argus assess` builds its plan in memory and names the workflow
+  // "assessment"; there is no YAML for it in the registry. Comparing against a
+  // missing definition produced `workflow version mismatch: checkpoint 1,
+  // current -1` and refused every assessment ever created, so an interrupted
+  // run could never be continued. With no definition to contradict it, the
+  // version recorded in the checkpoint is the authority.
+  const currentWorkflowVersion = workflowDef?.version ?? checkpoint.workflowVersion
   const currentScope = scopeEntriesFor(engagement.target)
   const validation = validateCheckpoint(checkpoint, {
     currentWorkflowName: checkpoint.workflow,
-    currentWorkflowVersion: workflowDef?.version ?? -1,
+    currentWorkflowVersion,
     currentScope,
   })
 
