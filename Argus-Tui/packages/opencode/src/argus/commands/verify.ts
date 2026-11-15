@@ -1,6 +1,13 @@
 import { PlaywrightEngine } from "../browser/engine"
+import { scopeEntriesFor } from "../browser/scope-guard"
 import { BOLAVerifier } from "../browser/verifiers/bola"
+import {
+  ObjectAccessPlanError,
+  discoveredResourceForFinding,
+  objectAccessPlan,
+} from "../browser/bola-plan"
 import { StoredXSSVerifier } from "../browser/verifiers/xss"
+import { XssPlanError, xssInjectionPointForFinding } from "../browser/verifiers/xss-plan"
 import { PrivilegeEscalationVerifier } from "../browser/verifiers/priv-esc"
 import { SSRFVerifier } from "../browser/verifiers/ssrf"
 import { LFIVerifier } from "../browser/verifiers/lfi"
@@ -49,7 +56,11 @@ export async function verifyCommand(
   credStore.clear()
 
   const targetUrl = options?.targetUrl ?? engagementTarget
-  const engine = options?.engineOverride ?? new PlaywrightEngine()
+  // The browser run is authorized for this engagement's target origin only: the
+  // context carries a logged-in session, so a navigation built from
+  // target-controlled text (a finding's URL, a redirect) must not inherit it.
+  const engine =
+    options?.engineOverride ?? new PlaywrightEngine({ allowedTargets: scopeEntriesFor(targetUrl) })
   const evidenceBaseDir = StoragePaths.engagementsDir
   const evidenceCollector = options?.collectorOverride ?? new EvidenceCollector(evidenceBaseDir)
   const confidenceEngine = options?.confidenceOverride ?? new ConfidenceEngine()
@@ -88,40 +99,74 @@ export async function verifyCommand(
 
   // Determine which verifier to run based on finding tool
   try {
-    if ((finding.tool?.includes("bola") || finding.subtype === "bola" || finding.subtype === "idor") && attackerRole && victimRole) {
-      const verifier = new BOLAVerifier(engine, targetUrl, "/api/resource", attackerRole, victimRole, evidenceCollector, engagementId, findingId)
-      const result = await runner.run(verifier)
-      lines.push(`[BOLA] ${result.summary} (confidence: ${result.confidence})`)
+    if (finding.tool?.includes("bola") || finding.subtype === "bola" || finding.subtype === "idor") {
+      // Stage 4.2: no hard-coded path and no borrowed role. The plan requires
+      // the finding's discovered endpoint plus two real, distinct identities;
+      // otherwise the check is reported unsupported rather than skipped.
+      try {
+        // Role names stay flexible ("Attacker", "victim_role", …), but the
+        // plan still requires both accounts to exist and be distinct.
+        const roleName = (want: string) =>
+          Object.keys(allRoles).find((key) => key.toLowerCase().includes(want))
+        const plan = objectAccessPlan(
+          allRoles,
+          discoveredResourceForFinding(finding, targetUrl, {
+            ownerRole: roleName("victim"),
+            accessorRole: roleName("attacker"),
+          }),
+        )
+        const verifier = new BOLAVerifier(engine, targetUrl, plan, evidenceCollector, engagementId, findingId)
+        const result = await runner.run(verifier)
+        lines.push(`[BOLA] ${result.summary} (proof: ${result.proofStatus}, confidence: ${result.confidence})`)
+      } catch (error) {
+        if (error instanceof ObjectAccessPlanError) {
+          lines.push(`[BOLA] unsupported: ${error.message}`)
+        } else {
+          throw error
+        }
+      }
     } else if ((finding.tool?.includes("xss") || finding.subtype === "xss" || finding.subtype === "xss_stored" || finding.subtype === "xss_reflected") && (userRole || adminRole)) {
-      const creds = userRole ?? adminRole!
-      const verifier = new StoredXSSVerifier(engine, targetUrl, targetUrl, "<script>alert('xss')</script>", evidenceCollector, engagementId, findingId)
-      const result = await runner.run(verifier)
-      lines.push(`[XSS] ${result.summary} (confidence: ${result.confidence})`)
+      // Stage 4.3: the victim view is the discovered endpoint/parameter (in a
+      // separate victim session), never a guessed page. The verifier builds its
+      // own nonce-bearing payload and confirms only an execution report from
+      // the victim page.
+      try {
+        const plan = xssInjectionPointForFinding(finding, targetUrl)
+        const verifier = new StoredXSSVerifier(engine, plan, evidenceCollector, engagementId, findingId)
+        const result = await runner.run(verifier)
+        lines.push(`[XSS] ${result.summary} (proof: ${result.proofStatus}, confidence: ${result.confidence})`)
+      } catch (error) {
+        if (error instanceof XssPlanError) {
+          lines.push(`[XSS] unsupported: ${error.message}`)
+        } else {
+          throw error
+        }
+      }
     } else if ((finding.tool?.includes("priv-esc") || finding.subtype === "privilege_escalation" || finding.subtype === "privesc") && userRole) {
       const verifier = new PrivilegeEscalationVerifier(engine, targetUrl, ["/admin"], userRole, evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
-      lines.push(`[PrivEsc] ${result.summary} (confidence: ${result.confidence})`)
+      lines.push(`[PrivEsc] ${result.summary} (proof: ${result.proofStatus}, confidence: ${result.confidence})`)
     } else if ((finding.tool?.includes("ssrf") || finding.subtype === "ssrf") && targetUrl) {
       const ssrfEndpoint = finding.description?.match(/\/\S+/)?.[0] ?? "/"
       const verifier = new SSRFVerifier(engine, targetUrl, ssrfEndpoint, evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
-      lines.push(`[SSRF] ${result.summary} (confidence: ${result.confidence})`)
+      lines.push(`[SSRF] ${result.summary} (proof: ${result.proofStatus}, confidence: ${result.confidence})`)
     } else if ((finding.tool?.includes("lfi") || finding.tool?.includes("path_traversal") || finding.subtype === "lfi" || finding.subtype === "path_traversal") && targetUrl) {
       const lfiParam = finding.description?.match(/(?:file|page|include|path|template|load|read|document|folder|root|preview|view|dir|show|url|lang|cat)\s*[:=]\s*\S+/i)?.[0] ?? finding.description?.match(/(\/[^\s,]+)/)?.[1] ?? "file"
       const verifier = new LFIVerifier(engine, targetUrl, lfiParam.startsWith("/") ? lfiParam : `?${lfiParam}=`, evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
-      lines.push(`[LFI] ${result.summary} (confidence: ${result.confidence})`)
+      lines.push(`[LFI] ${result.summary} (proof: ${result.proofStatus}, confidence: ${result.confidence})`)
     } else if ((finding.tool?.includes("jwt") || finding.subtype === "jwt" || finding.subtype === "jwt_tampering" || finding.subtype === "jwt_none_algorithm") && targetUrl) {
       const protectedEndpoint = finding.description?.match(/(\/[^\s,]+)/)?.[1] ?? "/admin"
       const jwtMatch = finding.description?.match(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/)
       const verifier = new JWTVerifier(engine, targetUrl, protectedEndpoint, jwtMatch?.[0], evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
-      lines.push(`[JWT] ${result.summary} (confidence: ${result.confidence})`)
+      lines.push(`[JWT] ${result.summary} (proof: ${result.proofStatus}, confidence: ${result.confidence})`)
     } else if ((finding.tool?.includes("secrets") || finding.subtype === "secrets" || finding.subtype === "exposed_secrets" || finding.subtype === "exposed_credentials") && targetUrl) {
       const scanEndpoint = finding.description?.match(/(\/[^\s,]+)/)?.[1] ?? "/"
       const verifier = new SecretsExposureVerifier(engine, targetUrl, scanEndpoint, evidenceCollector, engagementId, findingId)
       const result = await runner.run(verifier)
-      lines.push(`[Secrets] ${result.summary} (confidence: ${result.confidence})`)
+      lines.push(`[Secrets] ${result.summary} (proof: ${result.proofStatus}, confidence: ${result.confidence})`)
     } else {
       lines.push(`[Argus] No matching verifier found for tool: ${finding.tool}`)
       lines.push(`[Argus] Available roles: ${Object.keys(allRoles).join(", ") || "none"}`)

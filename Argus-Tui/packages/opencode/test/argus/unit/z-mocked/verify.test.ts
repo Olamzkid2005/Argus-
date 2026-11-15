@@ -53,8 +53,8 @@ const mockEngine = {
 const mockCredStore = {
   load: mock(() => ({ roles: {} })),
   getAllCredentials: mock(() => ({
-    attacker: { username: "attacker", password: "pass" },
-    victim: { username: "victim", password: "pass" },
+    attacker: { username: "mallory", password: "mallory-real-pass" },
+    victim: { username: "alice", password: "alice-real-pass" },
   })),
   clear: mock(() => {}),
   getCredentials: mock(() => null),
@@ -186,6 +186,7 @@ describe("verifyCommand", () => {
       confidence: 1,
       status: "PENDING",
       description: "test",
+      url: "https://custom-target.com/api/user/1", // discovered resource (Stage 4.2)
       tool: "bola",          // Use a tool that has a registered verifier
       phase: "phase-1",
       created_at: new Date().toISOString(),
@@ -202,8 +203,8 @@ describe("verifyCommand", () => {
       credStoreOverride: mockCredStore as any,
     })
 
-    // The BOLA verifier should have been invoked with the targetUrl,
-    // not just echoed in the output string.
+    // The BOLA verifier is invoked through the plan rule with the discovered
+    // resource; the target flows into the run rather than being echoed.
     expect(output).toContain("[BOLA]")
     expect(output).toContain("https://custom-target.com")
     expect(output).not.toContain("No matching verifier found")
@@ -268,6 +269,7 @@ describe("verifyCommand", () => {
       confidence: 2,
       status: "PENDING",
       description: "https://bola-test.com/api/resource",
+      url: "https://bola-test.com/api/resource",
       tool: "bola-scanner",
       phase: "phase-1",
       created_at: new Date().toISOString(),
@@ -302,6 +304,7 @@ describe("verifyCommand", () => {
       confidence: 2,
       status: "PENDING",
       description: "https://xss-test.com/profile",
+      url: "https://xss-test.com/profile?id=1",
       tool: "xss-scanner",
       phase: "phase-1",
       created_at: new Date().toISOString(),
@@ -392,6 +395,7 @@ describe("verifyCommand", () => {
       confidence: 2,
       status: "PENDING",
       description: "test",
+      url: "https://fail-verify.com/api/user/1",
       tool: "bola-scanner",
       phase: "phase-1",
       created_at: new Date().toISOString(),
@@ -472,6 +476,7 @@ describe("verifyCommand", () => {
       confidence: 2,
       status: "PENDING",
       description: "https://bola-flex-test.com/api/resource",
+      url: "https://bola-flex-test.com/api/resource",
       tool: "bola-scanner",
       phase: "phase-1",
       created_at: new Date().toISOString(),
@@ -482,8 +487,8 @@ describe("verifyCommand", () => {
     const flexCredStore = {
       load: mock(() => ({ roles: {} })),
       getAllCredentials: mock(() => ({
-        Attacker: { username: "attacker", password: "pass" },
-        victim_role: { username: "victim", password: "pass" },
+        Attacker: { username: "mallory", password: "mallory-real-pass" },
+        victim_role: { username: "alice", password: "alice-real-pass" },
       })),
       clear: mock(() => {}),
       getCredentials: mock(() => null),
