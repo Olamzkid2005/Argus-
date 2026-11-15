@@ -505,3 +505,46 @@ class TestDispatch:
     def test_handles_malformed_input(self):
         findings = dispatch("nuclei", "")
         assert findings == []
+
+
+class TestGenericParserNumericSeverity:
+    """Verifier output carries numbers; the report must not flatten them.
+
+    playwright-bola/xss/privesc print ``{"severity": 4, "confidence": 5}`` for
+    a confirmed issue and ``0`` for a clean result. Normalized as strings, both
+    fell to the MEDIUM default: every confirmed finding was reported as MEDIUM,
+    and each "No X detected" sentinel became a MEDIUM finding of its own, so a
+    clean run looked like it had findings.
+    """
+
+    def test_numeric_severity_maps_onto_the_scale(self):
+        findings = dispatch(
+            "playwright-bola",
+            json.dumps(
+                {"title": "BOLA: Unauthorized Access", "severity": 4, "confidence": 5}
+            ),
+        )
+
+        assert findings[0].severity == 4
+        assert findings[0].confidence == 5
+
+    def test_negative_result_is_not_a_finding(self):
+        parsed = dispatch(
+            "playwright-bola",
+            json.dumps(
+                {"title": "No BOLA vulnerability detected", "severity": 0, "confidence": 5}
+            ),
+        )
+
+        assert parsed == []
+
+    def test_named_severity_still_works(self):
+        findings = dispatch(
+            "playwright-bola",
+            json.dumps(
+                {"title": "Exposed admin", "severity": "high", "confidence": "high"}
+            ),
+        )
+
+        assert findings[0].severity == 3
+        assert findings[0].confidence == 4

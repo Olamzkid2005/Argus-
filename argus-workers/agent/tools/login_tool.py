@@ -53,6 +53,22 @@ TOKEN_COOKIE_NAMES = frozenset(
 # ── Public API ──
 
 
+#: Phrases that mean the submitted credentials were rejected. Deliberately
+#: specific: a page that merely contains "invalid" somewhere is not a login
+#: failure, and treating it as one threw away a working session.
+_AUTH_FAILURE_PHRASES = (
+    "invalid credentials",
+    "invalid username",
+    "invalid password",
+    "invalid login",
+    "incorrect password",
+    "incorrect username",
+    "wrong password",
+    "login failed",
+    "authentication failed",
+)
+
+
 # ── Common API field name permutations for API-style login ──
 # When no HTML form fields are available (API mode), the login tool
 # iterates through these combinations to find the right field names.
@@ -211,8 +227,18 @@ def run_login(
             if resp.ok or resp.status_code in (302, 301, 200):
                 body_text = resp.text.lower() if resp.text else ""
 
-                # Check for login failure indicators in response
-                if "invalid" in body_text or "incorrect" in body_text:
+                # Check for login failure indicators in response.
+                #
+                # A bare `"invalid"` substring matched any page that merely
+                # mentions the word — a target whose page links to a
+                # placeholder host such as `sentinel.argus.invalid` was
+                # reported as INVALID_CREDENTIALS after a *successful* login,
+                # and the auth phase failed on it. Only auth-specific phrases
+                # mean the credentials were rejected.
+                if any(
+                    phrase in body_text
+                    for phrase in _AUTH_FAILURE_PHRASES
+                ):
                     if attempt < MAX_RETRIES - 1:
                         last_error = ERROR_CODES["INVALID_CREDENTIALS"]
                         _rate_limit_backoff(attempt)

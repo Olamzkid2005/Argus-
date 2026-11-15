@@ -12,6 +12,12 @@ _ERROR_PATTERN = re.compile(
     r"(error|fail|critical|vulnerability|warning)\s*[:]?\s*(.*)", re.IGNORECASE
 )
 
+#: A verifier that found nothing still prints a titled result. That result is
+#: not a finding; promoting it made every clean run look like it had a MEDIUM.
+_NEGATIVE_RESULT = re.compile(
+    r"^no\b.*\b(detected|found|identified|discovered)\b", re.IGNORECASE
+)
+
 
 def _try_json(output: str) -> list[NormalizedFinding] | None:
     try:
@@ -41,11 +47,13 @@ def _try_json(output: str) -> list[NormalizedFinding] | None:
             or item.get("finding")
             or "Generic finding"
         )
+        if _NEGATIVE_RESULT.match(str(title)):
+            continue
         findings.append(
             NormalizedFinding(
                 title=str(title),
-                severity=normalize_severity(str(item.get("severity", "medium"))),
-                confidence=normalize_confidence(str(item.get("confidence", "medium"))),
+                severity=normalize_severity(item.get("severity", "medium")),
+                confidence=normalize_confidence(item.get("confidence", "medium")),
                 description=str(item.get("description", item.get("message", ""))),
                 tool=item.get("tool", "unknown"),
                 evidence=[item],

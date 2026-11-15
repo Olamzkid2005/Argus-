@@ -37,14 +37,53 @@ _CONFIDENCE_MAP = {
 }
 
 
-def _normalize_severity(severity: str) -> str:
-    """Map a severity string to a standard level."""
-    return _SEVERITY_MAP.get(severity.strip().lower(), "MEDIUM")
+#: Parser-produced findings may carry a number instead of a name. The worker's
+#: own verifiers (playwright-bola/xss/privesc) emit `"severity": 4` for a
+#: confirmed issue and `0` for a clean result on the 0-4 INFO..CRITICAL scale.
+#: Read as a string, both fell through to the MEDIUM default: every confirmed
+#: finding was reported as MEDIUM *and* every "No X detected" sentinel became a
+#: MEDIUM finding of its own.
+_NUMERIC_SEVERITY = {
+    0: "INFO",
+    1: "LOW",
+    2: "MEDIUM",
+    3: "HIGH",
+    4: "CRITICAL",
+    5: "CRITICAL",
+}
+
+#: A verifier that found nothing still prints a title; that title is a result,
+#: not a finding.
+_NEGATIVE_RESULT = re.compile(
+    r"^no\b.*\b(detected|found|identified|discovered)\b", re.IGNORECASE
+)
 
 
-def _normalize_confidence(confidence: str) -> float:
-    """Map a confidence string to a float."""
-    return _CONFIDENCE_MAP.get(confidence.strip().lower(), 0.50)
+def _normalize_severity(severity) -> str:
+    """Map a severity name or the 0-4 scale onto a standard level."""
+    if isinstance(severity, bool):
+        return "MEDIUM"
+    if isinstance(severity, (int, float)) and float(severity).is_integer():
+        return _NUMERIC_SEVERITY.get(int(severity), "MEDIUM")
+    text = str(severity).strip().lower()
+    if text.isdigit():
+        return _NUMERIC_SEVERITY.get(int(text), "MEDIUM")
+    return _SEVERITY_MAP.get(text, "MEDIUM")
+
+
+def _normalize_confidence(confidence) -> float:
+    """Map a confidence name or the verifier's 0-5 scale to a float."""
+    if isinstance(confidence, bool):
+        return 0.50
+    if isinstance(confidence, (int, float)):
+        level = float(confidence)
+        if level > 1:  # 0-5 scale
+            level = level / 5
+        return max(0.0, min(1.0, level))
+    text = str(confidence).strip().lower()
+    if text.replace(".", "", 1).isdigit():
+        return _normalize_confidence(float(text))
+    return _CONFIDENCE_MAP.get(text, 0.50)
 
 
 class GenericParser(BaseParser):
@@ -95,8 +134,10 @@ def _try_json(output: str) -> list[dict] | None:
             or item.get("finding")
             or "Generic finding"
         )
-        severity_raw = str(item.get("severity", "medium"))
-        confidence_raw = str(item.get("confidence", "medium"))
+        if _NEGATIVE_RESULT.match(str(title)):
+            continue
+        severity_raw = item.get("severity", "medium")
+        confidence_raw = item.get("confidence", "medium")
 
         findings.append(
             {

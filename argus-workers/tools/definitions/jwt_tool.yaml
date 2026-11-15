@@ -1,9 +1,11 @@
 name: jwt_tool
 command: jwt_tool
 description: "JWT security testing toolkit"
-args:
-  - "-C"
-  - "-d"
+args: []
+# Disabled: jwt_tool can only work on a token. Without one it crawls the
+# target, finds nothing and exits 1, which surfaced as a failed
+# api_exploitation phase on every target that has no JWT. Enable it once
+# recon extracts a token and pass that token as the positional argument.
 parameters:
   - name: target
     type: string
@@ -20,5 +22,5 @@ requires:
     - has_login_page
 priority: 70
 cost: low
-enabled: true
+enabled: false
 timeout: 120

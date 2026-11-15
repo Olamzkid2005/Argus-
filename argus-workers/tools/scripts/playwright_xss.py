@@ -10,6 +10,28 @@ from playwright.sync_api import sync_playwright
 XSS_PAYLOAD = "<script>alert('XSS')</script>"
 
 
+def _single_login(creds, source: str) -> dict:
+    """Reduce a credentials file to the one login this verifier needs.
+
+    The executor writes credentials as a role map (``{"attacker": {...}}``),
+    because the BOLA verifier needs two logins. Reading that map as a login
+    raised ``KeyError: 'username'`` after the browser had started, which read
+    as a crashing scanner rather than a config mismatch.
+    """
+    if not isinstance(creds, dict):
+        raise SystemExit(f"{source}: expected a JSON object")
+    if "username" in creds:
+        return creds
+    for key in ("attacker", "low-priv", "low_priv", "user", "default"):
+        entry = creds.get(key)
+        if isinstance(entry, dict) and "username" in entry:
+            return entry
+    for entry in creds.values():
+        if isinstance(entry, dict) and "username" in entry:
+            return entry
+    raise SystemExit(f"{source}: no entry with a 'username' field")
+
+
 def _check_auth_success(page, target: str) -> bool:
     """Verify authentication succeeded by checking multiple signals.
 
@@ -143,7 +165,7 @@ if __name__ == "__main__":
 
     if args.creds_file:
         with open(args.creds_file) as f:
-            creds: Any = json.load(f)
+            creds: Any = _single_login(json.load(f), args.creds_file)
     elif args.username and args.password:
         creds = {"username": args.username, "password": args.password}
     else:
