@@ -74,6 +74,38 @@ else
   echo "nmap already installed: $("$BIN/nmap" --version | head -1)"
 fi
 
+# ── cloud_enum + s3scanner (the cloud_enum phase needs both) ─────────
+if [ "$FORCE" = "1" ] || ! "$BIN/cloud_enum" --help >/dev/null 2>&1; then
+  echo "installing cloud_enum"
+  rm -rf "$ROOT/.livefire/tools/cloud_enum"
+  mkdir -p "$ROOT/.livefire/tools/cloud_enum"
+  curl -fsSL --max-time 300 -o "$TMP/cloud_enum.zip" \
+    https://codeload.github.com/initstring/cloud_enum/zip/refs/heads/master
+  unzip -q "$TMP/cloud_enum.zip" -d "$TMP/cenum"
+  cp -a "$TMP/cenum/cloud_enum-master/." "$ROOT/.livefire/tools/cloud_enum/"
+  cat > "$BIN/cloud_enum" <<'WRAPPER'
+#!/bin/sh
+# cloud_enum ships as a Python script; run it with the worker venv.
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+exec "$ROOT/argus-workers/venv/bin/python" "$ROOT/.livefire/tools/cloud_enum/cloud_enum.py" "$@"
+WRAPPER
+  chmod +x "$BIN/cloud_enum"
+  uv pip install --python "$ROOT/argus-workers/venv/bin/python" \
+    dnspython requests-futures colorama
+fi
+
+if [ "$FORCE" = "1" ] || ! "$BIN/s3scanner" -h >/dev/null 2>&1; then
+  echo "installing s3scanner"
+  curl -fsSL --max-time 300 -o "$TMP/s3scanner.deb" \
+    https://github.com/sa7mon/S3Scanner/releases/download/v3.1.1/S3Scanner_3.1.1_linux_amd64.deb
+  rm -rf "$ROOT/.livefire/tools/s3scanner"
+  mkdir -p "$ROOT/.livefire/tools/s3scanner"
+  dpkg-deb -x "$TMP/s3scanner.deb" "$ROOT/.livefire/tools/s3scanner"
+  chmod +x "$ROOT/.livefire/tools/s3scanner/usr/bin/S3Scanner"
+  ln -sf ../tools/s3scanner/usr/bin/S3Scanner "$BIN/s3scanner"
+fi
+
 # ── headless browser for the playwright verifiers ────────────────────
 # Chromium needs shared libraries and a fontconfig file this image does not
 # ship. They are extracted unprivileged into tools/browser-libs; the worker's
