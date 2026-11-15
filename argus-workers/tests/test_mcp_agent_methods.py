@@ -385,3 +385,182 @@ class TestMCPToolResult:
         result = MCPToolResult(success=True, output="ok", tool="nuclei")
         d = result.to_dict()
         assert "data" not in d["meta"]
+
+
+class TestStage5ActionCarryThrough:
+    """Stage 5.1 items 1-3 over the MCP session protocol."""
+
+    @patch("mcp_server.LLMClient")
+    def test_next_carries_the_step_arguments_with_the_tool(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
+        init = server.handle_agent_init(
+            {
+                "target": "https://example.com",
+                "phase": "scan",
+                "pipeline": [
+                    {"tool": "nuclei", "arguments": {"severity": "high", "tags": "cves"}},
+                    {"tool": "nmap"},
+                ],
+            }
+        )
+        sid = init["session_id"]
+
+        first = server.handle_agent_next({"session_id": sid})
+        # The chosen arguments survive, and the target stays the authorized one.
+        assert first["arguments"] == {
+            "severity": "high",
+            "tags": "cves",
+            "target": "https://example.com",
+        }
+        assert first["signature"]
+
+        second = server.handle_agent_next({"session_id": sid})
+        assert second["tool"] == "nmap"
+        assert second["arguments"] == {"target": "https://example.com"}
+
+    @patch("mcp_server.LLMClient")
+    def test_model_supplied_target_cannot_override_the_engagement(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
+        init = server.handle_agent_init(
+            {
+                "target": "https://example.com",
+                "phase": "scan",
+                "pipeline": [
+                    {"tool": "nuclei", "arguments": {"target": "https://attacker.example"}}
+                ],
+            }
+        )
+        nxt = server.handle_agent_next({"session_id": init["session_id"]})
+        assert nxt["arguments"]["target"] == "https://example.com"
+
+    @patch("mcp_server.LLMClient")
+    def test_identical_actions_are_deduplicated_by_signature(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
+        server.register_tool(ToolDefinition(name="httpx", command="httpx"))
+        init = server.handle_agent_init(
+            {
+                "target": "https://example.com",
+                "phase": "scan",
+                "pipeline": [
+                    {"tool": "nuclei"},
+                    {"tool": "nuclei"},
+                    {"tool": "httpx"},
+                ],
+            }
+        )
+        sid = init["session_id"]
+
+        assert server.handle_agent_next({"session_id": sid})["tool"] == "nuclei"
+        # The repeat is refused, and the run moves on to the next distinct action.
+        second = server.handle_agent_next({"session_id": sid})
+        assert second["tool"] == "httpx"
+
+    @patch("mcp_server.LLMClient")
+    def test_observe_records_structured_engagement_observations(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
+        init = server.handle_agent_init(
+            {
+                "target": "https://example.com",
+                "phase": "scan",
+                "engagementId": "ENG-OBS-1",
+                "pipeline": [{"tool": "nuclei"}],
+            }
+        )
+        sid = init["session_id"]
+        action = server.handle_agent_next({"session_id": sid})
+
+        result = server.handle_agent_observe(
+            {
+                "session_id": sid,
+                "action_id": action["action_id"],
+                "tool": "nuclei",
+                "arguments": {"target": "https://example.com/search?q=1"},
+                "success": True,
+                "summary": "found https://example.com/api/users/7",
+                "result": {"findings": [{"title": "IDOR on /api/users/7"}]},
+            }
+        )
+
+        kinds = {record["kind"] for record in result["structured_observations"]}
+        assert {"endpoint", "parameter", "finding"} <= kinds
+        assert "https://example.com/api/users/7" in result["observations"]
+        assert "IDOR on /api/users/7" in result["observations"]
+
+        stored = server.observation_store.records("ENG-OBS-1")
+        assert "https://example.com/api/users/7" in [o.value for o in stored]
+
+        session = server.session_store.get(sid)
+        assert [o["kind"] for o in session.structured_observations].count("finding") == 1
+        assert "nuclei" in session.executed_tools
+
+    @patch("mcp_server.LLMClient")
+    def test_observed_credentials_are_redacted_before_storage(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
+        init = server.handle_agent_init(
+            {
+                "target": "https://example.com",
+                "engagementId": "ENG-SECRET-1",
+                "pipeline": [{"tool": "nuclei"}],
+            }
+        )
+        sid = init["session_id"]
+        action = server.handle_agent_next({"session_id": sid})
+        server.handle_agent_observe(
+            {
+                "session_id": sid,
+                "action_id": action["action_id"],
+                "tool": "nuclei",
+                "arguments": {"target": "https://example.com", "password": "hunter2"},
+                "success": False,
+                "summary": "login rejected",
+            }
+        )
+        session = server.session_store.get(sid)
+        recorded = session.tool_history[0].arguments
+        assert recorded["password"] == "***REDACTED***"
+        assert "hunter2" not in str(session.tool_history[0].__dict__)
+        assert "hunter2" not in str(session.structured_observations)
+
+    @patch("mcp_server.LLMClient")
+    def test_stop_is_deferred_until_required_coverage_is_complete(self, mock_llm, server):
+        mock_llm.return_value.is_available.return_value = False
+        init = server.handle_agent_init(
+            {
+                "target": "https://example.com",
+                "phase": "scan",
+                "requiredCoverage": ["nmap"],
+                "pipeline": [{"tool": "nuclei"}, {"tool": "nmap"}],
+            }
+        )
+        sid = init["session_id"]
+
+        first = server.handle_agent_next({"session_id": sid})
+        server.handle_agent_observe(
+            {
+                "session_id": sid,
+                "action_id": first["action_id"],
+                "tool": "nuclei",
+                "success": True,
+                "summary": "nuclei done",
+                "stop": True,
+            }
+        )
+        # The stop is recorded but coverage for nmap is still missing, so the
+        # run continues with the required action instead of stopping early.
+        second = server.handle_agent_next({"session_id": sid})
+        assert second["done"] is False
+        assert second["tool"] == "nmap"
+
+        server.handle_agent_observe(
+            {
+                "session_id": sid,
+                "action_id": second["action_id"],
+                "tool": "nmap",
+                "success": True,
+                "summary": "nmap done",
+                "stop": True,
+            }
+        )
+        final = server.handle_agent_next({"session_id": sid})
+        assert final["done"] is True
+        assert "coverage complete" in final["stop_reason"]

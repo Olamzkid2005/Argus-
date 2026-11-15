@@ -31,6 +31,14 @@ try:
 except ImportError:  # python-dotenv is optional at runtime
     pass
 
+from agent.action_policy import CoveragePolicy, check_action
+from agent.auth_sessions import redact_arguments
+from agent.engagement_observations import (
+    EngagementObservationStore,
+    extract_observations,
+    identity_from,
+    public_identity_label,
+)
 from agent.react_agent import ReActAgent
 from agent.session_store import AgentSessionStore, ToolExecution
 from agent.tool_registry import ToolRegistry
@@ -39,6 +47,23 @@ from config.llm_env import InvalidWorkerLlmConfig, set_worker_llm_config
 from llm_client import LLMClient
 from tool_core.parser import dispatch, has_parser
 from tools.scope_validator import ScopeViolationError
+
+
+def scope_validator_for_engagement(engagement_id: str):
+    """The single authorization entry point for one engagement's tool calls.
+
+    An initial run and a resumed one both reach tools through ``call_tool`` with
+    the engagement id, so both are authorized by the same record. When the
+    engagement carries no scope — or a stale one that no longer loads — the
+    validator still fails closed, so a resumed run cannot inherit a weaker
+    check than the run that started it.
+    """
+    from orchestrator_pkg.engagement import EngagementService
+    from tools.scope_validator import ScopeValidator
+
+    return ScopeValidator(
+        engagement_id, EngagementService.load_authorized_scope(engagement_id)
+    )
 
 # ── Signal quality tiers for planner intelligence ──
 
@@ -506,6 +531,10 @@ class MCPServer:
             self._apply_declarative_registry()
         self._check_critical_tools()
         self.session_store = AgentSessionStore()
+        # Structured, engagement-keyed observations (Stage 5.1): recon/tool
+        # results become typed endpoint/parameter/auth/finding/failure records
+        # that the next decision sees, instead of free-text history.
+        self.observation_store = EngagementObservationStore()
         # Proactive DNS check — warn at startup if DNS is broken.
         # DNS-reliant tools (subfinder, amass, dnsx, etc.) silently fail
         # without producing useful error messages when DNS is unavailable
@@ -1339,6 +1368,30 @@ class MCPServer:
         """Get execution statistics for all tools."""
         return dict(self._execution_stats)
 
+    def handle_agent_budget(self, params: dict) -> dict:
+        """Return the worker's engagement-scoped execution ledger.
+
+        The session ledger is the worker's authoritative record of hybrid
+        actions that actually executed. It carries tool counts, executed
+        tools, plan provenance, and non-secret identity labels so a driver
+        checkpoint can reconcile its local budget instead of reporting an
+        unchecked dispatched count.
+        """
+        engagement_id = params.get("engagement_id", "")
+        if not engagement_id:
+            return {"error": "engagement_id is required"}
+        executions = self.session_store.executions_for_engagement(engagement_id)
+        executed_tools = sorted({execution.tool for execution in executions if execution.tool})
+        identities = sorted({execution.identity for execution in executions if execution.identity})
+        sessions = self.session_store.session_ids_for_engagement(engagement_id)
+        return {
+            "engagement_id": engagement_id,
+            "tool_calls": len(executions),
+            "executed_tools": executed_tools,
+            "identities": identities,
+            "sessions": len(sessions),
+        }
+
     # ── Hybrid planning methods ──
 
     def handle_agent_init(self, params: dict) -> dict:
@@ -1424,7 +1477,15 @@ class MCPServer:
         )
         sources = plan.get("sources") or ["deterministic"] * len(plan["tool_order"])
         engine_chosen = sum(1 for source in sources if source == "llm")
-        self.session_store.set_plan(session_id, plan["tool_order"], sources=sources)
+        self.session_store.set_plan(
+            session_id,
+            plan["tool_order"],
+            sources=sources,
+            argument_map=plan.get("arguments"),
+        )
+        required_coverage = params.get("requiredCoverage")
+        if required_coverage:
+            self.session_store.set_required_coverage(session_id, list(required_coverage))
         self.session_store.set_plan_provenance(
             session_id, plan.get("source", "deterministic")
         )
@@ -1646,7 +1707,7 @@ class MCPServer:
         }
 
     def _record_plan_step(
-        self, session, tool_name: str, iteration: int, source: str
+        self, session, tool_name: str, iteration: int, source: str, arguments: dict | None = None
     ) -> None:
         """Record a deterministic plan step as a fallback decision.
 
@@ -1669,7 +1730,7 @@ class MCPServer:
                 phase=_canonical_phase_name(session.phase),
                 iteration=iteration,
                 tool_selected=tool_name,
-                arguments={"target": session.target},
+                arguments=arguments or {"target": session.target},
                 reasoning=f"Deterministic plan step for {session.phase}",
                 was_fallback=True,
             )
@@ -1685,12 +1746,20 @@ class MCPServer:
         """
         session = self.session_store.get(session_id)
 
-        # Extract tool names from pipeline steps, validating they exist
+        # Extract tool names from pipeline steps, validating they exist.
+        # Stage 5.1 item 2: the step's arguments are kept alongside its tool, so
+        # a chosen call is not reduced to a bare name before it reaches the
+        # executor.
         tool_order = []
+        argument_map = []
         for step in pipeline:
             tool_name = step.get("tool")
             if tool_name and tool_name in self._tools:
                 tool_order.append(tool_name)
+                step_arguments = step.get("arguments")
+                argument_map.append(
+                    dict(step_arguments) if isinstance(step_arguments, dict) else {}
+                )
             elif tool_name:
                 logger.warning(
                     "Pipeline references unknown tool '%s', skipping", tool_name
@@ -1706,10 +1775,108 @@ class MCPServer:
 
         return {
             "tool_order": tool_order,
+            "arguments": argument_map,
             "sources": ["deterministic"] * len(tool_order),
             "reasoning": f"Deterministic plan for {session.phase}: {len(tool_order)} tools",
             "source": "deterministic",
         }
+
+    def _bounded_plan_step(
+        self, session, session_id: str, current_iteration: int
+    ) -> dict | None:
+        """Issue the next plan entry that passes the action policy.
+
+        Stage 5.1 items 2-3. Each entry is (tool, arguments), so the arguments
+        chosen with the tool reach the executor; deduplication is by whole
+        action signature rather than tool name, so the same tool with different
+        arguments is a new action while an identical repeat is refused; revisits
+        are bounded per tool; and a stop request is honoured only when the
+        required coverage is complete.
+
+        Returns the action response, a terminal ``done`` response when the
+        remaining steps are all refused, or None when the plan is exhausted
+        without a policy decision.
+        """
+        engagement_id = getattr(session, "engagement_id", "") or ""
+
+        if getattr(session, "stop_requested", False):
+            coverage = CoveragePolicy(getattr(session, "required_coverage", []))
+            stop = coverage.can_stop(True, getattr(session, "executed_tools", []))
+            if stop.stop:
+                return {
+                    "done": True,
+                    "session_id": session_id,
+                    "stop_reason": stop.reason,
+                }
+            logger.info("Session %s: %s", session_id, stop.reason)
+
+        denied: list[str] = []
+        plan_length = len(session.current_plan or [])
+        for _ in range(max(plan_length, 1)):
+            advanced = self.session_store.advance_plan_entry(session_id)
+            if not advanced:
+                break
+            next_tool, step_source, step_arguments = advanced
+            # The target is the engagement's authorized target, never model
+            # free-text; every other discovered argument is carried as chosen.
+            arguments = dict(step_arguments or {})
+            arguments["target"] = session.target
+
+            decision = check_action(
+                self.session_store.action_signatures(session_id),
+                self.session_store.action_counts(session_id),
+                next_tool,
+                arguments,
+            )
+            if not decision.allowed:
+                denied.append(decision.reason)
+                logger.info(
+                    "Session %s: skipping plan step %s — %s",
+                    session_id,
+                    next_tool,
+                    decision.reason,
+                )
+                continue
+
+            self.session_store.record_action_signature(
+                session_id, next_tool, decision.signature
+            )
+            self._record_plan_step(
+                session, next_tool, current_iteration, step_source, arguments
+            )
+            action_id = self.session_store.record_issued_action(
+                session_id, next_tool
+            )
+            reasoning = (
+                "Engine-chosen plan step"
+                if step_source == "llm"
+                else "Deterministic plan step"
+            )
+            return {
+                "action_id": action_id,
+                "tool": next_tool,
+                "arguments": arguments,
+                "session_id": session_id,
+                "engagement_id": engagement_id,
+                "reasoning": reasoning,
+                "provenance": step_source,
+                "signature": decision.signature,
+                "revisit": decision.revisit,
+                # Structured discoveries travel with the action, so the next
+                # decision sees the endpoint/parameter this run just found.
+                "observations": self.observation_store.prompt_section(engagement_id),
+                "done": False,
+                "iteration": current_iteration,
+            }
+
+        if denied:
+            return {
+                "done": True,
+                "session_id": session_id,
+                "stop_reason": denied[-1],
+                "denied": denied,
+            }
+        return None
 
     def handle_agent_next(self, params: dict) -> dict:
         """Get next tool from current plan, or signal done if plan exhausted.
@@ -1771,34 +1938,9 @@ class MCPServer:
         # `agent_observe` records the result and acknowledges it without
         # advancing, so the driver must call `agent_next` again for the
         # following action.
-        advanced = self.session_store.advance_plan_with_source(session_id)
-        if advanced:
-            next_tool, step_source = advanced
-            self._record_plan_step(
-                session, next_tool, current_iteration, step_source
-            )
-            action_id = self.session_store.record_issued_action(
-                session_id, next_tool
-            )
-            reasoning = (
-                "Engine-chosen plan step"
-                if step_source == "llm"
-                else "Deterministic plan step"
-            )
-            return {
-                "action_id": action_id,
-                "tool": next_tool,
-                # Validated arguments reach the runner unchanged except this
-                # documented normalization: the target comes from the session
-                # the driver authorized, never from model free-text.
-                "arguments": {"target": session.target},
-                "session_id": session_id,
-                "engagement_id": getattr(session, "engagement_id", "") or "",
-                "reasoning": reasoning,
-                "provenance": step_source,
-                "done": False,
-                "iteration": current_iteration,
-            }
+        issued = self._bounded_plan_step(session, session_id, current_iteration)
+        if issued:
+            return issued
 
         # Plan exhausted
         if trigger in ("stuck", "new_finding", "phase_complete"):
@@ -1808,28 +1950,17 @@ class MCPServer:
                 return {"done": True, "session_id": session_id}
             replan_source = new_plan.get("source", "llm")
             self.session_store.set_plan(
-                session_id, new_plan["tool_order"], sources=[replan_source]
+                session_id,
+                new_plan["tool_order"],
+                sources=[replan_source] * len(new_plan["tool_order"]),
+                argument_map=new_plan.get("arguments"),
             )
             self.session_store.set_plan_provenance(session_id, replan_source)
-            advanced = self.session_store.advance_plan_with_source(session_id)
-            if advanced:
-                next_tool, step_source = advanced
-                self._record_plan_step(
-                    session, next_tool, current_iteration, step_source
-                )
-                action_id = self.session_store.record_issued_action(
-                    session_id, next_tool
-                )
-                return {
-                    "action_id": action_id,
-                    "tool": next_tool,
-                    "arguments": {"target": session.target},
-                    "session_id": session_id,
-                    "engagement_id": getattr(session, "engagement_id", "") or "",
-                    "reasoning": new_plan.get("reasoning", "Re-plan after trigger"),
-                    "provenance": step_source,
-                    "done": False,
-                }
+            issued = self._bounded_plan_step(session, session_id, current_iteration)
+            if issued:
+                if new_plan.get("reasoning"):
+                    issued["reasoning"] = new_plan["reasoning"]
+                return issued
 
         return {"done": True, "session_id": session_id}
 
@@ -1869,6 +2000,10 @@ class MCPServer:
                 severity = f.get("severity", "")
                 context_parts.append(f"- {title} ({subtype or 'no subtype'}, severity={severity})")
 
+        engagement_id = getattr(session, "engagement_id", "") or ""
+        if engagement_id:
+            context_parts.append("=== STRUCTURED OBSERVATIONS ===")
+            context_parts.append(self.observation_store.prompt_section(engagement_id))
         context = "\n".join(context_parts)
         task = f"{session.phase}: {session.target}"
 
@@ -1951,6 +2086,9 @@ class MCPServer:
         agent.record_decision(action, getattr(session, "execution_iteration", 0) or 0)
         return {
             "tool_order": [action.tool],
+            # The chosen call's arguments travel with it (Stage 5.1 item 2);
+            # reducing the plan to a tool name discarded them.
+            "arguments": [dict(action.arguments or {})],
             "reasoning": action.reasoning or f"ReActAgent selected {action.tool}",
             "source": "deterministic"
             if ReActAgent.is_fallback_action(action)
@@ -2001,17 +2139,45 @@ class MCPServer:
                 "session_id": session_id,
                 "done": False,
             }
+        safe_arguments = redact_arguments(observed_arguments)
+        identity = public_identity_label(params.get("identity")) or identity_from(safe_arguments)
         execution = ToolExecution(
             tool=params.get("tool", ""),
-            arguments=observed_arguments,
+            arguments=safe_arguments,
             reasoning=params.get("reasoning", ""),
             success=params.get("success", False),
             duration_ms=params.get("durationMs", 0),
             finding_count=params.get("findingCount", 0),
             summary=params.get("summary", ""),
+            identity=identity if isinstance(identity, str) else "",
         )
         self.session_store.add_execution(session_id, execution)
         self.session_store.add_observation(session_id, params.get("summary", ""))
+
+        engagement_id = getattr(session, "engagement_id", "") or ""
+        self.session_store.record_executed_tool(session_id, execution.tool)
+
+        # Stage 5.1 item 1: turn this execution into typed, engagement-keyed
+        # observations (endpoint, parameter, auth, finding, failure) so the next
+        # decision reasons over facts rather than free text.
+        result_payload = params.get("result")
+        observations = extract_observations(
+            engagement_id,
+            execution.tool,
+            safe_arguments,
+            success=execution.success,
+            summary=execution.summary,
+            result=result_payload if isinstance(result_payload, (dict, list)) else None,
+            action_id=params.get("action_id", "") or "",
+        )
+        structured = [observation.to_dict() for observation in observations]
+        self.session_store.add_structured_observations(session_id, structured)
+        self.observation_store.record_many(observations)
+
+        # Stage 5.1 item 3: a stop signalled by the driver is recorded, and the
+        # next `agent_next` honours it only when coverage allows.
+        if params.get("stop") is True:
+            self.session_store.set_stop_requested(session_id, True)
 
         # Increment shared TS/Python iteration counter (blocker 32)
         iteration = self.session_store.increment_iteration(session_id)
@@ -2019,9 +2185,11 @@ class MCPServer:
         return {
             "recorded": True,
             "session_id": session_id,
-            "engagement_id": getattr(session, "engagement_id", "") or "",
+            "engagement_id": engagement_id,
             "action_id": params.get("action_id", ""),
             "iteration": iteration,
+            "structured_observations": structured,
+            "observations": self.observation_store.prompt_section(engagement_id),
             "done": False,
         }
 
@@ -2515,16 +2683,7 @@ def main():
         _scope_validator = None
         if engagement_id:
             try:
-                from orchestrator_pkg.engagement import EngagementService
-                from tools.scope_validator import ScopeValidator
-
-                _authorized_scope = EngagementService.load_authorized_scope(
-                    engagement_id
-                )
-                if _authorized_scope:
-                    _scope_validator = ScopeValidator(
-                        engagement_id, _authorized_scope
-                    )
+                _scope_validator = scope_validator_for_engagement(engagement_id)
             except Exception:
                 logger.debug(
                     "Could not create scope validator for engagement %s in MCP call_tool",
@@ -2573,6 +2732,11 @@ def main():
     transport.register("phase_complete", handle_phase_complete)
 
     # ── Phase 4.1.4: Checkpoint MCP handler ──
+    def handle_agent_budget(params):
+        return server.handle_agent_budget(params)
+
+    transport.register("agent_budget", handle_agent_budget)
+
     def handle_get_checkpoint(params):
         """Return completed tool list for a given phase (Phase 4.1.4)."""
         engagement_id = params.get("engagement_id", "")
