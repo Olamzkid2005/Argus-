@@ -1383,7 +1383,11 @@ class MCPServer:
             if tool.name in WALL_LIMITED_TOOLS and os.name != "nt":
                 _wall = int(os.environ.get("ARGUS_TOOL_WALL_SECONDS", "240"))
                 if _wall > 0 and cmd and cmd[0] != "timeout":
-                    cmd = ["timeout", "-s", "INT", str(_wall), *cmd]
+                    # `-k` matters: without it `timeout` waits forever for a
+                    # child that ignores SIGINT, which is exactly what nuclei
+                    # does mid-request (measured: still alive at the 300s MCP
+                    # call budget). 15s is enough for it to flush its JSONL.
+                    cmd = ["timeout", "-s", "INT", "-k", "15", str(_wall), *cmd]
                     logger.debug(
                         "Bounding %s to %ss of wall clock (ARGUS_TOOL_WALL_SECONDS)",
                         tool.name,
