@@ -69,7 +69,9 @@ describe("MCP Worker Reconnection — integration", () => {
     // After the failed connection attempts, the bridge should
     // have set status to UNAVAILABLE
     expect(bridge.llmStatus()).toBe("UNAVAILABLE")
-  })
+    // The crash path spends the readiness handshake plus restart backoff before
+    // concluding UNAVAILABLE; that wait is the behaviour under test.
+  }, 20_000)
 
   test("can call tool after reconnection", async () => {
     bridge = new WorkersBridge(TEST_SERVER, "python3")

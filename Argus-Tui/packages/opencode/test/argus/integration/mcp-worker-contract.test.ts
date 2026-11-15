@@ -30,6 +30,9 @@ const STUB_ENGAGEMENT = "00000000-0000-0000-0000-000000000000"
 
 let bridge: WorkersBridge | null = null
 let skipReason: string | null = null
+// Captured so the longer readiness window stays local to this suite: leaving it
+// set makes later suites (e.g. the crash-path reconnection test) wait it out.
+const previousReadyTimeout = process.env.ARGUS_MCP_READY_TIMEOUT_MS
 
 describe("MCP worker payload contract — real worker", () => {
   beforeAll(async () => {
@@ -58,6 +61,11 @@ describe("MCP worker payload contract — real worker", () => {
       await bridge?.disconnect()
     } catch {
       // best-effort cleanup
+    }
+    if (previousReadyTimeout === undefined) {
+      delete process.env.ARGUS_MCP_READY_TIMEOUT_MS
+    } else {
+      process.env.ARGUS_MCP_READY_TIMEOUT_MS = previousReadyTimeout
     }
   })
 
