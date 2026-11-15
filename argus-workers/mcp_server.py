@@ -1194,6 +1194,25 @@ class MCPServer:
                     ]
                 )
 
+        # ffuf refuses to start without a wordlist and a URL it can fuzz, and
+        # its only output in that case is the usage screen — which the planner
+        # saw as a failed tool. Supply the repo's wordlist and make the target
+        # fuzzable when the caller did neither.
+        if (
+            tool.name == "ffuf"
+            and "-w" not in cmd
+            and "wordlist" not in (arguments or {})
+        ):
+            _wordlist = os.environ.get("ARGUS_FFUF_WORDLIST") or os.path.join(
+                server_dir, "wordlists", "common.txt"
+            )
+            if os.path.isfile(_wordlist):
+                cmd.extend(["-w", _wordlist])
+            _ffuf_target = (arguments or {}).get("target")
+            if isinstance(_ffuf_target, str) and "FUZZ" not in _ffuf_target:
+                arguments = dict(arguments)
+                arguments["target"] = _ffuf_target.rstrip("/") + "/FUZZ"
+
         # Map named arguments to CLI flags
         arguments = arguments or {}
         for param in tool.parameters:
