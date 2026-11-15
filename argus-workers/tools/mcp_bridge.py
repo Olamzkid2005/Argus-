@@ -172,7 +172,19 @@ class MCPToolBridge:
                 authorized_scope = EngagementService.load_authorized_scope(
                     self.engagement_id
                 )
-                if authorized_scope:
+                # A TUI engagement lives in its own SQLite store, so the worker
+                # finds no PostgreSQL scope row for it. The declared allowlist
+                # (ARGUS_SCOPE_MODE=allowlist + ARGUS_ALLOWED_TARGETS) is still a
+                # real scope: validate against it rather than running with the
+                # guard switched off. Without either, behavior is unchanged
+                # (no validator, which ScopeValidator treats as fail-closed).
+                _env_scope = os.environ.get(
+                    "ARGUS_ALLOWED_TARGETS", ""
+                ).strip() and os.environ.get("ARGUS_SCOPE_MODE", "").lower() in (
+                    "allowlist",
+                    "enforce",
+                )
+                if authorized_scope or _env_scope:
                     scope_validator = ScopeValidator(
                         self.engagement_id, authorized_scope
                     )

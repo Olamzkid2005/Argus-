@@ -3,9 +3,11 @@ Scope Validator - Ensures LLM-selected tools stay within authorized scope.
 Prevents prompt injection from tricking the agent into scanning unauthorized targets.
 """
 
+import ipaddress
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -94,6 +96,16 @@ class ScopeValidator:
         """
         self.engagement_id = engagement_id
         self._scope = self._parse_scope(authorized_scope)
+        if not self._scope["domains"] and not self._scope["ipRanges"]:
+            # An engagement created by the TUI lives in its SQLite database, so
+            # the worker finds no PostgreSQL row and would otherwise fall back to
+            # "no scope → reject everything", which is why runs needed
+            # ARGUS_ALLOW_UNSCOPED=1. The declared allowlist the operator already
+            # configured is a real scope: enforce that instead of disabling
+            # enforcement.
+            self._scope = self._scope_from_environment()
+            if self._scope["domains"] or self._scope["ipRanges"]:
+                self._scope_source = "ARGUS_ALLOWED_TARGETS"
         self._unscoped_allowed = os.environ.get("ARGUS_ALLOW_UNSCOPED", "").lower() in ("1", "true")
         self._slog = ScanLogger("scope_validator", engagement_id=engagement_id)
         if self._scope["domains"] or self._scope["ipRanges"]:
@@ -113,6 +125,38 @@ class ScopeValidator:
                     "This is acceptable only for development/testing. "
                     "For production, set 'authorized_scope' with domains/IP ranges."
                 )
+
+    @staticmethod
+    def _scope_from_environment() -> dict:
+        """Scope declared by ARGUS_ALLOWED_TARGETS (the TUI's own allowlist).
+
+        Honored only in an allowlist/enforce mode, so an unconfigured
+        environment keeps the existing fail-closed behavior. CIDR entries and
+        bare IPs become ``ipRanges``; everything else is a domain, with a
+        leading ``*.`` wildcard preserved (``_matches_domain`` understands it).
+        """
+        mode = os.environ.get("ARGUS_SCOPE_MODE", "").lower()
+        if mode not in ("allowlist", "enforce"):
+            return {"domains": [], "ipRanges": []}
+        raw = os.environ.get("ARGUS_ALLOWED_TARGETS", "")
+        domains: list[str] = []
+        ip_ranges: list[str] = []
+        for entry in re.split(r"[,\s]+", raw):
+            entry = entry.strip()
+            if not entry:
+                continue
+            value = entry.split("://", 1)[-1]
+            host = value.split("/", 1)[0].split(":", 1)[0]
+            if "/" in value:  # CIDR
+                ip_ranges.append(value)
+                continue
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                domains.append(host.lower())
+            else:
+                ip_ranges.append(host)
+        return {"domains": domains, "ipRanges": ip_ranges}
 
     def _parse_scope(self, scope) -> dict:
         """Parse authorized scope from dict or JSON string."""

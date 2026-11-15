@@ -468,3 +468,45 @@ class TestCheckAllowed:
         from tools.scope_validator import _check_allowed
         result = _check_allowed("https://example.com", None, "warn")
         assert result is True
+
+
+class TestEnvironmentScopeFallback:
+    """A TUI engagement has no PostgreSQL scope row.
+
+    The worker used to see "no scope" for those runs and reject every target,
+    which is why the Gate A harness had to set ARGUS_ALLOW_UNSCOPED=1. The
+    operator's declared allowlist is a real scope and must be enforced.
+    """
+
+    def test_declared_allowlist_is_enforced(self, monkeypatch):
+        monkeypatch.setenv("ARGUS_SCOPE_MODE", "allowlist")
+        monkeypatch.setenv("ARGUS_ALLOWED_TARGETS", "127.0.0.1,lab.example.com")
+        monkeypatch.delenv("ARGUS_ALLOW_UNSCOPED", raising=False)
+
+        validator = ScopeValidator("ENG-mwi09f2p-0", None)
+
+        assert validator.validate_target("http://127.0.0.1:18080/api/data/10")
+        assert validator.validate_target("https://lab.example.com/login")
+        with pytest.raises(ScopeViolationError):
+            validator.validate_target("https://sentinel.argus.invalid/do-not-scan")
+
+    def test_wildcard_entries_are_honored(self, monkeypatch):
+        monkeypatch.setenv("ARGUS_SCOPE_MODE", "allowlist")
+        monkeypatch.setenv("ARGUS_ALLOWED_TARGETS", "*.lab.example")
+        monkeypatch.delenv("ARGUS_ALLOW_UNSCOPED", raising=False)
+
+        validator = ScopeValidator("ENG-1", {})
+
+        assert validator.validate_target("https://api.lab.example/v1")
+        with pytest.raises(ScopeViolationError):
+            validator.validate_target("https://other.example")
+
+    def test_no_declared_scope_stays_fail_closed(self, monkeypatch):
+        monkeypatch.delenv("ARGUS_SCOPE_MODE", raising=False)
+        monkeypatch.delenv("ARGUS_ALLOWED_TARGETS", raising=False)
+        monkeypatch.delenv("ARGUS_ALLOW_UNSCOPED", raising=False)
+
+        validator = ScopeValidator("ENG-2", None)
+
+        with pytest.raises(ScopeViolationError):
+            validator.validate_target("https://lab.example")

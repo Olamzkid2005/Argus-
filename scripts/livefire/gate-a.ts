@@ -5,7 +5,7 @@
 //
 // The TUI keeps engagements in SQLite (`ENG-*`), while the worker's scope guard
 // loads `authorized_scope` from PostgreSQL by UUID, so worker tools are refused
-// for a TUI-created engagement. ARGUS_ALLOW_UNSCOPED=1 is the documented
+// for a TUI-created engagement. The declared allowlist is the scope: the
 // development escape hatch that lets a lab run execute tools regardless; it is
 // inherited only by the MCP server this run spawns, and the TypeScript side still
 // enforces ARGUS_SCOPE_MODE=allowlist for 127.0.0.1.
@@ -48,8 +48,6 @@ const baseEnv: Record<string, string> = {
   // committed config ships mode: warn).
   ARGUS_SCOPE_MODE: "allowlist",
   ARGUS_ALLOWED_TARGETS: "127.0.0.1",
-  // Lab-only: see the header note about SQLite engagements vs PostgreSQL scope.
-  ARGUS_ALLOW_UNSCOPED: "1",
   // Unattended runs cannot answer the destructive-tool prompt; this approves it
   // with an auditable "auto-approved at <timestamp>" record instead.
   ARGUS_AUTO_APPROVE: "1",
