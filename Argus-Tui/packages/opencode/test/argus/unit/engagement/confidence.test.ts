@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { ConfidenceEngine } from "@argus/engagement/confidence"
 import { Confidence, Severity } from "@argus/planner/types"
+import { ProofStatus } from "@argus/shared/types"
+import type { EvidencePackage, VerificationResult } from "@argus/shared/types"
 import type { NormalizedFinding } from "@argus/planner/types"
 
 function makeFinding(overrides?: Partial<NormalizedFinding>): NormalizedFinding {
@@ -73,85 +75,143 @@ describe("ConfidenceEngine", () => {
       expect(result).toBe(Confidence.MEDIUM)
     })
 
-    test("promotes HIGH to VERIFIED when evidence exists", () => {
-      const engine = new ConfidenceEngine()
-      const result = engine.promote(makeFinding({
-        confidence: Confidence.HIGH,
-        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
-      }))
-      expect(result).toBe(Confidence.VERIFIED)
+    // ── Proof-gated promotion (Stage 4.1 item 2) ─────────────────────
+    // Confidence above HIGH is a proof claim. It needs an explicit
+    // `reproduced` status plus something to audit: a captured artifact or a
+    // control comparison. Metadata, an empty evidence package, a verifier's
+    // bare `passed: true`, or a failed/inconclusive/unsupported verification
+    // must never get there, no matter how many times promote() is called.
+
+    const artifact = { path: "evidence/pkg-1/response.txt", type: "response" as const }
+
+    const proofResult = (
+      proofStatus: ProofStatus,
+      overrides: Partial<VerificationResult> = {},
+    ): VerificationResult => ({
+      passed: proofStatus === ProofStatus.REPRODUCED,
+      proofStatus,
+      controls: [],
+      confidence: 0.9,
+      summary: "verification",
+      verifier: "test",
+      verifiedAt: new Date().toISOString(),
+      ...overrides,
     })
 
-    test("keeps HIGH when evidence array is empty", () => {
+    const packageWith = (artifacts: Array<{ path: string; type: "response" }>): EvidencePackage => ({
+      packageId: "pkg-1",
+      findingId: "f-1",
+      artifacts,
+      packageHash: "abc",
+      createdAt: "",
+    })
+
+    test("evidence packages alone do not promote to VERIFIED", () => {
       const engine = new ConfidenceEngine()
       const result = engine.promote(makeFinding({
         confidence: Confidence.HIGH,
-        evidence: [],
+        evidence: [packageWith([])],
       }))
       expect(result).toBe(Confidence.HIGH)
     })
 
-    test("keeps VERIFIED — no promotion to CONFIRMED when verificationResult missing", () => {
+    test("a verifier's bare pass (suspected) never reaches VERIFIED", () => {
       const engine = new ConfidenceEngine()
       const result = engine.promote(makeFinding({
-        confidence: Confidence.VERIFIED,
-        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
+        confidence: Confidence.HIGH,
+        evidence: [packageWith([artifact])],
+        verificationResult: proofResult(ProofStatus.SUSPECTED),
+      }))
+      expect(result).toBe(Confidence.HIGH)
+    })
+
+    test("reproduced with a captured artifact reaches VERIFIED", () => {
+      const engine = new ConfidenceEngine()
+      const result = engine.promote(makeFinding({
+        confidence: Confidence.HIGH,
+        evidence: [packageWith([artifact])],
+        verificationResult: proofResult(ProofStatus.REPRODUCED),
       }))
       expect(result).toBe(Confidence.VERIFIED)
     })
 
-    test("promotes VERIFIED to CONFIRMED when verificationResult.passed is true", () => {
+    test("reproduced with a control comparison and no artifacts reaches VERIFIED", () => {
+      const engine = new ConfidenceEngine()
+      const result = engine.promote(makeFinding({
+        confidence: Confidence.HIGH,
+        verificationResult: proofResult(ProofStatus.REPRODUCED, {
+          controls: [{ kind: "control-request", description: "same request without payload", outcome: "no execution" }],
+        }),
+      }))
+      expect(result).toBe(Confidence.VERIFIED)
+    })
+
+    test("a reproduction with nothing to audit stays HIGH", () => {
+      const engine = new ConfidenceEngine()
+      const result = engine.promote(makeFinding({
+        confidence: Confidence.HIGH,
+        verificationResult: proofResult(ProofStatus.REPRODUCED),
+      }))
+      expect(result).toBe(Confidence.HIGH)
+    })
+
+    test("a bare passed:true is suspected and cannot reach CONFIRMED", () => {
       const engine = new ConfidenceEngine()
       const result = engine.promote(makeFinding({
         confidence: Confidence.VERIFIED,
-        verificationResult: { passed: true, confidence: 0.9, summary: "Browser confirmed", verifier: "xss", verifiedAt: new Date().toISOString() },
+        evidence: [packageWith([artifact])],
+        verificationResult: proofResult(ProofStatus.SUSPECTED),
+      }))
+      expect(result).toBe(Confidence.VERIFIED)
+    })
+
+    test("VERIFIED + reproduced + artifact reaches CONFIRMED", () => {
+      const engine = new ConfidenceEngine()
+      const result = engine.promote(makeFinding({
+        confidence: Confidence.VERIFIED,
+        evidence: [packageWith([artifact])],
+        verificationResult: proofResult(ProofStatus.REPRODUCED),
       }))
       expect(result).toBe(Confidence.CONFIRMED)
     })
 
-    test("promotes HIGH to VERIFIED when verificationResult.passed is true (no evidence)", () => {
-      const engine = new ConfidenceEngine()
-      const result = engine.promote(makeFinding({
-        confidence: Confidence.HIGH,
-        verificationResult: { passed: true, confidence: 0.9, summary: "SSRF confirmed via metadata probe", verifier: "ssrf", verifiedAt: new Date().toISOString() },
-      }))
-      expect(result).toBe(Confidence.VERIFIED)
-    })
-
-    test("keeps HIGH when verificationResult exists but passed is false", () => {
-      const engine = new ConfidenceEngine()
-      const result = engine.promote(makeFinding({
-        confidence: Confidence.HIGH,
-        verificationResult: { passed: false, confidence: 0.2, summary: "Could not confirm", verifier: "lfi", verifiedAt: new Date().toISOString() },
-      }))
-      expect(result).toBe(Confidence.HIGH)
-    })
-
-    test("keeps VERIFIED when verificationResult.passed is false", () => {
-      const engine = new ConfidenceEngine()
-      const result = engine.promote(makeFinding({
-        confidence: Confidence.VERIFIED,
-        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
-        verificationResult: { passed: false, confidence: 0.2, summary: "LFI probe failed", verifier: "lfi", verifiedAt: new Date().toISOString() },
-      }))
-      expect(result).toBe(Confidence.VERIFIED)
-    })
-
-    test("promotes HIGH to VERIFIED with verificationResult.passed even with empty evidence", () => {
-      const engine = new ConfidenceEngine()
-      const result = engine.promote(makeFinding({
-        confidence: Confidence.HIGH,
-        evidence: [],
-        verificationResult: { passed: true, confidence: 0.9, summary: "JWT tampering confirmed", verifier: "jwt", verifiedAt: new Date().toISOString() },
-      }))
-      expect(result).toBe(Confidence.VERIFIED)
-    })
-
-    test("promotes one tier per call — HIGH→VERIFIED, then VERIFIED→CONFIRMED on second call", () => {
+    test("a failed verification cannot be promoted by repeated calls", () => {
       const engine = new ConfidenceEngine()
       const finding = makeFinding({
         confidence: Confidence.HIGH,
-        verificationResult: { passed: true, confidence: 0.9, summary: "Confirmed", verifier: "test", verifiedAt: new Date().toISOString() },
+        evidence: [packageWith([artifact])],
+        verificationResult: proofResult(ProofStatus.NOT_REPRODUCED),
+      })
+      for (let i = 0; i < 5; i++) {
+        finding.confidence = engine.promote(finding)
+      }
+      expect(finding.confidence).toBe(Confidence.HIGH)
+    })
+
+    test("inconclusive and unsupported verifications never promote", () => {
+      const engine = new ConfidenceEngine()
+      for (const status of [ProofStatus.INCONCLUSIVE, ProofStatus.UNSUPPORTED]) {
+        const finding = makeFinding({
+          confidence: Confidence.HIGH,
+          evidence: [packageWith([artifact])],
+          verificationResult: proofResult(status, {
+            error: status === ProofStatus.INCONCLUSIVE
+              ? { step: "execute", name: "Error", message: "navigation blocked" }
+              : undefined,
+          }),
+        })
+        for (let i = 0; i < 5; i++) finding.confidence = engine.promote(finding)
+        expect(finding.confidence).toBe(Confidence.HIGH)
+      }
+    })
+
+    test("promotes one tier per call — HIGH→VERIFIED, then VERIFIED→CONFIRMED with real proof", () => {
+      const engine = new ConfidenceEngine()
+      const finding = makeFinding({
+        confidence: Confidence.HIGH,
+        verificationResult: proofResult(ProofStatus.REPRODUCED, {
+          controls: [{ kind: "second-identity", description: "user B session" }],
+        }),
       })
       const first = engine.promote(finding)
       expect(first).toBe(Confidence.VERIFIED)

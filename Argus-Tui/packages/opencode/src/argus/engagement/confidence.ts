@@ -1,5 +1,25 @@
 import { Confidence } from "../shared/types"
 import type { NormalizedFinding } from "../shared/types"
+import { proofSupportsVerifiedClaim } from "../browser/proof"
+
+/**
+ * Whether this finding holds proof strong enough for a verified/confirmed
+ * claim: an explicit `reproduced` verification plus a real artifact or control.
+ *
+ * This is the only thing that can raise confidence above HIGH. Metadata
+ * (owasp/cwe/status code) stops at HIGH, a bare `passed: true` is only
+ * `suspected`, and a failed/inconclusive/unsupported verification can never be
+ * promoted — which is what makes repeated promotion calls harmless.
+ */
+function hasProofForVerifiedClaim(finding: NormalizedFinding): boolean {
+  const artifacts = (finding.evidence ?? []).reduce(
+    (count, pkg) => count + (pkg.artifacts?.length ?? 0),
+    0,
+  )
+  return proofSupportsVerifiedClaim(finding.verificationResult, {
+    evidenceArtifacts: artifacts,
+  })
+}
 
 const PROMOTION_RULES: Array<{ from: Confidence; to: Confidence; condition: (finding: NormalizedFinding) => boolean }> = [
   {
@@ -21,21 +41,21 @@ const PROMOTION_RULES: Array<{ from: Confidence; to: Confidence; condition: (fin
       (f.statusCode !== undefined && f.statusCode >= 200 && f.statusCode < 300),
   },
   {
+    // VERIFIED is a proof claim: it needs a reproduced verification with real
+    // evidence or a control comparison. Evidence packages alone are not proof
+    // (an empty or error-only package used to be enough), and neither is a
+    // verifier's bare pass.
     from: Confidence.HIGH,
     to: Confidence.VERIFIED,
-    condition: (f) =>
-      (f.evidence !== undefined && f.evidence.length > 0) ||
-      // Browser verification passing is strong evidence — promote to VERIFIED
-      // even when the scanner didn't attach structured evidence packages.
-      f.verificationResult?.passed === true,
+    condition: (f) => hasProofForVerifiedClaim(f),
   },
   {
-    // CONFIRMED is promoted when an independent verification run has passed
-    // AND the finding already has VERIFIED confidence. This requires a
-    // cascading promote() call (see workflow-runner.ts while loop).
+    // CONFIRMED needs the same proof, reached from VERIFIED. A failed,
+    // inconclusive or unsupported verification never satisfies it, so the
+    // caller's cascading promote() loop stops at HIGH.
     from: Confidence.VERIFIED,
     to: Confidence.CONFIRMED,
-    condition: (f) => f.verificationResult?.passed === true,
+    condition: (f) => hasProofForVerifiedClaim(f),
   },
 ]
 
