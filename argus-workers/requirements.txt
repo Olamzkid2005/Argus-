@@ -3,6 +3,9 @@
 # Task Queue
 celery[redis]==5.4.0
 redis==5.2.1
+# kombu 5.7 refuses redis-py < 6.1.0 (VersionMismatch at transport init), so an
+# unpinned kombu silently breaks the worker against the pinned redis client.
+kombu==5.5.4
 
 # Database
 # psycopg2-binary avoids the libpq-dev build dependency.
