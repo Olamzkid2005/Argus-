@@ -266,7 +266,19 @@ for (let run = 1; run <= RUNS; run++) {
   )
 }
 
-const passed = results.every((r) => r.outcome === "complete" && r.promptMs !== null && r.exitCode === 0)
+// `finished` is the TUI's line for a run whose phases all completed but some
+// reported partial coverage (a capability with no runnable tool, a tool the
+// worker skipped). That is the product's definition of a completed engagement
+// (`status === "COMPLETED"`), so the gate accepts it; a run that truly failed
+// says `failed` and does not pass.
+const passed = results.every(
+  (r) =>
+    (r.outcome === "complete" || r.outcome === "finished") &&
+    r.status === "COMPLETED" &&
+    r.promptMs !== null &&
+    r.exitCode === 0 &&
+    ((r.severity?.["3"] ?? 0) + (r.severity?.["4"] ?? 0)) > 0,
+)
 writeFileSync(
   path.join(outDir, "summary.json"),
   JSON.stringify({ target: TARGET, runs: results.length, passed, results }, null, 2),

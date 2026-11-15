@@ -181,8 +181,8 @@ async function executeTuiAssessment(
   // nothing, so anything watching the log for a completion marker (the Gate A
   // harness, an operator reading the transcript) saw the run hang forever even
   // though the scan dashboard had already flipped to COMPLETED.
-  const summary =
-    `Assessment complete — ${result.findings} finding(s) (${result.high} high, ${result.medium} medium)`
+  const breakdown = `${result.critical} critical, ${result.high} high, ${result.medium} medium`
+  const summary = `Assessment complete — ${result.findings} finding(s) (${breakdown})`
   if (status === "completed") appendLog(summary)
 
   // Also write the terminal line to the terminal itself. The scan screen is a
@@ -194,7 +194,7 @@ async function executeTuiAssessment(
     status === "completed"
       ? summary
       : status === "partial"
-        ? `Assessment finished — partial coverage (${result.findings} finding(s), ${result.high} high)`
+        ? `Assessment finished — partial coverage (${result.findings} finding(s): ${breakdown})`
         : status === "stopped"
           ? `Assessment stopped at a phase boundary (${result.findings} finding(s))`
           : `Assessment failed: ${result.error ?? "unknown error"}`
