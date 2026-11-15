@@ -38,6 +38,9 @@ fi
 # libblas and libgfortran, which this image does not all ship.
 NOBLE="http://archive.ubuntu.com/ubuntu/pool"
 DEBS=(
+  # The binary package ships no /usr/share/nmap data; without nmap-common nmap
+  # falls back to a stub services file and refuses --top-ports.
+  "$NOBLE/universe/n/nmap/nmap-common_7.94+git20230807.3be01efb1+dfsg-3build2_all.deb"
   "$NOBLE/universe/n/nmap/nmap_7.94+git20230807.3be01efb1+dfsg-3build2_amd64.deb"
   "$NOBLE/main/libs/libssh2/libssh2-1t64_1.11.0-4.1build2_amd64.deb"
   "$NOBLE/universe/libl/liblinear/liblinear4_2.3.0+dfsg-5build1_amd64.deb"
