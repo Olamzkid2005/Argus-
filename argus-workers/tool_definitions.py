@@ -503,8 +503,15 @@ _register(
     ToolDefinition(
         name="nmap",
         description="Network port scanner",
-        phases=[],  # Disabled: no nmap parser exists. Use naabu for port scanning.
-        default_args=["-oX", "-"],
+        # Enabled: parsers/parsers/nmap.py parses the `-oX -` XML into
+        # OPEN_PORT findings. The earlier "no nmap parser exists" note was
+        # stale — the parser is auto-discovered from that package. `-sT`
+        # because the worker runs unprivileged (a SYN scan needs
+        # CAP_NET_RAW) and `-Pn` for the same reason (host discovery uses raw
+        # sockets); the scope guard has already fixed the host, so skipping
+        # discovery only costs time.
+        phases=["recon"],
+        default_args=["-sT", "-Pn", "-oX", "-", "-T4", "--top-ports", "200"],
         parameters=[
             ToolParameter("target", "Target host", required=True),
             ToolParameter("ports", "Port range", flag="-p"),

@@ -24,7 +24,18 @@ class TestBuildToolArgv:
     def test_positional_target_is_not_invented_a_flag(self):
         """nmap's target has no flag and stays positional, after default args."""
         argv = build_tool_argv("nmap", target="127.0.0.1", parameters={"ports": "80"})
-        assert argv == ["-oX", "-", "127.0.0.1", "-p", "80"]
+        assert argv == [
+            "-sT",
+            "-Pn",
+            "-oX",
+            "-",
+            "-T4",
+            "--top-ports",
+            "200",
+            "127.0.0.1",
+            "-p",
+            "80",
+        ]
 
     def test_boolean_parameter_is_a_switch(self):
         """A truthy boolean emits its flag alone; a falsey one emits nothing."""

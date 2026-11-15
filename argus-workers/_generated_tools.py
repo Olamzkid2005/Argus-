@@ -598,7 +598,7 @@ _register(ToolDefinition(
     phases=["scan"],
     default_args=["-C", "-d"],
     parameters=[
-    ToolParameter(name="target", description="Target URL", required=True, flag="-u"),
+    ToolParameter(name="target", description="Target URL", required=True, flag="-t"),
 ],
     timeout=120,
     signal_quality=SignalQuality.PROBABLE,
@@ -699,7 +699,7 @@ _register(ToolDefinition(
     name="nmap",
     description="Nmap port scanner for port discovery and service identification",
     phases=["recon"],
-    default_args=["-oX", "-", "-Pn", "-T4", "--top-ports", "200"],
+    default_args=["-sT", "-Pn", "-oX", "-", "-T4", "--top-ports", "200"],
     parameters=[
     ToolParameter(name="target", description="Target hostname or IP address", required=True),
     ToolParameter(name="ports", description="Port range (e.g. 80,443 or 1-1000)", flag="-p"),

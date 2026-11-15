@@ -139,12 +139,14 @@ class TestGetToolsForPhase:
             assert "report-generator" in names
 
     def test_phase_empty_not_in_error(self):
-        """nmap has empty phases and should not appear in any phase."""
+        """A tool with no execution phase must not appear in any phase."""
         with patch("tool_definitions.is_tool_available", return_value=True):
-            tools = []
+            names = []
             for phase in ALL_PHASES:
-                tools.extend(get_tools_for_phase(phase))
-            assert "nmap" not in [t.name for t in tools]
+                names.extend(t.name for t in get_tools_for_phase(phase))
+            assert "dnsx" not in names
+            # nmap is enabled now that its XML parser is in the registry.
+            assert "nmap" in names
 
 
 class TestGetPhaseToolNames:
@@ -332,9 +334,9 @@ class TestReregistrationKeepsGeneratedFields:
 class TestInlineOverridesDoNotLoseYamlData:
     """An inline override may change policy, but it must not drop YAML data.
 
-    The inline blocks are the newer, verified invocation (they disable nmap,
-    keep the SAST tools out of HTTP phases, drop the playwright auto-generated
-    scheme gate), so their policy fields win. Everything they simply left
+    The inline blocks are the newer, verified invocation (they enable nmap in
+    recon, keep the SAST tools out of HTTP phases, drop the playwright
+    auto-generated scheme gate), so their policy fields win. Everything they simply left
     unset — parameters, the CLI flag of a same-named parameter, binary,
     metadata — must survive from the YAML definition. Two live bugs came from
     the old wholesale replacement: httpx received its target positionally and
@@ -394,10 +396,20 @@ class TestInlineOverridesDoNotLoseYamlData:
         assert TOOLS["httpx"].target_kind == "any"
 
     def test_inline_policy_is_not_overwritten(self):
-        # nmap is deliberately disabled: no nmap parser exists.
-        assert TOOLS["nmap"].phases == []
+        # nmap runs in recon: parsers/parsers/nmap.py parses `-oX -` XML, and
+        # the scan is a TCP connect (`-sT`) with discovery off (`-Pn`) because
+        # the worker is unprivileged.
+        assert TOOLS["nmap"].phases == ["recon"]
         assert TOOLS["nmap"].timeout == 600
-        assert TOOLS["nmap"].default_args == ["-oX", "-"]
+        assert TOOLS["nmap"].default_args == [
+            "-sT",
+            "-Pn",
+            "-oX",
+            "-",
+            "-T4",
+            "--top-ports",
+            "200",
+        ]
         # dnsx is deliberately disabled: v1.2+ needs `-w` with `-d`, or a
         # list file/stdin, none of which the arg builder can supply.
         assert TOOLS["dnsx"].phases == []

@@ -2,9 +2,13 @@ name: nmap
 command: nmap
 description: "Nmap port scanner for port discovery and service identification"
 args:
+  # -sT: the worker runs unprivileged, where a SYN scan is unavailable.
+  # -Pn: host discovery needs raw sockets too; the scope guard already fixed
+  # the host, so skipping discovery only costs time.
+  - "-sT"
+  - "-Pn"
   - "-oX"
   - "-"
-  - "-Pn"
   - "-T4"
   - "--top-ports"
   - "200"

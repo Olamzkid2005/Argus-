@@ -1434,14 +1434,14 @@ class TestWorkerToolStatePublishedOverMCP:
         by_name = {t["name"]: t for t in self._server().get_tools()}
         # dnsx needs a wordlist and gospider's installed build segfaults; both
         # are `phases=[]` in tool_definitions.py while their YAML says enabled.
-        for name in ("dnsx", "gospider", "nmap"):
+        for name in ("dnsx", "gospider"):
             entry = by_name[name]
             assert entry["disabled"] is True, name
             assert "no execution phase" in entry["disabled_reason"], name
 
     def test_a_runnable_tool_is_not_disabled(self):
         by_name = {t["name"]: t for t in self._server().get_tools()}
-        for name in ("httpx", "nuclei", "katana"):
+        for name in ("httpx", "nuclei", "katana", "nmap"):
             assert by_name[name]["disabled"] is False, name
             assert "disabled_reason" not in by_name[name], name
 
