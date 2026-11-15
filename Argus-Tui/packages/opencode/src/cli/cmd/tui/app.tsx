@@ -8,7 +8,6 @@ import { RouteProvider, useRoute } from "@tui/context/route"
 import {
   Switch,
   Match,
-  lazy,
   createEffect,
   createMemo,
   ErrorBoundary,
@@ -49,17 +48,18 @@ import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { ArgusCommandRegistry } from "@/argus/tui-command-registry"
 
-// Lazy imports for Argus route components — only loaded when the corresponding
-// route is navigated to. This keeps ~60KB of dead code out of the OpenCode TUI
-// bundle when running in non-ARGUS_MODE.
-const ScanDashboard = lazy(() => import("@/argus/tui/routes/scan"))
-const FindingsViewer = lazy(() => import("@/argus/tui/routes/findings"))
-const FindingDetail = lazy(() => import("@/argus/tui/routes/finding-detail"))
-const ArgusDashboard = lazy(() => import("@/argus/tui/routes/dashboard"))
-const EngagementBrowser = lazy(() => import("@/argus/tui/routes/engagements"))
-const EngagementDetail = lazy(() => import("@/argus/tui/routes/engagement-detail"))
-const Workspace = lazy(() => import("@/argus/tui/routes/workspace"))
-const ReportDashboard = lazy(() => import("@/argus/tui/routes/report"))
+// Argus route components are imported eagerly: Solid's `lazy()` hands the
+// renderer an empty text node while its resource resolves, and OpenTUI rejects
+// any text node without a <text> parent, so every lazy route crashed the TUI with
+// "Orphan text error" as soon as /assess navigated to it.
+import { ScanDashboard } from "@/argus/tui/routes/scan"
+import { FindingsViewer } from "@/argus/tui/routes/findings"
+import { FindingDetail } from "@/argus/tui/routes/finding-detail"
+import { ArgusDashboard } from "@/argus/tui/routes/dashboard"
+import { EngagementBrowser } from "@/argus/tui/routes/engagements"
+import { EngagementDetail } from "@/argus/tui/routes/engagement-detail"
+import { Workspace } from "@/argus/tui/routes/workspace"
+import { ReportDashboard } from "@/argus/tui/routes/report"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
