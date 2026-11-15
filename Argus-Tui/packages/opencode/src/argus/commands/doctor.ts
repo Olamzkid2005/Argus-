@@ -201,10 +201,21 @@ async function playwrightCheck(): Promise<CheckResult> {
 }
 
 /**
- * Check Redis connectivity by TCP-connecting to the configured URL
- * and sending a PING command. Uses raw TCP (no redis client library needed).
+ * Encode one command in Redis' RESP protocol.
+ *
+ * Raw TCP keeps the doctor free of a Redis client dependency; the reply parser
+ * below only needs the line terminator, so no library is pulled in.
  */
-async function redisCheck(): Promise<CheckResult> {
+function respCommand(args: string[]): string {
+  return `*${args.length}\r\n${args.map((arg) => `$${Buffer.byteLength(arg)}\r\n${arg}\r\n`).join("")}`
+}
+
+/**
+ * Check Redis connectivity by TCP-connecting to the configured URL,
+ * authenticating when the URL carries credentials, and sending PING.
+ * Uses raw TCP (no redis client library needed).
+ */
+export async function redisCheck(): Promise<CheckResult> {
   const redisUrl = process.env.REDIS_URL || process.env.CELERY_BROKER_URL || ""
   if (!redisUrl) {
     return {
@@ -214,13 +225,24 @@ async function redisCheck(): Promise<CheckResult> {
     }
   }
 
-  // Parse host/port from redis:// URL
+  // Parse host/port (and credentials) from redis:// URL
   let host = "localhost"
   let port = 6379
+  let username = ""
+  let password = ""
   try {
     const u = new URL(redisUrl)
-    host = u.hostname || "localhost"
+    if (!u.hostname) {
+      return {
+        name: "Redis",
+        status: "WARN",
+        message: `REDIS_URL has no host: ${redisUrl}. Expected redis://host:port`,
+      }
+    }
+    host = u.hostname
     port = parseInt(u.port || "6379", 10) || 6379
+    username = u.username ? decodeURIComponent(u.username) : ""
+    password = u.password ? decodeURIComponent(u.password) : ""
   } catch {
     return {
       name: "Redis",
@@ -229,29 +251,39 @@ async function redisCheck(): Promise<CheckResult> {
     }
   }
 
-  // TCP connect + PING
+  // TCP connect, AUTH when credentials are present, then PING.
   try {
     const result = await new Promise<{ ok: boolean; data: string }>((resolve_) => {
       const socket = tcpConnect(port, host, () => {
-        // Send Redis PING command
-        socket.write("*1\r\n$4\r\nPING\r\n")
+        // A password-protected server answers a bare PING with -NOAUTH, which
+        // the old check reported as "did not respond with PONG" even though
+        // Redis and its credentials were fine.
+        const auth = password
+          ? respCommand(username ? ["AUTH", username, password] : ["AUTH", password])
+          : ""
+        socket.write(auth + respCommand(["PING"]))
       })
-      const timer = setTimeout(() => {
-        socket.destroy()
-        resolve_({ ok: false, data: "connection timed out after 5s" })
-      }, 5000)
       let data = ""
+      const finish = (ok: boolean) => {
+        clearTimeout(timer)
+        socket.destroy()
+        resolve_({ ok, data })
+      }
+      const timer = setTimeout(() => {
+        data = "connection timed out after 5s"
+        finish(false)
+      }, 5000)
+      // Redis keeps the connection open after replying, so resolving on "end"
+      // (the previous behaviour) always burned the full timeout. A reply is
+      // complete once PONG arrives or an error line starts.
       socket.on("data", (chunk: Buffer) => {
         data += chunk.toString()
+        if (data.includes("+PONG") || /(^|\r\n)-/.test(data)) finish(true)
       })
-      socket.on("end", () => {
-        clearTimeout(timer)
-        resolve_({ ok: true, data })
-      })
+      socket.on("end", () => finish(false))
       socket.on("error", (err: Error) => {
-        clearTimeout(timer)
-        socket.destroy()
-        resolve_({ ok: false, data: err.message })
+        data = err.message
+        finish(false)
       })
     })
 
@@ -260,7 +292,15 @@ async function redisCheck(): Promise<CheckResult> {
       return {
         name: "Redis",
         status: "PASS",
-        message: `Redis reachable at ${host}:${port} — responded to PING`,
+        message: `Redis reachable at ${host}:${port}${password ? " (authenticated)" : ""} — responded to PING`,
+      }
+    }
+
+    if (/NOAUTH|WRONGPASS|invalid password/i.test(result.data)) {
+      return {
+        name: "Redis",
+        status: "FAIL",
+        message: `Redis at ${host}:${port} rejected authentication: ${result.data.trim().slice(0, 80)}`,
       }
     }
 
