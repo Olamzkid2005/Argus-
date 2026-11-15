@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readdir, stat, unlink, rmdir } from "fs/promises"
+import { mkdir, writeFile, readdir, stat, unlink, rmdir, chmod } from "fs/promises"
 import { join, extname } from "path"
 import { existsSync } from "fs"
 import { createHash, randomBytes } from "crypto"
@@ -29,8 +29,6 @@ export class EvidenceCollector {
   private config: CollectorConfig
   /** When set, binary evidence files are encrypted at rest using this engagement's derived key. */
   private encryptionEngagementId: string | null = null
-  /** Track engagements for which we've already warned about missing encryption key. */
-  private _encryptionWarned: Set<string> = new Set()
 
   constructor(
     private baseDir: string,
@@ -52,24 +50,19 @@ export class EvidenceCollector {
   }
 
   /**
-   * Check if encryption is active (engagement ID set + master key cached).
-   * Logs a warning when encryption was requested (engagement ID set) but
-   * the master key is not cached — this means data will be written as plaintext.
+   * Check whether this write must be encrypted.
+   *
+   * Fail closed: when encryption was requested, a missing master key is an
+   * error. Returning to plaintext would silently defeat the operator's
+   * explicit protection request.
    */
   private _isEncrypted(): boolean {
     if (this.encryptionEngagementId === null) return false
-    const key = EncryptionManager.getCachedMasterKey()
-    if (key === null) {
-      // Warn only once per engagement to avoid log spam
-      if (!this._encryptionWarned.has(this.encryptionEngagementId)) {
-        this._encryptionWarned.add(this.encryptionEngagementId)
-        console.warn(
-          `[Evidence] Encryption requested for engagement ${this.encryptionEngagementId} ` +
-          "but master key is not cached — writing evidence as plaintext. " +
+    if (EncryptionManager.getCachedMasterKey() === null) {
+      throw new Error(
+        `Encryption requested for engagement ${this.encryptionEngagementId} but master key is not cached. ` +
           "Set ARGUS_KEY_PASSPHRASE or call EncryptionManager.loadKey() before collecting evidence."
-        )
-      }
-      return false
+      )
     }
     return true
   }
@@ -82,7 +75,8 @@ export class EvidenceCollector {
   }
 
   private async ensureDir(path: string): Promise<void> {
-    await mkdir(path, { recursive: true })
+    await mkdir(path, { recursive: true, mode: 0o700 })
+    await chmod(path, 0o700)
   }
 
   private validateId(id: string, label: string): void {
@@ -194,6 +188,7 @@ export class EvidenceCollector {
     this.validateId(engagementId, "engagementId")
     this.validateId(findingId, "findingId")
     if (!(await this.checkStorageLimit(engagementId))) throw new Error(`Storage limit exceeded for engagement ${engagementId}`)
+    const encrypted = this._isEncrypted()
     const dir = join(this.baseDir, engagementId, "artifacts", findingId, "requests")
     await this.ensureDir(dir)
     const fileName = `request-${Date.now()}-${randomBytes(4).toString("hex")}.txt`
@@ -201,12 +196,12 @@ export class EvidenceCollector {
     const plaintext = Buffer.from(request, "utf-8")
     const relativePath = join("requests", fileName)
 
-    if (this._isEncrypted()) {
+    if (encrypted) {
       const masterKey = this._getMasterKey()!
       const fileId = EncryptedFileHandle.fileIdFromPath(relativePath)
       EncryptedFileHandle.writeEncrypted(filePath, plaintext, masterKey, this.encryptionEngagementId!, fileId)
     } else {
-      await writeFile(filePath, plaintext)
+      await writeFile(filePath, plaintext, { mode: 0o600 })
     }
 
     return {
@@ -221,6 +216,7 @@ export class EvidenceCollector {
     this.validateId(engagementId, "engagementId")
     this.validateId(findingId, "findingId")
     if (!(await this.checkStorageLimit(engagementId))) throw new Error(`Storage limit exceeded for engagement ${engagementId}`)
+    const encrypted = this._isEncrypted()
     const dir = join(this.baseDir, engagementId, "artifacts", findingId, "responses")
     await this.ensureDir(dir)
     const fileName = `response-${Date.now()}-${randomBytes(4).toString("hex")}.txt`
@@ -228,12 +224,12 @@ export class EvidenceCollector {
     const plaintext = Buffer.from(response, "utf-8")
     const relativePath = join("responses", fileName)
 
-    if (this._isEncrypted()) {
+    if (encrypted) {
       const masterKey = this._getMasterKey()!
       const fileId = EncryptedFileHandle.fileIdFromPath(relativePath)
       EncryptedFileHandle.writeEncrypted(filePath, plaintext, masterKey, this.encryptionEngagementId!, fileId)
     } else {
-      await writeFile(filePath, plaintext)
+      await writeFile(filePath, plaintext, { mode: 0o600 })
     }
 
     return {
@@ -244,22 +240,59 @@ export class EvidenceCollector {
     }
   }
 
+  /**
+   * Save a textual log artifact (execution events, cleanup outcome, verifier
+   * diagnostics) next to the request/response evidence.
+   *
+   * Stage 4.3 item 3: an XSS confirmation has to keep the execution event and
+   * the cleanup outcome, not just a screenshot, so they are persisted as
+   * first-class `log` artifacts alongside the HTTP evidence.
+   */
+  async saveLog(engagementId: string, findingId: string, log: string): Promise<ArtifactEntry> {
+    this.validateId(engagementId, "engagementId")
+    this.validateId(findingId, "findingId")
+    if (!(await this.checkStorageLimit(engagementId))) throw new Error(`Storage limit exceeded for engagement ${engagementId}`)
+    const encrypted = this._isEncrypted()
+    const dir = join(this.baseDir, engagementId, "artifacts", findingId, "logs")
+    await this.ensureDir(dir)
+    const fileName = `log-${Date.now()}-${randomBytes(4).toString("hex")}.txt`
+    const filePath = join(dir, fileName)
+    const plaintext = Buffer.from(log, "utf-8")
+    const relativePath = join("logs", fileName)
+
+    if (encrypted) {
+      const masterKey = this._getMasterKey()!
+      const fileId = EncryptedFileHandle.fileIdFromPath(relativePath)
+      EncryptedFileHandle.writeEncrypted(filePath, plaintext, masterKey, this.encryptionEngagementId!, fileId)
+    } else {
+      await writeFile(filePath, plaintext, { mode: 0o600 })
+    }
+
+    return {
+      path: relativePath,
+      hash: createHash("sha256").update(plaintext).digest("hex"),
+      type: "log" as const,
+      size_bytes: plaintext.length,
+    }
+  }
+
   async captureScreenshot(engagementId: string, findingId: string, screenshotBuffer: Buffer): Promise<ArtifactEntry> {
     this.validateId(engagementId, "engagementId")
     this.validateId(findingId, "findingId")
     if (!(await this.checkStorageLimit(engagementId))) throw new Error(`Storage limit exceeded for engagement ${engagementId}`)
+    const encrypted = this._isEncrypted()
     const dir = join(this.baseDir, engagementId, "artifacts", findingId, "screenshots")
     await this.ensureDir(dir)
     const fileName = `screenshot-${Date.now()}-${randomBytes(4).toString("hex")}.png`
     const filePath = join(dir, fileName)
     const relativePath = join("screenshots", fileName)
 
-    if (this._isEncrypted()) {
+    if (encrypted) {
       const masterKey = this._getMasterKey()!
       const fileId = EncryptedFileHandle.fileIdFromPath(relativePath)
       EncryptedFileHandle.writeEncrypted(filePath, screenshotBuffer, masterKey, this.encryptionEngagementId!, fileId)
     } else {
-      await writeFile(filePath, screenshotBuffer)
+      await writeFile(filePath, screenshotBuffer, { mode: 0o600 })
     }
 
     return {
@@ -341,7 +374,7 @@ export class EvidenceCollector {
 
     const manifestDir = join(this.baseDir, engagementId, "artifacts", findingId)
     await this.ensureDir(manifestDir)
-    await writeFile(join(manifestDir, "manifest.json"), JSON.stringify(manifest, null, 2))
+    await writeFile(join(manifestDir, "manifest.json"), JSON.stringify(manifest, null, 2), { mode: 0o600 })
 
     return manifest
   }

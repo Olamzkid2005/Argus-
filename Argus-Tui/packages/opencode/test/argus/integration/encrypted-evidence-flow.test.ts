@@ -17,7 +17,7 @@
  *       → EncryptionManager.decryptFile (AES-256-GCM per-file key)
  */
 import { beforeAll, afterAll, describe, expect, test } from "bun:test"
-import { readFileSync, existsSync, writeFileSync, readdirSync } from "node:fs"
+import { readFileSync, existsSync, writeFileSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import crypto from "node:crypto"
 
@@ -443,6 +443,39 @@ describe("Edge cases", () => {
     await collector.createPackage(engId, findingId, [entry])
     const result = await verifyPackage(tempDir, engId, findingId, { masterKey })
     expect(result.valid).toBe(true)
+  })
+
+  test("requested encryption without a cached master key fails closed", async () => {
+    await EncryptionManager.requireMasterKey()
+    const engId = "ENG-enc-fail-closed-001"
+    const findingId = "find-enc-fail-closed-001"
+    const collector = new EvidenceCollector(tempDir, undefined, engId)
+    EncryptionManager.clearCache()
+    try {
+      await expect(collector.saveRequest(engId, findingId, "must not become plaintext")).rejects.toThrow("master key is not cached")
+    } finally {
+      // Restore the cached key. `clearCache()` zeroizes the cached buffer, so
+      // the suite-wide `masterKey` handle is no longer usable afterward.
+      await EncryptionManager.requireMasterKey()
+    }
+    expect(existsSync(join(tempDir, engId, "artifacts", findingId))).toBe(false)
+  })
+
+  test("evidence files and manifests are private and pass permission verification", async () => {
+    const verificationKey = await EncryptionManager.requireMasterKey()
+    const engId = "ENG-enc-permissions-001"
+    const findingId = "find-enc-permissions-001"
+    const collector = new EvidenceCollector(tempDir, undefined, engId)
+    const request = await collector.saveRequest(engId, findingId, "permission-checked request")
+    const manifest = await collector.createPackage(engId, findingId, [request])
+    const requestPath = join(tempDir, engId, "artifacts", findingId, request.path)
+    const manifestPath = join(tempDir, engId, "artifacts", findingId, "manifest.json")
+    expect(statSync(requestPath).mode & 0o777).toBe(0o600)
+    expect(statSync(manifestPath).mode & 0o777).toBe(0o600)
+    const result = await verifyPackage(tempDir, engId, findingId, { masterKey: verificationKey, checkPermissions: true })
+    expect(result.valid).toBe(true)
+    expect(result.errors).toHaveLength(0)
+    expect(manifest.artifacts).toHaveLength(1)
   })
 
   test("collector without encryption enabled stores plaintext", async () => {

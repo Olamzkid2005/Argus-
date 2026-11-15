@@ -28,6 +28,18 @@ describe("EvidenceCollector", () => {
     expect(entry.hash).toMatch(/^[a-f0-9]{64}$/)
   })
 
+  test("saveLog creates a log artifact entry and writes it to disk", async () => {
+    const collector = new EvidenceCollector(baseDir)
+    const body = "execution event: nonce=argus-xss-1 matches=true"
+    const entry = await collector.saveLog("eng-1", "find-10", body)
+    expect(entry.type).toBe("log")
+    expect(entry.path).toMatch(/^logs[\\\/]log-\d+-[a-f0-9]+\.txt$/)
+    expect(entry.size_bytes).toBe(Buffer.byteLength(body))
+    expect(entry.hash).toBe(createHash("sha256").update(Buffer.from(body, "utf-8")).digest("hex"))
+    const filePath = join(baseDir, "eng-1", "artifacts", "find-10", entry.path)
+    expect(readFileSync(filePath, "utf-8")).toBe(body)
+  })
+
   test("captureScreenshot saves buffer and returns correct entry", async () => {
     const collector = new EvidenceCollector(baseDir)
     const buf = Buffer.from("fake-png-data")

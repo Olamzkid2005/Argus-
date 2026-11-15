@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, createReadStream } from "fs"
+import { readFileSync, existsSync, createReadStream, statSync } from "fs"
 import { createHash } from "crypto"
 import { join } from "path"
 import type { EvidenceManifest, IntegrityReport } from "./types"
@@ -50,6 +50,24 @@ export interface VerifyPackageOptions {
    * Must match the key used when the evidence package was created.
    */
   hmacKey?: string | Buffer
+  /**
+   * When true, evidence files must also be private on disk: manifests and
+   * artifacts must have mode 0600. Plain integrity verification intentionally
+   * stays permission-agnostic so historical plaintext packages can still have
+   * their cryptographic hashes checked.
+   */
+  checkPermissions?: boolean
+}
+
+function checkPrivateFile(filePath: string, label: string, errors: string[]): void {
+  try {
+    const mode = statSync(filePath).mode & 0o777
+    if (mode !== 0o600) {
+      errors.push(`${label} has insecure permissions: expected mode 600, found ${mode.toString(8)}`)
+    }
+  } catch (err) {
+    errors.push(`Could not verify permissions for ${label}: ${(err as Error).message}`)
+  }
 }
 
 export async function verifyPackage(
@@ -88,6 +106,9 @@ export async function verifyPackage(
   }
 
   const errors: string[] = []
+  if (options?.checkPermissions) {
+    checkPrivateFile(manifestPath, "manifest.json", errors)
+  }
 
   // Stream-based hash for large files to avoid loading entire artifact into memory
   for (const artifact of manifest.artifacts) {
@@ -100,6 +121,9 @@ export async function verifyPackage(
     if (!existsSync(artifactPath)) {
       errors.push(`Artifact missing: ${artifact.path}`)
       continue
+    }
+    if (options?.checkPermissions) {
+      checkPrivateFile(artifactPath, artifact.path, errors)
     }
 
     let actualHash: string
