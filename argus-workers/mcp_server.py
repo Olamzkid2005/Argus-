@@ -68,6 +68,12 @@ def scope_validator_for_engagement(engagement_id: str):
 # ── Signal quality tiers for planner intelligence ──
 
 
+
+# Tools that stream findings and can be told to stop early without losing what
+# they already printed. Bounded by ARGUS_TOOL_WALL_SECONDS (default 240).
+WALL_LIMITED_TOOLS = frozenset({"nuclei", "dalfox"})
+
+
 class SignalQuality:
     """Signal quality tier for a tool's findings reliability.
 
@@ -1367,6 +1373,23 @@ class MCPServer:
             _env.update(_tool_environment_overrides())
             _env["PYTHONDONTWRITEBYTECODE"] = "1"
 
+            # A web scanner against a real internet host can run for hours: on
+            # testasp.vulnweb.com nuclei and dalfox each blew through the MCP
+            # call budget (measured: both killed at the 600s client timeout,
+            # twice, failing the whole vuln_scan phase). They stream findings as
+            # they go, so a wall clock that asks them to stop keeps every finding
+            # already printed. Python tools and tools that need their full run
+            # (sqlmap, nmap) are untouched.
+            if tool.name in WALL_LIMITED_TOOLS and os.name != "nt":
+                _wall = int(os.environ.get("ARGUS_TOOL_WALL_SECONDS", "240"))
+                if _wall > 0 and cmd and cmd[0] != "timeout":
+                    cmd = ["timeout", "-s", "INT", str(_wall), *cmd]
+                    logger.debug(
+                        "Bounding %s to %ss of wall clock (ARGUS_TOOL_WALL_SECONDS)",
+                        tool.name,
+                        _wall,
+                    )
+
             result = subprocess.run(  # noqa: S603 — safe: cmd is list form, validated by _validate_args_safe()
                 cmd,
                 capture_output=True,
@@ -1401,6 +1424,12 @@ class MCPServer:
             # finding downstream.
             findings_exit = self.FINDINGS_EXIT_CODES.get(name, set())
             success = result.returncode == 0 or result.returncode in findings_exit
+            # Exit 124 is our own wall clock, not a scanner failure. When the
+            # bounded run still produced parseable findings the scan was
+            # productive — report those findings and say the run was cut short.
+            wall_limited = result.returncode == 124 and bool(structured)
+            if wall_limited:
+                success = True
             if (
                 success
                 and result.returncode != 0
