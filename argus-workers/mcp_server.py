@@ -147,8 +147,16 @@ def _augmented_tool_path() -> str:
     _homebrew_bin = "/opt/homebrew/bin"
     _project_venv = str(Path(__file__).resolve().parent.parent / "venv" / "bin")
     _pip_scripts = sysconfig.get_path("scripts")
+    # Real binaries before Python console scripts. `~/go/bin` covers a Go
+    # install, but the lab keeps the ProjectDiscovery builds in a directory on
+    # the inherited PATH (`.livefire/bin`). Appending that PATH *after* the
+    # venv is what left `httpx` resolving to the Python HTTPX CLI even though
+    # the worker inherited an environment where the Go binary came first, so
+    # both operator-provided sources now precede the venv entries.
     parts = [
         _go_bin,
+        os.environ.get("ARGUS_EXTRA_PATH", ""),
+        os.environ.get("PATH", ""),
         _venv_bin,
         _homebrew_bin,
         _project_venv,
@@ -157,10 +165,14 @@ def _augmented_tool_path() -> str:
         "/usr/local/bin",
         "/usr/bin",
         "/bin",
-        os.environ.get("ARGUS_EXTRA_PATH", ""),
-        os.environ.get("PATH", ""),
     ]
-    return os.pathsep.join(part for part in parts if part)
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for entry in iter(os.pathsep.join(part for part in parts if part).split(os.pathsep)):
+        if entry and entry not in seen:
+            seen.add(entry)
+            ordered.append(entry)
+    return os.pathsep.join(ordered)
 
 
 def _param_is_true(value: Any) -> bool:
@@ -1110,6 +1122,22 @@ class MCPServer:
             ):
                 static_arg = os.path.join(project_dir, static_arg)
             cmd.append(static_arg)
+
+        # Arguments a tool needs from the environment rather than from the
+        # caller. nuclei ships no bundled templates, so without `-t` it exits
+        # with "no templates provided for scan" and the whole vuln_scan phase
+        # loses its primary scanner. Only injected when the operator pointed
+        # ARGUS_NUCLEI_TEMPLATES at a populated directory and the caller did not
+        # choose templates itself.
+        _templates_dir = os.environ.get("ARGUS_NUCLEI_TEMPLATES", "")
+        if (
+            tool.name == "nuclei"
+            and _templates_dir
+            and "-t" not in cmd
+            and "templates" not in (arguments or {})
+            and os.path.isdir(_templates_dir)
+        ):
+            cmd.extend(["-t", _templates_dir])
 
         # Map named arguments to CLI flags
         arguments = arguments or {}

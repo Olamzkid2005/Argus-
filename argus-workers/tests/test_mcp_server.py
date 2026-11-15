@@ -726,6 +726,76 @@ class TestAugmentedToolPath:
         venv_bin = str(Path(sys.executable).parent)
         assert parts.index(go_bin) < parts.index(venv_bin)
 
+    def test_inherited_path_precedes_the_venv(self, monkeypatch):
+        """Operator tools on PATH must win over Python console scripts.
+
+        The lab keeps the ProjectDiscovery builds in `.livefire/bin`, which the
+        worker inherits on PATH. With the inherited PATH appended last, `httpx`
+        resolved to venv/bin/httpx (the Python CLI) and recon failed with
+        "No such option '-s'" despite the Go binary being installed.
+        """
+        import os
+        import sys
+
+        from mcp_server import _augmented_tool_path
+
+        monkeypatch.setenv("PATH", "/opt/argus-tools:/usr/bin")
+        parts = _augmented_tool_path().split(os.pathsep)
+        venv_bin = str(Path(sys.executable).parent)
+        assert parts.index("/opt/argus-tools") < parts.index(venv_bin)
+
+    def test_path_is_deduplicated(self, monkeypatch):
+        import os
+        import sys
+
+        from mcp_server import _augmented_tool_path
+
+        venv_bin = str(Path(sys.executable).parent)
+        monkeypatch.setenv("PATH", f"{venv_bin}:/usr/bin")
+        parts = _augmented_tool_path().split(os.pathsep)
+        assert parts.count(venv_bin) == 1
+
+    def test_nuclei_gets_the_configured_template_directory(self, monkeypatch, tmp_path):
+        """nuclei ships no templates; without -t the phase loses its scanner."""
+        import json
+        import os
+        import sys
+
+        monkeypatch.setenv("ARGUS_NUCLEI_TEMPLATES", str(tmp_path))
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="nuclei",
+            command=sys.executable,
+            args=["-c", "import json,sys; print(json.dumps(sys.argv[1:]))"],
+            parameters=[],
+        ))
+
+        result = server.call_tool("nuclei", {})
+
+        assert result["isError"] is False, result
+        argv = json.loads(result["content"][0]["text"].strip().splitlines()[-1])
+        assert argv == ["-t", str(tmp_path)], argv
+
+    def test_nuclei_keeps_caller_templates(self, monkeypatch, tmp_path):
+        import json
+        import sys
+
+        monkeypatch.setenv("ARGUS_NUCLEI_TEMPLATES", str(tmp_path))
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+        server.register_tool(ToolDefinition(
+            name="nuclei",
+            command=sys.executable,
+            args=["-c", "import json,sys; print(json.dumps(sys.argv[1:]))"],
+            parameters=[ToolSchema(name="templates", type="string", flag="-t")],
+        ))
+
+        result = server.call_tool("nuclei", {"target": "http://x", "templates": "/custom"})
+
+        assert result["isError"] is False, result
+        argv = json.loads(result["content"][0]["text"].strip().splitlines()[-1])
+        assert argv.count("-t") == 1, argv
+        assert "/custom" in argv
+
     def test_extra_path_is_honored_for_discovery_and_execution(self, monkeypatch):
         import os
 
