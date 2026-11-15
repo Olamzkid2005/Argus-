@@ -8,7 +8,15 @@ logger = logging.getLogger(__name__)
 
 
 class ReproductionEngine:
-    """Attempts to reproduce a finding by replaying the attack."""
+    """Attempts to reproduce a finding by replaying the attack.
+
+    Placeholder (Stage 4.1 item 3): none of these strategies actually replays
+    the attack yet — every result carries ``"supported": False`` so callers
+    record the finding as *unsupported* instead of treating a canned payload
+    list or a "requires a live HTTP client" note as a reproduction attempt.
+    Remove the flag only when a strategy really re-sends the exploit and
+    inspects the response.
+    """
 
     def __init__(self, http_client=None):
         self._http_client = http_client
@@ -36,7 +44,12 @@ class ReproductionEngine:
                 return self._reproduce_generic(endpoint, finding)
         except Exception as e:
             logger.debug("Reproduction failed for %s: %s", ftype, e)
-            return {"reproduced": False, "error": str(e), "evidence": {}}
+            return {
+                "reproduced": False,
+                "supported": False,
+                "error": str(e),
+                "evidence": {},
+            }
 
     def _reproduce_sqli(self, endpoint: str, finding: dict) -> dict:
         test_payloads = ["'", "1' OR '1'='1", "1 UNION SELECT NULL--"]
@@ -47,6 +60,7 @@ class ReproductionEngine:
         }
         return {
             "reproduced": False,
+            "supported": False,
             "evidence": evidence,
             "error": "Requires live HTTP client",
         }
@@ -60,6 +74,7 @@ class ReproductionEngine:
         }
         return {
             "reproduced": False,
+            "supported": False,
             "evidence": evidence,
             "error": "Requires live HTTP client",
         }
@@ -72,6 +87,7 @@ class ReproductionEngine:
         }
         return {
             "reproduced": False,
+            "supported": False,
             "evidence": evidence,
             "error": "Requires live HTTP client",
         }
@@ -80,6 +96,7 @@ class ReproductionEngine:
         evidence = {"endpoint": endpoint, "type": "cmdi", "severity": "CRITICAL"}
         return {
             "reproduced": False,
+            "supported": False,
             "evidence": evidence,
             "error": "Requires live HTTP client",
         }
@@ -92,6 +109,7 @@ class ReproductionEngine:
         }
         return {
             "reproduced": False,
+            "supported": False,
             "evidence": evidence,
             "error": "Requires live HTTP client",
         }
@@ -100,6 +118,7 @@ class ReproductionEngine:
         evidence = {"endpoint": endpoint, "type": finding.get("type", "unknown")}
         return {
             "reproduced": False,
+            "supported": False,
             "evidence": evidence,
             "error": "No specific reproduction for this finding type",
         }

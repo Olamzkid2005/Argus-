@@ -52,8 +52,26 @@ class VerificationAgent(AbstractTool):
             reproduction = engine.reproduce(finding, ctx.target)
             evidence = collector.collect(finding, reproduction)
             confidence = score_confidence(finding, reproduction, evidence)
+            # Promotion is decided on the proof itself (Stage 4.1): only a
+            # completed reproduction with captured, non-error evidence may
+            # confirm. Error artifacts and placeholder "requires a live HTTP
+            # client" runs are not evidence, so they stay PENDING/INCONCLUSIVE.
+            proof_artifacts = [
+                artifact["path"]
+                for artifact in evidence.get("artifacts", [])
+                if artifact.get("type") != "error_log" and artifact.get("path")
+            ]
             promoted = promote_finding(
-                finding, confidence, reproduction.get("reproduced", False)
+                finding,
+                confidence,
+                reproduction.get("reproduced", False),
+                # A placeholder strategy (no live replay yet) is *unsupported*,
+                # which is a different claim from a failed attempt — and it can
+                # never be promoted (Stage 4.1 item 3).
+                supported=reproduction.get("supported", True),
+                completed=not reproduction.get("error"),
+                evidence_refs=proof_artifacts,
+                error=reproduction.get("error"),
             )
 
             # Normalize promoted findings to standard FindingBuilder format (M3)

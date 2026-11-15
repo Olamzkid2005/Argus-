@@ -889,8 +889,13 @@ class TestFindingPromoter:
         from tools.verification.finding_promoter import promote_finding
 
         finding = {"id": "1", "confidence": 0.5}
-        result = promote_finding(finding, 0.9, True)
+        # Confirmation needs a reproduction *and* a reference to audit
+        # (Stage 4.1); a bare reproduction is only recorded as such.
+        result = promote_finding(
+            finding, 0.9, True, evidence_refs=["evidence/pkg-1/har.har"]
+        )
         assert result["status"] == "CONFIRMED"
+        assert result["proof_status"] == "reproduced"
 
     def test_reject_low_confidence(self):
         from tools.verification.finding_promoter import promote_finding

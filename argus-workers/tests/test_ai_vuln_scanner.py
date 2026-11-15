@@ -7,8 +7,6 @@ without hitting real AI endpoints.
 
 from unittest.mock import Mock, patch
 
-import pytest
-
 from tool_core.base import ToolContext
 from tool_core.result import ToolStatus
 from tools.ai_vuln_scanner import (

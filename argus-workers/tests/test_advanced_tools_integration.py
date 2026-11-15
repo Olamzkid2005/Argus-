@@ -5,8 +5,6 @@ Tests verify that tools work together correctly and integrate with
 the existing tool infrastructure (ToolRunner, MCP, orchestrator).
 """
 
-import pytest
-
 from tool_core.base import ToolContext
 from tool_core.result import ToolStatus
 

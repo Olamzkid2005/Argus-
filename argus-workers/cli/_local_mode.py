@@ -439,10 +439,23 @@ def _auto_verify_findings(
             try:
                 from tools.verification.finding_promoter import promote_finding
 
+                # Same rule as the verification agent: a verifier's answer
+                # confirms only with captured evidence and no verifier error
+                # (Stage 4.1). Otherwise the finding stays PENDING rather than
+                # being promoted by its score.
+                proof_refs = [
+                    ref
+                    for ref in (verification.get("evidence") or [])
+                    if isinstance(ref, str)
+                ]
+                verifier_error = verification.get("error")
                 promoted = promote_finding(
                     original,
                     confidence=min(new_confidence, 1.0),
                     reproduced=bool(verified),
+                    completed=not verifier_error,
+                    evidence_refs=proof_refs,
+                    error=verifier_error,
                 )
 
                 if promoted.get("status") == "CONFIRMED":
