@@ -240,8 +240,16 @@ export interface ExecutionOptions {
  */
 const NAME_BASED_CLOUD_TOOLS = new Set(["cloud_enum", "s3scanner"])
 
-function targetNotApplicable(tool: string, target: string): string | undefined {
+function targetNotApplicable(tool: string, target: string, phaseName?: string): string | undefined {
   if (!NAME_BASED_CLOUD_TOOLS.has(tool)) return undefined
+  // A cloud name sweep is the whole point of the cloud phase and pure overhead
+  // anywhere else: handing a public hostname to cloud_enum from recon asks the
+  // three clouds about 1837 bucket names while the phase waits, then the cloud
+  // phase asks again. Measured on testasp.vulnweb.com: recon spent minutes in
+  // cloud_enum before any web tool had reported.
+  if (phaseName && !/cloud/i.test(phaseName)) {
+    return `cloud asset enumeration belongs to the cloud phase, not ${phaseName}`
+  }
   let host: string
   try {
     host = new URL(target.includes("://") ? target : `http://${target}`).hostname
@@ -693,7 +701,7 @@ export class InProcessExecutor implements PhaseExecutor {
           deliberatelySkipped++
           continue
         }
-        const notApplicable = targetNotApplicable(step.tool, phase.target)
+        const notApplicable = targetNotApplicable(step.tool, phase.target, phase.name)
         if (notApplicable) {
           if (execOptions.verbose) {
             console.log(`[executor]  Skipping ${step.tool}: ${notApplicable}`)
