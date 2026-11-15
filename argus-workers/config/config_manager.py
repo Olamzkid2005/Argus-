@@ -6,6 +6,7 @@ Provides a singleton ConfigManager that reads from argus_config.yaml
 and supports runtime reload without restart.
 """
 
+import copy
 import logging
 import os
 import threading
@@ -17,6 +18,11 @@ logger = logging.getLogger(__name__)
 # Default configuration (used if YAML file not found)
 # NOTE: Default host is 127.0.0.1 (not 0.0.0.0) to avoid binding to all
 # interfaces in production. Override via config file or env var.
+def _default_config() -> dict:
+    """Return an isolated copy of the default configuration."""
+    return copy.deepcopy(DEFAULT_CONFIG)
+
+
 DEFAULT_CONFIG = {
     "server": {"host": "127.0.0.1", "port": 9000, "workers": 4, "log_level": "INFO"},
     "database": {"pool_min": 2, "pool_max": 20, "slow_query_ms": 500},
@@ -86,7 +92,7 @@ class ConfigManager:
             logger.warning(
                 "Config file not found at %s, using defaults", self._config_path
             )
-            self._config = DEFAULT_CONFIG.copy()
+            self._config = _default_config()
             return
 
         try:
@@ -96,17 +102,17 @@ class ConfigManager:
                 loaded = yaml.safe_load(f)
             if loaded and isinstance(loaded, dict):
                 # Deep merge with defaults so missing keys fall back
-                self._config = self._deep_merge(DEFAULT_CONFIG.copy(), loaded)
+                self._config = self._deep_merge(_default_config(), loaded)
                 self._last_mtime = path.stat().st_mtime
                 logger.info("Configuration loaded from %s", self._config_path)
             else:
-                self._config = DEFAULT_CONFIG.copy()
+                self._config = _default_config()
         except ImportError:
             logger.warning("PyYAML not installed, using default configuration")
-            self._config = DEFAULT_CONFIG.copy()
+            self._config = _default_config()
         except Exception as e:
             logger.error("Failed to load config: %s, using defaults", e)
-            self._config = DEFAULT_CONFIG.copy()
+            self._config = _default_config()
 
     def _deep_merge(self, base: dict, override: dict) -> dict:
         """Deep merge two dictionaries (override wins)."""

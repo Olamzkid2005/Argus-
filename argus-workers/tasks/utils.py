@@ -13,6 +13,14 @@ import os
 
 logger = logging.getLogger(__name__)
 
+try:
+    from redis.exceptions import RedisError as _RedisError
+except Exception:
+    _RedisError = None
+_REDIS_OPERATION_ERRORS = (
+    (_RedisError,) if isinstance(_RedisError, type) else ()
+) + (ConnectionError, OSError, ValueError)
+
 RECON_CONTEXT_KEY = "recon_context:{engagement_id}"
 from config.constants import HARD_TIMEOUT_SECONDS
 
@@ -39,7 +47,7 @@ class LlmCostTracker:
         self._redis = None
         try:
             self._redis = _get_redis_client()
-        except (ConnectionError, OSError, ValueError) as e:
+        except _REDIS_OPERATION_ERRORS as e:
             logger.warning(
                 "Redis unavailable for LlmCostTracker — cost cap disabled for %s: %s",
                 engagement_id,
@@ -94,7 +102,7 @@ class LlmCostTracker:
             try:
                 self._redis.incrbyfloat(self._redis_key, cost)
                 self._redis.expire(self._redis_key, 86400)  # 24h TTL
-            except (ConnectionError, OSError, ValueError) as e:
+            except _REDIS_OPERATION_ERRORS as e:
                 logger.warning(
                     "Failed to record LLM cost in Redis for %s: %s",
                     self.engagement_id,
@@ -112,7 +120,7 @@ class LlmCostTracker:
             try:
                 redis_cost = float(self._redis.get(self._redis_key) or 0)
                 return max(self._local_spend, redis_cost)
-            except (ConnectionError, OSError, ValueError) as e:
+            except _REDIS_OPERATION_ERRORS as e:
                 logger.debug(
                     "Redis unavailable for LlmCostTracker cost lookup for %s: %s, using local spend",
                     self.engagement_id,

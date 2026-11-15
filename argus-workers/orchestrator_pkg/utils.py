@@ -44,10 +44,14 @@ def get_nuclei_templates_path() -> Path:
     if base.exists() and any(base.rglob("*.yaml")):
         return base
 
-    # Fall back to ~/.nuclei-templates
-    home_path = Path.home() / ".nuclei-templates"
-    if home_path.exists() and any(home_path.rglob("*.yaml")):
-        return home_path
+    # Fall back to nuclei's own user template directories. v3 installs into
+    # ~/nuclei-templates (no dot); older releases used ~/.nuclei-templates.
+    for home_path in (
+        Path.home() / ".nuclei-templates",
+        Path.home() / "nuclei-templates",
+    ):
+        if home_path.exists() and any(home_path.rglob("*.yaml")):
+            return home_path
 
     return base  # May not exist - caller should check
 

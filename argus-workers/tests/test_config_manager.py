@@ -64,6 +64,14 @@ class TestConfigManager:
         cm.set("custom.nested.key", "value")
         assert cm.get("custom.nested.key") == "value"
 
+    def test_instances_do_not_share_nested_defaults(self):
+        first = ConfigManager(config_path="/nonexistent/config.yaml")
+        first.set("server.port", 9001)
+
+        second = ConfigManager(config_path="/nonexistent/config.yaml")
+        assert second.get("server.port") == 9000
+        assert DEFAULT_CONFIG["server"]["port"] == 9000
+
     def test_all_returns_copy(self):
         cm = ConfigManager(config_path="/nonexistent/config.yaml")
         all_config = cm.all()

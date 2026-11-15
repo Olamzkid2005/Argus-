@@ -1,5 +1,7 @@
 """Tests for tasks.utils — Category: class"""
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from llm_service import CostTracker
@@ -32,6 +34,18 @@ class TestLlmCostTracker:
 
         for estimate in (0.0, 0.5, 1.0, 1.5):
             assert ours.exceeded(estimate) == theirs.exceeded(estimate)
+
+    def test_redis_errors_fall_back_to_local_spend(self):
+        redis = pytest.importorskip("redis")
+        tracker = LlmCostTracker("eng-1", max_cost=1.0)
+        tracker._redis = MagicMock()
+        tracker._redis.get.side_effect = redis.exceptions.RedisError("down")
+        tracker._redis.incrbyfloat.side_effect = redis.exceptions.RedisError("down")
+
+        assert tracker.record_llm_call(0.25) is True
+        assert tracker.total == 0.25
+        assert tracker.exceeded(0.5) is False
+        assert tracker.exceeded(1.0) is True
 
     def test_str_repr(self):
         """String representation not available (requires constructor args)."""

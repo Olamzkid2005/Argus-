@@ -122,22 +122,16 @@ class FeatureFlags:
 
         # 2. Check ARGUS_AUTONOMOUS profile — enables autonomous features unless
         #    explicitly overridden by ARGUS_FF_* env var (checked above).
-        #    Also sets ARGUS_ALLOW_UNSCOPED=1 so the scope validator (fail-closed
-        #    by default) allows unscoped scanning in autonomous development mode.
+        #    It deliberately does NOT relax scope authorization: autonomous mode
+        #    is a feature profile, not permission to scan. A run without an
+        #    explicit scope stays fail-closed, and an operator who means to allow
+        #    unscoped runs sets ARGUS_ALLOW_UNSCOPED itself.
         autonomous = os.environ.get("ARGUS_AUTONOMOUS", "")
         is_autonomous = autonomous.lower() in ("1", "true", "yes")
-        if is_autonomous:
-            # Propagate to scope validator (Python-side subprocesses inherit os.environ)
-            if "ARGUS_ALLOW_UNSCOPED" not in os.environ:
-                os.environ["ARGUS_ALLOW_UNSCOPED"] = "1"
-                logger.debug(
-                    "ARGUS_AUTONOMOUS=1 detected — set ARGUS_ALLOW_UNSCOPED=1 "
-                    "so scope validator permits targets without explicit scope config"
-                )
-            if flag_name.upper() in AUTONOMOUS_FEATURES:
-                self._cache[flag_name] = (True, FlagSource.ENV, now)
-                logger.debug("Feature flag %s=True from ARGUS_AUTONOMOUS profile", flag_name)
-                return (True, FlagSource.ENV)
+        if is_autonomous and flag_name.upper() in AUTONOMOUS_FEATURES:
+            self._cache[flag_name] = (True, FlagSource.ENV, now)
+            logger.debug("Feature flag %s=True from ARGUS_AUTONOMOUS profile", flag_name)
+            return (True, FlagSource.ENV)
 
         # 3. Check database
         if self.db:
@@ -243,13 +237,11 @@ def log_feature_flag_guidance():
             "See AUTONOMOUS_FEATURES in feature_flags.py for the full list."
         )
     else:
-        # Propagate to scope validator
-        if "ARGUS_ALLOW_UNSCOPED" not in os.environ:
-            os.environ["ARGUS_ALLOW_UNSCOPED"] = "1"
+        # No scope relaxation here: ARGUS_AUTONOMOUS enables features, never
+        # authorization. See the get() profile branch above.
         logger.info(
             "Feature flags: ARGUS_AUTONOMOUS is enabled — "
-            "%d autonomous features activated"
-            " (ARGUS_ALLOW_UNSCOPED=1 auto-set for scope validator)",
+            "%d autonomous features activated (scope authorization unchanged)",
             len(AUTONOMOUS_FEATURES),
         )
 

@@ -230,3 +230,32 @@ class TestConvenienceFunctions:
     def test_get_flag_default(self):
         flags = FeatureFlags()
         assert flags.get_flag("NONEXISTENT", 42) == 42
+
+
+class TestAutonomousModeDoesNotRelaxScope:
+    """Autonomous mode is a feature profile, not authorization (plan §3.1).
+
+    It used to set ``ARGUS_ALLOW_UNSCOPED=1`` as a side effect of reading any
+    flag, which turned the fail-closed scope validator into allow-all for every
+    run that enabled autonomous features.
+    """
+
+    def test_reading_a_flag_under_autonomous_mode_does_not_set_allow_unscoped(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("ARGUS_ALLOW_UNSCOPED", raising=False)
+        monkeypatch.setenv("ARGUS_AUTONOMOUS", "1")
+        flags = FeatureFlags()
+
+        # The profile still enables its features; only the scope side effect is gone.
+        assert flags.is_enabled(FEATURE_TRUE_REACT_LOOP) is True
+        assert "ARGUS_ALLOW_UNSCOPED" not in os.environ
+
+    def test_autonomous_mode_still_fails_closed_without_a_scope(self, monkeypatch):
+        monkeypatch.delenv("ARGUS_ALLOW_UNSCOPED", raising=False)
+        monkeypatch.setenv("ARGUS_AUTONOMOUS", "1")
+        assert FeatureFlags().is_enabled(FEATURE_TRUE_REACT_LOOP) is True
+
+        from tools.scope_validator import validate_target_scope
+
+        assert validate_target_scope("https://example.com", "eng-1") is False
