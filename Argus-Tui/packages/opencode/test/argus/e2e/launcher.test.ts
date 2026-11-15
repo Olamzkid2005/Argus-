@@ -31,15 +31,23 @@ describe("bare Argus terminal", () => {
       // The shutdown path can repaint the frame it is leaving, so output after
       // our own SIGTERM must not count as a responsive prompt.
       let dying = false
-      let tail = ""
+      // The prompt is not necessarily the last thing in a chunk: a cold frame is
+      // one diff write of several kilobytes and the animated background repaints
+      // the screen every tick, so a short tail never holds the whole string.
+      // Keep a bounded window of the decoded stream and look anywhere inside it.
+      let window = ""
+      let resolved = false
       await using terminal = new Bun.Terminal({
         cols: 120,
         rows: 50,
         data(_, bytes) {
           const text = decoder.decode(bytes, { stream: true })
           chunks.push(text)
-          tail = (tail + text).slice(-32)
-          if (!dying && tail.includes("/assess")) ready()
+          window = (window + text).slice(-32_768)
+          if (!dying && !resolved && window.includes("/assess")) {
+            resolved = true
+            ready()
+          }
         },
       })
       const child = Bun.spawn([process.execPath, binary], {
@@ -97,8 +105,12 @@ describe("bare Argus terminal", () => {
             )
           }),
         ])
-        // Exercise prompt input and the app's local exit command only.
-        terminal.write("/exit\r")
+        // Exercise prompt input and the app's local exit command only. Write the
+        // command and Enter separately: one "/exit\r" write is read as pasted
+        // text plus a newline and never submits, unlike a real keyboard.
+        terminal.write("/exit")
+        await Bun.sleep(50)
+        terminal.write("\r")
         expect(await child.exited).toBe(0)
         const output = chunks.join("")
         expect(output).toContain("/assess")
