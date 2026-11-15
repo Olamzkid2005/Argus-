@@ -1,5 +1,6 @@
 import { describe, expect, test, mock } from "bun:test"
 import { ConfidenceEngine } from "@argus/engagement/confidence"
+import { ProofStatus } from "@argus/shared/types"
 
 // ── Pure function tests ──
 
@@ -249,6 +250,58 @@ describe("formatFindingsSummary", () => {
     expect(result.engagementId).toBe("ENG-test-001")
   })
 
+  test("checkpoints reconcile auth identities and the worker execution ledger", async () => {
+    const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+    const { mockEngagementStore, mockExecutor, mockBridge, deps } = makeDeps()
+    deps.store.saveCheckpoint = mock(() => {})
+    deps.credStore.listRoles = mock(() => ["attacker"])
+    deps.executor.execute = mock(() => ({
+      phaseId: "phase-0-recon",
+      status: "completed",
+      findings: [],
+      artifacts: [],
+      errors: [],
+      durationMs: 42,
+      actionRecords: [{
+        tool: "nuclei",
+        capability: "web_recon",
+        outcome: "succeeded-with-findings",
+        reasoning: "engine chose nuclei",
+        identity: "attacker",
+        source: "llm",
+      }],
+    }))
+    deps.bridge.budgetStatus = mock(async () => ({
+      engagementId: "ENG-test-001",
+      toolCalls: 1,
+      executedTools: ["nuclei"],
+      identities: ["attacker"],
+      sessions: 1,
+    }))
+
+    const runner = new WorkflowRunner(deps)
+    await runner.run({ target: "https://example.com" })
+
+    expect(deps.store.saveCheckpoint).toHaveBeenCalled()
+    const saved = (deps.store.saveCheckpoint as any).mock.calls.at(-1)[0]
+    expect(saved.actions[0]).toMatchObject({
+      source: "plan",
+      by: "local-operator",
+    })
+    expect(saved.actions[0].provenance.actions).toEqual([expect.objectContaining({
+      tool: "nuclei",
+      identity: "attacker",
+      source: "llm",
+    })])
+    expect(saved.authIdentities).toEqual(["credential:attacker", "worker:attacker"])
+    expect(saved.workerBudget).toMatchObject({
+      toolCalls: 1,
+      executedTools: ["nuclei"],
+      identities: ["attacker"],
+      sessions: 1,
+    })
+  })
+
   test("a cooperative stop skips remaining phases and reports stopped", async () => {
     const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
     const { mockEngagementStore, mockExecutor, deps } = makeDeps()
@@ -259,7 +312,9 @@ describe("formatFindingsSummary", () => {
     expect(mockExecutor.execute).not.toHaveBeenCalled()
     expect(result.stopped).toBe(true)
     expect(result.success).toBe(false)
-    expect(mockEngagementStore.updateStatus).toHaveBeenCalledWith("ENG-test-001", "PAUSED")
+    // Stage 6.2: a cooperative stop is an explicit INTERRUPTED state (resumable),
+    // not PAUSED and certainly not COMPLETED.
+    expect(mockEngagementStore.updateStatus).toHaveBeenCalledWith("ENG-test-001", "INTERRUPTED")
     expect(mockEngagementStore.savePhase).toHaveBeenCalledWith(
       "ENG-test-001",
       expect.objectContaining({ status: "SKIPPED" }),
@@ -980,6 +1035,220 @@ describe("formatFindingsSummary", () => {
         expect.any(Number),
       )
     })
+
+    test("an HTTP probe result is suspected and cannot be promoted past HIGH", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      deps.bridge.callTool = mock(async () => ({
+        success: true,
+        data: { verified: true, confidence: "HIGH", reason: "endpoint returned 200" },
+      }))
+
+      const probeFinding: any = {
+        id: "find-sqli-1",
+        title: "Possible SQL injection",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "Login form returns a SQL error page",
+        subtype: "sqli",
+        tool: "scanner",
+        phase: "scan",
+        cwe: "CWE-918",
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: new Date().toISOString() }],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      const runner = new WorkflowRunner(deps)
+      ;(runner as any).executorBridge = deps.bridge
+      const emit = (_event: any) => {}
+      await (runner as any).mcpVerifyFindings([probeFinding], "https://example.com", "ENG-test-002", emit)
+
+      // The probe answered — that is reachability, not a reproduction.
+      expect(probeFinding.verificationResult?.proofStatus).toBe(ProofStatus.SUSPECTED)
+      expect(probeFinding.verificationResult?.controls).toEqual([])
+
+      const engine = new ConfidenceEngine()
+      const asFinding = probeFinding
+      let promoted = engine.promote(asFinding)
+      while (promoted !== asFinding.confidence) {
+        asFinding.confidence = promoted
+        promoted = engine.promote(asFinding)
+      }
+      expect(asFinding.confidence).toBe(3) // HIGH, never VERIFIED/CONFIRMED
+    })
+  })
+
+  // ── BOLA identity rule (Stage 4.2 item 1) ──
+  describe("object-access identity rule", () => {
+    function bolaFinding(overrides: Record<string, unknown> = {}) {
+      return {
+        id: "find-bola-1",
+        title: "IDOR on invoice",
+        severity: 4,
+        confidence: 3,
+        status: "PENDING" as const,
+        description: "Invoice 42 belongs to another user",
+        subtype: "idor",
+        tool: "scanner",
+        phase: "scan",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        ...overrides,
+      }
+    }
+
+    test("a finding with no discovered endpoint is unsupported, not guessed", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      const runner = new WorkflowRunner(deps)
+      const finding = bolaFinding()
+
+      const updated = await (runner as any).verifyFindings(
+        [finding],
+        "https://example.com",
+        { username: "alice", password: "alice-real-pass" },
+        "ENG-bola-1",
+        () => {},
+        {
+          credentialRoles: {
+            victim: { username: "alice", password: "alice-real-pass" },
+            attacker: { username: "mallory", password: "mallory-real-pass" },
+          },
+        },
+      )
+
+      expect(updated[0].verificationResult?.proofStatus).toBe(ProofStatus.UNSUPPORTED)
+      expect(updated[0].verificationResult?.summary).toContain("no discovered endpoint")
+      expect(updated[0].verificationResult?.error?.name).toBe("ObjectAccessPlanError")
+    })
+
+    test("a single supplied identity is unsupported — no fabricated second user", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      const runner = new WorkflowRunner(deps)
+      const finding = bolaFinding({ url: "https://example.com/api/invoices/42" })
+
+      const updated = await (runner as any).verifyFindings(
+        [finding],
+        "https://example.com",
+        { username: "alice", password: "alice-real-pass" },
+        "ENG-bola-2",
+        () => {},
+        {
+          credentialRoles: {
+            victim: { username: "alice", password: "alice-real-pass" },
+          },
+        },
+      )
+
+      expect(updated[0].verificationResult?.proofStatus).toBe(ProofStatus.UNSUPPORTED)
+      expect(updated[0].verificationResult?.summary).toContain('role "attacker" is not in the credential file')
+    })
+  })
+
+  // ── XSS execution proof (Stage 4.3 item 1) ──
+  describe("XSS execution proof", () => {
+    test("a configured payload that cannot report the run's nonce is unsupported, not verified", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      const runner = new WorkflowRunner(deps)
+      const finding = {
+        id: "find-xss-nonce",
+        title: "Reflected XSS in search",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "XSS in /search?q=test",
+        url: "https://example.com/search?q=test",
+        subtype: "xss",
+        tool: "scanner",
+        phase: "scan",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      const updated = await (runner as any).verifyFindings(
+        [finding],
+        "https://example.com",
+        {},
+        "ENG-xss-1",
+        () => {},
+        { xssDefaultPayload: "<script>alert('xss')</script>" },
+      )
+
+      expect(updated[0].verificationResult?.passed).toBe(false)
+      expect(updated[0].verificationResult?.proofStatus).toBe(ProofStatus.UNSUPPORTED)
+      expect(updated[0].verificationResult?.summary).toContain("XSS verification unsupported")
+      expect(updated[0].verificationResult?.error?.name).toBe("XssProbeError")
+    })
+
+    test("a finding with no discovered endpoint is unsupported, not tested against a guessed page", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      const runner = new WorkflowRunner(deps)
+      const finding = {
+        id: "find-xss-guess",
+        title: "XSS somewhere",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "XSS in /contact form",
+        subtype: "xss_stored",
+        tool: "scanner",
+        phase: "scan",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      const updated = await (runner as any).verifyFindings(
+        [finding],
+        "https://example.com",
+        {},
+        "ENG-xss-guess",
+        () => {},
+        {},
+      )
+
+      expect(updated[0].verificationResult?.passed).toBe(false)
+      expect(updated[0].verificationResult?.proofStatus).toBe(ProofStatus.UNSUPPORTED)
+      expect(updated[0].verificationResult?.summary).toContain("requires a discovered endpoint")
+      expect(updated[0].verificationResult?.error?.name).toBe("XssPlanError")
+    })
+
+    test("a discovered endpoint with no injectable parameter is unsupported", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeDeps()
+      const runner = new WorkflowRunner(deps)
+      const finding = {
+        id: "find-xss-noparam",
+        title: "XSS on a page",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "XSS on the search page",
+        url: "https://example.com/search",
+        subtype: "xss_reflected",
+        tool: "scanner",
+        phase: "scan",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      const updated = await (runner as any).verifyFindings(
+        [finding],
+        "https://example.com",
+        {},
+        "ENG-xss-noparam",
+        () => {},
+        {},
+      )
+
+      expect(updated[0].verificationResult?.proofStatus).toBe(ProofStatus.UNSUPPORTED)
+      expect(updated[0].verificationResult?.summary).toContain("no query parameter")
+      expect(updated[0].verificationResult?.error?.name).toBe("XssPlanError")
+    })
   })
 
   // ── Confidence cascade while loop ──
@@ -991,7 +1260,7 @@ describe("formatFindingsSummary", () => {
       return base
     }
 
-    test("promotes MEDIUM→HIGH→VERIFIED→CONFIRMED when browser verification passes", async () => {
+    test("promotes MEDIUM→HIGH→VERIFIED→CONFIRMED when browser verification reproduces the issue", async () => {
       const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
       const { deps } = makeCascadeDeps()
 
@@ -1006,8 +1275,8 @@ describe("formatFindingsSummary", () => {
         tool: "scanner",
         phase: "scan",
         cwe: "CWE-79",
-        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: new Date().toISOString() }],
-        verificationResult: { passed: true, summary: "XSS confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [{ path: "evidence/pkg-1/har.har", type: "har" }], packageHash: "abc", createdAt: new Date().toISOString() }],
+        verificationResult: { passed: true, proofStatus: ProofStatus.REPRODUCED, controls: [{ kind: "control-request", description: "same request without payload" }], confidence: 0.9, summary: "XSS reproduced", verifier: "browser", verifiedAt: new Date().toISOString() },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -1028,7 +1297,7 @@ describe("formatFindingsSummary", () => {
       expect(result.allFindings[0].confidence).toBe(5)
     })
 
-    test("promotes HIGH→VERIFIED→CONFIRMED when starting from HIGH", async () => {
+    test("promotes HIGH→VERIFIED→CONFIRMED when starting from HIGH with reproduced proof", async () => {
       const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
       const { deps } = makeCascadeDeps()
 
@@ -1042,8 +1311,8 @@ describe("formatFindingsSummary", () => {
         subtype: "command_injection",
         tool: "scanner",
         phase: "scan",
-        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: new Date().toISOString() }],
-        verificationResult: { passed: true, summary: "RCE confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [{ path: "evidence/pkg-1/har.har", type: "har" }], packageHash: "abc", createdAt: new Date().toISOString() }],
+        verificationResult: { passed: true, proofStatus: ProofStatus.REPRODUCED, controls: [{ kind: "command-output", description: "id output from injected command" }], confidence: 0.9, summary: "RCE reproduced", verifier: "browser", verifiedAt: new Date().toISOString() },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -1062,6 +1331,45 @@ describe("formatFindingsSummary", () => {
 
       expect(result.allFindings).toHaveLength(1)
       expect(result.allFindings[0].confidence).toBe(5)
+    })
+
+    test("a verifier's bare pass (suspected) stops at HIGH, never CONFIRMED", async () => {
+      const { WorkflowRunner } = await import("../../../src/argus/workflow-runner")
+      const { deps } = makeCascadeDeps()
+
+      const probeOnlyFinding = {
+        id: "find-xss-3",
+        title: "Reflected XSS in search",
+        severity: 3,
+        confidence: 2,
+        status: "PENDING" as const,
+        description: "XSS in /search",
+        subtype: "xss",
+        tool: "scanner",
+        phase: "scan",
+        cwe: "CWE-79",
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [{ path: "evidence/pkg-1/har.har", type: "har" }], packageHash: "abc", createdAt: new Date().toISOString() }],
+        verificationResult: { passed: true, proofStatus: ProofStatus.SUSPECTED, controls: [], confidence: 0.9, summary: "HTTP probe returned 200", verifier: "browser", verifiedAt: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      deps.executor.execute = mock(() => ({
+        phaseId: "phase-0-recon",
+        status: "completed",
+        findings: [probeOnlyFinding],
+        artifacts: [],
+        errors: [],
+        durationMs: 10,
+      }))
+
+      const runner = new WorkflowRunner(deps)
+      const result = await runner.run({ target: "https://example.com" })
+
+      expect(result.allFindings).toHaveLength(1)
+      // Metadata (cwe) and the evidence package carry it to HIGH and no further:
+      // a reachability probe is not a reproduction.
+      expect(result.allFindings[0].confidence).toBe(3)
     })
 
     test("does not promote beyond available metadata", async () => {
@@ -1112,7 +1420,7 @@ describe("formatFindingsSummary", () => {
         subtype: "ssrf",
         tool: "scanner",
         phase: "scan",
-        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: new Date().toISOString() }],
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [{ path: "evidence/pkg-1/har.har", type: "har" }], packageHash: "abc", createdAt: new Date().toISOString() }],
         verificationResult: { passed: false, summary: "SSRF not confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

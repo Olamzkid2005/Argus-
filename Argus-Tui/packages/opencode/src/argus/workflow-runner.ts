@@ -22,12 +22,30 @@ import { detectTargetType, detectAuthState } from "./planner/strategy"
 import { join, resolve } from "path"
 import { Capability, guessCapability } from "./planner/capabilities"
 import type { NormalizedFinding, VerificationResult, EvidencePackage } from "./shared/types"
-import { Severity } from "./shared/types"
+import { ProofStatus, Severity } from "./shared/types"
 import type { PhaseRecord } from "./engagement/types"
+import {
+  buildCheckpoint,
+  type CheckpointActionProvenance,
+  type CheckpointBudgetUsage,
+  type CheckpointProvenanceAction,
+  type CheckpointWorkerBudget,
+} from "./engagement/checkpoint"
+import type { WorkerBudgetStatus } from "./bridge/mcp-client"
 import { VerificationRunner } from "./browser/verifiers/runner"
 import { PlaywrightEngine } from "./browser/engine"
+import { scopeEntriesFor } from "./browser/scope-guard"
+import { verificationResultFrom } from "./browser/proof"
 import { StoredXSSVerifier } from "./browser/verifiers/xss"
+import { XssProbeError } from "./browser/verifiers/xss-probe"
+import { XssPlanError, xssInjectionPointForFinding } from "./browser/verifiers/xss-plan"
+import type { XssDiscovery } from "./browser/verifiers/xss-plan"
 import { BOLAVerifier } from "./browser/verifiers/bola"
+import {
+  ObjectAccessPlanError,
+  discoveredResourceForFinding,
+  objectAccessPlan,
+} from "./browser/bola-plan"
 import { PrivilegeEscalationVerifier } from "./browser/verifiers/priv-esc"
 import { SSRFVerifier } from "./browser/verifiers/ssrf"
 import { LFIVerifier } from "./browser/verifiers/lfi"
@@ -39,6 +57,176 @@ import { handleProgressEvent } from "./tui/scan-store"
 import type { CacheMode } from "./bridge/types"
 import { PROJECT_ROOT, MCP_WORKER_PATH } from "./shared/path"
 import { getTargetValidator } from "./shared/target-validator"
+
+interface PlannedPhaseProvenance {
+  source: CheckpointActionProvenance["source"]
+  reason: string
+  by: string
+}
+
+type CheckpointActionDetail = NonNullable<Parameters<typeof buildCheckpoint>[0]["actionDetails"]>[string]
+
+type BudgetStatusBridge = Pick<WorkersBridge, "budgetStatus">
+
+/** Normalize a planned or replanned phase into its checkpoint authorship record. */
+function plannedPhaseProvenance(
+  phase: import("./planner/types").PhaseExecutionRequest,
+  kind: "plan" | "replan",
+): PlannedPhaseProvenance {
+  if (kind === "plan") {
+    const capabilities = phase.requiredCapabilities.join(", ") || "no capabilities"
+    return {
+      source: "plan",
+      reason: `Approved ${phase.name} with ${capabilities}`,
+      by: "local-operator",
+    }
+  }
+  const replan = phase.config.replan as Partial<PlannedPhaseProvenance> | undefined
+  if (
+    replan &&
+    (replan.source === "replan-rule" || replan.source === "replan-llm" || replan.source === "replan-chain") &&
+    typeof replan.reason === "string" &&
+    replan.reason.length > 0 &&
+    typeof replan.by === "string" &&
+    replan.by.length > 0
+  ) {
+    return { source: replan.source, reason: replan.reason, by: replan.by }
+  }
+  return {
+    source: "replan-rule",
+    reason: `Rule-based replan for ${phase.name}`,
+    by: "local-planner",
+  }
+}
+
+/** Combine planned authorship with the phase's tool-level execution records. */
+function actionDetailForPhase(
+  planned: PlannedPhaseProvenance,
+  status: string,
+  actions: Array<{
+    tool: string
+    outcome: string
+    reasoning?: string
+    identity?: string
+    source: CheckpointProvenanceAction["source"]
+    detail?: string
+  }> = [],
+): CheckpointActionDetail {
+  return {
+    reason: `${planned.reason}; phase ${status.toLowerCase()}`,
+    source: planned.source,
+    by: planned.by,
+    provenance: {
+      source: planned.source,
+      reason: planned.reason,
+      by: planned.by,
+      actions: actions.map((action) => ({
+        tool: action.tool,
+        outcome: action.outcome,
+        reasoning: action.reasoning,
+        identity: action.identity,
+        source: action.source,
+        detail: action.detail,
+      })),
+    },
+  }
+}
+
+/** Read the authoritative worker ledger without letting ledger outages fail the run. */
+async function workerBudgetFor(
+  bridge: BudgetStatusBridge | undefined,
+  engagementId: string,
+): Promise<CheckpointWorkerBudget | undefined> {
+  if (!bridge || typeof bridge.budgetStatus !== "function") return undefined
+  try {
+    const status: WorkerBudgetStatus = await bridge.budgetStatus(engagementId)
+    return {
+      toolCalls: status.toolCalls,
+      executedTools: [...status.executedTools],
+      identities: [...status.identities],
+      sessions: status.sessions,
+    }
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Persist one restart checkpoint (Stage 6.2). Storage failures are raised, not
+ * swallowed: a run whose checkpoint could not be written must not report that
+ * it is resumable. Test doubles without checkpoint support are skipped only
+ * because the concrete store always implements it. The worker ledger is
+ * best-effort: it enriches reconciliation when available but never blocks
+ * checkpoint persistence.
+ */
+async function saveRunCheckpoint(params: {
+  store: IEngagementStore
+  engagement: ReturnType<IEngagementStore["getEngagement"]> & object
+  bridge?: BudgetStatusBridge
+  plan: import("./planner/types").AssessmentPlan
+  phases: PhaseRecord[]
+  target: string
+  roles: string[]
+  findings: NormalizedFinding[]
+  toolCalls: number
+  startedAt: string
+  completedAt?: string
+  limits?: Record<string, number | string | null>
+  actionDetails?: Record<string, CheckpointActionDetail>
+}): Promise<void> {
+  const store = params.store as IEngagementStore & {
+    saveCheckpoint?: (checkpoint: ReturnType<typeof buildCheckpoint>) => void
+  }
+  if (typeof store.saveCheckpoint !== "function") return
+
+  const proofStatus: Record<string, string> = {}
+  for (const finding of params.findings) {
+    proofStatus[finding.id] = finding.verificationResult?.proofStatus ?? "suspected"
+  }
+
+  const engagementId = (params.engagement as { id?: unknown }).id
+  const workerBudget = typeof engagementId === "string"
+    ? await workerBudgetFor(params.bridge, engagementId)
+    : undefined
+  const workerIdentities = (workerBudget?.identities ?? []).map((identity) => `worker:${identity}`)
+  const authIdentities = [...new Set([
+    ...params.roles.map((role) => `credential:${role}`),
+    ...workerIdentities,
+  ])].sort()
+
+  const budgetUsage: CheckpointBudgetUsage = {
+    deadlineAt: process.env.ARGUS_DEADLINE_AT,
+    llmCalls: 0,
+    llmFailures: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+    // The worker's cumulative ledger is authoritative for cost; this TS-side
+    // record is an explicit unknown rather than an invented zero.
+    costKnown: false,
+    toolCalls: params.toolCalls,
+    requestCount: 0,
+  }
+
+  store.saveCheckpoint(buildCheckpoint({
+    engagement: params.engagement,
+    plan: params.plan,
+    phases: params.phases,
+    scope: scopeEntriesFor(params.target),
+    secretRefs: params.roles.map((role) => `credential:${role}`),
+    authIdentities,
+    limits: params.limits,
+    proofStatus,
+    observations: params.findings.map(
+      (finding) => `${finding.tool ?? "unknown"}: ${finding.url ?? finding.title}`,
+    ),
+    budgetUsage,
+    workerBudget,
+    actionDetails: params.actionDetails,
+    startedAt: params.startedAt,
+    completedAt: params.completedAt,
+  }))
+}
 
 export interface WorkflowRunOptions {
   target: string
@@ -102,6 +290,14 @@ export interface WorkflowRunOptions {
    * Overrides the built-in "<img src=x onerror=alert(1)>" default.
    */
   xssDefaultPayload?: string
+  /**
+   * What discovery (or the operator) recorded about the XSS injection point:
+   * the injectable parameter, method, encoding and, for stored XSS, the separate
+   * victim page. The endpoint itself comes from the finding's structured URL.
+   * Without usable discovery data, XSS verification is unsupported rather than
+   * pointed at a guessed page.
+   */
+  xssInjection?: XssDiscovery
 }
 
 export interface VerifyEngagementResult {
@@ -258,6 +454,10 @@ export class WorkflowRunner {
     options?: {
       severityThreshold?: number
       xssDefaultPayload?: string
+      /** Discovered parameter/method/encoding/victim page for XSS testing. */
+      xssInjection?: XssDiscovery
+      /** Every supplied role, so object-access checks can use real identities. */
+      credentialRoles?: Record<string, CredentialEntry>
     },
   ): Promise<NormalizedFinding[]> {
     const threshold = options?.severityThreshold ?? Severity.HIGH
@@ -291,7 +491,9 @@ export class WorkflowRunner {
     emit({ type: "verification_start", phaseId: "", total: toVerify.length })
 
     const runner = new VerificationRunner()
-    const engine = new PlaywrightEngine()
+    // Verification reuses the run's authenticated browser, so the engine is
+    // authorized for the engagement target's origin only (Stage 3.2 item 2).
+    const engine = new PlaywrightEngine({ allowedTargets: scopeEntriesFor(target) })
     const updated: NormalizedFinding[] = []
     let verifierPassed = 0
     let verifierFailed = 0
@@ -310,34 +512,39 @@ export class WorkflowRunner {
           case "xss":
           case "xss_stored":
           case "xss_reflected": {
-            const injectUrl = finding.statusCode ? target : `${target}/contact`
-            // Use the configured default XSS payload when the finding
-            // doesn't include a script payload. Falls back to the built-in
-            // default if neither finding description nor options provide one.
-            const xssPayload = finding.description.includes("<script>")
-              ? finding.description
-              : options?.xssDefaultPayload ?? "<img src=x onerror=alert(1)>"
+            // Stage 4.3: the injection point comes from what discovery found
+            // (the finding's structured endpoint plus the discovered parameter,
+            // method and encoding). The old `${target}/contact` guess is gone,
+            // and a finding without usable discovery data is unsupported.
+            const plan = xssInjectionPointForFinding(finding, target, options?.xssInjection)
+            // The payload must be able to prove its own execution in the
+            // victim view. Only a template with the `{{nonce}}` placeholder
+            // (and the probe call) is accepted; the finding description and a
+            // generic `alert(1)` fallback proved nothing about execution.
             scenario = new StoredXSSVerifier(
               engine,
-              injectUrl,
-              injectUrl,
-              xssPayload,
+              plan,
               undefined,
               engagementId,
               finding.id,
-              options?.xssDefaultPayload,  // pass as defaultPayloadOverride
+              { payloadTemplate: options?.xssDefaultPayload },
             )
             break
           }
           case "bola":
           case "idor": {
-            const resourcePath = finding.description.match(/(\/[^\s]+)/)?.[1] ?? "profile"
+            // Stage 4.2: two real identities and a discovered resource. The
+            // old code invented a "${username}_b" account with the same
+            // password and guessed the path from the description; both are
+            // refused by the plan rule now.
+            const plan = objectAccessPlan(
+              options?.credentialRoles ?? {},
+              discoveredResourceForFinding(finding, target),
+            )
             scenario = new BOLAVerifier(
               engine,
               target,
-              resourcePath,
-              creds!,
-              { username: `${creds!.username}_b`, password: creds!.password },
+              plan,
               undefined,
               engagementId,
               finding.id,
@@ -431,13 +638,12 @@ export class WorkflowRunner {
           findingSubtype: finding.subtype,
         })
         const result = await runner.run(scenario)
-        const verificationResult: VerificationResult = {
-          passed: result.passed,
-          confidence: result.confidenceScore ?? 0,
-          summary: result.summary,
+        // One conversion from verifier result to stored claim: status, controls
+        // and (when a step threw) the verifier's error detail.
+        const verificationResult: VerificationResult = verificationResultFrom({
           verifier: scenario.name,
-          verifiedAt: new Date().toISOString(),
-        }
+          result,
+        })
 
         if (result.passed) {
           verifierPassed++
@@ -463,6 +669,45 @@ export class WorkflowRunner {
         emit(`✓ Verification ${result.passed ? "passed" : "failed"} for ${finding.title}`)
       } catch (error) {
         verifierFailed++
+        if (error instanceof XssProbeError || error instanceof XssPlanError) {
+          // Stage 4.3: a payload that cannot prove execution (or a context that
+          // cannot observe it) is unsupported, never a silent "not vulnerable".
+          updated.push({
+            ...finding,
+            verificationResult: {
+              passed: false,
+              proofStatus: ProofStatus.UNSUPPORTED,
+              confidence: 0,
+              summary: `XSS verification unsupported: ${error.message}`,
+              verifier: "xss",
+              verifiedAt: new Date().toISOString(),
+              controls: [],
+              error: { step: "setup", name: error.name, message: error.message },
+            },
+          })
+          emit(`⚠ XSS verification unsupported for ${finding.title}: ${error.message}`)
+          continue
+        }
+        if (error instanceof ObjectAccessPlanError) {
+          // The check could not be set up honestly (no second identity or no
+          // discovered resource). Record it as unsupported, never as observed.
+          const detail = error as ObjectAccessPlanError
+          updated.push({
+            ...finding,
+            verificationResult: {
+              passed: false,
+              proofStatus: ProofStatus.UNSUPPORTED,
+              confidence: 0,
+              summary: `Object-access verification unsupported: ${detail.message}`,
+              verifier: "bola",
+              verifiedAt: new Date().toISOString(),
+              controls: [],
+              error: { step: "setup", name: detail.name, message: detail.message },
+            },
+          })
+          emit(`⚠ Object-access verification unsupported for ${finding.title}: ${detail.message}`)
+          continue
+        }
         updated.push(finding)
         emit(`⚠ Verification error for ${finding.title}: ${(error as Error).message}`)
       }
@@ -548,6 +793,7 @@ export class WorkflowRunner {
     const credStore = this.deps?.credStore ?? new CredentialStore()
     const creds = options?.credsPath ? credStore.load(options.credsPath) : credStore.load()
     const defaultCreds = credStore.getDefaultCredentials()
+    const credentialRoles = credStore.getAllCredentials()
     credStore.clear()
 
     // Run verification using the existing verifyFindings logic
@@ -557,22 +803,25 @@ export class WorkflowRunner {
       defaultCreds,
       engagementId,
       emit,
-      {
-        severityThreshold: options?.severityThreshold,
-      },
+                  {
+              severityThreshold: options?.severityThreshold,
+              credentialRoles,
+              xssInjection: (options as { xssInjection?: XssDiscovery } | undefined)?.xssInjection,
+            },
     )
 
     // Confidence promotion cascade: full while-loop through all tiers.
     // Each promote() call advances at most one tier, so the while loop
-    // is required to reach CONFIRMED from any starting confidence.
+    // is required to reach CONFIRMED from any starting confidence. The engine
+    // — not a bare `passed` flag — decides where it stops: metadata ends at
+    // HIGH and only a reproduced verification with real proof may confirm, so
+    // repeating promote() cannot override a failed check (Stage 4.1).
     const confidenceEngine = this.deps?.confidenceEngine ?? new ConfidenceEngine()
     for (const finding of verifiedFindings) {
-      if (finding.verificationResult?.passed) {
-        let promoted = confidenceEngine.promote(finding)
-        while (promoted !== finding.confidence) {
-          finding.confidence = promoted
-          promoted = confidenceEngine.promote(finding)
-        }
+      let promoted = confidenceEngine.promote(finding)
+      while (promoted !== finding.confidence) {
+        finding.confidence = promoted
+        promoted = confidenceEngine.promote(finding)
       }
     }
 
@@ -691,10 +940,15 @@ export class WorkflowRunner {
             finderResult.verifiedCount++
             finding.verificationResult = {
               passed: true,
+              // An HTTP probe is reachability, not exploit proof: the finding is
+              // suspected, and the later stages must not promote it further on
+              // the strength of this answer alone.
+              proofStatus: ProofStatus.SUSPECTED,
               confidence: 0.8,  // MCP HTTP verification — reasonable confidence
               summary: `MCP verified: ${result.data.reason ?? "HTTP probe confirmed"}`,
               verifier: "finding_verifier",
               verifiedAt: new Date().toISOString(),
+              controls: [],
             }
             emit(`✓ MCP verification passed for ${finding.title}`)
           } else if (result) {
@@ -953,6 +1207,10 @@ export class WorkflowRunner {
       emit(`✓ Engagement created: \`${engagementId}\``)
     }
 
+    // Stage 6.2: explicit UTC timestamp for the run, persisted in every
+    // checkpoint. Missing progress is never inferred from this timestamp.
+    const runStartedAt = new Date().toISOString()
+
     // ── 2. Load credentials, feature flags & replan config ──
     const featureFlags = new FeatureFlags(options.features)
     let configMaxReplans: number | undefined
@@ -1069,6 +1327,8 @@ export class WorkflowRunner {
     let stopped = false
     // Set inside the try; read in the finally to record gate decisions.
     let approvalAuditExecutor: InProcessExecutor | undefined
+    const phaseProvenance = new Map<string, PlannedPhaseProvenance>()
+    const actionDetails: Record<string, CheckpointActionDetail> = {}
     const bridge = this.deps?.bridge ?? new WorkersBridge(workersPath)
     // Store bridge reference for mcpVerifyFindings() to access
     this.executorBridge = bridge
@@ -1153,6 +1413,9 @@ export class WorkflowRunner {
       let llmReplanCount = 0
       const targetType = detectTargetType(target)
       const authState = detectAuthState(target)
+      for (const initialPhase of plan.phases) {
+        phaseProvenance.set(initialPhase.phaseId, plannedPhaseProvenance(initialPhase, "plan"))
+      }
 
       let i = 0
       while (i < plan.phases.length) {
@@ -1209,6 +1472,8 @@ export class WorkflowRunner {
             {
               severityThreshold: options.verificationSeverityThreshold,
               xssDefaultPayload: options.xssDefaultPayload,
+              xssInjection: options.xssInjection,
+              credentialRoles: this.deps?.credStore?.getAllCredentials() ?? {},
             },
           )
 
@@ -1227,7 +1492,8 @@ export class WorkflowRunner {
           emit({ type: "finding", phaseId: phase.phaseId, severity: String(finding.severity), title: finding.title })
           // Promote confidence iteratively until no more promotions apply.
           // This cascades: MEDIUM→HIGH→VERIFIED→CONFIRMED in a single pass
-          // when browser verification passed (verificationResult.passed === true).
+          // only when a verification reproduced the issue with real proof;
+          // metadata and a bare pass stop at HIGH (Stage 4.1).
           // Each promote() call advances at most one tier.
           let promoted = confidenceEngine.promote(finding)
           while (promoted !== finding.confidence) {
@@ -1243,6 +1509,33 @@ export class WorkflowRunner {
         finalRecord.completedAt = new Date().toISOString()
         if (result.errors.length > 0) finalRecord.error = result.errors.join("; ")
         store.savePhase(engagementId, finalRecord)
+
+        // Stage 6.2 item 1: persist the approved plan, phase results, proof
+        // status and budget usage at every phase boundary, so a restart resumes
+        // this run instead of inventing a new one.
+        actionDetails[phase.phaseId] = actionDetailForPhase(
+          phaseProvenance.get(phase.phaseId) ?? plannedPhaseProvenance(phase, "replan"),
+          phaseStatus,
+          result.actionRecords ?? [],
+        )
+        await saveRunCheckpoint({
+          store,
+          engagement: store.getEngagement(engagementId)!,
+          bridge,
+          plan,
+          phases: Array.from(phaseRecords.values()),
+          target,
+          roles: credStore.listRoles(),
+          findings: allFindings,
+          toolCalls: i + 1,
+          startedAt: runStartedAt,
+          limits: {
+            maxReplans: configMaxReplans ?? null,
+            llmMaxReplans: configLlmMaxReplans ?? null,
+            deadlineAt: process.env.ARGUS_DEADLINE_AT ?? null,
+          },
+          actionDetails: { ...actionDetails },
+        })
 
         const findingCount = phaseFindings.length
         const errorCount = result.errors.length
@@ -1432,6 +1725,7 @@ export class WorkflowRunner {
               plan.phases.splice(i + 1 + insertOffset, 0, rp)
               insertOffset++
               plan.errorRecovery[rp.phaseId] = "retry_once_then_skip"
+              phaseProvenance.set(rp.phaseId, plannedPhaseProvenance(rp, "replan"))
               phaseRecords.set(rp.phaseId, {
                 id: rp.phaseId,
                 engagementId,
@@ -1487,8 +1781,38 @@ export class WorkflowRunner {
 
       let persistError: Error | null = null
       try {
-        const allCompleted = Array.from(phaseRecords.values()).every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")
-        store.updateStatus(engagementId, executionError ? "FAILED" : allCompleted && !stopped ? "COMPLETED" : "PAUSED")
+        const records = Array.from(phaseRecords.values())
+        const allCompleted = records.every((p) => p.status === "COMPLETED" || p.status === "PARTIAL")
+        // Stage 6.2 item 4: explicit terminal states. A cooperative stop is
+        // INTERRUPTED (resumable), never PAUSED and never COMPLETED; a run whose
+        // phases are all terminal but not all successful is PARTIAL.
+        const finalStatus = executionError
+          ? "FAILED"
+          : stopped
+            ? "INTERRUPTED"
+            : allCompleted
+              ? "COMPLETED"
+              : "PARTIAL"
+        store.updateStatus(engagementId, finalStatus)
+        await saveRunCheckpoint({
+          store,
+          engagement: store.getEngagement(engagementId)!,
+          bridge,
+          plan,
+          phases: records,
+          target,
+          roles: credStore.listRoles(),
+          findings: allFindings,
+          toolCalls: records.length,
+          startedAt: runStartedAt,
+          completedAt: new Date().toISOString(),
+          limits: {
+            maxReplans: configMaxReplans ?? null,
+            llmMaxReplans: configLlmMaxReplans ?? null,
+            deadlineAt: process.env.ARGUS_DEADLINE_AT ?? null,
+          },
+          actionDetails: { ...actionDetails },
+        })
         store.saveFindings(engagementId, allFindings)
       } catch (err) {
         persistError = err as Error

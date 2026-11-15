@@ -247,3 +247,172 @@ describe("resume audit log entries", () => {
     expect(resumed.status).toBe("RUNNING")
   })
 })
+
+// ── Stage 6.2: resume from the saved checkpoint, never a fresh plan ──
+
+import { buildCheckpoint } from "../../../src/argus/engagement/checkpoint"
+import { scopeEntriesFor } from "../../../src/argus/browser/scope-guard"
+import type { AssessmentPlan } from "../../../src/argus/planner/types"
+
+function savedPlan(): AssessmentPlan {
+  return {
+    workflow: "full_assessment",
+    phases: [],
+    errorRecovery: {},
+    planCreatedAt: "2026-11-14T10:00:00.000Z",
+  }
+}
+
+function saveCheckpointFor(
+  store: EngagementStore,
+  engagementId: string,
+  overrides?: { scope?: string[]; actions?: Parameters<typeof buildCheckpoint>[0]["phases"] },
+) {
+  const engagement = store.getEngagement(engagementId)!
+  const started = new Date(Date.parse(engagement.createdAt) + 1000).toISOString()
+  store.saveCheckpoint(
+    buildCheckpoint({
+      engagement,
+      plan: savedPlan(),
+      phases: overrides?.actions ?? [],
+      scope: overrides?.scope ?? scopeEntriesFor(engagement.target),
+      budgetUsage: {
+        llmCalls: 2,
+        llmFailures: 0,
+        inputTokens: 10,
+        outputTokens: 5,
+        costUsd: 0.01,
+        costKnown: true,
+        toolCalls: 1,
+        requestCount: 2,
+      },
+      startedAt: started,
+      now: new Date(Date.parse(engagement.createdAt) + 300_000),
+    }),
+  )
+}
+
+describe("resume uses the saved checkpoint", () => {
+  test("refuses to resume a run with no checkpoint instead of inventing a plan", async () => {
+    const store = makeStore("checkpoint-missing")
+    const eng = store.createEngagement("https://example.com", "full_assessment")
+    store.updateStatus(eng.id, "INTERRUPTED")
+    const { resumeCommand } = await import("../../../src/argus/commands/resume")
+
+    const result = await resumeCommand(eng.id, { storeOverride: store })
+
+    expect(result).toContain("no saved checkpoint")
+    expect(store.getEngagement(eng.id)!.status).toBe("PAUSED")
+  })
+
+  test("rejects a checkpoint whose scope is wider than the engagement scope", async () => {
+    const store = makeStore("checkpoint-wide-scope")
+    const eng = store.createEngagement("https://example.com", "full_assessment")
+    store.updateStatus(eng.id, "INTERRUPTED")
+    saveCheckpointFor(store, eng.id, { scope: ["https://other.example:443"] })
+    const { resumeCommand } = await import("../../../src/argus/commands/resume")
+
+    const result = await resumeCommand(eng.id, { storeOverride: store })
+
+    expect(result).toContain("wider")
+    expect(store.getEngagement(eng.id)!.status).toBe("PAUSED")
+  })
+
+  test("pauses on an ambiguous in-flight state-changing action", async () => {
+    const store = makeStore("checkpoint-ambiguous")
+    const eng = store.createEngagement("https://example.com", "full_assessment")
+    store.updateStatus(eng.id, "INTERRUPTED")
+    saveCheckpointFor(store, eng.id, {
+      actions: [
+        {
+          id: "phase-exploit",
+          engagementId: eng.id,
+          name: "web_exploitation",
+          status: "RUNNING",
+          capabilities: [],
+          executionMode: "sequential",
+          replanCycle: false,
+        },
+      ],
+    })
+    const { resumeCommand } = await import("../../../src/argus/commands/resume")
+
+    const result = await resumeCommand(eng.id, { storeOverride: store })
+
+    expect(result).toContain("not safe to replay")
+    expect(store.getEngagement(eng.id)!.status).toBe("PAUSED")
+    const audit = store.getAuditLog(eng.id)
+    expect(audit.some((entry) => entry.eventType === "RESUME_PAUSED")).toBe(true)
+  })
+
+  test("an interrupted read-only scan is retried, not paused", async () => {
+    const store = makeStore("checkpoint-readonly-retry")
+    const eng = store.createEngagement("https://example.com", "full_assessment")
+    store.updateStatus(eng.id, "INTERRUPTED")
+    saveCheckpointFor(store, eng.id, {
+      actions: [
+        {
+          id: "phase-scan",
+          engagementId: eng.id,
+          name: "sqlmap",
+          status: "RUNNING",
+          capabilities: [],
+          executionMode: "sequential",
+          replanCycle: false,
+        },
+      ],
+    })
+    const { resumeCommand } = await import("../../../src/argus/commands/resume")
+
+    const result = await resumeCommand(eng.id, { storeOverride: store })
+
+    expect(result).not.toContain("not safe to replay")
+    const audit = store.getAuditLog(eng.id)
+    expect(audit.some((entry) => entry.eventType === "RESUME_RETRY_READ_ONLY")).toBe(true)
+  })
+})
+
+describe("missingCredentialRefs", () => {
+  test("requires exact roles and rejects unnamespaced references", async () => {
+    const { missingCredentialRefs } = await import("../../../src/argus/commands/resume")
+    expect(missingCredentialRefs(["credential:attacker"], ["attacker"])).toEqual([])
+    expect(missingCredentialRefs(["credential:attacker"], ["victim"])).toEqual(["credential:attacker"])
+    expect(missingCredentialRefs(["attacker"], ["attacker"])).toEqual(["attacker"])
+    expect(missingCredentialRefs(["credential:"], ["attacker"])).toEqual(["credential:"])
+  })
+})
+
+describe("resume uses the saved checkpoint", () => {
+  test("completed work is not retried on a valid checkpoint", async () => {
+    const store = makeStore("checkpoint-readonly")
+    const eng = store.createEngagement("https://example.com", "full_assessment")
+    store.updateStatus(eng.id, "INTERRUPTED")
+    saveCheckpointFor(store, eng.id, {
+      actions: [
+        {
+          id: "phase-recon",
+          engagementId: eng.id,
+          name: "recon",
+          status: "COMPLETED",
+          capabilities: [],
+          executionMode: "sequential",
+          replanCycle: false,
+          startedAt: new Date(Date.parse(eng.createdAt) + 60_000).toISOString(),
+          completedAt: new Date(Date.parse(eng.createdAt) + 120_000).toISOString(),
+        },
+      ],
+    })
+    const { resumeCommand } = await import("../../../src/argus/commands/resume")
+
+    // The plan has no phases, so a valid checkpoint ends before executing
+    // anything; the point of the assertion is that validation accepted it and
+    // the completed action was not scheduled for a replay.
+    const result = await resumeCommand(eng.id, { storeOverride: store })
+    expect(result).not.toContain("cannot be resumed")
+    expect(result).not.toContain("not safe to replay")
+    const audit = store.getAuditLog(eng.id)
+    const restored = audit.find((entry) => entry.eventType === "RESUME_RESTORED")
+    expect(restored).toBeDefined()
+    expect(restored!.message).toContain("1 completed action")
+  })
+})
