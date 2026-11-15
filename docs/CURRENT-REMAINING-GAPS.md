@@ -25,7 +25,7 @@
 
 A CLI smoke-test cleanup also fixed a test-order artifact: the doctor handler intentionally sets `process.exitCode = 1` when a health check fails, which previously left an otherwise all-green TypeScript unit invocation exiting nonzero. The CLI smoke tests now restore `process.exitCode = 0` after each test.
 
-This item remains open because the repository-workspace `bare Argus terminal` PTY gate reaches its own 180-second timeout without displaying `/assess`, while the in-process TUI lifecycle suite passes. Database, Docker, and live Gate A/B checks also remain unrun/blocked in this environment. The suites above were run as separate service-independent invocations because of the five-minute limit on an individual validation command.
+This item remains open because the repository-workspace `bare Argus terminal` PTY gate reaches its own 180-second timeout without displaying `/assess`, while the in-process TUI lifecycle suite passes. The service-backed half has improved: on 2026-11-15 PostgreSQL 16.2, Redis 7.2.5 (password-protected) and the Celery worker were provisioned natively, a disposable database was built from scratch by the migration runner (33 migrations, with a deliberately broken migration proven fatal), and Gate B passed 24/24 criteria on the controlled lab (`livefire-runs/livefire-lab-20261115-133508/verdict.json`). Docker, `trivy`, `nmap` and an `argus` PATH install remain unavailable to this account, and Gate A (three cold runs through `/assess`) is still blocked by the PTY launcher. The suites above were run as separate service-independent invocations because of the five-minute limit on an individual validation command.
 
 The prior full Python worker-suite run reported:
 

@@ -88,6 +88,8 @@ The worker must consume the phase queues (`recon`, `scan`, `analyze`, `report`) 
 declares them, so a plain `celery -A celery_app worker` picks them up, and `scripts/mac/start-argus.sh`
 passes them explicitly with `-Q`.
 
+On a host without Docker there is no `docker-entrypoint-initdb.d`, so the migration runner applies `database/init/01-schema.sql` and `02-audit.sql` itself when the database has no `organizations` table; `python -m database.migrations.runner` is therefore enough to build a fresh database, and a failing migration exits non-zero with a `failed` row instead of being counted as applied. If Redis requires a password, put it in `REDIS_URL` (`redis://:password@host:6379/0`) so the worker, the harness and `argus doctor` all authenticate.
+
 `PSQL` is how the harness reaches the database (`psql …` or `docker compose exec …`); `WORKER_LOG`
 and `WORKER_PID` let it read the worker's events and sample its memory, which Docker would otherwise
 provide. The run ends with a pass/fail verdict in `${LOG_DIR}/verdict.json` and exits non-zero when a
