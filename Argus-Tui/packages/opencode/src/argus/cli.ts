@@ -101,11 +101,30 @@ export const ArgusAssessCommand = {
       credsPath: argv.creds as string | undefined,
       features: featureOverrides,
       shouldStop: () => stop.requested,
-    }).then((result) => {
-      if (result?.stopped) {
+    }).then(async (result) => {
+      if (!result) return
+      if (result.stopped) {
         process.stderr.write("[Argus] Run stopped at a phase boundary; findings so far are saved\n")
         process.exitCode = 130
+        return
       }
+      // Ctrl-C during a phase can end the run before the runner reaches its own
+      // stop check: the phase is torn down and the run returns unsuccessful
+      // with the engagement still RUNNING. The operator asked for a stop, so
+      // record the engagement as INTERRUPTED (resumable) and exit non-zero
+      // rather than reporting a normal completion.
+      if (stop.requested) {
+        try {
+          const { EngagementStore } = await import("./engagement/store")
+          new EngagementStore().updateStatus(result.engagementId, "INTERRUPTED")
+        } catch (err) {
+          process.stderr.write(`[Argus] Could not mark ${result.engagementId} INTERRUPTED: ${(err as Error).message}\n`)
+        }
+        process.stderr.write("[Argus] Cancelled — engagement marked INTERRUPTED; findings so far are saved\n")
+        process.exitCode = 130
+        return
+      }
+      if (!result.success) process.exitCode = 1
     }).catch((e: Error) => {
       // A refused or failed run must be observable to an unattended driver —
       // swallowing the error left `argus assess` exiting 0, so a scope guard
