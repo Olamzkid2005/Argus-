@@ -27,6 +27,9 @@ class ToolExecution:
     duration_ms: int
     finding_count: int
     summary: str
+    # Non-secret identity label the action used, when one was named. This is
+    # provenance metadata only; secret values are redacted before recording.
+    identity: str = ""
 
 
 @dataclass
@@ -58,6 +61,22 @@ class AgentSession:
     # Per-step provenance, parallel to `current_plan`: "llm" for a tool the
     # engine chose, "deterministic" for one the fallback order supplied.
     plan_sources: list[str] = field(default_factory=list)
+    # Per-step arguments, parallel to `current_plan` (Stage 5.1 item 2). A step
+    # is (tool, arguments), so the choice's arguments reach the executor instead
+    # of being discarded when the plan is reduced to tool names.
+    plan_arguments: list[dict] = field(default_factory=list)
+    # Action signatures already issued (signature -> tool) and how many times
+    # each tool ran. Dedupe is by whole action, not by tool name, so a revisit
+    # with different arguments is a different action (Stage 5.1 item 3).
+    action_signatures: dict[str, str] = field(default_factory=dict)
+    action_counts: dict[str, int] = field(default_factory=dict)
+    # Tool names that actually executed, for required-coverage accounting.
+    executed_tools: list[str] = field(default_factory=list)
+    stop_requested: bool = False
+    required_coverage: list[str] = field(default_factory=list)
+    # Structured, engagement-keyed observations mirrored on the session so the
+    # replan prompt can include discovered endpoints/parameters (Stage 5.1).
+    structured_observations: list[dict] = field(default_factory=list)
     # 2.2 protocol: exactly one advancement owner. `agent_next` issues an
     # action (with a stable action_id); `agent_observe` only acknowledges it.
     # The last issued action is remembered so an observation for an unknown
@@ -238,6 +257,7 @@ class AgentSessionStore:
         session_id: str,
         plan: list[str],
         sources: list[str] | None = None,
+        argument_map: list[dict] | None = None,
     ) -> None:
         """Set the current hybrid plan for the session and reset step counter.
 
@@ -256,6 +276,11 @@ class AgentSessionStore:
             session.current_plan = plan
             session.plan_sources = (
                 list(sources) if sources else ["deterministic"] * len(plan)
+            )
+            session.plan_arguments = (
+                [dict(argument_map[i]) if i < len(argument_map) else {} for i in range(len(plan))]
+                if argument_map
+                else [{} for _ in plan]
             )
             session.plan_step = 0
 
@@ -326,6 +351,112 @@ class AgentSessionStore:
                 session.plan_step += 1
                 return tool, source
         return None
+
+    def advance_plan_entry(self, session_id: str) -> tuple[str, str, dict] | None:
+        """Return the next ``(tool, source, arguments)``, or None if complete.
+
+        Stage 5.1 item 2: the arguments chosen with the tool travel with it.
+        A plan stored as names only yields an empty argument map, which the
+        caller fills with the session target.
+        """
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            if session.current_plan is not None and session.plan_step < len(
+                session.current_plan
+            ):
+                index = session.plan_step
+                tool = session.current_plan[index]
+                source = (
+                    session.plan_sources[index]
+                    if index < len(session.plan_sources)
+                    else "deterministic"
+                )
+                arguments = (
+                    dict(session.plan_arguments[index])
+                    if index < len(session.plan_arguments)
+                    else {}
+                )
+                session.plan_step += 1
+                return tool, source, arguments
+        return None
+
+    def record_action_signature(self, session_id: str, tool: str, signature: str) -> None:
+        """Remember an issued action's signature and count the tool's runs."""
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            session.action_signatures[signature] = tool
+            session.action_counts[tool] = session.action_counts.get(tool, 0) + 1
+
+    def action_signatures(self, session_id: str) -> dict[str, str]:
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            return dict(session.action_signatures)
+
+    def action_counts(self, session_id: str) -> dict[str, int]:
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            return dict(session.action_counts)
+
+    def record_executed_tool(self, session_id: str, tool: str) -> None:
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            if tool and tool not in session.executed_tools:
+                session.executed_tools.append(tool)
+
+    def session_ids_for_engagement(self, engagement_id: str) -> list[str]:
+        """Return session ids belonging to an engagement, for budget status."""
+        if not engagement_id:
+            return []
+        with self._lock:
+            return [
+                session.session_id
+                for session in self._sessions.values()
+                if getattr(session, "engagement_id", "") == engagement_id
+            ]
+
+    def executions_for_engagement(self, engagement_id: str) -> list[ToolExecution]:
+        """Return copies of tool executions for every session of an engagement.
+
+        The worker's session ledger is the authoritative record of what hybrid
+        actions actually ran; TypeScript checkpoints reconcile against this
+        instead of assuming their dispatched count survived intact.
+        """
+        if not engagement_id:
+            return []
+        with self._lock:
+            executions: list[ToolExecution] = []
+            for session in self._sessions.values():
+                if getattr(session, "engagement_id", "") == engagement_id:
+                    executions.extend(copy.deepcopy(session.tool_history))
+            return executions
+
+    def set_required_coverage(self, session_id: str, required: list[str]) -> None:
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            session.required_coverage = [str(item) for item in (required or []) if str(item)]
+
+    def set_stop_requested(self, session_id: str, requested: bool = True) -> None:
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            session.stop_requested = bool(requested)
+
+    def add_structured_observations(self, session_id: str, observations: list[dict]) -> int:
+        """Append structured observations to the session, deduplicated by value."""
+        added = 0
+        with self._lock:
+            session = self._get_and_touch(session_id)
+            existing = {
+                (record.get("kind"), record.get("value"))
+                for record in session.structured_observations
+            }
+            for record in observations or []:
+                key = (record.get("kind"), record.get("value"))
+                if key in existing:
+                    continue
+                session.structured_observations.append(dict(record))
+                existing.add(key)
+                added += 1
+        return added
 
     def record_issued_action(self, session_id: str, tool: str) -> str:
         """Remember the action just issued by `agent_next` and return its id.

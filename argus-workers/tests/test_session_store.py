@@ -131,3 +131,64 @@ class TestAddFinding:
     def test_raises_on_missing_session(self, store):
         with pytest.raises(ValueError, match="not found"):
             store.add_finding("nonexistent", {"title": "test"})
+
+
+class TestStage5PlanArguments:
+    """Stage 5.1 item 2: plan entries keep their arguments."""
+
+    def test_advance_plan_entry_returns_arguments_with_the_tool(self, store, session_id):
+        store.set_plan(
+            session_id,
+            ["nuclei", "nmap"],
+            sources=["llm", "llm"],
+            argument_map=[{"severity": "high"}, {}],
+        )
+        assert store.advance_plan_entry(session_id) == ("nuclei", "llm", {"severity": "high"})
+        assert store.advance_plan_entry(session_id) == ("nmap", "llm", {})
+        assert store.advance_plan_entry(session_id) is None
+
+    def test_names_only_plan_yields_empty_arguments(self, store, session_id):
+        store.set_plan(session_id, ["nuclei"])
+        assert store.advance_plan_entry(session_id) == ("nuclei", "deterministic", {})
+
+    def test_partial_argument_map_is_padded(self, store, session_id):
+        store.set_plan(session_id, ["nuclei", "nmap"], argument_map=[{"severity": "high"}])
+        store.advance_plan_entry(session_id)
+        assert store.advance_plan_entry(session_id) == ("nmap", "deterministic", {})
+
+
+class TestStage5SessionPolicyState:
+    """Stage 5.1 item 3 + Stage 5.2 item 6 session state."""
+
+    def test_action_signatures_and_counts_are_tracked(self, store, session_id):
+        store.record_action_signature(session_id, "nuclei", "sig-a")
+        store.record_action_signature(session_id, "nuclei", "sig-b")
+        assert store.action_signatures(session_id) == {"sig-a": "nuclei", "sig-b": "nuclei"}
+        assert store.action_counts(session_id) == {"nuclei": 2}
+
+    def test_executed_tools_and_coverage_are_recorded(self, store, session_id):
+        store.record_executed_tool(session_id, "nuclei")
+        store.record_executed_tool(session_id, "nuclei")
+        store.set_required_coverage(session_id, ["nuclei", "nmap"])
+        store.set_stop_requested(session_id)
+        session = store.get(session_id)
+        assert session.executed_tools == ["nuclei"]
+        assert session.required_coverage == ["nuclei", "nmap"]
+        assert session.stop_requested is True
+
+    def test_structured_observations_are_deduplicated(self, store, session_id):
+        first = store.add_structured_observations(
+            session_id,
+            [
+                {"kind": "endpoint", "value": "https://example.com/a"},
+                {"kind": "endpoint", "value": "https://example.com/a"},
+            ],
+        )
+        second = store.add_structured_observations(
+            session_id, [{"kind": "endpoint", "value": "https://example.com/a"}]
+        )
+        assert first == 1
+        assert second == 0
+        assert store.get(session_id).structured_observations == [
+            {"kind": "endpoint", "value": "https://example.com/a"}
+        ]
