@@ -45,6 +45,9 @@ mock.module("playwright", () => {
     addCookies: async () => {},
     setExtraHTTPHeaders: async () => {},
     addInitScript: async () => {},
+    // The engine installs its scope guard at context level; tests that exercise
+    // the guard's decisions live in scope-guard.test.ts.
+    route: async () => {},
   }
 
   const mockBrowser = {

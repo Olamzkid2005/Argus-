@@ -1,5 +1,11 @@
-import type { Browser, BrowserContext, Page } from "playwright"
+import type { Browser, BrowserContext, Page, Route } from "playwright"
 import type { Observation } from "./types"
+import {
+  BrowserScope,
+  BrowserScopeError,
+  type ScopeViolation,
+  isScopeableUrl,
+} from "./scope-guard"
 import { existsSync, mkdirSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
@@ -96,9 +102,22 @@ export interface BrowserEngineOptions {
   disableFingerprintSpoofing?: boolean
 }
 
+export interface PlaywrightEngineScopeOptions {
+  /**
+   * Explicitly authorized entries for this run (host/port, origin, or glob).
+   * The engagement target is normally passed here by the caller; with none the
+   * first navigation pins the run's own origin instead.
+   */
+  allowedTargets?: string[]
+  /** `enforce` (default) aborts out-of-scope requests; `warn` logs and allows. */
+  mode?: "enforce" | "warn"
+}
+
 export class PlaywrightEngine implements BrowserEngine {
   private browser: Browser | null = null
   private context: BrowserContext | null = null
+  /** Parsed-origin authorization applied to every navigation and subresource. */
+  readonly scope: BrowserScope
   private harPath: string | null = null
   /** Tracks all HAR files created across multiple context switches. */
   private allHarPaths: string[] = []
@@ -106,6 +125,15 @@ export class PlaywrightEngine implements BrowserEngine {
   private navigationResponseHeaders = new WeakMap<Page, Record<string, string>>()
   /** Stores stealth options from the last createContext() call. */
   private _stealthOptions: { disableMouseSimulation?: boolean } = {}
+
+  constructor(options?: PlaywrightEngineScopeOptions) {
+    this.scope = new BrowserScope(options?.allowedTargets ?? [], options?.mode ?? "enforce")
+  }
+
+  /** Requests refused by the scope guard, in order. */
+  get scopeViolations(): ScopeViolation[] {
+    return this.scope.violations
+  }
 
   async launch(headless = true, userAgent?: string): Promise<void> {
     const { chromium } = await import("playwright")
@@ -206,6 +234,14 @@ export class PlaywrightEngine implements BrowserEngine {
     await this.context.setExtraHTTPHeaders({
       "Accept-Language": acceptLanguage,
     })
+
+    // ── Scope guard: every request in this context, for its whole lifetime ──
+    // A context carries the logged-in session, so the guard has to sit at the
+    // context rather than on one page: navigations, XHR/fetch, subresources,
+    // iframes, popups and redirect hops all pass through here. Aborting is what
+    // keeps session cookies and `Authorization` headers off an out-of-scope
+    // host — the request is stopped before the browser reads them.
+    await this.context.route("**/*", (route) => this.guardRequest(route))
 
     // ── Stealth: Apply comprehensive patches to remove automation fingerprints ──
     // Removes navigator.webdriver property, overrides navigator.plugins length,
@@ -486,8 +522,63 @@ export class PlaywrightEngine implements BrowserEngine {
     }
   }
 
+  /**
+   * The scope decision for one request, applied as abort/continue.
+   *
+   * Kept separate from navigate() because the context guard sees requests the
+   * verifier never asked for: a `<script src>` pointing off-origin, an iframe,
+   * a popup, an XHR, or a redirect hop the initial URL did not mention.
+   */
+  private async guardRequest(route: Route): Promise<void> {
+    const request = route.request()
+    const url = request.url()
+
+    // data:/blob:/about: subresources are local to the page and carry no
+    // session to another host; only network URLs are scope decisions.
+    if (!isScopeableUrl(url)) {
+      await route.continue().catch(() => {})
+      return
+    }
+
+    const decision = this.scope.authorize(url)
+    if (decision.authorized) {
+      await route.continue().catch(() => {})
+      return
+    }
+
+    let navigation = false
+    try {
+      navigation = request.isNavigationRequest()
+    } catch {
+      navigation = false
+    }
+    this.scope.recordViolation(url, decision.reason, navigation)
+
+    if (this.scope.mode === "warn") {
+      await route.continue().catch(() => {})
+      return
+    }
+    await route.abort("blockedbyclient").catch(() => {})
+  }
+
   async navigate(url: string): Promise<Page> {
     if (!this.context) throw new Error("No browser context")
+
+    // A run with no explicit entries is authorized for its own target: the
+    // first navigation names that origin, and every later request must stay on
+    // it. With entries, the decision is theirs (plus a pinned engagement
+    // target), so an out-of-scope URL is refused before a page is created and
+    // before any request — or any session header — leaves the process.
+    if (this.scope.entries.length === 0 && !this.scope.pinnedOrigin) {
+      this.scope.pinOrigin(url)
+    }
+
+    const decision = this.scope.authorize(url)
+    if (!decision.authorized && this.scope.mode === "enforce") {
+      this.scope.recordViolation(url, decision.reason, true)
+      throw new BrowserScopeError(url, decision.reason)
+    }
+
     const page: Page = await this.context.newPage()
     const response = await page.goto(url, { waitUntil: "networkidle", timeout: 30000 })
     // Store the response headers for this page so observe() can access them.
