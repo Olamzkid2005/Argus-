@@ -180,18 +180,22 @@ scenario_cancel() {
   local log="$OUT/5-cancel.log"
   local home="$OUT/home-cancel"
   mkdir -p "$home"
-  run_assess "$home" "$log" &
-  local run=$!
-  sleep 45
-  kill -INT $run 2>/dev/null
-  wait $run 2>/dev/null
+  # SIGINT must come from `timeout`, not from the script: bash starts a
+  # background job with SIGINT ignored, so a run launched as `cmd &` never sees
+  # Ctrl-C and the rehearsal "passes" against a process that was never signalled
+  # (measured: the whole assessment ran to completion). `timeout` runs the CLI in
+  # the foreground and delivers the signal itself; --preserve-status keeps the
+  # CLI's own exit code instead of 124.
+  timeout --preserve-status -s INT -k 120 45 env HOME="$home" ARGUS_DATA_DIR="$home/.argus" \
+    ARGUS_SCOPE_MODE=allowlist ARGUS_ALLOWED_TARGETS=127.0.0.1 \
+    "${CLI[@]}" assess "$TARGET" >"$log" 2>&1
   local code=$?
   local engagement
   engagement=$(ls -t "$home/.argus/engagements" 2>/dev/null | head -1)
   if [ -z "$engagement" ]; then failed "cancellation" "no engagement persisted"; return; fi
   local status
   status=$(engagement_status "$home/.argus/argus.db")
-  if [ $code -eq 124 ]; then failed "cancellation" "ignored Ctrl-C until the deadline"; return; fi
+  if [ $code -eq 124 ]; then failed "cancellation" "ignored Ctrl-C for 120s"; return; fi
   if [ "$status" != "INTERRUPTED" ]; then failed "cancellation" "status is $status, not INTERRUPTED (exit $code)"; return; fi
   if [ $code -eq 0 ]; then failed "cancellation" "interrupted run exited 0"; return; fi
   pass "cancelled run recorded INTERRUPTED and exited $code"
