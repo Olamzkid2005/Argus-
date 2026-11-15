@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { VerificationRunner } from "../../../../../src/argus/browser/verifiers/runner"
 import type { VerificationScenario, VerifierResult } from "../../../../../src/argus/browser/types"
 import { Confidence } from "../../../../../src/argus/planner/types"
+import { ProofStatus } from "../../../../../src/argus/shared/types"
 
 const passingScenario: VerificationScenario = {
   name: "test",
@@ -129,7 +130,11 @@ describe("VerificationRunner", () => {
     expect(result.passed).toBe(false)
     expect(result.confidence).toBe(0)
     expect(result.evidence).toHaveLength(0)
-    expect(result.summary).toBe("Verification failed: Setup failed")
+    // The summary names the failing step so "could not verify" is not
+    // indistinguishable from a negative (Stage 4.1).
+    expect(result.summary).toBe("Verification failed during setup: Setup failed")
+    expect(result.proofStatus).toBe(ProofStatus.INCONCLUSIVE)
+    expect(result.error).toMatchObject({ step: "setup", message: "Setup failed" })
   })
 
   test("Handles scenario where verify returns passed=false", async () => {

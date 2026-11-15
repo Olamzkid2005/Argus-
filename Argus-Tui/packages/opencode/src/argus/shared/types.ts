@@ -40,12 +40,62 @@ export interface NormalizedFinding {
   verificationResult?: VerificationResult
 }
 
+/**
+ * What a verification actually established (Stage 4.1).
+ *
+ * `suspected` is the honest default for a check that passed without the
+ * verifier observing the exploit; only an observed reproduction may be
+ * `reproduced`. `inconclusive` carries a `VerifierErrorDetail`, and
+ * `unsupported` marks an issue type that has no real verification yet.
+ */
+export enum ProofStatus {
+  SUSPECTED = "suspected",
+  REPRODUCED = "reproduced",
+  NOT_REPRODUCED = "not_reproduced",
+  INCONCLUSIVE = "inconclusive",
+  UNSUPPORTED = "unsupported",
+}
+
+/** A comparison the verifier held fixed while testing (baseline/secure twin/etc.). */
+export interface ControlReference {
+  /** What kind of control this is, e.g. `control-request`, `second-identity`. */
+  kind: string
+  description: string
+  /** Identifier of the request/identity/session when one exists. */
+  reference?: string
+  /** What the control showed, in the verifier's words. */
+  outcome?: string
+  /** Evidence artifact path, when the control was captured. */
+  evidencePath?: string
+}
+
+/** How the verifier's browser/session teardown ended (Stage 4.3 item 3). */
+export interface CleanupOutcome {
+  ok: boolean
+  detail: string
+}
+
+/** Where a verification stopped and why. */
+export interface VerifierErrorDetail {
+  step: "setup" | "execute" | "verify" | "collectEvidence" | "cleanup"
+  name: string
+  message: string
+}
+
 export interface VerificationResult {
   passed: boolean
+  /** Authoritative outcome; `confidence` never substitutes for it. */
+  proofStatus: ProofStatus
   confidence: number  // 0.0-1.0 float — graded confidence score from the verifier
   summary: string
   verifier: string
   verifiedAt: string
+  /** Comparisons the verifier used to reach this result. */
+  controls: ControlReference[]
+  /** Present only when the verification could not complete. */
+  error?: VerifierErrorDetail
+  /** What happened to the resources the verification opened (Stage 4.3). */
+  cleanup?: CleanupOutcome
 }
 
 // Note: This file uses camelCase for in-memory/API transfer.

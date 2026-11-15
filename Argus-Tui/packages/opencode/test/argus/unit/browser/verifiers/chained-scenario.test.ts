@@ -1,6 +1,7 @@
 import { describe, it, expect, mock } from "bun:test"
 import { ChainedScenario } from "../../../../../src/argus/browser/verifiers/chained-scenario"
-import { Confidence } from "../../../../../src/argus/shared/types"
+import { Confidence, ProofStatus } from "../../../../../src/argus/shared/types"
+import { chainProofStatus } from "../../../../../src/argus/browser/proof"
 
 const passingScenario = {
   name: "passing",
@@ -149,44 +150,97 @@ describe("ChainedScenario", () => {
     await expect(chain.execute()).rejects.toThrow('Execute failed at stage "stage2"')
   })
 
-  it("verify() returns allPassed=true with HIGH confidence when all pass", async () => {
+  it("verify() is reproduced only when every stage reproduces", async () => {
     passingScenario.verify.mockReset()
-    passingScenario.verify.mockImplementation(() => Promise.resolve({ passed: true, confidence: Confidence.HIGH, confidenceScore: 0.9, evidence: [], summary: "Passed" }))
+    passingScenario.verify.mockImplementation(() => Promise.resolve({
+      passed: true,
+      proofStatus: ProofStatus.REPRODUCED,
+      controls: [{ kind: "control-request", description: "benign variant" }],
+      confidence: Confidence.HIGH,
+      confidenceScore: 0.9,
+      evidence: [],
+      summary: "Passed",
+    }))
 
     const chain = new ChainedScenario([
       { scenario: passingScenario, name: "stage1" },
     ])
     const result = await chain.verify()
     expect(result.passed).toBe(true)
+    expect(result.proofStatus).toBe(ProofStatus.REPRODUCED)
     expect(result.confidence).toBe(Confidence.HIGH)
   })
 
-  it("verify() returns anyPassed with average confidence when mixed", async () => {
+  it("verify() does not pass when one stage only passed without proof", async () => {
+    // A bare `passed: true` is `suspected`. One stage used to be enough to
+    // report the whole chain as passed; it is not a reproduction of the chain.
     passingScenario.verify.mockReset()
     failingScenario.verify.mockReset()
-    passingScenario.verify.mockImplementation(() => Promise.resolve({ passed: true, confidence: Confidence.HIGH, confidenceScore: 0.9, evidence: [], summary: "Passed" }))
-    failingScenario.verify.mockImplementation(() => Promise.resolve({ passed: false, confidence: Confidence.INFORMATIONAL, confidenceScore: 0.0, evidence: [], summary: "Failed" }))
+    passingScenario.verify.mockImplementation(() => Promise.resolve({
+      passed: true,
+      proofStatus: ProofStatus.REPRODUCED,
+      controls: [{ kind: "second-identity", description: "user B session" }],
+      confidence: Confidence.HIGH,
+      confidenceScore: 0.9,
+      evidence: [],
+      summary: "Passed",
+    }))
+    failingScenario.verify.mockImplementation(() => Promise.resolve({
+      passed: true,
+      proofStatus: ProofStatus.SUSPECTED,
+      controls: [],
+      confidence: Confidence.INFORMATIONAL,
+      confidenceScore: 0.0,
+      evidence: [],
+      summary: "Probe returned 200",
+    }))
 
     const chain = new ChainedScenario([
       { scenario: passingScenario, name: "pass" },
-      { scenario: failingScenario, name: "fail" },
-    ])
-    const result = await chain.verify()
-    expect(result.passed).toBe(true)
-    expect(result.confidence).toBe(Math.round((Confidence.HIGH + Confidence.INFORMATIONAL) / 2))
-  })
-
-  it("verify() catches failures and adds failed VerifierResult", async () => {
-    passingScenario.verify.mockReset()
-    passingScenario.verify.mockImplementation(() => { throw new Error("Unexpected error") })
-
-    const chain = new ChainedScenario([
-      { scenario: passingScenario, name: "stage1" },
+      { scenario: failingScenario, name: "probe" },
     ])
     const result = await chain.verify()
     expect(result.passed).toBe(false)
-    expect(result.confidence).toBe(Confidence.INFORMATIONAL)
-    expect(result.summary).toContain('Verification failed at stage "stage1"')
+    expect(result.proofStatus).toBe(ProofStatus.SUSPECTED)
+    expect(result.confidence).toBe(Math.round((Confidence.HIGH + Confidence.INFORMATIONAL) / 2))
+  })
+
+  it("verify() reports inconclusive and keeps the stage error when a stage throws", async () => {
+    passingScenario.verify.mockReset()
+    passingScenario.verify.mockImplementation(() => Promise.resolve({
+      passed: true,
+      proofStatus: ProofStatus.REPRODUCED,
+      controls: [{ kind: "control-request" }],
+      confidence: Confidence.HIGH,
+      confidenceScore: 0.9,
+      evidence: [],
+      summary: "Passed",
+    }))
+
+    const throwing = {
+      ...passingScenario,
+      verify: mock(() => { throw new Error("Target page crashed") }),
+    }
+
+    const chain = new ChainedScenario([
+      { scenario: passingScenario, name: "stage1" },
+      { scenario: throwing, name: "stage2" },
+    ])
+    const result = await chain.verify()
+
+    expect(result.passed).toBe(false)
+    expect(result.proofStatus).toBe(ProofStatus.INCONCLUSIVE)
+    expect(result.error?.message).toContain("Target page crashed")
+    expect(result.error?.step).toBe("verify")
+  })
+
+  it("an empty chain is unsupported, never passed", async () => {
+    const chain = new ChainedScenario([])
+
+    const result = await chain.verify()
+
+    expect(result.passed).toBe(false)
+    expect(result.proofStatus).toBe(ProofStatus.UNSUPPORTED)
   })
 
   it("collectEvidence() collects from all stages and tags artifacts", async () => {
@@ -260,5 +314,41 @@ describe("ChainedScenario", () => {
     await chain.cleanup()
     expect(cleanSpy1).toHaveBeenCalledTimes(1)
     expect(cleanSpy2).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("chainProofStatus", () => {
+  const reproduced = {
+    passed: true,
+    proofStatus: ProofStatus.REPRODUCED,
+  }
+  const suspected = { passed: true, proofStatus: ProofStatus.SUSPECTED }
+  const withStatus = (status: ProofStatus) => ({ passed: false, proofStatus: status })
+
+  it("is unsupported with no stages", () => {
+    expect(chainProofStatus([])).toBe(ProofStatus.UNSUPPORTED)
+  })
+
+  it("is reproduced only when every stage reproduced", () => {
+    expect(chainProofStatus([reproduced, reproduced])).toBe(ProofStatus.REPRODUCED)
+  })
+
+  it("is suspected when a stage is only suspected", () => {
+    expect(chainProofStatus([reproduced, suspected])).toBe(ProofStatus.SUSPECTED)
+  })
+
+  it("is unsupported when any stage is unsupported", () => {
+    expect(chainProofStatus([reproduced, withStatus(ProofStatus.UNSUPPORTED)]))
+      .toBe(ProofStatus.UNSUPPORTED)
+  })
+
+  it("is inconclusive when any stage could not complete", () => {
+    expect(chainProofStatus([reproduced, withStatus(ProofStatus.INCONCLUSIVE)]))
+      .toBe(ProofStatus.INCONCLUSIVE)
+  })
+
+  it("is not reproduced when any stage is a negative", () => {
+    expect(chainProofStatus([reproduced, withStatus(ProofStatus.NOT_REPRODUCED)]))
+      .toBe(ProofStatus.NOT_REPRODUCED)
   })
 })

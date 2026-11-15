@@ -10,8 +10,9 @@ import type {
   VerificationScenario,
   VerifierResult,
 } from "../types"
-import type { EvidencePackage } from "../../shared/types"
-import { Confidence } from "../../shared/types"
+import type { ControlReference, EvidencePackage } from "../../shared/types"
+import { Confidence, ProofStatus } from "../../shared/types"
+import { chainProofStatus } from "../proof"
 
 interface Stage {
   scenario: VerificationScenario
@@ -64,18 +65,30 @@ export class ChainedScenario implements VerificationScenario {
         const result = await stage.scenario.verify()
         this.stageResults.push(result)
       } catch (error) {
+        // A stage that could not run is inconclusive, not a negative — and it
+        // must not be folded into a chain-wide pass.
+        const reason = error instanceof Error ? error : new Error(String(error))
         this.stageResults.push({
           passed: false,
+          proofStatus: ProofStatus.INCONCLUSIVE,
           confidence: Confidence.INFORMATIONAL,
           confidenceScore: 0,
           evidence: [],
-          summary: `Verification failed at stage "${stage.name}": ${(error as Error).message}`,
+          controls: [],
+          summary: `Verification failed at stage "${stage.name}": ${reason.message}`,
+          error: {
+            step: "verify",
+            name: reason.name,
+            message: reason.message,
+          },
         })
       }
     }
 
-    const anyPassed = this.stageResults.some((r) => r.passed)
-    const allPassed = this.stageResults.every((r) => r.passed)
+    // A chain is only proven when every stage is. One passing stage used to
+    // make the whole path "pass" — that is not a reproduction of the chain.
+    const proofStatus = chainProofStatus(this.stageResults)
+    const reproduced = proofStatus === ProofStatus.REPRODUCED
     const avgConfidence = this.stageResults.length > 0
       ? Math.round(
           this.stageResults.reduce((s, r) => s + r.confidence, 0) /
@@ -88,11 +101,19 @@ export class ChainedScenario implements VerificationScenario {
       ? confidenceScoreSum / this.stageResults.length
       : 0
 
+    const controls: ControlReference[] = this.stageResults.flatMap(
+      (result) => result.controls ?? [],
+    )
+    const failedStage = this.stageResults.find((result) => result.error)
+
     return {
-      passed: anyPassed,
-      confidence: allPassed ? Confidence.HIGH : avgConfidence,
-      confidenceScore: allPassed ? Math.min(avgConfidenceScore + 0.1, 1.0) : avgConfidenceScore,
+      passed: reproduced,
+      proofStatus,
+      confidence: reproduced ? Confidence.HIGH : avgConfidence,
+      confidenceScore: reproduced ? Math.min(avgConfidenceScore + 0.1, 1.0) : avgConfidenceScore,
       evidence: [],
+      controls,
+      ...(failedStage?.error ? { error: failedStage.error } : {}),
       summary: this.stageResults
         .map((r, i) => `[${this.stages[i].name}] ${r.summary}`)
         .join("; "),
