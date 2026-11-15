@@ -1,0 +1,87 @@
+{
+  "name": "argus-ownership-lab",
+  "description": "Resettable discovery/verification lab extending the auth-bypass fixture: linked landing and login form, API description, two synthetic identities, per-run markers, a vulnerable ownership check and its secure twin, plus out-of-scope and negative controls.",
+  "answer_manifest_location": "harness only (this file is never served by the target)",
+  "fixture": {
+    "path": "argus-workers/test_fixtures/auth-bypass/app.py",
+    "health": "/health",
+    "reset": "POST /__lab/reset",
+    "request_log": "GET /__lab/requests",
+    "landing": "/",
+    "login_form": "form action=/login method=post",
+    "api_description": "/api/docs",
+    "identities": ["user1", "user2", "admin"],
+    "run_marker_env": "LAB_RUN_MARKER",
+    "marker_field": "marker",
+    "xss_fixture_link": "/xss -> XSS_FIXTURE_URL (discoverable link; no source read)"
+  },
+  "expected_findings": [
+    {
+      "type": "IDOR",
+      "severity": "HIGH",
+      "endpoint": "/api/data/10",
+      "control": "/api/secure/data/10",
+      "description": "Authenticated user2 can read user1's resource id 10; the secure twin returns 403 for the same request."
+    },
+    {
+      "type": "IDOR",
+      "severity": "HIGH",
+      "endpoint": "/api/data/11",
+      "control": "/api/secure/data/11",
+      "description": "Authenticated user1 can read user2's resource id 11; the secure twin returns 403."
+    },
+    {
+      "type": "BROKEN_ACCESS_CONTROL",
+      "severity": "HIGH",
+      "endpoint": "/admin/profile",
+      "description": "Admin profile endpoint has no role check; any caller reads a fake secret key."
+    },
+    {
+      "type": "BROKEN_ACCESS_CONTROL",
+      "severity": "HIGH",
+      "endpoint": "/admin/users",
+      "description": "Admin users list returns every username and password without access control."
+    },
+    {
+      "type": "WEAK_CREDENTIALS",
+      "severity": "MEDIUM",
+      "endpoint": "/login",
+      "description": "Predictable passwords: user1/welcome1, user2/welcome2, admin/password123."
+    },
+    {
+      "type": "AUTH_BYPASS",
+      "severity": "CRITICAL",
+      "endpoint": "/flag",
+      "description": "GET /flag with X-Debug-Token: argus-bypass-2026 returns the flag without a session."
+    }
+  ],
+  "negative_controls": [
+    {
+      "name": "secure ownership twin",
+      "endpoint": "/api/secure/data/<id>",
+      "expectation": "403 for a non-owner, 200 for the owner; a finding here is a false positive"
+    },
+    {
+      "name": "unauthenticated API",
+      "endpoint": "/api/data/<id>",
+      "expectation": "401 without a session"
+    },
+    {
+      "name": "wrong debug token",
+      "endpoint": "/flag",
+      "expectation": "403 with an incorrect X-Debug-Token"
+    },
+    {
+      "name": "unknown resource",
+      "endpoint": "/api/data/9999",
+      "expectation": "404, not a disclosure"
+    }
+  ],
+  "out_of_scope_sentinel": {
+    "url": "https://sentinel.argus.invalid/do-not-scan",
+    "discoverable_from": "/",
+    "expectation": "no request is sent to this host; any hit is an out-of-scope violation"
+  },
+  "detection_tools": ["web_scanner", "nuclei"],
+  "notes": "Every response carries the run marker (env LAB_RUN_MARKER or the value returned by POST /__lab/reset), so findings can be tied to the run. The target never serves this manifest."
+}

@@ -32,7 +32,10 @@
 set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────────────────
-ENGAGEMENT_ID="${ENGAGEMENT_ID:-a1b2c3d4-1111-4000-8000-000000000001}"
+# Fresh engagement by default: reuse must be explicit, and a fresh id cannot
+# inherit another run's findings. Set ENGAGEMENT_ID to reuse a seeded row.
+ENGAGEMENT_ID="${ENGAGEMENT_ID:-}"
+FRESH_ENGAGEMENT=0
 TARGET_URL="${TARGET_URL:-http://127.0.0.1:3001}"
 TARGET_LABEL="${TARGET_LABEL:-juice-shop}"
 RUN_ID="livefire-${TARGET_LABEL}-$(date +%Y%m%d-%H%M%S)"
@@ -48,6 +51,12 @@ ASSERT_SCRIPT="${ASSERT_SCRIPT:-${SCRIPT_DIR}/assert-livefire.py}"
 PYTHON="${PYTHON:-python3}"
 MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-1800}"  # 30 min max
 POLL_INTERVAL="${POLL_INTERVAL:-10}"           # seconds between state checks
+LAB_RESET="${LAB_RESET:-0}"                   # reset the local lab before dispatch
+
+if [ -z "${ENGAGEMENT_ID}" ]; then
+  ENGAGEMENT_ID=$("${PYTHON}" -c 'import uuid; print(uuid.uuid4())')
+  FRESH_ENGAGEMENT=1
+fi
 
 # Scope the engagement is authorized for. A target the allowlist does not match
 # is blocked by the worker's own scope guard, so the pattern is derived from
@@ -58,6 +67,30 @@ POLL_INTERVAL="${POLL_INTERVAL:-10}"           # seconds between state checks
 # `127.0.0.1:3001`, matched none of those — the harness denied its own target and
 # every phase reported success while scanning nothing.
 ALLOWED_TARGETS="${ALLOWED_TARGETS:-[\"${TARGET_URL}\"]}"
+
+# Validate the swarm opt-ins before dispatching anything. A malformed or
+# contradictory option stops here, not after a green-looking run.
+HARNESS_CONFIG=$("${PYTHON}" "${SCRIPT_DIR}/harness_config.py" --json \
+  --target-url "${TARGET_URL}" \
+  --engagement-id "${ENGAGEMENT_ID}" \
+  --scope "{\"mode\": \"allowlist\", \"allowed_targets\": ${ALLOWED_TARGETS}, \"blocked_targets\": []}") || {
+  echo "[FAIL]  Invalid harness options — nothing was dispatched" >&2
+  exit 2
+}
+AGGRESSIVENESS=$(printf '%s' "${HARNESS_CONFIG}" | "${PYTHON}" -c 'import json,sys; print(json.load(sys.stdin)["options"]["aggressiveness"])')
+SCAN_MODE=$(printf '%s' "${HARNESS_CONFIG}" | "${PYTHON}" -c 'import json,sys; print(json.load(sys.stdin)["options"]["scan_mode"])')
+REQUIRE_SWARM=$(printf '%s' "${HARNESS_CONFIG}" | "${PYTHON}" -c 'import json,sys; print(int(json.load(sys.stdin)["options"]["require_swarm"]))')
+REQUIRED_SPECIALISTS=$(printf '%s' "${HARNESS_CONFIG}" | "${PYTHON}" -c 'import json,sys; print(",".join(json.load(sys.stdin)["options"]["required_specialists"]))')
+
+# Assertion flags are built once: `REQUIRE_SWARM:+...` would pass --require-swarm
+# even for 0, because "0" is a non-empty string.
+SWARM_ASSERT_ARGS=()
+if [ "${REQUIRE_SWARM}" = "1" ]; then
+  SWARM_ASSERT_ARGS+=(--require-swarm)
+fi
+if [ -n "${REQUIRED_SPECIALISTS}" ]; then
+  SWARM_ASSERT_ARGS+=(--required-specialists "${REQUIRED_SPECIALISTS}")
+fi
 
 # ── Where Postgres lives ───────────────────────────────────────────────────
 # The harness was written for `docker compose`. A host that runs Postgres
@@ -175,15 +208,20 @@ preflight() {
 reset_engagement() {
   header "Step 1/6: Reset Engagement State"
 
-  info "Deleting existing findings for engagement ${ENGAGEMENT_ID}..."
-  db_query "DELETE FROM findings WHERE engagement_id = '${ENGAGEMENT_ID}';" > /dev/null 2>&1 || true
-  ok "Findings cleared"
-
-  info "Resetting engagement state to 'created'..."
-  # `engagements` has no started_at column — asking for one made this statement
-  # fail silently behind `|| true`, so the reset never happened.
-  db_query "UPDATE engagements SET status = 'created', completed_at = NULL WHERE id = '${ENGAGEMENT_ID}';" > /dev/null 2>&1 || true
-  ok "Engagement reset to 'created'"
+  if [ "${FRESH_ENGAGEMENT}" = "1" ]; then
+    info "Creating a fresh engagement ${ENGAGEMENT_ID} (no findings are inherited or deleted)..."
+    db_query "INSERT INTO engagements (id, org_id, created_by, target, target_url, authorization_proof, authorized_scope, status)
+      SELECT '${ENGAGEMENT_ID}', o.id, u.id, '${TARGET_URL}', '${TARGET_URL}', '{\"proof_type\":\"livefire\"}',
+             '{\"domains\": ${ALLOWED_TARGETS}, \"ipRanges\": []}', 'created'
+      FROM organizations o, users u ORDER BY o.id, u.id LIMIT 1;" > /dev/null 2>&1 || true
+    ok "Fresh engagement row requested"
+  else
+    info "Reusing the explicitly supplied engagement ${ENGAGEMENT_ID}; its findings are left untouched..."
+    # `engagements` has no started_at column — asking for one made this statement
+    # fail silently behind `|| true`, so the reset never happened.
+    db_query "UPDATE engagements SET status = 'created', completed_at = NULL WHERE id = '${ENGAGEMENT_ID}';" > /dev/null 2>&1 || true
+    ok "Engagement reset to 'created'"
+  fi
 
   # The verifier reads FINDING_VERIFICATION through feature_flags.is_enabled(),
   # which checks ARGUS_FF_* in the worker's environment and then this table
@@ -209,6 +247,20 @@ start_log_capture() {
 
   mkdir -p "${LOG_DIR}"
   info "Log directory: ${LOG_DIR}"
+  printf '%s\n' "${HARNESS_CONFIG}" > "${LOG_DIR}/effective-config.json"
+  info "Effective configuration saved (aggressiveness=${AGGRESSIVENESS}, scan_mode=${SCAN_MODE}, require_swarm=${REQUIRE_SWARM})"
+
+  if [ "${LAB_RESET}" = "1" ]; then
+    info "Resetting the lab target before dispatch..."
+    LAB_RESPONSE=$(curl -s -X POST --max-time 5 "${TARGET_URL%/}/__lab/reset" 2>/dev/null || true)
+    if [ -n "${LAB_RESPONSE}" ]; then
+      printf '%s\n' "${LAB_RESPONSE}" > "${LOG_DIR}/lab-reset.json"
+      LAB_MARKER=$(printf '%s' "${LAB_RESPONSE}" | "${PYTHON}" -c 'import json,sys; print(json.load(sys.stdin).get("marker",""))' 2>/dev/null || true)
+      ok "Lab reset (marker: ${LAB_MARKER:-unknown})"
+    else
+      warn "Lab reset endpoint did not answer — the run may reuse old resources"
+    fi
+  fi
 
   LOGS_PID=""
   TARGET_LOGS_PID=""
@@ -270,12 +322,12 @@ dispatch_recon() {
   "budget": {
     "max_tools": 30,
     "llm_budget_usd": 2.00,
-    "scan_mode": "standard",
+    "scan_mode": "${SCAN_MODE}",
     "prev_engagement_id": null
   },
-  "aggressiveness": "moderate",
+  "aggressiveness": "${AGGRESSIVENESS}",
   "agent_mode": true,
-  "scan_mode": "standard",
+  "scan_mode": "${SCAN_MODE}",
   "bug_bounty_mode": false,
   "auth_config": {},
   "dual_auth_config": null,
@@ -541,7 +593,8 @@ PY
       --worker-rss-mb "${WORKER_RSS_MB}" \
       ${WORKER_LOG:+--worker-log "${WORKER_LOG}"} \
       ${WORKER_LOG:+--worker-log-start-line "${WORKER_LOG_START_LINE:-0}"} \
-      --baseline-dir "$(dirname "${LOG_DIR}")"
+      --baseline-dir "$(dirname "${LOG_DIR}")" \
+      ${SWARM_ASSERT_ARGS[@]+"${SWARM_ASSERT_ARGS[@]}"}
   else
     "${PYTHON}" "${ASSERT_SCRIPT}" \
       --run-dir "${LOG_DIR}" \
@@ -551,7 +604,8 @@ PY
       --duration-seconds "${SECONDS}" \
       ${WORKER_LOG:+--worker-log "${WORKER_LOG}"} \
       ${WORKER_LOG:+--worker-log-start-line "${WORKER_LOG_START_LINE:-0}"} \
-      --baseline-dir "$(dirname "${LOG_DIR}")"
+      --baseline-dir "$(dirname "${LOG_DIR}")" \
+      ${SWARM_ASSERT_ARGS[@]+"${SWARM_ASSERT_ARGS[@]}"}
   fi
   VERDICT_EXIT=$?
   set -e

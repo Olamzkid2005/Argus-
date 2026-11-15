@@ -1,98 +1,113 @@
 #!/usr/bin/env python3
-"""
-Live-fire runner for auth-bypass fixture app
-=============================================
+"""Standalone checks for the Stage 7 ownership lab.
 
-Starts the fixture app, tests each vulnerable endpoint, and verifies
-that the expected vulnerability response is present. This is a lightweight
-alternative to the full Docker-based live-fire runner — no Celery, no
-PostgreSQL, no Redis needed.
+Starts the fixture app, verifies its contract with real HTTP sessions, and
+prints the expected findings. No Celery, PostgreSQL, Redis or scanner binaries
+are needed — this is the lab's own regression check, separate from the full
+live-fire harness.
 
 Usage:
     python scripts/livefire/test-fixture-auth-bypass.py
-
-Exit code: 0 = all endpoint checks pass, 1 = any check fails
 """
 
+from __future__ import annotations
+
+import http.cookiejar
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
 import traceback
 import urllib.error
-import urllib.parse
 import urllib.request
+from pathlib import Path
 
-FIXTURE_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "argus-workers", "test_fixtures", "auth-bypass")
-)
-PORT = 18765  # Unlikely to conflict
-BASE_URL = f"http://127.0.0.1:{PORT}"
+FIXTURE_DIR = Path(__file__).resolve().parents[2] / "argus-workers" / "test_fixtures" / "auth-bypass"
+MARKER = "fixture-script-marker"
 
 passed = 0
 failed = 0
 
 
 def check(name: str, fn):
-    """Run a check and count pass/fail."""
     global passed, failed
     try:
         fn()
         passed += 1
         print(f"  [PASS] {name}")
-    except Exception as e:
+    except Exception as exc:
         failed += 1
-        print(f"  [FAIL] {name}: {e}")
+        print(f"  [FAIL] {name}: {exc}")
         traceback.print_exc()
 
 
-def http_get(path: str, headers: dict | None = None) -> tuple[int, str]:
-    """Make an HTTP GET request and return (status_code, body)."""
-    req = urllib.request.Request(f"{BASE_URL}{path}", headers=headers or {})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return resp.status, resp.read().decode("utf-8")
-    except urllib.error.HTTPError as e:
-        return e.code, e.read().decode("utf-8")
+class Lab:
+    def __init__(self, base_url: str) -> None:
+        self.base_url = base_url
+        self._openers: dict[str, urllib.request.OpenerDirector] = {}
+
+    def opener(self, identity: str):
+        if identity not in self._openers:
+            self._openers[identity] = urllib.request.build_opener(
+                urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
+            )
+        return self._openers[identity]
+
+    def request(self, method: str, path: str, *, identity="anonymous", body=None, headers=None):
+        data = json.dumps(body).encode() if body is not None else None
+        hdrs = dict(headers or {})
+        if data is not None:
+            hdrs["Content-Type"] = "application/json"
+        req = urllib.request.Request(f"{self.base_url}{path}", data=data, headers=hdrs, method=method)
+        try:
+            with self.opener(identity).open(req, timeout=10) as response:
+                return response.status, response.read().decode()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read().decode()
+
+    def get(self, path: str, **kwargs):
+        return self.request("GET", path, **kwargs)
+
+    def login(self, username: str, password: str) -> None:
+        status, body = self.request(
+            "POST", "/login", identity=username, body={"username": username, "password": password}
+        )
+        assert status == 200, body
+
+    def reset(self, marker=MARKER) -> dict:
+        status, body = self.request("POST", "/__lab/reset", body={"run_marker": marker})
+        assert status == 200, body
+        return json.loads(body)
 
 
-def http_post(path: str, data: dict) -> tuple[int, str]:
-    """Make an HTTP POST request and return (status_code, body)."""
-    body = urllib.parse.urlencode(data).encode("utf-8")
-    req = urllib.request.Request(f"{BASE_URL}{path}", data=body)
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return resp.status, resp.read().decode("utf-8")
-    except urllib.error.HTTPError as e:
-        return e.code, e.read().decode("utf-8")
+def free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
 
 
-# ── Fixture App Lifecycle ─────────────────────────────────────────────
-
-
-def start_fixture() -> subprocess.Popen:
-    """Start the auth-bypass Flask app and return the process handle."""
+def start_fixture(port: int) -> subprocess.Popen:
     proc = subprocess.Popen(
-        [sys.executable, "app.py", str(PORT)],
+        [sys.executable, "app.py", str(port)],
         cwd=FIXTURE_DIR,
+        env=dict(os.environ, LAB_TEST_MODE="1", LAB_RUN_MARKER=MARKER),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    # Wait for the app to start
-    for _ in range(15):
-        time.sleep(0.5)
+    for _ in range(60):
+        time.sleep(0.1)
         try:
-            status, _ = http_get("/health")
-            if status == 200:
-                return proc
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=1) as response:
+                if response.status == 200:
+                    return proc
         except Exception:
             continue
-    raise RuntimeError("Fixture app did not start within 7.5 seconds")
+    raise RuntimeError("fixture app did not start")
 
 
-def stop_fixture(proc: subprocess.Popen):
-    """Stop the fixture app."""
+def stop_fixture(proc: subprocess.Popen) -> None:
     proc.terminate()
     try:
         proc.wait(timeout=5)
@@ -101,155 +116,104 @@ def stop_fixture(proc: subprocess.Popen):
         proc.wait()
 
 
-# ══════════════════════════════════════════════════════════════════════
-# Endpoint Checks
-# ══════════════════════════════════════════════════════════════════════
+def run_checks(lab: Lab) -> None:
+    def landing():
+        status, html = lab.get("/")
+        assert status == 200
+        for link in ("/api/docs", "/api/data/10", "/api/data/11", "/xss"):
+            assert f'href="{link}"' in html
+        assert 'action="/login"' in html
+        assert "sentinel.argus.invalid" in html
+
+    def api_docs():
+        status, body = lab.get("/api/docs")
+        assert status == 200
+        docs = json.loads(body)
+        assert any(e["path"] == "/api/data/{id}" for e in docs["endpoints"])
+        assert docs["marker"] == MARKER
+
+    def login_required():
+        assert lab.get("/api/data/10")[0] == 401
+        assert lab.get("/api/secure/data/10")[0] == 401
+        lab.login("user1", "welcome1")
+        assert lab.get("/api/me", identity="user1")[0] == 200
+
+    def idor_vulnerable():
+        status, body = lab.get("/api/data/11", identity="user1")
+        assert status == 200, body
+        data = json.loads(body)
+        assert data["owner"] == "user2", data
+        assert data["marker"] == MARKER
+
+    def secure_twin():
+        assert lab.get("/api/secure/data/11", identity="user1")[0] == 403
+        assert lab.get("/api/secure/data/10", identity="user1")[0] == 200
+
+    def admin_profile():
+        status, body = lab.get("/admin/profile")
+        assert status == 200
+        assert json.loads(body)["secret_key"] == "sk-admin-1234567890abcdef"
+
+    def admin_users():
+        status, body = lab.get("/admin/users")
+        assert status == 200
+        users = json.loads(body)["users"]
+        assert {u["username"] for u in users} == {"user1", "user2", "admin"}
+
+    def flag_checks():
+        assert lab.get("/flag")[0] == 403
+        assert lab.get("/flag", headers={"X-Debug-Token": "wrong"})[0] == 403
+        status, body = lab.get("/flag", headers={"X-Debug-Token": "argus-bypass-2026"})
+        assert status == 200
+        assert json.loads(body)["flag"] == "ARGUS{XSS_AUTH_BYPASS_2026}"
+
+    def reset_and_logging():
+        rotated = lab.reset("rotated-marker")
+        assert rotated["marker"] == "rotated-marker"
+        assert "user2" in rotated["users"]
+        status, body = lab.get("/api/data/10", identity="user1")
+        assert status == 200
+        assert json.loads(body)["marker"] == "rotated-marker"
+        status, body = lab.get("/__lab/requests")
+        assert status == 200
+        paths = [entry["path"] for entry in json.loads(body)["requests"]]
+        assert "/api/data/10" in paths
+
+    print("[Checks] Discoverable lab contract")
+    check("landing page links login, API and sentinel", landing)
+    check("API description is discoverable", api_docs)
+    check("session identities are required", login_required)
+    check("vulnerable ownership check (IDOR)", idor_vulnerable)
+    check("secure twin denies non-owner", secure_twin)
+    check("admin/profile broken access control", admin_profile)
+    check("admin/users credential disclosure", admin_users)
+    check("flag debug-header auth bypass", flag_checks)
+    check("reset rotates markers and logs target requests", reset_and_logging)
 
 
-def check_health():
-    """Health endpoint should return 200 with 'ok'."""
-    status, body = http_get("/health")
-    assert status == 200, f"Expected 200, got {status}"
-    assert body == "ok", f"Expected 'ok', got {body!r}"
-
-
-def check_login_valid():
-    """Login with valid credentials should return 200."""
-    status, body = http_post("/login", {"username": "admin", "password": "password123"})
-    assert status == 200, f"Expected 200, got {status}"
-    data = json.loads(body)
-    assert data.get("status") == "ok", f"Expected ok status, got {data}"
-
-
-def check_login_invalid():
-    """Login with invalid credentials should return 401."""
-    status, body = http_post("/login", {"username": "admin", "password": "wrong"})
-    assert status == 401, f"Expected 401, got {status}"
-
-
-def check_admin_profile_no_auth():
-    """Admin profile without auth still returns data (no access control = vuln)."""
-    status, body = http_get("/admin/profile")
-    assert status == 200, f"Expected 200, got {status}"
-    data = json.loads(body)
-    assert "secret_key" in data, f"Expected secret_key in response: {data}"
-    assert data["secret_key"] == "sk-admin-1234567890abcdef", (
-        f"Unexpected secret_key: {data['secret_key']}"
-    )
-
-
-def check_admin_users_disclosure():
-    """Admin users list exposes credentials without access control."""
-    status, body = http_get("/admin/users")
-    assert status == 200, f"Expected 200, got {status}"
-    data = json.loads(body)
-    users = data.get("users", [])
-    assert len(users) == 3, f"Expected 3 users, got {len(users)}"
-    passwords = {u["username"]: u["password"] for u in users}
-    assert passwords.get("admin") == "password123", (
-        f"Expected admin password, got {passwords}"
-    )
-
-
-def check_idor():
-    """IDOR: user1 can access admin data (ID=1) without ownership check."""
-    status, body = http_get("/api/data/1")
-    assert status == 200, f"Expected 200, got {status}"
-    data = json.loads(body)
-    assert data.get("owner") == "admin", f"Expected admin data, got {data}"
-    assert data["data"].get("ssn") == "000-00-0000", (
-        f"Expected SSN in leaked data: {data}"
-    )
-
-
-def check_idor_user_data():
-    """IDOR: any user can access other users' data by iterating IDs."""
-    status, body = http_get("/api/data/10")
-    assert status == 200, f"Expected 200, got {status}"
-    data = json.loads(body)
-    assert data.get("owner") == "user1", f"Expected user1 data, got {data}"
-
-
-def check_flag_no_header():
-    """Flag endpoint without debug header should return 403."""
-    status, body = http_get("/flag")
-    assert status == 403, f"Expected 403, got {status}"
-
-
-def check_flag_with_header():
-    """Flag endpoint with X-Debug-Token should return 200 with flag."""
-    status, body = http_get("/flag", {"X-Debug-Token": "argus-bypass-2026"})
-    assert status == 200, f"Expected 200, got {status}"
-    data = json.loads(body)
-    assert data.get("flag") == "ARGUS{XSS_AUTH_BYPASS_2026}", (
-        f"Unexpected flag: {data}"
-    )
-
-
-def check_flag_wrong_token():
-    """Flag endpoint with wrong debug token should return 403."""
-    status, _ = http_get("/flag", {"X-Debug-Token": "wrong-token"})
-    assert status == 403, f"Expected 403, got {status}"
-
-
-# ══════════════════════════════════════════════════════════════════════
-# Main
-# ══════════════════════════════════════════════════════════════════════
-
-
-def main():
+def main() -> None:
     print("=" * 62)
-    print("  Auth-Bypass Fixture — Live Endpoint Verification")
+    print("  Argus Ownership Lab — Contract Verification")
     print("=" * 62)
-    print()
-
-    # Start fixture
-    print("[Setup] Starting auth-bypass fixture app...")
+    port = free_port()
+    proc = start_fixture(port)
+    lab = Lab(f"http://127.0.0.1:{port}")
+    print(f"  [OK] Lab running at {lab.base_url}\n")
     try:
-        proc = start_fixture()
-        print(f"  [OK]   App running at {BASE_URL}")
-    except Exception as e:
-        print(f"  [FAIL] Could not start fixture: {e}")
+        run_checks(lab)
+    finally:
+        stop_fixture(proc)
+
+    print("\n" + "-" * 62)
+    print(f"  Results:  {passed} passed, {failed} failed  (of {passed + failed})")
+    print("-" * 62 + "\n")
+    if failed:
+        print("[FAIL] Some lab checks failed — see errors above.")
         sys.exit(1)
-
-    print()
-
-    # Run checks
-    print("[Checks] Vulnerability endpoint verification")
-    check("health endpoint", check_health)
-    check("login with valid credentials", check_login_valid)
-    check("login with invalid credentials", check_login_invalid)
-    check("admin/profile: broken access control", check_admin_profile_no_auth)
-    check("admin/users: credential disclosure", check_admin_users_disclosure)
-    check("IDOR: access admin data as anonymous", check_idor)
-    check("IDOR: access user1 data as anonymous", check_idor_user_data)
-    check("flag: 403 without debug header", check_flag_no_header)
-    check("flag: 200 with correct debug token", check_flag_with_header)
-    check("flag: 403 with wrong debug token", check_flag_wrong_token)
-
-    # Cleanup
-    stop_fixture(proc)
-
-    # Summary
-    print()
-    print("-" * 62)
-    total = passed + failed
-    print(f"  Results:  {passed} passed, {failed} failed  (of {total})")
-    print("-" * 62)
-    print()
-
-    if failed > 0:
-        print("[FAIL] Some endpoint checks failed — see errors above.")
-        sys.exit(1)
-    else:
-        print("[PASS] All endpoint checks passed — fixture app behaves as expected.")
-        print()
-        print("  Vulnerabilities confirmed accessible:")
-        print("    - Broken Access Control: /admin/profile, /admin/users")
-        print("    - Insecure Direct Object Reference: /api/data/<id>")
-        print("    - Weak Credentials: /login (predictable passwords)")
-        print("    - Auth Bypass: /flag (debug header)")
-        print()
+    print("[PASS] Lab behaves as expected.")
+    print("  - Ownership: /api/data/<id> leaks, /api/secure/data/<id> denies")
+    print("  - Auth: predictable logins and a debug-header bypass")
+    print("  - Harness: reset and request logging are available")
 
 
 if __name__ == "__main__":

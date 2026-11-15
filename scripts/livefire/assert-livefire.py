@@ -75,6 +75,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--worker-log-start-line", type=int, default=0,
         help="line the worker log stood at when this run started",
     )
+    parser.add_argument(
+        "--require-swarm", action="store_true",
+        help="fail unless every required specialist activates, executes and completes",
+    )
+    parser.add_argument(
+        "--required-specialists", default="",
+        help="comma-separated specialists the run must prove (idor,auth,api)",
+    )
     parser.add_argument("--db-url", default=os.getenv("DATABASE_URL", ""))
     parser.add_argument("--baseline-dir", default=str(Path.cwd() / "livefire-runs"))
     return parser.parse_args(argv)
@@ -122,8 +130,110 @@ def worker_log_lines(worker_log: str, start_line: int = 0) -> list[str]:
     return lines[min(start_line, len(lines)):]
 
 
-def swarm_events(lines: list[str]) -> int:
-    return sum(1 for line in lines if "Swarm:" in line)
+SWARM_EVENT_PREFIX = "[SWARM_EVENT] "
+
+
+def parse_swarm_events(lines: list[str], engagement_id: str) -> list[dict]:
+    """Structured per-specialist events for this engagement.
+
+    ``Swarm: no specialists activated`` is a log sentence, not evidence, so the
+    verdict reads the JSON events the specialists emit instead.
+    """
+    events: list[dict] = []
+    for line in lines:
+        if SWARM_EVENT_PREFIX not in line:
+            continue
+        try:
+            payload = json.loads(line.split(SWARM_EVENT_PREFIX, 1)[1])
+        except (ValueError, IndexError):
+            continue
+        if payload.get("engagement_id") not in (engagement_id, ""):
+            continue
+        events.append(payload)
+    return events
+
+
+def swarm_criteria(
+    events: list[dict], required: list[str]
+) -> tuple[list[dict], dict]:
+    """Prove each required specialist activated, executed and completed.
+
+    Selection without execution, an error/timeout completion, or a missing
+    event all fail: a specialist that never ran cannot count as coverage.
+    """
+    criteria: list[dict] = []
+    summary: dict[str, dict] = {}
+    by_domain: dict[str, list[dict]] = {}
+    for event in events:
+        by_domain.setdefault(str(event.get("domain", "")), []).append(event)
+
+    if any(event.get("event") == "no_specialists_activated" for event in events):
+        add(
+            criteria, "swarm_specialists_activated", False,
+            "each required specialist activates", "no specialists activated",
+        )
+    elif required:
+        add(
+            criteria, "swarm_specialists_activated", True,
+            "each required specialist activates", "activation events present",
+        )
+
+    for domain in required:
+        domain_events = by_domain.get(domain, [])
+        activated = any(e.get("event") == "agent_started" for e in domain_events)
+        executed = [
+            e for e in domain_events
+            if e.get("event") == "tool_executed" and e.get("status") == "success"
+        ]
+        completed = [
+            e for e in domain_events
+            if e.get("event") == "agent_completed" and e.get("status") == "completed"
+        ]
+        selected = {
+            str(e.get("tool")) for e in domain_events if e.get("event") == "tool_selected"
+        }
+        executed_tools = {str(e.get("tool")) for e in executed}
+        provenance = bool(selected & executed_tools)
+        failures = [
+            e for e in domain_events
+            if (e.get("event") == "tool_executed" and e.get("status") != "success")
+            or (e.get("event") == "agent_completed" and e.get("status") != "completed")
+        ]
+
+        add(
+            criteria, f"swarm_{domain}_activated", activated,
+            f"{domain} agent_started event", f"{len(domain_events)} event(s)",
+        )
+        add(
+            criteria, f"swarm_{domain}_tool_executed", bool(executed),
+            f"{domain} executed a tool successfully",
+            f"{len(executed_tools)} tool(s): {sorted(executed_tools)}",
+        )
+        add(
+            criteria, f"swarm_{domain}_completed", bool(completed),
+            f"{domain} agent_completed status=completed",
+            f"{len(completed)} completion(s)",
+        )
+        add(
+            criteria, f"swarm_{domain}_provenance", provenance,
+            "a selected tool is also the one that executed",
+            f"selected={sorted(selected)} executed={sorted(executed_tools)}",
+        )
+        add(
+            criteria, f"swarm_{domain}_no_failures", not failures,
+            "no failed tool or error/timeout completion",
+            f"{len(failures)} failure event(s)",
+            "a completed-with-errors specialist is not successful completion",
+        )
+        summary[domain] = {
+            "activated": activated,
+            "selected_tools": sorted(selected),
+            "executed_tools": sorted(executed_tools),
+            "completed": bool(completed),
+            "failed_events": len(failures),
+            "proof_status": (completed[0].get("proof_status", {}) if completed else {}),
+        }
+    return criteria, summary
 
 
 def engagement_log_lines(lines: list[str], engagement_id: str) -> list[str]:
@@ -187,9 +297,23 @@ def main(argv: list[str]) -> int:
             )
             or 0
         )
-    scope_violations = int(
-        scalar(args.db_url, "SELECT COUNT(*) FROM scope_violations WHERE engagement_id = %s;", (engagement,))
-        or 0
+    # Older deployments never created a scope_violations table; the schema has
+    # no migration for it. Treat its absence as zero rather than crashing the
+    # verdict, and still count it when the table exists.
+    has_scope_table = scalar(
+        args.db_url, "SELECT to_regclass('public.scope_violations') IS NOT NULL;"
+    )
+    scope_violations = (
+        int(
+            scalar(
+                args.db_url,
+                "SELECT COUNT(*) FROM scope_violations WHERE engagement_id = %s;",
+                (engagement,),
+            )
+            or 0
+        )
+        if has_scope_table
+        else 0
     )
     decisions_total = int(
         scalar(args.db_url, "SELECT COUNT(*) FROM agent_decisions WHERE engagement_id = %s;", (engagement,))
@@ -206,9 +330,15 @@ def main(argv: list[str]) -> int:
     fallback_rate = 0.0 if not decisions_total else 1 - decisions_engine / decisions_total
     run_log_lines = worker_log_lines(args.worker_log, args.worker_log_start_line)
     for_this_run = engagement_log_lines(run_log_lines, engagement)
+    swarm_log_events = parse_swarm_events(run_log_lines, engagement)
+    required_specialists = [
+        item.strip().lower()
+        for item in args.required_specialists.split(",")
+        if item.strip()
+    ]
     scope_block = scope_block_reason(for_this_run)
     orphans = orphan_processes()
-    swarm = swarm_events(run_log_lines)
+    swarm = len(swarm_log_events)
     verified_fraction = (high_verified / high_total) if high_total else None
 
     metrics = {
@@ -228,9 +358,14 @@ def main(argv: list[str]) -> int:
         "decisions_engine_chosen": decisions_engine,
         "fallback_rate": round(fallback_rate, 4),
         "swarm_events": swarm,
+        "required_specialists": required_specialists,
         "scope_block": scope_block,
         "duration_seconds": args.duration_seconds,
     }
+
+    (run_dir / "swarm-events.jsonl").write_text(
+        "".join(json.dumps(event, sort_keys=True) + "\n" for event in swarm_log_events)
+    )
 
     criteria: list[dict] = []
     add(criteria, "pipeline_completed", state == "complete", "engagements.status = complete", state)
@@ -249,6 +384,15 @@ def main(argv: list[str]) -> int:
         ">= 1 engine-chosen decision", f"{decisions_engine} of {decisions_total}",
         "the run must show the engine choosing tools, not only deterministic fallbacks",
     )
+    if args.require_swarm:
+        if not required_specialists:
+            add(
+                criteria, "swarm_required_specialists_declared", False,
+                "--required-specialists names at least one specialist", "",
+            )
+        swarm_checks, swarm_summary = swarm_criteria(swarm_log_events, required_specialists)
+        criteria.extend(swarm_checks)
+        metrics["swarm_specialists"] = swarm_summary
     # Verification is only an absolute criterion for the target the README's
     # numbers describe. Elsewhere it is recorded: a fixture's single HIGH finding
     # can be a protocol observation (no HTTPS) that no HTTP probe can confirm, and

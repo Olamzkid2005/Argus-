@@ -31,6 +31,21 @@ pytestmark = [
 ]
 
 
+def _login_as(base_url: str, username: str = "user1", password: str = "welcome1"):
+    """Return a cookiejar-backed opener logged in as a fixture user."""
+    import http.cookiejar
+    import urllib.parse
+    import urllib.request
+
+    jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    body = urllib.parse.urlencode(
+        {"username": username, "password": password}
+    ).encode()
+    opener.open(f"{base_url}/login", data=body, timeout=5)
+    return opener
+
+
 class TestFixtureAppLifecycle:
     """Tests that start the fixture app directly (no conftest fixtures)."""
 
@@ -252,13 +267,14 @@ class TestAuthBypassE2E:
     def test_idor_data_by_id(self, fixture_app):
         """IDOR: user data accessible by ID without ownership check."""
         import json
-        import urllib.request
 
-        # Access admin's data record (id=1) without authentication
-        resp = urllib.request.urlopen(f"{fixture_app}/api/data/1", timeout=5)
+        # The fixture now requires a login; the vulnerability is the missing
+        # ownership check, so any authenticated user can read admin's record.
+        opener = _login_as(fixture_app)
+        resp = opener.open(f"{fixture_app}/api/data/1", timeout=5)
         assert resp.status == 200
         data = json.loads(resp.read().decode())
-        assert data["data"]["account"] == "admin"
+        assert data["data"]["owner"] == "admin"
         assert data["owner"] == "admin"
 
     def test_flag_endpoint_requires_debug_header(self, fixture_app):
@@ -291,8 +307,9 @@ class TestAuthBypassE2E:
         import urllib.error
         import urllib.request
 
+        opener = _login_as(fixture_app)
         try:
-            urllib.request.urlopen(f"{fixture_app}/api/data/9999", timeout=5)
+            opener.open(f"{fixture_app}/api/data/9999", timeout=5)
             pytest.fail("Expected 404")
         except urllib.error.HTTPError as e:
             assert e.code == 404
