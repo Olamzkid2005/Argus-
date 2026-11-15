@@ -101,3 +101,6 @@ argus-workers/tool_assets/nuclei-templates/
 
 # Live-fire validation artifacts (run logs, post-mortems, verdicts, baselines)
 livefire-runs/
+
+# Local live-fire runtime state (Postgres data dir, harness PIDs and logs)
+.livefire/
