@@ -1,4 +1,4 @@
-import { ReportGenerator } from "../reporting/generator"
+import { ReportGenerator, persistedReportOptions } from "../reporting/generator"
 import { EngagementStore } from "../engagement/store"
 import type { IEngagementStore } from "../engagement/types"
 import { FindingAnalyzer } from "../engagement/finding-analyzer"
@@ -94,6 +94,7 @@ export async function reportCommand(
 
   const findings = db.getFindings(engagementId)
   const generator = new ReportGenerator()
+  const contentOptions = persistedReportOptions(db, engagementId)
 
   const llmEnabled = useLLM ?? getFeatureFlags().isEnabled(Feature.LLM_FINDING_ANALYSIS)
   if (llmEnabled) {
@@ -103,14 +104,15 @@ export async function reportCommand(
     generator.setAnalyses(analyses)
   }
 
-  switch (format) {
+      switch (format) {
     case "json":
-      return generator.generateJSON(findings, engagementId, engagement.target, engagement.workflow)
+      return generator.generateJSON(findings, engagementId, engagement.target, engagement.workflow, contentOptions)
     case "sarif":
-      return generator.generateSARIF(findings, engagementId, engagement.target, engagement.workflow)
+      return generator.generateSARIF(findings, engagementId, engagement.target, engagement.workflow, contentOptions)
     case "html":
-      return generator.generateHTML(findings, engagementId, engagement.target, engagement.workflow)
+      return generator.generateHTML(findings, engagementId, engagement.target, engagement.workflow, contentOptions)
     default:
-      return generator.generateMarkdown(findings, engagementId, engagement.target, engagement.workflow)
+      return generator.generateMarkdown(findings, engagementId, engagement.target, engagement.workflow, contentOptions)
   }
+
 }

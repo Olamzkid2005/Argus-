@@ -1,6 +1,7 @@
 import { runAssessment } from "../assessment/service"
 import type { WorkflowRunResult } from "../workflow-runner"
-import { ReportGenerator } from "../reporting/generator"
+import { ReportGenerator, persistedReportOptions } from "../reporting/generator"
+import { EngagementStore } from "../engagement/store"
 import type { Feature } from "../config/feature-flags"
 import type { ProgressEvent } from "../shared/progress"
 
@@ -74,7 +75,8 @@ export async function assessCommand(target: string, options?: {
   // Render once and always leave the report on disk — stdout is easy to lose in
   // an unattended run, and "0 findings" is exactly when an artifact matters.
   const reportGen = new ReportGenerator()
-  const report = reportGen.generateMarkdown(result.allFindings, result.engagementId, target, "assessment")
+  const store = new EngagementStore()
+  const report = reportGen.generateMarkdown(result.allFindings, result.engagementId, target, "assessment", persistedReportOptions(store, result.engagementId))
   try {
     const reportPath = reportGen.writeArtifact(result.engagementId, report, "markdown")
     process.stderr.write(`\n✓ Report written: ${reportPath}\n`)

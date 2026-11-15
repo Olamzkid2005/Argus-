@@ -161,6 +161,7 @@ describe("assessCommand", () => {
       "eng-1",
       "https://example.com",
       "assessment",
+      { coverageGaps: [], evidenceByFinding: {} },
     )
   })
 

@@ -119,6 +119,55 @@ describe("reportCommand", () => {
     expect(typeof result).toBe("string")
     expect(result.length).toBeGreaterThan(0)
   })
+
+  test("report carries persisted coverage gaps, proof status, and evidence links", async () => {
+    const testDir = mkdtempSync(join(tmpdir(), "report-proof-ledger-"))
+    const testStore = new EngagementStore(join(testDir, "test.db"))
+    const eng = testStore.createEngagement("https://proof.test", "assessment")
+    testStore.savePhases(eng.id, [{
+      id: "phase-recon",
+      engagementId: eng.id,
+      name: "recon",
+      status: "COMPLETED",
+      capabilities: ["web_recon"],
+      executionMode: "sequential",
+      replanCycle: false,
+    }, {
+      id: "phase-exploitation",
+      engagementId: eng.id,
+      name: "exploitation",
+      status: "PARTIAL",
+      capabilities: ["web_exploitation"],
+      executionMode: "sequential",
+      replanCycle: false,
+      error: "one tool failed",
+    }])
+    testStore.saveFindings(eng.id, [{
+      id: "finding-1",
+      title: "Cross-site scripting",
+      severity: 3,
+      confidence: 2,
+      status: "PENDING",
+      description: "Reflected input was observed in the response.",
+      tool: "scanner",
+      phase: "exploitation",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }])
+    testStore.saveEvidencePackage("pkg-1", "finding-1", "abc123")
+    testStore.saveArtifact("artifact-1", "pkg-1", "requests/request-1.txt", "deadbeef", 123, "request")
+
+    try {
+      const { reportCommand } = await import("../../../../src/argus/commands/report")
+      const result = await reportCommand(eng.id, "markdown", testStore, undefined, false)
+      expect(result).toContain("exploitation is partial: one tool failed")
+      expect(result).toContain("- **Proof:** unverified")
+      expect(result).toContain("- **Evidence:** 1 package, 1 artifact (abc123)")
+      expect(result).toContain("requests/request-1.txt (request, 123 bytes)")
+    } finally {
+      try { rmSync(testDir, { recursive: true, force: true }) } catch {}
+    }
+  })
 })
 
 describe("enhanceReportWithAnalysis", () => {

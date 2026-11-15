@@ -2,6 +2,7 @@
  * FindingDetail — Full-screen detail view for a single finding.
  */
 import { createSignal, onMount, Show, For } from "solid-js"
+import type { RGBA } from "@opentui/core"
 import { useTheme } from "@tui/context/theme"
 import { EvidenceViewer } from "./evidence-viewer"
 import { Feature, getFeatureFlags } from "@/argus/config/feature-flags"
@@ -10,6 +11,24 @@ import { Toast } from "@tui/ui/toast"
 
 const SEV_LABELS = ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
 const CONF_LABELS = ["INFORMATIONAL", "LOW", "MEDIUM", "HIGH", "VERIFIED", "CONFIRMED"]
+const PROOF_LABELS: Record<string, string> = {
+  reproduced: "Reproduced",
+  suspected: "Suspected",
+  inconclusive: "Inconclusive",
+  not_reproduced: "Not reproduced",
+  unsupported: "Unsupported",
+  unverified: "Unverified",
+}
+
+function proofColor(
+  status: string,
+  theme: { success: RGBA; warning: RGBA; error: RGBA; textMuted: RGBA },
+): RGBA {
+  if (status === "reproduced") return theme.success
+  if (status === "not_reproduced") return theme.error
+  if (status === "suspected") return theme.warning
+  return theme.textMuted
+}
 
 interface FindingDetailProps {
   findingId: string
@@ -97,6 +116,32 @@ export function FindingDetail(props: FindingDetailProps) {
             </box>
             <text fg={theme.textMuted}>ID: {f().id}</text>
             <text fg={theme.textMuted}>Status: {CONF_LABELS[f().confidence] ?? "UNKNOWN"}</text>
+            <Show
+              when={f().verificationResult}
+              fallback={
+                <text fg={theme.textMuted}>Proof: Unverified — no verification outcome recorded</text>
+              }
+            >
+              {(proof) => (
+                <box flexDirection="column">
+                  <text fg={proofColor(proof().proofStatus, theme)}>
+                    Proof: {PROOF_LABELS[proof().proofStatus] ?? proof().proofStatus}
+                  </text>
+                  <text fg={theme.textMuted}>
+                    Verifier: {proof().verifier} · Confidence: {Math.round(proof().confidence * 100)}% · Controls: {proof().controls.length}
+                  </text>
+                  <Show when={proof().verifiedAt}>
+                    <text fg={theme.textMuted}>Verified: {proof().verifiedAt}</text>
+                  </Show>
+                  <text fg={theme.textMuted}>{proof().summary}</text>
+                  <Show when={proof().error}>
+                    <text fg={theme.error}>
+                      Verification stopped during {proof().error!.step}: {proof().error!.message}
+                    </text>
+                  </Show>
+                </box>
+              )}
+            </Show>
 
             {/* Details section */}
             <box flexDirection="column" paddingTop={1} border={["bottom"]} borderColor={theme.textMuted}>

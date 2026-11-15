@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test"
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
-import { ReportGenerator } from "../../../../src/argus/reporting/generator"
+import { ReportGenerator, coverageGapsFromPhases, evidenceMapFromEngagementEvidence, normalizeProofStatus, persistedReportOptions } from "../../../../src/argus/reporting/generator"
+import type { IEngagementStore } from "../../../../src/argus/engagement/types"
 import { Severity, Confidence } from "../../../../src/argus/planner/types"
+import { ProofStatus } from "../../../../src/argus/shared/types"
 import type { NormalizedFinding } from "../../../../src/argus/planner/types"
 
 function makeFinding(overrides?: Partial<NormalizedFinding>): NormalizedFinding {
@@ -354,6 +356,325 @@ describe("ReportGenerator", () => {
       expect(html).toContain("Fix 1")
       expect(html).toContain("ai-analysis")
       expect(html).toContain("gpt-4")
+    })
+  })
+
+  describe("proof ledger", () => {
+    function verifiedFinding(overrides?: Partial<NormalizedFinding>): NormalizedFinding {
+      return makeFinding({
+        id: "verified-1",
+        verificationResult: {
+          passed: true,
+          proofStatus: ProofStatus.REPRODUCED,
+          confidence: 0.92,
+          summary: "Payload executed in the test browser",
+          verifier: "browser-xss",
+          verifiedAt: "2026-11-14T12:00:00.000Z",
+          controls: [{ kind: "control-request", description: "Same request without payload" }],
+        },
+        ...overrides,
+      })
+    }
+
+    test("counts proof outcomes and identifies findings needing attention", () => {
+      const generator = new ReportGenerator()
+      const ledger = generator.proofLedger([
+        verifiedFinding({ id: "reproduced-1" }),
+        makeFinding({ id: "unverified-1" }),
+        makeFinding({
+          id: "suspected-1",
+          verificationResult: {
+            passed: true,
+            proofStatus: ProofStatus.SUSPECTED,
+            confidence: 0.65,
+            summary: "Detector matched, but exploitation was not observed",
+            verifier: "scanner",
+            verifiedAt: "2026-11-14T12:05:00.000Z",
+            controls: [],
+          },
+        }),
+      ], ["recon was skipped"])
+
+      expect(ledger.totalFindings).toBe(3)
+      expect(ledger.verifiedOutcomes).toBe(2)
+      expect(ledger.reproduced).toBe(1)
+      expect(ledger.suspected).toBe(1)
+      expect(ledger.unverified).toBe(1)
+      expect(ledger.reproducedFindingIds).toEqual(["reproduced-1"])
+      expect(ledger.attentionFindingIds).toEqual(["unverified-1", "suspected-1"])
+      expect(ledger.entries[0].controlComparisons).toEqual([{ kind: "control-request", description: "Same request without payload" }])
+      expect(ledger.coverageGaps).toEqual(["recon was skipped"])
+    })
+
+    test("markdown reports proof outcomes, attention items, and coverage gaps", () => {
+      const generator = new ReportGenerator()
+      const markdown = generator.generateMarkdown(
+        [verifiedFinding(), makeFinding({ id: "unverified-1" })],
+        "eng-1",
+        "https://example.com",
+        "assessment",
+        { coverageGaps: ["privilege escalation was skipped"] },
+      )
+
+      expect(markdown).toContain("## Proof ledger")
+      expect(markdown).toContain("Verified outcomes: 1 of 2")
+      expect(markdown).toContain("unverified-1 (unverified)")
+      expect(markdown).toContain("- **Proof:** reproduced (verifier browser-xss, confidence 92%, verified at 2026-11-14T12:00:00.000Z, controls: control-request: Same request without payload)")
+      expect(markdown).toContain("privilege escalation was skipped")
+    })
+
+    test("HTML and SARIF preserve machine- and human-readable proof metadata", () => {
+      const generator = new ReportGenerator()
+      const html = generator.generateHTML(
+        [verifiedFinding()],
+        "eng-1",
+        "https://example.com",
+        "assessment",
+        { coverageGaps: ["post-exploitation was skipped"] },
+      )
+      expect(html).toContain("Proof ledger")
+      expect(html).toContain("Proof: reproduced")
+      expect(html).toContain("post-exploitation was skipped")
+
+      const sarif = JSON.parse(generator.generateSARIF(
+        [verifiedFinding()],
+        "eng-1",
+        "https://example.com",
+        "assessment",
+        { coverageGaps: ["post-exploitation was skipped"] },
+      ))
+      expect(sarif.runs[0].results[0].properties.proofStatus).toBe("reproduced")
+      expect(sarif.runs[0].properties.proofByStatus.reproduced).toBe(1)
+      expect(sarif.runs[0].properties.attentionFindingIds).toEqual([])
+      expect(sarif.runs[0].properties.coverageGaps).toEqual(["post-exploitation was skipped"])
+    })
+
+    test("coverage helper distinguishes completed work from incomplete work", () => {
+      expect(coverageGapsFromPhases([
+        { name: "recon", status: "COMPLETED" },
+        { name: "exploitation", status: "PARTIAL", error: "one tool failed" },
+        { name: "post-exploitation", status: "SKIPPED" },
+      ])).toEqual([
+        "exploitation is partial: one tool failed",
+        "post-exploitation was skipped",
+      ])
+      expect(normalizeProofStatus("PASS")).toBe("reproduced")
+    })
+
+    test("evidence packages and artifacts travel with the proof ledger", () => {
+      const evidenceByFinding = {
+        "verified-1": [{
+          packageId: "pkg-1",
+          packageHash: "abc123",
+          createdAt: Date.now(),
+          artifacts: [
+            { id: "a-1", path: "requests/request-1.txt", type: "request", sizeBytes: 123 },
+            { id: "a-2", path: "responses/response-1.txt", type: "response", sizeBytes: 456 },
+          ],
+        }],
+      }
+      const generator = new ReportGenerator()
+      const ledger = generator.proofLedger([verifiedFinding()], [], evidenceByFinding)
+      expect(ledger.evidencePackages).toBe(1)
+      expect(ledger.evidenceArtifacts).toBe(2)
+      expect(ledger.entries[0].evidencePackageHashes).toEqual(["abc123"])
+
+      const markdown = generator.generateMarkdown(
+        [verifiedFinding()],
+        "eng-1",
+        "https://example.com",
+        "assessment",
+        { evidenceByFinding },
+      )
+      expect(markdown).toContain("- **Evidence:** 1 package, 2 artifacts (abc123)")
+      expect(markdown).toContain("requests/request-1.txt (request, 123 bytes)")
+
+      const html = generator.generateHTML(
+        [verifiedFinding()],
+        "eng-1",
+        "https://example.com",
+        "assessment",
+        { evidenceByFinding },
+      )
+      expect(html).toContain("Evidence packages")
+      expect(html).toContain("responses/response-1.txt")
+
+      const sarif = JSON.parse(generator.generateSARIF(
+        [verifiedFinding()],
+        "eng-1",
+        "https://example.com",
+        "assessment",
+        { evidenceByFinding },
+      ))
+      expect(sarif.runs[0].results[0].properties.evidencePackageHashes).toEqual(["abc123"])
+      expect(sarif.runs[0].results[0].properties.evidence).toHaveLength(2)
+      expect(sarif.runs[0].properties.evidencePackages).toBe(1)
+      expect(sarif.runs[0].results[0].properties.controlComparisons).toEqual([{
+        kind: "control-request",
+        description: "Same request without payload",
+      }])
+    })
+
+    test("exported reports redact scanned secrets and preserve local finding values", () => {
+      const canaries = [
+        "canary-bearer-1234567890",
+        "AKIAIOSFODNN7EXAMPLE",
+        "canary-password-1234567890",
+      ]
+      const generator = new ReportGenerator()
+      generator.setAnalyses([{
+        findingId: "verified-1",
+        explanation: "Use Authorization: Bearer canary-bearer-1234567890 for comparison.",
+        impact: ["api_key=canary-password-1234567890 could be abused"],
+        remediation: ["Rotate AKIAIOSFODNN7EXAMPLE"],
+        model: "test-model",
+        generatedAt: Date.now(),
+        findingUpdatedAt: Date.now(),
+      }])
+      const finding = verifiedFinding({
+        title: "Leaked AKIAIOSFODNN7EXAMPLE in response",
+        description: "Authorization: Bearer canary-bearer-1234567890 and password=canary-password-1234567890 were returned.",
+        verificationResult: {
+          passed: true,
+          proofStatus: ProofStatus.REPRODUCED,
+          confidence: 0.9,
+          summary: "Reproduced with Authorization: Bearer canary-bearer-1234567890.",
+          verifier: "browser",
+          verifiedAt: new Date().toISOString(),
+          controls: [{ kind: "control-request", description: "Same request without AKIAIOSFODNN7EXAMPLE" }],
+        },
+      })
+      const markdown = generator.generateMarkdown([finding], "eng-1", "https://example.com", "assessment")
+      const json = generator.generateJSON([finding], "eng-1", "https://example.com", "assessment")
+      const html = generator.generateHTML([finding], "eng-1", "https://example.com", "assessment")
+      const sarif = generator.generateSARIF([finding], "eng-1", "https://example.com", "assessment")
+      for (const output of [markdown, json, html, sarif]) {
+        for (const canary of canaries) {
+          expect(output).not.toContain(canary)
+        }
+      }
+      expect(markdown).toContain("Bearer")
+      expect(markdown).toContain("REDACTED")
+      expect(json).toContain("__REDACTED_AWS_KEY__")
+      expect(finding.title).toContain(canaries[1])
+    })
+
+    test("execution snapshots show scope, credential refs, budget, and action outcomes", () => {
+      const generator = new ReportGenerator()
+      const execution = {
+        scope: ["https://example.com"],
+        model: "provider/test-model",
+        limits: { maxToolCalls: 10 },
+        actions: [
+          { id: "recon", tool: "recon", status: "succeeded" as const, readOnly: true, reason: "approved recon phase", source: "plan" as const, by: "local-operator" },
+          { id: "exploit", tool: "exploit", status: "failed" as const, readOnly: false, error: "target refused the payload", reason: "followed an observed login form", source: "replan-llm" as const, by: "worker:attacker", provenanceActions: [{ tool: "nuclei", outcome: "failed", reasoning: "engine chose nuclei for the login form", identity: "attacker", source: "llm" as const, detail: "target refused the payload" }] },
+        ],
+        observations: ["recon: discovered a login form"],
+        secretRefs: ["credential:analyst"],
+        authIdentities: ["credential:analyst", "worker:attacker"],
+        budgetUsage: {
+          llmCalls: 2,
+          llmFailures: 1,
+          inputTokens: 100,
+          outputTokens: 20,
+          costUsd: 0,
+          costKnown: false,
+          toolCalls: 3,
+          requestCount: 5,
+          source: "merged (ts driver + worker agent sessions)" as const,
+          workerToolCalls: 2,
+          discrepancies: ["worker sessions recorded 2 tool call(s); TS driver recorded 3"],
+        },
+        checkpointAt: "2026-11-14T12:10:00.000Z",
+      }
+      const markdown = generator.generateMarkdown([makeFinding()], "eng-1", "https://example.com", "assessment", { execution })
+      expect(markdown).toContain("## Execution context")
+      expect(markdown).toContain("https://example.com")
+      expect(markdown).toContain("credential:analyst")
+      expect(markdown).toContain("worker:attacker")
+      expect(markdown).toContain("merged (ts driver + worker agent sessions)")
+      expect(markdown).toContain("worker sessions recorded 2 tool call(s); TS driver recorded 3")
+      expect(markdown).toContain("exploit: failed (source replan-llm, by worker:attacker) — target refused the payload")
+      expect(markdown).toContain("reason: followed an observed login form")
+      expect(markdown).toContain("nuclei: failed (llm, attacker)")
+
+      const html = generator.generateHTML([makeFinding()], "eng-1", "https://example.com", "assessment", { execution })
+      expect(html).toContain("Execution context")
+      expect(html).toContain("provider/test-model")
+
+      const parsed = JSON.parse(generator.generateJSON([makeFinding()], "eng-1", "https://example.com", "assessment", { execution }))
+      expect(parsed.execution.secretRefs).toEqual(["credential:analyst"])
+      expect(parsed.execution.authIdentities).toEqual(["credential:analyst", "worker:attacker"])
+      expect(parsed.execution.budgetUsage.toolCalls).toBe(3)
+      expect(parsed.execution.budgetUsage.source).toBe("merged (ts driver + worker agent sessions)")
+      expect(parsed.execution.actions[1].provenanceActions[0].identity).toBe("attacker")
+    })
+
+    test("persisted report options carry phases, evidence, and checkpoints together", () => {
+      const store = {
+        getPhases: () => [{ name: "post-exploitation", status: "SKIPPED" }],
+        getEvidenceByEngagement: () => [{
+          findingId: "finding-1",
+          packages: [{ id: "pkg-1", packageHash: "abc123", createdAt: 123, artifacts: [] }],
+        }],
+        getLatestCheckpoint: () => ({
+          scope: ["https://example.com"],
+          secretRefs: ["credential:analyst"],
+          authIdentities: ["credential:analyst", "worker:attacker"],
+          actions: [{
+            id: "recon",
+            tool: "recon",
+            status: "succeeded",
+            readOnly: true,
+            reason: "approved recon phase",
+            source: "plan",
+            by: "local-operator",
+            provenance: {
+              source: "plan",
+              reason: "approved recon phase",
+              by: "local-operator",
+              actions: [{ tool: "nuclei", outcome: "succeeded-with-findings", reasoning: "engine choice", identity: "attacker", source: "llm" }],
+            },
+          }],
+          observations: [],
+          budgetUsage: {
+            llmCalls: 0,
+            llmFailures: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            costUsd: 0,
+            costKnown: false,
+            toolCalls: 2,
+            requestCount: 0,
+          },
+          workerBudget: { toolCalls: 1, executedTools: ["nuclei"], identities: ["attacker"], sessions: 1 },
+          checkpointAt: "2026-11-14T12:10:00.000Z",
+        }),
+      } as unknown as IEngagementStore
+      const options = persistedReportOptions(store, "eng-1")
+      expect(options.coverageGaps).toEqual(["post-exploitation was skipped"])
+      expect(options.evidenceByFinding?.["finding-1"]?.[0].packageId).toBe("pkg-1")
+      expect(options.execution?.secretRefs).toEqual(["credential:analyst"])
+      expect(options.execution?.authIdentities).toEqual(["credential:analyst", "worker:attacker"])
+      expect(options.execution?.actions[0].reason).toBe("approved recon phase")
+      expect(options.execution?.actions[0].provenanceActions?.[0].tool).toBe("nuclei")
+      expect(options.execution?.budgetUsage.source).toBe("merged (ts driver + worker agent sessions)")
+      expect(options.execution?.budgetUsage.workerToolCalls).toBe(1)
+      expect(options.execution?.budgetUsage.discrepancies.join(" ")).toContain("worker sessions recorded 1 tool call(s); TS driver recorded 2")
+    })
+
+    test("engagement evidence rows are mapped to finding-keyed report evidence", () => {
+      const mapped = evidenceMapFromEngagementEvidence([{
+        findingId: "verified-1",
+        packages: [{
+          id: "pkg-1",
+          packageHash: "abc123",
+          createdAt: 123,
+          artifacts: [{ id: "a-1", path: "requests/request-1.txt", type: "request", sizeBytes: 123 }],
+        }],
+      }])
+      expect(mapped["verified-1"][0].packageId).toBe("pkg-1")
+      expect(mapped["verified-1"][0].artifacts).toHaveLength(1)
     })
   })
 

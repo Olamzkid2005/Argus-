@@ -52,13 +52,14 @@ export function ReportDashboard(props: ReportDashboardProps) {
       })
 
       // Generate the markdown report
-      const { ReportGenerator } = await import("@/argus/reporting/generator")
+      const { ReportGenerator, persistedReportOptions } = await import("@/argus/reporting/generator")
       const generator = new ReportGenerator()
       const markdown = generator.generateMarkdown(
         findings,
         engagement.id,
         engagement.target,
         engagement.workflow,
+        persistedReportOptions(store, props.engagementId),
       )
 
       // Prepend phase summary to the report
