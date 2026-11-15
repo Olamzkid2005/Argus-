@@ -1,57 +1,89 @@
 import type { BrowserEngine } from "../engine"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../types"
-import { Confidence } from "../../shared/types"
+import { Confidence, ProofStatus } from "../../shared/types"
+import type { ControlReference } from "../../shared/types"
 import { authenticateSession, isAccessDenied, detectAuthChallenge, logAuthChallenge } from "../login"
 import type { AuthTokens } from "../login"
 import type { EvidenceCollector } from "../../evidence/collector"
 import type { CredentialEntry } from "../../engagement/credentials"
-import { randomUUID, createHash } from "crypto"
+import { ObjectAccessPlanError } from "../bola-plan"
+import type { ObjectAccessIdentity, ObjectAccessPlan } from "../bola-plan"
+import { createHash, randomUUID } from "crypto"
 import { tmpdir } from "os"
 import { join } from "path"
 import { existsSync, mkdirSync, rmSync } from "fs"
 
+/** One request made as one identity, with everything needed to judge it. */
+interface ResourceFetch {
+  loginSucceeded: boolean
+  accessible: boolean
+  httpStatus: number
+  body: string
+  bodySignature: string
+  denialText: boolean
+}
+
+/**
+ * Broken Object Level Authorization — proves that a second real identity can
+ * read a resource that belongs to the first.
+ *
+ * Stage 4.2. The verifier no longer accepts a path string plus any two
+ * credential objects: it is constructed from the validated `ObjectAccessPlan`
+ * from `objectAccessPlan()`, so fabricated or missing identities cannot reach
+ * it. Before the cross-user attempt it establishes the controls the plan
+ * requires — the resource is protected (unauthenticated request denied), the
+ * login mechanism rejects a wrong password, the owner really can read the
+ * resource — and it only confirms when the accessor receives the owner's
+ * unique data. A secure twin (accessor denied) is explicitly not confirmed,
+ * and a 200 that returns someone else's/another page is inconclusive, not a
+ * finding.
+ */
 export class BOLAVerifier implements VerificationScenario {
   name = "bola"
   description = "Broken Object Level Authorization — verifies resource access between different users"
 
   private logs: string[] = []
-  private userAResourceAccessible = false
-  private userBResourceAccessible = false
-  private resourceRequiresAuth = false
   private capturedScreenshots: { data: Buffer; label: string }[] = []
   private capturedResponses: string[] = []
   private capturedRequests: string[] = []
   private resourceUrl = ""
   private harDir: string | null = null
-  private loginFailed = false
+
+  private unauthenticatedBlocked = false
+  private invalidCredentialsRejected = false
+  private loginFailedFor: string | null = null
+
+  private ownerFetch: ResourceFetch | null = null
+  private accessorFetch: ResourceFetch | null = null
+
+  private controls: ControlReference[] = []
 
   constructor(
     private engine: BrowserEngine,
     private targetUrl: string,
-    private resourcePath: string,
-    private userACreds: CredentialEntry,
-    private userBCreds: CredentialEntry,
+    private plan: ObjectAccessPlan,
     private collector?: EvidenceCollector,
     private engagementId?: string,
     private findingId?: string,
-  ) {}
+  ) {
+    this.resourceUrl = plan.resource.url
+  }
 
   async setup(): Promise<void> {
-    if (!this.userACreds.username || !this.userACreds.password) {
-      this.logs.push("WARNING: User A credentials are empty — authentication may fail")
+    if (!this.resourceUrl) {
+      throw new ObjectAccessPlanError(
+        "unstructured-resource",
+        "BOLA verifier requires a discovered resource URL",
+      )
     }
-    if (!this.userBCreds.username || !this.userBCreds.password) {
-      this.logs.push("WARNING: User B credentials are empty — authentication may fail")
-    }
-    if (this.resourcePath === this.targetUrl.replace(/\/+$/, "")) {
-      this.logs.push("WARNING: resourcePath and targetUrl are identical — BOLA check will be ineffective")
-    }
-    this.resourceUrl = `${this.targetUrl.replace(/\/+$/, "")}/${this.resourcePath.replace(/^\//, "")}`
     await this.engine.launch()
     // Create a temp directory for HAR capture
     this.harDir = join(tmpdir(), `argus-har-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
     mkdirSync(this.harDir, { recursive: true })
-    this.logs.push(`BOLA verifier setup complete — HAR dir: ${this.harDir}`)
+    this.logs.push(
+      `BOLA verifier setup complete — ${this.plan.owner.role} owns ${this.resourceUrl}, ` +
+        `${this.plan.accessor.role} attempts access — HAR dir: ${this.harDir}`,
+    )
   }
 
   async cleanup(): Promise<void> {
@@ -65,52 +97,206 @@ export class BOLAVerifier implements VerificationScenario {
   }
 
   async execute(): Promise<void> {
-    // Baseline: check if the resource is accessible without auth
-    this.resourceRequiresAuth = !(await this.checkAccessUnauthenticated(this.resourceUrl))
-    this.logs.push(`Resource requires auth: ${this.resourceRequiresAuth}`)
+    // Control 1: the resource must actually be protected. A public page has no
+    // object-level policy to violate, so it cannot be used as a BOLA proof.
+    const anonymous = await this.fetchUnauthenticated(this.resourceUrl)
+    this.unauthenticatedBlocked = !anonymous.accessible
+    this.controls.push({
+      kind: "unauthenticated-baseline",
+      description: `GET ${this.resourceUrl} without a session`,
+      reference: this.resourceUrl,
+      outcome: this.unauthenticatedBlocked
+        ? `denied (HTTP ${anonymous.httpStatus || "no response"}${anonymous.denialText ? ", denial page" : ""})`
+        : `served without authentication (HTTP ${anonymous.httpStatus || "no response"})`,
+    })
+    this.logs.push(`Unauthenticated access blocked: ${this.unauthenticatedBlocked}`)
 
-    this.userAResourceAccessible = await this.checkAccess(this.resourceUrl, this.userACreds, "User A")
-    this.userBResourceAccessible = await this.checkAccess(this.resourceUrl, this.userBCreds, "User B")
-    this.logs.push(`User A access: ${this.userAResourceAccessible}, User B access: ${this.userBResourceAccessible}`)
+    // Control 2: the login mechanism must reject a wrong password. Otherwise a
+    // "successful" login proves nothing about the identity we think we used.
+    this.invalidCredentialsRejected = await this.invalidCredentialControl(this.plan.owner)
+    this.controls.push({
+      kind: "invalid-credentials",
+      description: `login as ${this.plan.owner.credentials.username} with a wrong password`,
+      reference: this.plan.owner.role,
+      outcome: this.invalidCredentialsRejected ? "rejected" : "accepted a wrong password",
+    })
+
+    // Control 3: the owner can read their own resource (ownership established).
+    this.ownerFetch = await this.fetchAs(this.resourceUrl, this.plan.owner, "owner")
+    if (!this.ownerFetch.loginSucceeded) {
+      this.loginFailedFor = this.plan.owner.credentials.username
+    }
+    const ownerMarkerSeen = this.markerSeen(this.ownerFetch)
+    this.controls.push({
+      kind: "owner-resource-access",
+      description: `${this.plan.owner.role} reads their own resource`,
+      reference: this.resourceUrl,
+      outcome: !this.ownerFetch.loginSucceeded
+        ? "login failed"
+        : this.ownerFetch.accessible
+          ? ownerMarkerSeen
+            ? "received owner data"
+            : "reached the resource (no owner marker seen)"
+          : "denied",
+    })
+
+    // The cross-user attempt comes last, after every control above.
+    this.accessorFetch = await this.fetchAs(this.resourceUrl, this.plan.accessor, "accessor")
+    if (!this.accessorFetch.loginSucceeded) {
+      this.loginFailedFor = this.plan.accessor.credentials.username
+    }
+    this.controls.push({
+      kind: "accessor-resource-access",
+      description: `${this.plan.accessor.role} requests the owner's resource`,
+      reference: this.resourceUrl,
+      outcome: !this.accessorFetch.loginSucceeded
+        ? "login failed"
+        : this.accessorFetch.accessible
+          ? `served (HTTP ${this.accessorFetch.httpStatus || "no response"})`
+          : `denied (HTTP ${this.accessorFetch.httpStatus || "no response"})`,
+    })
+
+    this.logs.push(
+      `Owner access: ${this.ownerFetch.accessible}${ownerMarkerSeen ? " (marker seen)" : ""}; ` +
+        `accessor access: ${this.accessorFetch.accessible}`,
+    )
   }
 
   async verify(): Promise<VerifierResult> {
-    // If login failed, report as skipped (not a clean "not vulnerable" result)
-    if (this.loginFailed) {
-      return {
-        passed: false,
+    const controls = this.controls
+
+    // A check that could not run is inconclusive — not a clean "not vulnerable".
+    if (this.loginFailedFor) {
+      return this.result({
+        status: ProofStatus.INCONCLUSIVE,
         confidence: Confidence.INFORMATIONAL,
-        confidenceScore: 0.0,
-        evidence: [],
-        summary: `BOLA skipped — login failed for one or both users, access check could not complete`,
-      }
+        score: 0,
+        summary: `BOLA inconclusive — login failed for ${this.loginFailedFor}, access check could not complete`,
+        controls,
+        error: {
+          step: "execute",
+          name: "LoginFailed",
+          message: `authentication failed for ${this.loginFailedFor}`,
+        },
+      })
     }
 
-    // BOLA only meaningful if the resource is actually access-controlled
-    const passed = this.resourceRequiresAuth && this.userAResourceAccessible && this.userBResourceAccessible
+    if (!this.unauthenticatedBlocked) {
+      return this.result({
+        status: ProofStatus.INCONCLUSIVE,
+        confidence: Confidence.INFORMATIONAL,
+        score: 0,
+        summary: `BOLA inconclusive — ${this.resourceUrl} is served without authentication, so there is no access-control policy to test`,
+        controls,
+      })
+    }
 
+    if (!this.invalidCredentialsRejected) {
+      return this.result({
+        status: ProofStatus.INCONCLUSIVE,
+        confidence: Confidence.INFORMATIONAL,
+        score: 0,
+        summary: "BOLA inconclusive — the login form accepted an invalid password, so the sessions cannot be trusted",
+        controls,
+      })
+    }
+
+    if (!this.ownerFetch?.accessible) {
+      return this.result({
+        status: ProofStatus.INCONCLUSIVE,
+        confidence: Confidence.INFORMATIONAL,
+        score: 0,
+        summary: `BOLA inconclusive — ${this.plan.owner.role} could not read their own resource, so ownership was not established`,
+        controls,
+      })
+    }
+
+    if (!this.markerSeen(this.ownerFetch)) {
+      return this.result({
+        status: ProofStatus.INCONCLUSIVE,
+        confidence: Confidence.INFORMATIONAL,
+        score: 0,
+        summary: `BOLA inconclusive — the owner's page did not contain the expected unique data, so the resource was not identified`,
+        controls,
+      })
+    }
+
+    const accessor = this.accessorFetch!
+    if (!accessor.accessible) {
+      // The secure twin: the second identity is denied. Never confirmed.
+      return this.result({
+        status: ProofStatus.NOT_REPRODUCED,
+        confidence: Confidence.LOW,
+        score: 0.3,
+        summary: `BOLA not detected for ${this.resourceUrl} — ${this.plan.accessor.role} was denied access to ${this.plan.owner.role}'s resource`,
+        controls,
+      })
+    }
+
+    // A 200 is not proof: the accessor must receive the *owner's* data.
+    if (!this.accessorSawOwnerData()) {
+      return this.result({
+        status: ProofStatus.INCONCLUSIVE,
+        confidence: Confidence.INFORMATIONAL,
+        score: 0.1,
+        summary: `BOLA inconclusive — ${this.plan.accessor.role} received a different response than ${this.plan.owner.role}; object access was not demonstrated`,
+        controls,
+      })
+    }
+
+    return this.result({
+      status: ProofStatus.REPRODUCED,
+      confidence: Confidence.HIGH,
+      score: 0.9,
+      summary: `BOLA confirmed: ${this.plan.accessor.role} received ${this.plan.owner.role}'s protected data at ${this.resourceUrl}`,
+      controls,
+    })
+  }
+
+  private result(input: {
+    status: ProofStatus
+    confidence: Confidence
+    score: number
+    summary: string
+    controls: ControlReference[]
+    error?: { step: "setup" | "execute" | "verify" | "collectEvidence"; name: string; message: string }
+  }): VerifierResult {
     return {
-      passed,
-      confidence: passed ? Confidence.HIGH : this.resourceRequiresAuth ? Confidence.LOW : Confidence.INFORMATIONAL,
-      confidenceScore: this.computeConfidence(passed),
+      passed: input.status === ProofStatus.REPRODUCED,
+      proofStatus: input.status,
+      confidence: input.confidence,
+      confidenceScore: input.score,
       evidence: [],
-      summary: !this.resourceRequiresAuth
-        ? `BOLA skipped — ${this.resourcePath} is publicly accessible (no auth required)`
-        : passed
-          ? `BOLA confirmed: User B could access User A's resource at ${this.resourcePath}`
-          : `BOLA not detected for ${this.resourcePath} (resource requires auth and User B denied)`,
+      summary: input.summary,
+      controls: input.controls,
+      ...(input.error ? { error: input.error } : {}),
     }
   }
 
+  private markerSeen(fetch: ResourceFetch | null): boolean {
+    if (!fetch?.accessible) return false
+    const marker = this.plan.resource.ownerMarker
+    if (marker) return fetch.body.includes(marker)
+    // Without an explicit marker, "owner data" means a non-trivial resource
+    // page — an empty body establishes nothing.
+    return fetch.body.trim().length >= 20
+  }
+
   /**
-   * Compute graded confidence score (0.0-1.0) from signal strength.
-   * BOLA confirmed with both users accessing the resource = high confidence.
+   * The accessor must have received the owner's unique data: the same resource
+   * content, or a page containing the owner's marker.
    */
-  private computeConfidence(passed: boolean): number {
-    if (!this.resourceRequiresAuth) return 0.0
-    if (!passed) return 0.3  // Auth works as expected, low risk
-    // Both users accessed the resource — confirmed BOLA
-    return 0.85
+  private accessorSawOwnerData(): boolean {
+    const owner = this.ownerFetch!
+    const accessor = this.accessorFetch!
+    if (!accessor.accessible) return false
+    const marker = this.plan.resource.ownerMarker
+    if (marker) return accessor.body.includes(marker)
+    return (
+      accessor.bodySignature !== "" &&
+      accessor.bodySignature === owner.bodySignature &&
+      accessor.body.trim().length >= 20
+    )
   }
 
   async collectEvidence(): Promise<EvidencePackage> {
@@ -170,8 +356,8 @@ export class BOLAVerifier implements VerificationScenario {
     return this.capturedScreenshots
   }
 
-  /** Check resource access without authentication as a baseline */
-  private async checkAccessUnauthenticated(resourceUrl: string): Promise<boolean> {
+  /** GET the resource with no session at all. */
+  private async fetchUnauthenticated(resourceUrl: string): Promise<ResourceFetch> {
     const context = await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
     const page = await context.newPage()
     try {
@@ -179,23 +365,68 @@ export class BOLAVerifier implements VerificationScenario {
       const response = await page.goto(resourceUrl, { waitUntil: "networkidle", timeout: 30000 })
       const httpStatus = response?.status() ?? 0
       this.capturedResponses.push(`[unauthenticated baseline] ${resourceUrl}: HTTP ${httpStatus}`)
-      try {
-        const shot = await this.engine.captureScreenshot(page)
-        this.capturedScreenshots.push({ data: shot, label: "unauthenticated-baseline" })
-      } catch { /* screenshot best-effort */ }
-      if (httpStatus === 401 || httpStatus === 403) return false
-      const bodyText = await page.locator("body").innerText().catch(() => "")
-      if (isAccessDenied(bodyText)) return false
-      return true
+      const body = await page.locator("body").innerText().catch(() => "")
+      const denialText = isAccessDenied(body)
+      const denied = httpStatus === 401 || httpStatus === 403 || denialText
+      await this.screenshot(page, "unauthenticated-baseline")
+      return {
+        loginSucceeded: true,
+        accessible: !denied,
+        httpStatus,
+        body,
+        bodySignature: bodySignature(body),
+        denialText,
+      }
     } catch {
-      return false
+      // A resource that cannot be fetched anonymously is not accessible.
+      return { loginSucceeded: true, accessible: false, httpStatus: 0, body: "", bodySignature: "", denialText: false }
     } finally {
       await page.close()
       await context.close()
     }
   }
 
-  private async checkAccess(resourceUrl: string, creds: CredentialEntry, label: string): Promise<boolean> {
+  /**
+   * Attempt a login with a deliberately wrong password. It must fail; if the
+   * form accepts it, no later session can be attributed to a real identity.
+   */
+  private async invalidCredentialControl(identity: ObjectAccessIdentity): Promise<boolean> {
+    if (!identity.credentials.password && !identity.credentials.authToken) {
+      // Token/cookie-only identities have no password to corrupt.
+      return true
+    }
+    const context = await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
+    const page = await context.newPage()
+    try {
+      await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30000 })
+      const bogus: CredentialEntry = {
+        ...identity.credentials,
+        password: `${identity.credentials.password}-argus-invalid-${Date.now()}`,
+        authToken: undefined,
+        authCookies: undefined,
+      }
+      this.capturedRequests.push(`POST login as ${identity.credentials.username} [invalid-credential control]`)
+      const accepted = await authenticateSession(page, bogus, undefined, context, () => {})
+      this.capturedResponses.push(
+        `[invalid-credential control] ${identity.credentials.username}: ${accepted ? "ACCEPTED" : "rejected"}`,
+      )
+      return !accepted
+    } catch {
+      // An error during the bogus login means it did not authenticate.
+      return true
+    } finally {
+      await page.close()
+      await context.close()
+    }
+  }
+
+  /** Log in as one identity in its own context and fetch the resource. */
+  private async fetchAs(
+    resourceUrl: string,
+    identity: ObjectAccessIdentity,
+    label: string,
+  ): Promise<ResourceFetch> {
+    const creds = identity.credentials
     this.logs.push(`Attempting to access ${resourceUrl} as ${label} (${creds.username})`)
     const context = await this.engine.createContext({ harDir: this.harDir ?? undefined } as any)
     const page = await context.newPage()
@@ -203,10 +434,6 @@ export class BOLAVerifier implements VerificationScenario {
       await page.goto(this.targetUrl, { waitUntil: "networkidle", timeout: 30000 })
       this.capturedRequests.push(`GET ${this.targetUrl} [${label} login]`)
 
-      // Build AuthTokens from the full CredentialEntry for OAuth/SSO fallback.
-      // Gap 2.6: When the credential file includes authToken or authCookies,
-      // they are passed to authenticateSession() so it can fall through to
-      // token/cookie injection when form-based login hits an OAuth/SSO page.
       const authTokens: AuthTokens | undefined =
         creds.authToken || (creds.authCookies && creds.authCookies.length > 0)
           ? {
@@ -215,9 +442,6 @@ export class BOLAVerifier implements VerificationScenario {
             }
           : undefined
 
-      // Phase 3.4.2: Capture auth challenges during login.
-      // Uses authenticateSession() which tries form login first, then falls
-      // back to token/cookie injection for OAuth/SSO pages (Gap 2.6).
       const loginSuccess = await authenticateSession(
         page,
         creds,
@@ -233,34 +457,50 @@ export class BOLAVerifier implements VerificationScenario {
           logAuthChallenge(challenge, (line) => this.logs.push(line))
         }
         this.logs.push(`Login failed for ${creds.username} — aborting access check (fail-closed)`)
-        this.loginFailed = true
-        return false
+        return { loginSucceeded: false, accessible: false, httpStatus: 0, body: "", bodySignature: "", denialText: false }
       }
 
-      // Navigate directly to the resource page after login.
-      // Do NOT re-navigate to targetUrl first — that would reload the login page
-      // and potentially invalidate the freshly-set session.
       const resourceResponse = await page.goto(resourceUrl, { waitUntil: "networkidle", timeout: 30000 })
+      const httpStatus = resourceResponse?.status() ?? 0
       this.capturedRequests.push(`GET ${resourceUrl} [${label}]`)
-      this.capturedResponses.push(`[${label}] Resource page status: ${resourceResponse?.status() ?? "unknown"}`)
+      this.capturedResponses.push(`[${label}] Resource page status: ${httpStatus}`)
 
-      try {
-        const shot = await this.engine.captureScreenshot(page)
-        this.capturedScreenshots.push({ data: shot, label: `${label}-resource` })
-      } catch { /* screenshot best-effort */ }
+      const body = await page.locator("body").innerText().catch(() => "")
+      const denialText = isAccessDenied(body)
+      await this.screenshot(page, `${label}-resource`)
 
       let accessible: boolean
-      try {
-        const body = await page.locator("body").innerText()
-        accessible = page.url() === resourceUrl || !isAccessDenied(body)
-      } catch {
+      if (httpStatus === 401 || httpStatus === 403) {
         accessible = false
+      } else if (denialText) {
+        accessible = false
+      } else if (page.url() !== resourceUrl) {
+        // Redirected away from the resource (usually to the login page).
+        accessible = false
+      } else {
+        accessible = true
       }
 
-      return accessible
+      return { loginSucceeded: true, accessible, httpStatus, body, bodySignature: bodySignature(body), denialText }
+    } catch {
+      return { loginSucceeded: false, accessible: false, httpStatus: 0, body: "", bodySignature: "", denialText: false }
     } finally {
       await page.close()
       await context.close()
     }
   }
+
+  private async screenshot(page: unknown, label: string): Promise<void> {
+    try {
+      const shot = await this.engine.captureScreenshot(page as Parameters<BrowserEngine["captureScreenshot"]>[0])
+      this.capturedScreenshots.push({ data: shot, label })
+    } catch { /* screenshot best-effort */ }
+  }
+}
+
+/** Stable fingerprint of a page body, ignoring whitespace noise. */
+function bodySignature(body: string): string {
+  const normalized = body.replace(/\s+/g, " ").trim()
+  if (!normalized) return ""
+  return createHash("sha256").update(normalized).digest("hex")
 }
