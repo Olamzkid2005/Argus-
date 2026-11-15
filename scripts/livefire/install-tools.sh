@@ -74,7 +74,62 @@ else
   echo "nmap already installed: $("$BIN/nmap" --version | head -1)"
 fi
 
-# ── verify both actually run ──────────────────────────────────────────
+# ── headless browser for the playwright verifiers ────────────────────
+# Chromium needs shared libraries and a fontconfig file this image does not
+# ship. They are extracted unprivileged into tools/browser-libs; the worker's
+# tool environment points LD_LIBRARY_PATH/FONTCONFIG_FILE at them and keeps the
+# browser cache inside the workspace so a throw-away HOME does not lose it.
+BROWSER_LIBS="$ROOT/.livefire/tools/browser-libs"
+PW_BROWSERS="$ROOT/.livefire/tools/ms-playwright"
+BROWSER_DEBS=(
+  libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libasound2t64
+  libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 libnspr4 libnss3
+  libxkbcommon0 libxi6 libxrender1 libpango-1.0-0 libcairo2 libxext6
+  libdbus-1-3 libfreetype6 libfontconfig1 libthai0 libdatrie1 libgraphite2-3
+  libharfbuzz0b libpixman-1-0 libfribidi0
+)
+
+if [ "$FORCE" = "1" ] || [ ! -x "$PW_BROWSERS/chromium_headless_shell-1255/chrome-headless-shell-linux64/chrome-headless-shell" ]; then
+  echo "installing the playwright chromium build"
+  PLAYWRIGHT_BROWSERS_PATH="$PW_BROWSERS" uv pip install --python "$ROOT/argus-workers/venv/bin/python" playwright
+  PLAYWRIGHT_BROWSERS_PATH="$PW_BROWSERS" "$ROOT/argus-workers/venv/bin/python" -m playwright install chromium
+fi
+
+if [ "$FORCE" = "1" ] || [ ! -f "$BROWSER_LIBS/etc/fonts/fonts.conf" ]; then
+  mkdir -p "$BROWSER_LIBS/etc/fonts"
+  for pkg in "${BROWSER_DEBS[@]}" fonts-dejavu-core; do
+    url=$(curl -sL --max-time 60 "https://packages.ubuntu.com/noble/amd64/$pkg/download" | grep -o 'http://[^"]*\.deb' | head -1)
+    [ -n "$url" ] || url=$(curl -sL --max-time 60 "https://packages.ubuntu.com/noble/all/$pkg/download" | grep -o 'http://[^"]*\.deb' | head -1)
+    if [ -z "$url" ]; then echo "could not resolve $pkg" >&2; continue; fi
+    file="$TMP/$(basename "$url")"
+    curl -fsSL --max-time 300 -o "$file" "$url" && dpkg-deb -x "$file" "$BROWSER_LIBS"
+  done
+  cat > "$BROWSER_LIBS/etc/fonts/fonts.conf" <<FONTS
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>$BROWSER_LIBS/usr/share/fonts</dir>
+  <cachedir>/tmp/fontconfig-cache</cachedir>
+</fontconfig>
+FONTS
+fi
+
+# ── verify everything actually runs ──────────────────────────────────
 "$BIN/trivy" --version | head -1
 "$BIN/nmap" --version | head -1
+LD_LIBRARY_PATH="$BROWSER_LIBS/usr/lib/x86_64-linux-gnu" \
+  FONTCONFIG_FILE="$BROWSER_LIBS/etc/fonts/fonts.conf" \
+  PLAYWRIGHT_BROWSERS_PATH="$PW_BROWSERS" \
+  "$ROOT/argus-workers/venv/bin/python" - <<'BROWSER_TEST'
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+    page = browser.new_page()
+    page.set_content("<title>argus</title>")
+    assert page.title() == "argus"
+    browser.close()
+print("chromium: renders a page")
+BROWSER_TEST
+
 echo "tools installed in $BIN"

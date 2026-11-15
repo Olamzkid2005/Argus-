@@ -755,6 +755,48 @@ class TestAugmentedToolPath:
         parts = _augmented_tool_path().split(os.pathsep)
         assert parts.count(venv_bin) == 1
 
+    def test_browser_runtime_paths_are_exported_when_present(self, monkeypatch, tmp_path):
+        """Chromium needs libs, fontconfig and a HOME-independent browser cache.
+
+        Without these the verifiers fail with a Skia ``FATAL`` on fontconfig or
+        a missing executable while the gate runs use a throw-away HOME.
+        """
+        import os
+
+        from mcp_server import _tool_environment_overrides
+
+        libs = tmp_path / "libs"
+        libs.mkdir()
+        fonts = tmp_path / "fonts.conf"
+        fonts.write_text("<fontconfig/>")
+        browsers = tmp_path / "ms-playwright"
+        browsers.mkdir()
+        monkeypatch.setenv("ARGUS_BROWSER_LIBS", str(libs))
+        monkeypatch.setenv("ARGUS_FONTCONFIG_FILE", str(fonts))
+        monkeypatch.setenv("ARGUS_PLAYWRIGHT_BROWSERS", str(browsers))
+        monkeypatch.delenv("FONTCONFIG_FILE", raising=False)
+        monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
+        monkeypatch.setenv("LD_LIBRARY_PATH", "/existing")
+
+        overrides = _tool_environment_overrides()
+
+        assert overrides["LD_LIBRARY_PATH"] == f"{libs}{os.pathsep}/existing"
+        assert overrides["FONTCONFIG_FILE"] == str(fonts)
+        assert overrides["PLAYWRIGHT_BROWSERS_PATH"] == str(browsers)
+
+    def test_browser_runtime_overrides_do_not_override_the_operator(self, monkeypatch, tmp_path):
+        from mcp_server import _tool_environment_overrides
+
+        libs = tmp_path / "libs"
+        libs.mkdir()
+        browsers = tmp_path / "browsers"
+        browsers.mkdir()
+        monkeypatch.setenv("ARGUS_BROWSER_LIBS", str(libs))
+        monkeypatch.setenv("ARGUS_PLAYWRIGHT_BROWSERS", str(browsers))
+        monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", "/operator/cache")
+
+        assert "PLAYWRIGHT_BROWSERS_PATH" not in _tool_environment_overrides()
+
     def test_nuclei_gets_the_configured_template_directory(self, monkeypatch, tmp_path):
         """nuclei ships no templates; without -t the phase loses its scanner."""
         import json

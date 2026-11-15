@@ -56,7 +56,8 @@ opentelemetry-exporter-otlp-proto-http==1.20.0
 # pytest-asyncio==0.25.2
 # pytest-celery==1.1.2
 # pytest-cov==6.1.1
-# playwright>=1.59.0
+# The playwright verifiers (bola/xss/privesc) import this at runtime.
+playwright==1.65.2
 
 # HTML Parsing (form discovery for auth)
 beautifulsoup4==4.12.3

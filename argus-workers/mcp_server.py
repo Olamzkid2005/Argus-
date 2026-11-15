@@ -175,6 +175,48 @@ def _augmented_tool_path() -> str:
     return os.pathsep.join(ordered)
 
 
+def _tool_environment_overrides() -> dict[str, str]:
+    """Environment a spawned tool needs beyond PATH.
+
+    The browser verifiers (playwright-bola/xss/privesc) launch Chromium, which
+    in an unprivileged lab needs three things the image does not provide:
+    shared libraries (`libnspr4`, `libnss3`, `libatk*`, …), a fontconfig file
+    (without one Skia aborts with ``FATAL ... SkFontMgr_FontConfigInterface:
+    Not implemented``), and a browser cache that does not depend on ``HOME``
+    (gate runs use a throw-away HOME, so a cache under ``$HOME`` disappears and
+    Playwright reports a missing executable). Everything is opt-in: a key is
+    only set when the configured path exists, and an explicit value in the
+    environment always wins.
+
+    Locations default to the ``.livefire`` layout that
+    ``scripts/livefire/install-tools.sh`` creates; ``ARGUS_BROWSER_LIBS``,
+    ``ARGUS_FONTCONFIG_FILE`` and ``ARGUS_PLAYWRIGHT_BROWSERS`` override them.
+    """
+    repo = Path(__file__).resolve().parent.parent
+    overrides: dict[str, str] = {}
+
+    libs = os.environ.get("ARGUS_BROWSER_LIBS") or str(
+        repo / ".livefire" / "tools" / "browser-libs" / "usr" / "lib" / "x86_64-linux-gnu"
+    )
+    if os.path.isdir(libs):
+        existing = os.environ.get("LD_LIBRARY_PATH", "")
+        overrides["LD_LIBRARY_PATH"] = libs + (os.pathsep + existing if existing else "")
+
+    fonts = os.environ.get("ARGUS_FONTCONFIG_FILE") or str(
+        repo / ".livefire" / "tools" / "browser-libs" / "etc" / "fonts" / "fonts.conf"
+    )
+    if os.path.isfile(fonts) and not os.environ.get("FONTCONFIG_FILE"):
+        overrides["FONTCONFIG_FILE"] = fonts
+
+    browsers = os.environ.get("ARGUS_PLAYWRIGHT_BROWSERS") or str(
+        repo / ".livefire" / "tools" / "ms-playwright"
+    )
+    if os.path.isdir(browsers) and not os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        overrides["PLAYWRIGHT_BROWSERS_PATH"] = browsers
+
+    return overrides
+
+
 def _param_is_true(value: Any) -> bool:
     """Interpret a boolean tool parameter from MCP arguments.
 
@@ -1290,6 +1332,7 @@ class MCPServer:
             # binary that was found is the binary that runs (see
             # _augmented_tool_path).
             _env["PATH"] = _augmented_tool_path()
+            _env.update(_tool_environment_overrides())
             _env["PYTHONDONTWRITEBYTECODE"] = "1"
 
             result = subprocess.run(  # noqa: S603 — safe: cmd is list form, validated by _validate_args_safe()
