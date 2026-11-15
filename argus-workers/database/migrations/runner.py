@@ -35,6 +35,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _MIGRATIONS_DIR = Path(__file__).resolve().parent
+_INIT_DIR = _MIGRATIONS_DIR.parent / "init"
 # Files that should NOT be treated as migration modules
 _SKIP_FILES = {"runner.py", "__init__.py"}
 
@@ -76,6 +77,49 @@ def _ensure_tracking_table(conn) -> None:
     except Exception:
         pass  # Table might not exist yet — will be created on next run
     conn.commit()
+
+
+def _bootstrap_base_schema(conn) -> list[str]:
+    """Apply `database/init/*.sql` when the base schema is absent.
+
+    Docker mounts these files into the postgres image's
+    `docker-entrypoint-initdb.d`, so a native PostgreSQL (including the
+    pgserver fixture used for live-fire runs) had to have them applied by hand
+    before any migration would work: migration 003 already assumes the
+    `organizations` table exists, so a fresh database failed on the first
+    dependent statement. Running them here makes a single
+    `python -m database.migrations.runner` enough to build a database, and a
+    partial failure rolls back instead of leaving half a base schema behind.
+
+    The init files are idempotent (`CREATE TABLE/EXTENSION IF NOT EXISTS`), so
+    an existing database is left untouched and returns an empty list.
+    """
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT to_regclass('public.organizations')")
+        row = cursor.fetchone()
+    if row and row[0] is not None:
+        return []
+
+    if not _INIT_DIR.is_dir():
+        return []
+
+    applied: list[str] = []
+    try:
+        for path in sorted(_INIT_DIR.glob("*.sql")):
+            sql = path.read_text(encoding="utf-8")
+            with conn.cursor() as cursor:
+                cursor.execute(sql)
+            applied.append(path.name)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+    if applied:
+        logger.info(
+            "Bootstrapped base schema from database/init: %s", ", ".join(applied)
+        )
+    return applied
 
 
 def _get_applied(conn) -> set[str]:
@@ -206,6 +250,7 @@ def run_migrations(connection_string: str | None = None) -> list[str]:
 
     conn = psycopg2.connect(conn_str)
     try:
+        _bootstrap_base_schema(conn)
         _ensure_tracking_table(conn)
         applied = _get_applied(conn)
 
