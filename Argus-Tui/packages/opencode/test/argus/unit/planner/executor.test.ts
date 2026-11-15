@@ -428,6 +428,257 @@ describe("InProcessExecutor", () => {
     })
   })
 
+  // ── 2.3: the per-action ledger and coverage accounting ─────────────
+  // Each of these drives the real hybrid loop through `execute()` and asserts
+  // the phase status, so a regression in accounting shows up here rather than
+  // only in a code comment.
+  describe("2.3 outcome accounting", () => {
+    const hybrid = (overrides?: Partial<PhaseExecutionRequest>) =>
+      makePhase({ toolExecution: "llm_driven" as const, ...overrides })
+
+    /** agentNext yields the given tools in order, then reports done. */
+    function sequenceBridge(tools: string[], result: any, extra: Record<string, any> = {}) {
+      let i = 0
+      const calls: string[] = []
+      const observed: any[] = []
+      const customNext = extra.agentNext
+      const { agentNext: _ignoredAgentNext, ...baseExtra } = extra
+      const bridge = {
+        ...mockBridge,
+        callTool: async (tool: string) => {
+          calls.push(tool)
+          return typeof result === "function" ? result(tool) : result
+        },
+        agentInit: async () => ({ session_id: "sess-1", plan: [], reasoning: "", phase: "phase-0" }),
+        agentNext: async () => {
+          if (i >= tools.length) return { session_id: "sess-1", done: true, reasoning: "done" }
+          const action = {
+            session_id: "sess-1",
+            action_id: `act-${i}`,
+            tool: tools[i],
+            reasoning: "r",
+            done: false,
+          }
+          i++
+          return typeof customNext === "function" ? { ...action, ...(await customNext(action)) } : action
+        },
+        agentObserve: async (params: any) => {
+          observed.push(params)
+          return { session_id: "sess-1", recorded: true, done: false, reasoning: "ack" }
+        },
+        ...baseExtra,
+      }
+      return { bridge, calls, observed }
+    }
+
+    test("a clean exit with no findings is succeeded-empty and covers its capability", async () => {
+      const { bridge } = sequenceBridge(["test-tool"], { success: true, data: {}, durationMs: 5 })
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(hybrid({ requiredCapabilities: [Capability.WEB_RECON] }))
+
+      // "Ran and found nothing" is a real result: coverage is satisfied and the
+      // phase may complete. It must not read as a coverage gap.
+      expect(result.errors).toEqual([])
+      expect(result.status).toBe("completed")
+    })
+
+    test("findings-bearing success covers the capability and keeps the findings", async () => {
+      const { bridge } = sequenceBridge(["test-tool"], {
+        success: true,
+        data: [{ title: "SQL injection", severity: "HIGH", confidence: 0.6, endpoint: "/user?id=1" }],
+        durationMs: 5,
+      })
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(hybrid({ requiredCapabilities: [Capability.WEB_RECON] }))
+
+      expect(result.status).toBe("completed")
+      expect(result.findings).toHaveLength(1)
+      expect(result.findings[0].title).toBe("SQL injection")
+    })
+
+    test("a failed action leaves the capability uncovered — failed, never completed", async () => {
+      const { bridge } = sequenceBridge(["test-tool"], { success: false, error: "connection refused", durationMs: 5 })
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(hybrid({ requiredCapabilities: [Capability.WEB_RECON] }))
+
+      expect(result.status).toBe("failed")
+      const joined = result.errors.join("\n")
+      expect(joined).toContain("Coverage gap")
+      expect(joined).toContain("test-tool=failed")
+    })
+
+    test("a timeout is recorded as timed-out, not failed", async () => {
+      const { bridge } = sequenceBridge(["test-tool"], { success: false, error: "Process timed out after 30s", durationMs: 5 })
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(hybrid({ requiredCapabilities: [Capability.WEB_RECON] }))
+
+      expect(result.errors.join("\n")).toContain("test-tool=timed-out")
+      expect(result.errors.join("\n")).not.toContain("test-tool=failed")
+    })
+
+    test("an uncovered capability with findings elsewhere is partial, not completed", async () => {
+      const registry = {
+        ...mockToolRegistry,
+        getToolsByCapability: (cap: string) =>
+          cap === Capability.AUTH_DETECTION
+            ? [{ name: "auth-tool", capabilities: ["auth_detection"], requires_auth: true, destructive: false, timeout_seconds: 30 }]
+            : [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, timeout_seconds: 30 }],
+      }
+      const { bridge } = sequenceBridge(["test-tool", "auth-tool"], (tool: string) =>
+        tool === "test-tool"
+          ? { success: true, data: [{ title: "Exposed admin panel", severity: "MEDIUM", confidence: 0.5, endpoint: "/admin" }], durationMs: 5 }
+          : { success: false, error: "invalid credentials", durationMs: 5 },
+      )
+      const exec = new InProcessExecutor(registry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(
+        hybrid({ requiredCapabilities: [Capability.WEB_RECON, Capability.AUTH_DETECTION] }),
+      )
+
+      expect(result.findings).toHaveLength(1)
+      expect(result.status).toBe("partial")
+      expect(result.errors.join("\n")).toContain("auth-tool=failed")
+    })
+
+    test("an unknown action is blocked before dispatch and never executed", async () => {
+      const { bridge, calls } = sequenceBridge(["ghost-tool"], { success: true, data: {}, durationMs: 5 })
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(hybrid({ requiredCapabilities: [Capability.WEB_RECON] }))
+
+      expect(calls).toEqual([])
+      expect(result.errors.join("\n")).toContain("Unknown action 'ghost-tool'")
+      expect(result.errors.join("\n")).toContain("ghost-tool=blocked")
+      expect(result.status).toBe("failed")
+    })
+
+    test("an LLM-unavailable skip does not cover the capability", async () => {
+      const { bridge } = sequenceBridge(["test-tool"], null, {
+        callTool: async () => { throw new LLMUnavailableError("DEGRADED", 30) },
+      })
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(hybrid({ requiredCapabilities: [Capability.WEB_RECON] }))
+
+      expect(result.errors.join("\n")).toContain("test-tool=skipped")
+      expect(result.status).toBe("failed")
+    })
+
+    test("zero executed actions fails instead of completing", async () => {
+      const { bridge } = sequenceBridge([], { success: true, data: {}, durationMs: 5 })
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(hybrid({ requiredCapabilities: [Capability.WEB_RECON] }))
+
+      expect(result.status).toBe("failed")
+      expect(result.errors.join("\n")).toContain("No tools executed")
+    })
+
+    test("a phase whose required capabilities resolve to no tools fails readiness", async () => {
+      // The SAST/SCA case: an absent runner must not read as a clean completion.
+      const registry = { ...mockToolRegistry, getToolsByCapability: () => [] }
+      const { bridge, calls } = sequenceBridge(["test-tool"], { success: true, data: {}, durationMs: 5 })
+      const exec = new InProcessExecutor(registry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(hybrid({ requiredCapabilities: [Capability.SAST] }))
+
+      expect(calls).toEqual([])
+      expect(result.status).toBe("failed")
+      expect(result.errors.join("\n")).toContain("No tools registered for required capabilities")
+    })
+
+    test("one action per agentNext: the loop advances only by asking again", async () => {
+      let nextCalls = 0
+      const { bridge, observed } = sequenceBridge(["test-tool", "test-tool"], { success: true, data: {}, durationMs: 5 })
+      const counted = {
+        ...bridge,
+        agentNext: async () => {
+          nextCalls++
+          return bridge.agentNext()
+        },
+      }
+      const exec = new InProcessExecutor(mockToolRegistry as any, counted as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      await exec.execute(hybrid({ requiredCapabilities: [Capability.WEB_RECON] }))
+
+      // Two executed actions require three requests (two actions + the done).
+      expect(nextCalls).toBe(3)
+      expect(observed).toHaveLength(2)
+      // 2.2: every observation names the action it acknowledges.
+      expect(observed.map((o: any) => o.action_id)).toEqual(["act-0", "act-1"])
+    })
+
+    test("hybrid actions carry reasoning, identity, and provenance", async () => {
+      const { bridge, observed } = sequenceBridge(["test-tool"], { success: true, data: {}, durationMs: 5 }, {
+        agentNext: async () => ({
+          session_id: "sess-1",
+          action_id: "act-0",
+          tool: "test-tool",
+          arguments: { identity: "attacker", target: "https://other.example" },
+          reasoning: "engine chose test-tool",
+          provenance: "llm",
+          done: false,
+        }),
+      })
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(hybrid({ requiredCapabilities: [Capability.WEB_RECON] }))
+      expect(result.actionRecords).toHaveLength(1)
+      expect(result.actionRecords?.[0]).toMatchObject({
+        tool: "test-tool",
+        outcome: "succeeded-empty",
+        reasoning: "engine chose test-tool",
+        identity: "attacker",
+        source: "llm",
+      })
+      expect(observed[0].identity).toBe("attacker")
+      expect(observed[0].arguments.target).toBe("https://example.com")
+    })
+
+    test("deterministic actions carry planned provenance", async () => {
+      const result = await executor.execute(makePhase())
+      expect(result.actionRecords).toHaveLength(1)
+      expect(result.actionRecords?.[0]).toMatchObject({
+        tool: "test-tool",
+        outcome: "succeeded-with-findings",
+        source: "deterministic",
+      })
+      expect(result.actionRecords?.[0].reasoning).toContain("test-tool")
+    })
+
+    test("the tool RPC carries the worker execution timeout and engagement identity", async () => {
+      let seenTimeout: number | undefined
+      let seenEngagement: string | undefined
+      let seenCallEngagement: string | undefined
+      const { bridge } = sequenceBridge(["test-tool"], { success: true, data: {}, durationMs: 5 }, {
+        callTool: async (_tool: string, _args: any, timeout?: number, _cache?: any, engagementId?: string) => {
+          seenTimeout = timeout
+          seenCallEngagement = engagementId
+          return { success: true, data: {}, durationMs: 5 }
+        },
+        agentInit: async (params: any) => {
+          seenEngagement = params.engagementId
+          return { session_id: "sess-1", plan: [], reasoning: "", phase: "phase-0" }
+        },
+      })
+      const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      await exec.execute(hybrid({ config: { engagementId: "eng-42" } }))
+
+      // Registry timeout (120s) reaches the worker as milliseconds, not the
+      // transport default, so cleanup fits inside the transport ceiling.
+      expect(seenTimeout).toBe(120_000)
+      expect(seenEngagement).toBe("eng-42")
+      // 3.1: the engagement travels on the tool RPC too, so a resumed run reaches
+      // the worker's scope validator through the same record as its first run.
+      expect(seenCallEngagement).toBe("eng-42")
+    })
+  })
+
   describe("CrossToolRateLimiter (blocker 44)", () => {
     beforeEach(() => {
       delete process.env.ARGUS_CROSS_TOOL_RATE_LIMIT
@@ -1261,6 +1512,30 @@ describe("InProcessExecutor", () => {
       expect(exec.unstructuredOutput.length).toBeGreaterThan(0)
       expect(exec.unstructuredOutput[0].snippet).toContain("Unable to connect")
     })
+
+    for (const [label, rawConfidence, expected] of [
+      ["a near-certain parser score", 0.99, 3],
+      ["the CONFIRMED tier itself", 5, 3],
+      ["a moderate parser score", 0.6, 2],
+    ] as const) {
+      test(`parser confidence (${label}) never becomes a proof claim`, async () => {
+        const bridge = {
+          ...mockBridge,
+          callTool: async () => ({
+            success: true,
+            data: "stdout",
+            structured: [{ title: "SQL injection", severity: "HIGH", confidence: rawConfidence, tool: "sqlmap", endpoint: "/user?id=1" }],
+            durationMs: 5,
+          }),
+        }
+        const exec = new InProcessExecutor(mockToolRegistry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+        exec.loadGates("test")
+        const result = await exec.execute(makePhase())
+        expect(result.findings).toHaveLength(1)
+        // 0 INFORMATIONAL, 1 LOW, 2 MEDIUM, 3 HIGH — metadata stops at HIGH.
+        expect(result.findings[0].confidence).toBe(expected)
+      })
+    }
 
     test("worker-parsed findings still become findings", async () => {
       const bridge = {

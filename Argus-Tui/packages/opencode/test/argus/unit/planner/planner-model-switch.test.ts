@@ -127,6 +127,10 @@ function withCleanEnv(fn: () => void) {
     OPENCODE_MODEL: process.env.OPENCODE_MODEL,
   }
   try {
+    // Another suite in the same process may have left a planner model behind;
+    // it would otherwise be appended to the available list and break isolation.
+    delete process.env.ARGUS_PLANNER_MODEL
+    delete process.env.OPENCODE_MODEL
     fn()
   } finally {
     for (const [key, val] of Object.entries(saved)) {

@@ -293,9 +293,13 @@ export class WorkflowPlanner {
 
     // ── Build capability set from rule-based sources (findings, hypotheses) ──
     const newCapabilities = new Set<Capability>()
+    const capabilityProvenance = new Map<Capability, { source: "replan-rule" | "replan-llm"; by: string }>()
     if (!ruleBudgetExhausted) {
       const ruleCaps = determineNewCapabilities(context)
-      for (const cap of ruleCaps) newCapabilities.add(cap)
+      for (const cap of ruleCaps) {
+        newCapabilities.add(cap)
+        capabilityProvenance.set(cap, { source: "replan-rule", by: "local-planner" })
+      }
     }
 
     // ── Merge LLM-suggested capabilities (independent budget) ──
@@ -312,6 +316,7 @@ export class WorkflowPlanner {
         const cap = guessCapability(raw)
         if (cap && !context.executedCapabilities.has(cap)) {
           newCapabilities.add(cap)
+          capabilityProvenance.set(cap, { source: "replan-llm", by: "worker-llm" })
           llmProducedPhases = true
         }
       }
@@ -327,6 +332,7 @@ export class WorkflowPlanner {
             const cap = guessCapability(raw)
             if (cap !== undefined && !context.executedCapabilities.has(cap) && !newCapabilities.has(cap)) {
               newCapabilities.add(cap)
+              capabilityProvenance.set(cap, { source: "replan-llm", by: "local-llm" })
               llmProducedPhases = true
             }
           }
@@ -395,6 +401,11 @@ export class WorkflowPlanner {
           config: {
             chainPlan: plan,
             chainDescription: plan.description,
+            replan: {
+              source: "replan-chain",
+              reason: plan.description || `Attack graph correlated ${caps.join(", ")} into an exploitation phase`,
+              by: "worker-attack-graph",
+            },
           },
           previousPhaseResults: [],
           toolExecution: "sequential",
@@ -405,17 +416,31 @@ export class WorkflowPlanner {
 
     // Combine regular replan phases with chain exploitation phases
     const nextReplanCount = context.replanCount + 1
-    const regularPhases = unhandled.map((cap) => ({
-      phaseId: `replan-${nextReplanCount}-${cap}`,
-      name: `replan-${cap.toLowerCase()}`,
-      workflowName: "replan",
-      target: context.target,
-      requiredCapabilities: [cap],
-      config: {},
-      previousPhaseResults: [],
-      toolExecution: "sequential" as const,
-      replanCycle: true,
-    }))
+    const regularPhases = unhandled.map((cap) => {
+      const provenance = capabilityProvenance.get(cap) ?? {
+        source: llmProducedPhases ? ("replan-llm" as const) : ("replan-rule" as const),
+        by: llmProducedPhases ? "worker-llm" : "local-planner",
+      }
+      return {
+        phaseId: `replan-${nextReplanCount}-${cap}`,
+        name: `replan-${cap.toLowerCase()}`,
+        workflowName: "replan",
+        target: context.target,
+        requiredCapabilities: [cap],
+        config: {
+          replan: {
+            ...provenance,
+            reason:
+              provenance.source === "replan-rule"
+                ? `Rule-based replan for newly observed ${cap}`
+                : `Model suggested ${cap} after ${context.findings.length} accumulated finding(s)`,
+          },
+        },
+        previousPhaseResults: [],
+        toolExecution: "sequential" as const,
+        replanCycle: true,
+      }
+    })
 
     const allPhases = [...chainPhases, ...regularPhases]
     if (allPhases.length === 0) return null

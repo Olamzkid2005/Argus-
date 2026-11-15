@@ -9,6 +9,7 @@ import type { ToolDef } from "../workflows/tool-registry"
 import crypto from "crypto"
 import { Capability } from "../shared/capabilities"
 import { resolveWorkerLlmConfig, type WorkerLlmConfig } from "./model-registry"
+import { provenanceForAction } from "./action-provenance"
 
 /** Shape of the LLM block sent to the worker in `agent_init`. */
 type AgentInitLlm = WorkerLlmConfig
@@ -42,10 +43,19 @@ export interface HybridActionRecord {
   capability: string
   outcome: HybridActionOutcome
   detail?: string
+  /** Worker-supplied reason for choosing this action; may contain scan text. */
+  reasoning?: string
+  /** Non-secret identity label named by the action arguments, when present. */
+  identity?: string
+  /** Whether the worker engine, deterministic plan, or fallback chose it. */
+  source: "llm" | "deterministic" | "fallback"
 }
 
 function isTimeoutMessage(message: string): boolean {
-  return /\btimed?-?out\b|\bETIMEDOUT\b|deadline exceeded/i.test(message)
+  // "timed out" (space), "timed-out", "timeout" and "time out" all occur in
+  // real tool/worker errors; the separator must allow whitespace, not just a
+  // hyphen, or a genuine timeout is mis-bucketed as `failed` (2.3).
+  return /\btimed?[-\s]?out\b|\bETIMEDOUT\b|deadline exceeded/i.test(message)
 }
 
 /**
@@ -256,9 +266,13 @@ function coerceSeverity(value: unknown): Severity {
 function coerceConfidence(value: unknown): Confidence {
   const numeric = Number(value)
   if (Number.isNaN(numeric) || numeric <= 0) return Confidence.INFORMATIONAL
-  if (numeric < 1) return Math.min(Confidence.CONFIRMED, Math.round(numeric * 4)) as Confidence
-  if (numeric <= Confidence.CONFIRMED) return Math.round(numeric) as Confidence
-  return Confidence.INFORMATIONAL
+  const tier = numeric < 1 ? Math.round(numeric * 4) : Math.round(numeric)
+  if (tier > Confidence.CONFIRMED) return Confidence.INFORMATIONAL
+  // A parser's own score is metadata. It may say how strongly the scanner
+  // believes the finding, so it can reach HIGH — but never VERIFIED or
+  // CONFIRMED, which are proof claims and require a reproduced verification
+  // with real evidence (Stage 4.1).
+  return Math.min(Confidence.HIGH, tier) as Confidence
 }
 
 /**
@@ -598,6 +612,22 @@ export class InProcessExecutor implements PhaseExecutor {
     const startTime = Date.now()
     const findings: NormalizedFinding[] = []
     const errors: string[] = []
+    const actionRecords: HybridActionRecord[] = []
+    const recordDeterministicOutcome = (
+      tool: string,
+      capability: Capability,
+      outcome: HybridActionOutcome,
+      detail?: string,
+    ): void => {
+      actionRecords.push({
+        tool,
+        capability,
+        outcome,
+        detail,
+        reasoning: `Planned capability ${capability} selected ${tool}`,
+        source: "deterministic",
+      })
+    }
     const calledTools = new Set<string>()
 
     const toolConfigs: { tool: ToolDef; cap: Capability }[] = []
@@ -610,6 +640,7 @@ export class InProcessExecutor implements PhaseExecutor {
         const tool = this.toolRegistry.getTool(step.tool)
         if (!tool) {
           errors.push(`Tool ${step.tool} not found in registry`)
+          recordDeterministicOutcome(step.tool, (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability, "blocked", `Tool ${step.tool} not found in registry`)
           continue
         }
         // The plan was built before the MCP worker connected, so it can name a
@@ -622,6 +653,7 @@ export class InProcessExecutor implements PhaseExecutor {
           if (execOptions.verbose) {
             console.log(`[executor]  Skipping ${step.tool}: worker cannot run it (${blockedBy})`)
           }
+          recordDeterministicOutcome(step.tool, (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability, "blocked", `worker cannot run it (${blockedBy})`)
           continue
         }
         const cap = (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability
@@ -667,6 +699,7 @@ export class InProcessExecutor implements PhaseExecutor {
         artifacts: [],
         errors,
         durationMs: Date.now() - startTime,
+        actionRecords,
       }
     }
 
@@ -683,10 +716,17 @@ export class InProcessExecutor implements PhaseExecutor {
             this.executeTool(tool, cap, phase, startTime, execOptions),
           ),
         )
-        for (const r of results) {
+        results.forEach((r, index) => {
+          const { tool, cap } = batch[index]
           findings.push(...r.findings)
           errors.push(...r.errors)
-        }
+          recordDeterministicOutcome(
+            tool.name,
+            cap,
+            r.errors.length > 0 ? "failed" : r.findings.length > 0 ? "succeeded-with-findings" : "succeeded-empty",
+            r.errors[0],
+          )
+        })
         // In parallel mode, never abort the phase on individual tool failures.
         // Tools are independent — one tool's failure has no bearing on others.
         // Accumulate all findings and errors, then continue to the next batch.
@@ -700,6 +740,12 @@ export class InProcessExecutor implements PhaseExecutor {
         const result = await this.executeTool(tool, cap, phase, startTime, execOptions)
         findings.push(...result.findings)
         errors.push(...result.errors)
+        recordDeterministicOutcome(
+          tool.name,
+          cap,
+          result.errors.length > 0 ? "failed" : result.findings.length > 0 ? "succeeded-with-findings" : "succeeded-empty",
+          result.errors[0],
+        )
         if (result.failFast) {
           return {
             phaseId: phase.phaseId,
@@ -708,6 +754,7 @@ export class InProcessExecutor implements PhaseExecutor {
             artifacts: [],
             errors,
             durationMs: Date.now() - startTime,
+            actionRecords,
           }
         }
       }
@@ -720,6 +767,7 @@ export class InProcessExecutor implements PhaseExecutor {
       artifacts: [],
       errors,
       durationMs: Date.now() - startTime,
+      actionRecords,
     }
   }
 
@@ -760,7 +808,8 @@ export class InProcessExecutor implements PhaseExecutor {
     // 2.3 guardrail: a phase whose required capabilities resolve to no tools
     // (absent runner — e.g. SAST/SCA with nothing registered) fails readiness
     // here. It must never report success with zero executions.
-    if (pipeline.length === 0 && phase.requiredCapabilities.length > 0) {
+          if (pipeline.length === 0 && phase.requiredCapabilities.length > 0) {
+
       const missing = phase.requiredCapabilities.join(", ")
       return {
         phaseId: phase.phaseId,
@@ -826,6 +875,17 @@ export class InProcessExecutor implements PhaseExecutor {
         done = true
         break
       }
+      const workerAction = provenanceForAction({
+        reasoning: next.reasoning,
+        args: next.arguments,
+        provenance: next.provenance,
+      })
+      const recordHybridOutcome = (
+        record: Omit<HybridActionRecord, "reasoning" | "identity" | "source"> & { source?: HybridActionRecord["source"] },
+      ): void => {
+        const { source = workerAction.source, ...rest } = record
+        recordOutcome({ ...rest, ...workerAction, source })
+      }
 
       // 2.2: validate the selected action before dispatch. Unknown tools
       // (not in the registry and with no fallback for their capability) are
@@ -833,18 +893,22 @@ export class InProcessExecutor implements PhaseExecutor {
       // the worker's audit trail shows the rejection.
       const selectedCap = pipeline.find(p => p.tool === next.tool)?.capabilities?.[0] ?? Capability.WEB_RECON
       const selectedDef = this.toolRegistry.getTool(next.tool)
-      const selectedFallback = selectedDef ? undefined : this.findFallbackTool(next.tool, selectedCap)
-      if (!selectedDef && !selectedFallback) {
-        const rejection = `Unknown action '${next.tool}' — no registered tool or fallback; rejected before dispatch`
+      // A tool the driver does not know is never dispatched, and never silently
+      // swapped for a different binary either: the action named this tool, so
+      // running something else would credit coverage to an action that did not
+      // happen (2.2 validation before dispatch, 2.3 blocked-not-covered).
+      if (!selectedDef) {
+        const rejection = `Unknown action '${next.tool}' — not in the registry; rejected before dispatch`
         nextTrigger = "stuck"
         errors.push(rejection)
-        recordOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "blocked", detail: rejection })
+        recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "blocked", detail: rejection })
         await this.bridge.agentObserve({
           session_id: session.session_id,
           action_id: next.action_id,
           tool: next.tool,
-          arguments: { target: phase.target },
+          arguments: { ...(next.arguments ?? {}), target: phase.target },
           reasoning: next.reasoning,
+          identity: workerAction.identity || undefined,
           success: false,
           summary: rejection,
         })
@@ -885,21 +949,25 @@ export class InProcessExecutor implements PhaseExecutor {
           // the two together for the audit trail.
           const fallbackOutcome = fallbackResult.findings.length > 0 ? "succeeded-with-findings"
             : fallbackResult.errors.length === 0 ? "succeeded-empty" : "failed"
-          recordOutcome({ actionId: next.action_id, tool: fallback.name, capability: cap, outcome: fallbackOutcome, detail: `fallback for ${next.tool}` })
-          recordOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: "blocked", detail: "circuit breaker open — hybrid fallback executed" })
+          recordHybridOutcome({ actionId: next.action_id, tool: fallback.name, capability: cap, outcome: fallbackOutcome, detail: `fallback for ${next.tool}`, source: "fallback" })
+          recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: "blocked", detail: "circuit breaker open — hybrid fallback executed" })
           nextTrigger = fallbackResult.findings.length > 0 ? "new_finding" : undefined
           await this.bridge.agentObserve({
             session_id: session.session_id,
             action_id: next.action_id,
             tool: next.tool,
-            arguments: { target: phase.target },
+            arguments: { ...(next.arguments ?? {}), target: phase.target },
             reasoning: next.reasoning,
+          identity: workerAction.identity || undefined,
             success: false,
             summary: `${next.tool} circuit-broken — fallback ${fallback.name}: ${fallbackResult.findings.length} findings`,
           })
           await this.bridge.agentObserve({
             session_id: session.session_id,
             tool: fallback.name,
+            arguments: { ...(next.arguments ?? {}), target: phase.target },
+            reasoning: next.reasoning,
+            identity: workerAction.identity || undefined,
             success: fallbackResult.findings.length > 0 || fallbackResult.errors.length === 0,
             findingCount: fallbackResult.findings.length,
             summary: `${fallback.name} (fallback for ${next.tool}): ${fallbackResult.findings.length} findings`,
@@ -912,13 +980,14 @@ export class InProcessExecutor implements PhaseExecutor {
           : 300
         errors.push(`Tool ${next.tool} is circuit-broken (retry in ${retryAfter}s)`)
         nextTrigger = "stuck"
-        recordOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "blocked", detail: "circuit breaker open, no fallback" })
+        recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "blocked", detail: "circuit breaker open, no fallback" })
         await this.bridge.agentObserve({
           session_id: session.session_id,
           action_id: next.action_id,
           tool: next.tool,
-          arguments: { target: phase.target },
+          arguments: { ...(next.arguments ?? {}), target: phase.target },
           reasoning: next.reasoning,
+          identity: workerAction.identity || undefined,
           success: false,
           summary: `Circuit breaker open for ${next.tool}`,
         })
@@ -938,13 +1007,14 @@ export class InProcessExecutor implements PhaseExecutor {
             const reason = toolApproval.reason ?? "Skipped by user"
             errors.push(`Destructive tool ${next.tool} skipped: ${reason}`)
             nextTrigger = undefined
-            recordOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "skipped", detail: reason })
+            recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "skipped", detail: reason })
             await this.bridge.agentObserve({
               session_id: session.session_id,
               action_id: next.action_id,
               tool: next.tool,
-              arguments: { target: phase.target },
+              arguments: { ...(next.arguments ?? {}), target: phase.target },
               reasoning: next.reasoning,
+          identity: workerAction.identity || undefined,
               success: false,
               summary: reason,
             })
@@ -984,7 +1054,13 @@ export class InProcessExecutor implements PhaseExecutor {
         // Without this, callTool defaults to 600s which may be too short for deep
         // scans (sqlmap, nuclei) or unnecessarily long for quick tools (httpx, gau).
         const toolTimeout = this.toolRegistry.getToolTimeout(next.tool) * 1000
-        const result = await this.bridge.callTool(next.tool, toolArgs, toolTimeout, execOptions.cacheMode)
+        const result = await this.bridge.callTool(
+          next.tool,
+          toolArgs,
+          toolTimeout,
+          execOptions.cacheMode,
+          phase.config?.engagementId as string | undefined,
+        )
         const durationMs = Date.now() - toolStartTime
 
         // Hybrid path: check for rate-limit responses (blocker 45)
@@ -1029,13 +1105,14 @@ export class InProcessExecutor implements PhaseExecutor {
           // success is `succeeded-with-findings`. Both cover the capability.
           const succeededOutcome = parsedFindings ? "succeeded-with-findings" : "succeeded-empty"
           nextTrigger = parsedFindings ? "new_finding" : undefined
-          recordOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: succeededOutcome })
+          recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: succeededOutcome })
           const observeAck = await this.bridge.agentObserve({
             session_id: session.session_id,
             action_id: next.action_id,
             tool: next.tool,
-            arguments: { target: phase.target },
+            arguments: { ...(next.arguments ?? {}), target: phase.target },
             reasoning: next.reasoning,
+          identity: workerAction.identity || undefined,
             success: true,
             durationMs,
             findingCount: findings.length,
@@ -1050,13 +1127,14 @@ export class InProcessExecutor implements PhaseExecutor {
 
           const failedOutcome = isTimeoutMessage(result.error ?? "") ? "timed-out" : "failed"
           nextTrigger = "stuck"
-          recordOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: failedOutcome, detail: result.error ?? undefined })
+          recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: failedOutcome, detail: result.error ?? undefined })
           const observeAck = await this.bridge.agentObserve({
             session_id: session.session_id,
             action_id: next.action_id,
             tool: next.tool,
-            arguments: { target: phase.target },
+            arguments: { ...(next.arguments ?? {}), target: phase.target },
             reasoning: next.reasoning,
+          identity: workerAction.identity || undefined,
             success: false,
             durationMs,
             summary: `${next.tool} failed: ${result.error}${normalizedTargetNote}`,
@@ -1071,13 +1149,14 @@ export class InProcessExecutor implements PhaseExecutor {
           // cooldown expires and a probe succeeds.
           errors.push(`Tool ${next.tool} skipped — LLM ${error.status}${error.retryAfter ? ` (retry in ${error.retryAfter}s)` : ""}`)
           nextTrigger = undefined
-          recordOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "skipped", detail: `LLM ${error.status}` })
+          recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: "skipped", detail: `LLM ${error.status}` })
           await this.bridge.agentObserve({
             session_id: session.session_id,
             action_id: next.action_id,
             tool: next.tool,
-            arguments: { target: phase.target },
+            arguments: { ...(next.arguments ?? {}), target: phase.target },
             reasoning: next.reasoning,
+          identity: workerAction.identity || undefined,
             success: false,
             summary: `LLM ${error.status} — skipping`,
           })
@@ -1093,13 +1172,14 @@ export class InProcessExecutor implements PhaseExecutor {
         errors.push(`Tool ${next.tool} error: ${errorMsg}`)
 
         nextTrigger = "stuck"
-        recordOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: isTimeoutMessage(errorMsg) ? "timed-out" : "failed", detail: errorMsg })
+        recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: selectedCap, outcome: isTimeoutMessage(errorMsg) ? "timed-out" : "failed", detail: errorMsg })
         await this.bridge.agentObserve({
           session_id: session.session_id,
           action_id: next.action_id,
           tool: next.tool,
-          arguments: { target: phase.target },
+          arguments: { ...(next.arguments ?? {}), target: phase.target },
           reasoning: next.reasoning,
+          identity: workerAction.identity || undefined,
           success: false,
           summary: errorMsg,
         })
@@ -1134,6 +1214,7 @@ export class InProcessExecutor implements PhaseExecutor {
       errors,
       durationMs: Date.now() - startTime,
       hypotheses,
+      actionRecords,
     }
   }
 
@@ -1240,7 +1321,13 @@ export class InProcessExecutor implements PhaseExecutor {
           }
         }
 
-        const result = await this.bridge.callTool(tool.name, toolArgs, toolTimeout, execOptions.cacheMode)
+        const result = await this.bridge.callTool(
+          tool.name,
+          toolArgs,
+          toolTimeout,
+          execOptions.cacheMode,
+          phase.config?.engagementId as string | undefined,
+        )
         // Clear credential data from args after the call
         delete toolArgs.extra
 

@@ -10,6 +10,7 @@ import { ConfidenceEngine } from "../../../src/argus/engagement/confidence"
 import { ToolConfig } from "../../../src/argus/config/tool-config"
 import type { PhaseExecutionRequest } from "../../../src/argus/planner/types"
 import type { ProgressEvent, ErrorHintData } from "../../../src/argus/shared/progress"
+import { ProofStatus } from "../../../src/argus/shared/types"
 import { Capability } from "../../../src/argus/shared/capabilities"
 
 class MockToolRegistry {
@@ -173,7 +174,7 @@ describe("InProcessExecutor fixes", () => {
       )
     }
 
-    test("cascades MEDIUM→HIGH→VERIFIED→CONFIRMED in single call", () => {
+    test("cascades MEDIUM→HIGH→VERIFIED→CONFIRMED in single call (real proof)", () => {
       const executor = makeExecutor()
       const finding = {
         id: "find-sqli-1",
@@ -185,8 +186,8 @@ describe("InProcessExecutor fixes", () => {
         tool: "scanner",
         phase: "scan",
         cwe: "CWE-89",
-        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
-        verificationResult: { passed: true, confidence: 0.9, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [{ path: "evidence/pkg-1/har.har", type: "har" as const }], packageHash: "abc", createdAt: "" }],
+        verificationResult: { passed: true, proofStatus: ProofStatus.REPRODUCED, controls: [], confidence: 0.9, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -195,7 +196,7 @@ describe("InProcessExecutor fixes", () => {
       expect(finding.confidence).toBe(5) // In-place mutation
     })
 
-    test("cascades HIGH→VERIFIED→CONFIRMED when starting from HIGH", () => {
+    test("cascades HIGH→VERIFIED→CONFIRMED when starting from HIGH (real proof)", () => {
       const executor = makeExecutor()
       const finding = {
         id: "find-xss-1",
@@ -206,14 +207,56 @@ describe("InProcessExecutor fixes", () => {
         description: "XSS in search",
         tool: "scanner",
         phase: "scan",
-        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
-        verificationResult: { passed: true, confidence: 0.9, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [{ path: "evidence/pkg-1/har.har", type: "har" as const }], packageHash: "abc", createdAt: "" }],
+        verificationResult: { passed: true, proofStatus: ProofStatus.REPRODUCED, controls: [], confidence: 0.9, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
       const result = executor.consumeVerificationResult(finding)
       expect(result).toBe(5) // CONFIRMED
       expect(finding.confidence).toBe(5)
+    })
+
+    test("stops at HIGH when the verification is only suspected (bare passed:true)", () => {
+      const executor = makeExecutor()
+      const finding = {
+        id: "find-xss-2",
+        title: "Reflected XSS",
+        severity: 3,
+        confidence: 3, // HIGH
+        status: "PENDING" as const,
+        description: "XSS in search",
+        tool: "scanner",
+        phase: "scan",
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [{ path: "evidence/pkg-1/har.har", type: "har" as const }], packageHash: "abc", createdAt: "" }],
+        verificationResult: { passed: true, proofStatus: ProofStatus.SUSPECTED, controls: [], confidence: 0.9, summary: "probe passed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      const result = executor.consumeVerificationResult(finding)
+      expect(result).toBe(3) // HIGH — no proof claim without a reproduction
+      expect(finding.confidence).toBe(3)
+    })
+
+    test("stops at HIGH when the verification could not reproduce the issue", () => {
+      const executor = makeExecutor()
+      const finding = {
+        id: "find-xss-3",
+        title: "Reflected XSS",
+        severity: 3,
+        confidence: 3, // HIGH
+        status: "PENDING" as const,
+        description: "XSS in search",
+        tool: "scanner",
+        phase: "scan",
+        evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [{ path: "evidence/pkg-1/har.har", type: "har" as const }], packageHash: "abc", createdAt: "" }],
+        verificationResult: { passed: false, proofStatus: ProofStatus.NOT_REPRODUCED, controls: [], confidence: 0.9, summary: "no alert fired", verifier: "browser", verifiedAt: new Date().toISOString() },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      const result = executor.consumeVerificationResult(finding)
+      expect(result).toBe(3) // HIGH — repeated promotion cannot override a negative
+      expect(finding.confidence).toBe(3)
     })
 
     test("does not promote when finding has no metadata beyond baseline", () => {
@@ -247,7 +290,7 @@ describe("InProcessExecutor fixes", () => {
         description: "RCE in upload endpoint",
         tool: "scanner",
         phase: "scan",
-        verificationResult: { passed: true, confidence: 0.9, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
+        verificationResult: { passed: true, proofStatus: ProofStatus.SUSPECTED, controls: [], confidence: 0.9, summary: "Confirmed", verifier: "browser", verifiedAt: new Date().toISOString() },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -268,7 +311,7 @@ describe("InProcessExecutor fixes", () => {
         tool: "scanner",
         phase: "scan",
         evidence: [{ packageId: "pkg-1", findingId: "f-1", artifacts: [], packageHash: "abc", createdAt: "" }],
-        verificationResult: { passed: false, confidence: 0.2, summary: "Probe failed", verifier: "ssrf", verifiedAt: new Date().toISOString() },
+        verificationResult: { passed: false, proofStatus: ProofStatus.SUSPECTED, controls: [], confidence: 0.2, summary: "Probe failed", verifier: "ssrf", verifiedAt: new Date().toISOString() },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }

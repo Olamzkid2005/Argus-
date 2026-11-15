@@ -67,6 +67,8 @@ export interface PhaseExecutionResult {
   errors: string[]
   durationMs: number
   hypotheses?: Hypothesis[]
+  /** Tool-level provenance for the actions issued while running this phase. */
+  actionRecords?: import("./executor").HybridActionRecord[]
 }
 
 export interface AssessmentPlan {

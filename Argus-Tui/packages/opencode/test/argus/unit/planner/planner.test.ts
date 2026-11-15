@@ -210,6 +210,7 @@ describe("WorkflowPlanner", () => {
       expect(result![0].toolExecution).toBe("sequential")
       expect(result![0].workflowName).toBe("replan")
       expect(result![0].phaseId).toMatch(/^replan-\d+-/)
+      expect(result![0].config.replan).toMatchObject({ source: "replan-rule", by: "local-planner" })
     })
 
     test("writes back incremented replanCount to context", async () => {
@@ -236,6 +237,30 @@ describe("WorkflowPlanner", () => {
 
       expect(result).not.toBeNull()
       expect(result![0].replanCycle).toBe(true)
+    })
+
+    test("chain exploitation phases preserve worker attack-graph authorship", async () => {
+      const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
+      const ctx = makeContext({
+        chainPlans: [{
+          chain_id: "chain-1",
+          name: "credential chain",
+          severity: "HIGH",
+          risk_score: 0.9,
+          prerequisite_finding_types: ["credential"],
+          suggested_capabilities: ["POST_EXPLOIT"],
+          description: "Correlated credential findings suggest exploitation",
+        }],
+      })
+      const result = await planner.replan(ctx)
+
+      expect(result).not.toBeNull()
+      const chain = result!.find((phase) => phase.phaseId.startsWith("chain-"))
+      expect(chain?.config.replan).toMatchObject({
+        source: "replan-chain",
+        by: "worker-attack-graph",
+        reason: "Correlated credential findings suggest exploitation",
+      })
     })
 
     test("uses maxReplans from context when provided", async () => {
@@ -353,6 +378,7 @@ describe("WorkflowPlanner", () => {
       expect(result).toHaveLength(1)
       expect(result![0].requiredCapabilities).toContain(Capability.POST_EXPLOITATION)
       expect(result![0].workflowName).toBe("replan")
+      expect(result![0].config.replan).toMatchObject({ source: "replan-llm", by: "worker-llm" })
     })
 
     test("rule-based findings produce phases when LLM budget exhausted", async () => {
