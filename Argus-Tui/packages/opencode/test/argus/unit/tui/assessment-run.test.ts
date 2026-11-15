@@ -57,6 +57,25 @@ describe("runTuiAssessment", () => {
     expect(state.llmPlanningModel).toBe("openai/gpt-4o-mini")
   })
 
+  test("prints a completion line so a clean run is observable", async () => {
+    // A fully successful run used to print nothing at all: the dashboard said
+    // COMPLETED while the transcript stopped at the last phase, so the Gate A
+    // harness (and any operator) waited forever for a terminal marker.
+    const runner = {
+      async run(options: WorkflowRunOptions) {
+        options.onEngagement?.({ id: "ENG-10", target: options.target, created: true })
+        return result({ engagementId: "ENG-10", findings: 3, high: 1, medium: 2 })
+      },
+    }
+
+    const outcome = await runTuiAssessment({ target: "https://lab.example" }, { runner, navigate: false })
+
+    const log = getScanState().log.join("\n")
+    expect(outcome.status).toBe("completed")
+    expect(log).toContain("Assessment complete")
+    expect(log).toContain("3 finding(s)")
+  })
+
   test("routes plain progress strings to the scan log", async () => {
     const runner = {
       async run(options: WorkflowRunOptions) {

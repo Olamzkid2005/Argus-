@@ -146,6 +146,13 @@ async function executeTuiAssessment(
   if (status === "failed") appendLog(`Assessment failed: ${result.error ?? "unknown error"}`)
   if (status === "partial") appendLog("Assessment finished with partial coverage")
   if (status === "stopped") appendLog("Assessment stopped at a phase boundary")
+  // Every other outcome prints a terminal line; a clean finish used to print
+  // nothing, so anything watching the log for a completion marker (the Gate A
+  // harness, an operator reading the transcript) saw the run hang forever even
+  // though the scan dashboard had already flipped to COMPLETED.
+  if (status === "completed") {
+    appendLog(`Assessment complete — ${result.findings} finding(s) (${result.high} high, ${result.medium} medium)`)
+  }
 
   return { result, engagementId, status }
 }
