@@ -96,6 +96,10 @@ provide. The run ends with a pass/fail verdict in `${LOG_DIR}/verdict.json` and 
 criterion fails; the first run for a label stores `livefire-runs/baseline-<label>.json`, and later
 runs must stay within ±50% of it.
 
+### Gate A: three cold TUI runs
+
+`bun run scripts/livefire/gate-a.ts` drives three cold `argus` → `/assess <target>` cycles through a real PTY, each from a fresh `HOME`, and writes `run-N.json` plus the raw `run-N.pty.log` into `livefire-runs/gate-a-<stamp>/` (gitignored). `RUNS`, `TIMEOUT_SECONDS`, `GATE_A_TARGET` and `GATE_A_LLM_URL` override the defaults. Results are read back from the TUI's own SQLite store (`ARGUS_DATA_DIR/argus/argus.db` and `engagements/<id>/engagement.db`), so the screen is not the only record. Two environment paths are deliberate: `ARGUS_AUTO_APPROVE=1` answers the destructive-tool prompt with an auditable timestamp, and `ARGUS_ALLOW_UNSCOPED=1` lets worker tools run because the TUI's `ENG-*` SQLite engagements have no PostgreSQL `authorized_scope` row — that escape hatch is for lab runs only.
+
 Each run creates a **fresh engagement** unless you pass `ENGAGEMENT_ID` explicitly, and it never
 deletes findings. The effective options, scope, feature flags and IDs are saved as
 `${LOG_DIR}/effective-config.json`, so a verdict can be reproduced from the artifact rather than
