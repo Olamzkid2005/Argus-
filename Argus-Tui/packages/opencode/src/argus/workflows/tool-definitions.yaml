@@ -444,7 +444,9 @@ tools:
     timeout_seconds: 600
     version_cmd: 'trivy --version'
     version_regex: '\d+\.\d+\.\d+'
-    min_version: "1.0.0"
+    # Trivy has never shipped a 1.x release; a 1.0.0 minimum made every
+    # installed trivy report as too old.
+    min_version: "0.50.0"
     scoring:
       confidence_score: 85
       coverage_score: 80
