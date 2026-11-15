@@ -360,6 +360,13 @@ const EXPECTED_ABSENCE_PATTERNS: Array<{ pattern: RegExp; note: string }> = [
     pattern: /EMAIL_EXISTS|already registered/i,
     note: "account already exists from an earlier run",
   },
+  {
+    // The planner can name a tool the worker registry has disabled (jwt_tool
+    // needs a token; without one it exits 1). Refusing to run it is the
+    // deliberate outcome, not a broken tool.
+    pattern: /^Tool disabled:/i,
+    note: "tool is disabled in the worker registry — nothing to run",
+  },
 ]
 
 /**
@@ -1201,6 +1208,33 @@ export class InProcessExecutor implements PhaseExecutor {
           if (observeAck.error) errors.push(`Observe rejected for ${next.tool}: ${observeAck.error}`)
         } else {
           this.toolHealth.recordFailure(next.tool, result.error ?? "Unknown error")
+          // Same rule as executeTool(): a tool the worker refuses to run (or a
+          // "not there" answer) is a result about the target/tool set, not a
+          // phase failure. Without this the hybrid path turned the disabled
+          // jwt_tool into the error that failed api_exploitation.
+          const hybridAbsence = classifyExpectedAbsence(result.error ?? "")
+          if (hybridAbsence) {
+            this.expectedAbsences.push({
+              tool: next.tool,
+              phase: phase.phaseId,
+              target: phase.target,
+              note: hybridAbsence,
+            })
+            console.log(`[executor]  ○ ${next.tool}: ${hybridAbsence} — recorded as an observation, not a failure`)
+            nextTrigger = "stuck"
+            recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: "blocked", detail: hybridAbsence })
+            await this.bridge.agentObserve({
+              session_id: session.session_id,
+              action_id: next.action_id,
+              tool: next.tool,
+              arguments: { ...(next.arguments ?? {}), target: phase.target },
+              reasoning: next.reasoning,
+              identity: workerAction.identity || undefined,
+              success: false,
+              summary: hybridAbsence,
+            })
+            continue
+          }
           errors.push(`Tool ${next.tool} failed: ${result.error}`)
 
           const failedOutcome = isTimeoutMessage(result.error ?? "") ? "timed-out" : "failed"
@@ -1276,9 +1310,25 @@ export class InProcessExecutor implements PhaseExecutor {
     } else {
       const uncovered = phase.requiredCapabilities.filter(c => !coveredCapabilities.has(c))
       if (uncovered.length > 0) {
+        // A capability nothing can perform is a gap in the tool set, not a
+        // failed phase: jwt_tool is disabled and no SSRF tool is registered, so
+        // api_exploitation was reported FAILED on every target even though its
+        // runnable tools ran and answered. Report the gap and mark the phase
+        // partial; a capability that *has* a runnable tool still fails it.
+        const absentTools = new Set(
+          this.expectedAbsences.filter((a) => a.phase === phase.phaseId).map((a) => a.tool),
+        )
+        const runnable = uncovered.filter((cap) =>
+          (this.toolRegistry.getToolsByCapability(cap) ?? []).some(
+            (tool) =>
+              !this.toolRegistry.getWorkerBlockReason(tool.name) &&
+              !absentTools.has(tool.name),
+          ),
+        )
         errors.push(`Coverage gap: required capabilities never successfully performed (${uncovered.join(", ")}); ` +
+          `runnable: ${runnable.length > 0 ? runnable.join(", ") : "none"}; ` +
           `outcomes: ${actionRecords.map(r => `${r.tool}=${r.outcome}`).join(", ")}`)
-        hybridStatus = findings.length > 0 ? "partial" : "failed"
+        hybridStatus = findings.length > 0 || runnable.length === 0 ? "partial" : "failed"
       } else if (errors.length > 0) {
         hybridStatus = findings.length > 0 ? "partial" : "failed"
       }

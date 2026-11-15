@@ -109,7 +109,15 @@ def check_stored_xss(
 
         page.goto(f"{target}{form_path}", timeout=30000, wait_until="networkidle")
 
-        page.fill("textarea, input[type=text]", payload)
+        # A page with no text input has no place to store the payload. That is a
+        # result about the target, not a crash: the verifier used to raise a
+        # Playwright timeout here and the phase recorded a failed tool.
+        injection_point = page.locator("textarea, input[type=text]").first
+        if injection_point.count() == 0:
+            browser.close()
+            return findings
+
+        injection_point.fill(payload)
         page.click("button[type=submit]")
         page.wait_for_load_state("networkidle")
 
