@@ -18,6 +18,28 @@ import { appendLog, completeScan, handleProgressEvent, initScan, setPlannerModel
 
 export type TuiAssessmentStatus = "completed" | "partial" | "stopped" | "failed"
 
+/**
+ * Append a breadcrumb to `<data dir>/tui-assessment-trace.log`.
+ *
+ * The TUI once finished every phase and then never drew the terminal line: the
+ * transcript stopped mid-assessment while the engagement database kept moving.
+ * A file survives a frozen renderer, so the next run says where it stopped.
+ */
+function makeTrace(): (line: string) => void {
+  const { appendFileSync } = require("node:fs") as typeof import("node:fs")
+  const { join } = require("node:path") as typeof import("node:path")
+  const { homedir } = require("node:os") as typeof import("node:os")
+  const dir = process.env["ARGUS_DATA_DIR"] || join(homedir(), ".argus")
+  const file = join(dir, "tui-assessment-trace.log")
+  return (line: string) => {
+    try {
+      appendFileSync(file, `${new Date().toISOString()} ${line}\n`)
+    } catch {
+      // Tracing must never break an assessment.
+    }
+  }
+}
+
 export interface TuiAssessmentOutcome {
   result: WorkflowRunResult
   engagementId: string
@@ -97,6 +119,7 @@ async function executeTuiAssessment(
   const enqueue = (work: () => void | Promise<void>) => {
     queue = queue.then(work).catch(() => {})
   }
+  const trace = makeTrace()
 
   let result: WorkflowRunResult
   try {
@@ -117,9 +140,10 @@ async function executeTuiAssessment(
               partial = true
             }
           }
-          enqueue(() =>
-            typeof event === "string" ? appendLog(event) : handleProgressEvent(event, engagementId || undefined),
-          )
+          enqueue(() => {
+            trace(typeof event === "string" ? `log ${event.slice(0, 80)}` : `event ${event.type}`)
+            return typeof event === "string" ? appendLog(event) : handleProgressEvent(event, engagementId || undefined)
+          })
         },
       },
       { runner: options.runner, switchModel: options.switchModel },
@@ -131,7 +155,13 @@ async function executeTuiAssessment(
     throw error
   }
 
+  // Diagnostic breadcrumb: a run can finish its phases and still never reach
+  // the terminal line (the screen froze mid-assessment once and the marker was
+  // never drawn), so record the boundary in the data directory next to the
+  // engagement it belongs to.
+  trace("runAssessment returned")
   await queue
+  trace("progress queue drained")
   if (!engagementId) engagementId = result.engagementId
 
   const status: TuiAssessmentStatus = result.stopped
@@ -143,6 +173,7 @@ async function executeTuiAssessment(
         : "completed"
 
   completeScan(status)
+  trace(`completeScan(${status})`)
   if (status === "failed") appendLog(`Assessment failed: ${result.error ?? "unknown error"}`)
   if (status === "partial") appendLog("Assessment finished with partial coverage")
   if (status === "stopped") appendLog("Assessment stopped at a phase boundary")
