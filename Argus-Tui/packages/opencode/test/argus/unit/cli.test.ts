@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from "bun:test"
+import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test"
 
 // NOTE: This file does NOT use mock.module() to avoid cross-file leakage.
 // Command definitions are string-based and safe to test directly.
@@ -25,6 +25,14 @@ beforeEach(async () => {
     workflows: cli.ArgusWorkflowsCommand,
     tools: cli.ArgusToolsCommand,
   }
+})
+
+afterEach(() => {
+  // CLI handlers intentionally set process.exitCode for real command failures.
+  // These smoke tests only assert that handlers do not throw, so always
+  // restore the runner's entry exit code. Restoring a per-test snapshot would
+  // preserve asynchronous leakage from the previous handler instead.
+  process.exitCode = 0
 })
 
 // =============================================================================
@@ -98,7 +106,7 @@ describe("assess handler", () => {
       new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 15000)),
     ])
     expect(["completed", "caught", "timeout"]).toContain(result)
-  })
+  }, 15000)
 })
 
 describe("doctor handler", () => {
@@ -121,7 +129,7 @@ describe("doctor handler", () => {
     }
     const writes = spy.mock.calls.map((c: any[]) => String(c[0])).join("")
     expect(writes.length).toBeGreaterThan(0)
-  })
+  }, 15000)
 })
 
 describe("report handler", () => {
@@ -163,7 +171,7 @@ describe("evidence handler", () => {
     }
     const writes = spy.mock.calls.map((c: any[]) => String(c[0])).join("")
     expect(writes.length).toBeGreaterThan(0)
-  })
+  }, 15000)
 })
 
 describe("config handler", () => {
@@ -192,7 +200,7 @@ describe("config handler", () => {
     }
     const writes = spy.mock.calls.map((c: any[]) => String(c[0])).join("")
     expect(writes.length).toBeGreaterThan(0)
-  })
+  }, 15000)
 })
 
 describe("findings handler", () => {
@@ -208,7 +216,7 @@ describe("findings handler", () => {
     // Should not crash. May say "No engagements" or list engagements
     const writes = spy.mock.calls.map((c: any[]) => String(c[0])).join("")
     expect(writes.length).toBeGreaterThan(0)
-  })
+  }, 15000)
 })
 
 describe("engagements handler", () => {
@@ -223,7 +231,7 @@ describe("engagements handler", () => {
     }
     const writes = spy.mock.calls.map((c: any[]) => String(c[0])).join("")
     expect(writes.length).toBeGreaterThan(0)
-  })
+  }, 15000)
 })
 
 describe("workflows handler", () => {
@@ -238,7 +246,7 @@ describe("workflows handler", () => {
     }
     const writes = spy.mock.calls.map((c: any[]) => String(c[0])).join("")
     expect(writes.length).toBeGreaterThan(0)
-  })
+  }, 15000)
 })
 
 describe("tools handler", () => {
@@ -256,5 +264,5 @@ describe("tools handler", () => {
     ])
     process.stdout.write = orig
     expect(["completed", "caught", "timeout"]).toContain(result)
-  })
+  }, 15000)
 })

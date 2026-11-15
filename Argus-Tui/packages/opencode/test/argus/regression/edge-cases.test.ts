@@ -15,6 +15,7 @@ import { join } from "path"
 import { tmpdir } from "os"
 import { Capability } from "../../../src/argus/planner/capabilities"
 import { Severity, Confidence } from "../../../src/argus/planner/types"
+import { ProofStatus } from "../../../src/argus/shared/types"
 import type { NormalizedFinding, PlannerContext } from "../../../src/argus/planner/types"
 import type { VerificationScenario, VerifierResult, EvidencePackage } from "../../../src/argus/browser/types"
 import type { PhaseExecutionRequest } from "../../../src/argus/planner/types"
@@ -123,6 +124,15 @@ describe("ConfidenceEngine edge cases", () => {
 
   test("Multiple sequential promotions (one tier per call)", () => {
     const engine2 = new ConfidenceEngine()
+    const verificationResult = {
+      passed: true,
+      proofStatus: ProofStatus.REPRODUCED,
+      confidence: 0.9,
+      summary: "Payload executed in the test browser",
+      verifier: "browser-xss",
+      verifiedAt: new Date().toISOString(),
+      controls: [{ kind: "control-request", description: "Same request without payload" }],
+    }
     const finding: NormalizedFinding = {
       id: "test", title: "Test", severity: Severity.HIGH, confidence: Confidence.LOW,
       status: "PENDING", description: "", tool: "scanner", cwe: "CWE-79",
@@ -130,7 +140,9 @@ describe("ConfidenceEngine edge cases", () => {
     }
     const first = engine2.promote(finding)
     expect(first).toBe(Confidence.MEDIUM)
-    const secondFinding = { ...finding, confidence: first, evidence: [{ packageId: "p1", findingId: "test", artifacts: [], packageHash: "hash", createdAt: "" }] }
+    // HIGH to VERIFIED is a proof claim: the reproduced verification and its
+    // control comparison must accompany the finding being promoted.
+    const secondFinding = { ...finding, confidence: first, verificationResult }
     const second = engine2.promote(secondFinding)
     expect(second).toBe(Confidence.HIGH)
     const thirdFinding = { ...secondFinding, confidence: second }
