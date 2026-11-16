@@ -120,6 +120,8 @@ export function resolveDefaultPython(): string {
 
 export class WorkersBridge {
   private process: ChildProcess | null = null
+  /** Set when the worker exits before it ever answered — surfaced by waitForReady. */
+  private startupExit?: { code: number | null; stderr: string }
   private rl: ReturnType<typeof createInterface> | null = null
   private pending = new Map<string, PendingRequest>()
   private requestId = 0
@@ -378,6 +380,9 @@ export class WorkersBridge {
    * "Process not running" and the assessment finished with zero findings.
    */
   private handleChildExit(child: ChildProcess, code: number | null, stderrBuffer: string[]): void {
+    if (!this._toolsEverFetched) {
+      this.startupExit = { code, stderr: stderrBuffer.join("") }
+    }
     if (this.process !== child) return
 
     // Reject all pending requests — process is gone
@@ -481,6 +486,18 @@ export class WorkersBridge {
     let delay = 200
     while (Date.now() - start < effectiveTimeout) {
       if (await this.isHealthy()) return
+      // A worker that already exited will never answer. Waiting out the whole
+      // budget hides the reason (a missing module, a bad import) behind
+      // "failed to become ready", so fail now and say what the worker said.
+      const crash = this.startupExit
+      if (crash) {
+        this.startupExit = undefined
+        const answer = crash.stderr.trim().split("\n").slice(-6).join("\n")
+        throw new Error(
+          `MCP worker exited (code ${crash.code}) during startup` +
+            (answer ? `:\n${answer}` : ""),
+        )
+      }
       await new Promise((r) => setTimeout(r, delay))
       delay = Math.min(delay * 2, 1600)
     }
