@@ -30,13 +30,34 @@ RESOLVERS = "1.1.1.1,8.8.8.8"
 COMMON_LABELS = "www\nmail\napi\ndev\nstaging\ntest\nadmin\nportal\nvpn\nblog"
 
 
+def _labels() -> list[str]:
+    """Common subdomain labels to brute-force under the target host.
+
+    The checked-in wordlist is the source of truth; COMMON_LABELS is only the
+    fallback for a tree where the wordlist was removed.
+    """
+    path = _wordlist()
+    if path:
+        with open(path, encoding="utf-8") as handle:
+            labels = [line.strip() for line in handle if line.strip()]
+        if labels:
+            return labels
+    return COMMON_LABELS.splitlines()
+
+
 def _targets(raw: str) -> tuple[str, list[str]]:
-    """Split a URL/bare host into (host, domains to resolve)."""
+    """Split a URL/bare host into (host, domains to resolve).
+
+    Besides the host itself, every label in the wordlist is brute-forced
+    (``www.<host>``, ``api.<host>``, ...), so resolving the apex alone does
+    not waste the tool's wordlist capability.
+    """
     value = raw.strip()
     if "://" in value:
         value = urllib.parse.urlsplit(value).hostname or value
     value = value.strip("/")
-    return value, [value]
+    hosts = [value, *[f"{label}.{value}" for label in _labels()]]
+    return value, list(dict.fromkeys(hosts))  # dedupe, keep order
 
 
 def _wordlist() -> str | None:

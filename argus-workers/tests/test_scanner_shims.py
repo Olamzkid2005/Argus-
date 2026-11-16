@@ -432,3 +432,50 @@ class TestDnsxShim:
         assert '"-l", list_path' in shim, "dnsx rejects a bare -d target without a wordlist/file"
         wordlist = Path(__file__).resolve().parents[1] / "tools" / "wordlists" / "dnsx-labels.txt"
         assert wordlist.is_file()
+
+
+class TestDnsxShim:
+    """dnsx needs a domain list, a wordlist and resolvers; the shim supplies all."""
+
+    def test_labels_are_read_from_the_checked_in_wordlist(self):
+        module = _load_shim("dnsx")
+        labels = module._labels()
+        assert labels
+        # The checked-in file is the source of truth, in order.
+        path = module._wordlist()
+        assert path and path.endswith("dnsx-labels.txt")
+        with open(path) as handle:
+            assert [line.strip() for line in handle if line.strip()] == labels
+
+    def test_the_target_is_brute_forced_with_those_labels(self):
+        module = _load_shim("dnsx")
+        host, hosts = module._targets("http://demo.testfire.net/")
+        assert host == "demo.testfire.net"
+        assert hosts[0] == "demo.testfire.net"
+        for label in module._labels():
+            assert f"{label}.demo.testfire.net" in hosts, label
+        assert len(hosts) == len(set(hosts)) == 1 + len(module._labels())
+
+    def test_end_to_end_reports_a_resolved_host(self, monkeypatch):
+        module = _load_shim("dnsx")
+
+        class _Proc:
+            returncode = 0
+            stdout = '{"host":"example.com","a":["93.184.216.34"],"cname":["example.com."]}\n'
+
+        captured: dict[str, list[str]] = {}
+
+        def fake_run(cmd, **kwargs):
+            with open(cmd[cmd.index("-l") + 1]) as handle:
+                captured["hosts"] = [line.strip() for line in handle if line.strip()]
+            return _Proc()
+
+        # monkeypatch: the shim's `import subprocess` is the shared stdlib
+        # module, so a direct assignment here would leak into every later test.
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+        ok, output = module.run_dnsx("dnsx", module._targets("example.com")[1], 10)
+        assert ok
+        assert "93.184.216.34" in output
+        # Brute force: the apex alone is not the whole list.
+        assert captured["hosts"][0] == "example.com"
+        assert "www.example.com" in captured["hosts"]
