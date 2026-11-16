@@ -1431,7 +1431,12 @@ class MCPServer:
             # Exit 124 is our own wall clock, not a scanner failure. When the
             # bounded run still produced parseable findings the scan was
             # productive — report those findings and say the run was cut short.
-            wall_limited = result.returncode == 124 and bool(structured)
+            # 124 is our own wall clock (see WALL_LIMITED_TOOLS). The scanner
+            # ran and was stopped on purpose; whether it had printed findings
+            # yet is coverage, not failure. Treating an empty bounded run as a
+            # failure put "dalfox failed after 1 retry" in the phase and turned
+            # a coverage gap into an error.
+            wall_limited = result.returncode == 124
             if wall_limited:
                 success = True
             if (

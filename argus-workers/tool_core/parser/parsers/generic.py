@@ -128,7 +128,7 @@ def _try_json(output: str) -> list[NormalizedFinding] | None:
                 severity=normalize_severity(item.get("severity", "medium")),
                 confidence=normalize_confidence(item.get("confidence", "medium")),
                 description=str(item.get("description") or item.get("message") or title),
-                tool=item.get("tool", "unknown"),
+                tool=item.get("tool") or item.get("source_tool") or "unknown",
                 evidence=[item],
             )
         )

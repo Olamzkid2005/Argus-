@@ -220,7 +220,7 @@ def _try_json(output: str) -> list[dict] | None:
                 "title": str(title),
                 "evidence": item,
                 "confidence": _normalize_confidence(confidence_raw),
-                "tool": item.get("tool", "unknown"),
+                "tool": item.get("tool") or item.get("source_tool") or "unknown",
             }
         )
     return findings

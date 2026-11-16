@@ -1143,6 +1143,28 @@ export class InProcessExecutor implements PhaseExecutor {
         if (extra) toolArgs.extra = extra;
         const credsFile = await this.buildCredsFile(next.tool, phase.config)
         if (credsFile) toolArgs.creds_file = credsFile;
+        else {
+          // A verifier with no logins is not a scan: playwright_bola.py exits 2
+          // with a usage dump and the phase records an error. If the tool
+          // declares roles it needs, having no file for them means it cannot
+          // run — say so and move on.
+          const requiredRoles = this.toolRegistry.getTool(next.tool)?.credential_roles ?? []
+          if (requiredRoles.length > 0) {
+            const reason = `requires ${requiredRoles.join(", ")} credentials — none configured`
+            if (execOptions.verbose) console.log(`[executor]  Skipping ${next.tool}: ${reason}`)
+            recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: "blocked", detail: reason })
+            await this.bridge.agentObserve({
+              session_id: session.session_id,
+              action_id: next.action_id,
+              tool: next.tool,
+              arguments: { target: phase.target },
+              reasoning: reason,
+              success: false,
+              summary: reason,
+            }).catch(() => {})
+            continue
+          }
+        }
         // Use per-tool timeout from registry — matches executeTool() at line 473.
         // Without this, callTool defaults to 600s which may be too short for deep
         // scans (sqlmap, nuclei) or unnecessarily long for quick tools (httpx, gau).
@@ -1415,6 +1437,15 @@ export class InProcessExecutor implements PhaseExecutor {
         if (extra) toolArgs.extra = extra;
         const credsFile = await this.buildCredsFile(tool.name, phase.config)
         if (credsFile) toolArgs.creds_file = credsFile;
+        else {
+          const requiredRoles = this.toolRegistry.getTool(tool.name)?.credential_roles ?? []
+          if (requiredRoles.length > 0) {
+            if (execOptions.verbose) {
+              console.log(`[executor]  Skipping ${tool.name}: requires ${requiredRoles.join(", ")} credentials — none configured`)
+            }
+            return { findings: [], errors: [], failFast: false }
+          }
+        }
         if (execOptions.verbose) {
           // Only log safe fields to avoid leaking credentials from config
           const safeArgs = { target: toolArgs.target, capability: toolArgs.capability }

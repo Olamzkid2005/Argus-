@@ -970,6 +970,26 @@ tools:
     priority: 90
     cost: low
 
+  - name: web_scanner
+    label: Web Scanner
+    description: HTTP checks for SSRF, injection, redirects, API and header issues
+    capabilities:
+      - security_analysis
+      - vulnerability_scanning
+      - sqli_detection
+      - ssrf_check
+      - api_probing
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 75
+      coverage_score: 85
+    signal_quality: PROBABLE
+    priority: 80
+
   - name: browser_security_operator
     label: Browser Security Operator
     capabilities:
