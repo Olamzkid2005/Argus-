@@ -1383,6 +1383,7 @@ class MCPServer:
             # they go, so a wall clock that asks them to stop keeps every finding
             # already printed. Python tools and tools that need their full run
             # (sqlmap, nmap) are untouched.
+            _wall = 0  # set below only for bounded scanners; the exit check reads it
             if tool.name in WALL_LIMITED_TOOLS and os.name != "nt":
                 _wall = int(os.environ.get("ARGUS_TOOL_WALL_SECONDS", "240"))
                 if _wall > 0 and cmd and cmd[0] != "timeout":
