@@ -34,6 +34,40 @@ _HEADLINE_FIELDS = (
 )
 
 
+_STATEMENT_FIELDS = (
+    "title",
+    "name",
+    "message",
+    "finding",
+    "description",
+    "detail",
+    "issue",
+    "check",
+    "reason",
+    "summary",
+)
+
+#: Types that say nothing about what was found; a finding carrying one of these
+#: still needs a sentence to be a finding.
+_CONTENTLESS_TYPES = {"", "GENERIC_FINDING", "RAW_OUTPUT", "UNKNOWN"}
+
+
+def _states_a_finding(item: dict) -> bool:
+    """Does this item say anything about what was found?
+
+    A verifier that emits ``{"severity": 2, "confidence": 3}`` — or one with
+    only a target URL — has not reported a finding, and turning it into
+    "unknown: finding" / "Finding at <host>" put thirteen MEDIUM findings with
+    no content into the testasp.vulnweb.com report. Requiring a sentence (or an
+    explicit finding type) keeps those out without dropping real results.
+    """
+    for key in _STATEMENT_FIELDS:
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return True
+    finding_type = str(item.get("type") or "").strip().upper()
+    return finding_type not in _CONTENTLESS_TYPES
+
 def _headline_from_item(item: dict) -> str:
     """Return a headline for an item that may not carry a title.
 
@@ -49,8 +83,14 @@ def _headline_from_item(item: dict) -> str:
             if line:
                 return line[:120]
     url = item.get("url") or item.get("endpoint")
-    if isinstance(url, str) and url.strip():
-        return f"Finding at {url.strip()}"[:120]
+    endpoint = url.strip() if isinstance(url, str) and url.strip() else ""
+    finding_type = str(item.get("type") or item.get("subtype") or "").strip()
+    if finding_type and finding_type.upper() not in _CONTENTLESS_TYPES:
+        label = finding_type.replace("_", " ").strip()
+        label = label[:1].upper() + label[1:].lower()
+        return f"{label}: {endpoint}"[:120] if endpoint else label[:120]
+    if endpoint:
+        return f"Finding at {endpoint}"[:120]
     tool = str(item.get("tool") or "unknown").strip()
     subtype = str(item.get("type") or item.get("subtype") or "finding").replace("_", " ").strip()
     return f"{tool}: {subtype}"[:120]
@@ -76,6 +116,8 @@ def _try_json(output: str) -> list[NormalizedFinding] | None:
     findings = []
     for item in items:
         if not isinstance(item, dict):
+            continue
+        if not _states_a_finding(item):
             continue
         title = _headline_from_item(item)
         if _NEGATIVE_RESULT.match(str(title)):

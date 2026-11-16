@@ -616,15 +616,28 @@ class TestGenericHeadlines:
         findings = generic.parse(output)
         assert findings[0].title == "Attacker can read victim's order via /api/data/10"
 
-    def test_endpoint_is_named_when_there_is_no_text(self):
-        output = json.dumps([{"severity": 2, "url": "http://testasp.vulnweb.com/Login.asp"}])
-        assert generic.parse(output)[0].title == "Finding at http://testasp.vulnweb.com/Login.asp"
+    def test_a_typed_finding_is_named_by_its_type_and_endpoint(self):
+        output = json.dumps([{"severity": 2, "type": "OPEN_REDIRECT", "url": "/Login.asp?RetURL=http://evil.example"}])
+        assert generic.parse(output)[0].title == "Open redirect: /Login.asp?RetURL=http://evil.example"
 
-    def test_tool_and_type_are_named_when_there_is_nothing_else(self):
-        output = json.dumps([{"severity": 1, "tool": "playwright-xss"}])
-        title = generic.parse(output)[0].title
-        assert title.startswith("playwright-xss:"), title
-        assert title != "Generic finding"
+    def test_a_bare_url_is_not_a_finding(self):
+        output = json.dumps([{"severity": 2, "url": "http://testasp.vulnweb.com/Login.asp"}])
+        assert generic.parse(output) == []
+
+    def test_an_item_with_no_statement_is_not_a_finding(self):
+        """Severity alone does not describe a finding.
+
+        The testasp.vulnweb.com run carried thirteen MEDIUM findings titled
+        "unknown: finding" or "Finding at http://<host>" whose whole content was
+        a severity and a URL — nothing the tool actually reported.
+        """
+        assert generic.parse(json.dumps([{"severity": 1, "tool": "playwright-xss"}])) == []
+        assert generic.parse(json.dumps([{"severity": 2, "url": "http://testasp.vulnweb.com"}])) == []
+
+    def test_an_explicit_finding_type_still_counts(self):
+        output = json.dumps([{"severity": 3, "type": "PATH_TRAVERSAL", "url": "/download?f=../../etc/passwd"}])
+        findings = generic.parse(output)
+        assert findings and findings[0].title == "Path traversal: /download?f=../../etc/passwd"
 
 
 class TestUnparseableOutputIsNotAFinding:
