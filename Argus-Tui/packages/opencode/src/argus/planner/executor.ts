@@ -673,6 +673,9 @@ export class InProcessExecutor implements PhaseExecutor {
     // them meaningless. A phase whose every candidate was skipped this way has
     // nothing to execute and nothing to miss: it must not fail readiness.
     let deliberatelySkipped = 0
+    // Capabilities whose only candidate tools were skipped for missing
+    // credentials: no scan can supply a login, so these are not coverage gaps.
+    const skippedForCredentials = new Set<string>()
 
     const toolConfigs: { tool: ToolDef; cap: Capability }[] = []
     const pipelineSteps = phase.config.pipelineSteps as PipelineStep[] | undefined
@@ -718,8 +721,12 @@ export class InProcessExecutor implements PhaseExecutor {
         const missingRoles = await this.missingCredentialRoles(step.tool)
         if (missingRoles) {
           const reason = `requires ${missingRoles.join(", ")} credentials — none configured`
-          if (execOptions.verbose) console.log(`[executor]  Skipping ${step.tool}: ${reason}`)
-          recordDeterministicOutcome(step.tool, (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability, "blocked", reason)
+          // A skip, not a failure: say so where the operator can see it and
+          // keep the capability out of the coverage gap, because no amount of
+          // scanning can supply a login that was never configured.
+          console.log(`[executor]  ◦ Skipped ${step.tool} (${phase.name}): ${reason}`)
+          skippedForCredentials.add(step.capabilities?.[0] ?? phase.requiredCapabilities[0])
+          recordDeterministicOutcome(step.tool, (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability, "skipped", reason)
           deliberatelySkipped++
           continue
         }
@@ -744,8 +751,9 @@ export class InProcessExecutor implements PhaseExecutor {
           const missingRoles = await this.missingCredentialRoles(tool.name)
           if (missingRoles) {
             const reason = `requires ${missingRoles.join(", ")} credentials — none configured`
-            if (execOptions.verbose) console.log(`[executor]  Skipping ${tool.name}: ${reason}`)
-            recordDeterministicOutcome(tool.name, cap, "blocked", reason)
+            console.log(`[executor]  ◦ Skipped ${tool.name} (${phase.name}): ${reason}`)
+            skippedForCredentials.add(cap)
+            recordDeterministicOutcome(tool.name, cap, "skipped", reason)
             deliberatelySkipped++
             continue
           }
@@ -916,7 +924,10 @@ export class InProcessExecutor implements PhaseExecutor {
 
     // 2.3: per-action outcome ledger. Only `succeeded-*` outcomes cover the
     // capability they ran for; `blocked`/`skipped`/failed outcomes leave a
-    // gap that forces partial/failed instead of completed.
+    // gap that forces partial/failed instead of completed — except a skip for
+    // missing credentials, which no scan can fix and which must not turn a
+    // complete phase into a partial one.
+    const skippedForCredentials = new Set<string>()
     const actionRecords: HybridActionRecord[] = []
     const coveredCapabilities = new Set<string>()
     const recordOutcome = (record: HybridActionRecord) => {
@@ -1158,8 +1169,9 @@ export class InProcessExecutor implements PhaseExecutor {
           const requiredRoles = this.toolRegistry.getTool(next.tool)?.credential_roles ?? []
           if (requiredRoles.length > 0) {
             const reason = `requires ${requiredRoles.join(", ")} credentials — none configured`
-            if (execOptions.verbose) console.log(`[executor]  Skipping ${next.tool}: ${reason}`)
-            recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: "blocked", detail: reason })
+            console.log(`[executor]  ◦ Skipped ${next.tool} (${phase.name}): ${reason}`)
+            skippedForCredentials.add(cap)
+            recordHybridOutcome({ actionId: next.action_id, tool: next.tool, capability: cap, outcome: "skipped", detail: reason })
             await this.bridge.agentObserve({
               session_id: session.session_id,
               action_id: next.action_id,
@@ -1345,7 +1357,9 @@ export class InProcessExecutor implements PhaseExecutor {
       errors.push("No tools executed in hybrid phase — agent success requires at least one executed action")
       hybridStatus = "failed"
     } else {
-      const uncovered = phase.requiredCapabilities.filter(c => !coveredCapabilities.has(c))
+      const uncovered = phase.requiredCapabilities.filter(
+        c => !coveredCapabilities.has(c) && !skippedForCredentials.has(c),
+      )
       if (uncovered.length > 0) {
         // A capability nothing can perform is a gap in the tool set, not a
         // failed phase: jwt_tool is disabled and no SSRF tool is registered, so

@@ -17,7 +17,7 @@ class MockToolRegistry {
   // 2.2/2.3: the hybrid loop rejects actions for tools that are neither
   // registered nor covered by a fallback, so the mock registers test-tool —
   // mirroring a real readiness where the planned tool exists.
-  getToolsByCapability() { return [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 300 }] }
+  getToolsByCapability(_cap?: string) { return [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 300 }] }
   getTool(name: string) {
     if (name === "test-tool") return { name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, timeout_seconds: 300 }
     return undefined
@@ -359,5 +359,68 @@ describe("InProcessExecutor fixes", () => {
       )
       expect(() => executor.reset()).not.toThrow()
     })
+  })
+})
+
+describe("credential-gated tools are skipped, not failed", () => {
+  class CredentialToolRegistry extends MockToolRegistry {
+    override getToolsByCapability(cap: string) {
+      if (cap === Capability.BROWSER_VERIFICATION) {
+        return [{
+          name: "playwright-bola",
+          capabilities: [Capability.BROWSER_VERIFICATION],
+          requires_auth: true,
+          credential_roles: ["attacker", "victim"],
+          destructive: false,
+          supports_api: false,
+          supports_web: true,
+          timeout_seconds: 300,
+        }]
+      }
+      return super.getToolsByCapability(cap)
+    }
+    override getTool(name: string) {
+      if (name === "playwright-bola") {
+        return {
+          name,
+          capabilities: [Capability.BROWSER_VERIFICATION],
+          requires_auth: true,
+          credential_roles: ["attacker", "victim"],
+          destructive: false,
+          supports_web: true,
+          timeout_seconds: 300,
+        }
+      }
+      return super.getTool(name)
+    }
+  }
+
+  test("playwright-bola with no credentials completes the phase and never calls it", async () => {
+    let called = false
+    const bridge = {
+      ...mockBridge,
+      callTool: async (name: string) => {
+        called = true
+        throw new Error(`callTool should not run for a credential-gated tool (saw ${name})`)
+      },
+    }
+    const executor = new InProcessExecutor(
+      new CredentialToolRegistry() as any,
+      bridge as any,
+      new ConfidenceEngine(),
+      mockWorkflowRegistry as any,
+    )
+    executor.loadGates("test")
+    const result = await executor.execute(makePhase({
+      requiredCapabilities: [Capability.BROWSER_VERIFICATION],
+      toolExecution: "sequential" as const,
+    }))
+    expect(called).toBe(false)
+    expect(result.errors).toEqual([])
+    expect(result.status).toBe("completed")
+    const record = (result.actionRecords ?? []).find((r) => r.tool === "playwright-bola")
+    expect(record?.outcome).toBe("skipped")
+    expect(record?.detail).toContain("credentials")
+    expect(record?.detail).toContain("attacker")
   })
 })

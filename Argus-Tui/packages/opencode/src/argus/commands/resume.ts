@@ -336,6 +336,9 @@ export async function resumeCommand(
       phaseRecord.completedAt = new Date().toISOString()
       if (result.errors.length > 0) phaseRecord.error = result.errors.join("; ")
       store.savePhase(engagementId, phaseRecord)
+      // A resumed run can be restarted again: persist as we go so the second
+      // restart resumes with this phase's findings instead of losing them.
+      store.saveFindings(engagementId, allFindings)
       store.appendAuditLog(engagementId, "PHASE_COMPLETE",
         `Phase ${phaseRecord.name}: ${phaseRecord.status}`)
 

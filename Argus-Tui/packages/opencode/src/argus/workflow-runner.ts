@@ -1551,6 +1551,16 @@ export class WorkflowRunner {
           actionDetails: { ...actionDetails },
         })
 
+        // Durable progress. Findings used to be written once, after the last
+        // phase, so a restart mid-run resumed with an empty database and the
+        // next phase started from nothing. Writing them at every phase
+        // boundary means a resumed run keeps everything already collected.
+        try {
+          store.saveFindings(engagementId, allFindings)
+        } catch (saveErr) {
+          emit(`⚠ Could not persist findings after ${phaseName}: ${(saveErr as Error).message}`)
+        }
+
         const findingCount = phaseFindings.length
         const errorCount = result.errors.length
         if (phaseStatus === "FAILED") {

@@ -1038,6 +1038,26 @@ export class EngagementStore implements IEngagementStore {
 
   saveFindings(engagementId: string, records: NormalizedFinding[]): void {
     const pe = this._ensureEngagementDb(engagementId)
+    // An finding nobody can attribute cannot be reproduced or defended, and it
+    // used to reach the report as an anonymous LOW. Refuse it here rather than
+    // storing it, and leave a trail so the missing attribution gets fixed at
+    // its emission site instead of silently reappearing.
+    const unattributed = records.filter((record) => !(record.tool ?? "").trim())
+    if (unattributed.length > 0) {
+      const titles = unattributed.slice(0, 5).map((record) => record.title).join(", ")
+      console.warn(
+        `[Argus] Refused ${unattributed.length} finding(s) with no tool attribution: ${titles}`,
+      )
+      try {
+        this.appendAuditLog(
+          engagementId,
+          "FINDING_WITHOUT_TOOL",
+          `Refused ${unattributed.length} unattributed finding(s): ${titles}`,
+        )
+      } catch { /* audit is best-effort; the refusal is the contract */ }
+      records = records.filter((record) => (record.tool ?? "").trim())
+      if (records.length === 0) return
+    }
     pe.drizzle.transaction((tx) => {
       for (const record of records) {
         // The same thing found twice is one finding. recon crawls a page and

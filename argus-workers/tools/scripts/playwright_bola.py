@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import sys
 
 from playwright.sync_api import sync_playwright
 
@@ -170,10 +171,26 @@ if __name__ == "__main__":
             },
         }
     else:
-        parser.error(
-            "Either --creds-file or --attacker-username/--attacker-password"
-            " and --victim-username/--victim-password must be provided"
+        # No logins means there is nothing to compare two identities with. That
+        # is a skip, not a broken tool: report it as skipped and exit 0 so the
+        # phase records a deliberate omission instead of an error.
+        print(
+            json.dumps(
+                {
+                    "skipped": True,
+                    "tool": "playwright-bola",
+                    "reason": (
+                        "no credentials configured — provide --creds-file or the"
+                        " attacker/victim username and password"
+                    ),
+                }
+            )
         )
+        print(
+            "playwright-bola: skipped (no credentials configured)",
+            file=sys.stderr,
+        )
+        raise SystemExit(0)
 
     # The pattern names the victim's own resource (an id, a slug, a path). Only
     # the operator running the engagement knows it, and a wrong default silently
