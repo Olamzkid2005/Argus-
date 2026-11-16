@@ -1489,6 +1489,20 @@ export class WorkflowRunner {
         }
 
         for (const finding of phaseFindings) {
+          // recon crawls a page and api_discovery crawls it again, so the same
+          // finding arrives once per phase with its own id and the report (and
+          // the total) counted it twice. Identity is what was found, where, by
+          // which tool — the id says nothing.
+          const identity = [finding.title, finding.tool ?? "", finding.url ?? "", finding.description ?? ""].join("\u0000")
+          const already = allFindings.findIndex(
+            (f) => [f.title, f.tool ?? "", f.url ?? "", f.description ?? ""].join("\u0000") === identity,
+          )
+          if (already >= 0) {
+            const kept = allFindings[already]!
+            if (finding.severity > kept.severity) kept.severity = finding.severity
+            if (finding.confidence > kept.confidence) kept.confidence = finding.confidence
+            continue
+          }
           emit({ type: "finding", phaseId: phase.phaseId, severity: String(finding.severity), title: finding.title })
           // Promote confidence iteratively until no more promotions apply.
           // This cascades: MEDIUM→HIGH→VERIFIED→CONFIRMED in a single pass

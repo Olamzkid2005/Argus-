@@ -1439,6 +1439,12 @@ class MCPServer:
             # SIGINT and has to be killed after the grace period (commix does
             # this). All three mean our clock stopped it, not that it broke.
             wall_limited = result.returncode in (124, 130, 137)
+            if not wall_limited and _wall:
+                # commix re-execs its children, so the process that exits is not
+                # always the one `timeout` signalled and the code can be its own
+                # (1) instead of 137. If the run consumed the budget we gave it,
+                # we stopped it, whatever code came back.
+                wall_limited = (time.time() - start) >= 0.6 * _wall
             if wall_limited:
                 success = True
             # ... and it must stay success. The check below demotes any non-zero
