@@ -20,6 +20,39 @@ def _infer_severity(msg: str) -> int:
     return 2
 
 
+#: Nikto's text report is prose full of commas, so the CSV path read
+#: "+ [999990] OPTIONS: Allowed HTTP Methods: OPTIONS, TRACE, GET, HEAD, POST ."
+#: as a six-column CSV row and turned its tail into findings described only as
+#: "HEAD POST ." (measured on the testasp.vulnweb.com run: five MEDIUM findings
+#: whose whole description was one method list cut to pieces). CSV is attempted
+#: only when the output actually looks like nikto's CSV report.
+def _looks_like_csv(output: str) -> bool:
+    lines = [line for line in output.splitlines() if line.strip()][:6]
+    if not lines:
+        return False
+    if any(line.lstrip().startswith(("+", "-")) for line in lines):
+        return False
+    if "Nikto" in output or "Target IP" in output:
+        return False
+    return any(line.count(",") >= 5 for line in lines)
+
+
+_SEE_URL = re.compile(r"\s*See:\s*https?://\S+", re.IGNORECASE)
+#: Nikto prefixes the sentence with the affected path or method ("/index.aspx: ",
+#: "OPTIONS: "). It already appears in the description, so a headline drops it.
+_LOCATION_PREFIX = re.compile(
+    r"^(?:/|/[\w.\-][\w.\-?=&%]*(?:/[\w.\-?=&%]*)*|OPTIONS|GET|POST|HEAD|TRACE|PUT|DELETE)\s*:\s+"
+)
+
+
+def _headline(content: str) -> str:
+    """Turn one nikto line into a headline an operator can scan."""
+    text = _SEE_URL.sub("", content).strip()
+    text = _LOCATION_PREFIX.sub("", text) or text
+    text = text.rstrip(" .")
+    return (text or content.strip())[:120]
+
+
 def _parse_json(output: str) -> list[NormalizedFinding]:
     findings: list[NormalizedFinding] = []
     try:
@@ -34,12 +67,14 @@ def _parse_json(output: str) -> list[NormalizedFinding]:
         if not isinstance(item, dict):
             continue
         msg = item.get("msg", "") or item.get("description", "")
+        if not str(msg).strip():
+            continue
         osvdb = item.get("OSVDB", "") or item.get("osvdb", "")
         url = item.get("url", "") or item.get("hostname", "")
 
         findings.append(
             NormalizedFinding(
-                title=msg[:120] if msg else "Nikto finding",
+                title=_headline(str(msg)),
                 severity=_infer_severity(msg),
                 confidence=2,
                 description=f"OSVDB: {osvdb}" if osvdb else msg,
@@ -74,7 +109,7 @@ def _parse_csv(output: str) -> list[NormalizedFinding]:
 
         findings.append(
             NormalizedFinding(
-                title=description[:120] if description else "Nikto finding",
+                title=_headline(description) if description else f"{method} {url}".strip(),
                 severity=normalize_severity("medium", 2),
                 confidence=2,
                 description=f"{method} {url}: {description}",
@@ -113,7 +148,7 @@ def _parse_text(output: str) -> list[NormalizedFinding]:
             continue
         findings.append(
             NormalizedFinding(
-                title=content[:120],
+                title=_headline(content),
                 severity=_infer_severity(content),
                 confidence=2,
                 description=content,
@@ -134,7 +169,7 @@ def _parse_text(output: str) -> list[NormalizedFinding]:
             continue
         findings.append(
             NormalizedFinding(
-                title=content[:120],
+                title=_headline(content),
                 severity=_infer_severity(content),
                 confidence=1,
                 description=content,
@@ -154,8 +189,9 @@ def parse(output: str) -> list[NormalizedFinding]:
     if findings:
         return findings
 
-    findings = _parse_csv(output)
-    if findings:
-        return findings
+    if _looks_like_csv(output):
+        findings = _parse_csv(output)
+        if findings:
+            return findings
 
     return _parse_text(output)

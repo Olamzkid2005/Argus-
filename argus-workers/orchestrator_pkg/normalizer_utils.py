@@ -25,6 +25,39 @@ _TITLE_FALLBACKS: dict[str, str] = {
 }
 
 
+_EVIDENCE_TEXT_KEYS = (
+    "description",
+    "message",
+    "content",
+    "detail",
+    "summary",
+    "text",
+    "url",
+    "endpoint",
+)
+
+
+def _title_from_evidence(raw_finding: dict) -> str:
+    """Return the best headline available in a finding's evidence.
+
+    A parser that reports type and evidence but no title reached the report as
+    "Generic finding" (its GENERIC_FINDING fallback), which hides what the tool
+    actually saw. The evidence usually still holds the sentence.
+    """
+    evidence = raw_finding.get("evidence")
+    items = evidence if isinstance(evidence, list) else [evidence]
+    for item in items:
+        if isinstance(item, str) and item.strip():
+            return item.strip().splitlines()[0][:120]
+        if not isinstance(item, dict):
+            continue
+        for key in _EVIDENCE_TEXT_KEYS:
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip().splitlines()[0][:120]
+    return ""
+
+
 def _derive_title(finding_type: str) -> str:
     """Return a readable title for a finding type that has none.
 
@@ -64,7 +97,7 @@ def normalize_finding(
         finding = normalizer.normalize(raw_finding, tool)
         # The Finding model has no title field, so take it from the raw parser
         # output and fall back to a derived label when the parser omitted one.
-        title = str(raw_finding.get("title") or "").strip()
+        title = str(raw_finding.get("title") or "").strip() or _title_from_evidence(raw_finding)
         return {
             "type": finding.type,
             "title": title or _derive_title(finding.type),

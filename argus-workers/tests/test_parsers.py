@@ -548,3 +548,69 @@ class TestGenericParserNumericSeverity:
 
         assert findings[0].severity == 3
         assert findings[0].confidence == 4
+
+
+class TestNiktoTextHeadlines:
+    """Nikto's text report, captured from the testasp.vulnweb.com run.
+
+    Regression: the CSV path accepted nikto's comma-heavy prose, so a single
+    methods list became five MEDIUM findings whose whole description was
+    "HEAD POST .", and every line without a message was titled "Nikto finding".
+    """
+
+    RAW = """- Nikto v2.6.1
++ Target IP:          44.238.29.244
++ Server: Microsoft-IIS/8.5
++ [999990] OPTIONS: Allowed HTTP Methods: OPTIONS, TRACE, GET, HEAD, POST .
++ [013587] /: Suggested security header missing: permissions-policy. See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Permissions-Policy
++ [999979] /aspnet_client: RFC-1918 IP address found in the 'location' header. The IP is "10.0.0.14".
+"""
+
+    def test_comma_heavy_text_is_not_read_as_csv(self):
+        titles = [f.title for f in nikto.parse(self.RAW)]
+        assert titles, "nikto findings were dropped entirely"
+        assert not any(t.strip() in {"HEAD POST .", "GET", "HEAD"} for t in titles)
+        assert len(titles) == 3
+
+    def test_headline_is_the_sentence_nikto_reported(self):
+        titles = [f.title for f in nikto.parse(self.RAW)]
+        assert "Allowed HTTP Methods: OPTIONS, TRACE, GET, HEAD, POST" in titles
+        assert "Suggested security header missing: permissions-policy" in titles
+        assert 'RFC-1918 IP address found in the \'location\' header. The IP is "10.0.0.14"' in titles
+
+    def test_system_b_titles_its_findings_too(self):
+        from parsers.parsers.nikto import NiktoParser
+
+        findings = NiktoParser().parse(self.RAW)
+        assert findings
+        assert all(f.get("title") for f in findings)
+        assert all(f["title"] != "Nikto finding" for f in findings)
+
+
+class TestGenericHeadlines:
+    """A finding without a title gets a real headline, not "Generic finding"."""
+
+    def test_description_becomes_the_headline(self):
+        output = json.dumps(
+            [
+                {
+                    "severity": 4,
+                    "confidence": 5,
+                    "description": "Attacker can read victim's order via /api/data/10",
+                    "url": "/api/data/10",
+                    "tool": "playwright-bola",
+                }
+            ]
+        )
+        findings = generic.parse(output)
+        assert findings[0].title == "Attacker can read victim's order via /api/data/10"
+
+    def test_endpoint_is_named_when_there_is_no_text(self):
+        output = json.dumps([{"severity": 2, "url": "http://testasp.vulnweb.com/Login.asp"}])
+        assert generic.parse(output)[0].title == "Finding at http://testasp.vulnweb.com/Login.asp"
+
+    def test_tool_and_type_are_named_when_there_is_nothing_else(self):
+        output = json.dumps([{"severity": 1, "tool": "playwright-xss"}])
+        title = generic.parse(output)[0].title
+        assert title.startswith("playwright-xss:"), title
+        assert title != "Generic finding"

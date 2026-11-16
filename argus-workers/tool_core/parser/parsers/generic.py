@@ -19,6 +19,43 @@ _NEGATIVE_RESULT = re.compile(
 )
 
 
+_HEADLINE_FIELDS = (
+    "title",
+    "name",
+    "message",
+    "finding",
+    "description",
+    "detail",
+    "issue",
+    "check",
+    "reason",
+    "summary",
+    "path",
+)
+
+
+def _headline_from_item(item: dict) -> str:
+    """Return a headline for an item that may not carry a title.
+
+    Findings without a title used to land as "Generic finding", which tells an
+    operator nothing and made a report unreadable. The text the tool did provide
+    is a better headline than a placeholder; when there is no text at all the
+    tool and its type are still more informative than "Generic finding".
+    """
+    for key in _HEADLINE_FIELDS:
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            line = value.strip().splitlines()[0].strip()
+            if line:
+                return line[:120]
+    url = item.get("url") or item.get("endpoint")
+    if isinstance(url, str) and url.strip():
+        return f"Finding at {url.strip()}"[:120]
+    tool = str(item.get("tool") or "unknown").strip()
+    subtype = str(item.get("type") or item.get("subtype") or "finding").replace("_", " ").strip()
+    return f"{tool}: {subtype}"[:120]
+
+
 def _try_json(output: str) -> list[NormalizedFinding] | None:
     try:
         data = json.loads(output)
@@ -40,13 +77,7 @@ def _try_json(output: str) -> list[NormalizedFinding] | None:
     for item in items:
         if not isinstance(item, dict):
             continue
-        title = (
-            item.get("title")
-            or item.get("name")
-            or item.get("message")
-            or item.get("finding")
-            or "Generic finding"
-        )
+        title = _headline_from_item(item)
         if _NEGATIVE_RESULT.match(str(title)):
             continue
         findings.append(
