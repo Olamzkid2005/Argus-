@@ -317,7 +317,8 @@ tools:
       cost: low
 
   - name: jwt_tool
-    label: JWT Security Toolkit
+    label: JWT Analysis
+    description: Passive JWT discovery and analysis (alg=none, expiry, sensitive claims)
     capabilities:
       - jwt_analysis
     requires_auth: false
@@ -325,13 +326,6 @@ tools:
     supports_api: true
     supports_web: true
     timeout_seconds: 120
-    version_cmd: 'jwt_tool --version'
-    version_regex: '\d+\.\d+\.\d+'
-    min_version: "1.0.0"
-    requires:
-      recon_signals:
-        - has_api
-        - has_login_page
     scoring:
       confidence_score: 75
       coverage_score: 60

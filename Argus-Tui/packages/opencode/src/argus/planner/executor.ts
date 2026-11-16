@@ -923,6 +923,13 @@ export class InProcessExecutor implements PhaseExecutor {
       actionRecords.push(record)
       if (record.outcome === "succeeded-empty" || record.outcome === "succeeded-with-findings") {
         coveredCapabilities.add(record.capability)
+        // A tool performs everything it declares. web_scanner checks SSRF and
+        // injection in one run, but only its first capability was credited, so
+        // a phase that genuinely tested both still reported them as never
+        // performed and came out partial.
+        for (const cap of this.toolRegistry.getTool(record.tool)?.capabilities ?? []) {
+          coveredCapabilities.add(String(cap))
+        }
       }
     }
 

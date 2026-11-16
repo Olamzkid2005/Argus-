@@ -1,26 +1,23 @@
 name: jwt_tool
-command: jwt_tool
-description: "JWT security testing toolkit"
-args: []
-# Disabled: jwt_tool can only work on a token. Without one it crawls the
-# target, finds nothing and exits 1, which surfaced as a failed
-# api_exploitation phase on every target that has no JWT. Enable it once
-# recon extracts a token and pass that token as the positional argument.
+command: python3
+description: "Passive JWT discovery and analysis (alg=none, expiry, sensitive claims)"
+args:
+  - argus-workers/tools/jwt_scan.py
+# jwt_tool itself only analyses a token handed to it; without one it exited 1 and
+# the api_exploitation phase reported jwt_analysis as never performed. This
+# wrapper looks for tokens the target actually issues and reports on them;
+# finding none is a result, not a failure.
 parameters:
   - name: target
     type: string
     description: "Target URL"
     required: true
-    flag: "-t"
+    flag: "--target"
 capabilities:
   - jwt_analysis
 signal_quality: PROBABLE
-risk_level: medium
-requires:
-  recon_signals:
-    - has_api
-    - has_login_page
+risk_level: low
 priority: 70
 cost: low
-enabled: false
+enabled: true
 timeout: 120
