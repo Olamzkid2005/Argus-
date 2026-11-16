@@ -179,6 +179,13 @@ class ToolDefinition:
     #: ``PDCP_API_KEY not specified``.
     required_env: tuple[str, ...] = ()
 
+    #: Why this tool is not dispatchable, when ``phases`` is empty.
+    #: The MCP server forwards this verbatim as the planner's skip reason, so
+    #: the log says what is actually wrong ("needs a resolver list", "the
+    #: installed build segfaults", "requires root") instead of a generic
+    #: "no execution phase".
+    disabled_reason: str | None = None
+
     #: Priority score for tool selection (higher = preferred)
     priority: int | None = None
 
@@ -531,6 +538,10 @@ _register(
         # stand (`-j` is an unknown shorthand; JSON output is `--json`), so a
         # newer build only needs the phase re-enabled.
         phases=[],
+        disabled_reason=(
+            "the installed gospider build segfaults (SIGSEGV in an ioctl path "
+            "under -v) and otherwise exits 0 with no output"
+        ),
         default_args=["-q", "--json"],
         parameters=[
             ToolParameter("target", "Target URL", flag="-s", required=True),
@@ -582,7 +593,13 @@ _register(
     ToolDefinition(
         name="dnsx",
         description="Fast DNS resolver and probe tool",
+        # Disabled: without -r dnsx has no resolvers and the installed build
+        # exits 0 having resolved nothing, which reads as a clean negative.
         phases=[],
+        disabled_reason=(
+            "needs a resolver list (-r) and a domain list; without them the "
+            "installed build exits 0 having resolved nothing"
+        ),
         default_args=["-json", "-silent"],
         parameters=[
             ToolParameter(

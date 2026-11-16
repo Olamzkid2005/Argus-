@@ -28,5 +28,7 @@ signal_quality: CANDIDATE
 priority: 50
 cost: high
 risk_level: high
+# Not dispatchable here: requires root or CAP_NET_RAW for raw sockets, which the unprivileged worker does not have; naabu and nmap cover port scanning
+disabled_reason: "requires root or CAP_NET_RAW for raw sockets, which the unprivileged worker does not have; naabu and nmap cover port scanning"
 enabled: true
 timeout: 600

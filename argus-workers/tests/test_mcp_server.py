@@ -1605,14 +1605,23 @@ class TestWorkerToolStatePublishedOverMCP:
             assert "disabled" in entry, entry["name"]
             assert isinstance(entry["disabled"], bool), entry["name"]
 
-    def test_a_tool_with_no_phase_is_disabled_with_a_reason(self):
+    def test_a_tool_with_no_phase_states_the_real_reason(self):
         by_name = {t["name"]: t for t in self._server().get_tools()}
-        # dnsx needs a wordlist and gospider's installed build segfaults; both
-        # are `phases=[]` in tool_definitions.py while their YAML says enabled.
-        for name in ("dnsx", "gospider"):
+        # These are `phases=[]` in the registry while their YAML says enabled.
+        # The planner prints disabled_reason verbatim into the run log, so it
+        # must name the actual obstacle, not "no execution phase".
+        expected = {
+            "dnsx": "resolver list",
+            "gospider": "segfaults",
+            "masscan": "root or CAP_NET_RAW",
+            "shuffledns": "resolver list",
+        }
+        for name, fragment in expected.items():
             entry = by_name[name]
             assert entry["disabled"] is True, name
-            assert "no execution phase" in entry["disabled_reason"], name
+            reason = entry["disabled_reason"]
+            assert fragment in reason, (name, reason)
+            assert "no execution phase" not in reason, (name, reason)
 
     def test_a_runnable_tool_is_not_disabled(self):
         by_name = {t["name"]: t for t in self._server().get_tools()}

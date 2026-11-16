@@ -16,5 +16,7 @@ signal_quality: CANDIDATE
 risk_level: low
 priority: 40
 cost: low
+# Not dispatchable here: needs a resolver list (-r) and a domain list; without them the installed build exits 0 having resolved nothing
+disabled_reason: "needs a resolver list (-r) and a domain list; without them the installed build exits 0 having resolved nothing"
 enabled: true
 timeout: 120

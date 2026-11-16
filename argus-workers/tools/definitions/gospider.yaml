@@ -23,5 +23,7 @@ signal_quality: CANDIDATE
 risk_level: low
 priority: 55
 cost: medium
+# Not dispatchable here: the installed gospider build segfaults (SIGSEGV in an ioctl path under -v) and otherwise exits 0 with no output
+disabled_reason: "the installed gospider build segfaults (SIGSEGV in an ioctl path under -v) and otherwise exits 0 with no output"
 enabled: true
 timeout: 300

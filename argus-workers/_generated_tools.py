@@ -648,6 +648,10 @@ _register(ToolDefinition(
     name="masscan",
     description="Massive-scale port scanner (entire internet in minutes)",
     phases=[],
+    disabled_reason=(
+        "requires root or CAP_NET_RAW for raw sockets, which the unprivileged "
+        "worker does not have; naabu and nmap cover port scanning"
+    ),
     default_args=["--rate", "1000", "--output-format", "json"],
     parameters=[
     ToolParameter(name="target", description="Target CIDR range or IP", required=True, flag="--range"),
@@ -938,6 +942,10 @@ _register(ToolDefinition(
     name="shuffledns",
     description="Mass DNS resolver for resolved subdomain enumeration",
     phases=[],
+    disabled_reason=(
+        "needs a public resolver list (-r) to mass-resolve; without one the "
+        "installed build exits 0 having resolved nothing"
+    ),
     default_args=["-silent"],
     parameters=[
     ToolParameter(name="target", description="Subdomain list or domain", required=True, flag="-d"),

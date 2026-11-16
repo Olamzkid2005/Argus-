@@ -25,5 +25,7 @@ signal_quality: CANDIDATE
 risk_level: low
 priority: 45
 cost: medium
+# Not dispatchable here: needs a public resolver list (-r) to mass-resolve; without one the installed build exits 0 having resolved nothing
+disabled_reason: "needs a public resolver list (-r) to mass-resolve; without one the installed build exits 0 having resolved nothing"
 enabled: true
 timeout: 300

@@ -952,8 +952,12 @@ class MCPServer:
                 )
                 disabled.append(name)
             elif not declared.phases:
+                # Prefer the registry's own explanation (needs a resolver
+                # list, segfaults, requires root) over a generic sentence the
+                # planner would print verbatim into the run log.
                 tool.disabled_reason = (
-                    "no execution phase in the worker registry "
+                    getattr(declared, "disabled_reason", None)
+                    or "no execution phase in the worker registry "
                     "(tool_definitions.TOOLS)"
                 )
                 disabled.append(name)
