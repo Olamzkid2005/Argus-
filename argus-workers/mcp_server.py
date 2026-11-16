@@ -770,6 +770,9 @@ class MCPServer:
                     "run_finding_verifier.py",
                 )
             ),
+            os.path.normpath(
+                os.path.join(project_dir, "argus-workers", "tools", "jwt_scan.py")
+            ),
         }
 
         try:
@@ -1431,7 +1434,11 @@ class MCPServer:
             # 124 is our own wall clock (see WALL_LIMITED_TOOLS), not a scanner
             # failure: the tool ran and was stopped on purpose, so having no
             # findings yet is coverage, not an error.
-            wall_limited = result.returncode == 124
+            # `timeout -s INT -k 15` returns 124 when the tool honours SIGINT,
+            # 130 when it exits on the signal itself, and 137 when it ignores
+            # SIGINT and has to be killed after the grace period (commix does
+            # this). All three mean our clock stopped it, not that it broke.
+            wall_limited = result.returncode in (124, 130, 137)
             if wall_limited:
                 success = True
             # ... and it must stay success. The check below demotes any non-zero
