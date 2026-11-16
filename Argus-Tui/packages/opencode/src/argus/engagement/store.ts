@@ -36,7 +36,7 @@ function _loadDrizzle(): DrizzleFunction {
   }
   return _drizzle
 }
-import { eq, desc, asc, sql, SQL, type AnyColumn, type SQLWrapper, inArray } from "drizzle-orm"
+import { eq, and, isNull, desc, asc, sql, SQL, type AnyColumn, type SQLWrapper, inArray } from "drizzle-orm"
 import { join, dirname } from "path"
 import { homedir } from "os"
 import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "fs"
@@ -1040,7 +1040,27 @@ export class EngagementStore implements IEngagementStore {
     const pe = this._ensureEngagementDb(engagementId)
     pe.drizzle.transaction((tx) => {
       for (const record of records) {
-        const row = toFindingRow(record, engagementId)
+        // The same thing found twice is one finding. recon crawls a page and
+        // api_discovery crawls it again, and each phase hands its finding in
+        // with a fresh id, so the report used to list "Endpoint: /x.jsp" twice.
+        // Identity is what was found where by which tool, not the id.
+        const urlMatch =
+          record.url === undefined || record.url === null
+            ? isNull(findingsTable.url)
+            : eq(findingsTable.url, record.url)
+        const existing = tx
+          .select({ id: findingsTable.id })
+          .from(findingsTable)
+          .where(
+            and(
+              eq(findingsTable.engagement_id, engagementId),
+              eq(findingsTable.title, record.title),
+              eq(findingsTable.tool, record.tool ?? ""),
+              urlMatch,
+            ),
+          )
+          .all()
+        const row = toFindingRow(existing.length > 0 ? { ...record, id: existing[0]!.id } : record, engagementId)
         const { id, engagement_id, ...updateFields } = row
         tx.insert(findingsTable).values(row).onConflictDoUpdate({
           target: findingsTable.id,
