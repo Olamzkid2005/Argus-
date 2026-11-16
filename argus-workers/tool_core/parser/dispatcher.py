@@ -30,6 +30,51 @@ def _confidence_to_int(value: Any) -> int:
     return normalize_confidence(str(value))
 
 
+_TYPE_LABELS = {
+    "CRAWLED_ENDPOINT": "Endpoint",
+    "DISCOVERED_ENDPOINT": "Endpoint",
+    "HTTP_ENDPOINT": "Endpoint",
+    "KNOWN_URL": "URL",
+    "HISTORICAL_URL": "URL",
+    "OPEN_PORT": "Open port",
+    "SUBDOMAIN": "Subdomain",
+    "TECH_DETECTED": "Technology",
+    "TECHNOLOGY_DETECTED": "Technology",
+}
+
+
+def _endpoint_title(finding: dict) -> str:
+    """Build a headline for a finding whose parser supplied none.
+
+    Most low-level parsers (katana, httpx, naabu) report a type and an endpoint
+    and nothing else. Taking the type as the title put raw tokens like
+    "CRAWLED_ENDPOINT" and "OPEN_PORT" at the top of every report — 92 of the 133
+    findings in the testasp.vulnweb.com run — which tells an operator nothing
+    about what was found. The endpoint is the concrete fact, so it leads.
+    """
+    from urllib.parse import urlsplit
+
+    finding_type = str(finding.get("type") or "").strip()
+    endpoint = str(finding.get("endpoint") or finding.get("url") or "").strip()
+    label = _TYPE_LABELS.get(finding_type.upper())
+
+    if endpoint:
+        target = endpoint
+        if endpoint.lower().startswith(("http://", "https://")):
+            parts = urlsplit(endpoint)
+            target = parts.path or "/"
+            if parts.query:
+                target = f"{target}?{parts.query}"
+        if label:
+            return f"{label}: {target}"[:120]
+        return f"{finding_type.replace('_', ' ').capitalize()}: {target}"[:120] if finding_type else target[:120]
+
+    if label:
+        return label
+    words = finding_type.replace("_", " ").strip()
+    return (words[:1].upper() + words[1:].lower())[:120] if words else ""
+
+
 def _to_normalized(finding: dict, tool_name: str) -> NormalizedFinding:
     """Convert a System B (BaseParser) finding dict into a NormalizedFinding.
 
@@ -60,8 +105,10 @@ def _to_normalized(finding: dict, tool_name: str) -> NormalizedFinding:
     if endpoint and endpoint not in description:
         description = f"{endpoint}: {description}".strip(": ")
 
+    title = str(finding.get("title") or "").strip() or _endpoint_title(finding) or "Finding"
+
     return NormalizedFinding(
-        title=str(finding.get("title") or finding.get("type") or "Finding"),
+        title=title,
         severity=severity
         if isinstance(severity, int) and not isinstance(severity, bool)
         else normalize_severity(str(severity)),
