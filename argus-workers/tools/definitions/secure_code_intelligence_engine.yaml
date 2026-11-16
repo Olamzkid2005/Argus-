@@ -3,7 +3,13 @@ command: python3
 args:
   - argus-workers/tools/run_agent_tool.py
   - secure_code_intelligence_engine
-description: "secure_code_intelligence_engine - security assessment tool"
+description: "Unified source-code security analysis: secrets, SAST and dependency scanning"
+# Serves the source_analysis phase: ai-surface now probes live HTTP targets, so the
+# static source scan is this engine (agent-internal, run via run_agent_tool.py).
+phases:
+  - source_analysis
+  - analyze
+  - repo_scan
 parameters:
   - name: target
     type: string

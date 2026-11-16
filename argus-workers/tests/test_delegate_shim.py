@@ -370,3 +370,21 @@ def test_every_canary_class_must_be_detected(monkeypatch, tmp_path):
     findings = ds.run_sast("bandit", str(tmp_path))
     assert findings[0]["type"] == "SAST_COVERAGE_GAP"
     assert names[1] in findings[0]["description"]
+
+
+def test_ai_surface_is_plannable_for_a_url_target():
+    """The planner selects by phase + capability + target kind. ai-surface probes a
+    live host, so it must sit in recon with a web capability and no source gate —
+    otherwise it is only reachable through a direct tools/call."""
+    import tool_definitions as td
+
+    tool = td.TOOLS["ai-surface"]
+    assert tool.phases == ["recon"], tool.phases
+    assert tool.requires is None, tool.requires
+    assert tool.binary == "python3"
+    assert tool.target_kind == "any"
+    assert td.is_tool_available("ai-surface")
+    assert "ai-surface" in [t.name for t in td.get_tools_for_phase("recon")]
+
+    spec = yaml.safe_load(open(os.path.join(DEFINITIONS, "ai-surface.yaml")))
+    assert "web_recon" in spec["capabilities"], spec["capabilities"]

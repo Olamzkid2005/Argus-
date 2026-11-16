@@ -12,20 +12,17 @@ from tool_definitions import ToolDefinition, ToolParameter, ToolRequires, Signal
 # ── ai-surface (from ai-surface.yaml) ──
 _register(ToolDefinition(
     name="ai-surface",
-    description="Static AI attack-surface scanner: MCP servers, agent frameworks, LLM SDKs, model gateways, vector stores, AI provider keys, API endpoints",
-    phases=["source_analysis"],
-    default_args=["scan", "--output", "json"],
+    description="Unauthenticated AI attack-surface probes over HTTP: ai-plugin manifest, OpenAPI spec, model and Ollama listings",
+    phases=["recon"],
+    binary="python3",
+    default_args=["argus-workers/tools/scripts/delegate_shim.py", "--tool", "ai-surface"],
     parameters=[
-    ToolParameter(name="target", description="Target path (directory) to scan for AI attack surfaces", required=True),
-    ToolParameter(name="output_format", description="Output format (json)", flag="--output", default="json"),
-    ToolParameter(name="fail_on", description="Severity gate threshold (critical|high|medium|low)", flag="--fail-on", default="high"),
-    ToolParameter(name="verbose", description="Verbose output", flag="--verbose", default=False),
+    ToolParameter(name="target", description="Target base URL", required=True, flag="--target"),
 ],
-    timeout=300,
-    signal_quality=SignalQuality.CONFIRMED,
-    requires=ToolRequires(recon_signals=["has_source_access"]),
-    priority=80,
-    cost="medium",
+    timeout=240,
+    signal_quality=SignalQuality.CANDIDATE,
+    priority=55,
+    cost="low",
     risk_level="low",
 ))
 
@@ -136,6 +133,7 @@ _register(ToolDefinition(
 # ── bandit (from bandit.yaml) ──
 _register(ToolDefinition(
     name="bandit",
+    binary="python3",
     description="Python security linter",
     phases=["repo_scan", "scan", "deep_scan"],
     target_kind="path",
@@ -155,6 +153,7 @@ _register(ToolDefinition(
 # ── brakeman (from brakeman.yaml) ──
 _register(ToolDefinition(
     name="brakeman",
+    binary="python3",
     description="Ruby on Rails security scanner for static analysis",
     phases=["repo_scan", "scan", "deep_scan"],
     target_kind="path",
@@ -207,6 +206,7 @@ _register(ToolDefinition(
 # ── chaos (from chaos.yaml) ──
 _register(ToolDefinition(
     name="chaos",
+    binary="python3",
     description="ProjectDiscovery chaos data feed client for subdomain enumeration",
     phases=["recon"],
     default_args=["-json", "-silent"],
@@ -291,8 +291,8 @@ _register(ToolDefinition(
 # ── dependency_check (from dependency_check.yaml) ──
 _register(ToolDefinition(
     name="dependency_check",
+    binary="python3",
     description="OWASP Dependency-Check for known vulnerability scanning in dependencies",
-    binary="dependency-check",
     phases=["repo_scan"],
     target_kind="path",
     default_args=["--format", "JSON"],
@@ -343,6 +343,7 @@ _register(ToolDefinition(
 # ── eslint (from eslint.yaml) ──
 _register(ToolDefinition(
     name="eslint",
+    binary="python3",
     description="JavaScript/TypeScript linter with security plugins",
     phases=["repo_scan", "scan", "deep_scan"],
     target_kind="path",
@@ -471,6 +472,7 @@ _register(ToolDefinition(
 # ── github-endpoints (from github-endpoints.yaml) ──
 _register(ToolDefinition(
     name="github-endpoints",
+    binary="python3",
     description="Enumerate GitHub repositories and exposed endpoints for a target",
     phases=["recon"],
     parameters=[
@@ -504,6 +506,7 @@ _register(ToolDefinition(
 # ── gosec (from gosec.yaml) ──
 _register(ToolDefinition(
     name="gosec",
+    binary="python3",
     description="Go security code scanner",
     phases=["repo_scan", "scan", "deep_scan"],
     target_kind="path",
@@ -539,6 +542,7 @@ _register(ToolDefinition(
 # ── govulncheck (from govulncheck.yaml) ──
 _register(ToolDefinition(
     name="govulncheck",
+    binary="python3",
     description="Go vulnerability scanner for dependencies",
     phases=["repo_scan", "scan", "deep_scan"],
     target_kind="path",
@@ -753,6 +757,7 @@ _register(ToolDefinition(
 # ── phpcs (from phpcs.yaml) ──
 _register(ToolDefinition(
     name="phpcs",
+    binary="python3",
     description="PHP CodeSniffer with security audit rules",
     phases=["repo_scan", "scan", "deep_scan"],
     target_kind="path",
@@ -771,6 +776,7 @@ _register(ToolDefinition(
 # ── pip-audit (from pip-audit.yaml) ──
 _register(ToolDefinition(
     name="pip-audit",
+    binary="python3",
     description="Python dependency vulnerability scanner",
     phases=["repo_scan"],
     target_kind="path",
@@ -903,7 +909,7 @@ _register(ToolDefinition(
     name="secure_code_intelligence_engine",
     description="secure_code_intelligence_engine - security assessment tool",
     binary="python3",
-    phases=["analyze", "repo_scan"],
+    phases=["source_analysis", "analyze", "repo_scan"],
     default_args=["argus-workers/tools/run_agent_tool.py", "secure_code_intelligence_engine"],
     parameters=[
     ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
@@ -973,6 +979,7 @@ _register(ToolDefinition(
 # ── spotbugs (from spotbugs.yaml) ──
 _register(ToolDefinition(
     name="spotbugs",
+    binary="python3",
     description="Java/Kotlin bytecode security scanner with find-sec-bugs plugin",
     phases=["repo_scan", "scan", "deep_scan"],
     target_kind="path",
@@ -1027,6 +1034,7 @@ _register(ToolDefinition(
 # ── testssl (from testssl.yaml) ──
 _register(ToolDefinition(
     name="testssl",
+    binary="python3",
     description="TLS/SSL security testing tool",
     phases=["scan", "deep_scan"],
     default_args=["--quiet", "--mode", "parallel"],
@@ -1081,6 +1089,7 @@ _register(ToolDefinition(
 # ── trufflehog (from trufflehog.yaml) ──
 _register(ToolDefinition(
     name="trufflehog",
+    binary="python3",
     description="High-entropy secret scanner for git history and filesystems",
     phases=["repo_scan", "scan", "deep_scan"],
     target_kind="path",
@@ -1100,6 +1109,7 @@ _register(ToolDefinition(
 # ── uncover (from uncover.yaml) ──
 _register(ToolDefinition(
     name="uncover",
+    binary="python3",
     description="Search engine discovery tool for exposed assets",
     phases=["recon"],
     default_args=["-json", "-silent"],
@@ -1217,6 +1227,7 @@ _register(ToolDefinition(
 # ── wpscan (from wpscan.yaml) ──
 _register(ToolDefinition(
     name="wpscan",
+    binary="python3",
     description="WordPress vulnerability scanner",
     phases=["scan", "deep_scan"],
     default_args=["-f", "json", "--no-banner"],

@@ -1047,7 +1047,7 @@ _register(
         name="pip-audit",
         description="Python dependency vulnerability scanner (overrides _generated_tools.py)",
         phases=["repo_scan"],
-        binary="pip-audit",
+        binary="python3",
         default_args=["--format", "json", "--quiet"],
         parameters=[
             ToolParameter("target", "Audit target path"),
@@ -1149,7 +1149,7 @@ _register(
         name="dependency_check",
         description="OWASP Dependency-Check for known vulnerability scanning in dependencies (overrides _generated_tools.py)",
         phases=["repo_scan"],
-        binary="dependency-check",
+        binary="python3",
         default_args=["--format", "JSON"],
         parameters=[
             ToolParameter("target", "Target project directory", flag="--scan", required=True),
@@ -1552,7 +1552,7 @@ _register(
     ToolDefinition(
         name="secure_code_intelligence_engine",
         description="Unified SAST/SCA/secret scanning combining gitleaks, semgrep, bandit, trivy",
-        phases=["repo_scan"],
+        phases=["source_analysis", "analyze", "repo_scan"],
         parameters=[
             ToolParameter(
                 "target", "Target repository path", required=True, flag="--target"
@@ -1756,6 +1756,14 @@ def is_tool_available(tool_name: str) -> bool:
         return True
 
     from tools.tool_utils import is_tool_available as _check_binary
+
+    # A tool may run through another binary (a Python shim, a delegated engine).
+    # Resolve that first, so declared availability matches what the MCP worker
+    # can actually dispatch, instead of requiring a binary named after the tool.
+    declared = TOOLS.get(tool_name)
+    binary = declared.binary if declared is not None else None
+    if binary and _check_binary(binary):
+        return True
 
     return _check_binary(tool_name)
 

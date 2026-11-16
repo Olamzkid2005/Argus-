@@ -700,28 +700,28 @@ tools:
 
   - name: ai-surface
     label: AI Surface Scanner
-    description: Static AI attack-surface scanner — detects MCP servers, agent frameworks, LLM SDKs, model gateways, vector stores, AI provider keys, and API endpoints from source code
+    description: Unauthenticated AI attack-surface probes over HTTP — finds exposed ai-plugin manifests, OpenAPI specs, OpenAI-compatible model listings and Ollama endpoints
     capabilities:
+      - web_recon
       - ai_surface_mapping
     requires_auth: false
     destructive: false
-    supports_api: false
-    supports_web: false
-    supports_source: true
-    timeout_seconds: 300
+    supports_api: true
+    supports_web: true
+    supports_source: false
+    timeout_seconds: 240
     scoring:
-      confidence_score: 90
-      coverage_score: 80
+      confidence_score: 70
+      coverage_score: 60
     consumes:
-      - source_code
+      - http_endpoints
     provides:
       - ai_surfaces
-      - mcp_servers
-      - agent_frameworks
-      - llm_sdks
-    signal_quality: CONFIRMED
-    priority: 80
-    cost: medium
+      - ai_endpoints
+      - llm_models
+    signal_quality: CANDIDATE
+    priority: 55
+    cost: low
 
   # ── Infrastructure Scanning ────────────────────────────────────
 

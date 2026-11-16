@@ -1,6 +1,6 @@
 name: ai-surface
 command: python3
-description: "Unauthenticated application probes through plain HTTP (delegated)"
+description: "Unauthenticated AI attack-surface probes over HTTP (delegated)"
 # The upstream binary/Ruby gem is not installable here; the credential-free checks it
 # performed are HTTP requests, so they run through delegate_shim.py and are
 # attributed to this tool instead of reporting a missing binary.
@@ -16,7 +16,7 @@ parameters:
     flag: "--target"
 capabilities:
   - web_recon
-  - discovery
+  - ai_surface_mapping
 signal_quality: CANDIDATE
 risk_level: low
 priority: 45

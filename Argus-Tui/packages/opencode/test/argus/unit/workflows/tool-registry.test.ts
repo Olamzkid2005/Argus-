@@ -529,3 +529,28 @@ describe("ToolRegistry", () => {
     })
   })
 })
+
+describe("ai-surface is plannable for http targets", () => {
+  const registry = new ToolRegistry()
+  registry.load(join(__dirname, "../../../../src/argus/workflows/tool-definitions.yaml"))
+
+  test("declares the capability the recon phase asks for", () => {
+    expect(registry.getCapabilities("ai-surface")).toContain(Capability.WEB_RECON)
+    expect(registry.getCapabilities("ai-surface")).toContain(Capability.AI_SURFACE_MAPPING)
+  })
+
+  test("is returned for WEB_RECON so the recon phase can dispatch it", () => {
+    const names = registry.getToolsByCapability(Capability.WEB_RECON).map(t => t.name)
+    expect(names).toContain("ai-surface")
+  })
+
+  test("survives the web-target filter in selectBest", () => {
+    const names = registry.selectBest([Capability.WEB_RECON], "web").map(t => t.name)
+    expect(names).toContain("ai-surface")
+  })
+
+  test("is selectable by its own capability as well", () => {
+    const names = registry.selectBest([Capability.AI_SURFACE_MAPPING], "web").map(t => t.name)
+    expect(names).toEqual(["ai-surface"])
+  })
+})

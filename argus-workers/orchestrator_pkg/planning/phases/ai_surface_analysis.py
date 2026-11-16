@@ -1,8 +1,9 @@
-"""Phase: ai_surface_analysis — AI attack-surface scanning of source code.
+"""Phase: ai_surface_analysis — source-code security analysis.
 
-Activated when source code access is available. Runs the ai-surface scanner
-to detect MCP servers, agent frameworks, LLM SDKs, model gateways, vector
-stores, AI provider keys, and API endpoints from source code.
+Activated when source code access is available. ai-surface itself now probes
+live HTTP AI endpoints, so this phase runs the code-intelligence engine over
+the source tree (secrets, SAST, dependencies). The AI/LLM surface detection
+for URL targets happens in-process during recon (detect_ai_surface).
 """
 
 from __future__ import annotations
@@ -26,14 +27,15 @@ def _activate_ai_surface_analysis(rc) -> tuple[bool, str]:
 def _ai_surface_analysis_tools(recon_context) -> list[ToolTask]:
     """Build tool tasks for the source_analysis phase.
 
-    Runs the ai-surface static scanner against the source code root.
+    Runs the code-intelligence engine against the source-code root. ai-surface is
+    deliberately not used here: it probes HTTP endpoints, not files.
     """
     return [
         ToolTask(
-            tool_name="ai-surface",
-            description="Static AI attack-surface scan: MCP, agents, LLMs, RAG, gateways, keys",
+            tool_name="secure_code_intelligence_engine",
+            description="Source-code security analysis: secrets, SAST, dependency scanning",
             priority=10,
             timeout=300,
-            args_template=["{target}", "--output", "json"],
+            args_template=["{target}"],
         ),
     ]
