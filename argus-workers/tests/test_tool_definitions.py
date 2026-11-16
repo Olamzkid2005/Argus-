@@ -144,7 +144,8 @@ class TestGetToolsForPhase:
             names = []
             for phase in ALL_PHASES:
                 names.extend(t.name for t in get_tools_for_phase(phase))
-            assert "dnsx" not in names
+            # masscan needs root for raw sockets, so it stays phase-less.
+            assert "masscan" not in names
             # nmap is enabled now that its XML parser is in the registry.
             assert "nmap" in names
 
@@ -410,12 +411,12 @@ class TestInlineOverridesDoNotLoseYamlData:
             "--top-ports",
             "200",
         ]
-        # dnsx is deliberately disabled: v1.2+ needs `-w` with `-d`, or a
-        # list file/stdin, none of which the arg builder can supply.
-        assert TOOLS["dnsx"].phases == []
-        # gospider is deliberately disabled: the installed build segfaults or
-        # exits 0 with no output, which would look like a successful crawl.
-        assert TOOLS["gospider"].phases == []
+        # dnsx is enabled again: its definition runs dnsx_shim.py, which
+        # supplies the -l domain file and -r resolver list v1.2+ requires.
+        assert TOOLS["dnsx"].phases == ["recon"]
+        # gospider v1.1.6 crawls without the older build's segfault; the flag
+        # fix (`--json`, not `-j`) still stands.
+        assert TOOLS["gospider"].phases == ["recon"]
         # The installed whatweb accepts only a positional target.
         assert TOOLS["whatweb"].default_args == []
         # Path-only tools stay out of the HTTP phases.

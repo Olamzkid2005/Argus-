@@ -388,3 +388,47 @@ class TestReconShim:
             assert data["args"][0] == "argus-workers/tools/scripts/recon_shim.py", name
             assert data["args"][data["args"].index("--tool") + 1] == name, name
             assert data["parameters"][0]["flag"] == "--target", name
+
+
+class TestDnsxShim:
+    """dnsx was disabled: no resolvers, and -d alone is rejected."""
+
+    def _run(self, monkeypatch, capsys, output: str):
+        module = _load_shim("dnsx")
+        monkeypatch.setattr(module.shutil, "which", lambda name: "/usr/bin/dnsx")
+        monkeypatch.setattr(module, "run_dnsx", lambda binary, hosts, timeout: (True, output))
+        monkeypatch.setattr(sys, "argv", ["dnsx_shim.py", "--target", "http://demo.testfire.net"])
+        assert module.main() == 0
+        return capsys.readouterr().out
+
+    def test_resolver_answers_become_findings(self, monkeypatch, capsys):
+        out = self._run(
+            monkeypatch,
+            capsys,
+            json.dumps({"host": "demo.testfire.net", "a": ["65.61.137.117"], "cname": ["testfire.net"]}),
+        )
+        findings = dispatch("dnsx", out)
+        assert len(findings) == 1
+        assert findings[0].tool == "dnsx"
+        assert "demo.testfire.net" in findings[0].title
+        assert "65.61.137.117" in findings[0].title
+
+    def test_no_answer_is_a_clean_negative(self, monkeypatch, capsys):
+        out = self._run(monkeypatch, capsys, "")
+        findings = dispatch("dnsx", out)
+        assert len(findings) == 1
+        assert findings[0].tool == "dnsx"
+        assert "no address records" in findings[0].title.lower()
+
+    def test_the_definition_supplies_the_missing_flags(self):
+        import yaml
+
+        base = Path(__file__).resolve().parents[1] / "tools" / "definitions"
+        data = yaml.safe_load((base / "dnsx.yaml").read_text())
+        assert data["command"] == "python3"
+        assert data["args"] == ["argus-workers/tools/scripts/dnsx_shim.py"]
+        shim = (Path(__file__).resolve().parents[1] / "tools" / "scripts" / "dnsx_shim.py").read_text()
+        assert "RESOLVERS" in shim and '"-r", RESOLVERS' in shim, "dnsx needs -r or it resolves nothing"
+        assert '"-l", list_path' in shim, "dnsx rejects a bare -d target without a wordlist/file"
+        wordlist = Path(__file__).resolve().parents[1] / "tools" / "wordlists" / "dnsx-labels.txt"
+        assert wordlist.is_file()

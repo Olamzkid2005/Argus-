@@ -23,7 +23,7 @@ signal_quality: CANDIDATE
 risk_level: low
 priority: 55
 cost: medium
-# Not dispatchable here: the installed gospider build segfaults (SIGSEGV in an ioctl path under -v) and otherwise exits 0 with no output
-disabled_reason: "the installed gospider build segfaults (SIGSEGV in an ioctl path under -v) and otherwise exits 0 with no output"
+# gospider v1.1.6 (provisioned by scripts/livefire/install-scanner-tools.sh)
+# was tested with -v and does not segfault, so the phase is enabled.
 enabled: true
 timeout: 300

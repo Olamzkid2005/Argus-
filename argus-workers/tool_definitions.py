@@ -532,16 +532,9 @@ _register(
     ToolDefinition(
         name="gospider",
         description="Web spider for endpoint discovery",
-        # Disabled: the installed gospider build segfaults (`SIGSEGV` in an
-        # ioctl path under -v) and otherwise exits 0 with no output, i.e. it
-        # would report success while crawling nothing. The flag fixes below
-        # stand (`-j` is an unknown shorthand; JSON output is `--json`), so a
-        # newer build only needs the phase re-enabled.
-        phases=[],
-        disabled_reason=(
-            "the installed gospider build segfaults (SIGSEGV in an ioctl path "
-            "under -v) and otherwise exits 0 with no output"
-        ),
+        # Enabled: gospider v1.1.6 (provisioned by the install script) crawls
+        # and emits JSONL without the segfault the older build showed under -v.
+        phases=["recon"],
         default_args=["-q", "--json"],
         parameters=[
             ToolParameter("target", "Target URL", flag="-s", required=True),
@@ -593,13 +586,9 @@ _register(
     ToolDefinition(
         name="dnsx",
         description="Fast DNS resolver and probe tool",
-        # Disabled: without -r dnsx has no resolvers and the installed build
-        # exits 0 having resolved nothing, which reads as a clean negative.
-        phases=[],
-        disabled_reason=(
-            "needs a resolver list (-r) and a domain list; without them the "
-            "installed build exits 0 having resolved nothing"
-        ),
+        # Enabled: the definition runs dnsx_shim.py, which supplies the domain
+        # list and the public resolver set dnsx insists on.
+        phases=["recon"],
         default_args=["-json", "-silent"],
         parameters=[
             ToolParameter(

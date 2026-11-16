@@ -1611,8 +1611,6 @@ class TestWorkerToolStatePublishedOverMCP:
         # The planner prints disabled_reason verbatim into the run log, so it
         # must name the actual obstacle, not "no execution phase".
         expected = {
-            "dnsx": "resolver list",
-            "gospider": "segfaults",
             "masscan": "root or CAP_NET_RAW",
             "shuffledns": "resolver list",
         }
@@ -1622,6 +1620,20 @@ class TestWorkerToolStatePublishedOverMCP:
             reason = entry["disabled_reason"]
             assert fragment in reason, (name, reason)
             assert "no execution phase" not in reason, (name, reason)
+
+    def test_dnsx_and_gospider_are_runnable_again(self):
+        """Both were disabled for fixable reasons and are now provisioned.
+
+        dnsx needed a resolver list and a domain file (the definition runs
+        dnsx_shim.py, which supplies both); gospider's older build segfaulted
+        and v1.1.6 does not, so its recon phase is back.
+        """
+        by_name = {t["name"]: t for t in self._server().get_tools()}
+        for name in ("dnsx", "gospider"):
+            entry = by_name[name]
+            assert entry["disabled"] is False, (name, entry.get("disabled_reason"))
+            assert "disabled_reason" not in entry, name
+            assert "recon" in entry["phases"], name
 
     def test_a_runnable_tool_is_not_disabled(self):
         by_name = {t["name"]: t for t in self._server().get_tools()}

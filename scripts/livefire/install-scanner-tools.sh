@@ -29,7 +29,43 @@ for tool in sqlmap arjun; do
   printf '%-8s %s\n' "$tool" "$(command -v "$tool")"
 done
 
-for shim in whatweb_shim.py sqlmap_shim.py arjun_shim.py sn1per_shim.py bucket_upload_shim.py recon_shim.py; do
+# Go releases that have no package here. .livefire/bin is already on the
+# runner's PATH; downloads are pinned and skipped when the binary is present.
+BIN="$REPO/.livefire/bin"
+mkdir -p "$BIN"
+
+fetch_release() {
+  local name="$1" url="$2" inner="$3"
+  if [ -x "$BIN/$name" ]; then
+    printf '%-10s already installed\n' "$name"
+    return 0
+  fi
+  local tmp
+  tmp="$(mktemp -d)"
+  if ! curl -sSL --max-time 180 -o "$tmp/rel.zip" "$url"; then
+    echo "warning: could not download $name ($url)" >&2
+    rm -rf "$tmp"
+    return 1
+  fi
+  unzip -o -q "$tmp/rel.zip" -d "$tmp/out"
+  local found
+  found="$(find "$tmp/out" -type f -name "$inner" | head -1)"
+  if [ -z "$found" ]; then
+    echo "warning: $name archive did not contain $inner" >&2
+    rm -rf "$tmp"
+    return 1
+  fi
+  install -m 0755 "$found" "$BIN/$name"
+  rm -rf "$tmp"
+  printf '%-10s installed from release\n' "$name"
+}
+
+fetch_release dnsx \
+  https://github.com/projectdiscovery/dnsx/releases/download/v1.2.1/dnsx_1.2.1_linux_amd64.zip dnsx
+fetch_release gospider \
+  https://github.com/jaeles-project/gospider/releases/download/v1.1.6/gospider_v1.1.6_linux_x86_64.zip gospider
+
+for shim in whatweb_shim.py sqlmap_shim.py arjun_shim.py sn1per_shim.py bucket_upload_shim.py recon_shim.py dnsx_shim.py; do
   "$VENV/bin/python" -m py_compile "$REPO/argus-workers/tools/scripts/$shim"
   printf '%-20s compiles (python shim)\n' "$shim"
 done

@@ -961,12 +961,20 @@ describe("InProcessExecutor", () => {
       expect(tracker.isThrottled("fast.com")).toBe(false)
     })
 
-    test("isThrottled auto-cleans expired entries", () => {
-      process.env.ARGUS_THROTTLE_BASE_DELAY_MS = "1"
-      process.env.ARGUS_THROTTLE_MAX_DELAY_MS = "1"
+    test("isThrottled auto-cleans expired entries", async () => {
+      // A 1 ms window raced the assertion: under the full suite the assertion
+      // itself could land after expiry and read `false`. Use a window that is
+      // short but cannot be crossed by the next statement, then wait it out.
+      process.env.ARGUS_THROTTLE_BASE_DELAY_MS = "100"
+      process.env.ARGUS_THROTTLE_MAX_DELAY_MS = "100"
       const tracker = new ThrottleTracker()
       tracker.recordThrottle("ephemeral.com")
       expect(tracker.isThrottled("ephemeral.com")).toBe(true)
+
+      await new Promise((resolve) => setTimeout(resolve, 150))
+
+      expect(tracker.isThrottled("ephemeral.com")).toBe(false)
+      expect((tracker as any).throttledTargets.has("ephemeral.com")).toBe(false)
     })
 
     test("honors custom env var ARGUS_THROTTLE_BASE_DELAY_MS", () => {

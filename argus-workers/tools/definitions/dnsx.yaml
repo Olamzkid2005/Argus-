@@ -1,22 +1,22 @@
 name: dnsx
-command: dnsx
-description: "Fast DNS resolver and probe tool"
+command: python3
+description: "Fast DNS resolver and probe tool (supplies the resolver list and domain file dnsx requires)"
+# dnsx refuses a bare domain (-d without -w) and resolves nothing without -r,
+# so the definition runs a wrapper that writes the target to a domain list,
+# passes public resolvers, and reports what resolved.
 args:
-  - "-json"
-  - "-silent"
+  - argus-workers/tools/scripts/dnsx_shim.py
 parameters:
   - name: target
     type: string
-    description: "Domain or subdomain list"
+    description: "Domain or host to resolve"
     required: true
-    flag: "-d"
+    flag: "--target"
 capabilities:
   - web_recon
 signal_quality: CANDIDATE
 risk_level: low
 priority: 40
 cost: low
-# Not dispatchable here: needs a resolver list (-r) and a domain list; without them the installed build exits 0 having resolved nothing
-disabled_reason: "needs a resolver list (-r) and a domain list; without them the installed build exits 0 having resolved nothing"
 enabled: true
 timeout: 120
