@@ -844,8 +844,10 @@ export class InProcessExecutor implements PhaseExecutor {
         recordDeterministicOutcome(
           tool.name,
           cap,
-          result.errors.length > 0 ? "failed" : result.findings.length > 0 ? "succeeded-with-findings" : "succeeded-empty",
-          result.errors[0],
+          result.skippedReason
+            ? "skipped"
+            : result.errors.length > 0 ? "failed" : result.findings.length > 0 ? "succeeded-with-findings" : "succeeded-empty",
+          result.skippedReason ?? result.errors[0],
         )
         if (result.failFast) {
           return {
@@ -1401,13 +1403,24 @@ export class InProcessExecutor implements PhaseExecutor {
     }
   }
 
+  /**
+   * A tool whose binary is not installed did not run and did not fail: the
+   * scan simply did not have it. Reporting it as an error failed the phase
+   * (sn1per is fail_fast, so one absent binary marked vuln_scan partial).
+   */
+  private static missingBinaryReason(message: string): string | undefined {
+    return /binary '[^']*' not found on PATH|binary not installed on the worker PATH/i.test(message)
+      ? "binary not installed on the worker PATH"
+      : undefined
+  }
+
   private async executeTool(
     tool: ToolDef,
     cap: Capability,
     phase: PhaseExecutionRequest,
     phaseStartTime: number,
     execOptions: ExecutionOptions,
-  ): Promise<{ findings: NormalizedFinding[]; errors: string[]; failFast: boolean }> {
+  ): Promise<{ findings: NormalizedFinding[]; errors: string[]; failFast: boolean; skippedReason?: string }> {
     if (!this.toolHealth.isHealthy(tool.name)) {
       // Blocker 6: Try fallback tool for the same capability before giving up.
       // This ensures we still get results even when the preferred tool is
@@ -1587,6 +1600,13 @@ export class InProcessExecutor implements PhaseExecutor {
         }
         lastError = new Error(result.error ?? "Tool returned unsuccessful result")
         this.toolHealth.recordFailure(tool.name, lastError.message)
+        {
+          const skippedReason = InProcessExecutor.missingBinaryReason(lastError.message)
+          if (skippedReason) {
+            console.log(`[executor]  ◦ Skipped ${tool.name} (${phase.name}): ${skippedReason}`)
+            return { findings, errors: [], failFast: false, skippedReason }
+          }
+        }
         if (errorRecovery === "fail_fast") {
           return { findings, errors: [`Tool ${tool.name} failed (fail_fast): ${lastError.message}`], failFast: true }
         }
@@ -1608,6 +1628,13 @@ export class InProcessExecutor implements PhaseExecutor {
         }
         lastError = error as Error
         this.toolHealth.recordFailure(tool.name, lastError.message)
+        {
+          const skippedReason = InProcessExecutor.missingBinaryReason(lastError.message)
+          if (skippedReason) {
+            console.log(`[executor]  ◦ Skipped ${tool.name} (${phase.name}): ${skippedReason}`)
+            return { findings, errors: [], failFast: false, skippedReason }
+          }
+        }
         if (errorRecovery === "fail_fast") {
           return { findings, errors: [`Tool ${tool.name} failed (fail_fast): ${lastError.message}`], failFast: true }
         }

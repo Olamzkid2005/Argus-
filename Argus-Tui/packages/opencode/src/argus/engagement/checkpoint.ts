@@ -178,6 +178,10 @@ export function reconcileActions(actions: CheckpointAction[]): {
       continue
     }
     if (action.status === "failed" || action.status === "skipped") continue
+    // A phase that never started has nothing in flight: it is simply still to
+    // do. Counting it as ambiguous paused every interrupted run whose later
+    // phases were state-changing, so a restart could never be resumed at all.
+    if (!action.startedAt) continue
     // in_flight: interruption is ambiguous for a state-changing action.
     if (action.readOnly) retryActionIds.push(action.id)
     else blockedActionIds.push(action.id)
@@ -345,6 +349,8 @@ export function buildCheckpoint(params: {
     if (phase.status === "COMPLETED" || phase.status === "PARTIAL") status = "succeeded"
     else if (phase.status === "FAILED") status = "failed"
     else if (phase.status === "SKIPPED") status = "skipped"
+    // Never started (PENDING/no start time) is not an interrupted action.
+    else if (!phase.startedAt) status = "skipped"
     const details = params.actionDetails?.[phase.id]
     return {
       id: phase.id,

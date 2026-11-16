@@ -7,6 +7,7 @@ import { EngagementStore } from "../engagement/store"
 import type { IEngagementStore } from "../engagement/types"
 import { CredentialStore } from "../engagement/credentials"
 import { ConfidenceEngine } from "../engagement/confidence"
+import { mergeFinding } from "../engagement/finding-identity"
 import { ReportGenerator, persistedReportOptions } from "../reporting/generator"
 import { canResume } from "../engagement/recovery"
 import {
@@ -114,6 +115,28 @@ export async function resumeCommand(
     return `Engagement ${engagementId} cannot be resumed: ${validation.reasons.join("; ")}`
   }
 
+  // A checkpoint written before "never started" was distinguished from "in
+  // flight" marks every pending phase as in flight, which paused every restart
+  // whose later phases were state-changing: the run could never be continued.
+  // The stored phase rows are durable and say whether a phase ever started, and
+  // a phase that never started cannot have left the target in an ambiguous
+  // state. Ids with no matching phase row stay blocked (conservative).
+  const storedPhases = store.getPhases(engagementId)
+  const neverStarted = new Set(
+    storedPhases.filter((p) => !p.startedAt).map((p) => p.id),
+  )
+  if (neverStarted.size > 0 && validation.blockedActionIds.length > 0) {
+    const stillBlocked = validation.blockedActionIds.filter((id) => !neverStarted.has(id))
+    if (stillBlocked.length !== validation.blockedActionIds.length) {
+      store.appendAuditLog(
+        engagementId,
+        "RESUME_UNBLOCKED_PENDING",
+        `Ignored in-flight record(s) for phase(s) that never started: ${validation.blockedActionIds.filter((id) => neverStarted.has(id)).join(", ")}`,
+      )
+      validation.blockedActionIds = stillBlocked
+    }
+  }
+
   // Stage 6.2 item 2: an interrupted state-changing action is ambiguous. Do not
   // replay it automatically; pause for an operator decision instead.
   if (validation.blockedActionIds.length > 0) {
@@ -188,6 +211,28 @@ export async function resumeCommand(
     options?.bridgeOverride ??
     new WorkersBridge(options?.workersPath ?? join(PROJECT_ROOT, "argus-workers/mcp_server.py"))
   await bridge.connect()
+
+  // The plan came from the static registry. Ask the worker which tools it can
+  // actually run, or a resumed phase fails on a missing binary (sqlmap, arjun,
+  // sn1per) instead of skipping a tool it never had.
+  try {
+    const workerTools = await (bridge as unknown as { getTools?: () => Promise<unknown[]> }).getTools?.()
+    if (workerTools) {
+      const blocked = toolRegistry.setWorkerToolStatus(
+        workerTools as unknown as import("../workflows/tool-registry").WorkerToolStatus[],
+      )
+      if (blocked.length > 0) {
+        emit(`⚠ ${blocked.length} tool(s) the worker cannot run will be skipped`)
+        store.appendAuditLog(
+          engagementId,
+          "TOOL_AVAILABILITY",
+          blocked.map((b) => `${b.name}: ${b.reason}`).join("; "),
+        )
+      }
+    }
+  } catch (toolStatusErr) {
+    emit(`⚠ Could not read worker tool state (${(toolStatusErr as Error).message}) — scheduling unfiltered`)
+  }
 
   const confidenceEngine = new ConfidenceEngine()
   const executor =
@@ -329,7 +374,9 @@ export async function resumeCommand(
       for (const finding of result.findings) {
         const promoted = confidenceEngine.promote(finding)
         finding.confidence = promoted
-        allFindings.push(finding)
+        // Same identity as the run path: a resumed phase that re-observes
+        // something already stored must not report it twice.
+        mergeFinding(allFindings, finding)
       }
 
       phaseRecord.status = result.status === "failed" ? "FAILED" : result.status === "partial" ? "PARTIAL" : result.status === "skipped" ? "SKIPPED" : "COMPLETED"

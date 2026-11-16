@@ -61,6 +61,8 @@ function action(overrides: Partial<CheckpointAction>): CheckpointAction {
     tool: "recon",
     status: "in_flight",
     readOnly: true,
+    // in_flight means it had started; a phase with no start time never ran.
+    startedAt,
     ...overrides,
   }
 }
@@ -294,9 +296,9 @@ describe("buildCheckpoint", () => {
       plan: plan(),
       phases: [
         phase({ id: "p1", status: "COMPLETED", startedAt, completedAt: checkpointAt }),
-        phase({ id: "p2", name: "sqlmap", status: "RUNNING" }),
+        phase({ id: "p2", name: "sqlmap", status: "RUNNING", startedAt }),
         phase({ id: "p3", status: "FAILED", error: "boom" }),
-        phase({ id: "p4", name: "web_exploitation", status: "RUNNING" }),
+        phase({ id: "p4", name: "web_exploitation", status: "RUNNING", startedAt }),
       ],
       scope: ["https://example.com"],
       budgetUsage: usage(),
@@ -334,5 +336,62 @@ describe("buildCheckpoint", () => {
     })
     expect(cp.secretRefs).toEqual(["credential:user"])
     expect(JSON.stringify(cp)).not.toContain("password")
+  })
+})
+
+describe("checkpoint: phases that never started are not in flight", () => {
+  const engagement = {
+    id: "eng-1",
+    target: "https://example.com",
+    workflow: "full_assessment",
+    workflowVersion: 1,
+    status: "INTERRUPTED" as const,
+    schemaVersion: 1,
+    storageVersion: 2,
+    version: 1,
+    createdAt: "2026-11-16T08:00:00.000Z",
+    updatedAt: "2026-11-16T08:00:00.000Z",
+  }
+
+  function checkpointWith(phases: PhaseRecord[]) {
+    return buildCheckpoint({
+      engagement: engagement as never,
+      plan: { workflow: "full_assessment", phases: [], errorRecovery: {}, planCreatedAt: engagement.createdAt } as never,
+      phases,
+      scope: ["https://example.com"],
+      budgetUsage: {
+        llmCalls: 0, llmFailures: 0, inputTokens: 0, outputTokens: 0,
+        costUsd: 0, costKnown: true, toolCalls: 1, requestCount: 0,
+      },
+    })
+  }
+
+  test("a PENDING state-changing phase does not block resume", () => {
+    const cp = checkpointWith([
+      {
+        id: "phase-scan", engagementId: "eng-1", name: "vuln_scan", status: "RUNNING",
+        capabilities: [], executionMode: "sequential", replanCycle: false,
+        startedAt: "2026-11-16T08:00:05.000Z",
+      },
+      {
+        id: "phase-exploit", engagementId: "eng-1", name: "web_exploitation", status: "PENDING",
+        capabilities: [], executionMode: "sequential", replanCycle: false,
+      },
+    ])
+    const reconciled = reconcileActions(cp.actions)
+    expect(reconciled.blockedActionIds).toEqual([])
+    // The read-only phase that was actually running is retried.
+    expect(reconciled.retryActionIds).toEqual(["phase-scan"])
+  })
+
+  test("a state-changing phase that had started still pauses for a decision", () => {
+    const cp = checkpointWith([
+      {
+        id: "phase-exploit", engagementId: "eng-1", name: "web_exploitation", status: "RUNNING",
+        capabilities: [], executionMode: "sequential", replanCycle: false,
+        startedAt: "2026-11-16T08:00:05.000Z",
+      },
+    ])
+    expect(reconcileActions(cp.actions).blockedActionIds).toEqual(["phase-exploit"])
   })
 })

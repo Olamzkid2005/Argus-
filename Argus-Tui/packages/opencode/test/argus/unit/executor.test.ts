@@ -424,3 +424,60 @@ describe("credential-gated tools are skipped, not failed", () => {
     expect(record?.detail).toContain("attacker")
   })
 })
+
+describe("a tool whose binary is missing is skipped, not failed", () => {
+  class MissingBinaryRegistry extends MockToolRegistry {
+    override getToolsByCapability(_cap?: string) {
+      return [{
+        name: "sn1per",
+        capabilities: [Capability.VULNERABILITY_SCANNING],
+        requires_auth: false,
+        destructive: false,
+        supports_api: false,
+        supports_web: true,
+        timeout_seconds: 300,
+      }]
+    }
+    override getTool(name: string) {
+      if (name === "sn1per") {
+        return {
+          name,
+          capabilities: [Capability.VULNERABILITY_SCANNING],
+          requires_auth: false,
+          destructive: false,
+          supports_web: true,
+          timeout_seconds: 300,
+        }
+      }
+      return super.getTool(name)
+    }
+  }
+
+  test("the phase completes with no error when the binary is not installed", async () => {
+    const bridge = {
+      ...mockBridge,
+      callTool: async () => ({
+        success: false,
+        data: "",
+        error: "Tool 'sn1per' binary 'sn1per' not found on PATH. Install it or add its directory to PATH.",
+        durationMs: 1,
+      }),
+    }
+    const executor = new InProcessExecutor(
+      new MissingBinaryRegistry() as any,
+      bridge as any,
+      new ConfidenceEngine(),
+      mockWorkflowRegistry as any,
+    )
+    executor.loadGates("test")
+    const result = await executor.execute(makePhase({
+      requiredCapabilities: [Capability.VULNERABILITY_SCANNING],
+      toolExecution: "sequential" as const,
+    }))
+    expect(result.errors).toEqual([])
+    expect(result.status).toBe("completed")
+    const record = (result.actionRecords ?? []).find((r) => r.tool === "sn1per")
+    expect(record?.outcome).toBe("skipped")
+    expect(record?.detail).toContain("binary")
+  })
+})
