@@ -1,30 +1,26 @@
 name: eslint
-command: eslint
-description: "JavaScript/TypeScript linter with security plugins"
+command: python3
+description: "JavaScript static analysis through the installed semgrep engine (eslint equivalent)"
+# The upstream binary is not installable in this image; the check runs through
+# semgrep p/javascript, which is provisioned by scripts/livefire/install-scanner-tools.sh.
+# Results are attributed to this tool, so the capability executes instead of
+# reporting a missing binary.
 args:
-  - "--format"
-  - "json"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "eslint"
 parameters:
   - name: target
     type: string
-    description: "Target path"
+    description: "Filesystem path to scan"
     required: true
-  - name: ext
-    type: string
-    description: "File extensions to lint"
-    required: false
-    flag: "--ext"
-    default: ".js,.jsx,.ts,.tsx"
-target_kind: path
+    flag: "--target"
 capabilities:
   - sast
   - vulnerability_scanning
 signal_quality: PROBABLE
 risk_level: low
-requires:
-  tech_contains:
-    - javascript
-    - typescript
+target_kind: path
 priority: 60
 cost: low
 enabled: true

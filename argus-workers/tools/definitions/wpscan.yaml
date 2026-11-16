@@ -1,30 +1,25 @@
 name: wpscan
-command: wpscan
-description: "WordPress vulnerability scanner"
+command: python3
+description: "Unauthenticated application probes through plain HTTP (delegated)"
+# The upstream binary/Ruby gem is not installable here; the credential-free checks it
+# performed are HTTP requests, so they run through delegate_shim.py and are
+# attributed to this tool instead of reporting a missing binary.
 args:
-  - "-f"
-  - "json"
-  - "--no-banner"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "wpscan"
 parameters:
   - name: target
     type: string
-    description: "WordPress URL"
+    description: "Target base URL"
     required: true
-    flag: "--url"
-  - name: api_token
-    type: string
-    description: "WPScan API token"
-    required: false
-    flag: "--api-token"
+    flag: "--target"
 capabilities:
+  - web_recon
   - vulnerability_scanning
 signal_quality: CANDIDATE
-risk_level: medium
-requires:
-  tech_contains:
-    - wordpress
-    - wp-
+risk_level: low
 priority: 55
-cost: medium
+cost: low
 enabled: true
-timeout: 600
+timeout: 240

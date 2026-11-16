@@ -65,7 +65,7 @@ fetch_release dnsx \
 fetch_release gospider \
   https://github.com/jaeles-project/gospider/releases/download/v1.1.6/gospider_v1.1.6_linux_x86_64.zip gospider
 
-for shim in whatweb_shim.py sqlmap_shim.py arjun_shim.py sn1per_shim.py bucket_upload_shim.py recon_shim.py dnsx_shim.py; do
+for shim in whatweb_shim.py sqlmap_shim.py arjun_shim.py sn1per_shim.py bucket_upload_shim.py recon_shim.py dnsx_shim.py delegate_shim.py; do
   "$VENV/bin/python" -m py_compile "$REPO/argus-workers/tools/scripts/$shim"
   printf '%-20s compiles (python shim)\n' "$shim"
 done

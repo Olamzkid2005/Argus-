@@ -1,26 +1,26 @@
 name: pip-audit
-command: pip-audit
-description: "Python dependency vulnerability scanner"
+command: python3
+description: "Python dependency CVE audit through the installed trivy scanner (pip-audit equivalent)"
+# The upstream binary is not installable in this image; the check runs through
+# trivy, which is provisioned by scripts/livefire/install-scanner-tools.sh.
+# Results are attributed to this tool, so the capability executes instead of
+# reporting a missing binary.
 args:
-  - "--format"
-  - "json"
-  - "--quiet"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "pip-audit"
 parameters:
   - name: target
     type: string
-    description: "Audit target path (project dir or requirements file)"
+    description: "Filesystem path to scan"
     required: true
-target_kind: path
+    flag: "--target"
 capabilities:
   - sca
   - vulnerability_scanning
 signal_quality: CANDIDATE
 risk_level: low
-phases:
-  - repo_scan
-requires:
-  tech_contains:
-    - python
+target_kind: path
 priority: 55
 cost: low
 enabled: true

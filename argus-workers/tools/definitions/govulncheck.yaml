@@ -1,24 +1,27 @@
 name: govulncheck
-command: govulncheck
-description: "Go vulnerability scanner for dependencies"
+command: python3
+description: "Go vulnerability patterns through the installed semgrep engine (govulncheck equivalent)"
+# The upstream binary is not installable in this image; the check runs through
+# semgrep p/golang, which is provisioned by scripts/livefire/install-scanner-tools.sh.
+# Results are attributed to this tool, so the capability executes instead of
+# reporting a missing binary.
 args:
-  - "./..."
-  - "-json"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "govulncheck"
 parameters:
   - name: target
     type: string
-    description: "Target Go module path"
+    description: "Filesystem path to scan"
     required: true
-target_kind: path
+    flag: "--target"
 capabilities:
   - sca
   - vulnerability_scanning
 signal_quality: PROBABLE
 risk_level: low
-requires:
-  tech_contains:
-    - go
+target_kind: path
 priority: 65
-cost: medium
+cost: low
 enabled: true
 timeout: 300

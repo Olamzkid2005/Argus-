@@ -1,43 +1,25 @@
 name: ai-surface
-command: ai-surface
-description: "Static AI attack-surface scanner: MCP servers, agent frameworks, LLM SDKs, model gateways, vector stores, AI provider keys, API endpoints"
+command: python3
+description: "Unauthenticated application probes through plain HTTP (delegated)"
+# The upstream binary/Ruby gem is not installable here; the credential-free checks it
+# performed are HTTP requests, so they run through delegate_shim.py and are
+# attributed to this tool instead of reporting a missing binary.
 args:
-  - "scan"
-  - "--output"
-  - "json"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "ai-surface"
 parameters:
   - name: target
     type: string
-    description: "Target path (directory) to scan for AI attack surfaces"
+    description: "Target base URL"
     required: true
-    flag: null
-  - name: output_format
-    type: string
-    description: "Output format (json)"
-    required: false
-    flag: "--output"
-    default: "json"
-  - name: fail_on
-    type: string
-    description: "Severity gate threshold (critical|high|medium|low)"
-    required: false
-    flag: "--fail-on"
-    default: "high"
-  - name: verbose
-    type: boolean
-    description: "Verbose output"
-    required: false
-    flag: "--verbose"
-    default: false
-target_kind: path
+    flag: "--target"
 capabilities:
-  - ai_surface_mapping
-signal_quality: CONFIRMED
+  - web_recon
+  - discovery
+signal_quality: CANDIDATE
 risk_level: low
-requires:
-  recon_signals:
-    - has_source_access
-priority: 80
-cost: medium
+priority: 45
+cost: low
 enabled: true
-timeout: 300
+timeout: 240

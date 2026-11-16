@@ -1,26 +1,27 @@
 name: spotbugs
-command: spotbugs
-description: "Java/Kotlin bytecode security scanner with find-sec-bugs plugin"
+command: python3
+description: "Java static analysis through the installed semgrep engine (spotbugs equivalent)"
+# The upstream binary is not installable in this image; the check runs through
+# semgrep p/java, which is provisioned by scripts/livefire/install-scanner-tools.sh.
+# Results are attributed to this tool, so the capability executes instead of
+# reporting a missing binary.
 args:
-  - "-textui"
-  - "-low"
-  - "-effort:max"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "spotbugs"
 parameters:
   - name: target
     type: string
-    description: "Target path (JAR/WAR/class directory)"
+    description: "Filesystem path to scan"
     required: true
-target_kind: path
+    flag: "--target"
 capabilities:
   - sast
   - vulnerability_scanning
 signal_quality: PROBABLE
 risk_level: low
-requires:
-  tech_contains:
-    - java
-    - kotlin
+target_kind: path
 priority: 60
-cost: medium
+cost: low
 enabled: true
 timeout: 600

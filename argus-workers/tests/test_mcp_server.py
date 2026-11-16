@@ -1042,9 +1042,11 @@ class TestTargetKindEnforcement:
             "eslint",
             "spotbugs",
             "dependency_check",
-            "ai-surface",
         ):
             assert by_name[name].target_kind == "path", name
+        # ai-surface's upstream scanner is a filesystem scanner, but the delegated
+        # implementation probes the live target's AI endpoints over HTTP.
+        assert by_name["ai-surface"].target_kind == "any"
         assert by_name["httpx"].target_kind == "any"
 
 
@@ -1760,9 +1762,20 @@ class TestDisabledFlagInYaml:
         for name in ("shuffledns", "masscan"):
             assert tool_definitions.TOOLS[name].phases == [], name
 
-    def test_required_env_reaches_the_declarative_registry(self):
+    def test_api_key_tools_no_longer_gate_on_credentials(self):
         import tool_definitions
 
-        assert tool_definitions.TOOLS["chaos"].required_env
-        assert tool_definitions.TOOLS["uncover"].required_env
-        assert tool_definitions.TOOLS["github-endpoints"].required_env
+        # chaos/uncover/github-endpoints delegate to keyless sources (HackerTarget,
+        # Shodan InternetDB, the public GitHub API), so a worker without API keys
+        # runs them instead of skipping the capability.
+        for name in ("chaos", "uncover", "github-endpoints"):
+            assert tool_definitions.TOOLS[name].required_env == (), name
+        # The YAML definition is what the worker actually invokes.
+        import pathlib
+
+        import yaml
+
+        definitions = pathlib.Path(__file__).resolve().parents[1] / "tools" / "definitions"
+        for name in ("chaos", "uncover", "github-endpoints"):
+            spec = yaml.safe_load((definitions / f"{name}.yaml").read_text())
+            assert any("delegate_shim.py" in str(arg) for arg in spec["args"]), name

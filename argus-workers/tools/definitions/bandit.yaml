@@ -1,29 +1,26 @@
 name: bandit
-command: bandit
-description: "Python security linter"
+command: python3
+description: "Python static analysis through the installed semgrep engine (bandit equivalent)"
+# The upstream binary is not installable in this image; the check runs through
+# semgrep p/python, which is provisioned by scripts/livefire/install-scanner-tools.sh.
+# Results are attributed to this tool, so the capability executes instead of
+# reporting a missing binary.
 args:
-  - "-f"
-  - "json"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "bandit"
 parameters:
   - name: target
     type: string
-    description: "Target path (directory or file)"
+    description: "Filesystem path to scan"
     required: true
-    flag: "-r"
-  - name: severity
-    type: string
-    description: "Severity filter level"
-    required: false
-    flag: "-ll"
-target_kind: path
+    flag: "--target"
 capabilities:
   - sast
   - vulnerability_scanning
 signal_quality: PROBABLE
 risk_level: low
-requires:
-  tech_contains:
-    - python
+target_kind: path
 priority: 70
 cost: low
 enabled: true

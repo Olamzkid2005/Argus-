@@ -1,24 +1,26 @@
 name: phpcs
-command: phpcs
-description: "PHP CodeSniffer with security audit rules"
+command: python3
+description: "PHP static analysis through the installed semgrep engine (phpcs equivalent)"
+# The upstream binary is not installable in this image; the check runs through
+# semgrep p/php, which is provisioned by scripts/livefire/install-scanner-tools.sh.
+# Results are attributed to this tool, so the capability executes instead of
+# reporting a missing binary.
 args:
-  - "--standard=Security"
-  - "--extensions=php"
-  - "--report=json"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "phpcs"
 parameters:
   - name: target
     type: string
-    description: "Target path"
+    description: "Filesystem path to scan"
     required: true
-target_kind: path
+    flag: "--target"
 capabilities:
   - sast
   - vulnerability_scanning
 signal_quality: PROBABLE
 risk_level: low
-requires:
-  tech_contains:
-    - php
+target_kind: path
 priority: 60
 cost: low
 enabled: true

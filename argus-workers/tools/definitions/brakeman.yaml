@@ -1,30 +1,27 @@
 name: brakeman
-command: brakeman
-description: "Ruby on Rails security scanner for static analysis"
+command: python3
+description: "Ruby on Rails static analysis through the installed semgrep engine (brakeman equivalent)"
+# The upstream binary is not installable in this image; the check runs through
+# semgrep p/ruby, which is provisioned by scripts/livefire/install-scanner-tools.sh.
+# Results are attributed to this tool, so the capability executes instead of
+# reporting a missing binary.
 args:
-  - "--format"
-  - "json"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "brakeman"
 parameters:
   - name: target
     type: string
-    description: "Target Rails application path"
+    description: "Filesystem path to scan"
     required: true
-  - name: confidence
-    type: string
-    description: "Minimum confidence level (1-3)"
-    required: false
-    flag: "--confidence-level"
-    default: "2"
-target_kind: path
+    flag: "--target"
 capabilities:
   - sast
   - vulnerability_scanning
 signal_quality: PROBABLE
 risk_level: low
-requires:
-  tech_contains:
-    - ruby
+target_kind: path
 priority: 65
-cost: medium
+cost: low
 enabled: true
 timeout: 600

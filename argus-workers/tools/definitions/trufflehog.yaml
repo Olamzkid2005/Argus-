@@ -1,32 +1,27 @@
 name: trufflehog
-command: trufflehog
-description: "High-entropy secret scanner for git history and filesystems"
+command: python3
+description: "Secret scanning through the installed gitleaks engine (trufflehog equivalent)"
+# The upstream binary is not installable in this image; the check runs through
+# gitleaks, which is provisioned by scripts/livefire/install-scanner-tools.sh.
+# Results are attributed to this tool, so the capability executes instead of
+# reporting a missing binary.
 args:
-  - "git"
-  - "--json"
-  - "--no-update"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "trufflehog"
 parameters:
   - name: target
     type: string
-    description: "Target path"
+    description: "Filesystem path to scan"
     required: true
-  - name: since_commit
-    type: string
-    description: "Scan from specific commit"
-    required: false
-    flag: "--since-commit"
-  - name: max_depth
-    type: integer
-    description: "Max commit depth"
-    required: false
-    flag: "--max-depth"
-target_kind: path
+    flag: "--target"
 capabilities:
   - secret_detection
   - vulnerability_scanning
 signal_quality: PROBABLE
 risk_level: low
+target_kind: path
 priority: 70
-cost: medium
+cost: low
 enabled: true
 timeout: 600

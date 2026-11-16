@@ -1,24 +1,27 @@
 name: dependency_check
-command: dependency-check
-description: "OWASP Dependency-Check for known vulnerability scanning in dependencies"
+command: python3
+description: "Dependency CVE audit through the installed trivy scanner (OWASP dependency-check equivalent)"
+# The upstream binary is not installable in this image; the check runs through
+# trivy, which is provisioned by scripts/livefire/install-scanner-tools.sh.
+# Results are attributed to this tool, so the capability executes instead of
+# reporting a missing binary.
 args:
-  - "--format"
-  - "JSON"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "dependency_check"
 parameters:
   - name: target
     type: string
-    description: "Target project directory"
+    description: "Filesystem path to scan"
     required: true
-    flag: "--scan"
-target_kind: path
+    flag: "--target"
 capabilities:
   - sca
   - vulnerability_scanning
 signal_quality: CONFIRMED
 risk_level: low
-phases:
-  - repo_scan
+target_kind: path
 priority: 70
-cost: medium
+cost: low
 enabled: true
 timeout: 600

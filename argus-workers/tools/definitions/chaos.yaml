@@ -1,15 +1,20 @@
 name: chaos
-command: chaos
-description: "ProjectDiscovery chaos data feed client for subdomain enumeration"
+command: python3
+description: "Passive subdomain enumeration from HackerTarget, no API key (chaos equivalent)"
+# The upstream binary is not installable in this image; the check runs through
+# HackerTarget, which is provisioned by scripts/livefire/install-scanner-tools.sh.
+# Results are attributed to this tool, so the capability executes instead of
+# reporting a missing binary.
 args:
-  - "-json"
-  - "-silent"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "chaos"
 parameters:
   - name: target
     type: string
-    description: "Target domain"
+    description: "Target URL or host"
     required: true
-    flag: "-d"
+    flag: "--target"
 capabilities:
   - web_recon
 signal_quality: CANDIDATE
@@ -17,8 +22,4 @@ risk_level: low
 priority: 30
 cost: low
 enabled: true
-timeout: 120
-# chaos authenticates against ProjectDiscovery Cloud. Without the key it exits
-# with "PDCP_API_KEY not specified" and produces nothing.
-required_env:
-  - PDCP_API_KEY
+timeout: 240

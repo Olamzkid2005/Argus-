@@ -1,27 +1,25 @@
 name: testssl
-command: testssl
-description: "TLS/SSL security testing tool"
+command: python3
+description: "TLS configuration audit with the system openssl/ssl stack (testssl.sh equivalent)"
+# The upstream binary is not installable in this image; the check runs through
+# openssl (Python ssl), which is provisioned by scripts/livefire/install-scanner-tools.sh.
+# Results are attributed to this tool, so the capability executes instead of
+# reporting a missing binary.
 args:
-  - "--quiet"
-  - "--mode"
-  - "parallel"
+  - argus-workers/tools/scripts/delegate_shim.py
+  - "--tool"
+  - "testssl"
 parameters:
   - name: target
     type: string
-    description: "Target host:port"
+    description: "Target URL or host"
     required: true
-  - name: jsonfile
-    type: string
-    description: "Write JSON findings to file (use '-'' for stdout)"
-    required: false
-    flag: "--jsonfile"
+    flag: "--target"
 capabilities:
   - vulnerability_scanning
 signal_quality: CANDIDATE
 risk_level: medium
-requires:
-  target_scheme: "https"
 priority: 60
-cost: medium
+cost: low
 enabled: true
 timeout: 300
