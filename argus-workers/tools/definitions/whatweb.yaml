@@ -1,20 +1,24 @@
 name: whatweb
-command: whatweb
-description: "WhatWeb technology detection and fingerprinting"
-# No default args: the installed whatweb accepts only a positional target.
-# Ruby WhatWeb's --color=never/--log-json=FILE are rejected as unrecognized
-# arguments, and the text line both builds print is handled by the parser.
-args: []
+command: python3
+description: "Technology fingerprinting (banners, headers, generator, assets)"
+# Provisioned as a Python shim: the upstream binary is not installable in this
+# environment (Ruby WhatWeb, the sn1per Bash framework), or needs a
+# parameterised URL the engagement never supplies (sqlmap). Each shim runs the
+# real tool when it exists and a native equivalent when it does not, and always
+# reports either a finding or an explicit clean negative attributed to whatweb.
+args:
+  - argus-workers/tools/scripts/whatweb_shim.py
 parameters:
   - name: target
     type: string
-    description: "Target URL to fingerprint"
+    description: "Target URL"
     required: true
+    flag: "--target"
 capabilities:
   - technology_detection
 signal_quality: CANDIDATE
 risk_level: low
-priority: 75
-cost: low
+priority: 70
+cost: medium
 enabled: true
 timeout: 120

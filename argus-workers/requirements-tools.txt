@@ -1,0 +1,8 @@
+# Scanner binaries that install cleanly as Python packages. Kept separate from
+# requirements.txt so the runtime image does not grow a scanner stack it may not
+# need, and installed by scripts/livefire/install-scanner-tools.sh.
+#
+# whatweb (Ruby) and sn1per (Bash framework) are not installable here; their
+# definitions point at the Python shims in tools/scripts/ instead.
+sqlmap==1.10.11
+arjun==2.2.7

@@ -1,27 +1,24 @@
 name: arjun
-command: arjun
-description: "HTTP parameter discovery tool"
+command: python3
+description: "HTTP parameter discovery (arjun or native probe)"
+# Provisioned as a Python shim: the upstream binary is not installable in this
+# environment (Ruby WhatWeb, the sn1per Bash framework), or needs a
+# parameterised URL the engagement never supplies (sqlmap). Each shim runs the
+# real tool when it exists and a native equivalent when it does not, and always
+# reports either a finding or an explicit clean negative attributed to arjun.
 args:
-  - "-m"
-  - "GET"
+  - argus-workers/tools/scripts/arjun_shim.py
 parameters:
   - name: target
     type: string
     description: "Target URL"
     required: true
-    flag: "-u"
-  - name: threads
-    type: integer
-    description: "Thread count"
-    required: false
-    flag: "-t"
-    default: 10
+    flag: "--target"
 capabilities:
   - api_probing
-  - api_docs_analysis
 signal_quality: CANDIDATE
 risk_level: low
-priority: 50
+priority: 70
 cost: medium
 enabled: true
-timeout: 300
+timeout: 180

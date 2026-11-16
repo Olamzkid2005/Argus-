@@ -655,11 +655,42 @@ class TestScannerInvocationDefinitions:
             "accepts comma-separated input"
         )
 
-    def test_whatweb_has_no_default_args(self):
-        # The installed whatweb accepts only a positional target. Both
-        # --format=json and Ruby WhatWeb's --color/--log-json forms are
-        # rejected, and the text line it prints is parsed instead.
-        assert self._definition("whatweb")["args"] == []
+    def test_whatweb_runs_the_python_fingerprint_shim(self):
+        # Ruby WhatWeb cannot be installed here, so the definition runs the
+        # native fingerprint shim: it prints the same text line WhatWeb does
+        # and the existing parser reads it. No Ruby flags are passed.
+        definition = self._definition("whatweb")
+        assert definition["command"] == "python3"
+        assert definition["args"] == [
+            "argus-workers/tools/scripts/whatweb_shim.py"
+        ]
+        assert not any(arg.startswith("--") for arg in definition["args"])
+
+    def test_discovery_tools_no_longer_depend_on_missing_binaries(self):
+        """sqlmap/arjun/whatweb/sn1per must execute, not skip as missing.
+
+        Each of these was recorded as `skipped: binary missing`, so SQL
+        injection, parameter discovery, technology fingerprinting and
+        vulnerability aggregation never ran. They now go through Python shims
+        that run the real tool when it exists and a native equivalent when it
+        does not, and always report an attributed result.
+        """
+        expected = {
+            "sqlmap": "sqlmap_shim.py",
+            "arjun": "arjun_shim.py",
+            "whatweb": "whatweb_shim.py",
+            "sn1per": "sn1per_shim.py",
+        }
+        for name, script in expected.items():
+            definition = self._definition(name)
+            assert definition["command"] == "python3", name
+            assert definition["args"] == [f"argus-workers/tools/scripts/{script}"], name
+            params = {p["name"]: p for p in definition["parameters"]}
+            assert params["target"]["flag"] == "--target", name
+            assert definition["capabilities"], name
+            assert definition.get("enabled") is True, name
+            shim = Path(__file__).resolve().parent.parent / "tools" / "scripts" / script
+            assert shim.is_file(), f"{name} definition points at missing {shim}"
 
     def test_nikto_target_keeps_its_port(self, mocker):
         import sys

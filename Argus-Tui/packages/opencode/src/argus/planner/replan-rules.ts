@@ -64,6 +64,11 @@ const INFORMATIONAL_SUBTYPES = new Set([
   "technology",
   "raw_output",
   "web_vulnerability",
+  // Clean negatives from the discovery shims: the check executed and found
+  // nothing, so there is no new capability to add.
+  "parameter_discovery_negative",
+  "sql_injection_not_found",
+  "vulnerability_scan_negative",
   "info",
   "informational",
   "observation",

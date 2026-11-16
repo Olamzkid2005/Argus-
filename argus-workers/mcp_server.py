@@ -773,6 +773,18 @@ class MCPServer:
             os.path.normpath(
                 os.path.join(project_dir, "argus-workers", "tools", "jwt_scan.py")
             ),
+            os.path.normpath(
+                os.path.join(project_dir, "argus-workers", "tools", "scripts", "whatweb_shim.py")
+            ),
+            os.path.normpath(
+                os.path.join(project_dir, "argus-workers", "tools", "scripts", "sqlmap_shim.py")
+            ),
+            os.path.normpath(
+                os.path.join(project_dir, "argus-workers", "tools", "scripts", "arjun_shim.py")
+            ),
+            os.path.normpath(
+                os.path.join(project_dir, "argus-workers", "tools", "scripts", "sn1per_shim.py")
+            ),
         }
 
         try:

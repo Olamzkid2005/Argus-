@@ -12,7 +12,16 @@ class ArjunParser(BaseParser):
         except json.JSONDecodeError:
             return findings
 
-        if isinstance(data, dict):
+        # Our parameter-discovery shim reports already-structured findings
+        # (so a clean negative can say so explicitly, with attribution); arjun's
+        # own -oJ output is the {endpoint: [params]} mapping handled below.
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict) and (item.get("title") or item.get("description")):
+                    findings.append(item)
+            return findings
+
+        if isinstance(data, dict) and not data.get("findings"):
             for endpoint, params in data.items():
                 if isinstance(params, list):
                     finding = {

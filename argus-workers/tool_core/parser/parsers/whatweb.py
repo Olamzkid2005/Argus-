@@ -38,6 +38,20 @@ def _parse_text_lines(output: str) -> list[NormalizedFinding]:
             plugin.group("name"): plugin.group("value")
             for plugin in _TEXT_PLUGIN_RE.finditer(match.group("plugins"))
         }
+        negative = plugins.pop("ArgusNegative", None)
+        if negative is not None and not plugins:
+            findings.append(
+                NormalizedFinding(
+                    title="Technology fingerprint: no identifiers found",
+                    severity=SEVERITY_MAP.get("info", 0),
+                    confidence=2,
+                    description=f"No version-revealing technology identifiers on {match.group('url')}: {negative}",
+                    tool="whatweb",
+                    evidence=[{"type": "technology", "url": match.group("url"), "plugins": {}}],
+                    subtype="technology_detection",
+                )
+            )
+            continue
         if not plugins:
             continue
         url = match.group("url")
@@ -97,6 +111,23 @@ def parse(output: str) -> list[NormalizedFinding]:
         plugins = {k: v for k, v in entry.items() if k not in ("url", "target")}
 
         if not plugins:
+            continue
+
+        # The fingerprint shim reports "nothing identified" with this plugin so
+        # the check is visibly executed rather than silently empty.
+        negative = plugins.pop("ArgusNegative", None)
+        if negative is not None and not plugins:
+            findings.append(
+                NormalizedFinding(
+                    title="Technology fingerprint: no identifiers found",
+                    severity=SEVERITY_MAP.get("info", 0),
+                    confidence=2,
+                    description=f"No version-revealing technology identifiers on {url}: {negative}",
+                    tool="whatweb",
+                    evidence=[{"type": "technology", "url": url, "plugins": {}}],
+                    subtype="technology_detection",
+                )
+            )
             continue
 
         plugin_names = ", ".join(sorted(plugins.keys()))

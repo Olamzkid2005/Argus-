@@ -1,16 +1,24 @@
 name: sn1per
-command: sn1per
-description: "Automated penetration testing framework"
+command: python3
+description: "sn1per-equivalent aggregation delegating to nuclei/nikto/httpx"
+# Provisioned as a Python shim: the upstream binary is not installable in this
+# environment (Ruby WhatWeb, the sn1per Bash framework), or needs a
+# parameterised URL the engagement never supplies (sqlmap). Each shim runs the
+# real tool when it exists and a native equivalent when it does not, and always
+# reports either a finding or an explicit clean negative attributed to sn1per.
+args:
+  - argus-workers/tools/scripts/sn1per_shim.py
 parameters:
   - name: target
     type: string
-    description: "Target domain or IP"
+    description: "Target URL"
     required: true
+    flag: "--target"
 capabilities:
   - vulnerability_scanning
 signal_quality: CANDIDATE
-priority: 40
-cost: high
-risk_level: high
+risk_level: medium
+priority: 70
+cost: medium
 enabled: true
-timeout: 600
+timeout: 300

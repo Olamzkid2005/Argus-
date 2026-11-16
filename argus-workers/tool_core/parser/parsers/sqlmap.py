@@ -71,8 +71,35 @@ def _parse_json(output: str) -> list[NormalizedFinding]:
     return findings
 
 
+#: Our shim says this when the parameters it tested were not injectable. That
+#: is an executed check with a clean result, not silence: the phase has to show
+#: the SQL-injection capability actually ran.
+_SQLMAP_NEGATIVE_RE = re.compile(
+    r"does not seem to be injectable|no parameter or form field found",
+    re.I,
+)
+
+
 def _parse_text(output: str) -> list[NormalizedFinding]:
     findings: list[NormalizedFinding] = []
+    negative = _SQLMAP_NEGATIVE_RE.search(output)
+    if negative and "identified the following injection point" not in output.lower():
+        tested = re.search(r"(\d+)\s+parameterised URL", output)
+        findings.append(
+            NormalizedFinding(
+                title="SQL injection: no injectable parameter found",
+                severity=0,
+                confidence=3,
+                description=(
+                    "sqlmap tested "
+                    + (f"{tested.group(1)} parameterised URL(s)" if tested else "the target's parameters")
+                    + " and found no injectable input. Clean negative."
+                ),
+                tool="sqlmap",
+                evidence=[{"type": "text", "content": output[:500]}],
+                subtype="SQL_INJECTION_NOT_FOUND",
+            )
+        )
     if "sqlmap identified the following injection point" in output.lower():
         url_match = re.search(r"(https?://(?:www\.)?(?!sqlmap\.org)[^\s]+)", output)
         endpoint = url_match.group(1) if url_match else "unknown_target"
