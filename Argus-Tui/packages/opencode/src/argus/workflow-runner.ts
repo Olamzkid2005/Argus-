@@ -1494,7 +1494,6 @@ export class WorkflowRunner {
           // finding arrives once per phase with its own id and the report (and
           // the total) counted it twice. Identity is what was found, where, by
           // which tool — the id says nothing.
-          if (!mergeFinding(allFindings, finding)) continue
           emit({ type: "finding", phaseId: phase.phaseId, severity: String(finding.severity), title: finding.title })
           // Promote confidence iteratively until no more promotions apply.
           // This cascades: MEDIUM→HIGH→VERIFIED→CONFIRMED in a single pass
@@ -1506,7 +1505,10 @@ export class WorkflowRunner {
             finding.confidence = promoted
             promoted = confidenceEngine.promote(finding)
           }
-          allFindings.push({ ...finding, confidence: promoted })
+          // One entry per distinct finding, with the promoted confidence — the
+          // same identity the resume path uses, so a resumed phase cannot report
+          // what was already collected a second time.
+          mergeFinding(allFindings, { ...finding, confidence: promoted })
         }
 
         const phaseStatus = result.status === "failed" ? "FAILED" : result.status === "partial" ? "PARTIAL" : result.status === "skipped" ? "SKIPPED" : "COMPLETED"
