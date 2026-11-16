@@ -138,18 +138,11 @@ def _regex_extract(output: str) -> list[NormalizedFinding]:
                 )
             )
 
-    if not findings and output.strip():
-        findings.append(
-            NormalizedFinding(
-                title="Raw output captured",
-                severity=0,
-                confidence=1,
-                description="No structured parsing available; raw output stored as evidence",
-                tool="unknown",
-                evidence=[{"type": "raw", "content": output[:2000]}],
-                subtype="raw_output",
-            )
-        )
+    # No last-resort "Raw output captured" finding. It was an INFO entry whose
+    # description said the output was stored as evidence, but nothing stored it,
+    # so every unparsed tool produced a finding that pointed at nothing — one
+    # appeared in the testasp.vulnweb.com report from the cloud phase. Output no
+    # parser can read is a coverage gap, reported by the phase, not a finding.
 
     return findings
 

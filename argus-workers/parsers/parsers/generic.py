@@ -222,18 +222,7 @@ def _regex_extract(output: str) -> list[dict]:
                 }
             )
 
-    # Last resort: capture raw output as a single finding
-    if not findings and output.strip():
-        findings.append(
-            {
-                "type": "RAW_OUTPUT",
-                "severity": "INFO",
-                "endpoint": "",
-                "evidence": {"type": "raw", "content": output[:2000]},
-                "confidence": 0.10,
-                "tool": "unknown",
-                "title": "Raw output captured",
-            }
-        )
+    # See the note in tool_core/parser/parsers/generic.py: unparseable output is
+    # a coverage gap, not a finding.
 
     return findings

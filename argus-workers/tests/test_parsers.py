@@ -378,9 +378,17 @@ class TestGenericParser:
         assert len(findings) == 1
         assert findings[0].title == "custom finding"
 
-    def test_parse_raw_text(self):
-        findings = generic.parse("some random output\nwith URLs https://example.com")
-        assert len(findings) >= 1
+    def test_plain_text_without_a_signal_is_not_a_finding(self):
+        """A URL alone is context, not a finding.
+
+        The parser used to mint an INFO "Raw output captured" entry for any
+        text it could not read; that entry claimed evidence nothing stored.
+        """
+        assert generic.parse("some random output\nwith URLs https://example.com") == []
+
+    def test_a_cve_reference_is_still_a_finding(self):
+        findings = generic.parse("banner mentions CVE-2021-41773 in the response")
+        assert findings and findings[0].cve == "CVE-2021-41773"
 
     def test_empty_output(self):
         assert generic.parse("") == []
@@ -499,8 +507,11 @@ class TestDispatch:
         assert findings[0].tool == "nuclei"
 
     def test_falls_back_to_generic(self):
-        findings = dispatch("unknown_tool", "some random text")
-        assert len(findings) >= 1
+        # The fallback still runs: a CVE reference in unknown tool output is
+        # reported. Plain prose with no signal is not turned into a finding.
+        findings = dispatch("unknown_tool", "server banner references CVE-2021-41773")
+        assert findings and findings[0].cve == "CVE-2021-41773"
+        assert dispatch("unknown_tool", "some random text") == []
 
     def test_handles_malformed_input(self):
         findings = dispatch("nuclei", "")
@@ -614,3 +625,26 @@ class TestGenericHeadlines:
         title = generic.parse(output)[0].title
         assert title.startswith("playwright-xss:"), title
         assert title != "Generic finding"
+
+
+class TestUnparseableOutputIsNotAFinding:
+    """Output no parser can read is a coverage gap, not a finding.
+
+    Regression: the generic parser's last resort minted an INFO finding titled
+    "Raw output captured" whose description claimed the output was stored as
+    evidence, while nothing stored it. One appeared in the testasp.vulnweb.com
+    report from the cloud phase.
+    """
+
+    UNREADABLE = "\x00\x01 cloud sweep finished with no reportable rows \x02\x03"
+
+    def test_system_a_generic_returns_nothing(self):
+        assert generic.parse(self.UNREADABLE) == []
+
+    def test_system_b_generic_returns_nothing(self):
+        from parsers.parsers.generic import GenericParser
+
+        assert GenericParser().parse(self.UNREADABLE) == []
+
+    def test_dispatch_does_not_invent_a_finding(self):
+        assert dispatch("cloud_enum", self.UNREADABLE) == []

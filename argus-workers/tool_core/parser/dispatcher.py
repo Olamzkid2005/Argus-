@@ -187,8 +187,8 @@ def dispatch(
         output: Raw stdout (or stderr) to parse.
         allow_generic: When False, skip the generic heuristic parser. Callers
             use this to ask "did this tool's *own* parser produce anything?"
-            — the generic parser manufactures a RAW_OUTPUT finding for almost
-            any text, so it cannot answer that question.
+            — the generic heuristics turn almost any text into findings, so
+            it cannot answer that question.
     """
     # 1. Try System A (native module-level parsers)
     parser = _PARSERS.get(tool_name)
