@@ -388,3 +388,117 @@ def test_ai_surface_is_plannable_for_a_url_target():
 
     spec = yaml.safe_load(open(os.path.join(DEFINITIONS, "ai-surface.yaml")))
     assert "web_recon" in spec["capabilities"], spec["capabilities"]
+
+
+RAILS_CONTROLLER = """class UsersController < ApplicationController
+  def search
+    @users = User.where("name = '#{params[:name]}'")
+  end
+
+  def run_report
+    cmd = params[:cmd]
+    output = `#{cmd}`
+    system(cmd)
+    render plain: output
+  end
+
+  def convert
+    eval(params[:code])
+  end
+
+  def create
+    User.create(params[:user])
+    redirect_to params[:next]
+  end
+end
+"""
+
+JAVA_SERVLET = """import java.io.File;
+import java.security.MessageDigest;
+import java.sql.Statement;
+import javax.servlet.http.HttpServletRequest;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+public class ReportServlet {
+  void doGet(HttpServletRequest req, Statement st) throws Exception {
+    String name = req.getParameter("name");
+    st.executeQuery("SELECT * FROM users WHERE name = '" + name + "'");
+    Runtime.getRuntime().exec(req.getParameter("cmd"));
+    MessageDigest.getInstance("MD5");
+    DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(new File(name));
+  }
+}
+"""
+
+
+@pytest.mark.skipif(SEMGREP is None, reason="semgrep is not installed on this worker")
+def test_brakeman_detects_a_real_rails_controller(tmp_path):
+    target = tmp_path / "app" / "controllers"
+    target.mkdir(parents=True)
+    (target / "users_controller.rb").write_text(RAILS_CONTROLLER, encoding="utf-8")
+    findings = ds.run_sast("brakeman", str(tmp_path))
+    kinds = {f["type"] for f in findings}
+    if "SAST_COVERAGE_GAP" in kinds:
+        pytest.skip("semgrep packs unavailable offline")
+    rules = {f["evidence"]["rule"].split(".")[-1] for f in findings}
+    assert {"tainted-sql-string", "dangerous-exec", "dangerous-subshell",
+            "ruby-eval", "avoid-redirect"} <= rules, rules
+    assert not any(kind.endswith("_NEGATIVE") for kind in kinds)
+
+
+@pytest.mark.skipif(SEMGREP is None, reason="semgrep is not installed on this worker")
+def test_spotbugs_detects_a_real_java_servlet(tmp_path):
+    target = tmp_path / "src"
+    target.mkdir()
+    (target / "ReportServlet.java").write_text(JAVA_SERVLET, encoding="utf-8")
+    findings = ds.run_sast("spotbugs", str(target))
+    kinds = {f["type"] for f in findings}
+    if "SAST_COVERAGE_GAP" in kinds:
+        pytest.skip("semgrep packs unavailable offline")
+    rules = {f["evidence"]["rule"].split(".")[-1] for f in findings}
+    assert {"formatted-sql-string", "use-of-md5"} <= rules, rules
+    assert not any(kind.endswith("_NEGATIVE") for kind in kinds)
+
+
+@pytest.mark.skipif(SEMGREP is None, reason="semgrep is not installed on this worker")
+def test_java_command_injection_alone_is_a_coverage_gap_not_a_clean_negative(tmp_path):
+    """No semgrep Java pack flags Runtime.exec, so a class whose only flaw is command
+    injection must be reported as unverified instead of clean."""
+    target = tmp_path / "src"
+    target.mkdir()
+    (target / "OnlyExec.java").write_text(
+        "class OnlyExec {\n  void f(String cmd) throws Exception {\n    Runtime.getRuntime().exec(cmd);\n  }\n}\n",
+        encoding="utf-8",
+    )
+    findings = ds.run_sast("spotbugs", str(target))
+    kinds = {f["type"] for f in findings}
+    assert "SAST_COVERAGE_GAP" in kinds, kinds
+    assert not any(kind.endswith("_NEGATIVE") for kind in kinds)
+    assert "CanaryExec.java" in findings[0]["description"]
+
+
+def test_brakeman_requires_subshell_coverage(monkeypatch, tmp_path):
+    """p/ruby alone misses backtick subshells, so a partial canary set must block the
+    clean negative and name the missing class."""
+    empty = {"results": [], "errors": [], "paths": {"scanned": [str(tmp_path / "app.rb")]}}
+    names = [name for name, _ in ds.SAST_CANARIES["brakeman"]]
+    partial = {
+        "results": [
+            {"check_id": "canary", "path": name, "start": {"line": 1},
+             "extra": {"message": "canary", "severity": "ERROR"}}
+            for name in names if name != "canary_shell.rb"
+        ],
+        "errors": [],
+        "paths": {"scanned": names},
+    }
+    calls = []
+
+    def fake(packs, path):
+        calls.append(path)
+        return (empty, "") if len(calls) == 1 else (partial, "")
+
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/semgrep")
+    monkeypatch.setattr(ds, "_semgrep_json", fake)
+    findings = ds.run_sast("brakeman", str(tmp_path))
+    assert findings[0]["type"] == "SAST_COVERAGE_GAP"
+    assert "canary_shell.rb" in findings[0]["description"]

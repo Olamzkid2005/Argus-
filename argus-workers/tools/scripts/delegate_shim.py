@@ -48,7 +48,7 @@ SAST_PACKS = {
     "gosec": ("p/golang", "p/default"),
     "eslint": ("p/default", "p/nodejsscan"),
     "phpcs": ("p/php",),
-    "brakeman": ("p/ruby",),
+    "brakeman": ("p/ruby", "p/default"),
     "spotbugs": ("p/java",),
     "govulncheck": ("p/golang", "p/default"),
 }
@@ -81,8 +81,15 @@ SAST_CANARIES = {
     "brakeman": (
         ("canary_eval.rb", 'class UsersController\n  def render_it\n    eval(params[:code])\n  end\nend\n'),
         ("canary_exec.rb", 'class UsersController\n  def run_it\n    system(params[:cmd])\n  end\nend\n'),
+        # p/ruby alone misses backtick subshells; p/default is what covers them.
+        ("canary_shell.rb", 'class UsersController\n  def run_it\n    output = `#{params[:cmd]}`\n    output\n  end\nend\n'),
     ),
     "spotbugs": (
+        # No semgrep pack detects Java command injection (verified against p/java,
+        # p/default, p/security-audit, p/owasp-top-ten and the registry rule ids),
+        # so this canary can never fire: a Java scan that finds nothing is reported
+        # as a coverage gap rather than a clean negative.
+        ("CanaryExec.java", 'import java.io.IOException;\n\nclass CanaryExec {\n  void f(String cmd) throws IOException {\n    Runtime.getRuntime().exec(cmd);\n  }\n}\n'),
         ("CanaryHash.java", 'import java.security.MessageDigest;\n\nclass CanaryHash { void f() throws Exception { MessageDigest.getInstance("MD5"); } }\n'),
         ("CanarySql.java", 'import java.sql.Statement;\n\nclass CanarySql {\n  void f(Statement st, String user) throws Exception {\n    String q = "SELECT * FROM users WHERE name = \'" + user + "\'";\n    st.executeQuery(q);\n  }\n}\n'),
     ),
