@@ -466,12 +466,16 @@ export class WorkersBridge {
   }
 
   private async waitForReady(timeoutMs?: number): Promise<void> {
-    // Read from env var with fallback to default 10s, then parameter
+    // The worker imports the whole tool stack and probes every tool's version
+    // before it answers, which takes tens of seconds on a loaded machine — 10s
+    // was tight enough that engagements failed with "worker failed to become
+    // ready" while the worker was still starting up perfectly well.
+    const defaultTimeout = 45000
     const effectiveTimeout = timeoutMs ?? (() => {
       const raw = process.env.ARGUS_MCP_READY_TIMEOUT_MS
-      if (raw === undefined || raw === "") return 10000
+      if (raw === undefined || raw === "") return defaultTimeout
       const n = Number(raw)
-      return Number.isFinite(n) && n > 0 ? n : 10000
+      return Number.isFinite(n) && n > 0 ? n : defaultTimeout
     })()
     const start = Date.now()
     let delay = 200
