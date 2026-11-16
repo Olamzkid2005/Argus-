@@ -4,5 +4,8 @@
 #
 # whatweb (Ruby) and sn1per (Bash framework) are not installable here; their
 # definitions point at the Python shims in tools/scripts/ instead.
+# semgrep is a core tool in `argus doctor`'s toolchain check; install it
+# here so a fresh worker passes without a separate step.
+semgrep
 sqlmap==1.10.11
 arjun==2.2.7

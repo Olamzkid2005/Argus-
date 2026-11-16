@@ -21,7 +21,7 @@ fi
 
 uv pip install --python "$VENV/bin/python" -r "$REPO/argus-workers/requirements-tools.txt"
 
-for tool in sqlmap arjun; do
+for tool in sqlmap arjun semgrep; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "error: $tool still not on PATH after install" >&2
     exit 1
