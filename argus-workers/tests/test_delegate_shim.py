@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 
 import pytest
@@ -44,7 +45,15 @@ def test_definition_runs_the_shim(tool):
 def test_every_delegated_tool_has_a_delegate(tool, delegate):
     assert delegate
     if tool in ds.SAST_PACKS:
-        assert ds.SAST_PACKS[tool].startswith("p/")
+        packs = ds.SAST_PACKS[tool]
+        assert packs and all(pack.startswith("p/") for pack in packs)
+
+
+def test_javascript_pack_set_covers_eval_and_exec_sinks():
+    """The reported regression: p/javascript alone flagged neither eval() nor
+    child_process sinks, so a vulnerable Node file produced a clean negative."""
+    assert "p/javascript" not in ds.SAST_PACKS["eslint"]
+    assert "p/default" in ds.SAST_PACKS["eslint"]
 
 
 def test_sast_findings_come_from_semgrep_but_are_attributed_to_the_tool(monkeypatch, tmp_path):
@@ -56,7 +65,9 @@ def test_sast_findings_come_from_semgrep_but_are_attributed_to_the_tool(monkeypa
                 "start": {"line": 7},
                 "extra": {"message": "Found subprocess with shell=True", "severity": "ERROR"},
             }
-        ]
+        ],
+        "errors": [],
+        "paths": {"scanned": [str(tmp_path / "app.py")]},
     }
     monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/semgrep")
     monkeypatch.setattr(ds, "_run", lambda cmd, timeout=ds.TIMEOUT: (0, json.dumps(payload), ""))
@@ -67,12 +78,109 @@ def test_sast_findings_come_from_semgrep_but_are_attributed_to_the_tool(monkeypa
     assert findings[0]["severity"] == "high"
 
 
-def test_sast_missing_semgrep_is_an_explicit_negative(monkeypatch, tmp_path):
+def test_sast_missing_semgrep_is_a_coverage_gap_not_a_clean_negative(monkeypatch, tmp_path):
     monkeypatch.setattr(ds.shutil, "which", lambda name: None)
     findings = ds.run_sast("gosec", str(tmp_path))
     assert len(findings) == 1
     assert findings[0]["tool"] == "gosec"
+    assert findings[0]["type"] == "SAST_COVERAGE_GAP"
     assert "not installed" in findings[0]["description"]
+
+
+def test_empty_scan_only_counts_as_clean_when_the_canary_is_detected(monkeypatch, tmp_path):
+    empty = {"results": [], "errors": [], "paths": {"scanned": [str(tmp_path / "app.py")]}}
+    detected = {
+        "results": [
+            {"check_id": f"canary.{name}", "path": name, "start": {"line": 1},
+             "extra": {"message": "canary", "severity": "ERROR"}}
+            for name, _ in ds.SAST_CANARIES["bandit"]
+        ],
+        "errors": [],
+        "paths": {"scanned": [name for name, _ in ds.SAST_CANARIES["bandit"]]},
+    }
+    calls = []
+
+    def fake(packs, path):
+        calls.append(path)
+        return (empty, "") if len(calls) == 1 else (detected, "")
+
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/semgrep")
+    monkeypatch.setattr(ds, "_semgrep_json", fake)
+    findings = ds.run_sast("bandit", str(tmp_path))
+    assert findings[0]["type"] == "BANDIT_NEGATIVE"
+    assert len(calls) == 2, "a clean result must be backed by a canary scan"
+
+
+def test_undetected_canary_blocks_the_clean_negative(monkeypatch, tmp_path):
+    empty = {"results": [], "errors": [], "paths": {"scanned": [str(tmp_path / "app.py")]}}
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/semgrep")
+    monkeypatch.setattr(ds, "_semgrep_json", lambda packs, path: (empty, ""))
+    findings = ds.run_sast("bandit", str(tmp_path))
+    assert findings[0]["type"] == "SAST_COVERAGE_GAP"
+    assert "baseline insecure sample" in findings[0]["description"]
+
+
+def test_a_broken_pack_is_loud_instead_of_clean(monkeypatch, tmp_path):
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/semgrep")
+    monkeypatch.setattr(
+        ds, "_semgrep_json",
+        lambda packs, path: (None, "Failed to download configuration HTTP 404"),
+    )
+    findings = ds.run_sast("eslint", str(tmp_path))
+    assert findings[0]["type"] == "SAST_COVERAGE_GAP"
+    assert "HTTP 404" in findings[0]["description"]
+    assert findings[0]["severity"] == "medium"
+
+
+def test_no_files_for_the_language_is_a_skip_not_a_clean_scan(monkeypatch, tmp_path):
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/semgrep")
+    monkeypatch.setattr(ds, "_semgrep_json", lambda packs, path: (None, ds.NO_SOURCE))
+    findings = ds.run_sast("gosec", str(tmp_path))
+    assert findings[0]["type"] == "SAST_NOT_APPLICABLE"
+    assert "not a clean scan" in findings[0]["description"]
+
+
+SEMGREP = shutil.which("semgrep")
+
+LANGUAGE_FIXTURES = {
+    "eslint": (
+        "index.js",
+        """const cp = require("child_process");
+
+eval(cp.execSync("id").toString());
+""",
+    ),
+    "bandit": (
+        "app.py",
+        'import subprocess\n\ndef run(cmd):\n    return subprocess.call(cmd, shell=True)\n',
+    ),
+    "gosec": ("main.go", 'package main\n\nimport "crypto/md5"\n\nfunc main() { _ = md5.New() }\n'),
+    "phpcs": ("app.php", '<?php\n\necho $_GET["name"];\n'),
+    "brakeman": ("app.rb", 'class C\n  def run\n    system(params[:cmd])\n  end\nend\n'),
+    "spotbugs": (
+        "App.java",
+        'import java.security.MessageDigest;\n\n'
+        'class App { void f() throws Exception { MessageDigest.getInstance("MD5"); } }\n',
+    ),
+}
+
+
+@pytest.mark.skipif(SEMGREP is None, reason="semgrep is not installed on this worker")
+@pytest.mark.parametrize("case", sorted(LANGUAGE_FIXTURES))
+def test_vulnerable_source_is_never_reported_clean_against_the_real_scanner(tmp_path, case):
+    """Pins the real semgrep behaviour per language: a file with a textbook sink must
+    produce a finding, and must never produce a *_NEGATIVE or a clean-looking result."""
+    filename, sample = LANGUAGE_FIXTURES[case]
+    target = tmp_path / "src"
+    target.mkdir()
+    (target / filename).write_text(sample, encoding="utf-8")
+    findings = ds.run_sast(case, str(target))
+    kinds = {f["type"] for f in findings}
+    if "SAST_COVERAGE_GAP" in kinds:
+        pytest.skip(f"semgrep pack unavailable offline: {findings[0]['description'][:120]}")
+    assert "SAST_FINDING" in kinds, f"{case} reported no finding for a vulnerable {filename}: {kinds}"
+    assert not any(kind.endswith("_NEGATIVE") for kind in kinds), f"{case} claimed clean: {kinds}"
+    assert all(f["tool"] == case for f in findings)
 
 
 def test_dependency_audit_parses_trivy_vulnerabilities(monkeypatch, tmp_path):
@@ -221,3 +329,44 @@ def urllib_path(url):
     from urllib.parse import urlsplit
 
     return urlsplit(url).path
+
+
+@pytest.mark.skipif(SEMGREP is None, reason="semgrep is not installed on this worker")
+def test_the_old_javascript_pack_can_never_report_clean(tmp_path, monkeypatch):
+    """Regression pin: with the previous p/javascript mapping, a file containing
+    eval()/execSync scanned clean. Whatever pack is configured, a scan that cannot
+    flag its own canary must surface a coverage gap instead of a clean negative."""
+    target = tmp_path / "src"
+    target.mkdir()
+    (target / "index.js").write_text(
+        'const cp = require("child_process");\n\neval(cp.execSync("id").toString());\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(ds.SAST_PACKS, "eslint", ("p/javascript",))
+    findings = ds.run_sast("eslint", str(target))
+    kinds = {f["type"] for f in findings}
+    assert not any(kind.endswith("_NEGATIVE") for kind in kinds), kinds
+    assert "SAST_COVERAGE_GAP" in kinds, kinds
+
+
+def test_every_canary_class_must_be_detected(monkeypatch, tmp_path):
+    """A pack that covers one sink class but not another cannot license a clean scan."""
+    empty = {"results": [], "errors": [], "paths": {"scanned": [str(tmp_path / "app.py")]}}
+    names = [name for name, _ in ds.SAST_CANARIES["bandit"]]
+    partial = {
+        "results": [{"check_id": "canary.rule", "path": names[0], "start": {"line": 1},
+                     "extra": {"message": "canary", "severity": "ERROR"}}],
+        "errors": [],
+        "paths": {"scanned": names},
+    }
+    calls = []
+
+    def fake(packs, path):
+        calls.append(path)
+        return (empty, "") if len(calls) == 1 else (partial, "")
+
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/semgrep")
+    monkeypatch.setattr(ds, "_semgrep_json", fake)
+    findings = ds.run_sast("bandit", str(tmp_path))
+    assert findings[0]["type"] == "SAST_COVERAGE_GAP"
+    assert names[1] in findings[0]["description"]

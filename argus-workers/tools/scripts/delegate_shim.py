@@ -40,16 +40,52 @@ import urllib.request
 
 TIMEOUT = 30
 
-#: Original tool -> semgrep registry pack for its language.
+#: Original tool -> the semgrep packs that cover its language. Some languages need
+#: more than one pack: p/javascript alone flags neither eval() nor innerHTML sinks
+#: in a plain Node file, so eslint also runs the default and Node packs.
 SAST_PACKS = {
-    "bandit": "p/python",
-    "gosec": "p/golang",
-    "eslint": "p/javascript",
-    "phpcs": "p/php",
-    "brakem": "p/ruby",
-    "brakeman": "p/ruby",
-    "spotbugs": "p/java",
-    "govulncheck": "p/golang",
+    "bandit": ("p/python",),
+    "gosec": ("p/golang", "p/default"),
+    "eslint": ("p/default", "p/nodejsscan"),
+    "phpcs": ("p/php",),
+    "brakeman": ("p/ruby",),
+    "spotbugs": ("p/java",),
+    "govulncheck": ("p/golang", "p/default"),
+}
+
+#: Baseline insecure snippet per tool. Before reporting a clean scan, the shim
+#: rescans a canary for the same language: a pack that cannot flag its own canary
+#: has no usable coverage, so an empty result from it means "unknown", not "clean".
+#: (lang name, samples) where each sample must produce at least one finding.
+SAST_CANARIES = {
+    "bandit": (
+        ("canary_shell.py", 'import subprocess\n\ndef run(cmd):\n    return subprocess.call(cmd, shell=True)\n'),
+        ("canary_hash.py", 'import hashlib\n\ndef digest(v):\n    return hashlib.md5(v.encode()).hexdigest()\n'),
+    ),
+    "gosec": (
+        ("canary_hash.go", 'package main\n\nimport (\n\t"crypto/md5"\n\t"fmt"\n)\n\nfunc main() { fmt.Println(md5.Sum([]byte("x"))) }\n'),
+        ("canary_exec.go", 'package main\n\nimport (\n\t"fmt"\n\t"os"\n\t"os/exec"\n)\n\nfunc main() {\n\tout, _ := exec.Command("sh", "-c", os.Args[1]).Output()\n\tfmt.Println(string(out))\n}\n'),
+    ),
+    "govulncheck": (
+        ("canary_hash.go", 'package main\n\nimport (\n\t"crypto/md5"\n\t"fmt"\n)\n\nfunc main() { fmt.Println(md5.Sum([]byte("x"))) }\n'),
+        ("canary_exec.go", 'package main\n\nimport (\n\t"fmt"\n\t"os"\n\t"os/exec"\n)\n\nfunc main() {\n\tout, _ := exec.Command("sh", "-c", os.Args[1]).Output()\n\tfmt.Println(string(out))\n}\n'),
+    ),
+    "eslint": (
+        ("canary_eval.js", 'const cp = require("child_process");\n\neval(cp.execSync("id").toString());\n'),
+        ("canary_hash.js", 'const crypto = require("crypto");\n\nconst digest = crypto.createHash("md5").update("x").digest("hex");\n'),
+    ),
+    "phpcs": (
+        ("canary_echo.php", '<?php\n\necho $_GET["name"];\n'),
+        ("canary_exec.php", '<?php\n\nsystem($_GET["cmd"]);\n'),
+    ),
+    "brakeman": (
+        ("canary_eval.rb", 'class UsersController\n  def render_it\n    eval(params[:code])\n  end\nend\n'),
+        ("canary_exec.rb", 'class UsersController\n  def run_it\n    system(params[:cmd])\n  end\nend\n'),
+    ),
+    "spotbugs": (
+        ("CanaryHash.java", 'import java.security.MessageDigest;\n\nclass CanaryHash { void f() throws Exception { MessageDigest.getInstance("MD5"); } }\n'),
+        ("CanarySql.java", 'import java.sql.Statement;\n\nclass CanarySql {\n  void f(Statement st, String user) throws Exception {\n    String q = "SELECT * FROM users WHERE name = \'" + user + "\'";\n    st.executeQuery(q);\n  }\n}\n'),
+    ),
 }
 
 #: Original tool -> the installed delegate that performs the same check.
@@ -169,23 +205,74 @@ def _semgrep_severity(level: str) -> str:
     return {"ERROR": "high", "WARNING": "medium", "INFO": "low"}.get(str(level).upper(), "medium")
 
 
-def run_sast(tool: str, path: str) -> list[dict]:
+#: Returned when the target holds no files of the pack's language: nothing to
+#: analyse is a skip, not a clean scan and not a failed scan.
+NO_SOURCE = "no source files for this language"
+
+
+def _semgrep_json(packs: tuple[str, ...], path: str) -> tuple[dict | None, str]:
+    """Run semgrep and return (report, problem). ``problem`` is set when the scan
+    itself was unusable — a missing pack, a download failure, a scan error — which
+    must never be reported as a clean result."""
     binary = shutil.which("semgrep")
-    endpoint = os.path.abspath(path)
-    pack = SAST_PACKS.get(tool, "p/ci")
     if not binary:
-        return [negative(tool, "semgrep", endpoint, "Static analysis", "semgrep is not installed")]
-    code, out, err = _run(
-        [binary, "scan", "--config", pack, "--json", "--quiet", "--disable-version-check", path],
-        240,
-    )
+        return None, "semgrep is not installed"
+    cmd = [binary, "scan"]
+    for pack in packs:
+        cmd += ["--config", pack]
+    cmd += ["--json", "--quiet", "--disable-version-check", path]
+    _code, out, err = _run(cmd, 240)
     if not out.strip().startswith("{"):
         note = (err or out).strip().splitlines()[-1][:160] if (err or out).strip() else "no JSON output"
-        return [negative(tool, "semgrep", endpoint, "Static analysis", note)]
+        return None, note
     try:
         data = json.loads(out)
     except json.JSONDecodeError:
-        return [negative(tool, "semgrep", endpoint, "Static analysis", "unreadable semgrep report")]
+        return None, "unreadable semgrep report"
+    errors = data.get("errors") or []
+    # Findings already prove the scan worked; only an empty scan with errors is
+    # unusable (a failed pack download, an unparsable target).
+    if errors and not data.get("results"):
+        first = errors[0] if isinstance(errors[0], dict) else {"message": str(errors[0])}
+        return None, str(first.get("message", "semgrep reported errors"))[:160]
+    if not (data.get("paths") or {}).get("scanned"):
+        return None, NO_SOURCE
+    return data, ""
+
+
+def _coverage_gap(tool: str, endpoint: str, packs: tuple[str, ...], detail: str) -> dict:
+    return finding(
+        tool,
+        f"Static analysis incomplete: {', '.join(packs)} could not be verified",
+        "SAST_COVERAGE_GAP",
+        "medium",
+        f"{tool} (via semgrep {', '.join(packs)}) produced no usable result for {endpoint}: {detail}. "
+        "This is not a clean scan — treat the code as unaudited until the pack can run.",
+        endpoint,
+    )
+
+
+def run_sast(tool: str, path: str) -> list[dict]:
+    binary = shutil.which("semgrep")
+    endpoint = os.path.abspath(path)
+    packs = SAST_PACKS.get(tool, ("p/ci",))
+    if not binary:
+        return [_coverage_gap(tool, endpoint, packs, "semgrep is not installed")]
+
+    data, problem = _semgrep_json(packs, path)
+    if problem == NO_SOURCE:
+        return [finding(
+            tool,
+            f"Static analysis skipped: no source files for {', '.join(packs)} under {endpoint}",
+            "SAST_NOT_APPLICABLE",
+            "info",
+            f"{tool} (via semgrep {', '.join(packs)}) found no files in this language under {endpoint}, "
+            "so nothing was analysed. This is not a clean scan of the codebase.",
+            endpoint,
+        )]
+    if problem:
+        return [_coverage_gap(tool, endpoint, packs, problem)]
+
     findings = []
     for result in data.get("results", []) or []:
         check = result.get("check_id") or "semgrep rule"
@@ -196,12 +283,36 @@ def run_sast(tool: str, path: str) -> list[dict]:
             f"{check.split('.')[-1]}: {str(extra.get('message', check)).splitlines()[0][:110]}",
             "SAST_FINDING",
             _semgrep_severity(str(extra.get("severity", "WARNING"))),
-            f"{tool} (via semgrep {pack}) reported {check} at "
+            f"{tool} (via semgrep {', '.join(packs)}) reported {check} at "
             f"{result.get('path')}:{start.get('line')}: {extra.get('message', '')}".strip(),
             endpoint,
             evidence={"rule": check, "path": result.get("path"), "line": start.get("line")},
         ))
-    return findings or [negative(tool, "semgrep", endpoint, f"Static analysis ({pack})")]
+    if findings:
+        return findings
+
+    # Nothing found. A clean negative now requires the packs to flag every canary
+    # sink class for that language: a miss means the pack has no rules for that
+    # class, so an empty result on real code proves nothing.
+    canaries = SAST_CANARIES.get(tool, ())
+    if not canaries:
+        return [_coverage_gap(tool, endpoint, packs, "no canary is defined for this language")]
+    with tempfile.TemporaryDirectory(prefix="argus-canary-") as tmp:
+        for name, snippet in canaries:
+            with open(os.path.join(tmp, name), "w", encoding="utf-8") as handle:
+                handle.write(snippet)
+        canary, canary_problem = _semgrep_json(packs, tmp)
+    if canary_problem:
+        return [_coverage_gap(tool, endpoint, packs, f"canary scan failed: {canary_problem}")]
+    detected = {str((result.get("path") or "")).rsplit("/", 1)[-1] for result in canary.get("results") or []}
+    missed = [name for name, _ in canaries if name not in detected]
+    if missed:
+        return [_coverage_gap(
+            tool, endpoint, packs,
+            "the pack did not flag its own baseline insecure sample(s) "
+            f"for {', '.join(missed)}, so missing findings are unverified",
+        )]
+    return [negative(tool, "semgrep", endpoint, f"Static analysis ({', '.join(packs)})")]
 
 
 # ── dependencies: pip-audit / dependency-check -> trivy ─────────────
