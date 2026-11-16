@@ -1428,19 +1428,18 @@ class MCPServer:
             # finding downstream.
             findings_exit = self.FINDINGS_EXIT_CODES.get(name, set())
             success = result.returncode == 0 or result.returncode in findings_exit
-            # Exit 124 is our own wall clock, not a scanner failure. When the
-            # bounded run still produced parseable findings the scan was
-            # productive — report those findings and say the run was cut short.
-            # 124 is our own wall clock (see WALL_LIMITED_TOOLS). The scanner
-            # ran and was stopped on purpose; whether it had printed findings
-            # yet is coverage, not failure. Treating an empty bounded run as a
-            # failure put "dalfox failed after 1 retry" in the phase and turned
-            # a coverage gap into an error.
+            # 124 is our own wall clock (see WALL_LIMITED_TOOLS), not a scanner
+            # failure: the tool ran and was stopped on purpose, so having no
+            # findings yet is coverage, not an error.
             wall_limited = result.returncode == 124
             if wall_limited:
                 success = True
+            # ... and it must stay success. The check below demotes any non-zero
+            # exit whose parser found nothing, which turned every bounded run
+            # into "dalfox failed after 1 retry" and made the phase look broken.
             if (
                 success
+                and not wall_limited
                 and result.returncode != 0
                 and has_parser(name)
                 and not dispatch(name, output_to_parse, allow_generic=False)

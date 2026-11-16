@@ -1350,7 +1350,8 @@ tools:
     description: Stored and DOM XSS detection via browser automation
     capabilities:
       - browser_verification
-    requires_auth: false
+    requires_auth: true
+    credential_roles: [attacker]
     destructive: false
     supports_api: true
     supports_web: true

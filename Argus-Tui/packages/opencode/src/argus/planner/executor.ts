@@ -1358,7 +1358,11 @@ export class InProcessExecutor implements PhaseExecutor {
         errors.push(`Coverage gap: required capabilities never successfully performed (${uncovered.join(", ")}); ` +
           `runnable: ${runnable.length > 0 ? runnable.join(", ") : "none"}; ` +
           `outcomes: ${actionRecords.map(r => `${r.tool}=${r.outcome}`).join(", ")}`)
-        hybridStatus = findings.length > 0 || runnable.length === 0 ? "partial" : "failed"
+        // A phase whose tools ran and found nothing is not a failed phase: the
+        // work happened, the result was empty. Only a phase where nothing could
+        // run at all is a failure.
+        const anyActionSucceeded = actionRecords.some(r => r.outcome.startsWith("succeeded"))
+        hybridStatus = findings.length > 0 || runnable.length === 0 || anyActionSucceeded ? "partial" : "failed"
       } else if (errors.length > 0) {
         hybridStatus = findings.length > 0 ? "partial" : "failed"
       }

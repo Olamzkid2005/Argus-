@@ -3,6 +3,9 @@ command: commix
 description: "Command injection detection tool"
 args:
   - "--batch"
+  # Without crawling commix reports "No parameter(s) found for testing" and
+  # exits 0, so the phase counted command_injection as never performed.
+  - "--crawl=2"
 parameters:
   - name: target
     type: string
