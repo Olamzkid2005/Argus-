@@ -1,19 +1,23 @@
 name: subfinder
-command: subfinder
-description: "Fast passive subdomain enumeration tool using multiple sources"
+command: python3
+description: "Passive subdomain enumeration from certificate transparency logs"
+# Runs the shared native recon shim: the upstream binary is not installable in
+# this image, and every check here is a thin client over a public data source
+# (Wayback CDX, crt.sh) or local logic. Each run reports a finding or an
+# explicit clean negative attributed to subfinder, so the capability executes
+# instead of being skipped for a missing binary.
 args:
-  - "-silent"
+  - argus-workers/tools/scripts/recon_shim.py
+  - "--mode"
+  - "subdomains"
+  - "--tool"
+  - "subfinder"
 parameters:
   - name: target
     type: string
-    description: "Target domain to enumerate subdomains for"
+    description: "Target URL or domain"
     required: true
-    flag: "-d"
-  - name: all
-    type: boolean
-    description: "Use all sources (including slower ones)"
-    required: false
-    flag: "-all"
+    flag: "--target"
 capabilities:
   - web_recon
 signal_quality: CANDIDATE
@@ -21,4 +25,4 @@ risk_level: low
 priority: 70
 cost: low
 enabled: true
-timeout: 300
+timeout: 120

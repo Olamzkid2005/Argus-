@@ -104,3 +104,6 @@ livefire-runs/
 
 # Local live-fire runtime state (Postgres data dir, harness PIDs and logs)
 .livefire/
+
+# Local SQLite left by ad-hoc runs (never committed)
+argus.db

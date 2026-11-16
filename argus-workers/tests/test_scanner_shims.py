@@ -215,3 +215,176 @@ class TestSn1perAggregation:
         findings = dispatch("sn1per", proc.stdout)
         assert len(findings) == 1
         assert findings[0].tool == "sn1per"
+
+
+class _PublicBucketHandler(http.server.BaseHTTPRequestHandler):
+    """An S3 endpoint that allows anonymous listing, reads and writes."""
+
+    objects: dict[str, bytes] = {}
+
+    def do_GET(self):  # noqa: N802
+        if self.path.startswith("/?list-type=2"):
+            keys = "".join(f"<Contents><Key>{name}</Key></Contents>" for name in self.objects)
+            body = (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                f"<ListBucketResult><Name>argus</Name>{keys}</ListBucketResult>"
+            ).encode()
+            self.send_response(200)
+        elif self.path.lstrip("/") in self.objects:
+            body = self.objects[self.path.lstrip("/")]
+            self.send_response(200)
+        else:
+            body = b"<Error><Code>NoSuchKey</Code></Error>"
+            self.send_response(404)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_PUT(self):  # noqa: N802
+        length = int(self.headers.get("Content-Length") or 0)
+        self.objects[self.path.lstrip("/")] = self.rfile.read(length)
+        self.send_response(200)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def do_DELETE(self):  # noqa: N802
+        self.objects.pop(self.path.lstrip("/"), None)
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+class _ClosedBucketHandler(http.server.BaseHTTPRequestHandler):
+    """An S3 endpoint that refuses anonymous access to everything."""
+
+    def _deny(self):
+        body = b"<Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>"
+        self.send_response(403)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    do_GET = _deny  # noqa: N815
+    do_PUT = _deny  # noqa: N815
+    do_DELETE = _deny  # noqa: N815
+
+    def log_message(self, *args):
+        pass
+
+
+def _serve(handler) -> tuple[http.server.HTTPServer, str]:
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd, f"http://127.0.0.1:{httpd.server_port}/"
+
+
+class TestBucketUploadCheck:
+    """bucket_upload had no implementation, so phases skipped it as missing."""
+
+    def test_public_bucket_reports_listing_read_and_upload(self):
+        _PublicBucketHandler.objects = {"private/secret.txt": b"canary"}
+        httpd, url = _serve(_PublicBucketHandler)
+        try:
+            proc = _run_shim("bucket_upload", url)
+        finally:
+            httpd.shutdown()
+        assert proc.returncode == 0, proc.stderr
+        findings = dispatch("bucket_upload", proc.stdout)
+        titles = " | ".join(f.title for f in findings)
+        assert "allows anonymous listing" in titles, titles
+        assert "readable without authentication" in titles, titles
+        assert "allows anonymous object upload" in titles, titles
+        assert all(f.tool == "bucket_upload" for f in findings)
+
+    def test_canary_is_deleted_after_a_successful_upload(self):
+        _PublicBucketHandler.objects = {}
+        httpd, url = _serve(_PublicBucketHandler)
+        try:
+            _run_shim("bucket_upload", url)
+            leftover = [k for k in _PublicBucketHandler.objects if k.startswith("argus-permission-check-")]
+        finally:
+            httpd.shutdown()
+        assert leftover == [], "the write probe must not leave objects in the bucket"
+
+    def test_a_locked_bucket_is_a_clean_negative(self):
+        httpd, url = _serve(_ClosedBucketHandler)
+        try:
+            proc = _run_shim("bucket_upload", url)
+        finally:
+            httpd.shutdown()
+        assert proc.returncode == 0, proc.stderr
+        findings = dispatch("bucket_upload", proc.stdout)
+        assert len(findings) == 1
+        assert findings[0].tool == "bucket_upload"
+        assert "anonymous access not permitted" in findings[0].title.lower()
+        assert findings[0].severity == 0
+
+
+class _WafHandler(http.server.BaseHTTPRequestHandler):
+    """An edge that advertises itself and blocks hostile queries."""
+
+    def do_GET(self):  # noqa: N802
+        body = b"<html><body>Request blocked by the firewall</body></html>"
+        self.send_response(403)
+        self.send_header("Server", "cloudflare")
+        self.send_header("CF-RAY", "8f00-AMS")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+class TestReconShim:
+    """waybackurls/gau/subfinder/amass/alterx/wafw00f were skipped as missing."""
+
+    def test_permutations_are_generated_locally(self):
+        proc = _run_shim("recon", "http://demo.testfire.net", "--mode", "permute", "--tool", "alterx")
+        assert proc.returncode == 0, proc.stderr
+        findings = dispatch("alterx", proc.stdout)
+        assert len(findings) == 1
+        assert findings[0].tool == "alterx"
+        assert "permutations generated" in findings[0].title
+        assert "dev.demo.testfire.net" in findings[0].description
+
+    def test_cdx_rows_become_urls(self):
+        module = _load_shim("recon")
+        payload = json.dumps([["original"], ["http://x.test/a?b=1"], ["https://x.test/c"]])
+        module._get = lambda url, timeout=None: (200, payload)  # type: ignore[assignment]
+        assert module.cdx_urls("x.test") == ["http://x.test/a?b=1", "https://x.test/c"]
+
+    def test_certificate_transparency_names_are_parsed(self):
+        module = _load_shim("recon")
+        payload = json.dumps([{"name_value": "a.x.test\n*.b.x.test"}, {"name_value": "other.test"}])
+        module._get = lambda url, timeout=None: (200, payload)  # type: ignore[assignment]
+        assert module.crtsh_hosts("x.test") == ["a.x.test", "b.x.test"]
+
+    def test_waf_signature_is_detected_and_attributed(self):
+        httpd = http.server.HTTPServer(("127.0.0.1", 0), _WafHandler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        try:
+            proc = _run_shim("recon", f"http://127.0.0.1:{httpd.server_port}/", "--mode", "waf", "--tool", "wafw00f")
+        finally:
+            httpd.shutdown()
+        assert proc.returncode == 0, proc.stderr
+        findings = dispatch("wafw00f", proc.stdout)
+        assert len(findings) == 1
+        assert findings[0].tool == "wafw00f"
+        assert "Cloudflare" in findings[0].title
+
+    def test_every_recon_definition_runs_the_shim(self):
+        from pathlib import Path
+
+        import yaml
+
+        base = Path(__file__).resolve().parents[1] / "tools" / "definitions"
+        for name in ("waybackurls", "gau", "subfinder", "amass", "alterx", "wafw00f"):
+            data = yaml.safe_load((base / f"{name}.yaml").read_text())
+            assert data["command"] == "python3", name
+            assert data["args"][0] == "argus-workers/tools/scripts/recon_shim.py", name
+            assert data["args"][data["args"].index("--tool") + 1] == name, name
+            assert data["parameters"][0]["flag"] == "--target", name

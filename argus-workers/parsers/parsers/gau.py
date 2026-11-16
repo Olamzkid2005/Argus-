@@ -1,10 +1,13 @@
-from parsers.parsers.base import BaseParser
+from parsers.parsers.base import BaseParser, structured_findings
 
 
 class GauParser(BaseParser):
     """Parser for gau output (GetAllUrls)"""
 
     def parse(self, raw_output: str) -> list[dict]:
+        structured = structured_findings(raw_output)
+        if structured:
+            return structured
         """
         Parse gau plain URL output
 

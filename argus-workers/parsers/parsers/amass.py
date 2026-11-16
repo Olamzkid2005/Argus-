@@ -1,10 +1,13 @@
 import json
 
-from parsers.parsers.base import BaseParser
+from parsers.parsers.base import BaseParser, structured_findings
 
 
 class AmassParser(BaseParser):
     def parse(self, raw_output: str) -> list[dict]:
+        structured = structured_findings(raw_output)
+        if structured:
+            return structured
         findings = []
         for line in raw_output.splitlines():
             if not line.strip():

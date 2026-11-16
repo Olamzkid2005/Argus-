@@ -29,7 +29,7 @@ for tool in sqlmap arjun; do
   printf '%-8s %s\n' "$tool" "$(command -v "$tool")"
 done
 
-for shim in whatweb_shim.py sqlmap_shim.py arjun_shim.py sn1per_shim.py; do
+for shim in whatweb_shim.py sqlmap_shim.py arjun_shim.py sn1per_shim.py bucket_upload_shim.py recon_shim.py; do
   "$VENV/bin/python" -m py_compile "$REPO/argus-workers/tools/scripts/$shim"
   printf '%-20s compiles (python shim)\n' "$shim"
 done

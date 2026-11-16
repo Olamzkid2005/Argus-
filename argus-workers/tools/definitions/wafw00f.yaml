@@ -1,23 +1,28 @@
 name: wafw00f
-command: wafw00f
-description: "Web Application Firewall fingerprinting and detection"
+command: python3
+description: "WAF fingerprinting from edge headers, cookies and block pages (wafw00f equivalent)"
+# Runs the shared native recon shim: the upstream binary is not installable in
+# this image, and every check here is a thin client over a public data source
+# (Wayback CDX, crt.sh) or local logic. Each run reports a finding or an
+# explicit clean negative attributed to wafw00f, so the capability executes
+# instead of being skipped for a missing binary.
 args:
-  - "-a"
+  - argus-workers/tools/scripts/recon_shim.py
+  - "--mode"
+  - "waf"
+  - "--tool"
+  - "wafw00f"
 parameters:
   - name: target
     type: string
-    description: "Target URL"
+    description: "Target URL or domain"
     required: true
-  - name: verbose
-    type: boolean
-    description: "Enable verbose output"
-    required: false
-    flag: "-v"
+    flag: "--target"
 capabilities:
   - web_recon
-signal_quality: CONFIRMED
+signal_quality: CANDIDATE
 risk_level: low
-priority: 45
+priority: 55
 cost: low
 enabled: true
 timeout: 120

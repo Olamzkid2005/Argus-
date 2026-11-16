@@ -1,18 +1,28 @@
 name: gau
-command: gau
-description: "Get all URLs from web archives (Wayback, AlienVault, etc.)"
+command: python3
+description: "Parameterised URL discovery from the Wayback CDX index (gau equivalent)"
+# Runs the shared native recon shim: the upstream binary is not installable in
+# this image, and every check here is a thin client over a public data source
+# (Wayback CDX, crt.sh) or local logic. Each run reports a finding or an
+# explicit clean negative attributed to gau, so the capability executes
+# instead of being skipped for a missing binary.
 args:
-  - "--json"
+  - argus-workers/tools/scripts/recon_shim.py
+  - "--mode"
+  - "gau"
+  - "--tool"
+  - "gau"
 parameters:
   - name: target
     type: string
-    description: "Target domain"
+    description: "Target URL or domain"
     required: true
+    flag: "--target"
 capabilities:
   - web_recon
 signal_quality: CANDIDATE
 risk_level: low
-priority: 40
+priority: 65
 cost: low
 enabled: true
-timeout: 180
+timeout: 120

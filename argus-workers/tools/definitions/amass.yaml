@@ -1,26 +1,28 @@
 name: amass
-command: amass
-description: "Subdomain enumeration and reconnaissance tool"
-# `enum` subcommand only. `-json` is not a flag on the installed build
-# (amass printed "flag provided but not defined: -json" and exited).
+command: python3
+description: "Passive subdomain enumeration from certificate transparency logs (amass equivalent)"
+# Runs the shared native recon shim: the upstream binary is not installable in
+# this image, and every check here is a thin client over a public data source
+# (Wayback CDX, crt.sh) or local logic. Each run reports a finding or an
+# explicit clean negative attributed to amass, so the capability executes
+# instead of being skipped for a missing binary.
 args:
-  - "enum"
+  - argus-workers/tools/scripts/recon_shim.py
+  - "--mode"
+  - "subdomains"
+  - "--tool"
+  - "amass"
 parameters:
   - name: target
     type: string
-    description: "Target domain"
+    description: "Target URL or domain"
     required: true
-    flag: "-d"
-  - name: brute
-    type: boolean
-    description: "Enable brute forcing"
-    required: false
-    flag: "-brute"
+    flag: "--target"
 capabilities:
   - web_recon
 signal_quality: CANDIDATE
-risk_level: medium
-priority: 65
-cost: high
+risk_level: low
+priority: 60
+cost: low
 enabled: true
-timeout: 600
+timeout: 120

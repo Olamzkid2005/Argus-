@@ -1,19 +1,28 @@
 name: alterx
-command: alterx
-description: "Subdomain permutation generator for expanding recon surface"
+command: python3
+description: "Subdomain permutation generation for expanding recon surface"
+# Runs the shared native recon shim: the upstream binary is not installable in
+# this image, and every check here is a thin client over a public data source
+# (Wayback CDX, crt.sh) or local logic. Each run reports a finding or an
+# explicit clean negative attributed to alterx, so the capability executes
+# instead of being skipped for a missing binary.
 args:
-  - "-silent"
+  - argus-workers/tools/scripts/recon_shim.py
+  - "--mode"
+  - "permute"
+  - "--tool"
+  - "alterx"
 parameters:
   - name: target
     type: string
-    description: "Root domain(s) to generate permutations for (comma-separated or file)"
+    description: "Target URL or domain"
     required: true
-    flag: "-l"
+    flag: "--target"
 capabilities:
   - web_recon
 signal_quality: CANDIDATE
 risk_level: low
-priority: 30
+priority: 50
 cost: low
 enabled: true
 timeout: 120

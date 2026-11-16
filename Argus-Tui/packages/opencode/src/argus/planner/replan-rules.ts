@@ -32,6 +32,9 @@ export const REPLAN_INSERTABLE: Record<string, Capability> = {
   openapi: Capability.API_DOCS_ANALYSIS,
   jwt: Capability.JWT_ANALYSIS,
   ssrf_parameters: Capability.SSRF_CHECK,
+  // A parameter arjun proved the server accepts widens the API surface; the
+  // executedCapabilities guard keeps it from re-running api_probing.
+  parameter_discovery: Capability.API_PROBING,
   sqli_reflective: Capability.SQLI_DETECTION,
   sqli_blind: Capability.SQLI_DETECTION,
 
@@ -42,6 +45,13 @@ export const REPLAN_INSERTABLE: Record<string, Capability> = {
   rce_confirmed: Capability.LATERAL_MOVEMENT,
   open_redirect: Capability.PHISHING_CHAIN,
   exposed_secret: Capability.CREDENTIAL_REPLAY,
+  // Bucket permission findings map back to the S3 capability that found them;
+  // it is already executed, so no duplicate scan is queued.
+  s3_public_bucket_listing: Capability.S3_SCANNING,
+  s3_public_object: Capability.S3_SCANNING,
+  s3_anonymous_write: Capability.S3_SCANNING,
+  url_discovery: Capability.CONTENT_DISCOVERY,
+  subdomain_discovery: Capability.WEB_RECON,
 }
 
 /**
@@ -69,6 +79,12 @@ const INFORMATIONAL_SUBTYPES = new Set([
   "parameter_discovery_negative",
   "sql_injection_not_found",
   "vulnerability_scan_negative",
+  "s3_permissions_negative",
+  "url_discovery_negative",
+  "subdomain_discovery_negative",
+  "subdomain_permutation",
+  "waf_detected",
+  "waf_detection_negative",
   "info",
   "informational",
   "observation",
@@ -119,8 +135,12 @@ export function determineNewCapabilities(context: PlannerContext): Set<Capabilit
   for (const finding of context.findings) {
     const subtype = finding.subtype
     if (subtype) {
-      if (REPLAN_INSERTABLE[subtype]) {
-        const cap = REPLAN_INSERTABLE[subtype]
+      // Parsers disagree on casing: some emit "sqli_reflective", the discovery
+      // shims emit "PARAMETER_DISCOVERY". The tables are lowercase, so look up
+      // the normalised key — otherwise a real subtype logs as unknown.
+      const subtypeKey = subtype.toLowerCase()
+      if (REPLAN_INSERTABLE[subtypeKey]) {
+        const cap = REPLAN_INSERTABLE[subtypeKey]
         if (finding.negative) {
           // Negative findings trigger capability insertion even if the
           // capability was already executed — the absence of a finding
@@ -129,7 +149,7 @@ export function determineNewCapabilities(context: PlannerContext): Set<Capabilit
         } else if (!context.executedCapabilities.has(cap)) {
           result.add(cap)
         }
-      } else if (!INFORMATIONAL_SUBTYPES.has(subtype.toLowerCase())) {
+      } else if (!INFORMATIONAL_SUBTYPES.has(subtypeKey)) {
         // Deduplicated: one line per subtype per process instead of one per
         // finding per phase. Informational recon subtypes are skipped entirely
         // — they have no capability to map to by design.

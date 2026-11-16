@@ -648,12 +648,17 @@ class TestScannerInvocationDefinitions:
         assert "-j" not in args, "gospider rejects -j: unknown shorthand flag"
         assert "--json" in args
 
-    def test_alterx_takes_its_input_with_l_not_d(self):
-        params = {p["name"]: p for p in self._definition("alterx")["parameters"]}
-        assert params["target"]["flag"] == "-l", (
-            "alterx v0.0.4+ dropped -d: flag provided but not defined; -l "
-            "accepts comma-separated input"
-        )
+    def test_alterx_runs_the_native_permutation_shim(self):
+        # alterx is a Go binary that is not installable here; the definition
+        # runs the recon shim's permutation mode, which needs no network and
+        # always reports an attributed result.
+        definition = self._definition("alterx")
+        assert definition["command"] == "python3"
+        assert definition["args"][0] == "argus-workers/tools/scripts/recon_shim.py"
+        assert definition["args"][definition["args"].index("--mode") + 1] == "permute"
+        assert definition["args"][definition["args"].index("--tool") + 1] == "alterx"
+        params = {p["name"]: p for p in definition["parameters"]}
+        assert params["target"]["flag"] == "--target"
 
     def test_whatweb_runs_the_python_fingerprint_shim(self):
         # Ruby WhatWeb cannot be installed here, so the definition runs the

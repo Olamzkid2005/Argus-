@@ -59,3 +59,29 @@ def _safe_get(data, *keys, default=None):
         else:
             return default
     return current if current is not None else default
+
+def structured_findings(raw_output: str) -> list[dict] | None:
+    """Findings that a tool already emitted as structured JSON.
+
+    The Argus recon shims replace binaries that cannot be installed here and
+    report results as ``[{title, type, severity, description, endpoint, tool}]``.
+    A parser written for the upstream tool's plain-text output would otherwise
+    turn that whole array into one garbled finding, so every parser offers the
+    structured form first.
+    """
+    import json
+
+    try:
+        data = json.loads(raw_output)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if isinstance(data, dict) and isinstance(data.get("findings"), list):
+        data = data["findings"]
+    if not isinstance(data, list):
+        return None
+    items = [
+        item
+        for item in data
+        if isinstance(item, dict) and (item.get("title") or item.get("description"))
+    ]
+    return items or None

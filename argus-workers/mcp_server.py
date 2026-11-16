@@ -785,6 +785,12 @@ class MCPServer:
             os.path.normpath(
                 os.path.join(project_dir, "argus-workers", "tools", "scripts", "sn1per_shim.py")
             ),
+            os.path.normpath(
+                os.path.join(project_dir, "argus-workers", "tools", "scripts", "bucket_upload_shim.py")
+            ),
+            os.path.normpath(
+                os.path.join(project_dir, "argus-workers", "tools", "scripts", "recon_shim.py")
+            ),
         }
 
         try:

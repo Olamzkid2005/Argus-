@@ -1,16 +1,28 @@
 name: waybackurls
-command: waybackurls
-description: "Fetch URLs from Wayback Machine archive"
+command: python3
+description: "Passive URL discovery from the Wayback CDX index"
+# Runs the shared native recon shim: the upstream binary is not installable in
+# this image, and every check here is a thin client over a public data source
+# (Wayback CDX, crt.sh) or local logic. Each run reports a finding or an
+# explicit clean negative attributed to waybackurls, so the capability executes
+# instead of being skipped for a missing binary.
+args:
+  - argus-workers/tools/scripts/recon_shim.py
+  - "--mode"
+  - "wayback"
+  - "--tool"
+  - "waybackurls"
 parameters:
   - name: target
     type: string
-    description: "Target domain"
+    description: "Target URL or domain"
     required: true
+    flag: "--target"
 capabilities:
   - web_recon
 signal_quality: CANDIDATE
 risk_level: low
-priority: 35
+priority: 70
 cost: low
 enabled: true
 timeout: 120

@@ -1,14 +1,21 @@
 name: bucket_upload
-command: bucket_upload
-description: "Cloud storage bucket upload testing for permission misconfigurations"
+command: python3
+description: "Cloud storage bucket permission testing: anonymous listing, public objects, anonymous upload"
+# S3 permissions are testable over plain HTTP; there is no separate uploader
+# binary to install. The shim tests listing, public object read and a canary
+# upload that is deleted immediately, and reports an attributed clean negative
+# when the bucket refuses all three.
+args:
+  - argus-workers/tools/scripts/bucket_upload_shim.py
 parameters:
   - name: target
     type: string
-    description: "Bucket URL or name"
+    description: "Bucket URL or bare bucket name"
     required: true
+    flag: "--target"
 capabilities:
-  - vulnerability_scanning
   - s3_scanning
+  - vulnerability_scanning
 signal_quality: PROBABLE
 risk_level: medium
 priority: 50
