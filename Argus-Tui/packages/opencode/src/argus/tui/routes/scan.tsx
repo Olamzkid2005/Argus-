@@ -417,20 +417,33 @@ export function ScanDashboard() {
           }}
         </For>
 
-        {/* Transcript: the scrollbox takes whatever height is left over, so a
-            taller terminal shows more lines without a row-count guess (and a
-            resize is handled by the layout), pinned to the newest line. */}
-        <Show when={scanState.log.length > 0}>
-          <text fg={theme.textMuted} paddingTop={1}>Activity Log</text>
-          <scrollbox flexGrow={1} stickyScroll stickyStart="bottom" viewportCulling>
-            <For each={scanState.log}>
-              {(entry) => (
-                <text fg={theme.textMuted}>{entry}</text>
-              )}
-            </For>
-          </scrollbox>
-        </Show>
+        {/* Bottom region: the transcript takes the leftover height, so a taller
+            terminal shows more lines without a row-count guess and a resize is
+            handled by the layout. minHeight keeps six rows for it even when the
+            panels above need more than the screen has, so the transcript cannot
+            collapse to nothing on a short terminal. */}
+        <box flexDirection="column" flexGrow={1}>
+          <Show when={scanState.log.length > 0}>
+            <text fg={theme.textMuted} paddingTop={1}>Activity Log</text>
+            <scrollbox flexGrow={1} minHeight={6} stickyScroll stickyStart="bottom" viewportCulling>
+              <For each={scanState.log}>
+                {(entry) => (
+                  <text fg={theme.textMuted}>{entry}</text>
+                )}
+              </For>
+            </scrollbox>
+          </Show>
+          {/* Until the first entry arrives the transcript is absent, so a spacer
+              keeps the bottom of the layout anchored instead of letting the
+              panels float up. It is hidden once the scrollbox exists, or the two
+              would split the leftover height. */}
+          <Show when={scanState.log.length === 0}>
+            <box flexGrow={1} />
+          </Show>
+        </box>
       </Show>
+
+      <Toast />
 
       {/* Error state */}
       <Show when={error() !== null}>
@@ -440,7 +453,6 @@ export function ScanDashboard() {
         </box>
       </Show>
 
-      <Toast />
     </box>
   )
 }
