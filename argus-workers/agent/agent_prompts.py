@@ -116,12 +116,6 @@ gitleaks
   Use when: ALWAYS. Every repo must be checked for committed secrets.
   Priority: CRITICAL — run alongside semgrep.
 
-trufflehog
-  Finds: High-entropy strings and verified live secrets (validates keys against APIs)
-         that pattern-based scanners like gitleaks may miss
-  Use when: ALWAYS. Complements gitleaks with entropy-based detection.
-  Priority: HIGH.
-
 bandit
   Finds: Python-specific issues — subprocess shell injection, hardcoded passwords,
          weak crypto, pickle deserialization, eval/exec usage
@@ -406,17 +400,16 @@ MANDATORY STOPPING RULES — VIOLATING THESE IS A CRITICAL FAILURE:
 You MAY ONLY return {"tool": "__done__"} when ALL of these are true:
   1. semgrep has been run
   2. gitleaks has been run
-  3. trufflehog has been run
-  4. Every language-specific tool for detected languages has been run:
+  3. Every language-specific tool for detected languages has been run:
        - bandit   → if Python detected
        - brakeman → if Ruby detected
        - gosec    → if Go detected
        - eslint   → if JavaScript or TypeScript detected
        - phpcs    → if PHP detected
        - spotbugs → if Java or Kotlin detected
-  5. trivy has been run if Dockerfile detected
-  6. pip_audit run if Python + requirements.txt detected
-  7. npm-audit run if JS/TS + package.json detected
+  4. trivy has been run if Dockerfile detected
+  5. pip_audit run if Python + requirements.txt detected
+  6. npm-audit run if JS/TS + package.json detected
 
 A tool finding nothing does NOT mean you should stop.
 Continue until all language-appropriate tools have completed.

@@ -1,11 +1,8 @@
 name: ai-surface
 command: python3
 description: "Unauthenticated AI attack-surface probes over HTTP (delegated)"
-# The upstream binary/Ruby gem is not installable here; the credential-free checks it
-# performed are HTTP requests, so they run through delegate_shim.py and are
-# attributed to this tool instead of reporting a missing binary.
 args:
-  - argus-workers/tools/scripts/delegate_shim.py
+  - "argus-workers/tools/scripts/delegate_shim.py"
   - "--tool"
   - "ai-surface"
 parameters:
@@ -14,12 +11,14 @@ parameters:
     description: "Target base URL"
     required: true
     flag: "--target"
+phases:
+  - recon
 capabilities:
   - web_recon
   - ai_surface_mapping
-signal_quality: CANDIDATE
-risk_level: low
+signal_quality: "CANDIDATE"
+risk_level: "low"
 priority: 45
-cost: low
-enabled: true
+cost: "low"
 timeout: 240
+enabled: true

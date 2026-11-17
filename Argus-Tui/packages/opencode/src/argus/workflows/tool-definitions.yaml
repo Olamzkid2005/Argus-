@@ -511,23 +511,6 @@ tools:
       coverage_score: 60
       cost: high
 
-  - name: trufflehog
-    label: TruffleHog Secret Scanner
-    capabilities:
-      - secret_detection
-      - vulnerability_scanning
-    requires_auth: false
-    destructive: false
-    supports_api: false
-    supports_web: false
-    timeout_seconds: 600
-    version_cmd: 'trufflehog --version'
-    version_regex: '\d+\.\d+\.\d+'
-    min_version: "1.0.0"
-    scoring:
-      confidence_score: 80
-      coverage_score: 75
-      cost: medium
 
   - name: gosec
     label: GoSec Security Scanner
@@ -636,44 +619,7 @@ tools:
       coverage_score: 60
       cost: high
 
-  - name: govulncheck
-    label: Govulncheck Dependency Scanner
-    capabilities:
-      - sca
-      - vulnerability_scanning
-    requires_auth: false
-    destructive: false
-    supports_api: false
-    supports_web: false
-    timeout_seconds: 300
-    version_cmd: 'govulncheck -version'
-    version_regex: '\d+\.\d+\.\d+'
-    min_version: "1.0.0"
-    requires:
-      tech_contains:
-        - go
-    scoring:
-      confidence_score: 75
-      coverage_score: 70
-      cost: medium
 
-  - name: dependency_check
-    label: OWASP Dependency Check
-    capabilities:
-      - sca
-      - vulnerability_scanning
-    requires_auth: false
-    destructive: false
-    supports_api: false
-    supports_web: false
-    timeout_seconds: 600
-    version_cmd: 'dependency-check --version'
-    version_regex: '\d+\.\d+\.\d+'
-    min_version: "1.0.0"
-    scoring:
-      confidence_score: 80
-      coverage_score: 75
-      cost: medium
 
   - name: npm-audit
     label: NPM Audit Scanner

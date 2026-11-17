@@ -102,8 +102,8 @@ def test_phase_tools_generated():
     assert len(tools) == 1, f"Expected 1 tool, got {len(tools)}"
     task = tools[0]
     assert isinstance(task, ToolTask), f"Expected ToolTask, got {type(task)}"
-    assert task.tool_name == "ai-surface"
-    assert "{target}" in (task.args_template or [])[0] if task.args_template else False
+    assert task.tool_name == "secure_code_intelligence_engine"
+    assert (task.args_template or [])[0] == "{target}"
     assert task.timeout == 300
     assert task.priority == 10
 
@@ -112,7 +112,7 @@ def test_phase_tools_with_none_context():
     """_ai_surface_analysis_tools handles None gracefully."""
     tools = _ai_surface_analysis_tools(None)
     assert len(tools) == 1
-    assert tools[0].tool_name == "ai-surface"
+    assert tools[0].tool_name == "secure_code_intelligence_engine"
 
 
 # ═══════════════════════════════════════════════════════════════════

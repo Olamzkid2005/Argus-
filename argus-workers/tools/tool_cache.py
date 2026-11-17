@@ -27,7 +27,6 @@ PIP_ALLOWLIST = frozenset(
         "semgrep",
         "bandit",
         "gitleaks",
-        "trufflehog",
         "trivy",
         "pip-audit",
         "sqlmap",

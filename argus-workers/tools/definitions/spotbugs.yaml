@@ -1,12 +1,8 @@
 name: spotbugs
 command: python3
 description: "Java static analysis through the installed semgrep engine (spotbugs equivalent)"
-# The upstream binary is not installable in this image; the check runs through
-# semgrep p/java, which is provisioned by scripts/livefire/install-scanner-tools.sh.
-# Results are attributed to this tool, so the capability executes instead of
-# reporting a missing binary.
 args:
-  - argus-workers/tools/scripts/delegate_shim.py
+  - "argus-workers/tools/scripts/delegate_shim.py"
   - "--tool"
   - "spotbugs"
 parameters:
@@ -15,13 +11,19 @@ parameters:
     description: "Filesystem path to scan"
     required: true
     flag: "--target"
+phases:
+  - repo_scan
 capabilities:
   - sast
   - vulnerability_scanning
-signal_quality: PROBABLE
-risk_level: low
 target_kind: path
+requires:
+  tech_contains:
+    - "java"
+    - "kotlin"
+signal_quality: "PROBABLE"
+risk_level: "low"
 priority: 60
-cost: low
-enabled: true
+cost: "low"
 timeout: 600
+enabled: true

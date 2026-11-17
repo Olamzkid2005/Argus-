@@ -317,8 +317,6 @@ class FindingNormalizer:
         "gospider": 0.35,
         # SCA tools
         "npm_audit": 0.10,
-        "govulncheck": 0.10,
-        "trufflehog": 0.05,
         "maven_check": 0.30,
         # Language-specific SAST tools
         "brakeman": 0.15,

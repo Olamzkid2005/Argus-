@@ -25,9 +25,8 @@ import delegate_shim as ds  # noqa: E402
 DEFINITIONS = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "tools", "definitions"))
 
 DELEGATED = [
-    "trufflehog", "bandit", "gosec", "govulncheck", "eslint", "phpcs", "brakeman",
-    "spotbugs", "pip-audit", "dependency_check", "testssl", "uncover", "chaos",
-    "github-endpoints", "wpscan", "ai-surface",
+    "bandit", "gosec", "eslint", "phpcs", "brakeman", "spotbugs", "pip-audit",
+    "testssl", "uncover", "chaos", "github-endpoints", "wpscan", "ai-surface",
 ]
 
 
@@ -208,22 +207,6 @@ def test_dependency_audit_parses_trivy_vulnerabilities(monkeypatch, tmp_path):
     assert "CVE-2026-26007" in findings[0]["title"]
     assert findings[0]["severity"] == "high"
 
-
-def test_secret_scan_reuses_gitleaks_report(monkeypatch, tmp_path):
-    leak = [{"RuleID": "generic-api-key", "File": "a.py", "StartLine": 1, "Description": "API key"}]
-
-    def fake_run(cmd, timeout=ds.TIMEOUT):
-        report = cmd[cmd.index("--report-path") + 1]
-        with open(report, "w", encoding="utf-8") as handle:
-            json.dump(leak, handle)
-        return 1, "", ""
-
-    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/gitleaks")
-    monkeypatch.setattr(ds, "_run", fake_run)
-    findings = ds.run_trufflehog("trufflehog", str(tmp_path))
-    assert findings[0]["tool"] == "trufflehog"
-    assert findings[0]["type"] == "SECRET_EXPOSURE"
-    assert findings[0]["evidence"]["rule"] == "generic-api-key"
 
 
 def test_tls_probe_reports_negative_when_nothing_answers(tmp_path):

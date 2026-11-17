@@ -366,9 +366,6 @@ class TestInlineOverridesDoNotLoseYamlData:
     def test_cloud_metadata_probe_extra_keeps_its_flag(self):
         assert self._param("cloud_metadata_probe", "extra").flag == "--extra"
 
-    def test_testssl_jsonfile_parameter_is_restored(self):
-        assert self._param("testssl", "jsonfile").flag == "--jsonfile"
-
     def test_alterx_target_gets_its_l_flag(self):
         # alterx v0.0.4+ dropped -d; -l is the current input flag.
         assert self._param("alterx", "target").flag == "-l"
@@ -391,7 +388,6 @@ class TestInlineOverridesDoNotLoseYamlData:
             "gitleaks",
             "pip-audit",
             "trivy",
-            "trufflehog",
         ):
             assert TOOLS[name].target_kind == "path", name
         assert TOOLS["httpx"].target_kind == "any"

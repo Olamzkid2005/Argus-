@@ -371,12 +371,11 @@ class TestSplitSecret:
         svc = FindingPersistenceService(engagement_id="e1", finding_repo=None)
         findings = [
             {"source_tool": "gitleaks", "type": "HARDCODED_SECRET"},
-            {"source_tool": "trufflehog", "type": "AWS_KEY"},
             {"source_tool": "secret-scan", "type": "GITHUB_TOKEN"},
         ]
         non_secret, secret = svc._split_secret(findings)
         assert len(non_secret) == 0
-        assert len(secret) == 3
+        assert len(secret) == 2
 
     def test_committed_secret_prefix(self):
         from orchestrator_pkg.persistence.finding_persistence_service import (

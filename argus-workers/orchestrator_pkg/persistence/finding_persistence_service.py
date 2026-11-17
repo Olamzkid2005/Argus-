@@ -32,7 +32,7 @@ class FindingPersistenceService:
     """
 
     # Tools whose results are treated as secrets (different upsert path)
-    SECRET_TOOLS: set[str] = {"gitleaks", "trufflehog", "secret-scan"}
+    SECRET_TOOLS: set[str] = {"gitleaks", "secret-scan"}
 
     def __init__(
         self,

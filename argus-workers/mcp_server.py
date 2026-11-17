@@ -109,8 +109,8 @@ logger = logging.getLogger(__name__)
 
 #: A URL with an explicit scheme (``http://``, ``https://``, ``ftp://``, ...).
 #: Only scheme-bearing URLs are rejected for ``target_kind == "path"``: bare
-#: host-shaped values ARE valid path-kind targets for some tools (govulncheck
-#: takes Go module paths, trivy takes ``registry.example.com/image:tag``), so
+#: host-shaped values ARE valid path-kind targets for some tools (trivy takes
+#: ``registry.example.com/image:tag``), so
 #: those must stay allowed.
 _URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
 
@@ -1081,7 +1081,6 @@ class MCPServer:
         "dalfox": {1},
         "trivy": {1},
         "pip-audit": {1},
-        "dependency_check": {1},
         "nuclei": {1},
     }
 

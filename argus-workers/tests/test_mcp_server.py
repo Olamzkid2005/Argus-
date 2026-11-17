@@ -1004,7 +1004,7 @@ class TestTargetKindEnforcement:
         assert "--target|/tmp" in result["content"][0]["text"]
 
     def test_path_tool_accepts_a_bare_module_path(self, mocker):
-        # govulncheck takes Go module paths and trivy image references; only
+        # some tools take identifiers that look like hosts; only
         # scheme-bearing URLs are refused, or those calls would break too.
         server = self._server(mocker, "path")
         result = server.call_tool(
@@ -1034,14 +1034,11 @@ class TestTargetKindEnforcement:
             "pip-audit",
             "npm-audit",
             "trivy",
-            "trufflehog",
             "gosec",
             "brakeman",
-            "govulncheck",
             "phpcs",
             "eslint",
             "spotbugs",
-            "dependency_check",
         ):
             assert by_name[name].target_kind == "path", name
         # ai-surface's upstream scanner is a filesystem scanner, but the delegated

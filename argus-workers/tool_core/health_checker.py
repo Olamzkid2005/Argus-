@@ -113,7 +113,6 @@ _SPECIAL_PROBES: dict[str, str] = {
     # Nmap
     "nmap": "--version",
     # Go tools
-    "govulncheck": "--help",
     # Node tools
     "npm-audit": "version --json",  # npm audit version
     "eslint": "--version",
@@ -143,7 +142,6 @@ _SPECIAL_PROBES: dict[str, str] = {
     "gospider": "--version",
     "amass": "--version",
     "gitleaks": "--version",
-    "trufflehog": "--version",
     "trivy": "--version",
     "gosec": "--version",
     "phpcs": "--version",

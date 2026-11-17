@@ -39,7 +39,7 @@ def clean_scope():
 
 class TestExcludedTools:
     @pytest.mark.parametrize(
-        "tool", ["subfinder", "amass", "theharvester", "shodan", "trufflehog"]
+        "tool", ["subfinder", "amass", "theharvester", "shodan"]
     )
     def test_third_party_tools_are_excluded_with_a_reason(self, tool):
         decision = authorize_tool_egress(tool, ["-d", "example.com"])

@@ -135,7 +135,6 @@ def _map_tool_to_source(tool_name: str) -> CandidateSource:
         # SAST tools
         "semgrep": CandidateSource.CUSTOM_RULE,
         "gitleaks": CandidateSource.CUSTOM_RULE,
-        "trufflehog": CandidateSource.CUSTOM_RULE,
         "bandit": CandidateSource.CUSTOM_RULE,
         "brakeman": CandidateSource.CUSTOM_RULE,
         "gosec": CandidateSource.CUSTOM_RULE,

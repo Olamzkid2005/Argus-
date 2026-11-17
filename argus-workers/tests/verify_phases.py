@@ -6,9 +6,9 @@ sys.path.insert(0, ".")
 from tool_definitions import TOOLS
 
 REPO_TOOLS = [
-    "semgrep", "bandit", "gitleaks", "trufflehog", "trivy",
+    "semgrep", "bandit", "gitleaks", "trivy",
     "npm-audit", "pip-audit", "pip_audit", "gosec", "brakeman",
-    "eslint", "phpcs", "spotbugs", "govulncheck", "dependency_check",
+    "eslint", "phpcs", "spotbugs",
 ]
 
 print("=== Repo-Only Tool Phase Assignments (Runtime) ===")

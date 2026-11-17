@@ -50,7 +50,6 @@ EXCLUDED_TOOLS: dict[str, str] = {
     "assetfinder": "queries third-party sources",
     "findomain": "queries third-party certificate-transparency sources",
     "github-subdomains": "queries GitHub's API",
-    "trufflehog": "verifies credentials against third-party providers",
 }
 
 #: Flags that make a target-directed tool contact its vendor (templates, update
