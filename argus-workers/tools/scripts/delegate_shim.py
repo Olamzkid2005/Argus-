@@ -142,6 +142,15 @@ def _fetch_json(url: str, headers: dict[str, str] | None = None) -> tuple[object
         return None, "unreadable response"
 
 
+def _error_detail(err: str, fallback: str) -> str:
+    """One readable line from a tool's stderr (trivy prefixes log lines with a
+    timestamp and a level, which adds nothing to a finding)."""
+    if not err.strip():
+        return fallback
+    line = err.strip().splitlines()[-1]
+    return (line.split("\t")[-1] if "\t" in line else line).strip()[:160]
+
+
 def _json_text(text: str) -> tuple[dict | list | None, str]:
     """Parse a tool's stdout as JSON, describing why when it cannot be read."""
     if not text.strip().startswith(("{", "[")):
@@ -264,8 +273,13 @@ def _coverage_gap(tool: str, endpoint: str, packs: tuple[str, ...], detail: str)
 _CANARY_CACHE: dict[tuple[str, tuple[str, ...]], str] = {}
 
 
+#: tool -> "" once trivy proved it reports both baseline canaries (see run_sca).
+_SCA_CANARY_CACHE: dict[str, str] = {}
+
+
 def _clear_canary_cache() -> None:
     _CANARY_CACHE.clear()
+    _SCA_CANARY_CACHE.clear()
 
 
 def _canary_problem(tool: str, packs: tuple[str, ...]) -> str:
@@ -343,16 +357,82 @@ def run_sast(tool: str, path: str) -> list[dict]:
 
 # ── dependencies: pip-audit -> trivy ────────────────────────────────
 
+#: Baseline inputs a working trivy must flag: a pinned vulnerable package proves the
+#: vulnerability database is loaded, a known token proves the secret rules load.
+#: Without them "no findings" cannot be told apart from "no database".
+SCA_CANARY_FILES = {
+    "requirements.txt": "django==2.0.0\n",
+    "creds.py": 'token = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"\n',
+}
+
+
+def _trivy_report(path: str) -> tuple[dict | None, str]:
+    """Run trivy, returning (report, problem). A problem means the audit was
+    unusable — no binary, a non-zero exit, an unloadable database, unreadable
+    output — and must never be reported as clean."""
+    binary = shutil.which("trivy")
+    if not binary:
+        return None, "trivy is not installed"
+    code, out, err = _run([binary, "fs", "--format", "json", "--quiet", path], 240)
+    data, problem = _json_text(out)
+    if problem:
+        return None, _error_detail(err, problem)
+    if code != 0:
+        # trivy writes partial reports on some failures; a non-zero exit means the
+        # scan did not finish, so its empty result says nothing about the code.
+        return None, _error_detail(err, f"trivy exited {code}")
+    if not isinstance(data, dict):
+        return None, "unexpected trivy report"
+    return data, ""
+
+
+def _sca_gap(tool: str, endpoint: str, detail: str) -> dict:
+    return finding(
+        tool,
+        "Dependency audit incomplete: trivy could not be verified",
+        "SCA_COVERAGE_GAP",
+        "medium",
+        f"{tool} (via trivy) produced no usable result for {endpoint}: {detail}. "
+        "This is not a clean audit — treat dependencies and secrets as unchecked until "
+        "the scanner works.",
+        endpoint,
+    )
+
+
+def _verify_sca() -> str:
+    """Empty when trivy flags both baseline canaries."""
+    with tempfile.TemporaryDirectory(prefix="argus-sca-canary-") as tmp:
+        for name, content in SCA_CANARY_FILES.items():
+            with open(os.path.join(tmp, name), "w", encoding="utf-8") as handle:
+                handle.write(content)
+        report, problem = _trivy_report(tmp)
+    if problem:
+        return f"canary scan failed: {problem}"
+    results = report.get("Results") or []
+    missed = []
+    if not [vuln for result in results for vuln in result.get("Vulnerabilities") or []]:
+        missed.append("the vulnerability database reported the baseline django==2.0.0 as clean")
+    if not [secret for result in results for secret in result.get("Secrets") or []]:
+        missed.append("the secret rules did not flag the baseline GitHub token")
+    return "; ".join(missed)
+
+
+def _sca_canary_problem(tool: str) -> str:
+    """Cache a verified trivy the same way as the SAST canaries: successes only, so
+    a transient database failure is retried instead of pinning a gap."""
+    if tool in _SCA_CANARY_CACHE:
+        return _SCA_CANARY_CACHE[tool]
+    verdict = _verify_sca()
+    if not verdict:
+        _SCA_CANARY_CACHE[tool] = verdict
+    return verdict
+
 
 def run_sca(tool: str, path: str) -> list[dict]:
-    binary = shutil.which("trivy")
     endpoint = os.path.abspath(path)
-    if not binary:
-        return [negative(tool, endpoint, "Dependency audit", "trivy is not installed")]
-    _code, out, err = _run([binary, "fs", "--format", "json", "--quiet", path], 240)
-    data, problem = _json_text(out)
-    if problem or not isinstance(data, dict):
-        return [negative(tool, endpoint, "Dependency audit", problem or (err.strip()[:160] or "unexpected report"))]
+    data, problem = _trivy_report(path)
+    if problem:
+        return [_sca_gap(tool, endpoint, problem)]
 
     findings = []
     for result in data.get("Results") or []:
@@ -379,7 +459,12 @@ def run_sca(tool: str, path: str) -> list[dict]:
                 f"{tool} (via trivy) matched {secret.get('RuleID')} in {secret.get('Target')}.",
                 endpoint,
             ))
-    return _leftovers(findings, tool, endpoint, "Dependency audit")
+    if findings:
+        return findings
+    gap = _sca_canary_problem(tool)
+    return [_sca_gap(tool, endpoint, gap)] if gap else [
+        negative(tool, endpoint, "Dependency audit")
+    ]
 
 
 # ── TLS: testssl -> Python ssl for protocols, openssl for the certificate ──

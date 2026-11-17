@@ -274,6 +274,90 @@ def test_dependency_audit_parses_trivy_vulnerabilities(monkeypatch, tmp_path):
 
 
 
+SCA_EMPTY_REPORT = {"SchemaVersion": 2, "Results": []}
+SCA_CANARY_DETECTED = {
+    "SchemaVersion": 2,
+    "Results": [
+        {"Target": "requirements.txt",
+         "Vulnerabilities": [{"PkgName": "django", "VulnerabilityID": "CVE-2019-19844",
+                              "InstalledVersion": "2.0.0", "FixedVersion": "2.0.19",
+                              "Severity": "HIGH", "Title": "password reset"}]},
+        {"Target": "creds.py", "Secrets": [{"RuleID": "github-pat", "Target": "creds.py"}]},
+    ],
+}
+TRIVY_DB_ERROR = (
+    "2026-11-17T03:35:29Z\tFATAL\tFatal error\trun error: init error: DB error: "
+    "database error: --skip-db-update cannot be specified on the first run"
+)
+
+
+def _trivy_stub(target=(0, SCA_EMPTY_REPORT, ""), canary=(0, SCA_CANARY_DETECTED, ""), calls=None):
+    def fake(cmd, timeout=ds.TIMEOUT):
+        path = str(cmd[-1])
+        if calls is not None:
+            calls.append(path)
+        code, report, err = canary if "argus-sca-canary-" in path else target
+        return code, json.dumps(report) if report is not None else "", err
+
+    return fake
+
+
+def test_missing_vulnerability_database_is_a_coverage_gap_not_a_clean_audit(monkeypatch, tmp_path):
+    """trivy exits 1 with no report when its database cannot load; the audit did not
+    happen, so the only truthful result is a coverage gap."""
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/trivy")
+    monkeypatch.setattr(ds, "_run", lambda cmd, timeout=ds.TIMEOUT: (1, "", TRIVY_DB_ERROR))
+    findings = ds.run_sca("pip-audit", str(tmp_path))
+    assert len(findings) == 1
+    assert findings[0]["tool"] == "pip-audit"
+    assert findings[0]["type"] == "SCA_COVERAGE_GAP"
+    assert "DB error" in findings[0]["description"]
+    assert not findings[0]["type"].endswith("_NEGATIVE")
+
+
+def test_partial_report_from_a_failed_run_is_not_clean(monkeypatch, tmp_path):
+    """A report written before the failure must not be read as a clean audit."""
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/trivy")
+    monkeypatch.setattr(ds, "_run", _trivy_stub(target=(2, SCA_EMPTY_REPORT, "blocked")))
+    findings = ds.run_sca("pip-audit", str(tmp_path))
+    assert findings[0]["type"] == "SCA_COVERAGE_GAP"
+
+
+def test_clean_audit_requires_the_canaries_to_be_flagged(monkeypatch, tmp_path):
+    """An empty result with a healthy exit is only clean if trivy still reports its
+    baseline vulnerable package and token."""
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/trivy")
+    monkeypatch.setattr(ds, "_run", _trivy_stub(canary=(0, SCA_EMPTY_REPORT, "")))
+    findings = ds.run_sca("pip-audit", str(tmp_path))
+    assert findings[0]["type"] == "SCA_COVERAGE_GAP"
+    assert "django==2.0.0" in findings[0]["description"]
+
+
+def test_clean_audit_with_a_working_database_is_a_negative(monkeypatch, tmp_path):
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/trivy")
+    monkeypatch.setattr(ds, "_run", _trivy_stub())
+    findings = ds.run_sca("pip-audit", str(tmp_path))
+    assert findings[0]["type"] == "PIP_AUDIT_NEGATIVE"
+
+
+def test_verified_sca_canary_is_not_rescanned(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/trivy")
+    monkeypatch.setattr(ds, "_run", _trivy_stub(calls=calls))
+    ds.run_sca("pip-audit", str(tmp_path / "a"))
+    ds.run_sca("pip-audit", str(tmp_path / "b"))
+    assert len(calls) == 3, "two targets + a single canary verification"
+
+
+def test_failed_sca_canary_is_retried(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/trivy")
+    monkeypatch.setattr(ds, "_run", _trivy_stub(canary=(1, None, "DB error"), calls=calls))
+    for _ in range(2):
+        assert ds.run_sca("pip-audit", str(tmp_path))[0]["type"] == "SCA_COVERAGE_GAP"
+    assert len(calls) == 4, "each audit re-attempts the unusable canary scan"
+
+
 def test_tls_probe_reports_negative_when_nothing_answers(tmp_path):
     findings = ds.run_testssl("testssl", "127.0.0.1:1")
     assert findings[0]["tool"] == "testssl"

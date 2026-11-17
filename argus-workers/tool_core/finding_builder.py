@@ -176,6 +176,7 @@ class FindingBuilder:
             "SAST_FINDING",
             "SAST_COVERAGE_GAP",
             "SAST_NOT_APPLICABLE",
+            "SCA_COVERAGE_GAP",
             "VULNERABLE_DEPENDENCY",
             "EXPOSED_SERVICE",
             "KNOWN_VULNERABILITY",
