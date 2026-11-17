@@ -154,6 +154,13 @@ export function ScanDashboard() {
     })
   }
 
+  // Transcript window: ScanStore keeps the whole log (capped), and the screen shows
+  // as many of the newest lines as it has room for instead of a fixed 8.
+  const logLines = createMemo(() => {
+    const rows = process.stdout.rows ?? 40
+    return Math.max(8, Math.min(24, rows - 22))
+  })
+
   // Progress bar characters
   const barWidth = createMemo(() => responsiveBarWidth())
   const filledBars = createMemo(() => Math.round((progressPct() / 100) * barWidth()))
@@ -417,10 +424,10 @@ export function ScanDashboard() {
           }}
         </For>
 
-        {/* Log entries with timestamps */}
+        {/* Transcript: newest lines, as many as the terminal height allows */}
         <Show when={scanState.log.length > 0}>
           <text fg={theme.textMuted} paddingTop={1}>Activity Log</text>
-          <For each={scanState.log.slice(-8)}>
+          <For each={scanState.log.slice(-logLines())}>
             {(entry) => (
               <text fg={theme.textMuted}>{entry}</text>
             )}

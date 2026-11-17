@@ -145,6 +145,15 @@ describe("scan-store", () => {
     expect(state.log).toEqual(["phase 1 starting", "phase 1 complete"])
   })
 
+  it("appendLog() keeps only the newest entries once the transcript is capped", () => {
+    initScan("https://test.com", "eng-1")
+    for (let i = 0; i < 520; i++) appendLog(`line ${i}`)
+    const log = getScanState().log
+    expect(log).toHaveLength(500)
+    expect(log[0]).toBe("line 20")
+    expect(log[499]).toBe("line 519")
+  })
+
   it("completeScan(true) sets status=completed and durationMs", () => {
     initScan("https://test.com", "eng-1")
     completeScan(true)
@@ -303,6 +312,14 @@ describe("scan-store", () => {
       await handleProgressEvent({ type: "phase_error", phaseId: "p1", name: "recon", error: "connection failed" })
       expect(getScanState().phases[0].status).toBe("failed")
       expect(getScanState().phases[0].errors[0]).toBe("connection failed")
+    })
+
+    it("phase_start appends a phase banner so the transcript reads like the CLI", async () => {
+      initScan("https://test.com", "eng-1")
+      await handleProgressEvent({ type: "phase_start", phaseId: "p1", name: "recon", total: 9, phaseIndex: 0 })
+      await handleProgressEvent({ type: "phase_start", phaseId: "p2", name: "scan", total: 9, phaseIndex: 1 })
+      const banners = getScanState().log.filter((line) => line.startsWith("── Phase"))
+      expect(banners).toEqual(["── Phase 1/9: recon ──", "── Phase 2/9: scan ──"])
     })
 
     it("finding event appends log entry", async () => {

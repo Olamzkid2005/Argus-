@@ -195,9 +195,12 @@ export function completePhase(phaseId: string, findings: number, errors: string[
   setScanState("totalFindings", (prev) => prev + findings)
 }
 
+/** Cap on the in-memory transcript; the scan screen renders a window of the tail. */
+const LOG_LIMIT = 500
+
 export function appendLog(msg: string) {
   persistActive()
-  setScanState("log", (prev) => [...prev, msg])
+  setScanState("log", (prev) => [...prev, msg].slice(-LOG_LIMIT))
 }
 
 export function completeScan(result: boolean | "completed" | "partial" | "stopped" | "failed") {
@@ -242,6 +245,9 @@ export function resetScan() {
 function processEventInner(event: ProgressEvent, engagementId?: string) {
   switch (event.type) {
     case "phase_start":
+      // The CLI prints a phase banner; the dashboard renders phases as a list, so
+      // the transcript keeps the same landmark to scroll back through.
+      appendLog(`── Phase ${event.phaseIndex + 1}/${event.total}: ${event.name} ──`)
       addPhase({ id: event.phaseId, name: event.name, index: scanState.phases.length, total: event.total })
       break
     case "phase_complete": {

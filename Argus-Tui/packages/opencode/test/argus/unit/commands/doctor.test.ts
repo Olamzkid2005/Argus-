@@ -127,14 +127,14 @@ describe("loadToolVersionChecks", () => {
     expect(nmap!.min_version).toBe("1.0.0")
   })
 
-  // 45, not 46: jwt_tool is no longer an external binary. It is a Python
-  // wrapper (tools/jwt_scan.py) that discovers tokens passively, so it has no
-  // version to check — it was the one tool that still declared a version_cmd
-  // for a program that never ran.
-  it("populates all 45 external tools with version checks", async () => {
+  // 42, not 45: jwt_tool is no longer an external binary (it is the Python
+  // wrapper tools/jwt_scan.py, with no version to check), and trufflehog,
+  // govulncheck and dependency_check were removed from the registry because
+  // each only re-ran gitleaks, gosec or pip-audit.
+  it("populates all 42 external tools with version checks", async () => {
     const { loadToolVersionChecks } = await import("../../../../src/argus/commands/doctor")
     const map = loadToolVersionChecks(yamlPath)
-    expect(map.size).toBe(45)
+    expect(map.size).toBe(42)
   })
 
   it("skips agent-internal tools (no version_cmd)", async () => {
