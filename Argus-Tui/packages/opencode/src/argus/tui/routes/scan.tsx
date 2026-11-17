@@ -154,13 +154,6 @@ export function ScanDashboard() {
     })
   }
 
-  // Transcript window: ScanStore keeps the whole log (capped), and the screen shows
-  // as many of the newest lines as it has room for instead of a fixed 8.
-  const logLines = createMemo(() => {
-    const rows = process.stdout.rows ?? 40
-    return Math.max(8, Math.min(24, rows - 22))
-  })
-
   // Progress bar characters
   const barWidth = createMemo(() => responsiveBarWidth())
   const filledBars = createMemo(() => Math.round((progressPct() / 100) * barWidth()))
@@ -424,14 +417,18 @@ export function ScanDashboard() {
           }}
         </For>
 
-        {/* Transcript: newest lines, as many as the terminal height allows */}
+        {/* Transcript: the scrollbox takes whatever height is left over, so a
+            taller terminal shows more lines without a row-count guess (and a
+            resize is handled by the layout), pinned to the newest line. */}
         <Show when={scanState.log.length > 0}>
           <text fg={theme.textMuted} paddingTop={1}>Activity Log</text>
-          <For each={scanState.log.slice(-logLines())}>
-            {(entry) => (
-              <text fg={theme.textMuted}>{entry}</text>
-            )}
-          </For>
+          <scrollbox flexGrow={1} stickyScroll stickyStart="bottom" viewportCulling>
+            <For each={scanState.log}>
+              {(entry) => (
+                <text fg={theme.textMuted}>{entry}</text>
+              )}
+            </For>
+          </scrollbox>
         </Show>
       </Show>
 
@@ -443,7 +440,6 @@ export function ScanDashboard() {
         </box>
       </Show>
 
-      <box flexGrow={1} />
       <Toast />
     </box>
   )
