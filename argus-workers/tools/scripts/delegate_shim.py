@@ -255,8 +255,31 @@ def _coverage_gap(tool: str, endpoint: str, packs: tuple[str, ...], detail: str)
     )
 
 
+#: (tool, packs) -> "" once the packs have proven they flag every canary class.
+#: The canary check is a property of the pack set, not of the target, so a clean
+#: result does not have to pay for the same verification scan a second time within
+#: one engagement. Only successes are cached: a timeout or a failed pack download
+#: must be retried on the next scan instead of pinning a coverage gap for the
+#: life of the process.
+_CANARY_CACHE: dict[tuple[str, tuple[str, ...]], str] = {}
+
+
+def _clear_canary_cache() -> None:
+    _CANARY_CACHE.clear()
+
+
 def _canary_problem(tool: str, packs: tuple[str, ...]) -> str:
     """Empty when the packs flag every canary class for this language."""
+    key = (tool, tuple(packs))
+    if key in _CANARY_CACHE:
+        return _CANARY_CACHE[key]
+    verdict = _verify_canaries(tool, packs)
+    if not verdict:
+        _CANARY_CACHE[key] = verdict
+    return verdict
+
+
+def _verify_canaries(tool: str, packs: tuple[str, ...]) -> str:
     canaries = SAST_CANARIES.get(tool, ())
     if not canaries:
         return "no canary is defined for this language"

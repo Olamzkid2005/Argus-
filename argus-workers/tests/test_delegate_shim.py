@@ -22,6 +22,14 @@ sys.path.insert(0, SCRIPTS)
 
 import delegate_shim as ds  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _fresh_canary_cache():
+    """The canary verdict is cached process-wide; tests must not inherit it."""
+    ds._clear_canary_cache()
+    yield
+    ds._clear_canary_cache()
+
 DEFINITIONS = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "tools", "definitions"))
 
 DELEGATED = [
@@ -108,6 +116,63 @@ def test_empty_scan_only_counts_as_clean_when_the_canary_is_detected(monkeypatch
     findings = ds.run_sast("bandit", str(tmp_path))
     assert findings[0]["type"] == "BANDIT_NEGATIVE"
     assert len(calls) == 2, "a clean result must be backed by a canary scan"
+
+
+def _canary_verdict_fake(target_report):
+    """A semgrep stub: the target scan returns ``target_report``, canary scans pass."""
+    def fake(packs, path):
+        if "argus-canary-" in str(path):
+            names = [name for name, _ in ds.SAST_CANARIES["bandit"]]
+            return ({
+                "results": [
+                    {"check_id": f"canary.{name}", "path": name, "start": {"line": 1},
+                     "extra": {"message": "canary", "severity": "ERROR"}}
+                    for name in names
+                ],
+                "errors": [],
+                "paths": {"scanned": names},
+            }, "")
+        return target_report(str(path)), ""
+
+    return fake
+
+
+def test_verified_canary_is_not_rescanned_for_the_next_clean_result(monkeypatch, tmp_path):
+    """A verified pack set cannot become unverified: one engagement pays once."""
+    calls = []
+    empty = lambda path: {"results": [], "errors": [], "paths": {"scanned": [path]}}  # noqa: E731
+
+    def fake(packs, path):
+        calls.append(path)
+        return _canary_verdict_fake(empty)(packs, path)
+
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/semgrep")
+    monkeypatch.setattr(ds, "_semgrep_json", fake)
+
+    first = ds.run_sast("bandit", str(tmp_path / "a"))
+    second = ds.run_sast("bandit", str(tmp_path / "b"))
+
+    assert first[0]["type"] == second[0]["type"] == "BANDIT_NEGATIVE"
+    assert len(calls) == 3, "two targets + a single canary verification"
+
+
+def test_a_failed_canary_verification_is_retried_instead_of_cached(monkeypatch, tmp_path):
+    """A timeout or failed pack download is transient: the next scan must retry."""
+    calls = []
+
+    def fake(packs, path):
+        calls.append(path)
+        if "argus-canary-" in str(path):
+            return None, "timeout"
+        return {"results": [], "errors": [], "paths": {"scanned": [str(path)]}}, ""
+
+    monkeypatch.setattr(ds.shutil, "which", lambda name: "/usr/bin/semgrep")
+    monkeypatch.setattr(ds, "_semgrep_json", fake)
+
+    for _ in range(2):
+        findings = ds.run_sast("bandit", str(tmp_path))
+        assert findings[0]["type"] == "SAST_COVERAGE_GAP"
+    assert len(calls) == 4, "each scan re-attempts the unusable canary check"
 
 
 def test_undetected_canary_blocks_the_clean_negative(monkeypatch, tmp_path):
