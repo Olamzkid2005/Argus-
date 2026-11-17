@@ -299,6 +299,41 @@ tools:
       coverage_score: 90
     cost: high
 
+  - name: api-spec
+    label: Spec-Driven API Tester
+    description: Replays every operation in the OpenAPI/Swagger document (declared auth, CORS, error leakage, rate limits)
+    capabilities:
+      - api_probing
+      - api_docs_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 85
+      coverage_score: 90
+    signal_quality: CONFIRMED
+    priority: 80
+    cost: low
+
+  - name: graphql
+    label: GraphQL Endpoint Tester
+    description: Introspection, query-depth and unauthenticated-mutation checks against a GraphQL endpoint
+    capabilities:
+      - graphql_assessment
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 180
+    scoring:
+      confidence_score: 85
+      coverage_score: 80
+    signal_quality: CONFIRMED
+    priority: 78
+    cost: low
+
   - name: arjun
     label: Arjun HTTP Parameter Discovery
     capabilities:

@@ -963,6 +963,41 @@ _register(ToolDefinition(
     risk_level="low",
 ))
 
+# ── api-spec (from api-spec.yaml) ──
+_register(ToolDefinition(
+    name="api-spec",
+    description="Spec-driven API testing: replays every operation in the OpenAPI/Swagger document",
+    phases=["api_exploitation"],
+    binary="python3",
+    default_args=["argus-workers/tools/api_spec_scan.py", "--mode", "spec"],
+    parameters=[
+    ToolParameter(name="target", description="Target base URL (the document is discovered under it)", required=True, flag="--target"),
+    ToolParameter(name="spec_url", description="Explicit OpenAPI/Swagger document URL (skips discovery)", flag="--spec-url"),
+],
+    timeout=300,
+    signal_quality=SignalQuality.CONFIRMED,
+    priority=78,
+    cost="low",
+    risk_level="low",
+))
+
+# ── graphql (from graphql.yaml) ──
+_register(ToolDefinition(
+    name="graphql",
+    description="GraphQL testing: introspection, query depth, unauthenticated mutations",
+    phases=["api_exploitation"],
+    binary="python3",
+    default_args=["argus-workers/tools/api_spec_scan.py", "--mode", "graphql"],
+    parameters=[
+    ToolParameter(name="target", description="Target URL (base URL or the GraphQL endpoint itself)", required=True, flag="--target"),
+],
+    timeout=180,
+    signal_quality=SignalQuality.CONFIRMED,
+    priority=76,
+    cost="low",
+    risk_level="low",
+))
+
 # ── Delegated tools (YAML + delegate_shim.py) ──
 # Their YAML file is the only definition; see _delegate_tools.py for why the mirror
 # above must not carry a second copy of that metadata.

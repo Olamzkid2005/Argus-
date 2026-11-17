@@ -1,0 +1,27 @@
+name: api-spec
+command: python3
+description: "Spec-driven API testing: replays every operation in the OpenAPI/Swagger document"
+args:
+  - argus-workers/tools/api_spec_scan.py
+  - --mode
+  - spec
+parameters:
+  - name: target
+    type: string
+    description: "Target base URL (the document is discovered under it)"
+    required: true
+    flag: "--target"
+  - name: spec_url
+    type: string
+    description: "Explicit OpenAPI/Swagger document URL (skips discovery)"
+    required: false
+    flag: "--spec-url"
+capabilities:
+  - api_probing
+  - api_docs_analysis
+signal_quality: CONFIRMED
+risk_level: low
+priority: 78
+cost: low
+enabled: true
+timeout: 300

@@ -1,0 +1,21 @@
+name: graphql
+command: python3
+description: "GraphQL testing: introspection, query depth, unauthenticated mutations"
+args:
+  - argus-workers/tools/api_spec_scan.py
+  - --mode
+  - graphql
+parameters:
+  - name: target
+    type: string
+    description: "Target URL (base URL or the GraphQL endpoint itself)"
+    required: true
+    flag: "--target"
+capabilities:
+  - graphql_assessment
+signal_quality: CONFIRMED
+risk_level: low
+priority: 76
+cost: low
+enabled: true
+timeout: 180

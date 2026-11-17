@@ -172,6 +172,17 @@ class FindingBuilder:
             "GENERIC_FINDING",
             "CVE_REFERENCE",
             "RAW_OUTPUT",
+            # Spec-driven API and GraphQL testing (tools/api_spec_scan.py)
+            "API_SPEC_ANALYSED",
+            "API_SPEC_NEGATIVE",
+            "API_SPEC_NOT_APPLICABLE",
+            "API_SPEC_COVERAGE_GAP",
+            "GRAPHQL_NEGATIVE",
+            "GRAPHQL_COVERAGE_GAP",
+            "GRAPHQL_NOT_APPLICABLE",
+            "GRAPHQL_INTROSPECTION_DISABLED",
+            "GRAPHQL_UNAUTHENTICATED_MUTATION",
+            "GRAPHQL_FIELD_SUGGESTION_LEAK",
             # Delegated tools (delegate_shim.py): SAST, TLS, exposure and dependency checks
             "SAST_FINDING",
             "SAST_COVERAGE_GAP",
