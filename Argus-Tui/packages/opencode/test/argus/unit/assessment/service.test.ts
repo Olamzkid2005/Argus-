@@ -165,3 +165,43 @@ describe("parseAssessmentArgs", () => {
     expect(parseAssessmentArgs("--no-cache").target).toBe("")
   })
 })
+
+describe("assessment service degradation reporting", () => {
+  test("emits the run's degradations through the progress hook", async () => {
+    const degradations = [
+      "capability-missing: recon: no installed tool for web_recon",
+      "phase-failed: scan failed and was skipped: scanner exploded",
+    ]
+    const { runner } = stubRunner(emptyResult({ degradations }))
+    const messages: string[] = []
+
+    const result = await runAssessment(
+      { target: "https://lab.example", mode: "recon" },
+      { onProgress: (event) => messages.push(String(event)) },
+      { runner },
+    )
+
+    // Still returned to the caller, unchanged...
+    expect(result.degradations).toEqual(degradations)
+    expect(result.success).toBe(true)
+    // ...and visible where the operator is: a headline plus one line per step.
+    expect(messages).toHaveLength(1 + degradations.length)
+    expect(messages[0]).toContain("degraded step(s)")
+    expect(messages[0]).toContain("coverage is incomplete")
+    expect(messages[1]).toContain("capability-missing: recon")
+    expect(messages[2]).toContain("phase-failed: scan")
+  })
+
+  test("a clean run emits no degradation lines", async () => {
+    const { runner } = stubRunner()
+    const messages: string[] = []
+
+    await runAssessment(
+      { target: "https://lab.example", mode: "recon" },
+      { onProgress: (event) => messages.push(String(event)) },
+      { runner },
+    )
+
+    expect(messages).toHaveLength(0)
+  })
+})

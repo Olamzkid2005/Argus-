@@ -74,6 +74,23 @@ export function parseAssessmentArgs(raw: string): {
   return { target, cacheMode, verbose: tokens.includes("--verbose") }
 }
 
+/**
+ * Progress lines that report tolerated failures (skipped phases, missing tools,
+ * phases that failed but did not end the run). Shared so a fresh assessment and
+ * a resumed one describe degraded coverage the same way; an empty list means a
+ * clean run and produces no lines.
+ */
+export function degradationSummaryLines(
+  degradations: readonly string[],
+  label = "Assessment completed",
+): string[] {
+  if (degradations.length === 0) return []
+  return [
+    `⚠ ${label} with ${degradations.length} degraded step(s) — coverage is incomplete:`,
+    ...degradations.map((degradation) => `  • ${degradation}`),
+  ]
+}
+
 export async function runAssessment(
   request: AssessmentRequest,
   hooks: AssessmentHooks = {},
@@ -89,7 +106,7 @@ export async function runAssessment(
 
   const useLLM = request.useLLM ?? (request.mode ? request.mode === "assess" : undefined)
   const runner = deps.runner ?? new (await import("../workflow-runner")).WorkflowRunner()
-  return runner.run({
+  const result = await runner.run({
     target,
     useLLM,
     cacheMode: request.cacheMode,
@@ -103,4 +120,15 @@ export async function runAssessment(
     onProgress: hooks.onProgress,
     onEngagement: hooks.onEngagement,
   })
+
+  // Surface tolerated failures where the operator is looking. The runner keeps
+  // them in the result and in the audit log, but a returned struct is not a
+  // report: an unattended run must not read as a clean pass. Both entry points
+  // (CLI `assess` and the TUI scan view) render string progress lines, so the
+  // degradation list is emitted through the same channel as every other status.
+  for (const line of degradationSummaryLines(result.degradations ?? [])) {
+    hooks.onProgress?.(line)
+  }
+
+  return result
 }
