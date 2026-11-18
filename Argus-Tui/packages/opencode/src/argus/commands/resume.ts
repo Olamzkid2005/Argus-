@@ -25,6 +25,8 @@ import type { PlannerContext } from "../planner/types"
 import { homedir } from "os"
 import { join } from "path"
 import { PROJECT_ROOT } from "../shared/path"
+import { degradationSummaryLines } from "../assessment/service"
+import { cliProgress } from "./progress"
 
 /**
  * Authenticated resume requires every `credential:<role>` reference saved in
@@ -59,7 +61,10 @@ export async function resumeCommand(
 ): Promise<string> {
   const store = options?.storeOverride ?? new EngagementStore()
   const engagement = store.getEngagement(engagementId)
-  const emit = options?.onProgress ?? (() => {})
+  // Same default as `assess`: the CLI prints progress to stderr, so a resumed
+  // run's degraded steps reach the operator instead of disappearing into a
+  // silent no-op callback.
+  const emit = options?.onProgress ?? cliProgress
 
   if (!engagement) {
     return `Engagement not found: ${engagementId}`
@@ -340,6 +345,28 @@ export async function resumeCommand(
   const allFindings: NormalizedFinding[] = [...existingFindings]
   let executionError: Error | null = null
 
+  // Same reporting contract as `runAssessment`: a resumed run that lost coverage
+  // says so instead of reading as clean. Without this, `argus resume` printed a
+  // report for a run whose phases were skipped or failed with no mention of it.
+  const degradations: string[] = []
+  const recordDegradation = (kind: string, detail: string) => {
+    const entry = `${kind}: ${detail}`
+    degradations.push(entry)
+    emit(`⚠ Degraded (${kind}) — ${detail}`)
+    try {
+      store.appendAuditLog(engagementId, "RUN_DEGRADED", entry)
+    } catch {
+      // Reporting is best-effort — it must never stop the resume.
+    }
+  }
+  // Coverage the planner already dropped when the plan was approved travels
+  // with the checkpoint; surface it on the resumed run too.
+  if (plan.degradations && plan.degradations.length > 0) {
+    for (const dropped of plan.degradations) {
+      recordDegradation("capability-missing", dropped)
+    }
+  }
+
   try {
     let i = startIndex
     while (i < plan.phases.length) {
@@ -389,8 +416,27 @@ export async function resumeCommand(
       store.appendAuditLog(engagementId, "PHASE_COMPLETE",
         `Phase ${phaseRecord.name}: ${phaseRecord.status}`)
 
+      // A phase that did not complete cleanly is degraded coverage, exactly as
+      // the fresh path records it (the runner's pre-flight skip and its
+      // retry-then-skip fall back to these same kinds).
       if (phaseRecord.status === "FAILED") {
+        recordDegradation(
+          "phase-failed",
+          `${phase.name} failed and was skipped: ${result.errors.join("; ") || "no error detail"}`,
+        )
         emit({ type: "phase_error", phaseId: phase.phaseId, name: phase.name, error: result.errors.join("; ") })
+      } else if (phaseRecord.status === "PARTIAL") {
+        recordDegradation(
+          "phase-partial",
+          `${phase.name} finished partially${result.errors.length > 0 ? `: ${result.errors.join("; ")}` : ""}`,
+        )
+        emit({ type: "phase_complete", phaseId: phase.phaseId, name: phase.name, findings: result.findings.length, status: phaseRecord.status })
+      } else if (phaseRecord.status === "SKIPPED") {
+        recordDegradation(
+          "phase-skipped",
+          `${phase.name} was skipped${result.errors.length > 0 ? `: ${result.errors.join("; ")}` : ""}`,
+        )
+        emit({ type: "phase_complete", phaseId: phase.phaseId, name: phase.name, findings: result.findings.length, status: phaseRecord.status })
       } else {
         emit({ type: "phase_complete", phaseId: phase.phaseId, name: phase.name, findings: result.findings.length, status: phaseRecord.status })
       }
@@ -488,8 +534,22 @@ export async function resumeCommand(
         ? `Resume failed: ${executionError.message}`
         : `Resume completed — ${allFindings.length - existingFindings.length} new finding(s)`)
     emit({ type: "scan_complete", totalFindings: allFindings.length })
+    for (const line of degradationSummaryLines(
+      degradations,
+      executionError ? "Resume failed" : "Resume completed",
+    )) {
+      emit(line)
+    }
     await bridge.disconnect()
   }
+
+  // The caller prints this string, so the degradation list rides along with the
+  // report instead of living only in progress events and the audit log.
+  const degradationBlock =
+    degradations.length > 0
+      ? `\n\n## Degraded coverage (${degradations.length} step(s))\n\n` +
+        degradations.map((degradation) => `- ${degradation}`).join("\n")
+      : ""
 
   // Generate report
   if (!executionError) {
@@ -505,12 +565,12 @@ export async function resumeCommand(
     // only in the terminal that happened to be watching.
     try {
       const reportPath = reportGen.writeArtifact(engagementId, report, "markdown")
-      return `${report}\n\nReport written: ${reportPath}`
+      return `${report}${degradationBlock}\n\nReport written: ${reportPath}`
     } catch (err) {
       console.warn(`Could not write the report artifact: ${(err as Error).message}`)
-      return report
+      return `${report}${degradationBlock}`
     }
   }
 
-  return `Resume completed with errors: ${executionError.message}`
+  return `Resume completed with errors: ${executionError.message}${degradationBlock}`
 }
