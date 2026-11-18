@@ -28,6 +28,11 @@ describe("argus doctor CLI", () => {
       stderr: "pipe",
       env: {
         PATH: process.env.PATH ?? "",
+        // `resolveDefaultPython()` (used by the assertion below) honours this
+        // override, so the child must see it too. Without it the doctor reports
+        // the repo venv while the test expects the interpreter the parent
+        // resolved, and the two halves of the check disagree.
+        ...(process.env.ARGUS_PYTHON ? { ARGUS_PYTHON: process.env.ARGUS_PYTHON } : {}),
         HOME: home.path,
         XDG_CONFIG_HOME: path.join(home.path, "config"),
         XDG_DATA_HOME: path.join(home.path, "data"),
