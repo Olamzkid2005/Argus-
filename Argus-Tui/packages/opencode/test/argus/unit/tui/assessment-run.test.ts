@@ -144,6 +144,47 @@ describe("runTuiAssessment", () => {
     expect(getScanState().status).toBe("partial")
   })
 
+  test("reports a degraded run as partial with a degraded-step transcript line", async () => {
+    // The runner tolerates skipped/failed phases and records them in
+    // `degradations`; the TUI must not then show a clean pass. No phase_error
+    // event is emitted here, so the status can only come from the result.
+    const runner = {
+      async run(options: WorkflowRunOptions) {
+        options.onEngagement?.({ id: "ENG-15", target: options.target, created: true })
+        await options.onProgress?.("⚠ Degraded (phase-failed) — recon failed and was skipped")
+        return result({
+          engagementId: "ENG-15",
+          findings: 1,
+          degradations: [
+            "capability-missing: reporting (no installed tool for report_generation)",
+            "phase-failed: recon failed and was skipped",
+          ],
+        })
+      },
+    }
+
+    const written: string[] = []
+    const originalWrite = process.stderr.write
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      written.push(String(chunk))
+      return true
+    }) as typeof process.stderr.write
+
+    let outcome: Awaited<ReturnType<typeof runTuiAssessment>>
+    try {
+      outcome = await runTuiAssessment({ target: "https://lab.example" }, { runner, navigate: false })
+    } finally {
+      process.stderr.write = originalWrite
+    }
+
+    expect(outcome.status).toBe("partial")
+    expect(getScanState().status).toBe("partial")
+    const log = getScanState().log.join("\n")
+    expect(log).toContain("Assessment finished with 2 degraded step(s)")
+    expect(log).toContain("Assessment finished with partial coverage")
+    expect(written.join("")).toContain("partial coverage (2 degraded step(s))")
+  })
+
   test("reports a stopped run without claiming success", async () => {
     const runner = {
       async run(options: WorkflowRunOptions) {

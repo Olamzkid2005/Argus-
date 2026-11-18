@@ -164,11 +164,16 @@ async function executeTuiAssessment(
   trace("progress queue drained")
   if (!engagementId) engagementId = result.engagementId
 
+  // A run that skipped or failed steps is not a clean pass: the scan view and
+  // the terminal line must say so, otherwise degraded coverage reads as a
+  // complete assessment with suspiciously few findings.
+  const degradedSteps = result.degradations?.length ?? 0
+  const degraded = degradedSteps > 0
   const status: TuiAssessmentStatus = result.stopped
     ? "stopped"
     : !result.success
       ? "failed"
-      : partial
+      : partial || degraded
         ? "partial"
         : "completed"
 
@@ -176,6 +181,7 @@ async function executeTuiAssessment(
   trace(`completeScan(${status})`)
   if (status === "failed") appendLog(`Assessment failed: ${result.error ?? "unknown error"}`)
   if (status === "partial") appendLog("Assessment finished with partial coverage")
+  if (degraded) appendLog(`Assessment finished with ${degradedSteps} degraded step(s)`)
   if (status === "stopped") appendLog("Assessment stopped at a phase boundary")
   // Every other outcome prints a terminal line; a clean finish used to print
   // nothing, so anything watching the log for a completion marker (the Gate A
@@ -194,7 +200,7 @@ async function executeTuiAssessment(
     status === "completed"
       ? summary
       : status === "partial"
-        ? `Assessment finished — partial coverage (${result.findings} finding(s): ${breakdown})`
+        ? `Assessment finished — partial coverage${degraded ? ` (${degradedSteps} degraded step(s))` : ""} (${result.findings} finding(s): ${breakdown})`
         : status === "stopped"
           ? `Assessment stopped at a phase boundary (${result.findings} finding(s))`
           : `Assessment failed: ${result.error ?? "unknown error"}`
