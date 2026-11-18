@@ -1988,4 +1988,36 @@ export class WorkflowRunner {
     }
   }
 
+  /**
+   * Autonomous assessment loop — runs the whole plan without operator
+   * intervention. It plans and replans without the LLM (rule-based and
+   * attack-graph chain plans only), and stops only when the cooperative
+   * `shouldStop()` signal fires at a phase boundary or when scope enforcement
+   * rejects the target.
+   *
+   * Scope enforcement (ARGUS_AUTONOMOUS=1 requires scope.mode=allowlist with
+   * configured allowed_targets) is validated inside run(), so an out-of-scope
+   * target still fails the engagement before any phase executes.
+   *
+   * Requires ARGUS_AUTONOMOUS=1.
+   */
+  async runAutonomous(
+    options: Omit<WorkflowRunOptions, "useLLM" | "shouldStop"> & {
+      shouldStop?: () => boolean
+    },
+  ): Promise<WorkflowRunResult> {
+    const isAutonomous =
+      process.env.ARGUS_AUTONOMOUS === "1" || process.env.ARGUS_AUTONOMOUS === "true"
+    if (!isAutonomous) {
+      throw new Error(
+        "[Argus] ARGUS_AUTONOMOUS=1 must be set to run an autonomous assessment",
+      )
+    }
+
+    return this.run({
+      ...options,
+      useLLM: false,
+      shouldStop: options.shouldStop ?? (() => false),
+    })
+  }
 }
