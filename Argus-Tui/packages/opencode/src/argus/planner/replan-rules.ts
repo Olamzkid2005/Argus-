@@ -44,6 +44,16 @@ export const REPLAN_INSERTABLE: Record<string, Capability> = {
   xss_confirmed: Capability.SESSION_HIJACK_ATTEMPT,
   rce_confirmed: Capability.LATERAL_MOVEMENT,
   open_redirect: Capability.PHISHING_CHAIN,
+  // Web scanner breadth findings (tools/web_scanner_checks). Without these
+  // mappings the checks run, report, and then replanning logs "Unknown subtype"
+  // and never acts on them. The executedCapabilities guard keeps an already-run
+  // capability from being queued twice.
+  missing_security_headers: Capability.SECURITY_ANALYSIS,
+  missing_csp: Capability.SECURITY_ANALYSIS,
+  weak_csp: Capability.SECURITY_ANALYSIS,
+  insecure_cookie: Capability.SESSION_HIJACK_ATTEMPT,
+  reflected_origin_cors: Capability.API_PROBING,
+  wildcard_cors: Capability.API_PROBING,
   exposed_secret: Capability.CREDENTIAL_REPLAY,
   // Bucket permission findings map back to the S3 capability that found them;
   // it is already executed, so no duplicate scan is queued.
