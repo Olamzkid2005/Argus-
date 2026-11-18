@@ -636,17 +636,29 @@ class MCPServer:
 
         The augmented PATH is built by ``_augmented_tool_path()`` and is the
         same PATH tool execution receives.
+
+        A cached answer is only valid for the exact inputs that produced it:
+        the augmented PATH string and the resolver itself. The cache is shared
+        process-wide, so without that check a lookup taken while ``PATH`` (or
+        ``ARGUS_EXTRA_PATH``) was different — or while ``shutil.which`` was
+        substituted — outlived the change and made ``available`` contradict
+        the PATH ``call_tool`` actually executes with.
         """
         _cache = self.__class__._binary_cache
         _now = time.monotonic()
+        _augmented_path = _augmented_tool_path()
+        _resolver = shutil.which
         _cached = _cache.get(name)
         if _cached is not None:
-            _path, _checked_at = _cached
-            if _path is not None or (_now - _checked_at) < self._BINARY_CACHE_MISS_TTL_SECS:
+            _path, _checked_at, _cached_path, _cached_resolver = _cached
+            if (
+                _cached_path == _augmented_path
+                and _cached_resolver is _resolver
+                and (_path is not None or (_now - _checked_at) < self._BINARY_CACHE_MISS_TTL_SECS)
+            ):
                 return _path
-        _augmented_path = _augmented_tool_path()
-        _found = shutil.which(name, path=_augmented_path)
-        _cache[name] = (_found, time.monotonic())
+        _found = _resolver(name, path=_augmented_path)
+        _cache[name] = (_found, time.monotonic(), _augmented_path, _resolver)
         return _found
 
     def _check_critical_tools(self) -> None:
@@ -796,6 +808,9 @@ class MCPServer:
             ),
             os.path.normpath(
                 os.path.join(project_dir, "argus-workers", "tools", "scripts", "delegate_shim.py")
+            ),
+            os.path.normpath(
+                os.path.join(project_dir, "argus-workers", "tools", "api_spec_scan.py")
             ),
         }
 
@@ -1067,11 +1082,14 @@ class MCPServer:
     # treated as an error on the MCP path, silently losing findings.
     # Last verified: both match exactly (8 tools each).
     # Shared binary availability cache (class-level, shared across all instances)
-    # Maps tool name -> (absolute_path_or_None, monotonic_check_time). Positive
-    # hits live for the process lifetime; negative hits (None) are re-checked
-    # after _BINARY_CACHE_MISS_TTL_SECS so tools installed mid-session are
-    # picked up instead of being reported missing forever.
-    _binary_cache: dict[str, tuple[str | None, float]] = {}
+    # Maps tool name -> (absolute_path_or_None, monotonic_check_time,
+    # augmented_path_used, resolver_used). Positive hits live for the process
+    # lifetime; negative hits (None) are re-checked after
+    # _BINARY_CACHE_MISS_TTL_SECS so tools installed mid-session are picked up
+    # instead of being reported missing forever. The PATH and resolver the
+    # answer was derived from are part of the entry so a changed PATH or a
+    # substituted resolver invalidates it instead of returning a stale verdict.
+    _binary_cache: dict[str, tuple[str | None, float, str, object]] = {}
     _BINARY_CACHE_MISS_TTL_SECS = 60.0
 
     FINDINGS_EXIT_CODES: dict[str, set[int]] = {

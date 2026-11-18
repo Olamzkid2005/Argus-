@@ -17,7 +17,7 @@ parameters:
 capabilities:
   - vulnerability_scanning
 signal_quality: CANDIDATE
-risk_level: medium
+risk_level: high
 priority: 70
 cost: medium
 enabled: true

@@ -182,6 +182,12 @@ def _build_tool_registration(data: dict) -> str:
         lines.append(_indent(f'cost="{cost}",'))
     risk_level = data.get("risk_level") or ("medium" if cost == "high" else "low")
     lines.append(_indent(f'risk_level="{risk_level}",'))
+    # The YAML explanation is what the worker publishes for a tool it cannot
+    # dispatch; dropping it here made every disabled tool report the generic
+    # "no execution phase" sentence instead of its real reason.
+    disabled_reason = data.get("disabled_reason")
+    if disabled_reason:
+        lines.append(_indent(f"disabled_reason={str(disabled_reason)!r},"))
     lines.append(_indent("))", level=0))
     return "\n".join(lines)
 

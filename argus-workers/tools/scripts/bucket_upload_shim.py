@@ -23,12 +23,10 @@ A bucket that refuses all three is an explicit clean negative attributed to
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import secrets
 import ssl
-import sys
 import urllib.error
 import urllib.parse
 import urllib.request

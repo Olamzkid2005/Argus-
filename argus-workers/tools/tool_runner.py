@@ -606,6 +606,12 @@ class ToolRunner:
                 stderr=egress.reason,
                 exit_code=1,
                 status=status,
+                # Structured consumers read error_*; leaving them blank is how a
+                # refusal reached the planner as a bare SCOPE_ERROR with no
+                # explanation, while the reason sat unused in stderr.
+                error_type="EgressPolicyViolation",
+                error_message=egress.reason,
+                error_detail=egress.reason,
             )
             result.mark_finished()
             return result
@@ -623,6 +629,9 @@ class ToolRunner:
                     stderr=block_reason,
                     exit_code=1,
                     status=ToolStatus.SCOPE_ERROR,
+                    error_type="ScopeViolation",
+                    error_message=block_reason,
+                    error_detail=block_reason,
                 )
                 result.mark_finished()
                 return result

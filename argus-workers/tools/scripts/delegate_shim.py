@@ -86,7 +86,7 @@ SAST_CANARIES = {
 
 #: Delegated tool -> the installed engine behind it, for negative wording.
 DELEGATES = {
-    **{tool: "semgrep" for tool in SAST_PACKS},
+    **dict.fromkeys(SAST_PACKS, "semgrep"),
     "pip-audit": "trivy",
     "testssl": "openssl",
     "uncover": "internetdb.shodan.io",

@@ -84,7 +84,7 @@ def discover(target: str) -> list[str]:
         action_url = urllib.parse.urljoin(target, action or target)
         if urllib.parse.urlsplit(action_url).netloc != parts.netloc:
             continue
-        query = urllib.parse.urlencode({name: "1" for name in names})
+        query = urllib.parse.urlencode(dict.fromkeys(names, "1"))
         candidate = f"{action_url}{'&' if '?' in action_url else '?'}{query}"
         if candidate not in candidates:
             candidates.append(candidate)

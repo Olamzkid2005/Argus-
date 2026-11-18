@@ -366,9 +366,12 @@ class TestInlineOverridesDoNotLoseYamlData:
     def test_cloud_metadata_probe_extra_keeps_its_flag(self):
         assert self._param("cloud_metadata_probe", "extra").flag == "--extra"
 
-    def test_alterx_target_gets_its_l_flag(self):
-        # alterx v0.0.4+ dropped -d; -l is the current input flag.
-        assert self._param("alterx", "target").flag == "-l"
+    def test_alterx_target_uses_the_recon_shim_flag(self):
+        # alterx is delegated to recon_shim.py (the upstream binary is not
+        # installable in this image), and that shim takes --target. The old
+        # -l list flag belonged to the upstream binary, not to this entry.
+        assert self._param("alterx", "target").flag == "--target"
+        assert TOOLS["alterx"].binary == "python3"
 
     def test_parameter_declared_only_inline_is_kept(self):
         assert self._param("login", "email") is not None
@@ -413,8 +416,12 @@ class TestInlineOverridesDoNotLoseYamlData:
         # gospider v1.1.6 crawls without the older build's segfault; the flag
         # fix (`--json`, not `-j`) still stands.
         assert TOOLS["gospider"].phases == ["recon"]
-        # The installed whatweb accepts only a positional target.
-        assert TOOLS["whatweb"].default_args == []
+        # whatweb is delegated to whatweb_shim.py, so its fixed arguments are
+        # the shim invocation and the target is appended as --target.
+        assert TOOLS["whatweb"].default_args == [
+            "argus-workers/tools/scripts/whatweb_shim.py",
+        ]
+        assert self._param("whatweb", "target").flag == "--target"
         # Path-only tools stay out of the HTTP phases.
         assert TOOLS["bandit"].phases == ["repo_scan"]
         # playwright-* removed the auto-generated scheme gate on purpose.

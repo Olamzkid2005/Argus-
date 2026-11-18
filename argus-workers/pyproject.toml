@@ -57,6 +57,11 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+[tool.ruff.lint.per-file-ignores]
+# Tests stub callables whose parameter names mirror the real signature; the
+# name is part of the contract under test, even when the stub ignores it.
+"tests/*" = ["ARG005"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["database", "tracing", "tools", "tasks"]
 

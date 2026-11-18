@@ -22,16 +22,29 @@ import pytest
 
 @pytest.fixture
 def mock_validate_target_scope():
-    """Default mock returns True (in scope)."""
+    """Default mock returns True (in scope).
+
+    Both module paths are patched: the scanner layer imports from
+    ``tools.scope_validator``, while ``AsyncToolRunner`` imports
+    ``tool_core.validators.scope`` inside the call. Patching only the former
+    silently missed the sandbox path, so its tests exercised the real
+    validator instead of the mocked allow/deny decision.
+    """
     with mock.patch("tools.scope_validator.validate_target_scope", return_value=True) as m:
-        yield m
+        with mock.patch(
+            "tool_core.validators.scope.validate_target_scope", return_value=True
+        ):
+            yield m
 
 
 @pytest.fixture
 def mock_validate_target_scope_block():
-    """Mock returns False (out of scope)."""
+    """Mock returns False (out of scope); patches both import sites."""
     with mock.patch("tools.scope_validator.validate_target_scope", return_value=False) as m:
-        yield m
+        with mock.patch(
+            "tool_core.validators.scope.validate_target_scope", return_value=False
+        ):
+            yield m
 
 
 @pytest.fixture
@@ -331,11 +344,12 @@ class TestSwarmScope:
 
 # ---------------------------------------------------------------------------
 # Sandbox: AsyncToolRunner.run() / run_streaming() —
-# SKIPPED: requires opentelemetry (pre-existing env issue).
+# These classes used to be skipped for an opentelemetry import error that no
+# longer reproduces (tools.tool_runner, orchestrator_pkg and tracing all import
+# cleanly), so they run again instead of hiding reachable coverage.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="opentelemetry import error in tools/tool_runner.py (pre-existing)")
 class TestSandboxScope:
     """SSRF + scope integration for AsyncToolRunner.run() and run_streaming().
 
@@ -390,16 +404,14 @@ class TestSandboxScope:
         assert "out of scope" in result.error_message
 
     @pytest.mark.asyncio
-    async def test_run_skips_scope_check_without_engagement_id(self, sandbox):
-        """No engagement_id => both SSRF and scope checks are skipped."""
+    async def test_run_blocks_internal_target_without_engagement_id(self, sandbox):
+        """No engagement_id does not mean no SSRF check: the run fails closed."""
         result = await sandbox.run(
             "echo", ["hello"], target="http://10.0.0.1", engagement_id="",
         )
-        # Without engagement_id, neither SSRF nor scope validation runs.
-        # The tool proceeds to subprocess execution.
-        assert result is not None
         from tool_core.result import ToolStatus
-        assert result.status != ToolStatus.SKIPPED
+        assert result.status == ToolStatus.SKIPPED
+        assert "internal/SSRF" in result.error_message
 
     @pytest.mark.asyncio
     async def test_run_passes_safe_target(self, sandbox, mock_validate_target_scope):
@@ -598,11 +610,12 @@ class TestWebScannerScope:
 
 # ---------------------------------------------------------------------------
 # Deterministic Pipeline: scan.py execute_scan_tools() —
-# SKIPPED: requires opentelemetry (pre-existing env issue).
+# These classes used to be skipped for an opentelemetry import error that no
+# longer reproduces (tools.tool_runner, orchestrator_pkg and tracing all import
+# cleanly), so they run again instead of hiding reachable coverage.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="opentelemetry import error in orchestrator_pkg/__init__.py (pre-existing)")
 class TestScanPipelineScope:
     """SSRF + scope integration for execute_scan_tools() in scan.py.
 
@@ -625,7 +638,12 @@ class TestScanPipelineScope:
         return ctx
 
     def test_filters_internal_targets(self, mock_ctx):
-        """Internal targets are filtered out by SSRF check before scope check."""
+        """Internal targets are filtered out by SSRF check before scope check.
+
+        The in-scope public target still runs and contributes the mocked
+        runner's result, so the property to assert is which targets reached
+        the runner: the metadata and private targets must never get there.
+        """
         from orchestrator_pkg.scan import execute_scan_tools
 
         targets = [
@@ -634,8 +652,11 @@ class TestScanPipelineScope:
             "http://10.0.0.1/admin",
         ]
         results = execute_scan_tools(mock_ctx, targets, {}, aggressiveness="default")
-        # Only in-scope public targets survive
-        assert len(results) == 0  # no tools actually ran (mocked runner)
+        assert len(results) == 1, results
+        invoked = " ".join(str(c) for c in mock_ctx.tool_runner.run.call_args_list)
+        assert "example.com" in invoked
+        assert "169.254.169.254" not in invoked
+        assert "10.0.0.1" not in invoked
 
     def test_filters_out_of_scope_targets(self, mock_ctx):
         """Out-of-scope targets are filtered after SSRF check."""
@@ -675,29 +696,33 @@ class TestScanPipelineScope:
             assert len(results) == 0
 
     def test_logs_blocked_targets(self, mock_ctx):
-        """Warning is logged for each blocked target."""
+        """Warning is logged for each blocked target.
+
+        ``execute_scan_tools`` reports through its ``ScanLogger``, not through
+        the module's stdlib logger, so the assertion belongs on the former.
+        """
         from orchestrator_pkg.scan import execute_scan_tools
+        from utils.logging_utils import ScanLogger
 
         mock_ctx.scope_mode = "allowlist"
         mock_ctx.allowed_targets = ["*nonexistent*"]
 
-        with mock.patch("orchestrator_pkg.scan.logger") as mock_logger:
+        with mock.patch.object(ScanLogger, "warn") as mock_warn:
             targets = ["https://example.com/api"]
             execute_scan_tools(mock_ctx, targets, {}, aggressiveness="default")
-            mock_logger.warning.assert_any_call(
-                mock.ANY,
-                mock.ANY,
-                mock.ANY,
-            )
+            assert mock_warn.called
+            messages = " ".join(str(call) for call in mock_warn.call_args_list)
+            assert "example.com" in messages
 
 
 # ---------------------------------------------------------------------------
 # Tool Runner: ToolRunner.run() with authorized_scope —
-# SKIPPED: requires opentelemetry (pre-existing env issue).
+# These classes used to be skipped for an opentelemetry import error that no
+# longer reproduces (tools.tool_runner, orchestrator_pkg and tracing all import
+# cleanly), so they run again instead of hiding reachable coverage.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="opentelemetry import error in tracing/__init__.py (pre-existing)")
 class TestToolRunnerScope:
     """Scope integration for ToolRunner.run().
 
@@ -752,23 +777,21 @@ class TestToolRunnerScope:
                 from tool_core.result import ToolStatus
                 assert result.status == ToolStatus.SCOPE_ERROR
 
-    def test_passes_without_engagement_id(self):
-        """No engagement_id = no scope load = no validation."""
+    def test_fails_closed_without_engagement_id(self):
+        """No engagement_id means no authorized scope, so the run is refused."""
         from tools.tool_runner import ToolRunner
         runner = ToolRunner(sandbox_dir="/tmp/test_sandbox")
 
         with mock.patch.object(runner, "_resolve_tool_path", return_value="/usr/bin/echo"):
             with mock.patch.object(runner, "is_dangerous", return_value=False):
                 with mock.patch("subprocess.run") as mock_subprocess:
-                    mock_subprocess.return_value.returncode = 0
-                    mock_subprocess.return_value.stdout = "hello"
-                    mock_subprocess.return_value.stderr = ""
-
                     result = runner.run(
                         "echo", ["https://example.com/api"], timeout=30,
                     )
                     from tool_core.result import ToolStatus
-                    assert result.status == ToolStatus.SUCCESS
+                    assert result.status == ToolStatus.SCOPE_ERROR
+                    assert "ARGUS_ALLOW_UNSCOPED" in result.error_message
+                    mock_subprocess.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

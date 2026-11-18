@@ -836,7 +836,6 @@ class TestAugmentedToolPath:
     def test_nuclei_gets_the_configured_template_directory(self, monkeypatch, tmp_path):
         """nuclei ships no templates; without -t the phase loses its scanner."""
         import json
-        import os
         import sys
 
         monkeypatch.setenv("ARGUS_NUCLEI_TEMPLATES", str(tmp_path))
@@ -1776,3 +1775,28 @@ class TestDisabledFlagInYaml:
         for name in ("chaos", "uncover", "github-endpoints"):
             spec = yaml.safe_load((definitions / f"{name}.yaml").read_text())
             assert any("delegate_shim.py" in str(arg) for arg in spec["args"]), name
+
+
+class TestPythonScriptDefinitionsAreLoadable:
+    def test_every_python_script_definition_survives_the_whitelist(self):
+        """A python3 tool whose script is not whitelisted is skipped silently.
+
+        The OpenAPI/GraphQL tools (``tools/api_spec_scan.py``) were added but
+        never whitelisted, so the worker dropped both and the capability could
+        not run at all. Loading every YAML definition the way the worker does
+        keeps that class of omission visible.
+        """
+        import yaml
+
+        definitions = Path(__file__).resolve().parents[1] / "tools" / "definitions"
+        server = MCPServer(tools_dir=str(definitions))
+        skipped = []
+        for path in sorted(definitions.glob("*.yaml")):
+            spec = yaml.safe_load(path.read_text()) or {}
+            if spec.get("command") != "python3":
+                continue
+            if spec.get("disabled") or not spec.get("enabled", True):
+                continue
+            if spec.get("name") not in server._tools:
+                skipped.append(f"{spec.get('name')} ({path.name})")
+        assert not skipped, f"python3 definitions skipped by the worker: {skipped}"

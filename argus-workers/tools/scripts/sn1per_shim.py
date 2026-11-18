@@ -20,7 +20,7 @@ import subprocess
 import sys
 import time
 
-_DELEGATES = "nuclei nikto httpx".split()
+_DELEGATES = ["nuclei", "nikto", "httpx"]
 
 
 def _run(cmd: list[str], timeout: int) -> str:

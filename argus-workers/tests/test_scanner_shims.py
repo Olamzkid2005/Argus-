@@ -390,7 +390,7 @@ class TestReconShim:
             assert data["parameters"][0]["flag"] == "--target", name
 
 
-class TestDnsxShim:
+class TestDnsxShimAnswers:
     """dnsx was disabled: no resolvers, and -d alone is rejected."""
 
     def _run(self, monkeypatch, capsys, output: str):
@@ -434,7 +434,7 @@ class TestDnsxShim:
         assert wordlist.is_file()
 
 
-class TestDnsxShim:
+class TestDnsxShimInputs:
     """dnsx needs a domain list, a wordlist and resolvers; the shim supplies all."""
 
     def test_labels_are_read_from_the_checked_in_wordlist(self):

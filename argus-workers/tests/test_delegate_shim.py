@@ -40,10 +40,11 @@ DELEGATED = [
 
 @pytest.mark.parametrize("tool", DELEGATED)
 def test_definition_runs_the_shim(tool):
-    spec = yaml.safe_load(open(os.path.join(DEFINITIONS, f"{tool}.yaml")))
+    with open(os.path.join(DEFINITIONS, f"{tool}.yaml")) as handle:
+        spec = yaml.safe_load(handle)
     assert spec["command"] == "python3", f"{tool} still requires a missing binary"
     assert any("delegate_shim.py" in str(arg) for arg in spec["args"])
-    assert tool in [arg for arg in spec["args"]] or any(tool in str(a) for a in spec["args"])
+    assert tool in spec["args"] or any(tool in str(a) for a in spec["args"])
     assert spec.get("enabled") is True
     assert not spec.get("required_env"), f"{tool} still gates on credentials"
 
@@ -518,7 +519,8 @@ def test_ai_surface_is_plannable_for_a_url_target():
     assert td.is_tool_available("ai-surface")
     assert "ai-surface" in [t.name for t in td.get_tools_for_phase("recon")]
 
-    spec = yaml.safe_load(open(os.path.join(DEFINITIONS, "ai-surface.yaml")))
+    with open(os.path.join(DEFINITIONS, "ai-surface.yaml")) as handle:
+        spec = yaml.safe_load(handle)
     assert "web_recon" in spec["capabilities"], spec["capabilities"]
 
 

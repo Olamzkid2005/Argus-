@@ -330,7 +330,7 @@ def operations(document: dict) -> list[Operation]:
 
 def _operation_url(base: str, operation: Operation) -> str:
     path = operation.path
-    for name in set(part.split("}")[0] for part in path.split("{")[1:]):
+    for name in {part.split("}")[0] for part in path.split("{")[1:]}:
         path = path.replace("{" + name + "}", "1")
     url = base.rstrip("/") + "/" + path.lstrip("/")
     if operation.method in ("get", "head"):
@@ -585,12 +585,12 @@ def _types(schema: dict) -> dict[str, list[tuple[str, str]]]:
             continue
         name = str(entry.get("name") or "")
         fields = []
-        for field in entry.get("fields") or []:
-            if not isinstance(field, dict) or not field.get("name"):
+        for entry_field in entry.get("fields") or []:
+            if not isinstance(entry_field, dict) or not entry_field.get("name"):
                 continue
-            kind = field.get("type") or {}
+            kind = entry_field.get("type") or {}
             return_name = str(kind.get("name") or (kind.get("ofType") or {}).get("name") or "")
-            fields.append((str(field["name"]), return_name))
+            fields.append((str(entry_field["name"]), return_name))
         if name:
             table[name] = fields
     return table
