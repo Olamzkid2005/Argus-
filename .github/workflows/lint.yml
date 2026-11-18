@@ -103,6 +103,19 @@ jobs:
         working-directory: Argus-Tui
         run: bun install ${{ env.BUN_INSTALL_FLAGS }}
 
+      # The suite under test/argus/ spawns the real MCP worker for its
+      # integration tests, so the worker's python dependencies must exist on
+      # the runner. Without them the bridge cannot start and resume-flow fails
+      # with ModuleNotFoundError instead of exercising the resume path. The
+      # worker also reads its delegated tool definitions through PyYAML, which
+      # lives in requirements-dev.txt.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python worker dependencies
+        run: pip install -r argus-workers/requirements.txt -r argus-workers/requirements-dev.txt -q
+
       - name: Create artifacts directory
         working-directory: Argus-Tui/packages/opencode
         run: mkdir -p .artifacts/unit
