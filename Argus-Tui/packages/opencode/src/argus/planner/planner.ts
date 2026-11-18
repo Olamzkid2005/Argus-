@@ -115,20 +115,18 @@ export class WorkflowPlanner {
         const tools = this.toolRegistry.selectBest(p.requiredCapabilities as any, targetType)
         return tools.length === 0 && plan.errorRecovery?.[p.phaseId] !== "fail_fast"
       })
-      // In autonomous mode, fail hard if ANY phase has zero tools
+      // Autonomous runs do not abort over a missing tool: one unavailable
+      // scanner used to end the whole assessment. The zero-tool phases are
+      // dropped below and named on plan.degradations so the runner can report
+      // the lost coverage and continue with the rest.
       if (hasError) {
         const zeroToolsPhases = plan.phases
           .filter((p) => {
             const tools = this.toolRegistry.selectBest(p.requiredCapabilities as any, targetType)
             return tools.length === 0
           })
-          .map((p) => p.name)
-        if (process.env.ARGUS_AUTONOMOUS === "1" || process.env.ARGUS_AUTONOMOUS === "true") {
-          throw new Error(
-            `[Argus] ARGUS_AUTONOMOUS=1: ${zeroToolsPhases.length} phase(s) have zero available tools: ${zeroToolsPhases.join(", ")}. ` +
-            `Install the required security tools or disable autonomous mode.`
-          )
-        }
+          .map((p) => `${p.name} (no installed tool for ${p.requiredCapabilities.join(", ")})`)
+        plan.degradations = [...(plan.degradations ?? []), ...zeroToolsPhases]
       }
       plan.phases = plan.phases.filter((p) => {
         const tools = this.toolRegistry.selectBest(p.requiredCapabilities as any, targetType)
@@ -209,6 +207,9 @@ export class WorkflowPlanner {
     const workflowCostFilter = workflow.name === "quick_scan" ? "no_high" : undefined
 
     const phases: PhaseExecutionRequest[] = []
+    // Dropped phases are recorded on the plan just like the deterministic
+    // path does, so `plan.degradations` is accurate regardless of `useLLM`.
+    const droppedPhases: string[] = []
     for (let i = 0; i < workflow.phases.length; i++) {
       const def = workflow.phases[i]
       // Pass gate context for tech-based and scheme-based tool filtering
@@ -219,6 +220,9 @@ export class WorkflowPlanner {
 
       if (tools.length === 0) {
         if (def.error_recovery !== "fail_fast") {
+          droppedPhases.push(
+            `${def.name} (no installed tool for ${def.required_capabilities.join(", ")})`,
+          )
           process.stderr.write(`Warning: Skipping phase "${def.name}" — zero available tools\n`)
           continue
         }
@@ -267,6 +271,7 @@ export class WorkflowPlanner {
         workflow.phases.map((p, i) => [`phase-${i}-${p.name}`, p.error_recovery]),
       ),
       planCreatedAt: new Date().toISOString(),
+      ...(droppedPhases.length > 0 ? { degradations: droppedPhases } : {}),
     }
   }
 

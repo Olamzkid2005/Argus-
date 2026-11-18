@@ -662,3 +662,70 @@ describe("WorkflowPlanner", () => {
     })
   })
 })
+
+describe("WorkflowPlanner plan() degradation reporting", () => {
+  test("LLM planning records phases dropped for zero available tools", async () => {
+    const workflow: WorkflowDefinition = {
+      name: "llm-workflow",
+      label: "LLM Workflow",
+      version: 1,
+      phases: [
+        {
+          name: "recon",
+          required_capabilities: [Capability.WEB_RECON],
+          execution: "parallel",
+          error_recovery: "skip_and_continue",
+        },
+        {
+          name: "reporting",
+          required_capabilities: [Capability.REPORT_GENERATION],
+          execution: "sequential",
+          error_recovery: "skip_and_continue",
+        },
+      ],
+    }
+    const registry = { findByCapabilities: () => workflow }
+    const toolRegistry = {
+      selectBest: (caps: string[]) =>
+        caps.includes(Capability.REPORT_GENERATION)
+          ? []
+          : [{ name: "recon-tool", capabilities: ["web_recon"] }],
+    }
+    const planner = new WorkflowPlanner(registry as any, toolRegistry as any, plannerDeps)
+
+    // useLLM: true exercises the LLM planning branch (the LLM itself is the
+    // "unavailable" stub, so workflow phases come from the registry).
+    const plan = await planner.plan("https://example.com", undefined, { useLLM: true })
+
+    expect(plan.phases.map((p) => p.name)).toEqual(["recon"])
+    expect(plan.degradations).toEqual([
+      "reporting (no installed tool for report_generation)",
+    ])
+  })
+
+  test("a fully runnable LLM plan reports no degradations", async () => {
+    const workflow: WorkflowDefinition = {
+      name: "llm-workflow",
+      label: "LLM Workflow",
+      version: 1,
+      phases: [
+        {
+          name: "recon",
+          required_capabilities: [Capability.WEB_RECON],
+          execution: "parallel",
+          error_recovery: "skip_and_continue",
+        },
+      ],
+    }
+    const registry = { findByCapabilities: () => workflow }
+    const toolRegistry = {
+      selectBest: () => [{ name: "recon-tool", capabilities: ["web_recon"] }],
+    }
+    const planner = new WorkflowPlanner(registry as any, toolRegistry as any, plannerDeps)
+
+    const plan = await planner.plan("https://example.com", undefined, { useLLM: true })
+
+    expect(plan.phases).toHaveLength(1)
+    expect(plan.degradations).toBeUndefined()
+  })
+})

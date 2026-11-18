@@ -76,6 +76,12 @@ export interface AssessmentPlan {
   phases: PhaseExecutionRequest[]
   errorRecovery: Record<string, ErrorRecovery>
   planCreatedAt: string
+  /**
+   * Phases the planner had to drop before execution, with the reason
+   * (e.g. a capability no installed tool provides). Carried on the plan so
+   * the runner can report degraded coverage instead of silently losing it.
+   */
+  degradations?: string[]
 }
 
 export interface Hypothesis {
