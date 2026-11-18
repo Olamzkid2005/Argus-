@@ -324,6 +324,12 @@ export interface WorkflowRunResult {
   success: boolean
   /** True when a cooperative stop ended the run at a phase boundary. */
   stopped?: boolean
+  /**
+   * Steps the run tolerated instead of failing: phases skipped because no
+   * installed tool provides their capability, and phases that failed and were
+   * skipped after a retry. Empty/absent when every phase ran.
+   */
+  degradations?: string[]
   error?: string
   /** All findings with promoted confidence, for rendering summaries */
   allFindings: NormalizedFinding[]
@@ -1295,6 +1301,30 @@ export class WorkflowRunner {
       onProgress: (event) => { if (typeof event !== "string") emit(event) },
     })
     emit(`✓ Plan created: ${plan.phases.length} phase(s)`)
+
+    // ── Self-healing degradation ──
+    // Autonomous runs must survive a missing tool or a crashing phase: the
+    // offending step is skipped, recorded here, and the remaining phases still
+    // run. Interactive runs keep the fail-fast behaviour below.
+    const autonomousRun =
+      process.env.ARGUS_AUTONOMOUS === "1" || process.env.ARGUS_AUTONOMOUS === "true"
+    const degradations: string[] = []
+    const recordDegradation = (kind: string, detail: string) => {
+      const entry = `${kind}: ${detail}`
+      degradations.push(entry)
+      emit(`⚠ Degraded (${kind}) — ${detail}`)
+      try {
+        store.appendAuditLog(engagementId, "RUN_DEGRADED", entry)
+      } catch {
+        // Reporting is best-effort — it must never stop the assessment.
+      }
+    }
+    if (plan.degradations && plan.degradations.length > 0) {
+      for (const dropped of plan.degradations) {
+        recordDegradation("capability-missing", dropped)
+      }
+    }
+
     if (defaultCreds) {
       for (const phase of plan.phases) {
         phase.config.credentials = defaultCreds
@@ -1452,6 +1482,32 @@ export class WorkflowRunner {
           continue
         }
 
+        // ── Self-healing: capability with no installed tool ──
+        // Replan and chain phases are built without a tool-availability check,
+        // and a worker can report a tool unusable after the plan exists.
+        // Dispatching a call that cannot succeed only collects a usage error,
+        // so the phase is skipped and the run continues.
+        if (autonomousRun && phase.toolExecution !== "llm_driven") {
+          const runnable = toolRegistry.selectBest(phase.requiredCapabilities as any, targetType)
+          if (runnable.length === 0) {
+            const skippedRecord = phaseRecords.get(phase.phaseId)
+            if (skippedRecord) {
+              skippedRecord.status = "SKIPPED"
+              skippedRecord.completedAt = new Date().toISOString()
+              skippedRecord.error =
+                "no installed tool for " + phase.requiredCapabilities.join(", ")
+              store.savePhase(engagementId, skippedRecord)
+            }
+            recordDegradation(
+              "capability-missing",
+              `${phaseName}: no installed tool for ${phase.requiredCapabilities.join(", ")}`,
+            )
+            for (const cap of phase.requiredCapabilities) executedCapabilities.add(cap)
+            i++
+            continue
+          }
+        }
+
         emit(`⠋ Running phase ${i + 1}/${plan.phases.length}: ${phaseName}`)
 
         const record = phaseRecords.get(phase.phaseId)!
@@ -1459,7 +1515,52 @@ export class WorkflowRunner {
         record.startedAt = new Date().toISOString()
         store.savePhase(engagementId, record)
 
-        const result = await executor.execute(phase)
+        // ── Self-healing: a phase that throws ──
+        // Autonomous runs retry once, then skip the phase so one broken
+        // scanner cannot end the assessment. Interactive runs rethrow, which
+        // the outer catch turns into a FAILED engagement (unchanged).
+        let result: Awaited<ReturnType<InProcessExecutor["execute"]>> | undefined
+        const maxAttempts = autonomousRun ? 2 : 1
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            result = await executor.execute(phase)
+            break
+          } catch (execErr) {
+            const message = (execErr as Error).message
+            if (!autonomousRun) throw execErr
+            if (attempt < maxAttempts) {
+              emit(
+                `⚠ Phase ${phaseName} failed (${message}) — retrying (attempt ${attempt + 1}/${maxAttempts})`,
+              )
+              try {
+                store.appendAuditLog(engagementId, "PHASE_RETRY", `${phaseName}: ${message}`)
+              } catch {
+                // Audit logging is best-effort.
+              }
+              continue
+            }
+            recordDegradation(
+              "phase-failed",
+              `${phaseName} failed and was skipped: ${message}`,
+            )
+            emit({ type: "phase_error", phaseId: phase.phaseId, name: phaseName, error: message })
+            const failedRecord = phaseRecords.get(phase.phaseId)
+            if (failedRecord) {
+              failedRecord.status = "FAILED"
+              failedRecord.completedAt = new Date().toISOString()
+              failedRecord.error = message
+              store.savePhase(engagementId, failedRecord)
+            }
+            // Mark the capability executed so replanning does not immediately
+            // queue the same failing work again (replan budget still bounds it).
+            for (const cap of phase.requiredCapabilities) executedCapabilities.add(cap)
+            insertedPhaseIds.add(phase.phaseId)
+          }
+        }
+        if (!result) {
+          i++
+          continue
+        }
 
         let phaseFindings = result.findings
         if (phaseFindings.length > 0) {
@@ -1861,6 +1962,11 @@ export class WorkflowRunner {
       if (!executionError && !stopped) {
         emit({ type: "scan_complete", totalFindings: allFindings.length })
       }
+      if (degradations.length > 0) {
+        emit(
+          `⚠ Assessment ran degraded: ${degradations.length} step(s) skipped or failed — ${degradations.join(" | ")}`,
+        )
+      }
       emit(`✓ Assessment ${executionError ? "failed" : stopped ? "stopped" : "complete"}`)
     }
 
@@ -1876,8 +1982,10 @@ export class WorkflowRunner {
       durationMs: Date.now() - startTime,
       success: !executionError && !stopped,
       stopped: stopped || undefined,
+      ...(degradations.length > 0 ? { degradations } : {}),
       error: executionError?.message,
       allFindings,
     }
   }
+
 }
