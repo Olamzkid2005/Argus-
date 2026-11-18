@@ -729,3 +729,99 @@ describe("WorkflowPlanner plan() degradation reporting", () => {
     expect(plan.degradations).toBeUndefined()
   })
 })
+
+describe("WorkflowPlanner replan() chain capability deduplication", () => {
+  function chainPlan(chainId: string, suggestedCapabilities: string[]) {
+    return {
+      chain_id: chainId,
+      name: `chain ${chainId}`,
+      severity: "HIGH",
+      risk_score: 8,
+      prerequisite_finding_types: ["idor", "mass_assignment"],
+      suggested_capabilities: suggestedCapabilities,
+      description: `chain ${chainId} exploitation step`,
+    }
+  }
+
+  function replanWithChains(chains: Array<{ chainId: string; capabilities: string[] }>) {
+    // Registries are unused on this path: the replan reads only the chain plans,
+    // and findings are empty so no LLM suggestion is requested.
+    const planner = new WorkflowPlanner({} as any, {} as any, plannerDeps)
+    const context = makeContext({
+      chainPlans: chains.map((chain) => chainPlan(chain.chainId, chain.capabilities)) as any,
+    })
+    return planner.replan(context)
+  }
+
+  function replanWith(suggestedCapabilities: string[], chainId = "chain_7") {
+    return replanWithChains([{ chainId, capabilities: suggestedCapabilities }])
+  }
+
+  test("an alias chain capability yields only the exploit phase, not a replan duplicate", async () => {
+    const phases = await replanWith(["POST_EXPLOIT"])
+
+    expect(phases).not.toBeNull()
+    expect(phases!.map((p) => p.name)).toEqual(["exploit-chain_7"])
+    expect(phases![0]!.workflowName).toBe("chain_exploitation")
+    // The alias resolves to the same Capability the earlier chain block queued,
+    // so it cannot survive as a second `replan-post_exploitation` phase.
+    expect(phases![0]!.requiredCapabilities).toEqual([Capability.POST_EXPLOITATION])
+    expect(phases!.some((p) => p.name.startsWith("replan-"))).toBe(false)
+  })
+
+  test("no capability repeats across the phases produced for one chain", async () => {
+    const phases = await replanWith(["POST_EXPLOITATION", "PHISHING_CHAIN"])
+
+    expect(phases).not.toBeNull()
+    expect(phases!.map((p) => p.name)).toEqual(["exploit-chain_7"])
+    const capabilities = phases!.flatMap((p) => p.requiredCapabilities)
+    expect(capabilities).toEqual([Capability.POST_EXPLOITATION, Capability.PHISHING_CHAIN])
+    expect(new Set(capabilities).size).toBe(capabilities.length)
+  })
+
+  test("two chains wanting the same capability share one phase and keep both contexts", async () => {
+    const phases = await replanWithChains([
+      { chainId: "chain_2", capabilities: ["POST_EXPLOIT"] },
+      { chainId: "chain_7", capabilities: ["POST_EXPLOITATION"] },
+    ])
+
+    expect(phases).not.toBeNull()
+    // One unit of work: the second chain does not add an exploit-chain_7 phase.
+    expect(phases!.map((p) => p.name)).toEqual(["exploit-chain_2"])
+    expect(phases![0]!.requiredCapabilities).toEqual([Capability.POST_EXPLOITATION])
+    // The absorbed chain's context is preserved on the owning phase.
+    const coalesced = phases![0]!.config.coalescedChainPlans as Array<{ chain_id: string }>
+    expect(coalesced.map((plan) => plan.chain_id)).toEqual(["chain_7"])
+  })
+
+  test("chains with disjoint capabilities keep their own phases", async () => {
+    const phases = await replanWithChains([
+      { chainId: "chain_2", capabilities: ["POST_EXPLOITATION"] },
+      { chainId: "chain_8", capabilities: ["PHISHING_CHAIN"] },
+    ])
+
+    expect(phases).not.toBeNull()
+    expect(phases!.map((p) => p.name)).toEqual(["exploit-chain_2", "exploit-chain_8"])
+    const capabilities = phases!.flatMap((p) => p.requiredCapabilities)
+    expect(capabilities).toEqual([Capability.POST_EXPLOITATION, Capability.PHISHING_CHAIN])
+    expect(new Set(capabilities).size).toBe(capabilities.length)
+    for (const phase of phases!) {
+      expect(phase.config.coalescedChainPlans).toBeUndefined()
+    }
+  })
+
+  test("a partially overlapping chain contributes only its unclaimed capability", async () => {
+    const phases = await replanWithChains([
+      { chainId: "chain_2", capabilities: ["POST_EXPLOITATION"] },
+      { chainId: "chain_7", capabilities: ["POST_EXPLOIT", "PHISHING_CHAIN"] },
+    ])
+
+    expect(phases).not.toBeNull()
+    expect(phases!.map((p) => p.name)).toEqual(["exploit-chain_2", "exploit-chain_7"])
+    expect(phases![0]!.requiredCapabilities).toEqual([Capability.POST_EXPLOITATION])
+    // The alias does not reappear: chain_7 only carries what chain_2 does not.
+    expect(phases![1]!.requiredCapabilities).toEqual([Capability.PHISHING_CHAIN])
+    const capabilities = phases!.flatMap((p) => p.requiredCapabilities)
+    expect(new Set(capabilities).size).toBe(capabilities.length)
+  })
+})

@@ -1,5 +1,5 @@
 import crypto from "crypto"
-import type { PlannerContext, AssessmentPlan, PhaseExecutionRequest } from "./types"
+import type { PlannerContext, AssessmentPlan, PhaseExecutionRequest, ChainPhasePlan } from "./types"
 import { Capability, guessCapability } from "./capabilities"
 import { WorkflowRegistry } from "../workflows/registry"
 import { ToolRegistry } from "../workflows/tool-registry"
@@ -298,12 +298,28 @@ export class WorkflowPlanner {
 
     // ── Build capability set from rule-based sources (findings, hypotheses) ──
     const newCapabilities = new Set<Capability>()
-    const capabilityProvenance = new Map<Capability, { source: "replan-rule" | "replan-llm"; by: string }>()
+    const capabilityProvenance = new Map<Capability, { source: "replan-rule" | "replan-llm" | "replan-chain"; by: string }>()
     if (!ruleBudgetExhausted) {
       const ruleCaps = determineNewCapabilities(context)
       for (const cap of ruleCaps) {
         newCapabilities.add(cap)
         capabilityProvenance.set(cap, { source: "replan-rule", by: "local-planner" })
+      }
+      // ── Chain-Plan-Driven Capabilities (rule-based, no LLM needed) ──
+      // Attack-graph chains detected in prior phases already name the
+      // capabilities their exploitation steps need. Feed those straight into
+      // replanning so chain exploitation proceeds without an LLM call.
+      if (context.chainPlans && context.chainPlans.length > 0) {
+        for (const chain of context.chainPlans) {
+          for (const raw of chain.suggested_capabilities ?? []) {
+            const cap = guessCapability(raw)
+            if (!cap) continue
+            if (context.executedCapabilities.has(cap)) continue
+            if (newCapabilities.has(cap)) continue
+            newCapabilities.add(cap)
+            capabilityProvenance.set(cap, { source: "replan-chain", by: "attack-graph" })
+          }
+        }
       }
     }
 
@@ -379,49 +395,85 @@ export class WorkflowPlanner {
     // When the attack graph has detected chains, we generate exploitation
     // phases that turn correlated findings into active exploitation steps.
     // These are inserted IMMEDIATELY after the current phase using splice().
+    // A phase is a unit of work, so one capability gets one phase even when
+    // several chains call for it: building `exploit-<chain>` per chain runs the
+    // same capability twice and buys no new evidence. Chains whose capabilities
+    // are already owned are folded into the owning phase's
+    // `coalescedChainPlans`, so their context (description, risk, prerequisites)
+    // survives without a duplicate phase.
     const chainPhases: PhaseExecutionRequest[] = []
+    const chainPhaseByCapability = new Map<Capability, PhaseExecutionRequest>()
     if (context.chainPlans && context.chainPlans.length > 0) {
       const nextReplanCount = context.replanCount + 1
       for (const plan of context.chainPlans) {
-        // Map chain suggested capabilities to actual registered capabilities
-        const caps = plan.suggested_capabilities
-          .map((c) => {
-            // Find the matching Capability enum value
-            const found = Object.values(Capability).find(
-              (cap) => cap.toLowerCase() === c.toLowerCase() ||
-                       cap.replace(/_/g, "").toLowerCase() === c.replace(/_/g, "").toLowerCase()
-            )
-            return found ?? c as Capability
-          })
-          .filter((c) => !context.executedCapabilities.has(c))
+        // Map chain suggested capabilities to actual registered capabilities.
+        // Resolved through `guessCapability` — the same resolver the chain-plan
+        // capability block above uses — so a chain's capability has one identity
+        // in both places and deduplication below compares like with like. The
+        // per-chain `Set` also stops one chain listing a capability twice.
+        const caps = [
+          ...new Set(
+            plan.suggested_capabilities
+              .map((c) => guessCapability(c) ?? (c as Capability))
+              .filter((c) => !context.executedCapabilities.has(c)),
+          ),
+        ]
 
         if (caps.length === 0) continue
 
-        chainPhases.push({
+        const unclaimedCaps = caps.filter((cap) => !chainPhaseByCapability.has(cap))
+        if (unclaimedCaps.length === 0) {
+          // Every capability is already owned by an earlier chain's phase.
+          // Keep this chain's context, drop the duplicate phase.
+          for (const cap of caps) {
+            const owner = chainPhaseByCapability.get(cap)!
+            const coalesced =
+              (owner.config.coalescedChainPlans as ChainPhasePlan[] | undefined) ?? []
+            if (!coalesced.some((coalescedPlan) => coalescedPlan.chain_id === plan.chain_id)) {
+              owner.config.coalescedChainPlans = [...coalesced, plan]
+            }
+          }
+          continue
+        }
+
+        const phase: PhaseExecutionRequest = {
           phaseId: `chain-${nextReplanCount}-${plan.chain_id}-${crypto.randomUUID().slice(0, 8)}`,
           name: `exploit-${plan.chain_id}`,
           workflowName: "chain_exploitation",
           target: context.target,
-          requiredCapabilities: caps,
+          requiredCapabilities: unclaimedCaps,
           config: {
             chainPlan: plan,
             chainDescription: plan.description,
             replan: {
               source: "replan-chain",
-              reason: plan.description || `Attack graph correlated ${caps.join(", ")} into an exploitation phase`,
+              reason: plan.description || `Attack graph correlated ${unclaimedCaps.join(", ")} into an exploitation phase`,
               by: "worker-attack-graph",
             },
           },
           previousPhaseResults: [],
           toolExecution: "sequential",
           replanCycle: true,
-        })
+        }
+        chainPhases.push(phase)
+        for (const cap of unclaimedCaps) {
+          chainPhaseByCapability.set(cap, phase)
+        }
       }
     }
 
+    // A chain capability must yield exactly ONE phase. The attack-chain block
+    // above already builds the `exploit-<chain>` phase that carries the chain
+    // plan (description, risk, context), so the same capability must not also
+    // become a `replan-<cap>` phase — that queued two phases for one capability
+    // and ran it twice.
+    const chainedCapabilities = new Set(
+      chainPhases.flatMap((phase) => phase.requiredCapabilities),
+    )
+
     // Combine regular replan phases with chain exploitation phases
     const nextReplanCount = context.replanCount + 1
-    const regularPhases = unhandled.map((cap) => {
+    const regularPhases = unhandled.filter((cap) => !chainedCapabilities.has(cap)).map((cap) => {
       const provenance = capabilityProvenance.get(cap) ?? {
         source: llmProducedPhases ? ("replan-llm" as const) : ("replan-rule" as const),
         by: llmProducedPhases ? "worker-llm" : "local-planner",
