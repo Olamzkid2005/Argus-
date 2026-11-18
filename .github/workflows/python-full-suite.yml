@@ -122,7 +122,7 @@ jobs:
 
       - name: Upload full suite results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-full-suite-results-${{ github.run_attempt }}
           if-no-files-found: ignore
@@ -131,7 +131,7 @@ jobs:
 
       - name: Upload pytest output on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-output-${{ github.run_attempt }}
           if-no-files-found: ignore
