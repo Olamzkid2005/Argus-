@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test"
 import { mkdtempSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
+import { resetTargetValidator } from "../../../src/argus/shared/target-validator"
 
 let dir: string
 let prevCwd: string
@@ -19,6 +20,10 @@ beforeAll(() => {
   process.env.ARGUS_AUTO_APPROVE = "1"
   process.env.ARGUS_SCOPE_MODE = "allowlist"
   process.env.ARGUS_ALLOWED_TARGETS = "example.com"
+  // The scope policy is a process-wide singleton that caches the config it read
+  // from the first cwd it saw. Drop any instance an earlier test file in this
+  // process already loaded, so this suite starts from its own config.
+  resetTargetValidator()
 })
 
 afterAll(() => {
@@ -27,6 +32,10 @@ afterAll(() => {
   delete process.env.ARGUS_AUTO_APPROVE
   delete process.env.ARGUS_SCOPE_MODE
   delete process.env.ARGUS_ALLOWED_TARGETS
+  // Restore the shared validator to the state the next test file expects. The
+  // cached instance still holds this suite's allowlist otherwise, and the git
+  // host check in the planner then rejects hosts every other test may use.
+  resetTargetValidator()
   rmSync(dir, { recursive: true, force: true })
 })
 
