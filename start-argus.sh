@@ -111,11 +111,18 @@ launch_tui() {
     exit 1
   fi
   ensure_bun_deps "$ARGUS_PKG"
-  cd "$ARGUS_PKG" || exit 1
+  # Stay in the directory the user launched from. That directory is the project
+  # the TUI works on: argus.config.yaml (engagement scope, storage settings) is
+  # resolved from it. Changing into the package directory silently dropped the
+  # engagement's allowlist, so every worker refused the target with "no
+  # authorized_scope configured".
+  local launch_dir="${ARGUS_PROJECT_DIR:-$PWD}"
   echo -e "${BLUE}[Argus] Launching interactive TUI...${NC}"
   echo -e "${CYAN}  Entry point: src/argus/index.ts${NC}"
+  echo -e "${CYAN}  Working directory: $launch_dir${NC}"
   echo ""
-  exec bun run src/argus/index.ts "$@"
+  cd "$launch_dir" || exit 1
+  exec bun run "$ARGUS_PKG/src/argus/index.ts" "$@"
 }
 
 launch_tui_background() {

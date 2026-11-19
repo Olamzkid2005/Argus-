@@ -105,7 +105,10 @@ export function ScanDashboard() {
     s === "COMPLETED" || s === "PASS" ? theme.success : s === "RUNNING" ? theme.primary : s === "FAILED" ? theme.error : theme.textMuted
 
   // Derived memos from reactive ScanStore
-  const completedPhases = createMemo(() => scanState.phases.filter((p) => p.status === "completed").length)
+  // A phase that ended partial or failed is finished too: counting only clean
+  // completions left the bar at 0% for a whole run against a target where the
+  // worker errors made every phase partial.
+  const completedPhases = createMemo(() => scanState.phases.filter((p) => p.status !== "running").length)
   const totalPhases = createMemo(() => scanState.phases.length)
   const progressPct = createMemo(() => totalPhases() > 0 ? Math.round((completedPhases() / totalPhases()) * 100) : 0)
 
@@ -242,12 +245,9 @@ export function ScanDashboard() {
           paddingY={1}
           marginBottom={1}
         >
-          <box flexDirection="row" gap={2}>
-            <box flexDirection="column" alignItems="center">
-              <text fg={theme.error}><b>{scanState.totalFindings}</b></text>
-              <text fg={theme.textMuted}>findings</text>
-            </box>
-          </box>
+          {/* One line, one text node: the nested centred column measured to no
+              width and the count never appeared. */}
+          <text fg={theme.text}><b>{`${scanState.totalFindings} findings`}</b></text>
         </box>
 
         {/* Verification progress indicator */}
@@ -377,45 +377,41 @@ export function ScanDashboard() {
         </Show>
 
         {/* Phase list with enhanced visualization */}
-        <text fg={theme.textMuted} paddingBottom={1}>Workflow Phases</text>
+        <Show when={scanState.phases.length > 0}>
+          <text fg={theme.textMuted} paddingBottom={1}>Workflow Phases</text>
+        </Show>
+        {/* Bounded and scrollable: a phase with a long error drew past the panel
+            and over the transcript, and a replanned run with a dozen phases
+            pushed the activity log off the screen. */}
+        <Show when={scanState.phases.length > 0}>
+        <scrollbox maxHeight={8} stickyScroll stickyStart="bottom" viewportCulling>
         <For each={scanState.phases}>
           {(phase, idx) => {
-            const isRunning = idx() === runningPhaseIndex()
-            const statusUpper = phase.status.toUpperCase()
+            // Everything reactive is read inside the rendered expression: the
+            // old row hoisted `const isRunning = …` outside the JSX, so the
+            // text effect captured isRunning=true for the phase that was
+            // running at mount time and, because the ternary short-circuited,
+            // never read phase.status. That row stayed frozen at "running" for
+            // the rest of the run even after the phase completed.
             return (
               <box
                 flexDirection="column"
                 paddingLeft={1}
                 border={["left"]}
-                borderColor={isRunning ? theme.primary : statusColor(statusUpper)}
+                borderColor={idx() === runningPhaseIndex() ? theme.primary : statusColor(phase.status.toUpperCase())}
               >
-                <box flexDirection="row" gap={1}>
-                  <text fg={isRunning ? theme.primary : statusColor(statusUpper)}>
-                    {isRunning ? spinner() : phaseIcon(statusUpper)}
-                  </text>
-                  <text fg={theme.text}>{isRunning ? <b>{phase.name}</b> : phase.name}</text>
-                  <Show when={isRunning}>
-                    <text fg={theme.primary}>running</text>
-                  </Show>
-                  <Show when={phase.status === "completed"}>
-                    <text fg={theme.success}>completed</text>
-                    <Show when={phase.findings > 0}>
-                      <text fg={theme.textMuted}>{phase.findings} finding(s)</text>
-                    </Show>
-                  </Show>
-                  <Show when={phase.status === "failed"}>
-                    <text fg={theme.error}>failed</text>
-                  </Show>
-                </box>
+                <text fg={theme.text}>{pad(phaseLine(phase, idx() === runningPhaseIndex(), spinner()))}</text>
                 <Show when={phase.errors.length > 0}>
                   <box flexDirection="row" gap={1} paddingLeft={3}>
-                    <text fg={theme.error}>⚠ {phase.errors.join("; ")}</text>
+                    <text fg={theme.error}>{pad(`⚠ ${clip(phase.errors.join("; "), 130)}`)}</text>
                   </box>
                 </Show>
               </box>
             )
           }}
         </For>
+        </scrollbox>
+        </Show>
 
         {/* Bottom region: the transcript takes the leftover height, so a taller
             terminal shows more lines without a row-count guess and a resize is
@@ -456,4 +452,24 @@ export function ScanDashboard() {
     </box>
   )
 }
+/** One line describing a phase, rebuilt whenever its status or count changes. */
+function phaseLine(phase: { name: string; status: string; findings: number }, isRunning: boolean, spinner: string): string {
+  const icon = isRunning ? spinner : phaseIcon(phase.status.toUpperCase())
+  const status = isRunning ? "running" : phase.status
+  const findings = phase.status === "completed" && phase.findings > 0 ? `  ${phase.findings} finding(s)` : ""
+  return `${icon} ${phase.name} ${status}${findings}`
+}
+/**
+ * Pad a line out to a fixed width so a shrinking label cannot leave the tail of
+ * the previous one behind on screen.
+ */
+function pad(line: string): string {
+  return line.padEnd(120)
+}
+
+/** Keep a phase's inline detail from drawing across the rest of the screen. */
+function clip(text: string, max: number): string {
+  return text.length > max ? text.slice(0, max - 1) + "…" : text
+}
+
 export default ScanDashboard

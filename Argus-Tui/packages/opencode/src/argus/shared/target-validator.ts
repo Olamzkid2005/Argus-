@@ -20,6 +20,7 @@ import { join } from "path"
 import { readFileSync } from "fs"
 import { parse as YAML } from "yaml"
 import { resolve } from "dns/promises"
+import { isIP } from "net"
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 
@@ -284,11 +285,18 @@ export class TargetValidator {
     // 3. DNS reachability check (informational — does not block)
     const hostname = this.extractHostname(target)
     let dnsReachable = false
-    try {
-      await resolve(hostname)
+    // A literal address has nothing to resolve, and dns.resolve() rejects
+    // literals — which reported a perfectly reachable loopback target as
+    // "DNS resolution failed" on every IP-scoped run.
+    if (isIP(hostname)) {
       dnsReachable = true
-    } catch {
-      dnsReachable = false
+    } else {
+      try {
+        await resolve(hostname)
+        dnsReachable = true
+      } catch {
+        dnsReachable = false
+      }
     }
 
     return {

@@ -1135,8 +1135,10 @@ export class WorkflowRunner {
     if (validator.requiresConfirmation(target)) {
       if (process.env.ARGUS_AUTO_APPROVE === "1") {
         emit(`✓ Target confirmation auto-approved (ARGUS_AUTO_APPROVE=1)`)
-      } else if (!process.stdout.isTTY) {
-        emit(`✓ Target auto-confirmed (non-TTY)`)
+      } else if (!process.stdout.isTTY || process.env.ARGUS_MODE === "1") {
+        // The TUI owns stdin as well as the screen, so a raw prompt here would
+        // never see a keystroke and would abort the run after 30s.
+        emit(`✓ Target auto-confirmed (${process.env.ARGUS_MODE === "1" ? "TUI" : "non-TTY"})`)
       } else {
         process.stderr.write(`\n⚠  Target Confirmation Required\n`)
         process.stderr.write(`   Target: ${target}\n`)

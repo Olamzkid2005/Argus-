@@ -42,6 +42,41 @@ const ARGUS_TUI_COMMANDS = new Set([
   "help",
   "open",
 ])
+/**
+ * The assessment verb typed at the prompt, if this input is one.
+ *
+ * Only `assess`/`scan`/`recon` start a run; the other Argus commands answer
+ * through a session, so they keep the normal submit path.
+ */
+async function argusAssessmentInput(
+  input: string,
+): Promise<{ cmd: "assess" | "scan" | "recon"; arg: string } | null> {
+  if (process.env.ARGUS_MODE !== "1") return null
+  const firstLine = input.split("\n")[0]
+  const firstWord = firstLine.split(" ")[0]
+  if (!firstWord.startsWith("/") || firstWord.length < 2) return null
+  const name = firstWord.slice(1).toLowerCase()
+  if (name !== "assess" && name !== "scan" && name !== "recon") return null
+  const { findArgusTuiCommand } = await import("@/argus/tui-commands")
+  if (!findArgusTuiCommand(name)) return null
+  return { cmd: name, arg: firstLine.slice(firstWord.length).trim() }
+}
+
+/** Start an assessment at the prompt, the same way the CLI `assess` does. */
+async function runArgusAssessmentCommand(cmd: string, arg: string, model: string): Promise<void> {
+  const { parseAssessmentArgs } = await import("@/argus/assessment/service")
+  const parsed = parseAssessmentArgs(arg)
+  if (!parsed.target) return
+  const { runTuiAssessment } = await import("@/argus/tui/assessment-run")
+  await runTuiAssessment({
+    target: parsed.target,
+    mode: cmd === "recon" ? "recon" : "assess",
+    cacheMode: parsed.cacheMode,
+    verbose: parsed.verbose,
+    model,
+  })
+}
+
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useProject } from "@tui/context/project"
@@ -1100,6 +1135,37 @@ export function Prompt(props: PromptProps) {
     }
 
     const variant = local.model.variant.current()
+    // Read what was submitted before any side effect: an Argus assessment is
+    // not a chat turn (see the early dispatch below).
+    const inputText = expandTrackedPastedText(
+      store.prompt.input,
+      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
+        const partIndex = store.extmarkToPartIndex.get(extmark.id)
+        const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
+        if (part?.type !== "text") return []
+        return [{ start: extmark.start, end: extmark.end, text: part.text }]
+      }),
+    )
+    let argusHandled = false
+
+    // Assessments typed at the prompt are dispatched before a session exists.
+    // Creating one here navigated to the session route 50ms later, which beat
+    // the assessment's own navigation to the scan route: the scan then ran to
+    // completion with the screen showing an empty chat.
+    const assessment = await argusAssessmentInput(inputText)
+    if (assessment) {
+      argusHandled = true
+      const progress = runArgusAssessmentCommand(assessment.cmd, assessment.arg, `${selectedModel.providerID}/${selectedModel.modelID}`)
+      history.append({ ...store.prompt, mode: store.mode })
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      input.clear()
+      props.onSubmit?.()
+      void progress
+      return true
+    }
+
     let sessionID = props.sessionID
     if (sessionID == null) {
       const workspace = workspaceSelection()
@@ -1135,15 +1201,6 @@ export function Prompt(props: PromptProps) {
     }
 
     const messageID = MessageID.ascending()
-    const inputText = expandTrackedPastedText(
-      store.prompt.input,
-      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
-        const partIndex = store.extmarkToPartIndex.get(extmark.id)
-        const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
-        if (part?.type !== "text") return []
-        return [{ start: extmark.start, end: extmark.end, text: part.text }]
-      }),
-    )
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
@@ -1213,8 +1270,6 @@ export function Prompt(props: PromptProps) {
       })
     } else {
       // Check for Argus slash commands first (only in Argus mode)
-      let argusHandled = false
-
       if (process.env.ARGUS_MODE === "1") {
         const firstLine = inputText.split("\n")[0]
         const firstWord = firstLine.split(" ")[0]
@@ -1354,7 +1409,8 @@ export function Prompt(props: PromptProps) {
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
-    if (!props.sessionID) {
+    // (never for an Argus command: it owns the route it navigated to)
+    if (!props.sessionID && !argusHandled) {
       if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
       setTimeout(() => {
         route.navigate({

@@ -13,6 +13,8 @@ export type ApprovalSource =
   | "deny-destructive-env"
   | "non-tty-skip-destructive"
   | "non-tty-approve"
+  | "tui-skip-destructive"
+  | "tui-approve"
   | "interactive"
   | "interactive-timeout"
   | "interactive-denied"
@@ -43,6 +45,19 @@ const DENY_DESTRUCTIVE_ENV = "ARGUS_DENY_DESTRUCTIVE"
 function deniesDestructive(): boolean {
   const raw = process.env[DENY_DESTRUCTIVE_ENV]
   return raw === "1" || raw?.toLowerCase() === "true"
+}
+
+/**
+ * True when the interactive TUI owns the terminal.
+ *
+ * The TUI renders through its own renderer and reads every keystroke itself, so
+ * a raw `Proceed? [y/N]` written to stderr is never answered: stdout is still a
+ * TTY there, so these gates used to take the interactive path, print the prompt
+ * into the rendered screen, eat the user's next key, and skip the phase after
+ * the 30s timeout. Apply the unattended policy instead.
+ */
+function terminalOwnedByTui(): boolean {
+  return process.env.ARGUS_MODE === "1"
 }
 
 export class ApprovalService {
@@ -151,12 +166,6 @@ export class ApprovalService {
       })
     }
 
-    process.stderr.write(`\n⚠  Approval Required: ${gate.label}\n`)
-    process.stderr.write(`   Phase: ${phaseName}\n`)
-    process.stderr.write(`   Target: ${target}\n`)
-    process.stderr.write(`   This operation may be destructive or modify the target state.\n`)
-    process.stderr.write(`   Proceed? [y/N] `)
-
     const base = { gate: gate.name, kind: "phase" as const, phase: phaseName, target }
 
     // Explicit refusal, checked before auto-approve so it wins. Lets an
@@ -184,28 +193,36 @@ export class ApprovalService {
       })
     }
 
-    // Non-TTY stdout (TUI mode):
+    // No one can answer a raw prompt — not a non-TTY stdout, and not the TUI,
+    // which owns stdin:
     //   ARGUS_AUTO_APPROVE=1 → auto-approve regardless of destructive flag
     //   Otherwise → auto-skip destructive gates, auto-approve non-destructive
-    if (!process.stdout.isTTY) {
+    const tui = terminalOwnedByTui()
+    if (!process.stdout.isTTY || tui) {
+      const where = tui ? "TUI" : "non-TTY"
       if (gate.destructive) {
-        process.stderr.write(" (non-TTY — auto-skip destructive gate)\n\n")
+        process.stderr.write(` (${where} — auto-skip destructive gate)\n\n`)
         return this.record({
           ...base,
           approved: false,
-          reason: "Non-TTY — destructive gate auto-skipped",
-          source: "non-tty-skip-destructive",
+          reason: `${where} — destructive gate auto-skipped`,
+          source: tui ? "tui-skip-destructive" : "non-tty-skip-destructive",
         })
       }
       const timestamp = new Date().toISOString()
-      process.stderr.write(` (non-TTY — auto-approved at ${timestamp})\n\n`)
+      process.stderr.write(` (${where} — auto-approved at ${timestamp})\n\n`)
       return this.record({
         ...base,
         approved: true,
-        reason: `Auto-approved (non-TTY) at ${timestamp}`,
-        source: "non-tty-approve",
+        reason: `Auto-approved (${where}) at ${timestamp}`,
+        source: tui ? "tui-approve" : "non-tty-approve",
       })
     }
+
+    process.stderr.write(`\n⚠  Approval Required: ${gate.label}\n`)
+    process.stderr.write(`   Phase: ${phaseName}\n`)
+    process.stderr.write(`   Target: ${target}\n`)
+    process.stderr.write(`   This operation may be destructive or modify the target state.\n`)
 
     const answer = await this.promptConfirmation("Proceed? [y/N] ", "Skipping phase.")
     return this.record({
@@ -259,13 +276,15 @@ export class ApprovalService {
       })
     }
 
-    // Non-TTY: auto-approve (phase was already approved, this is just an extra safety prompt)
-    if (!process.stdout.isTTY) {
+    // No attendant, or the TUI owns stdin: auto-approve (phase was already
+    // approved, this is just an extra safety prompt).
+    const tui = terminalOwnedByTui()
+    if (!process.stdout.isTTY || tui) {
       return this.record({
         ...base,
         approved: true,
-        reason: "Auto-approved (non-TTY): phase was already approved",
-        source: "non-tty-approve",
+        reason: `Auto-approved (${tui ? "TUI" : "non-TTY"}): phase was already approved`,
+        source: tui ? "tui-approve" : "non-tty-approve",
       })
     }
 

@@ -14,7 +14,9 @@
 import { runAssessment, type AssessmentDeps, type AssessmentRequest } from "../assessment/service"
 import type { WorkflowRunResult } from "../workflow-runner"
 import { navigateTo } from "./navigator"
-import { appendLog, completeScan, handleProgressEvent, initScan, setPlannerModel } from "./scan-store"
+import { ReportGenerator, persistedReportOptions } from "../reporting/generator"
+import { EngagementStore } from "../engagement/store"
+import { appendLog, completeScan, handleProgressEvent, initScan, setPlannerModel, setTotalFindings } from "./scan-store"
 
 export type TuiAssessmentStatus = "completed" | "partial" | "stopped" | "failed"
 
@@ -39,6 +41,37 @@ function makeTrace(): (line: string) => void {
     }
   }
 }
+
+/**
+ * Keep stray stderr output off the TUI's screen.
+ *
+ * The renderer owns the terminal, so a plain `process.stderr.write` — the
+ * planner's missing-signal warnings, an approval prompt, a tool's own logging —
+ * is painted straight over the panels and leaves fragments of text across the
+ * scan dashboard. In the TUI those lines are diagnostics, not UI: append them to
+ * `<data dir>/tui-stderr.log` and let the renderer keep the terminal.
+ */
+function redirectStderrForTui(): void {
+  if (process.env.ARGUS_MODE !== "1") return
+  const { appendFileSync } = require("node:fs") as typeof import("node:fs")
+  const { join } = require("node:path") as typeof import("node:path")
+  const { homedir } = require("node:os") as typeof import("node:os")
+  const dir = process.env["ARGUS_DATA_DIR"] || join(homedir(), ".argus")
+  const file = join(dir, "tui-stderr.log")
+  const write = (chunk: unknown, ...rest: unknown[]) => {
+    try {
+      appendFileSync(file, String(chunk))
+    } catch {
+      // Diagnostics must never break the run.
+    }
+    const callback = rest.find((entry) => typeof entry === "function")
+    if (typeof callback === "function") (callback as () => void)()
+    return true
+  }
+  ;(process.stderr as unknown as { write: typeof write }).write = write
+}
+
+redirectStderrForTui()
 
 export interface TuiAssessmentOutcome {
   result: WorkflowRunResult
@@ -177,8 +210,37 @@ async function executeTuiAssessment(
         ? "partial"
         : "completed"
 
+  // The CLI adapter always leaves a markdown report on disk; the TUI used to
+  // stop at the rendered dashboard, so a finished TUI assessment had no
+  // artifact to read afterwards. Write the same file here (no stdout: that
+  // would paint over the view).
+  let reportPath: string | undefined
+  if (status !== "failed" && engagementId) {
+    try {
+      const generator = new ReportGenerator()
+      const markdown = generator.generateMarkdown(
+        result.allFindings,
+        engagementId,
+        request.target,
+        "assessment",
+        persistedReportOptions(new EngagementStore(), engagementId),
+      )
+      reportPath = generator.writeArtifact(engagementId, markdown, "markdown")
+      trace(`report written ${reportPath}`)
+    } catch (error) {
+      appendLog(`Could not write the report artifact: ${message(error)}`)
+      trace(`report write failed: ${message(error)}`)
+    }
+  }
+
+  // Phase counts overlap (one finding can be reported by several phases), so
+  // the dashboard total read higher than the report: 119 vs the 43 deduplicated
+  // findings in the artifact. Once the run is over the authoritative number is
+  // the one the report and the terminal line print.
+  setTotalFindings(result.findings)
   completeScan(status)
   trace(`completeScan(${status})`)
+  if (reportPath) appendLog(`Report written: ${reportPath}`)
   if (status === "failed") appendLog(`Assessment failed: ${result.error ?? "unknown error"}`)
   if (status === "partial") appendLog("Assessment finished with partial coverage")
   if (degraded) appendLog(`Assessment finished with ${degradedSteps} degraded step(s)`)
