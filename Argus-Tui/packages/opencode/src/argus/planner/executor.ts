@@ -8,6 +8,7 @@ import type { ProgressEvent, ErrorHintData } from "../shared/progress"
 import type { ToolDef } from "../workflows/tool-registry"
 import crypto from "crypto"
 import { Capability } from "../shared/capabilities"
+import { detectTargetType } from "./strategy"
 import { resolveWorkerLlmConfig, type WorkerLlmConfig } from "./model-registry"
 import { provenanceForAction } from "./action-provenance"
 
@@ -735,9 +736,26 @@ export class InProcessExecutor implements PhaseExecutor {
         if (execOptions.verbose) console.log(`[executor]  Tool: ${step.tool} (capability: ${cap})`)
       }
     } else {
-      // Fallback: select tools by capability (legacy path)
+      // Fallback: select tools by capability (legacy path).
+      //
+      // Use the planner's own selection rather than the raw capability list: a
+      // phase that arrives without pipelineSteps still has to obey the same
+      // eligibility rules. Taking every registered tool for a capability handed
+      // a URL to source-only scanners (bandit, eslint, gosec, braille...), whose
+      // own guard then rejected the call — eight failures in a single web phase
+      // of a real run, all of which looked like broken tools. `selectBest`
+      // applies the target-type, worker-availability and gate filters, so the
+      // fallback can only pick a tool that can actually run against this target.
+      const targetType = detectTargetType(phase.target)
+      // Test doubles implement only the capability lookup; the registry the CLI
+      // builds always provides selectBest, which is where those filters live.
+      const registry = this.toolRegistry as ToolRegistry & {
+        selectBest?: (caps: Capability[], targetType?: string) => ToolDef[]
+      }
       for (const cap of phase.requiredCapabilities) {
-        const tools = this.toolRegistry.getToolsByCapability(cap)
+        const tools = registry.selectBest
+          ? registry.selectBest([cap], targetType)
+          : registry.getToolsByCapability(cap)
         if (tools.length === 0) {
           // No local tools registered for this capability — it's handled
           // externally (e.g., post-exploitation → Python Celery pipeline).
@@ -748,6 +766,15 @@ export class InProcessExecutor implements PhaseExecutor {
         for (const tool of tools) {
           if (calledTools.has(tool.name)) continue
           calledTools.add(tool.name)
+          const notApplicable = targetNotApplicable(tool.name, phase.target, phase.name)
+          if (notApplicable) {
+            if (execOptions.verbose) {
+              console.log(`[executor]  Skipping ${tool.name}: ${notApplicable}`)
+            }
+            recordDeterministicOutcome(tool.name, cap, "blocked", notApplicable)
+            deliberatelySkipped++
+            continue
+          }
           const missingRoles = await this.missingCredentialRoles(tool.name)
           if (missingRoles) {
             const reason = `requires ${missingRoles.join(", ")} credentials — none configured`

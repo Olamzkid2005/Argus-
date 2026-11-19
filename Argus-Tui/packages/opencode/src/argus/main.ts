@@ -25,6 +25,11 @@ import {
 
 const cli = yargs(hideBin(process.argv))
   .scriptName("argus")
+  // `--no-cache` is a real option name, not a negation of `cache`. With yargs'
+  // default boolean-negation, `.strict()` rejected it as an unknown `cache`
+  // argument, printed help, and exited 0 — so the documented flag silently did
+  // nothing on this entry point (the TUI entry already disables negation).
+  .parserConfiguration({ "boolean-negation": false })
   .command(ArgusAssessCommand)
   .command(ArgusDoctorCommand)
   .command(ArgusReportCommand)

@@ -55,6 +55,10 @@ export const REPLAN_INSERTABLE: Record<string, Capability> = {
   reflected_origin_cors: Capability.API_PROBING,
   wildcard_cors: Capability.API_PROBING,
   exposed_secret: Capability.CREDENTIAL_REPLAY,
+  // testssl emits TLS_VULNERABILITY for protocol/cipher weaknesses. There is no
+  // dedicated TLS capability, so route it to the generic scan; the
+  // executedCapabilities guard keeps a re-check from queuing a duplicate phase.
+  tls_vulnerability: Capability.VULNERABILITY_SCANNING,
   // Bucket permission findings map back to the S3 capability that found them;
   // it is already executed, so no duplicate scan is queued.
   s3_public_bucket_listing: Capability.S3_SCANNING,

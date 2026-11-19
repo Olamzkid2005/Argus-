@@ -18,6 +18,9 @@ class MockToolRegistry {
   // registered nor covered by a fallback, so the mock registers test-tool —
   // mirroring a real readiness where the planned tool exists.
   getToolsByCapability(_cap?: string) { return [{ name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, supports_api: false, supports_web: true, timeout_seconds: 300 }] }
+  // The executor's fallback picks tools through selectBest(), which only the
+  // real registry implements. These fakes model capability lookup.
+  selectBest(caps: any[]) { return caps.flatMap((cap) => this.getToolsByCapability(cap)) }
   getTool(name: string) {
     if (name === "test-tool") return { name: "test-tool", capabilities: ["web_recon"], requires_auth: false, destructive: false, timeout_seconds: 300 }
     return undefined

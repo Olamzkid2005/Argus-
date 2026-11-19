@@ -6,6 +6,7 @@ import type { ToolDefinition, ToolResult, MCPError, DriftReport, CacheMode } fro
 import { LLMUnavailableError } from "./types"
 import { WorkerSupervisor } from "./supervisor"
 import { PROJECT_ROOT } from "../shared/path"
+import { scopeEnvironment } from "../shared/target-validator"
 
 interface PendingRequest {
   resolve: (value: unknown) => void
@@ -312,6 +313,11 @@ export class WorkersBridge {
       // and tool definitions relative to a known location regardless of where
       // the parent process was launched from.
       cwd: PROJECT_ROOT,
+      // The worker enforces the engagement scope itself, and an engagement
+      // created here lives in this process's SQLite store rather than the
+      // worker's table. Forward the operator's allowlist so a correctly scoped
+      // run is not rejected tool-by-tool with "no authorized_scope configured".
+      env: { ...process.env, ...scopeEnvironment() },
     })
     this.process = child
 

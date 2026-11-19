@@ -420,3 +420,27 @@ export function getTargetValidator(): TargetValidator {
 export function resetTargetValidator(): void {
   _instance = null
 }
+
+/**
+ * The configured allowlist as the worker's own scope variables.
+ *
+ * The worker validates every tool target against `authorized_scope` loaded from
+ * its engagement table. An engagement created by this CLI lives in the TS
+ * SQLite store, so the worker finds no row, and its documented fallback is the
+ * operator's declared allowlist (ARGUS_SCOPE_MODE + ARGUS_ALLOWED_TARGETS).
+ * Without these variables every tool call is rejected with "no
+ * authorized_scope configured" even though the run is correctly scoped.
+ *
+ * Only an actual allowlist is forwarded: leaving the variables unset keeps the
+ * worker's fail-closed default for an unconfigured environment.
+ */
+export function scopeEnvironment(): Record<string, string> {
+  const { scope } = getTargetValidator().load()
+  if (scope?.mode !== "allowlist") return {}
+  const allowed = scope.allowed_targets ?? []
+  if (allowed.length === 0) return {}
+  return {
+    ARGUS_SCOPE_MODE: "allowlist",
+    ARGUS_ALLOWED_TARGETS: allowed.join(","),
+  }
+}
