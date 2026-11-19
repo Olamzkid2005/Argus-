@@ -578,17 +578,67 @@ describe("InProcessExecutor", () => {
       expect(result.errors.join("\n")).toContain("No tools executed")
     })
 
-    test("a phase whose required capabilities resolve to no tools fails readiness", async () => {
-      // The SAST/SCA case: an absent runner must not read as a clean completion.
-      const registry = { ...mockToolRegistry, getToolsByCapability: () => [] }
+    test("a phase whose required capabilities resolve to no tools is skipped with a named provider", async () => {
+      // The SAST/SCA case: an absent runner must not read as a clean
+      // completion, and it must not read as a broken phase either — it is a
+      // skip whose reason names the capability and the tool that provides it.
+      const registry = {
+        ...mockToolRegistry,
+        getToolsByCapability: () => [],
+        describeCapabilityGap: (cap: Capability) =>
+          `capability "${cap}" has no usable tool (providers: test-sast) — skipped`,
+      }
       const { bridge, calls } = sequenceBridge(["test-tool"], { success: true, data: {}, durationMs: 5 })
       const exec = new InProcessExecutor(registry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
       exec.loadGates("test")
       const result = await exec.execute(hybrid({ requiredCapabilities: [Capability.SAST] }))
 
       expect(calls).toEqual([])
-      expect(result.status).toBe("failed")
-      expect(result.errors.join("\n")).toContain("No tools registered for required capabilities")
+      expect(result.status).toBe("skipped")
+      expect(result.errors.join("\n")).toContain("providers: test-sast")
+    })
+
+    test("a capability whose only tool was gated out is not a coverage gap", async () => {
+      // web_exploitation on a target with no upload surface: commix declares
+      // command_injection but its requires-gate dropped it, so the phase has no
+      // step for that capability. Its other tools ran, so the phase completed —
+      // it used to go PARTIAL and mark the whole engagement Partial.
+      const registry = {
+        ...mockToolRegistry,
+        getToolsByCapability: (cap: Capability) =>
+          cap === Capability.COMMAND_INJECTION
+            ? [{ name: "commix", capabilities: ["command_injection"], requires_auth: false, destructive: false, supports_web: true, timeout_seconds: 30 }]
+            : mockToolRegistry.getToolsByCapability(),
+      }
+      const { bridge } = sequenceBridge(["test-tool"], { success: true, data: {}, durationMs: 5 })
+      const exec = new InProcessExecutor(registry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(
+        hybrid({
+          requiredCapabilities: [Capability.WEB_RECON, Capability.COMMAND_INJECTION],
+          config: { pipelineSteps: [{ tool: "test-tool", capabilities: [Capability.WEB_RECON] }] },
+        }),
+      )
+
+      expect(result.status).toBe("completed")
+      expect(result.errors.join("\n")).not.toContain("Coverage gap")
+    })
+
+    test("a capability no tool declares says so instead of failing", async () => {
+      const registry = {
+        ...mockToolRegistry,
+        getToolsByCapability: () => [],
+        describeCapabilityGap: (cap: Capability) =>
+          `no tool provides capability "${cap}" (no tool definition declares it) — nothing to run, skipped`,
+      }
+      const { bridge, calls } = sequenceBridge(["test-tool"], { success: true, data: {}, durationMs: 5 })
+      const exec = new InProcessExecutor(registry as any, bridge as any, new ConfidenceEngine(), mockWorkflowRegistry as any)
+      exec.loadGates("test")
+      const result = await exec.execute(hybrid({ requiredCapabilities: [Capability.SAST] }))
+
+      expect(calls).toEqual([])
+      expect(result.status).toBe("skipped")
+      expect(result.errors.join("\n")).toContain("no tool provides capability")
     })
 
     test("one action per agentNext: the loop advances only by asking again", async () => {

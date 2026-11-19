@@ -1322,8 +1322,18 @@ export class WorkflowRunner {
       }
     }
     if (plan.degradations && plan.degradations.length > 0) {
+      // The planner drops a phase when no installed tool provides its
+      // capability (e.g. code_analysis with no SAST runner). That is a clean
+      // skip with a reason — recorded and shown — not degraded coverage: it
+      // used to mark the whole engagement Partial even though every phase that
+      // ran had completed.
       for (const dropped of plan.degradations) {
-        recordDegradation("capability-missing", dropped)
+        emit(`○ Phase skipped — ${dropped}`)
+        try {
+          store.appendAuditLog(engagementId, "PHASE_SKIPPED", dropped)
+        } catch {
+          // Audit logging is best-effort.
+        }
       }
     }
 
@@ -1489,21 +1499,43 @@ export class WorkflowRunner {
         // and a worker can report a tool unusable after the plan exists.
         // Dispatching a call that cannot succeed only collects a usage error,
         // so the phase is skipped and the run continues.
-        if (autonomousRun && phase.toolExecution !== "llm_driven") {
+        const capabilityGapNote = (cap: Capability): string => {
+          const registry = toolRegistry as ToolRegistry & {
+            describeCapabilityGap?: (c: Capability) => string
+          }
+          if (typeof registry.describeCapabilityGap === "function") {
+            return registry.describeCapabilityGap(cap)
+          }
+          const providers = (toolRegistry.getToolsByCapability(cap) ?? []).map(t => t.name)
+          return providers.length > 0
+            ? `capability "${cap}" has no usable tool (providers: ${providers.join(", ")}) — skipped`
+            : `no tool provides capability "${cap}" — skipped`
+        }
+        if (phase.toolExecution !== "llm_driven") {
           const runnable = toolRegistry.selectBest(phase.requiredCapabilities as any, targetType)
           if (runnable.length === 0) {
+            // Missing coverage, not a broken phase: the reason names the
+            // capability and the tools that would provide it. This used to be
+            // gated on ARGUS_AUTONOMOUS, so an interactive/TUI run marked the
+            // phase FAILED and the whole engagement Partial over a tool the
+            // sandbox never had.
+            const reason = phase.requiredCapabilities
+              .map(cap => capabilityGapNote(cap))
+              .join("; ")
             const skippedRecord = phaseRecords.get(phase.phaseId)
             if (skippedRecord) {
               skippedRecord.status = "SKIPPED"
               skippedRecord.completedAt = new Date().toISOString()
-              skippedRecord.error =
-                "no installed tool for " + phase.requiredCapabilities.join(", ")
+              skippedRecord.error = reason
               store.savePhase(engagementId, skippedRecord)
             }
-            recordDegradation(
-              "capability-missing",
-              `${phaseName}: no installed tool for ${phase.requiredCapabilities.join(", ")}`,
-            )
+            emit({ type: "phase_complete", phaseId: phase.phaseId, name: phaseName, findings: 0, status: "SKIPPED" })
+            emit(`○ Phase ${phaseName} skipped — ${reason}`)
+            try {
+              store.appendAuditLog(engagementId, "PHASE_SKIPPED", `${phaseName}: ${reason}`)
+            } catch {
+              // Audit logging is best-effort.
+            }
             for (const cap of phase.requiredCapabilities) executedCapabilities.add(cap)
             i++
             continue
@@ -1660,7 +1692,12 @@ export class WorkflowRunner {
 
         const findingCount = phaseFindings.length
         const errorCount = result.errors.length
-        if (phaseStatus === "FAILED") {
+        if (phaseStatus === "SKIPPED") {
+          // A clean skip: the phase could not run and said why. It must not be
+          // emitted as a phase_error, which the TUI treats as partial coverage.
+          emit({ type: "phase_complete", phaseId: phase.phaseId, name: phaseName, findings: findingCount, status: phaseStatus })
+          emit(`○ Phase ${phaseName} skipped — ${result.errors.join("; ") || "no work to do"}`)
+        } else if (phaseStatus === "FAILED") {
           emit({ type: "phase_error", phaseId: phase.phaseId, name: phaseName, error: result.errors.join("; ") })
           emit(`⚠ Phase ${phaseName}: ${findingCount} finding(s), ${errorCount} error(s)`)
         } else if (phaseStatus === "PARTIAL") {

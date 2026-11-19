@@ -197,6 +197,33 @@ export class ToolRegistry {
     return all.filter(t => this.toolConfig.isEnabled(t.name) && !this.workerBlocked.has(t.name))
   }
 
+  /**
+   * Every tool definition that declares *cap*, usable or not, with the reason
+   * it cannot run. Used to explain a capability gap: an operator needs to know
+   * which tool would provide the capability, not just that nothing ran.
+   */
+  listCapabilityProviders(cap: Capability): Array<{ name: string; usable: boolean; reason?: string }> {
+    const all = this.toolsByCapability.get(cap) ?? []
+    return all.map(t => {
+      const reason = this.workerBlocked.get(t.name) ?? (this.toolConfig.isEnabled(t.name) ? undefined : "disabled in tool config")
+      return { name: t.name, usable: reason === undefined, reason }
+    })
+  }
+
+  /**
+   * One sentence naming a capability that cannot run and the tools that would
+   * provide it. A missing optional tool is a skip with a reason, never a phase
+   * failure, so this text is what the operator sees instead of "failed".
+   */
+  describeCapabilityGap(cap: Capability): string {
+    const providers = this.listCapabilityProviders(cap)
+    if (providers.length === 0) {
+      return `no tool provides capability "${cap}" (no tool definition declares it) — nothing to run, skipped`
+    }
+    const names = providers.map(p => p.name).join(", ")
+    return `capability "${cap}" has no usable tool (providers: ${names}) — skipped`
+  }
+
   getCapabilities(toolName: string): string[] {
     return this.toolsByName.get(toolName)?.capabilities ?? []
   }

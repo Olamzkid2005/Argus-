@@ -817,8 +817,25 @@ export class InProcessExecutor implements PhaseExecutor {
         }
       }
       if (errors.length === 0) {
-        const missing = phase.requiredCapabilities.join(", ")
-        errors.push(`No tools configured for required capabilities (${missing}) — readiness failed, not a clean completion`)
+        // No tool is installed for the capability the phase needs. That is
+        // missing coverage, not a broken phase: report a clean skip that names
+        // the capability and the tools that would provide it. Marking it
+        // "failed" made an engagement Partial over a tool the sandbox never
+        // had, while the diagnostic said nothing an operator could act on.
+        for (const cap of phase.requiredCapabilities) {
+          if (this.toolRegistry.getToolsByCapability(cap).length === 0) {
+            errors.push(this.capabilitySkipNote(cap))
+          }
+        }
+        return {
+          phaseId: phase.phaseId,
+          status: "skipped",
+          findings,
+          artifacts: [],
+          errors,
+          durationMs: Date.now() - startTime,
+          actionRecords,
+        }
       }
       return {
         phaseId: phase.phaseId,
@@ -902,6 +919,25 @@ export class InProcessExecutor implements PhaseExecutor {
   }
 
   /**
+   * Say why a capability could not run: the capability itself and the tools
+   * that declare it, so the operator can install one instead of reading a
+   * generic "readiness failed". Test doubles implement only
+   * `getToolsByCapability`, so the richer registry method is optional here.
+   */
+  private capabilitySkipNote(cap: Capability): string {
+    const registry = this.toolRegistry as ToolRegistry & {
+      describeCapabilityGap?: (cap: Capability) => string
+    }
+    if (typeof registry.describeCapabilityGap === "function") {
+      return registry.describeCapabilityGap(cap)
+    }
+    const providers = (registry.getToolsByCapability(cap) ?? []).map(t => t.name)
+    return providers.length > 0
+      ? `capability "${cap}" has no usable tool (providers: ${providers.join(", ")}) — skipped`
+      : `no tool provides capability "${cap}" — skipped`
+  }
+
+  /**
    * The model the Python worker should use, resolved once per executor.
    *
    * The planner owns model resolution (it is the runtime with access to
@@ -938,15 +974,15 @@ export class InProcessExecutor implements PhaseExecutor {
     // 2.3 guardrail: a phase whose required capabilities resolve to no tools
     // (absent runner — e.g. SAST/SCA with nothing registered) fails readiness
     // here. It must never report success with zero executions.
-          if (pipeline.length === 0 && phase.requiredCapabilities.length > 0) {
-
-      const missing = phase.requiredCapabilities.join(", ")
+    if (pipeline.length === 0 && phase.requiredCapabilities.length > 0) {
+      // Same rule as the pipeline path: nothing installed for the capability is
+      // a clean skip with a named provider list, never a failed phase.
       return {
         phaseId: phase.phaseId,
-        status: "failed",
+        status: "skipped",
         findings,
         artifacts: [],
-        errors: [`No tools registered for required capabilities (${missing}) — readiness failed, not a clean completion`],
+        errors: phase.requiredCapabilities.map(cap => this.capabilitySkipNote(cap)),
         durationMs: Date.now() - startTime,
       }
     }
@@ -1386,9 +1422,37 @@ export class InProcessExecutor implements PhaseExecutor {
       errors.push("No tools executed in hybrid phase — agent success requires at least one executed action")
       hybridStatus = "failed"
     } else {
+      // A capability whose tools were filtered out by the planner's gates for
+      // this target (commix needs a file-upload signal; jwt_tool is disabled)
+      // never becomes a step, so it can never be "covered". That is not a
+      // coverage gap: nothing applicable was left unperformed. Counting it made
+      // web_exploitation PARTIAL on a target with no upload surface, which in
+      // turn marked the whole engagement Partial.
+      const steps = (phase.config?.pipelineSteps ?? []) as Array<{
+        tool?: string
+        capabilities?: string[]
+      }>
+      const hasApplicableStep = (cap: Capability): boolean => {
+        if (steps.length === 0) return true
+        const providers = new Set((this.toolRegistry.getToolsByCapability(cap) ?? []).map(t => t.name))
+        if (providers.size === 0) return false
+        return steps.some(step =>
+          (step.capabilities ?? []).some(c => c === cap) || (step.tool ? providers.has(step.tool) : false),
+        )
+      }
       const uncovered = phase.requiredCapabilities.filter(
-        c => !coveredCapabilities.has(c) && !skippedForCredentials.has(c),
+        c => !coveredCapabilities.has(c) && !skippedForCredentials.has(c) && hasApplicableStep(c as Capability),
       )
+      const notApplicable = phase.requiredCapabilities.filter(
+        c => !coveredCapabilities.has(c) && !skippedForCredentials.has(c) && !hasApplicableStep(c as Capability),
+      )
+      for (const cap of notApplicable) {
+        const providers = (this.toolRegistry.getToolsByCapability(cap as Capability) ?? []).map(t => t.name)
+        const reason = providers.length > 0
+          ? `no ${providers.join("/")} gate matched this target`
+          : `no tool provides capability "${cap}"`
+        console.log(`[executor]  ◦ Not applicable in ${phase.name}: ${cap} (${reason})`)
+      }
       if (uncovered.length > 0) {
         // A capability nothing can perform is a gap in the tool set, not a
         // failed phase: jwt_tool is disabled and no SSRF tool is registered, so

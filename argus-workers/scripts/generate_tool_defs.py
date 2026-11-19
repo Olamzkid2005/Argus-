@@ -37,6 +37,7 @@ CAPABILITY_TO_PHASES: dict[str, list[str]] = {
     "graphql_assessment": ["scan"],
     "api_docs_analysis": ["scan"],
     "jwt_analysis": ["scan"],
+    "session_hijack_attempt": ["deep_scan", "post_exploitation"],
     "ssrf_check": ["scan", "deep_scan"],
     "command_injection": ["scan", "deep_scan"],
     "security_analysis": ["analyze"],

@@ -1,0 +1,25 @@
+name: session_hijack
+command: python3
+description: "Local session hijack probe (cookie flags, forgeable ids, fixation)"
+args:
+  - argus-workers/tools/session_hijack_scan.py
+# Nothing declared session_hijack_attempt, so a replanned session-hijack phase
+# had no provider at all and was skipped as "no tool provides capability".
+# This probe is stdlib-only and needs no external service: it inspects the
+# session cookie the target issues, then tests whether a neighbouring id is
+# accepted (enumerable sessions) and whether the server adopts a planted id
+# (fixation). Finding nothing is a result, not a failure, so it exits 0.
+parameters:
+  - name: target
+    type: string
+    description: "Target URL"
+    required: true
+    flag: "--target"
+capabilities:
+  - session_hijack_attempt
+signal_quality: PROBABLE
+risk_level: low
+priority: 65
+cost: low
+enabled: true
+timeout: 120

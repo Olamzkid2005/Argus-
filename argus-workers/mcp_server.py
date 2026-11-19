@@ -15,6 +15,8 @@ import sys
 import sysconfig
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from typing import Any
 
@@ -509,6 +511,43 @@ _MAX_PLANNED_TOOLS = int(os.getenv("ARGUS_MAX_PLANNED_TOOLS", "6"))
 #: partial plan, instead of the driver's RPC timing out. Zero disables the cap.
 _PLAN_BUDGET_SECONDS = float(os.getenv("ARGUS_PLAN_BUDGET_SECONDS", "90"))
 
+#: Cap on a single planning/replan LLM call. The budget above is checked between
+#: calls, so one unreachable provider could still retry for ten minutes and take
+#: the whole phase (and the run) down with the driver's RPC timeout. Zero
+#: disables the cap.
+_PLAN_CALL_TIMEOUT_SECONDS = float(
+    os.getenv("ARGUS_PLAN_CALL_TIMEOUT_SECONDS", "20")
+)
+
+#: Cap on building the advisory attack graph for a completed phase.
+_ATTACK_GRAPH_TIMEOUT_SECONDS = float(
+    os.getenv("ARGUS_ATTACK_GRAPH_TIMEOUT_SECONDS", "15")
+)
+
+
+class _PlannerCallTimeout(Exception):
+    """A single planning LLM call exceeded its slice of the plan budget."""
+
+
+def _call_with_deadline(fn, timeout: float | None, label: str = "call"):
+    """Run ``fn()`` but never wait on it longer than ``timeout`` seconds.
+
+    The LLM client has its own retries and timeouts (three 180s attempts plus
+    backoff), which is longer than a planning step may block. The worker thread
+    is abandoned rather than joined: it may still sit in a socket read, and the
+    MCP response must not wait for it.
+    """
+    if not timeout or timeout <= 0:
+        return fn()
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="argus-plan")
+    future = pool.submit(fn)
+    try:
+        return future.result(timeout=timeout)
+    except FuturesTimeoutError as exc:
+        raise _PlannerCallTimeout(label) from exc
+    finally:
+        pool.shutdown(wait=False)
+
 
 def _planning_noop(**_kwargs) -> dict:
     """Stand-in callable for a tool registered for selection only.
@@ -784,6 +823,9 @@ class MCPServer:
             ),
             os.path.normpath(
                 os.path.join(project_dir, "argus-workers", "tools", "jwt_scan.py")
+            ),
+            os.path.normpath(
+                os.path.join(project_dir, "argus-workers", "tools", "session_hijack_scan.py")
             ),
             os.path.normpath(
                 os.path.join(project_dir, "argus-workers", "tools", "scripts", "whatweb_shim.py")
@@ -1861,7 +1903,8 @@ class MCPServer:
         reasons: list[str] = []
         tried: set[str] = set()
         for _ in range(_MAX_PLANNED_TOOLS):
-            if deadline is not None and time.monotonic() >= deadline:
+            remaining = deadline - time.monotonic() if deadline is not None else None
+            if remaining is not None and remaining <= 0:
                 logger.info(
                     "Plan generation budget (%.0fs) spent after %d tool(s) — "
                     "running the rest of the phase deterministically",
@@ -1870,12 +1913,27 @@ class MCPServer:
                 )
                 break
             try:
-                action = agent.plan_next_action(
-                    task=task,
-                    context="Choosing this phase's tools and the order to run them.",
-                    tried_tools=set(tried),
-                    recon_context=recon_context,
+                action = _call_with_deadline(
+                    lambda: agent.plan_next_action(
+                        task=task,
+                        context="Choosing this phase's tools and the order to run them.",
+                        tried_tools=set(tried),
+                        recon_context=recon_context,
+                    ),
+                    # The budget is checked between calls, so a single call has
+                    # to be bounded too: an unreachable LLM provider made one
+                    # planning call retry for ten minutes and killed the whole
+                    # phase (and the run) on the MCP request timeout.
+                    timeout=min(_PLAN_CALL_TIMEOUT_SECONDS, remaining) if remaining is not None else _PLAN_CALL_TIMEOUT_SECONDS,
+                    label="plan_next_action",
                 )
+            except _PlannerCallTimeout:
+                logger.warning(
+                    "Plan generation call exceeded %.0fs — using the deterministic "
+                    "pipeline order for the rest of the phase",
+                    _PLAN_CALL_TIMEOUT_SECONDS,
+                )
+                break
             except Exception as exc:
                 logger.warning("Plan generation failed: %s", exc)
                 break
@@ -2279,12 +2337,23 @@ class MCPServer:
             recon_context = ReconContext(target_url=session.target)
 
         try:
-            action = agent.plan_next_action(
-                task=task,
-                context=context,
-                tried_tools={ex.tool for ex in session.tool_history},
-                recon_context=recon_context,
+            action = _call_with_deadline(
+                lambda: agent.plan_next_action(
+                    task=task,
+                    context=context,
+                    tried_tools={ex.tool for ex in session.tool_history},
+                    recon_context=recon_context,
+                ),
+                timeout=_PLAN_CALL_TIMEOUT_SECONDS,
+                label="replan_next_action",
             )
+        except _PlannerCallTimeout:
+            logger.warning(
+                "Replan call exceeded %.0fs — ending the phase instead of blocking "
+                "the driver's RPC",
+                _PLAN_CALL_TIMEOUT_SECONDS,
+            )
+            return {"done": True, "reasoning": "Replan LLM call timed out"}
         except Exception as e:
             logger.warning("ReActAgent replan failed: %s", e)
             return {"done": True, "reasoning": f"Replan failed: {e}"}
@@ -2457,11 +2526,27 @@ class MCPServer:
                 phase=phase,
             )
 
-            result = agent.plan_next_phase(
-                findings=findings,
-                phase=phase,
-                target=target,
-            )
+            # Bounded like plan generation: an LLM provider that is reachable
+            # but never answers used to hold this call for the driver's whole
+            # 300s RPC budget after *every* phase. The fallback progression is
+            # the honest answer in that case.
+            try:
+                result = _call_with_deadline(
+                    lambda: agent.plan_next_phase(
+                        findings=findings,
+                        phase=phase,
+                        target=target,
+                    ),
+                    timeout=_PLAN_CALL_TIMEOUT_SECONDS,
+                    label="plan_next_phase",
+                )
+            except _PlannerCallTimeout:
+                logger.warning(
+                    "Phase-complete analysis exceeded %.0fs — using the "
+                    "deterministic progression",
+                    _PLAN_CALL_TIMEOUT_SECONDS,
+                )
+                return self._fallback_phase_complete(phase, findings)
 
             logger.info(
                 "handle_phase_complete for engagement=%s phase=%s: "
@@ -2633,10 +2718,30 @@ class MCPServer:
 
         from attack_composition import generate_plan_from_graph
 
-        graph, skipped_count, findings = self._build_attack_graph(
-            engagement_id,
-            params.get("findings"),
-        )
+        # The graph is built from the engagement store. When that store is not
+        # reachable this is an advisory lookup, so it must not hold the driver's
+        # RPC open for minutes after every phase: report an empty graph and let
+        # the run continue (the caller already treats the call as non-blocking).
+        try:
+            graph, skipped_count, findings = _call_with_deadline(
+                lambda: self._build_attack_graph(
+                    engagement_id,
+                    params.get("findings"),
+                ),
+                timeout=_ATTACK_GRAPH_TIMEOUT_SECONDS,
+                label="build_attack_graph",
+            )
+        except _PlannerCallTimeout:
+            logger.warning(
+                "Attack graph build exceeded %.0fs — returning an empty graph",
+                _ATTACK_GRAPH_TIMEOUT_SECONDS,
+            )
+            return {
+                "error": "attack graph unavailable: data store did not answer in time",
+                "chains": [],
+                "paths": [],
+                "chain_plans": [],
+            }
 
         # Get highest risk paths and chain plans
         chains = graph.find_chains()

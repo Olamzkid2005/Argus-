@@ -14,7 +14,7 @@ export interface ScanPhase {
   name: string
   index: number
   total: number
-  status: "pending" | "running" | "completed" | "partial" | "failed"
+  status: "pending" | "running" | "completed" | "partial" | "failed" | "skipped"
   findings: number
   errors: string[]
 }
@@ -183,10 +183,16 @@ export function addPhase(phase: { id: string; name: string; index: number; total
   setScanState("currentPhase", phase.index)
 }
 
-export function completePhase(phaseId: string, findings: number, errors: string[], status?: "completed" | "partial" | "failed") {
+export function completePhase(
+  phaseId: string,
+  findings: number,
+  errors: string[],
+  status?: "completed" | "partial" | "failed" | "skipped",
+) {
   const idx = scanState.phases.findIndex((p) => p.id === phaseId)
   if (idx < 0) return
-  if (scanState.phases[idx]?.status === "completed" || scanState.phases[idx]?.status === "partial" || scanState.phases[idx]?.status === "failed") return
+  const settled = scanState.phases[idx]?.status
+  if (settled === "completed" || settled === "partial" || settled === "failed" || settled === "skipped") return
   persistActive()
   const resolvedStatus = status ?? (errors.length > 0 && findings > 0 ? "partial" : errors.length > 0 ? "failed" : "completed")
   setScanState("phases", idx, "status", resolvedStatus)
@@ -252,7 +258,14 @@ function processEventInner(event: ProgressEvent, engagementId?: string) {
       break
     case "phase_complete": {
       const ps = "status" in event ? event.status : undefined
-      completePhase(event.phaseId, event.findings, [], ps === "PARTIAL" ? "partial" : ps === "COMPLETED" ? "completed" : undefined)
+      // SKIPPED is its own outcome: a phase that could not run must not render
+      // as "completed" and pretend it did work.
+      completePhase(
+        event.phaseId,
+        event.findings,
+        [],
+        ps === "PARTIAL" ? "partial" : ps === "COMPLETED" ? "completed" : ps === "SKIPPED" ? "skipped" : undefined,
+      )
       break
     }
     case "phase_error": {

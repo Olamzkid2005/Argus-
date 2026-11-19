@@ -1339,3 +1339,16 @@ tools:
     cost: medium
     requires:
       target_scheme: [http, https]
+  - name: session_hijack
+    label: Session Hijack Probe
+    description: Local session takeover probe (cookie flags, forgeable ids, fixation)
+    capabilities:
+      - session_hijack_attempt
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 70
+      coverage_score: 60
