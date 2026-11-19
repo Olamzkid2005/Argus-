@@ -43,6 +43,8 @@ class WebScannerParser(BaseParser):
         1. JSON array of findings (standard subprocess output)
         2. JSON lines (one finding per line)
         3. Already-structured dict output (when called inline)
+        4. The agent-tool envelope ``{"success": ..., "findings": [...]}`` that
+           ``run_agent_tool.py`` prints, which is how the MCP path runs this tool
         """
         findings: list[dict] = []
 
@@ -52,6 +54,13 @@ class WebScannerParser(BaseParser):
         # Try JSON array first
         try:
             data = json.loads(raw_output)
+            if isinstance(data, dict):
+                # run_agent_tool.py wraps the tool's findings in an envelope; the
+                # bare object is not a finding, so the old code dropped every
+                # result and the call surfaced as unstructured output.
+                nested = data.get("findings")
+                if isinstance(nested, list):
+                    data = nested
             if isinstance(data, list):
                 for item in data:
                     finding = self._normalize(item)

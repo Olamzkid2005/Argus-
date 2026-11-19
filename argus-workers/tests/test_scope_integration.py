@@ -558,23 +558,27 @@ class TestWebScannerScope:
         return sc
 
     def test_blocks_internal_target(self, scanner, mock_validate_target_scope):
-        """SSRF: 169.254.169.254 is blocked, result has empty findings."""
-        scanner._run_scan_impl("http://169.254.169.254/latest/meta-data/")
+        """SSRF: 169.254.169.254 is refused instead of scanned."""
+        with pytest.raises(RuntimeError, match="internal/SSRF target"):
+            scanner._run_scan_impl("http://169.254.169.254/latest/meta-data/")
         assert len(scanner.findings) == 0
 
     def test_blocks_private_ip(self, scanner, mock_validate_target_scope):
-        """SSRF: 10.0.0.1 is blocked."""
-        scanner._run_scan_impl("http://10.0.0.1/admin")
+        """SSRF: 10.0.0.1 is refused instead of scanned."""
+        with pytest.raises(RuntimeError, match="internal/SSRF target"):
+            scanner._run_scan_impl("http://10.0.0.1/admin")
         assert len(scanner.findings) == 0
 
     def test_blocks_metadata_hostname(self, scanner, mock_validate_target_scope):
-        """SSRF: metadata.google.internal is blocked."""
-        scanner._run_scan_impl("http://metadata.google.internal")
+        """SSRF: metadata.google.internal is refused instead of scanned."""
+        with pytest.raises(RuntimeError, match="internal/SSRF target"):
+            scanner._run_scan_impl("http://metadata.google.internal")
         assert len(scanner.findings) == 0
 
     def test_blocks_out_of_scope_target(self, scanner, mock_validate_target_scope_block):
-        """Out-of-scope public target is blocked."""
-        scanner._run_scan_impl("https://evil.com")
+        """Out-of-scope public target is refused, not scanned and reported empty."""
+        with pytest.raises(RuntimeError, match="outside authorized scope"):
+            scanner._run_scan_impl("https://evil.com")
         assert len(scanner.findings) == 0
 
     def test_passes_safe_public_target(self, mock_validate_target_scope):
@@ -594,18 +598,15 @@ class TestWebScannerScope:
             assert sc.target_url == "https://example.com"
 
     def test_blocks_wildcard_scope_bypass(self, scanner, mock_validate_target_scope):
-        """SSRF check runs before scope check — internal targets blocked regardless of scope."""
-        scanner._run_scan_impl("http://127.0.0.1:8080")
+        """SSRF check runs before scope check — internal targets refused regardless of scope."""
+        with pytest.raises(RuntimeError, match="internal/SSRF target"):
+            scanner._run_scan_impl("http://127.0.0.1:8080")
         assert len(scanner.findings) == 0
 
     def test_logs_warning_on_internal_target(self, scanner, mock_validate_target_scope):
-        """Warning is logged when an internal/SSRF target is blocked."""
-        with mock.patch("tools.web_scanner.logger") as mock_logger:
+        """A refused internal target says how to authorize it."""
+        with pytest.raises(RuntimeError, match="ARGUS_ALLOW_INTERNAL_TARGETS=1"):
             scanner._run_scan_impl("http://169.254.169.254/")
-            mock_logger.warning.assert_any_call(
-                mock.ANY,
-                mock.ANY,
-            )
 
 
 # ---------------------------------------------------------------------------

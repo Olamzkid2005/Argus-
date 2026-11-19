@@ -641,26 +641,24 @@ class WebScanner(AbstractTool):
         if hostname and ScopeValidator.is_blocked_internal_target(
             hostname, authorized=self._internal_target_authorized(target_url)
         ):
-            logger.warning(
-                "Target %s is an internal/SSRF target — scan aborted. "
+            # Refusing is not the same as scanning and finding nothing. Raising
+            # turns the refusal into a visible failed tool call; returning an
+            # empty finding list used to surface as "succeeded, no findings",
+            # which reads as a clean target.
+            raise RuntimeError(
+                f"Target {target_url} is an internal/SSRF target — scan not run. "
                 "Set ARGUS_ALLOW_INTERNAL_TARGETS=1 and authorize the target in "
-                "the engagement scope to scan internal targets.",
-                target_url,
+                "the engagement scope to scan internal targets."
             )
-            self.findings = []
-            return
         if (
             self.engagement_id
             and not _internal_opted_in
             and not authorize_target(target_url, self.engagement_id).authorized
         ):
-            logger.warning(
-                "Target %s is outside authorized scope for engagement %s — scan aborted (M-25)",
-                target_url,
-                self.engagement_id,
+            raise RuntimeError(
+                f"Target {target_url} is outside authorized scope for engagement "
+                f"{self.engagement_id} — scan not run (M-25)"
             )
-            self.findings = []
-            return
 
         self.findings = []
         self.target_url = target_url.rstrip("/")

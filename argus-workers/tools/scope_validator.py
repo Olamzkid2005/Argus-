@@ -1115,6 +1115,22 @@ def validate_target_scope(
             mode = published.get("mode", mode)
             allowed_targets = published.get("allowed_targets")
             blocked_targets = published.get("blocked_targets")
+        else:
+            # Tool execution happens in a subprocess, so an in-process
+            # publication never reaches the guard that runs inside it. The run's
+            # declared allowlist travels in the environment instead
+            # (ARGUS_SCOPE_MODE / ARGUS_ALLOWED_TARGETS), which is exactly how
+            # the tool runner authorizes targets. Read the same source here, or a
+            # tool that authorizes its own target (web_scanner) denies a target
+            # the run-level guard already allowed.
+            env_scope = ScopeValidator._scope_from_environment()
+            if env_scope["domains"] or env_scope["ipRanges"]:
+                env_mode = (os.environ.get("ARGUS_SCOPE_MODE") or "").strip().lower()
+                if env_mode == "enforce":
+                    mode = "allowlist"
+                elif env_mode in ("allowlist", "warn"):
+                    mode = env_mode
+                allowed_targets = env_scope["domains"] + env_scope["ipRanges"]
 
     # A target that cannot be parsed cannot be authorized, in any mode: the
     # old code let an unparseable string fall through to string matching, where

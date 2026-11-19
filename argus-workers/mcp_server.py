@@ -1219,6 +1219,17 @@ class MCPServer:
                 static_arg = os.path.join(project_dir, static_arg)
             cmd.append(static_arg)
 
+        # Agent tools run in their own process and need the engagement identity:
+        # without it they cannot authorize a target (web_scanner refuses an
+        # internal target the operator opted into, because there is no engagement
+        # to authorize it against) and their findings lose correlation.
+        if (
+            engagement_id
+            and "--engagement-id" not in cmd
+            and any(os.path.basename(arg) == "run_agent_tool.py" for arg in cmd[1:])
+        ):
+            cmd.extend(["--engagement-id", str(engagement_id)])
+
         # Arguments a tool needs from the environment rather than from the
         # caller. nuclei ships no bundled templates, so without `-t` it exits
         # with "no templates provided for scan" and the whole vuln_scan phase
