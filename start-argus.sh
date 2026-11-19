@@ -28,6 +28,37 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Security tools are commonly installed outside the login shell's PATH: the Go
+# toolchain puts nuclei/httpx/katana in ~/go/bin, user installs land in
+# ~/.local/bin, and Homebrew is not always on PATH for non-login shells. Without
+# this the doctor reported "MISSING: nuclei" for a machine that had it.
+for _dir in "$HOME/go/bin" "$HOME/.local/bin" "/opt/homebrew/bin" "/usr/local/bin" "$SCRIPT_DIR/.livefire/bin"; do
+  [ -d "$_dir" ] && case ":$PATH:" in *":$_dir:"*) ;; *) PATH="$_dir:$PATH" ;; esac
+done
+if [ -n "${ARGUS_EXTRA_PATH:-}" ]; then
+  PATH="$ARGUS_EXTRA_PATH:$PATH"
+fi
+export PATH
+
+# Load .env if present. The docs tell people to copy .env.example to .env, but
+# nothing read it, so REDIS_URL/LLM_API_KEY from the file never reached the
+# process and the doctor kept warning that Redis was not configured. Variables
+# already set in the environment win, and nothing is evaluated as shell.
+for _envfile in "$SCRIPT_DIR/.env" "$SCRIPT_DIR/argus-workers/.env"; do
+  [ -f "$_envfile" ] || continue
+  while IFS= read -r _line || [ -n "$_line" ]; do
+    case "$_line" in ''|'#'*) continue ;; esac
+    case "$_line" in *=*) ;; *) continue ;; esac
+    _key=${_line%%=*}
+    _val=${_line#*=}
+    case "$_key" in *[!A-Za-z0-9_]*) continue ;; esac
+    if [ -z "$(printenv "$_key" 2>/dev/null)" ]; then
+      export "$_key=$_val"
+    fi
+  done < "$_envfile"
+done
+
 ARGUS_PKG="$SCRIPT_DIR/Argus-Tui/packages/opencode"
 ARGUS_CLI_PKG="$SCRIPT_DIR/Argus-Tui/packages/cli"
 PID_DIR="$SCRIPT_DIR/.pid"
