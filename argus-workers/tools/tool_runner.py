@@ -461,7 +461,7 @@ class ToolRunner:
             raise SecurityError(f"Invalid tool name blocked (path traversal): {tool!r}")
         return tool
 
-    def _resolve_tool_path(self, tool: str) -> str:
+    def _resolve_tool_path(self, tool: str) -> str | None:
         """
         Resolve the full path to a tool binary.
 
@@ -473,7 +473,9 @@ class ToolRunner:
             tool: Tool name (e.g., 'nuclei', 'httpx')
 
         Returns:
-            Full path to the tool binary, or the tool name if not found.
+            Full path to the tool binary, the bare tool name when it was not
+            found (so PATH lookup at exec time still applies), or ``None`` when
+            every candidate is a non-tool shadow (a pip console script).
         """
         self._validate_tool_name(tool)
 
@@ -497,7 +499,10 @@ class ToolRunner:
         if resolved:
             return resolved
 
-        return tool
+        # None means "a candidate exists but none of them is this tool" (a pip
+        # console script shadowing a native-only tool). Returning the bare name
+        # here would run that unrelated script, so let run() report the gap.
+        return None
 
     @staticmethod
     def _redact_sensitive_args(
@@ -692,6 +697,24 @@ class ToolRunner:
             # subprocess raise a confusing FileNotFoundError that surfaces as a
             # generic EXCEPTION result. NOT_INSTALLED is a fatal status, so the
             # agent and operator both see the real cause + an install hint.
+            if tool_path is None:
+                from tools.tool_utils import shadowing_diagnostic
+
+                reason = shadowing_diagnostic(tool)
+                logger.error(
+                    "Tool %r is not usable: %s",
+                    tool,
+                    reason or "no executable found on the worker PATH",
+                )
+                result = UnifiedToolResult.not_installed(
+                    tool,
+                    command=[tool] + args,
+                    target=self._extract_target(args) or "",
+                    reason=reason,
+                )
+                result.mark_finished()
+                return result
+
             if not os.path.isfile(tool_path) and shutil.which(tool_path) is None:
                 logger.error(
                     "Tool %r is not installed (resolved=%r) — refusing to run. "
@@ -1026,6 +1049,17 @@ class ToolRunner:
     ) -> UnifiedToolResult:
         """Stream tool output line by line, calling on_line() for each."""
         tool_path = self._resolve_tool_path(tool)
+        if tool_path is None:
+            from tools.tool_utils import shadowing_diagnostic
+
+            result = UnifiedToolResult.not_installed(
+                tool,
+                command=[tool] + args,
+                target=self._extract_target(args) or "",
+                reason=shadowing_diagnostic(tool),
+            )
+            result.mark_finished()
+            return result
 
         # Egress policy — mirror run()'s pre-spawn check, in the same order
         egress = self._egress_block(tool, args)

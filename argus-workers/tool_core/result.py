@@ -144,18 +144,28 @@ class UnifiedToolResult:
 
     @classmethod
     def not_installed(
-        cls, tool_name: str, command: list[str], target: str = ""
+        cls,
+        tool_name: str,
+        command: list[str],
+        target: str = "",
+        reason: str | None = None,
     ) -> UnifiedToolResult:
+        # A caller that knows *why* the tool is unusable (a same-named Python
+        # console script shadowing the native binary) passes `reason` so the
+        # operator is not told to `which` a command that does exist.
         return cls(
             tool_name=tool_name,
             command=command,
             target=target,
             status=ToolStatus.NOT_INSTALLED,
             error_type="FileNotFoundError",
-            error_message=f"{tool_name!r} binary not found on PATH.",
+            error_message=reason or f"{tool_name!r} binary not found on PATH.",
             fix_hint=(
-                f"Install {tool_name} and ensure its binary is on the PATH used by the "
-                f"Celery worker. Run: which {tool_name}"
+                reason
+                or (
+                    f"Install {tool_name} and ensure its binary is on the PATH used by the "
+                    f"Celery worker. Run: which {tool_name}"
+                )
             ),
         )
 
