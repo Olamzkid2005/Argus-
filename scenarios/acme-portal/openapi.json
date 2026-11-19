@@ -1,0 +1,48 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Acme Expense Portal API",
+    "version": "1.4.0",
+    "description": "Internal API backing the sales expense portal."
+  },
+  "servers": [{ "url": "http://127.0.0.1:8080" }],
+  "paths": {
+    "/api/expenses": {
+      "get": {
+        "summary": "Fetch a single expense",
+        "security": [],
+        "parameters": [
+          { "name": "id", "in": "query", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Expense record" } }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "summary": "List portal users",
+        "security": [],
+        "responses": { "200": { "description": "Portal users" } }
+      }
+    },
+    "/search": {
+      "get": {
+        "summary": "Search expenses",
+        "security": [],
+        "parameters": [
+          { "name": "q", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Search results" } }
+      }
+    },
+    "/redirect": {
+      "get": {
+        "summary": "Post-login redirect helper",
+        "security": [],
+        "parameters": [
+          { "name": "next", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": { "302": { "description": "Redirect" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+# Engagement scope for the Acme Expense Portal drill.
+#
+# The portal only listens on loopback, so the allowlist is the loopback host.
+# Scope enforcement is set to allowlist: an assessment of any other host fails
+# before a single phase runs, which is the behaviour the engagement letter
+# promises the client.
+security:
+  scope:
+    mode: allowlist
+    allowed_targets:
+      - 127.0.0.1
+      - localhost
+    blocked_targets: []
+    require_confirmation: false
+  # The portal is an HTTP service, not a git remote: no git host policy needed.
+  git_host_policy: allow_all
+storage:
+  encryption:
+    enabled: false
