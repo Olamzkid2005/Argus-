@@ -75,3 +75,8 @@ websockets==12.0
 # Scheduled task cron expressions (tasks/scheduled.py)
 croniter>=3.0.0
 termcolor==3.3.0
+
+# YAML — the worker's YAML tool definitions (mcp_server) and the delegated
+# tool shims import this at module load; without it the registry silently
+# falls back to declarative-only tools.
+pyyaml==6.0.3
