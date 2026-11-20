@@ -45,7 +45,7 @@ jobs:
 
       - name: Upload smoke test artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: smoke-test-results-${{ github.run_attempt }}
           if-no-files-found: ignore
@@ -161,7 +161,7 @@ jobs:
 
       - name: Upload unit artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-linux-${{ github.run_attempt }}
           if-no-files-found: ignore
@@ -219,7 +219,7 @@ jobs:
 
       - name: Upload python test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-test-results-${{ github.run_attempt }}
           if-no-files-found: ignore
@@ -313,7 +313,7 @@ jobs:
 
       - name: Upload full test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-full-test-results-${{ github.run_attempt }}
           if-no-files-found: ignore
@@ -410,7 +410,7 @@ jobs:
 
       - name: Upload fixture test report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fixture-full-report-${{ github.run_attempt }}
           if-no-files-found: ignore
