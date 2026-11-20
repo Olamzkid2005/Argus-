@@ -29,6 +29,8 @@ type CommandSlashEntry = {
   display: string
   description?: string
   aliases?: string[]
+  // Commands that act on the typed text need it to survive selection.
+  keepPromptText?: boolean
   onSelect: () => void
 }
 type Command = ReturnType<OpenTuiKeymap["getCommands"]>[number]
@@ -277,6 +279,7 @@ export function useCommandSlashes(): Accessor<readonly CommandSlashEntry[]> {
         aliases: Array.isArray(slashAliases)
           ? slashAliases.filter((alias): alias is string => typeof alias === "string").map((alias) => `/${alias}`)
           : undefined,
+        keepPromptText: (entry.command as { keepPromptText?: boolean }).keepPromptText === true,
         onSelect: () => keymap.dispatchCommand(entry.command.name),
       }
     }),

@@ -30,9 +30,32 @@ export function ArgusCommandRegistry() {
       slashName: slash,
       slashAliases: [] as string[],
       hidden: false,
+      // Selecting this from the autocomplete keeps whatever the user typed
+      // (or pasted) so run() below can execute an exact command instead of
+      // seeing a prompt the autocomplete already emptied.
+      keepPromptText: true,
       run: () => {
         const ref = promptRef.current
-        if (ref) ref.set({ input: "/" + slash + (needsTarget ? " " : ""), parts: [] })
+        if (!ref) return
+
+        // This entry is what Enter on the autocomplete menu and the command
+        // palette execute. When the prompt already holds this command (typed
+        // or pasted), run it. Previously the command's own text was written
+        // back into the prompt instead, so "/config" + Enter looked like the
+        // UI pasting its own words and nothing was queried.
+        const current = ref.current.input.trim().toLowerCase()
+        const typed = ["/" + slash, ...cmd.slashes.map((alias) => "/" + alias)].some(
+          (name) => current === name.toLowerCase() || current.startsWith(name.toLowerCase() + " "),
+        )
+        const missingTarget = needsTarget && !current.includes(" ")
+        if (typed && !missingTarget) {
+          ref.submit()
+          return
+        }
+
+        // Otherwise just pre-fill the prompt: commands that take a target still
+        // need the user to supply one.
+        ref.set({ input: "/" + slash + (needsTarget ? " " : ""), parts: [] })
       },
     }))
   })

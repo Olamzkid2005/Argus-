@@ -68,6 +68,9 @@ export type AutocompleteOption = {
   isDirectory?: boolean
   onSelect?: () => void
   path?: string
+  // The handler owns the prompt text on select (it may run the typed command),
+  // so hide() must not blank the prompt before it runs.
+  keepPromptText?: boolean
 }
 
 export function Autocomplete(props: {
@@ -643,10 +646,12 @@ export function Autocomplete(props: {
     }
   }
 
-  function select() {
+  function select(mode: "select" | "complete" = "select") {
     const selected = options()[store.selected]
     if (!selected) return
-    hide()
+    // Tab only completes, so it still clears the typed text first; Enter must
+    // hand it to the command when that command acts on it (see keepPromptText).
+    hide(mode === "select" && selected.keepPromptText === true)
     selected.onSelect?.()
   }
 
@@ -720,7 +725,7 @@ export function Autocomplete(props: {
             return
           }
 
-          select()
+          select("complete")
         },
       },
     ],
@@ -740,9 +745,9 @@ export function Autocomplete(props: {
     })
   }
 
-  function hide() {
+  function hide(keepText = false) {
     const text = props.input().plainText
-    if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
+    if (!keepText && store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
       // Sync the prompt store immediately since onContentChange is async
