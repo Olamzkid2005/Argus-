@@ -121,7 +121,11 @@ tool_version() {
   [ -n "$cmd" ] || return 1
   need "$name" || return 1
   out="$(bash -c "$cmd" 2>&1 || true)"
-  printf '%s\n' "$out" | grep -oE '[0-9]+(\.[0-9]+)+' | head -1
+  # Drop interpreter/warning noise (".../python3.12/site-packages/requests/...
+  # RequestsDependencyWarning") so the first number left is the tool's own.
+  printf '%s\n' "$out" \
+    | grep -viE 'warning|site-packages|traceback|^[[:space:]]*\^' \
+    | grep -oE '[0-9]+(\.[0-9]+)+' | head -1
 }
 
 # ── Platform ──────────────────────────────────────────────────────────────────
