@@ -122,7 +122,21 @@ jobs:
 
       - name: Run argus unit tests
         working-directory: Argus-Tui/packages/opencode
-        run: bun test --timeout 30000 test/argus/ --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml
+        run: |
+          bun test --timeout 30000 test/argus/ \
+            --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml \
+            2>&1 | tee /tmp/unit-output.txt
+          exit_code=${PIPESTATUS[0]}
+          if [ "$exit_code" -ne 0 ]; then
+            # Annotations are readable without an authenticated GitHub session.
+            grep -E '^\(fail\)' /tmp/unit-output.txt | head -10 | while read -r line; do
+              echo "::error title=argus unit::${line}"
+            done
+            grep -E '^ *[0-9]+ fail' /tmp/unit-output.txt | while read -r line; do
+              echo "::error title=argus unit summary::${line}"
+            done
+          fi
+          exit $exit_code
 
       - name: Run llm unit tests
         working-directory: Argus-Tui/packages/llm

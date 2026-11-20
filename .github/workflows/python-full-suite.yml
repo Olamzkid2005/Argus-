@@ -111,6 +111,16 @@ jobs:
           exit_code=${PIPESTATUS[0]}
           echo "---PYTEST EXIT CODE: $exit_code---"
           tail -20 /tmp/pytest-output.txt
+          # Surface the failing ids as annotations: the job log needs an
+          # authenticated session, the annotations do not.
+          if [ "$exit_code" -ne 0 ]; then
+            grep -E '^(FAILED|ERROR) ' /tmp/pytest-output.txt | head -10 | while read -r line; do
+              echo "::error title=python-full-suite::${line}"
+            done
+            grep -E '^=+ .*(failed|error)' /tmp/pytest-output.txt | tail -1 | while read -r line; do
+              echo "::error title=python-full-suite summary::${line}"
+            done
+          fi
           exit $exit_code
 
       - name: Check diff coverage
