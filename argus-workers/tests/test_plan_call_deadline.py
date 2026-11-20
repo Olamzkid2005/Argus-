@@ -10,7 +10,7 @@ import time
 import pytest
 
 import mcp_server
-from mcp_server import _PlannerCallTimeout, _call_with_deadline
+from mcp_server import _call_with_deadline, _PlannerCallTimeout
 
 
 class TestCallWithDeadline:

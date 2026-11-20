@@ -1513,7 +1513,13 @@ export class WorkflowRunner {
         }
         if (phase.toolExecution !== "llm_driven") {
           const runnable = toolRegistry.selectBest(phase.requiredCapabilities as any, targetType)
-          if (runnable.length === 0) {
+          // An empty selection only proves a capability gap when the registry
+          // actually holds definitions. A registry that loaded nothing (a test
+          // double, or a definitions file that failed to load) says nothing
+          // about coverage, and skipping every phase would turn a broken
+          // registry into a green-looking run.
+          const registryKnowsTools = (toolRegistry.listTools?.() ?? []).length > 0
+          if (runnable.length === 0 && registryKnowsTools) {
             // Missing coverage, not a broken phase: the reason names the
             // capability and the tools that would provide it. This used to be
             // gated on ARGUS_AUTONOMOUS, so an interactive/TUI run marked the

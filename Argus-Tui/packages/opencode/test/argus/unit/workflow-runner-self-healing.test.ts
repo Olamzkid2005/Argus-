@@ -112,7 +112,9 @@ function makeDeps(opts: { toolsFor: (caps: string[]) => unknown[]; execute: any 
         getTool: mock(() => undefined),
         getToolsByCapability: mock(() => []),
         getCapabilities: mock(() => []),
-        listTools: mock(() => []),
+        // A real registry always lists its definitions; an empty one means the
+        // definitions failed to load, which is not evidence of a coverage gap.
+        listTools: mock(() => [{ name: "t" }]),
         findBestTools: mock(() => []),
         setConfig: mock(() => {}),
         getToolTimeout: mock(() => 120),
@@ -171,8 +173,15 @@ describe("self-healing autonomous loop", () => {
 
     expect(execute.mock.calls.map((c: any[]) => c[0].phaseId)).toEqual(["scan"])
     expect(result.success).toBe(true)
-    expect(result.degradations?.some((d) => d.includes("capability-missing") && d.includes("web_recon"))).toBe(true)
-    expect(store.savePhase).toHaveBeenCalledWith("ENG-heal", expect.objectContaining({ id: "recon", status: "SKIPPED" }))
+    // A capability no tool can perform is a clean skip that names the
+    // capability, not degraded coverage — otherwise a run missing one optional
+    // tool reports Partial even though every runnable phase completed.
+    expect(result.degradations ?? []).not.toContainEqual(expect.stringContaining("capability-missing"))
+    expect(store.savePhase).toHaveBeenCalledWith("ENG-heal", expect.objectContaining({
+      id: "recon",
+      status: "SKIPPED",
+      error: expect.stringContaining("web_recon"),
+    }))
   })
 
   test("skips a phase that keeps throwing and reports the failure", async () => {
