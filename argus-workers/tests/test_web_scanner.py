@@ -130,15 +130,15 @@ class TestScanValidation:
             scanner.scan("gopher://internal:6379")
 
     def test_scope_validation_rejects(self):
-        """When engagement_id is set and scope rejects the target,
-        scan() returns [] without making requests."""
+        """When engagement_id is set and scope rejects the target, scan()
+        refuses to run instead of returning an empty result."""
         scanner = WebScanner(engagement_id="eng-1")
 
         with patch("tools.scope_validator.validate_target_scope", return_value=False):
             with patch.object(scanner, "_safe_request") as mock_req:
-                findings = scanner.scan("https://out-of-scope.example.com")
+                with pytest.raises(RuntimeError, match="outside authorized scope"):
+                    scanner.scan("https://out-of-scope.example.com")
 
-        assert findings == []
         mock_req.assert_not_called()
 
 
@@ -534,8 +534,16 @@ class TestExecute:
         scanner = WebScanner()
         ctx = ToolContext(target="https://example.com", engagement_id="eng-42")
 
-        with patch.object(scanner, "_safe_request", return_value=None):
-            scanner.execute(ctx)
+        # A tool call is only authorized by the scope published for its own
+        # engagement; an unpublished scope is denied rather than allowed.
+        from tools.scope_validator import clear_process_scope, set_process_scope
+
+        set_process_scope("eng-42", mode="allowlist", allowed_targets=["example.com"])
+        try:
+            with patch.object(scanner, "_safe_request", return_value=None):
+                scanner.execute(ctx)
+        finally:
+            clear_process_scope("eng-42")
 
         assert scanner.engagement_id == "eng-42"
         assert scanner._builder.engagement_id == "eng-42"

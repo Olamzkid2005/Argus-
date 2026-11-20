@@ -1923,8 +1923,11 @@ class MCPServer:
                     # The budget is checked between calls, so a single call has
                     # to be bounded too: an unreachable LLM provider made one
                     # planning call retry for ten minutes and killed the whole
-                    # phase (and the run) on the MCP request timeout.
-                    timeout=min(_PLAN_CALL_TIMEOUT_SECONDS, remaining) if remaining is not None else _PLAN_CALL_TIMEOUT_SECONDS,
+                    # phase (and the run) on the MCP request timeout. The bound
+                    # is the call timeout, not the budget remainder: clamping it
+                    # to a nearly-spent budget kills a slow-but-alive provider's
+                    # answer and leaves the phase with no engine choices at all.
+                    timeout=_PLAN_CALL_TIMEOUT_SECONDS,
                     label="plan_next_action",
                 )
             except _PlannerCallTimeout:
