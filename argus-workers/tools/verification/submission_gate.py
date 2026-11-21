@@ -272,9 +272,12 @@ def _ask_evidence(finding: dict) -> GateAnswer:
         _text(finding.get("screenshot")).strip()
         or _text(evidence.get("screenshot") or evidence.get("screenshots")).strip()
     )
-    if refs or has_body or has_screenshot:
+    # Any non-empty evidence payload counts: Argus stores what a tool captured
+    # under whatever keys that tool uses ("output", "matches", "headers", …),
+    # and a triager can audit those too. Only genuinely empty evidence holds.
+    if refs or finding.get("evidence") or has_body or has_screenshot:
         return _answer(
-            Q_EVIDENCE, GateVerdict.PASS, "evidence reference or raw traffic present"
+            Q_EVIDENCE, GateVerdict.PASS, "evidence reference or payload present"
         )
 
     steps = _text(

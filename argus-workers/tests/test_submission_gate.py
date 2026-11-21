@@ -281,6 +281,35 @@ class TestRealFindingShapes:
         assert result.answer_for(Q_EVIDENCE).verdict is GateVerdict.PASS
         assert result.decision is GateDecision.SUBMIT
 
+    def test_any_non_empty_evidence_payload_counts(self):
+        """Tool-shaped evidence (no request/response keys) is still auditable."""
+        row = {
+            "type": "SECURITY_MISCONFIGURATION",
+            "severity": "MEDIUM",
+            "confidence": 0.7,
+            "description": "Directory listing exposed.",
+            "evidence": {"output": "Index of /backup\n  dump.sql"},
+        }
+
+        result = evaluate_submission(row)
+
+        assert result.answer_for(Q_EVIDENCE).verdict is GateVerdict.PASS
+        assert result.decision is GateDecision.SUBMIT
+
+    def test_truly_empty_evidence_still_holds(self):
+        row = {
+            "type": "XSS",
+            "severity": "HIGH",
+            "confidence": 0.8,
+            "description": "Stored XSS in the profile page.",
+            "evidence": {},
+        }
+
+        result = evaluate_submission(row)
+
+        assert result.answer_for(Q_EVIDENCE).verdict is GateVerdict.FAIL
+        assert result.decision is GateDecision.HOLD
+
     def test_a_screenshot_inside_evidence_counts_as_evidence(self):
         row = {
             "type": "XSS",
@@ -380,6 +409,28 @@ class TestAuditFixes:
 
         assert annotated["submission_decision"] == "drop"
         assert annotated["submission_ready"] is False
+
+
+class TestSingleGateEvaluation:
+    """The report generator must not ask the seven questions twice per finding."""
+
+    def test_the_gate_runs_once_per_finding(self, monkeypatch: pytest.MonkeyPatch):
+        from tools import bugbounty_report_generator as module
+
+        calls: list[str] = []
+        real = module.evaluate_submission
+
+        def counting(finding: dict, **kwargs: object):
+            calls.append(str(finding.get("id")))
+            return real(finding, **kwargs)
+
+        monkeypatch.setattr(module, "evaluate_submission", counting)
+
+        module.BugBountyReportGenerator().generate(
+            [clean_finding()], platform="hackerone"
+        )
+
+        assert calls == ["f-1"]
 
 
 class TestTaskTally:

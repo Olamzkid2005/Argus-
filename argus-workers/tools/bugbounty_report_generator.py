@@ -18,6 +18,7 @@ from typing import Any
 
 from tools.verification.submission_gate import (
     GateDecision,
+    GateResult,
     evaluate_submission,
     gate_report_section,
 )
@@ -693,19 +694,17 @@ class BugBountyReportGenerator:
             f"Processing {len(findings)} findings (min_confidence={min_confidence})"
         )
 
-        # Apply Bug-Reaper audit rules: filter findings by quality
-        reportable = self._filter_findings(findings, min_confidence)
+        # Apply Bug-Reaper audit rules and the submission gate in one pass, so
+        # the gate runs once per finding and its verdict is reused below.
+        evaluated = self._evaluate_findings(findings, min_confidence)
+        reportable = [(f, gate) for f, reason, gate in evaluated if reason is None]
         slog.info(
             f"{len(reportable)}/{len(findings)} findings reportable after filtering"
         )
 
         if not reportable:
             slog.info("No reportable vulnerabilities — generating empty report")
-            reasons = {
-                id(f): reason
-                for f, reason in self._filter_with_reasons(findings, min_confidence)
-                if reason
-            }
+            reasons = {id(f): reason for f, reason, _ in evaluated if reason}
             return (
                 f"# Bug Bounty Report — {platform.upper()}\n\n"
                 f"**No reportable vulnerabilities identified.**\n\n"
@@ -725,15 +724,14 @@ class BugBountyReportGenerator:
         reports = []
         generator_fn = GENERATORS[platform]
 
-        for finding in reportable:
+        for finding, gate in reportable:
             vuln_type = self._map_type(finding)
             finding_data = self.adapter.adapt(finding, vuln_type, engagement)
             try:
                 report_md = generator_fn(finding_data, vuln_type)
                 # A held finding still ships, but with the gate's answers next to
                 # it so whoever submits knows what to fix before pressing send.
-                gate = evaluate_submission(finding, min_confidence=min_confidence)
-                if gate.decision is GateDecision.HOLD:
+                if gate is not None and gate.decision is GateDecision.HOLD:
                     report_md = report_md + "\n\n" + gate_report_section(gate)
                 reports.append(report_md)
             except Exception as e:
@@ -759,25 +757,40 @@ class BugBountyReportGenerator:
         slog.tool_complete("report_generation", platform=platform, reports=len(reports))
         return header + "\n\n---\n\n".join(reports)
 
-    def _filter_with_reasons(
+    def _evaluate_findings(
         self, findings: list[dict], min_confidence: float
-    ) -> list[tuple[dict, str | None]]:
-        """Keep or reject each finding, keeping the reason a finding was rejected.
+    ) -> list[tuple[dict, str | None, GateResult | None]]:
+        """Judge every finding once, keeping the reason and the gate's verdict.
 
-        Returns ``(finding, None)`` for reportable findings and
-        ``(finding, reason)`` for the rest, so an empty report can say *why*
-        each finding was left out instead of guessing.
+        Returns ``(finding, None, gate)`` for reportable findings — the gate
+        result is carried out so the caller does not have to run the seven
+        questions a second time — and ``(finding, reason, None)`` for the rest.
         """
-        decision: list[tuple[dict, str | None]] = []
+        evaluated: list[tuple[dict, str | None, GateResult | None]] = []
 
         for f in findings:
-            reason = self._rejection_reason(f, min_confidence)
-            decision.append((f, reason))
+            reason = self._prior_rejection(f, min_confidence)
+            if reason is not None:
+                evaluated.append((f, reason, None))
+                continue
 
-        return decision
+            gate = evaluate_submission(f, min_confidence=min_confidence)
+            if gate.decision is GateDecision.DROP:
+                evaluated.append(
+                    (
+                        f,
+                        f"dropped by the submission gate ({', '.join(gate.blocking)})",
+                        gate,
+                    )
+                )
+                continue
 
-    def _rejection_reason(self, f: dict, min_confidence: float) -> str | None:
-        """Why this finding is not reportable, or None when it is."""
+            evaluated.append((f, None, gate))
+
+        return evaluated
+
+    def _prior_rejection(self, f: dict, min_confidence: float) -> str | None:
+        """Why this finding fails before the gate is worth asking, or None."""
         fp_assessment = f.get("fp_assessment", {})
         if not isinstance(fp_assessment, dict):
             fp_assessment = {}
@@ -794,10 +807,6 @@ class BugBountyReportGenerator:
         confidence = float(f.get("confidence", 0))
         if confidence < min_confidence:
             return "below confidence threshold"
-
-        gate = evaluate_submission(f, min_confidence=min_confidence)
-        if gate.decision is GateDecision.DROP:
-            return f"dropped by the submission gate ({', '.join(gate.blocking)})"
 
         return None
 
@@ -816,7 +825,11 @@ class BugBountyReportGenerator:
            still reported — the gate never promotes, only blocks the clearly
            unreportable.
         """
-        return [f for f, reason in self._filter_with_reasons(findings, min_confidence) if reason is None]
+        return [
+            f
+            for f, reason, _ in self._evaluate_findings(findings, min_confidence)
+            if reason is None
+        ]
 
     def _map_type(self, finding: dict) -> str:
         """Map Argus finding type to Bug-Reaper vulnerability type."""
