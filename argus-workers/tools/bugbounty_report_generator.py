@@ -16,6 +16,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from tools.verification.submission_gate import (
+    GateDecision,
+    evaluate_submission,
+    gate_report_section,
+)
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
@@ -720,6 +725,11 @@ class BugBountyReportGenerator:
             finding_data = self.adapter.adapt(finding, vuln_type, engagement)
             try:
                 report_md = generator_fn(finding_data, vuln_type)
+                # A held finding still ships, but with the gate's answers next to
+                # it so whoever submits knows what to fix before pressing send.
+                gate = evaluate_submission(finding, min_confidence=min_confidence)
+                if gate.decision is GateDecision.HOLD:
+                    report_md = report_md + "\n\n" + gate_report_section(gate)
                 reports.append(report_md)
             except Exception as e:
                 slog.warn(
@@ -753,6 +763,11 @@ class BugBountyReportGenerator:
         2. Minimum severity: Medium
         3. Exclude false positives
         4. Exclude unvalidated findings (requires_validation with no validation)
+        5. Exclude findings the submission gate drops: not reproduced, self-
+           inflicted, already known/out-of-scope-impact, or out of scope. A
+           finding the gate merely holds (evidence hygiene, missing proof) is
+           still reported — the gate never promotes, only blocks the clearly
+           unreportable.
         """
         reportable = []
         rejected = []
@@ -778,6 +793,12 @@ class BugBountyReportGenerator:
             # Check confidence
             confidence = float(f.get("confidence", 0))
             if confidence < min_confidence:
+                rejected.append(f)
+                continue
+
+            # Check the seven-question submission gate. Only a DROP removes a
+            # finding here: a HOLD is something the report can still say.
+            if evaluate_submission(f, min_confidence=min_confidence).decision is GateDecision.DROP:
                 rejected.append(f)
                 continue
 
