@@ -14,6 +14,7 @@ from pathlib import Path
 
 from celery_app import app
 from tools.bugbounty_report_generator import BugBountyReportGenerator
+from tools.verification.submission_gate import GateDecision, annotate_finding
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +74,16 @@ def generate_bugbounty_report(
             "message": "No findings found for this engagement.",
         }
 
+    # Tag each finding with the submission gate's verdict before the report is
+    # built, so the caller (and anything downstream of this task) sees the
+    # decision itself and not just the markdown it produced.
+    gated = [annotate_finding(f) for f in findings]
+
     # Generate the report
     generator = BugBountyReportGenerator()
     try:
         report_md = generator.generate(
-            findings=findings,
+            findings=gated,
             platform=platform,
             engagement=engagement,
         )
@@ -107,7 +113,18 @@ def generate_bugbounty_report(
         "output_path": output_path,
         "findings_count": len(findings),
         "report_length": len(report_md),
+        "submission_gate": _gate_tally(gated),
     }
+
+
+def _gate_tally(findings: list[dict]) -> dict:
+    """Count findings by gate decision, for the task's result payload."""
+    tally: dict[str, int] = {decision.value: 0 for decision in GateDecision}
+    for finding in findings:
+        decision = finding.get("submission_decision")
+        if decision in tally:
+            tally[decision] += 1
+    return tally
 
 
 def _fetch_findings(engagement_id: str) -> list[dict]:

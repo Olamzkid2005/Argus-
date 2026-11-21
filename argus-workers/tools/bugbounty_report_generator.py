@@ -701,6 +701,11 @@ class BugBountyReportGenerator:
 
         if not reportable:
             slog.info("No reportable vulnerabilities — generating empty report")
+            reasons = {
+                id(f): reason
+                for f, reason in self._filter_with_reasons(findings, min_confidence)
+                if reason
+            }
             return (
                 f"# Bug Bounty Report — {platform.upper()}\n\n"
                 f"**No reportable vulnerabilities identified.**\n\n"
@@ -709,7 +714,7 @@ class BugBountyReportGenerator:
                     f"- {f.get('type', 'Unknown')} at {f.get('endpoint', '?')} "
                     f"(confidence: {f.get('confidence', 0):.2f}, "
                     f"severity: {f.get('severity', '?')}) "
-                    f"— {'below confidence threshold' if f.get('confidence', 0) < min_confidence else 'below Medium severity'}"
+                    f"— {reasons.get(id(f), 'not reportable')}"
                     for f in findings
                 )
                 if findings
@@ -754,6 +759,48 @@ class BugBountyReportGenerator:
         slog.tool_complete("report_generation", platform=platform, reports=len(reports))
         return header + "\n\n---\n\n".join(reports)
 
+    def _filter_with_reasons(
+        self, findings: list[dict], min_confidence: float
+    ) -> list[tuple[dict, str | None]]:
+        """Keep or reject each finding, keeping the reason a finding was rejected.
+
+        Returns ``(finding, None)`` for reportable findings and
+        ``(finding, reason)`` for the rest, so an empty report can say *why*
+        each finding was left out instead of guessing.
+        """
+        decision: list[tuple[dict, str | None]] = []
+
+        for f in findings:
+            reason = self._rejection_reason(f, min_confidence)
+            decision.append((f, reason))
+
+        return decision
+
+    def _rejection_reason(self, f: dict, min_confidence: float) -> str | None:
+        """Why this finding is not reportable, or None when it is."""
+        fp_assessment = f.get("fp_assessment", {})
+        if not isinstance(fp_assessment, dict):
+            fp_assessment = {}
+        if f.get("false_positive") or fp_assessment.get("verdict") in (
+            "false_positive",
+            "likely_false_positive",
+        ):
+            return "flagged as a false positive"
+
+        severity = str(f.get("severity", "")).upper()
+        if severity not in ("CRITICAL", "HIGH", "MEDIUM"):
+            return "below Medium severity"
+
+        confidence = float(f.get("confidence", 0))
+        if confidence < min_confidence:
+            return "below confidence threshold"
+
+        gate = evaluate_submission(f, min_confidence=min_confidence)
+        if gate.decision is GateDecision.DROP:
+            return f"dropped by the submission gate ({', '.join(gate.blocking)})"
+
+        return None
+
     def _filter_findings(
         self, findings: list[dict], min_confidence: float
     ) -> list[dict]:
@@ -769,42 +816,7 @@ class BugBountyReportGenerator:
            still reported — the gate never promotes, only blocks the clearly
            unreportable.
         """
-        reportable = []
-        rejected = []
-
-        for f in findings:
-            # Check false positive flag
-            fp_assessment = f.get("fp_assessment", {})
-            if not isinstance(fp_assessment, dict):
-                fp_assessment = {}
-            if f.get("false_positive") or fp_assessment.get("verdict") in (
-                "false_positive",
-                "likely_false_positive",
-            ):
-                rejected.append(f)
-                continue
-
-            # Check severity
-            severity = str(f.get("severity", "")).upper()
-            if severity not in ("CRITICAL", "HIGH", "MEDIUM"):
-                rejected.append(f)
-                continue
-
-            # Check confidence
-            confidence = float(f.get("confidence", 0))
-            if confidence < min_confidence:
-                rejected.append(f)
-                continue
-
-            # Check the seven-question submission gate. Only a DROP removes a
-            # finding here: a HOLD is something the report can still say.
-            if evaluate_submission(f, min_confidence=min_confidence).decision is GateDecision.DROP:
-                rejected.append(f)
-                continue
-
-            reportable.append(f)
-
-        return reportable
+        return [f for f, reason in self._filter_with_reasons(findings, min_confidence) if reason is None]
 
     def _map_type(self, finding: dict) -> str:
         """Map Argus finding type to Bug-Reaper vulnerability type."""

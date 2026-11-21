@@ -6,6 +6,7 @@ from tools.verification.submission_gate import (
     GateDecision,
     GateResult,
     GateVerdict,
+    annotate_finding,
     evaluate_submission,
     gate_report_section,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "GateDecision",
     "GateResult",
     "GateVerdict",
+    "annotate_finding",
     "evaluate_submission",
     "gate_report_section",
 ]

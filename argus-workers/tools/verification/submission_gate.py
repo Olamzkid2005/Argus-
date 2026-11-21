@@ -61,6 +61,9 @@ _REPRODUCED = "reproduced"
 _BLOCKING_ON_FAIL = frozenset(
     {Q_REPRODUCIBLE, Q_NOT_SELF_INFLICTED, Q_NOT_KNOWN, Q_IN_SCOPE}
 )
+# A question whose *unknown* answer still blocks the submission: a triager can
+# only look at evidence, so "steps recorded, no artifact" is a hold, not a pass.
+_HOLD_ON_UNKNOWN = frozenset({Q_EVIDENCE})
 
 # Same secrets/PII classes Claude-BugHunter's ``evidence-hygiene`` skill lists:
 # what a screenshot or a raw request must never carry into a submission.
@@ -71,14 +74,25 @@ _HYGIENE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("private key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("JWT", re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+")),
-    ("email address", re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]{2,}\b")),
+    # Only an address that is the *value* of a mail field is account data. A
+    # bare address in a page body is the target's public contact, not PII, and
+    # flagging it would make every marketing page hold.
+    (
+        "email field",
+        re.compile(
+            r"[\"']?\b(?:e-?mail|user_?email|email_?address|mail)\b[\"']?\s*[:=]\s*[\"']?"
+            r"[\w.+-]+@[\w-]+\.[\w.-]{2,}",
+            re.I,
+        ),
+    ),
 )
 
+# ``payload`` is deliberately absent: an attack string legitimately contains
+# "password=' OR 1=1" and must not be mistaken for a captured credential.
 _EVIDENCE_STRING_FIELDS = (
     "poc",
     "request",
     "response",
-    "payload",
     "evidence",
     "screenshot",
     "raw_request",
@@ -181,6 +195,18 @@ def _text(value: Any) -> str:
     return str(value)
 
 
+def _evidence_dict(finding: dict) -> dict:
+    """The finding's structured ``evidence`` block, when it has one.
+
+    Real findings from the database carry ``evidence`` as a dict (the model
+    coerces strings and lists into one), with the captured traffic inside it.
+    Reading only the top-level keys would answer question 2 with FAIL for every
+    finding Argus actually produces.
+    """
+    evidence = finding.get("evidence")
+    return evidence if isinstance(evidence, dict) else {}
+
+
 def _evidence_blob(finding: dict) -> str:
     parts = [_text(finding.get(name)) for name in _EVIDENCE_STRING_FIELDS]
     for name in _EVIDENCE_LIST_FIELDS:
@@ -189,7 +215,15 @@ def _evidence_blob(finding: dict) -> str:
             parts.extend(str(v) for v in value)
         elif value:
             parts.append(str(value))
+    parts.extend(_text(finding.get("evidence")))
     return "\n".join(p for p in parts if p)
+
+
+def _severity_text(finding: dict) -> str:
+    """Severity as an upper-case string, whether it is an enum or a string."""
+    severity = finding.get("severity")
+    value = getattr(severity, "value", severity)
+    return _text(value).strip().upper()
 
 
 def _answer(question_id: str, verdict: GateVerdict, reason: str) -> GateAnswer:
@@ -227,13 +261,29 @@ def _ask_evidence(finding: dict) -> GateAnswer:
             refs.extend(v for v in value if v)
         elif value:
             refs.append(value)
+
+    evidence = _evidence_dict(finding)
+    traffic_keys = ("request", "response", "poc", "raw_request", "raw_response")
     has_body = any(
-        _text(finding.get(name)).strip()
-        for name in ("request", "response", "poc", "raw_request", "raw_response")
+        _text(finding.get(name)).strip() or _text(evidence.get(name)).strip()
+        for name in traffic_keys
     )
-    if refs or has_body or _text(finding.get("screenshot")).strip():
-        return _answer(Q_EVIDENCE, GateVerdict.PASS, "evidence reference or raw traffic present")
-    steps = _text(finding.get("reproduction_steps") or finding.get("steps")).strip()
+    has_screenshot = bool(
+        _text(finding.get("screenshot")).strip()
+        or _text(evidence.get("screenshot") or evidence.get("screenshots")).strip()
+    )
+    if refs or has_body or has_screenshot:
+        return _answer(
+            Q_EVIDENCE, GateVerdict.PASS, "evidence reference or raw traffic present"
+        )
+
+    steps = _text(
+        finding.get("repro_steps")
+        or finding.get("reproduction_steps")
+        or finding.get("steps")
+        or evidence.get("steps")
+        or evidence.get("repro_steps")
+    ).strip()
     if steps:
         return _answer(
             Q_EVIDENCE,
@@ -244,7 +294,7 @@ def _ask_evidence(finding: dict) -> GateAnswer:
 
 
 def _ask_impact(finding: dict) -> GateAnswer:
-    severity = str(finding.get("severity") or "").strip().upper()
+    severity = _severity_text(finding)
     impact = _text(finding.get("impact") or finding.get("description")).strip()
     if severity and severity not in _SUBMITTABLE_SEVERITIES:
         return _answer(
@@ -336,7 +386,7 @@ def evaluate_submission(
     finding: dict,
     *,
     min_confidence: float = 0.65,
-    require_reproduction: bool = True,
+    require_reproduction: bool = False,
 ) -> GateResult:
     """Run the seven questions against one finding.
 
@@ -344,8 +394,11 @@ def evaluate_submission(
         finding: An Argus finding dict (``VulnerabilityFinding`` shape).
         min_confidence: The floor the program's triage expects; a finding below
             it is held rather than dropped — more evidence can still lift it.
-        require_reproduction: When False (e.g. an issue class with no verifier),
-            a missing reproduction is not a reason to hold.
+        require_reproduction: When True, a finding with no reproduction record
+            at all is held rather than passed. Defaults to False: not every
+            finding in Argus went through a verifier, and "we never recorded a
+            proof" must not block a report that is otherwise sound. An explicit
+            negative (``not_reproduced``/``unsupported``) always drops.
 
     Returns:
         A :class:`GateResult` with every answer, the blocking question ids and
@@ -384,16 +437,51 @@ def evaluate_submission(
             decision = GateDecision.HOLD
         blocking.append("confidence-below-threshold")
 
-    reproducible = answers[0]
+    by_question = {a.question_id: a for a in answers}
+
+    for question_id in _HOLD_ON_UNKNOWN:
+        if (
+            by_question[question_id].verdict is GateVerdict.UNKNOWN
+            and decision is not GateDecision.DROP
+            and question_id not in blocking
+        ):
+            decision = GateDecision.HOLD
+            blocking.append(question_id)
+
     if (
         require_reproduction
-        and reproducible.verdict is GateVerdict.UNKNOWN
+        and by_question[Q_REPRODUCIBLE].verdict is GateVerdict.UNKNOWN
         and decision is not GateDecision.DROP
+        and Q_REPRODUCIBLE not in blocking
     ):
         decision = GateDecision.HOLD
         blocking.append(Q_REPRODUCIBLE)
 
     return GateResult(decision=decision, answers=answers, blocking=tuple(blocking))
+
+
+def annotate_finding(
+    finding: dict,
+    *,
+    min_confidence: float = 0.65,
+    require_reproduction: bool = False,
+) -> dict:
+    """Return a copy of the finding carrying the gate's verdict.
+
+    The report text is not the only consumer: anything downstream (MCP tools,
+    the UI, a triage queue) needs the decision itself, not a markdown table. The
+    original finding is not mutated.
+    """
+    result = evaluate_submission(
+        finding,
+        min_confidence=min_confidence,
+        require_reproduction=require_reproduction,
+    )
+    annotated = dict(finding)
+    annotated["submission_gate"] = result.to_dict()
+    annotated["submission_decision"] = result.decision.value
+    annotated["submission_ready"] = result.is_submittable
+    return annotated
 
 
 def gate_report_section(result: GateResult) -> str:
