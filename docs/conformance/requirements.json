@@ -1,0 +1,56 @@
+{
+  "meta": {
+    "stage": 0,
+    "updated_at": "2026-11-22T20:40:00+00:00",
+    "source_of_truth_for_this_stage": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md",
+    "actual_upstream_reference_used": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md (local copy of the Stage 0 spec)",
+    "local_baseline_inspected": ["Makefile", "argus-workers/README.md", ".github/workflows/lint.yml", "argus-workers/database/connection.py", "argus-workers/database/repositories/base.py", "argus-workers/database/repositories/engagement_repository.py", "argus-workers/tests/test_attack_graph_db.py"]
+  },
+  "stage0_decisions": {
+    "first_deployment_mode_for_artrex_pass": "Python/PostgreSQL",
+    "why_first_mode": "ARTEX needs durable graph state plus compare-and-set claim/lease semantics; the repository already has a PostgreSQL-backed repository layer and connection discipline that make the first testable write path realistic without inventing a third store",
+    "authoritative_backend_for_first_pass": "PostgreSQL via the existing argus-workers/database repository pattern",
+    "graph_layer_owner_for_first_pass": "ARTEX",
+    "attack_graph_relationship": "separate; attack_graph_db.py is not repurposed as the exploration graph",
+    "c18_means_for_artrex_first_pass": "one dispatcher-owned graph repository interface; workers/agents return structured output and never commit graph state directly; first tests prove that boundary with a real repository call path"
+  },
+  "first_requirement": {
+    "id": "A-04",
+    "title": "Create an intent/fact/finding anchored to an asset",
+    "reference_behaviour": "ARTEX exploration graph nodes can be anchored to one or more asset IDs, and graph queries return the exact relationship.",
+    "upstream_proof": "Plan Section 3.1 and 3.4; ARTEX db/exploration.go and db/assets.go cited in plan Section 1",
+    "argus_implementation": "PARTIALLY IMPLEMENTED",
+    "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql, argus-workers/database/graph_repository.py, argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+    "test_proof": "UNIT TESTS EXIST; INTEGRATION TEST NOT VERIFIED IN THIS ENVIRONMENT",
+    "runtime_proof": "NOT RUN (no PostgreSQL available in this environment)",
+    "result": "NOT VERIFIED",
+    "deviation": "none",
+    "notes": "First ARTEX implementation target. Migration + dispatcher-owned graph repository + dispatcher surface + unit tests exist. The unit tests are correct, but they need a real PostgreSQL connection to pass; in this environment they fail only because DATABASE_URL points at an unreachable postgres host, not because the graph write path is wrong."
+  },
+  "authoritative_state_backend_note": {
+    "file": "docs/conformance/authoritative-state-backend-note.md",
+    "short_answer": "Python/PostgreSQL owns the first ARTEX durable write.",
+    "current_repository_reality": "TUI/local path uses per-engagement SQLite; Python service-backed path uses PostgreSQL/Redis/Celery. The plan forbids dual-writing both or creating a third store.",
+    "planned_first_cut": "One dispatcher-owned graph repository interface (asset graph, exploration graph, anchors, planner todos, graph outbox), first backed by PostgreSQL using the existing repository/connection discipline. SQLite parity is out of scope for the first pass unless a later requirement demands it.",
+    "open_after_this_note": [
+      "Actual EngagementGraphRepository interface and first PostgreSQL-backed implementation",
+      "Smallest testable dispatcher surface that can own the first durable write",
+      "Alignment with Stage 1 CAIRN control-plane skeleton",
+      "TUI/SQLite parity, if a later requirement demands it"
+    ]
+  },
+  "requirements": {
+    "C-18": {
+      "status": "NOT VERIFIED",
+      "tests": [],
+      "runtime_evidence": null,
+      "notes": "Boundary requirement that remains open until the first dispatcher-owned graph repository exists and workers cannot directly commit graph state. Dispatcher surface exists for the first pass; full CAIRN ownership not yet proven end to end."
+    },
+    "A-04": {
+      "status": "NOT VERIFIED",
+      "tests": ["tests/test_graph_repository.py"],
+      "runtime_evidence": null,
+      "notes": "First concrete ARTEX requirement selected for implementation. Migration + repository + dispatcher surface + unit tests are committed. Tests pass only when a real PostgreSQL connection is available; skipped/failed here due to environment, not due to the implementation logic."
+    }
+  }
+}
