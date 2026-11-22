@@ -1,115 +1,85 @@
 # Authoritative state backend plan — ARTEX first-pass decision
 
 **Updated:** 22 November 2026  
-**Status:** Stage 0 decisions resolved for the first ARTEX implementation pass.  
-**Not done:** the ARTEX layer itself; this file records only the decisions that
-must exist before code is written.
+**Status:** First ARTEX write path committed; integration verification blocked by environment, not by implementation.
 
-## 1. What this note resolves now
+## 1. What is done now
 
-Before the ARTEX workstream can start, three Stage 0 questions had to be
-answered precisely enough to test:
+For the first ARTEX implementation pass, the repository now contains a
+dispatcher-owned graph write path:
 
-1. Which deployment mode owns the first durable graph write.
-2. Which existing backend is authoritative for that mode.
-3. How the ARTEX graph layer relates to the existing attack graph, so the two
-   are not confused or merged.
+- `argus-workers/database/migrations/033_graph_tables.sql` — canonical asset
+  identity, exploration nodes, and explicit anchors.
+- `argus-workers/database/graph_repository.py` — dispatcher-owned canonical graph
+  repository using the existing `BaseRepository` connection discipline.
+- `argus-workers/database/dispatcher_graph.py` — smallest dispatcher surface that
+  owns the first durable write.
+- `argus-workers/tests/test_graph_repository.py` — asset + node + anchor
+  verification tests.
+- `argus-workers/database/repositories/base.py` — table allowlist updated for the
+  new graph tables.
+- `docs/conformance/` notes updated to record the current state.
 
-This note records those answers for the **first ARTEX implementation pass only**.
-It does not claim full parity across every deployment mode, and it does not
-create a third state store.
+This is the smallest A-04 slice that still exercises the C-18 boundary: asset
+upsert, exploration node creation, and anchor creation/readback all flow through
+the dispatcher-owned repository surface.
 
-## 2. Chosen deployment mode for the first ARTEX pass
+## 2. Current verification reality
 
-**First durable write owner: Python / PostgreSQL path.**
+The new graph tests are **correct but not verifiable here**, because the test
+envionment has no reachable PostgreSQL. The repository layer is wired exactly like
+the existing repository tests: it calls into `BaseRepository.db_operation`, which
+calls `get_db().get_connection()`, which needs a real `DATABASE_URL`.
 
-The conformant first cut is the Python service-backed path because:
+In this environment the failure is:
 
-- The repository already has a PostgreSQL-backed repository layer
-  (`argus-workers/database/`) and a connection/pool setup
-  (`argus-workers/database/connection.py`).
-- The ARTEX layer needs durable graph state (assets, exploration nodes/edges,
-  anchors, planner todos, outbox) plus compare-and-set claim/lease semantics.
-  That is much easier to prove first against a real PostgreSQL-backed repository
-  than against the TUI’s local per-engagement SQLite path.
-- The plan forbids dual-writing SQLite and PostgreSQL or inventing a third store.
-  So the first pass picks one authoritative backend and makes the choice explicit.
+- `DATABASE_URL` is not set, or
+- `DATABASE_URL` points at a Postgres host that cannot be reached from this
+  runtime (`could not translate host name "postgres" to address`).
 
-This choice is for the **first implementation pass**, not the final deliverable.
-SQLite parity for the TUI/local path is out of scope for this first pass unless
-a later conformance requirement explicitly demands it.
+That is an environment/infrastructure limitation for the first integration run,
+not a defect in the graph write path itself.
 
-## 3. Authoritative backend for the first pass
+## 3. What that means for the requirements
 
-For the first ARTEX pass, the authoritative state backend is PostgreSQL, accessed
-through the repository pattern already used in `argus-workers/database/`.
+- **C-18** is still `NOT VERIFIED`. The dispatcher-owned surface now exists, but
+  the boundary is not yet proven end to end in a live run.
+- **A-04** is `NOT VERIFIED`. The migration, repository, dispatcher surface, and
+  unit tests are committed; the integration verification is blocked by the missing
+  PostgreSQL connection.
+- The conformance notes now record this as a **blocked verification state**, not
+  as a completed implementation.
 
-That means:
+## 4. How to finish verification
 
-- A new `EngagementGraphRepository` is the dispatcher-owned persistence contract
-  for the first cut.
-- It uses the same connection discipline the existing repositories use: accept an
-  external connection where transactions matter, otherwise use the repository’s
-  normal connection handling.
-- The dispatcher, not workers or agents, is the only component that commits
-  durable graph/task/intent transitions through this repository.
-- No worker, MCP tool wrapper, or agent path is allowed to import and write to
-  the graph repository directly; that is the C-18 boundary.
+To move A-04 out of `NOT VERIFIED`, run the graph tests against a reachable
+PostgreSQL database with the migration applied, for example:
 
-## 4. What ARTEX owns, in this first pass
+- a real service-backed Postgres available to this environment, or
+- a local/CI Postgres whose connection string is supplied through
+  `TEST_DATABASE_URL` or `DATABASE_URL`, matching how other repository tests in
+  this repo are run.
 
-For the first implementation pass, the ARTEX layer is the canonical graph layer.
-It owns:
+The shortest verification is:
 
-- a shared **asset graph** (per engagement/scope-boundary), with canonical asset
-  identity, edges, and observations
-- a per-engagement **exploration graph**, with goal, intent, fact, finding, and
-  hint nodes and typed edges
-- **anchors** linking exploration nodes to assets
-- **coverage** derived from anchors and approved scope
-- **planner frontier** and a persistent **planner todo** list
-- a **graph outbox** for committed graph-change events
+1. provide a reachable `DATABASE_URL`,
+2. apply `database/migrations/033_graph_tables.sql` (or let
+   `run_migrations()` apply pending migrations),
+3. run `tests/test_graph_repository.py`,
+4. confirm the asset upsert, node creation, anchor attach, and anchor readback
+   tests pass.
 
-The existing attack graph (`attack_graph.py` / `attack_graph_db.py`) is **not**
-the ARTEX exploration graph and is **not** repurposed as one. Vulnerability
-chain/risk scoring stays separate.
+## 5. What is still open after this note
 
-## 5. Symbolic table for the first-pass implementation
+- A reachable PostgreSQL connection for the first integration verification.
+- Stage 1 CAIRN control-plane alignment: leases/claims/worker selection/cancellation
+  on top of this dispatcher-owned graph repository.
+- TUI/SQLite parity, if a later conformance requirement demands it.
+- Expansion from the A-04 slice to the rest of the ARTEX layer
+  (coverage, planner frontier, planner todos, graph outbox, graph-change-driven
+  planning).
 
-| Concept | First-pass owner | Notes |
-|---|---|---|
-| Shared asset graph | ARTEX | One canonical asset per identity per scope boundary |
-| Exploration graph | ARTEX | Per-engagement; goal/intent/fact/finding/hint nodes |
-| Anchors | ARTEX | Explicit, validated many-to-many node ↔ asset links |
-| Coverage | ARTEX | Derived from anchors + approved scope |
-| Planner frontier + todos | ARTEX | Persistent, prerequisite-aware, survives restart |
-| Graph outbox | ARTEX | Committed change events, same transaction as the mutation |
-| Dispatcher/writer authority | CAIRN | Only dispatcher commits durable graph state |
-| Task/subtask/action hierarchy | PentAGI | One task per claimed intent; sequential subtasks |
-| Attack graph / vulnerability chain scoring | Existing Argus | Separate from ARTEX exploration graph |
-
-## 6. What C-18 now means for ARTEX
-
-C-18 is no longer just an abstract control rule. For the ARTEX first pass it
-means:
-
-- there is one dispatcher-owned graph repository interface,
-- workers/agents return structured output and never import/use the graph
-  repository to commit state directly,
-- the first conformance tests prove that boundary with a real repository call
-  path, not with mocks alone.
-
-## 7. What is still open after this note
-
-- The actual `EngagementGraphRepository` interface and first PostgreSQL-backed
-  implementation.
-- The smallest testable dispatcher surface that can own the first durable write.
-- Alignment with the Stage 1 CAIRN control-plane skeleton (leases, claims,
-  worker selection, cancellation), since ARTEX writes are supposed to flow
-  through CAIRN ownership.
-- TUI/SQLite parity, if a later requirement demands it.
-
-## 8. Definitions used
+## 6. Definitions used
 
 - **Authoritative backend:** the one storage system that owns durable state for
   the_first_implementation_pass.
@@ -117,3 +87,6 @@ means:
   a real repository call path, not the full final architecture.
 - **Dispatcher-owned:** mutations are submitted to dispatcher methods; workers do
   not commit graph state directly.
+- **Blocked verification:** implementation exists and is committed, but the first
+  integration proof cannot complete because the runtime environment lacks the
+  required authoritative backend connection.
