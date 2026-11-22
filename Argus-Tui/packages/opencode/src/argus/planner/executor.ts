@@ -206,6 +206,7 @@ import type { ApprovalDecision } from "../workflows/approval"
 import type { ApprovalGate } from "../workflows/types"
 import { WorkflowRegistry } from "../workflows/registry"
 import { Feature, type FeatureFlags } from "../config/feature-flags"
+import { responseEvidenceFrom } from "../reporting/normalizer"
 import { ToolConfig } from "../config/tool-config"
 import { ToolHealthMonitor } from "../bridge/tool-health"
 import type { ToolHealthRecord } from "../bridge/tool-health"
@@ -314,7 +315,7 @@ function coerceConfidence(value: unknown): Confidence {
  * expects. The worker's NormalizedFinding dicts carry the security content but
  * no id, status or timestamps — those are required for persistence.
  */
-function normalizeParsedFinding(raw: unknown, tool: string, phaseId: string): NormalizedFinding {
+export function normalizeParsedFinding(raw: unknown, tool: string, phaseId: string): NormalizedFinding {
   const r = (raw ?? {}) as Record<string, unknown>
   const now = new Date().toISOString()
   const str = (key: string): string | undefined =>
@@ -333,6 +334,11 @@ function normalizeParsedFinding(raw: unknown, tool: string, phaseId: string): No
     remediation: str("remediation"),
     tool: str("tool") ?? tool,
     phase: str("phase") ?? phaseId,
+    // The worker sends the evidence it based the finding on, including the
+    // http_response block a MEDIUM+ finding must carry. Dropping it here is
+    // why the report could only repeat the severity label.
+    evidence: (r.evidence as NormalizedFinding["evidence"]) ?? undefined,
+    responseEvidence: responseEvidenceFrom(r),
     created_at: str("created_at") ?? now,
     updated_at: str("updated_at") ?? now,
   }

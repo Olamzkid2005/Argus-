@@ -1,5 +1,5 @@
 import { describe, expect, test, mock } from "bun:test"
-import { InProcessExecutor } from "../../../src/argus/planner/executor"
+import { InProcessExecutor, normalizeParsedFinding } from "../../../src/argus/planner/executor"
 
 // `executeHybrid` resolves the worker's LLM handoff, and for an `opencode*`
 // provider that means acquiring a real `opencode serve`. Unit tests must not
@@ -482,5 +482,52 @@ describe("a tool whose binary is missing is skipped, not failed", () => {
     const record = (result.actionRecords ?? []).find((r) => r.tool === "sn1per")
     expect(record?.outcome).toBe("skipped")
     expect(record?.detail).toContain("binary")
+  })
+})
+
+describe("normalizeParsedFinding", () => {
+  test("keeps the evidence and response the worker sent", () => {
+    // The vulnbank.org run reported MEDIUM findings with no observed response
+    // because this projection dropped evidence entirely.
+    const normalized = normalizeParsedFinding(
+      {
+        title: "Missing csp: /",
+        severity: "MEDIUM",
+        confidence: 0.95,
+        tool: "web_scanner",
+        evidence: {
+          message: "No Content-Security-Policy header found",
+          http_response: {
+            url: "https://vulnbank.org/",
+            status_code: 200,
+            headers: { server: "cloudflare" },
+            body_bytes: 5,
+            body_sha256: "e".repeat(64),
+            body_preview: "hello",
+          },
+        },
+      },
+      "web_scanner",
+      "phase-1-vuln_scan",
+    )
+
+    expect(normalized.evidence).toBeDefined()
+    expect(normalized.responseEvidence).toEqual({
+      url: "https://vulnbank.org/",
+      statusCode: 200,
+      headers: { server: "cloudflare" },
+      bodyBytes: 5,
+      bodySha256: "e".repeat(64),
+      preview: "hello",
+    })
+  })
+
+  test("a finding without a response block keeps none", () => {
+    const normalized = normalizeParsedFinding(
+      { title: "Open port: 443/tcp", severity: "MEDIUM", confidence: 0.9, tool: "naabu" },
+      "naabu",
+      "phase-1-recon",
+    )
+    expect(normalized.responseEvidence).toBeUndefined()
   })
 })
