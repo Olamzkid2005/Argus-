@@ -76,6 +76,7 @@ import { EncryptionManager, keychainAccountName, keychainServiceName } from "../
 import type { EngagementState, PhaseRecord, EngagementStatus, PhaseStatus, IEngagementStore } from "./types"
 import type { EngagementCheckpoint } from "./checkpoint"
 import type { ExecutionMode } from "../shared/types"
+import { Severity } from "../shared/types"
 import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
 
 function defaultDbPath(): string {
@@ -107,6 +108,11 @@ const ADD_STORAGE_VERSION_COLUMN_SQL = `ALTER TABLE engagements ADD COLUMN stora
  *  try/catch, so existing databases get the column and new ones skip this. */
 const ADD_FINDING_URL_COLUMN_SQL = `ALTER TABLE findings ADD COLUMN url TEXT`
 
+/** Migration: persist the HTTP response a MEDIUM+ finding was derived from.
+ *  Without it the scanner's evidence never survived the write, so a report
+ *  could only repeat the claim. Ran in try/catch like the url migration. */
+const ADD_FINDING_RESPONSE_EVIDENCE_SQL = `ALTER TABLE findings ADD COLUMN response_evidence TEXT`
+
 /**
  * Per-engagement DB schema — all tables except engagements.
  * These are plain SQL strings passed directly to bun:sqlite's exec()
@@ -118,7 +124,7 @@ const PER_ENGAGEMENT_TABLE_SQL = [
     id TEXT PRIMARY KEY, engagement_id TEXT NOT NULL,
     title TEXT NOT NULL, severity INTEGER NOT NULL, confidence INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'PENDING', description TEXT, subtype TEXT, cve TEXT, cwe TEXT,
-    owasp TEXT, remediation TEXT, tool TEXT, phase TEXT, url TEXT, created_at INTEGER NOT NULL,
+    owasp TEXT, remediation TEXT, tool TEXT, phase TEXT, url TEXT, response_evidence TEXT, created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL, finalized_at INTEGER, negative INTEGER NOT NULL DEFAULT 0
   )`,
   `CREATE INDEX IF NOT EXISTS idx_findings_engagement ON findings(engagement_id)`,
@@ -232,6 +238,7 @@ function toFindingRow(finding: NormalizedFinding, engagementId: string): typeof 
     tool: finding.tool,
     phase: finding.phase,
     url: finding.url,
+    response_evidence: finding.responseEvidence ?? null,
     negative: finding.negative ?? false,
     created_at: finding.created_at ? new Date(finding.created_at).getTime() : Date.now(),
     updated_at: finding.updated_at ? new Date(finding.updated_at).getTime() : Date.now(),
@@ -255,11 +262,109 @@ function toNormalizedFinding(row: typeof findingsTable.$inferSelect): Normalized
     tool: row.tool ?? "unknown",
     phase: row.phase ?? "unknown",
     url: row.url ?? undefined,
+    responseEvidence: (row.response_evidence ?? undefined) as NormalizedFinding["responseEvidence"],
     negative: row.negative ? true : undefined,
     created_at: new Date(row.created_at).toISOString(),
     updated_at: new Date(row.updated_at).toISOString(),
     finalized_at: row.finalized_at ? new Date(row.finalized_at).toISOString() : undefined,
   }
+}
+
+/**
+ * Findings types that are attack-surface inventory rather than issues.
+ *
+ * A crawler reports one finding per URL; a 21-page site became 782 rows in
+ * the church-site engagement, 866 of its 877 findings INFO. That is a list of
+ * pages, not 782 problems, and it drowns the findings that matter. These are
+ * rolled up into one informational row per tool and type.
+ */
+const INVENTORY_SUBTYPES = new Set([
+  "DISCOVERED_ENDPOINT",
+  "CRAWLED_ENDPOINT",
+  "HTTP_ENDPOINT",
+  "KNOWN_URL",
+  "HISTORICAL_URL",
+  "DIRECTORY_FOUND",
+  "SUBDOMAIN",
+  "SUBDOMAIN_DISCOVERY",
+  "SUBDOMAIN_PERMUTATION",
+  "TECH_DETECTED",
+  "TECHNOLOGY_DETECTED",
+])
+
+const INVENTORY_LABELS: Record<string, string> = {
+  DISCOVERED_ENDPOINT: "Endpoint",
+  CRAWLED_ENDPOINT: "Endpoint",
+  HTTP_ENDPOINT: "Endpoint",
+  KNOWN_URL: "URL",
+  HISTORICAL_URL: "URL",
+  DIRECTORY_FOUND: "Directory",
+  SUBDOMAIN: "Subdomain",
+  SUBDOMAIN_DISCOVERY: "Subdomain",
+  SUBDOMAIN_PERMUTATION: "Subdomain",
+  TECH_DETECTED: "Technology",
+  TECHNOLOGY_DETECTED: "Technology",
+}
+
+/** How many concrete URLs an inventory row shows before summarising. */
+const INVENTORY_SAMPLE_SIZE = 10
+
+/**
+ * Collapse per-URL recon output into one INFO row per (tool, subtype).
+ *
+ * Only inventory types at INFO severity are touched; anything a scanner rated
+ * LOW or above is left exactly as it was reported. The row's title and url are
+ * stable across phases so re-saving updates the same row instead of piling up
+ * a new one for every partial crawl.
+ */
+export function rollupInventoryFindings(records: NormalizedFinding[]): NormalizedFinding[] {
+  const kept: NormalizedFinding[] = []
+  const groups = new Map<
+    string,
+    { first: NormalizedFinding; urls: Set<string>; seen: number }
+  >()
+
+  for (const record of records) {
+    const subtype = (record.subtype ?? "").toUpperCase()
+    if (!INVENTORY_SUBTYPES.has(subtype) || record.severity > Severity.INFO) {
+      kept.push(record)
+      continue
+    }
+    const key = `${record.tool}::${subtype}`
+    const group = groups.get(key)
+    if (!group) {
+      groups.set(key, {
+        first: record,
+        urls: new Set(record.url ? [record.url] : []),
+        seen: 1,
+      })
+      continue
+    }
+    group.seen += 1
+    if (record.url) group.urls.add(record.url)
+  }
+
+  for (const [key, group] of groups) {
+    const subtype = key.slice(key.indexOf("::") + 2)
+    const label = INVENTORY_LABELS[subtype] ?? "Asset"
+    const count = Math.max(group.urls.size, group.seen)
+    const samples = [...group.urls].slice(0, INVENTORY_SAMPLE_SIZE)
+    const sampleText = samples.length > 0 ? `\n\nFirst ${samples.length}:\n${samples.map((u) => `- ${u}`).join("\n")}` : ""
+
+    kept.push({
+      ...group.first,
+      id: `rollup-${key}`,
+      title: `${label} inventory — ${group.first.tool}`,
+      subtype,
+      severity: Severity.INFO,
+      description:
+        `${count} ${label.toLowerCase()}${count === 1 ? "" : "s"} observed by ${group.first.tool}.` +
+        sampleText,
+      url: undefined,
+    })
+  }
+
+  return kept
 }
 
 export class EngagementStore implements IEngagementStore {
@@ -823,6 +928,12 @@ export class EngagementStore implements IEngagementStore {
     } catch {
       // Column already exists — safe to ignore
     }
+    // Migration for engagement DBs created before response evidence was kept.
+    try {
+      sqlite.exec(ADD_FINDING_RESPONSE_EVIDENCE_SQL)
+    } catch {
+      // Column already exists — safe to ignore
+    }
   }
 
   private _seedCounters(): void {
@@ -1037,6 +1148,9 @@ export class EngagementStore implements IEngagementStore {
   // ── Findings (per-engagement DB with fallback) ──
 
   saveFindings(engagementId: string, records: NormalizedFinding[]): void {
+    // Inventory noise is collapsed before anything is written, so a crawl of
+    // 782 URLs costs one row instead of 782.
+    records = rollupInventoryFindings(records)
     const pe = this._ensureEngagementDb(engagementId)
     // An finding nobody can attribute cannot be reproduced or defended, and it
     // used to reach the report as an anonymous LOW. Refuse it here rather than

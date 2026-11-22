@@ -35,8 +35,7 @@ SENSITIVE_FILES = [
     "settings.py",
     ".npmrc",
     ".pypirc",
-    "robots.txt",
-    "sitemap.xml",
+    # Published on purpose (see the matching comment in tools/web_scanner.py).
     "swagger.json",
     "openapi.json",
     "/actuator",
@@ -49,7 +48,6 @@ SENSITIVE_FILES = [
     "/phpinfo.php",
     "/info.php",
     "/_profiler",
-    "/.well-known/security.txt",
     "/server-status",
     "/wp-admin/",
     "/admin/",

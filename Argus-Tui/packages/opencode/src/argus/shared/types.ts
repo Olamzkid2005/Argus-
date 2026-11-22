@@ -8,6 +8,23 @@ export interface CredentialRef {
   credentialType: string
 }
 
+/**
+ * The HTTP response a MEDIUM+ finding was derived from.
+ *
+ * A severity label alone is not checkable: a finding must say which request
+ * produced it and what came back, so an operator can confirm or refute it
+ * without rerunning the scanner.
+ */
+export interface ResponseEvidence {
+  url?: string
+  statusCode?: number
+  headers?: Record<string, string>
+  bodyBytes?: number
+  bodySha256?: string
+  /** First 500 characters of the body, HTML-escaped by the scanner. */
+  preview?: string
+}
+
 export interface NormalizedFinding {
   id: string
   title: string
@@ -17,6 +34,8 @@ export interface NormalizedFinding {
   description: string
   subtype?: string
   evidence?: EvidencePackage[]
+  /** Raw response for a MEDIUM+ finding; see ResponseEvidence. */
+  responseEvidence?: ResponseEvidence
   cve?: string
   cwe?: string
   owasp?: string

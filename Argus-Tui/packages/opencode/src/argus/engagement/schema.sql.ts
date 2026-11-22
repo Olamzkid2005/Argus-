@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer, real, index, foreignKey } from "drizzle-orm/sqlite-core"
+import type { ResponseEvidence } from "../shared/types"
 
 /** Storage version flags for per-engagement DB migration (Item 14b).
  *  1 = legacy single-DB mode (all tables in argus.db)
@@ -52,6 +53,11 @@ export const findings = sqliteTable("findings", {
   phase: text(),
   /** Discovered endpoint the finding refers to (Stage 4.2). */
   url: text(),
+  /**
+   * The observed HTTP response behind a MEDIUM+ finding (JSON). Stored rather
+   * than recomputed: a finding that cannot show what it saw is an assertion.
+   */
+  response_evidence: text({ mode: "json" }).$type<ResponseEvidence>(),
   created_at: integer().notNull().$default(() => Date.now()),
   updated_at: integer().notNull().$onUpdate(() => Date.now()),
   finalized_at: integer(),

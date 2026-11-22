@@ -612,6 +612,17 @@ export class ReportGenerator {
       lines.push(`- **Proof:** ${escapeMarkdown(this.proofDisplay(f))}`)
       const evidencePackages = this.evidenceFor(options, f.id)
       lines.push(`- **Evidence:** ${escapeMarkdown(this.evidenceDisplay(evidencePackages))}`)
+      const observed = f.responseEvidence
+      if (observed) {
+        const status = observed.statusCode === undefined ? "no status" : `HTTP ${observed.statusCode}`
+        const bytes = observed.bodyBytes === undefined ? "" : `, ${observed.bodyBytes} bytes`
+        const digest = observed.bodySha256 ? `, body sha256 ${observed.bodySha256}` : ""
+        const where = observed.url ? ` from ${observed.url}` : ""
+        lines.push(`- **Observed response:** ${escapeMarkdown(`${status}${where}${bytes}${digest}`)}`)
+        if (observed.preview) {
+          lines.push(`  - Body preview: ${escapeMarkdown(observed.preview.slice(0, 200))}`)
+        }
+      }
       for (const pkg of evidencePackages) {
         lines.push(`  - Package ${escapeMarkdown(pkg.packageHash)}: ${pkg.artifacts.length} artifact${pkg.artifacts.length === 1 ? "" : "s"}`)
         for (const artifact of pkg.artifacts.slice(0, 5)) {

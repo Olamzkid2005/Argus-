@@ -21,6 +21,7 @@ Integrates advanced web scanning capabilities:
 """
 
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -60,6 +61,21 @@ from tools.web_scanner_checks._helpers import test_jwt_alg_none
 from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
+
+#: Findings at or above these severities must carry the HTTP response they were
+#: derived from, so a human can check the claim instead of trusting the label.
+RESPONSE_EVIDENCE_SEVERITIES = frozenset({"CRITICAL", "HIGH", "MEDIUM"})
+
+#: How the property a prototype-pollution payload sets would appear if the
+#: server actually merged the input into an object. Used as a differential
+#: marker against the unmodified response; the bare word "true" is not one.
+_PROTOTYPE_POLLUTION_MARKERS = (
+    '"isadmin":true',
+    "'isadmin':true",
+    '"isadmin": true',
+    "'isadmin': true",
+    "isadmin=true",
+)
 
 
 def _validate_redirect_chain(
@@ -134,8 +150,12 @@ class WebScanner(AbstractTool):
         "settings.py",
         ".npmrc",
         ".pypirc",
-        "robots.txt",
-        "sitemap.xml",
+        # robots.txt, sitemap.xml and /.well-known/security.txt are published on
+        # purpose: they are meant to be fetched by anyone. Listing them here made
+        # every ordinary site that has them report three HIGH "exposed sensitive
+        # file" findings (observed on www.hisdayspringfamily.org). Keep this list
+        # in sync with tools/web_scanner_checks/detection_check.py — a test
+        # asserts the two copies are identical.
         "swagger.json",
         "openapi.json",
         "/actuator",
@@ -148,7 +168,6 @@ class WebScanner(AbstractTool):
         "/phpinfo.php",
         "/info.php",
         "/_profiler",
-        "/.well-known/security.txt",
         "/server-status",
         "/wp-admin/",
         "/admin/",
@@ -446,6 +465,10 @@ class WebScanner(AbstractTool):
         self._reauth_interval = 10
         self._reauth_lock = threading.Lock()
         self._builder: FindingBuilder | None = None
+        # Per-thread record of the last response this thread received. Checks
+        # run in a thread pool, so a shared attribute would attribute one
+        # check's response to another check's finding.
+        self._request_state = threading.local()
 
     def execute(self, ctx: ToolContext) -> UnifiedToolResult:
         """
@@ -1000,6 +1023,13 @@ class WebScanner(AbstractTool):
             if resp is not None and follow_redirects:
                 resp = self._follow_redirects_safe(resp, session=req_session)
 
+            # Remember the response on this thread so _add_finding can attach
+            # it as evidence for a MEDIUM+ finding without every check having
+            # to thread the object through (H-v4 evidence).
+            state = getattr(self, "_request_state", None)
+            if resp is not None and state is not None:
+                state.last_response = resp
+
             return resp
         except (
             TimeoutError,
@@ -1023,6 +1053,7 @@ class WebScanner(AbstractTool):
         endpoint: str,
         evidence: dict,
         confidence: float = 0.8,
+        response=None,
     ):
         """Add a finding — delegates to FindingBuilder.
 
@@ -1034,6 +1065,18 @@ class WebScanner(AbstractTool):
         calls to individual check methods (e.g. ``check_graphql_introspection()``)
         produce immediately visible results.
         """
+        if (
+            severity.upper() in RESPONSE_EVIDENCE_SEVERITIES
+            and "http_response" not in evidence
+        ):
+            observed = response
+            if observed is None:
+                observed = getattr(
+                    getattr(self, "_request_state", None), "last_response", None
+                )
+            block = self._response_evidence(observed)
+            if block:
+                evidence = {**evidence, "http_response": block}
         if self._builder is None:
             self._builder = FindingBuilder(
                 source_tool="web_scanner",
@@ -1044,6 +1087,38 @@ class WebScanner(AbstractTool):
             finding_type, severity, endpoint, evidence, confidence
         )
         self.findings.append(finding)
+
+    @staticmethod
+    def _response_evidence(resp) -> dict:
+        """Summarise the response a finding was derived from.
+
+        Hashing the body keeps the record verifiable while the preview stays
+        readable. Everything is returned as plain data so it survives the JSON
+        round trip into an engagement database.
+        """
+        if resp is None:
+            return {}
+        try:
+            body = resp.text or ""
+        except Exception:  # a broken/streamed body must not lose the finding
+            body = ""
+        encoded = body.encode("utf-8", errors="ignore")
+        try:
+            headers = {
+                str(key): str(value)
+                for key, value in list(resp.headers.items())[:30]
+            }
+        except Exception:
+            headers = {}
+        url = getattr(resp, "url", "")
+        return {
+            "url": url if isinstance(url, str) else "",
+            "status_code": getattr(resp, "status_code", None),
+            "headers": headers,
+            "body_bytes": len(encoded),
+            "body_sha256": hashlib.sha256(encoded).hexdigest(),
+            "body_preview": body[:500],
+        }
 
     def _detect_framework(self, response) -> str:
         """
@@ -1155,6 +1230,7 @@ class WebScanner(AbstractTool):
                     ],
                 },
                 confidence=0.95,
+                response=resp,
             )
 
     def check_csp(self):
@@ -1171,6 +1247,7 @@ class WebScanner(AbstractTool):
                 endpoint=self.target_url,
                 evidence={"message": "No Content-Security-Policy header found"},
                 confidence=0.95,
+                response=resp,
             )
             return
 
@@ -1193,6 +1270,7 @@ class WebScanner(AbstractTool):
                     "csp_preview": csp[:200],
                 },
                 confidence=0.9,
+                response=resp,
             )
 
     def check_cookies(self):
@@ -1408,6 +1486,7 @@ class WebScanner(AbstractTool):
                         "verified": bool(expected_signatures),
                     },
                     confidence=confidence,
+                    response=resp,
                 )
 
     def check_js_secrets(self):
@@ -2860,27 +2939,70 @@ class WebScanner(AbstractTool):
                 return
 
     def check_prototype_pollution(self):
-        """Check for prototype pollution vulnerabilities."""
+        """Check for prototype pollution by comparing against a baseline.
+
+        A page that merely contains the word "true" is not prototype
+        pollution. The old check fired on any 200 whose body contained
+        "true" or "isAdmin", so every ordinary page looked vulnerable:
+        on www.hisdayspringfamily.org the payload URL returned a body
+        byte-identical to the baseline and still produced a finding.
+
+        The payload response now has to show a marker the baseline does not:
+        the property the payload sets, as a merged object would render it.
+        """
+        baseline = self._safe_request("GET", self.target_url)
+        if not baseline or baseline.status_code != 200:
+            return
+
+        baseline_text = baseline.text or ""
+        baseline_markers = self._prototype_markers_in(baseline_text)
+        baseline_digest = hashlib.sha256(
+            baseline_text.encode("utf-8", errors="ignore")
+        ).hexdigest()
+
         for payload in self.PROTOTYPE_POLLUTION_PAYLOADS:
             test_url = f"{self.target_url}{payload}"
             resp = self._safe_request("GET", test_url)
-            if not resp:
+            if not resp or resp.status_code != 200:
                 continue
-            if resp.status_code == 200 and (
-                "isAdmin" in resp.text or "true" in resp.text.lower()
-            ):
-                self._add_finding(
-                    finding_type="PROTOTYPE_POLLUTION",
-                    severity="MEDIUM",
-                    endpoint=test_url,
-                    evidence={
-                        "payload": payload,
-                        "response_status": resp.status_code,
-                        "message": "Potential prototype pollution via query parameter",
-                    },
-                    confidence=0.6,
+
+            body = resp.text or ""
+            new_markers = self._prototype_markers_in(body) - baseline_markers
+            if body == baseline_text or not new_markers:
+                logger.debug(
+                    "Prototype pollution payload %s changed nothing observable; "
+                    "no differential marker between baseline and payload response",
+                    payload,
                 )
-                break
+                continue
+
+            self._add_finding(
+                finding_type="PROTOTYPE_POLLUTION",
+                severity="MEDIUM",
+                endpoint=test_url,
+                evidence={
+                    "payload": payload,
+                    "response_status": resp.status_code,
+                    "markers": sorted(new_markers),
+                    "baseline_body_sha256": baseline_digest,
+                    "payload_body_sha256": hashlib.sha256(
+                        body.encode("utf-8", errors="ignore")
+                    ).hexdigest(),
+                    "message": (
+                        "Payload-derived property appears in the response but "
+                        "not in the unmodified baseline"
+                    ),
+                },
+                confidence=0.75,
+                response=resp,
+            )
+            break
+
+    @staticmethod
+    def _prototype_markers_in(text: str) -> set[str]:
+        """Return the prototype-pollution markers present in a body."""
+        lowered = " ".join(text.lower().split())
+        return {m for m in _PROTOTYPE_POLLUTION_MARKERS if m in lowered}
 
     def check_cache_poisoning(self):
         """Check for cache poisoning vulnerabilities."""
