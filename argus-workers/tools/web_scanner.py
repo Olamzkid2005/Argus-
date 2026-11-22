@@ -31,7 +31,7 @@ import socket
 import threading
 import time
 import uuid
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse
 
 # Allowed URL schemes for scan targets — blocks dangerous protocols like
 # file:// and gopher:// that could be used for SSRF (H-v3-24)
@@ -340,19 +340,117 @@ class WebScanner(AbstractTool):
         "X-Original-Forwarded-For": "127.0.0.1",
     }
 
-    # Financial / transaction paths for business logic checks
+    # Financial / transaction paths for business logic checks.
+    #
+    # The money-moving surface of a fintech target is not one endpoint: a
+    # transfer, a card top-up, a bill payment and a merchant charge are all
+    # amount-accepting endpoints with the same validation questions. Sending
+    # the amount probes to only /api/transfer found nothing on targets whose
+    # payments live under /api/cards/fund or /api/billers/pay.
     TRANSFER_PATHS = [
         "/api/transfer",
+        "/api/transfers",
         "/api/transactions",
         "/api/payment",
+        "/api/payments",
         "/api/v1/transfers",
+        "/api/v1/payments",
         "/api/send",
+        "/api/withdraw",
+        "/api/wallet/transfer",
+        # Virtual cards
+        "/api/cards/fund",
+        "/api/card/fund",
+        "/api/v1/cards/fund",
+        "/api/cards/topup",
+        # Bill payments
+        "/api/bills/pay",
+        "/api/bill-payment",
+        "/api/bill-payments",
+        "/api/billers/pay",
+        "/api/utilities/pay",
+        # Merchant / payment API
+        "/api/merchant/pay",
+        "/api/merchant/payment",
+        "/api/merchant/charge",
+        "/api/charge",
+        "/api/v1/payments/charge",
+        # Money-moving handlers are often mounted at the root. A target whose
+        # transfer lives at POST /transfer answered every /api/* amount probe
+        # with 404, so the business-logic checks never reached a handler.
+        "/transfer",
+        "/pay",
+        "/payments",
+        "/withdraw",
     ]
 
-    # File upload endpoints
+    # Authenticated banking resources. A fintech surface exposes cards, bills
+    # and a merchant API alongside ordinary transfers; without these paths the
+    # card/bill/merchant classes were only tested for amount handling.
+    CARD_LIST_PATHS = [
+        "/api/virtual-cards",
+        "/api/cards",
+        "/api/v1/cards",
+        "/cards",
+    ]
+    CARD_CREATE_PATHS = [
+        "/api/virtual-cards/create",
+        "/api/cards/create",
+        "/api/v1/cards/create",
+        "/api/cards",
+    ]
+    CARD_LIMIT_TEMPLATES = [
+        "/api/virtual-cards/{id}/update-limit",
+        "/api/cards/{id}/update-limit",
+        "/api/cards/{id}/limit",
+    ]
+    CARD_ACTIVITY_TEMPLATES = [
+        "/api/virtual-cards/{id}/transactions",
+        "/api/cards/{id}/transactions",
+    ]
+    MERCHANT_REGISTER_PATHS = [
+        "/api/v1/merchants/register",
+        "/api/merchants/register",
+        "/api/merchant/register",
+    ]
+    MERCHANT_LOGIN_PATHS = [
+        "/api/v1/merchants/login",
+        "/api/merchants/login",
+        "/api/merchant/login",
+    ]
+    MERCHANT_PAYMENT_TEMPLATES = [
+        "/api/v1/payments/merchant_id/{id}",
+        "/api/merchants/{id}/payments",
+    ]
+    MERCHANT_CHARGE_PATHS = [
+        "/api/v1/payments/charge",
+        "/api/merchant/charge",
+        "/api/payments/charge",
+    ]
+    LOGOUT_PATHS = [
+        "/logout",
+        "/api/logout",
+        "/api/auth/logout",
+        "/auth/logout",
+        "/api/v1/logout",
+    ]
+
+    # Fields a merchant registration/login response must never echo back.
+    MERCHANT_KEY_FIELDS = (
+        "api_key",
+        "apikey",
+        "api_secret",
+        "secret_key",
+        "password",
+    )
+
+    # File upload endpoints (incl. URL-based profile-image import, the SSRF
+    # surface of many profile settings pages)
     UPLOAD_PATHS = [
         "/api/upload",
         "/api/profile/image",
+        "/api/profile/avatar",
+        "/api/avatar",
         "/api/documents",
         "/api/v1/upload",
         "/upload",
@@ -360,27 +458,100 @@ class WebScanner(AbstractTool):
 
     # Rate limiting sensitive paths
     RATE_LIMIT_PATHS = [
+        "/login",
+        "/transfer",
+        "/api/v1/payments/charge",
         "/api/login",
         "/api/auth/login",
         "/api/reset-password",
+        "/api/forgot-password",
         "/api/transfer",
         "/api/payment",
+        "/api/cards/fund",
+        "/api/bills/pay",
+        "/api/merchant/pay",
     ]
 
     # Password reset endpoints
     RESET_PATHS = [
+        "/forgot-password",
+        "/api/v1/forgot-password",
         "/api/forgot-password",
         "/api/reset-password",
         "/api/auth/reset",
+        "/api/auth/forgot-password",
+        "/api/password/reset",
+        "/forgot-password",
     ]
 
     # Race condition test endpoints
     RACE_PATHS = [
+        "/transfer",
+        "/api/v1/payments/charge",
         "/api/transfer",
         "/api/payment",
+        "/api/payments",
         "/api/card/fund",
+        "/api/cards/fund",
+        "/api/bills/pay",
+        "/api/merchant/pay",
         "/api/withdraw",
     ]
+
+    # Object endpoints whose response is expected to belong to the caller.
+    # An authenticated request that returns another owner's record is BOLA.
+    BOLA_RESOURCE_TEMPLATES = [
+        "/api/data/{id}",
+        # Banking objects are also mounted at the root: transaction history and
+        # balance lookups take the account number in the path.
+        "/transactions/{id}",
+        "/check_balance/{id}",
+        "/api/virtual-cards/{id}",
+        "/api/v1/payments/{id}",
+        "/api/bill-payments/{id}",
+        "/api/accounts/{id}",
+        "/api/account/{id}",
+        "/api/orders/{id}",
+        "/api/transactions/{id}",
+        "/api/cards/{id}",
+        "/api/bills/{id}",
+        "/api/invoices/{id}",
+        "/api/documents/{id}",
+        "/api/v1/accounts/{id}",
+        "/api/v1/transactions/{id}",
+    ]
+
+    # Identity endpoints used to learn who "we" are before judging ownership.
+    BOLA_IDENTITY_PATHS = [
+        "/api/me",
+        "/api/v1/merchants/me",
+        "/api/transactions",
+        "/api/v1/me",
+        "/me",
+        "/api/user",
+        "/api/users/me",
+        "/api/profile",
+        "/api/v1/profile",
+        "/api/auth/me",
+    ]
+
+    # Response keys that name the owner of an object.
+    BOLA_OWNER_FIELDS = {
+        "user_id",
+        "userId",
+        "owner_id",
+        "ownerId",
+        "account_id",
+        "customer_id",
+        "created_by",
+        "createdBy",
+        "owner",
+        "user",
+        "username",
+        "email",
+        "account_number",
+        "accountNumber",
+    }
 
     # Sensitive response fields (BOPLA — should not appear in regular user responses)
     SENSITIVE_RESPONSE_FIELDS = {
@@ -395,6 +566,12 @@ class WebScanner(AbstractTool):
         "cvc",
         "secret",
         "api_key",
+        "api_secret",
+        "secret_key",
+        "card_details",
+        "pan_number",
+        "card_holder",
+        "authorization_code",
         "access_token",
         "refresh_token",
         "ssn",
@@ -490,6 +667,18 @@ class WebScanner(AbstractTool):
         # run in a thread pool, so a shared attribute would attribute one
         # check's response to another check's finding.
         self._request_state = threading.local()
+        # Engagement credentials handed to the scanner through ToolContext
+        # (the executor encodes them into --extra). Without them every check
+        # ran logged out: 401 responses made auth/BOLA/transaction findings
+        # impossible no matter how many checks were implemented.
+        self._credentials: dict[str, str] = {}
+        self._authenticated = False
+        # Authenticated surface harvested before the checks run: links served
+        # to a logged-in user plus paths advertised by API documentation.
+        self.discovered_urls: list[str] = []
+        # Cards created by check_card_security, reused by the activity and
+        # transaction-verification checks so they need not create more.
+        self._probe_cards: list[dict] = []
 
     def execute(self, ctx: ToolContext) -> UnifiedToolResult:
         """
@@ -517,6 +706,7 @@ class WebScanner(AbstractTool):
         self.rate_limit = ctx.rate_limit
         self.tech_stack = ctx.tech_stack or self.tech_stack
         self.engagement_id = engagement_id
+        self._credentials = self._extract_credentials(ctx)
 
         # Run the actual scan logic
         target_url = ctx.target
@@ -653,6 +843,170 @@ class WebScanner(AbstractTool):
             and authorize_target(target_url, self.engagement_id).authorized
         )
 
+    @staticmethod
+    def _extract_credentials(ctx: ToolContext) -> dict[str, str]:
+        """Credentials the engagement supplied for this scan.
+
+        Shared with the AI scanner through ``auth_manager`` so both tools
+        accept the same executor shape (``_<key>`` attributes from
+        ``--extra``) and the direct ``_credentials`` mapping.
+        """
+        from tools.auth_manager import extract_engagement_credentials
+
+        return extract_engagement_credentials(ctx)
+
+    @staticmethod
+    def _session_has_auth(
+        session: requests.Session,
+        *,
+        api_key: str = "",
+        cookie: str = "",
+        token: str = "",
+    ) -> bool:
+        """Whether a session actually carries credential material."""
+        if token or cookie or api_key:
+            return True
+        if session.headers.get("Authorization"):
+            return True
+        return len(session.cookies) > 0
+
+    def _json_login(
+        self, session: requests.Session, username: str, password: str
+    ) -> requests.Session | None:
+        """Log in against a JSON API and attach the returned token."""
+        from tools.auth_manager import json_api_login
+
+        return json_api_login(
+            session,
+            self.target_url,
+            username,
+            password,
+            timeout=self.timeout,
+            verify=self.verify,
+        )
+
+    def _authenticate_with_credentials(self) -> bool:
+        """Log in with the engagement's credentials, if any were supplied.
+
+        Returns True when the scan now carries an authenticated session. A
+        target with no credentials (or a login that fails) keeps scanning
+        anonymously: that is a coverage limitation to be reported, not a
+        reason to abort the whole scan.
+        """
+        creds = self._credentials
+        if not creds:
+            return False
+
+        username = creds.get("username") or creds.get("email", "")
+        password = creds.get("password", "")
+        cookie = creds.get("cookie", "")
+        token = creds.get("token", "")
+        api_key = creds.get("api_key", "")
+        if not (cookie or token or api_key or (username and password)):
+            return False
+
+        try:
+            from tools.auth_manager import AuthConfig, AuthManager
+
+            config = AuthConfig(
+                username=username,
+                password=password,
+                cookie=cookie,
+                token=token,
+                api_key=api_key,
+                login_url=creds.get("login_url", ""),
+            )
+            manager = AuthManager(config)
+            session = manager.authenticate(self.target_url)
+        except Exception as exc:  # login failure must not fail the scan
+            logger.info(
+                "Web scanner: authenticated scan unavailable for %s (%s); "
+                "continuing unauthenticated",
+                self.target_url,
+                exc,
+            )
+            return False
+
+        # AuthManager can hand back a session that carries no credentials at
+        # all (its form-encoded login is rejected by JSON-only APIs). Reporting
+        # that as "authenticated" made every authenticated check answer 401 and
+        # find nothing. Verify the session, then fall back to a JSON login.
+        if (username and password) and not self._session_has_auth(session):
+            session = self._json_login(session, username, password) or session
+        if not self._session_has_auth(session, api_key=api_key, cookie=cookie, token=token):
+            logger.info(
+                "Web scanner: engagement credentials did not produce an "
+                "authenticated session for %s; continuing unauthenticated",
+                self.target_url,
+            )
+            return False
+
+        self.session = session
+        self._shared_cookie_jar = session.cookies
+        self.session.headers.setdefault("User-Agent", "Argus-Scanner/1.0 (security-automation)")
+        # Keep re-authenticating through the in-flight hook in _safe_request.
+        self._auth_manager = manager
+        self._authenticated = True
+        self._add_finding(
+            finding_type="AUTH_DETECTED",
+            severity="INFO",
+            endpoint=self.target_url,
+            evidence={
+                "message": "Engagement credentials authenticated; authenticated surface was scanned",
+                "auth_method": "cookie"
+                if cookie
+                else "token"
+                if token
+                else "api_key"
+                if api_key
+                else "form_login",
+                "cookies_captured": len(session.cookies),
+            },
+            confidence=0.9,
+        )
+        return True
+
+    def _harvest_authenticated_surface(self) -> None:
+        """Collect URLs that are only visible to a logged-in user.
+
+        BOLA/IDOR checks need object URLs. Most targets expose them through
+        the authenticated landing page or an API description (``/api/docs``,
+        OpenAPI), so both are harvested here. Everything goes through
+        ``_safe_request`` so scope and SSRF policy still apply to every hop.
+        """
+        candidates: list[str] = []
+        sources = [
+            self.target_url,
+            urljoin(self.target_url, "/api/docs"),
+            urljoin(self.target_url, "/api/docs/"),
+            urljoin(self.target_url, "/api-docs"),
+            urljoin(self.target_url, "/openapi.json"),
+            urljoin(self.target_url, "/static/openapi.json"),
+            urljoin(self.target_url, "/swagger.json"),
+            urljoin(self.target_url, "/api"),
+        ]
+
+        path_re = re.compile(r"(/api/[A-Za-z0-9_\-./{}]+)")
+        for source in sources:
+            resp = self._safe_request("GET", source)
+            if not resp or resp.status_code >= 400:
+                continue
+            text = resp.text or ""
+            for link in re.findall(r'href=["\']([^"\']+)["\']', text, re.I):
+                absolute = urljoin(source, link)
+                if _is_in_scope(absolute, self.target_url, self.engagement_id):
+                    candidates.append(absolute)
+            for path in path_re.findall(text):
+                absolute = urljoin(self.target_url, path.lstrip("/"))
+                if _is_in_scope(absolute, self.target_url, self.engagement_id):
+                    candidates.append(absolute)
+
+        seen: set[str] = set()
+        for url in candidates:
+            if url not in seen:
+                seen.add(url)
+                self.discovered_urls.append(url)
+
     def _run_scan_impl(self, target_url: str) -> None:
         """
         Core scan logic — SSRF prevention, scope validation, SSL test, then
@@ -710,6 +1064,10 @@ class WebScanner(AbstractTool):
         self.slog.phase_header("WEB SCAN", target=self.target_url)
         logger.info("Starting comprehensive web scan: %s", self.target_url)
 
+        # Log in before the pre-flight request so every subsequent request —
+        # including the pooled sessions created below — inherits the session.
+        self._authenticate_with_credentials()
+
         # Pre-flight: test SSL/TLS connectivity. If a cert error occurs,
         # report it as a finding and retry with verification disabled so
         # the rest of the scan can proceed against self-signed/internal certs.
@@ -760,11 +1118,19 @@ class WebScanner(AbstractTool):
         # exclusively, avoiding requests.Session thread-safety races (C-06).
         self._ensure_pool()
 
+        # Harvest the logged-in surface before the checks that consume it.
+        if self._authenticated:
+            self._harvest_authenticated_surface()
+
         # Run parameter discovery sequentially before the concurrent phase.
         # parameter_fuzzing() depends on self.discovered_parameters being
         # populated; running both in the ThreadPoolExecutor created a race
         # where fuzzing could see an empty dict and skip all tests (H-14).
         self.parameter_discovery()
+
+        # Card creation is also sequential: the merchant check charges the card
+        # this creates, and running both in the pool made the card list a race.
+        self.check_card_security()
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -782,9 +1148,11 @@ class WebScanner(AbstractTool):
             self.check_debug_endpoints,
             self.check_auth_endpoints,
             self.check_mass_assignment,
+            self.check_csrf,
             self.check_xss,
             self.check_ssti,
             self.check_lfi,
+            self.check_ssrf,
             self.check_xxe,
             self.check_graphql_introspection,
             self.check_financial_logic,
@@ -795,6 +1163,12 @@ class WebScanner(AbstractTool):
             self.check_rate_limiting,
             self.check_race_conditions,
             self.check_bopla,
+            self.check_bola,
+            self.check_card_activity_monitoring,
+            self.check_transaction_verification,
+            self.check_merchant_api,
+            self.check_token_invalidation,
+            self.check_token_in_url,
             self.check_predictable_identifiers,
             self.check_jwt_algorithm_confusion,
             self.check_prototype_pollution,
@@ -2087,6 +2461,58 @@ class WebScanner(AbstractTool):
                             url,
                         )
 
+    #: Hidden field names that indicate a form carries an anti-CSRF token.
+    CSRF_TOKEN_FIELD_RE = re.compile(
+        r'name=["\'](?:csrf|_csrf|csrf_token|csrfmiddlewaretoken|'
+        r'authenticity_token|__requestverificationtoken|_token|xsrf[_-]token)["\']',
+        re.I,
+    )
+
+    def check_csrf(self):
+        """Report state-changing forms with no anti-CSRF token.
+
+        A POST form that submits nothing secret and accepts no ``SameSite``
+        cookie is forgeable from any origin. Only forms actually served to the
+        scanner are judged, so the finding names a real action URL instead of a
+        guess.
+        """
+        resp = self._safe_request("GET", self.target_url)
+        if not resp or not resp.text:
+            return
+
+        for form in re.finditer(
+            r"<form\b([^>]*)>(.*?)</form>", resp.text, re.I | re.S
+        ):
+            attrs, body = form.group(1), form.group(2)
+            method_match = re.search(r"method=[\"'](\w+)[\"']", attrs, re.I)
+            method = (method_match.group(1) if method_match else "get").lower()
+            if method != "post":
+                continue
+            action_match = re.search(r"action=[\"']([^\"']*)[\"']", attrs, re.I)
+            action = action_match.group(1) if action_match else self.target_url
+            action_url = urljoin(self.target_url + "/", action)
+
+            if self.CSRF_TOKEN_FIELD_RE.search(body):
+                continue
+            if re.search(r'type=["\']hidden["\'][^>]*name=["\'](?:\w*token\w*)["\']', body, re.I):
+                continue
+
+            self._add_finding(
+                finding_type="MISSING_CSRF_TOKEN",
+                severity="MEDIUM",
+                endpoint=action_url,
+                evidence={
+                    "message": (
+                        "State-changing form has no anti-CSRF token; a "
+                        "cross-site request can submit it with the victim's cookies"
+                    ),
+                    "form_action": action,
+                    "method": "POST",
+                },
+                confidence=0.7,
+            )
+            return
+
     def check_xss(self):
         """Check for reflected XSS with improved validation."""
         resp = self._safe_request("GET", self.target_url)
@@ -2306,6 +2732,110 @@ class WebScanner(AbstractTool):
                     )
                     break
 
+    #: Canary used by the SSRF probe. It resolves nowhere and points at a
+    #: closed port on loopback: a target that fetches it returns a connection
+    #: error, which proves server-side fetching without reading anything real
+    #: (no cloud-metadata endpoint is ever contacted).
+    SSRF_CANARY = "http://127.0.0.1:1/argus-ssrf-canary"
+    SSRF_URL_PARAMS = (
+        "url",
+        "uri",
+        "link",
+        "image",
+        "image_url",
+        "avatar",
+        "avatar_url",
+        "photo",
+        "profile_image",
+        "callback",
+        "webhook",
+        "feed",
+        "source",
+        "src",
+        "target",
+    )
+    SSRF_ERROR_SIGNATURES = (
+        "connection refused",
+        "failed to connect",
+        "could not connect",
+        "connectex",
+        "econnrefused",
+        "getaddrinfo",
+        "name or service not known",
+        "nodename nor servname",
+        "no route to host",
+        "connection timed out",
+        "urlopen error",
+        "ssrf-canary",
+    )
+
+    def check_ssrf(self):
+        """Probe URL-accepting inputs for server-side request forgery.
+
+        Profile-image import, webhook configuration and link previews fetch a
+        user-supplied URL server-side. The probe supplies a loopback canary and
+        looks for the target's own connection error in the response — evidence
+        that the server made the request. The canary never points at cloud
+        metadata, so a vulnerable target leaks nothing during the test.
+        """
+        probe_urls: list[str] = [
+            urljoin(self.target_url, path.lstrip("/")) for path in self.UPLOAD_PATHS
+        ]
+        for discovered in self.discovered_urls:
+            for param in re.findall(r"[?&](\w+)=", discovered):
+                if param.lower() in self.SSRF_URL_PARAMS:
+                    probe_urls.append(discovered)
+                    break
+
+        seen: set[str] = set()
+        for url in probe_urls:
+            if url in seen:
+                continue
+            seen.add(url)
+            requests_to_make = []
+            if "?" in url:
+                parsed = urlparse(url)
+                query = parse_qs(parsed.query)
+                for param in list(query):
+                    if param.lower() in self.SSRF_URL_PARAMS:
+                        query[param] = [self.SSRF_CANARY]
+                        replaced = parsed._replace(query=urlencode(query, doseq=True))
+                        requests_to_make.append(("GET", replaced.geturl(), None))
+            else:
+                for param in ("url", "image_url", "avatar_url"):
+                    requests_to_make.append(
+                        ("POST", url, {param: self.SSRF_CANARY})
+                    )
+                requests_to_make.append(
+                    ("GET", f"{url}?url={quote(self.SSRF_CANARY, safe='')}", None)
+                )
+
+            for method, probe_url, body in requests_to_make:
+                resp = self._safe_request(method, probe_url, json=body) if body else self._safe_request(method, probe_url)
+                if not resp or not resp.text:
+                    continue
+                lowered = resp.text.lower()
+                matched = [sig for sig in self.SSRF_ERROR_SIGNATURES if sig in lowered]
+                if matched:
+                    self._add_finding(
+                        finding_type="SSRF",
+                        severity="HIGH",
+                        endpoint=probe_url,
+                        evidence={
+                            "message": (
+                                "Server fetched a URL supplied by the client — "
+                                "response contains the outbound connection error"
+                            ),
+                            "parameter": body and next(iter(body)) or "url",
+                            "canary": self.SSRF_CANARY,
+                            "indicators": matched,
+                            "status": resp.status_code,
+                            "response_preview": resp.text[:300],
+                        },
+                        confidence=0.8,
+                    )
+                    return
+
     def check_xxe(self):
         """Check for XML External Entity injection."""
         xxe_payload = '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>'
@@ -2381,6 +2911,16 @@ class WebScanner(AbstractTool):
                 except json.JSONDecodeError:
                     pass
 
+        # Depth/complexity limits and raw error disclosure. Run on the first
+        # endpoint that actually answers, so a target with no GraphQL costs
+        # one request rather than a probe per path.
+        for path in self.GRAPHQL_ENDPOINTS:
+            candidate = urljoin(self.target_url, path.lstrip("/"))
+            probe = self._safe_request("GET", candidate)
+            if probe and probe.status_code in (200, 400, 405):
+                self._check_graphql_depth_and_errors(candidate)
+                break
+
         # GraphQL depth/complexity check — detect excessive schema exposure
         for path in self.GRAPHQL_ENDPOINTS:
             url = urljoin(self.target_url, path.lstrip("/"))
@@ -2442,11 +2982,102 @@ class WebScanner(AbstractTool):
                 except json.JSONDecodeError:
                     pass
 
+    #: A deliberately deep query. A server without a depth/complexity limit
+    #: executes it; one with a limit answers with an error instead of data.
+    GRAPHQL_DEPTH_QUERY = (
+        "{a{a{a{a{a{a{a{a{a{a{id}}}}}}}}}}"
+    )
+
+    def _check_graphql_depth_and_errors(self, url: str) -> None:
+        """Depth/complexity limit and raw-error disclosure for a GraphQL URL."""
+        resp = self._safe_request(
+            "POST",
+            url,
+            json={"query": self.GRAPHQL_DEPTH_QUERY},
+            headers={"Content-Type": "application/json"},
+        )
+        if resp and resp.status_code == 200:
+            try:
+                body = resp.json()
+            except (ValueError, json.JSONDecodeError):
+                body = None
+            errors = (body or {}).get("errors") if isinstance(body, dict) else None
+            error_text = json.dumps(errors).lower() if errors else ""
+            limited = any(
+                word in error_text
+                for word in (
+                    "depth",
+                    "complexity",
+                    "too complex",
+                    "max",
+                    "limit",
+                    "exceed",
+                )
+            )
+            if not limited:
+                self._add_finding(
+                    finding_type="GRAPHQL_DEPTH_LIMIT_MISSING",
+                    severity="MEDIUM",
+                    endpoint=url,
+                    evidence={
+                        "message": "GraphQL endpoint executed a deeply nested query with no depth/complexity limit",
+                        "query": self.GRAPHQL_DEPTH_QUERY,
+                        "status": resp.status_code,
+                    },
+                    confidence=0.7,
+                )
+
+        # Raw error disclosure: an invalid selection should be answered with a
+        # generic error, not a stack trace / file path / "Did you mean" hints.
+        resp = self._safe_request(
+            "POST",
+            url,
+            json={"query": "{__argus_no_such_field_xyz}"},
+            headers={"Content-Type": "application/json"},
+        )
+        if resp and resp.status_code in (200, 400, 500) and resp.text:
+            text = resp.text
+            lowered = text.lower()
+            disclosure_indicators = (
+                "did you mean",
+                "traceback",
+                "stack trace",
+                "at line",
+                "node_modules",
+                "/usr/",
+                "graphql.ts",
+                "resolver",
+                "sql",
+                "exception",
+            )
+            matched = [word for word in disclosure_indicators if word in lowered]
+            if matched:
+                self._add_finding(
+                    finding_type="VERBOSE_API_ERROR",
+                    severity="LOW",
+                    endpoint=url,
+                    evidence={
+                        "message": "GraphQL error response discloses internal details",
+                        "indicators": matched,
+                        "response_preview": text[:300],
+                    },
+                    confidence=0.75,
+                )
+
     def check_financial_logic(self):
         """Test financial API endpoints for business logic flaws."""
         for path in self.TRANSFER_PATHS:
             url = urljoin(self.target_url, path)
-            base_payload = {"from": "test_source", "to": "test_dest"}
+            # Field names differ per product: "from"/"to", "to_account",
+            # "recipient". Sending every alias costs nothing and stops a 422
+            # (unknown field) from hiding an accepted amount.
+            base_payload = {
+                "from": "test_source",
+                "from_account": "test_source",
+                "to": "test_dest",
+                "to_account": "test_dest",
+                "recipient": "test_dest",
+            }
 
             # Test 1: Negative amount
             neg_resp = self._safe_request(
@@ -2604,15 +3235,26 @@ class WebScanner(AbstractTool):
     def check_session_expiration(self):
         """Check whether login tokens have expiry claims (JWT exp field)."""
         # Try to extract JWTs from responses — look in common auth response patterns
-        auth_paths = ["/api/auth/login", "/api/login", "/auth/login"]
+        auth_paths = ["/login", "/api/auth/login", "/api/login", "/auth/login"]
         jwt_pattern = r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"
 
         for path in auth_paths:
             url = urljoin(self.target_url, path.lstrip("/"))
+            # Use the engagement's credentials when present. A login probe
+            # with test/test is rejected by every real target, which is why
+            # "no session expiration" was never observable on authenticated
+            # engagements even though the check existed.
+            login_payload = {"username": "test", "password": "test"}
+            cred_user = self._credentials.get("username") or self._credentials.get(
+                "email", ""
+            )
+            cred_pass = self._credentials.get("password", "")
+            if cred_user and cred_pass:
+                login_payload = {"username": cred_user, "password": cred_pass}
             resp = self._safe_request(
                 "POST",
                 url,
-                json={"username": "test", "password": "test"},
+                json=login_payload,
                 headers={"Content-Type": "application/json"},
             )
             if not resp:
@@ -2824,6 +3466,16 @@ class WebScanner(AbstractTool):
             "/api/v1/me",
             "/api/me",
             "/api/profile",
+            # Card/bill/merchant surfaces expose PAN, CVV, limits and
+            # billing details; they belong in the property-level check.
+            "/api/cards",
+            "/api/v1/cards",
+            "/api/wallet",
+            "/api/transactions",
+            "/api/bills",
+            "/api/billers",
+            "/api/merchant/transactions",
+            "/api/merchant/profile",
         ]
 
         for path in api_paths:
@@ -2861,6 +3513,788 @@ class WebScanner(AbstractTool):
                     },
                     confidence=0.85,
                 )
+
+    @staticmethod
+    def _owner_values(payload, depth: int = 0) -> set[str]:
+        """Owner identifiers found anywhere in a JSON response.
+
+        Depth is bounded so a hostile or accidentally recursive document
+        cannot make the scanner spin.
+        """
+        found: set[str] = set()
+        if depth > 4:
+            return found
+        if isinstance(payload, dict):
+            for key, value in payload.items():
+                if key in WebScanner.BOLA_OWNER_FIELDS and isinstance(
+                    value, (str, int)
+                ):
+                    found.add(str(value).lower())
+                found |= WebScanner._owner_values(value, depth + 1)
+        elif isinstance(payload, list):
+            for value in payload[:20]:
+                found |= WebScanner._owner_values(value, depth + 1)
+        return found
+
+    def _own_identity(self) -> set[str]:
+        """Who the current session is, as identifiers usable for ownership.
+
+        Includes JWT claims when the session carries a token, because a
+        target that never exposes ``/api/me`` can still tell us our subject.
+        """
+        identity: set[str] = set()
+
+        token = self.session.headers.get("Authorization", "")
+        token = token.replace("Bearer", "").strip()
+        parts = token.split(".")
+        if len(parts) == 3:
+            try:
+                import base64 as _b64
+
+                padded = parts[1] + "=" * (-len(parts[1]) % 4)
+                claims = json.loads(_b64.urlsafe_b64decode(padded).decode("utf-8"))
+                for key in ("sub", "user_id", "userId", "id", "email", "username"):
+                    if isinstance(claims.get(key), (str, int)):
+                        identity.add(str(claims[key]).lower())
+            except Exception:
+                pass
+
+        for path in self.BOLA_IDENTITY_PATHS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            resp = self._safe_request("GET", url)
+            if not resp or resp.status_code != 200:
+                continue
+            try:
+                data = resp.json()
+            except (ValueError, json.JSONDecodeError):
+                continue
+            values = self._owner_values(data)
+            if values:
+                identity |= values
+                break
+        return identity
+
+    def check_bola(self):
+        """Test object-level authorization (BOLA/IDOR) on a logged-in session.
+
+        A request made as one user must not return another user's object. The
+        check learns the session's own identifiers, then fetches object URLs
+        (harvested from the authenticated surface and from common resource
+        shapes) and compares the owner recorded in each response with them.
+        When no identity endpoint exists, two adjacent ids that both return
+        200 with *different* owners are still proof that one session can read
+        objects belonging to more than one principal.
+        """
+        if not self._authenticated:
+            return
+
+        own = self._own_identity()
+
+        candidates: list[str] = []
+        for url in self.discovered_urls:
+            if re.search(r"/\d+(?:/|$|\?)", url) or re.search(
+                r"[?&](?:id|user_id|account_id|card_id|bill_id)=\d+", url
+            ):
+                candidates.append(url)
+        for template in self.BOLA_RESOURCE_TEMPLATES:
+            for object_id in (1, 2, 3):
+                candidates.append(
+                    urljoin(self.target_url, template.format(id=object_id).lstrip("/"))
+                )
+
+        seen: set[str] = set()
+        observed: list[tuple[str, set[str]]] = []
+        checked = 0
+        for url in candidates:
+            if url in seen or checked >= 12:
+                continue
+            seen.add(url)
+            checked += 1
+            resp = self._safe_request("GET", url)
+            if not resp or resp.status_code != 200:
+                continue
+            try:
+                data = resp.json()
+            except (ValueError, json.JSONDecodeError):
+                continue
+            owners = self._owner_values(data)
+            if not owners:
+                continue
+
+            if own and not (owners & own):
+                self._add_finding(
+                    finding_type="BOLA",
+                    severity="HIGH",
+                    endpoint=url,
+                    evidence={
+                        "message": (
+                            "Authenticated session received an object owned by "
+                            "another user — missing object-level authorization"
+                        ),
+                        "own_identity": sorted(own)[:5],
+                        "object_owner": sorted(owners)[:5],
+                        "status": resp.status_code,
+                    },
+                    confidence=0.85,
+                )
+                return
+
+            observed.append((url, owners))
+
+        # No identity endpoint: different owners served to one session.
+        if not own and len(observed) >= 2:
+            first_url, first_owners = observed[0]
+            for other_url, other_owners in observed[1:]:
+                if first_owners and other_owners and not (first_owners & other_owners):
+                    self._add_finding(
+                        finding_type="BOLA",
+                        severity="HIGH",
+                        endpoint=other_url,
+                        evidence={
+                            "message": (
+                                "One authenticated session can read objects "
+                                "belonging to different principals — possible BOLA"
+                            ),
+                            "first_object_owner": sorted(first_owners)[:5],
+                            "second_object_owner": sorted(other_owners)[:5],
+                            "first_url": first_url,
+                        },
+                        confidence=0.7,
+                    )
+                    return
+
+    # --- Banking surface checks (cards, merchant API, session lifecycle) ---
+
+    def _api_json(self, method: str, url: str, **kwargs):
+        """Request helper returning ``(response, parsed_json_or_None)``."""
+        resp = self._safe_request(method, url, **kwargs)
+        if resp is None:
+            return None, None
+        try:
+            return resp, resp.json()
+        except (ValueError, json.JSONDecodeError):
+            return resp, None
+
+    @staticmethod
+    def _card_number(card: dict) -> str:
+        """Digits of a PAN from any of the field names products use."""
+        for key in ("card_number", "pan", "number", "masked_number", "card_no"):
+            value = card.get(key)
+            if isinstance(value, (str, int)):
+                digits = re.sub(r"\D", "", str(value))
+                if 12 <= len(digits) <= 19:
+                    return digits
+        return ""
+
+    def check_card_security(self):
+        """Cards: plaintext details, predictable PANs, mass-assigned limits.
+
+        A virtual-card surface has four observable flaws without touching
+        another customer: full PAN/CVV returned to the client, sequentially
+        generated card numbers, limit/balance fields that mass assignment can
+        overwrite, and a limit update that ignores validation. All four need a
+        logged-in session; the card the check creates is its own object.
+        """
+        if not self._authenticated:
+            return
+
+        # 1. List cards and look for full card data in the response.
+        for path in self.CARD_LIST_PATHS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            resp, data = self._api_json("GET", url)
+            if not resp or resp.status_code != 200:
+                continue
+            text = json.dumps(data) if data is not None else (resp.text or "")
+            has_pan = bool(re.search(r"(?<!\d)(?:\d[ -]?){15,18}\d(?!\d)", text))
+            has_cvv = bool(re.search(r'"(?:cvv2?|cvc|security_code)"\s*:', text, re.I))
+            if has_pan and has_cvv:
+                self._add_finding(
+                    finding_type="CARD_DETAILS_EXPOSED",
+                    severity="HIGH",
+                    endpoint=url,
+                    evidence={
+                        "message": (
+                            "Card API returns the full PAN together with CVV; "
+                            "card details are stored and served in plaintext"
+                        ),
+                        "response_preview": self._redact_for_llm(text)[:400],
+                    },
+                    confidence=0.9,
+                )
+            break
+
+        # 2. Create two cards and compare their numbers.
+        created: list[dict] = []
+        create_url = ""
+        for path in self.CARD_CREATE_PATHS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            resp, data = self._api_json(
+                "POST", url, json={"card_limit": 100, "card_type": "standard"}
+            )
+            if resp is None or resp.status_code not in (200, 201):
+                continue
+            create_url = url
+            card = None
+            if isinstance(data, dict):
+                for key in ("card_details", "card", "data"):
+                    if isinstance(data.get(key), dict):
+                        card = data[key]
+                        break
+                card = card or data
+            if isinstance(card, dict):
+                created.append({"url": url, "card": card})
+            if len(created) >= 2:
+                break
+
+        pans = [self._card_number(entry["card"]) for entry in created]
+        usable = [p for p in pans if p]
+        if len(usable) >= 2:
+            try:
+                delta = abs(int(usable[0]) - int(usable[1]))
+            except ValueError:
+                delta = -1
+            same_bin = usable[0][:8] == usable[1][:8]
+            if same_bin and 0 < delta < 1000:
+                self._add_finding(
+                    finding_type="PREDICTABLE_CARD_NUMBER",
+                    severity="HIGH",
+                    endpoint=create_url or self.target_url,
+                    evidence={
+                        "message": (
+                            "Two cards created in a row differ by a small offset "
+                            "under the same BIN — card numbers are sequential and "
+                            "predictable"
+                        ),
+                        "card_numbers": [f"****{p[-4:]}" for p in usable[:2]],
+                        "numeric_delta": delta,
+                    },
+                    confidence=0.85,
+                )
+
+        # A create/read response that hands back the full PAN with its CVV is
+        # plaintext card storage + card-detail disclosure even when the card
+        # list itself was empty before the check created anything.
+        for entry in created:
+            blob = json.dumps(entry["card"])
+            if re.search(r"(?<!\d)(?:\d[ -]?){15,18}\d(?!\d)", blob) and re.search(
+                r'"(?:cvv2?|cvc|security_code)"\s*:', blob, re.I
+            ):
+                self._add_finding(
+                    finding_type="CARD_DETAILS_EXPOSED",
+                    severity="HIGH",
+                    endpoint=entry["url"],
+                    evidence={
+                        "message": (
+                            "Card creation response returns the full PAN and CVV "
+                            "— card details are stored and disclosed in plaintext"
+                        ),
+                        "response_preview": self._redact_for_llm(blob)[:400],
+                    },
+                    confidence=0.9,
+                )
+                break
+
+        self._probe_cards = [
+            {**entry, "pan": pan}
+            for entry, pan in zip(created, pans, strict=False)
+            if entry
+        ]
+
+        # 3. Mass assignment on the card limit update.
+        if created:
+            card = created[0]["card"]
+            card_id = card.get("id") or card.get("card_id")
+            if card_id is not None:
+                injected = {
+                    "limit": 99999,
+                    "card_limit": 99999,
+                    "balance": 999999,
+                    "status": "active",
+                    "user_id": 1,
+                    "card_number": "4111111111111111",
+                }
+                for template in self.CARD_LIMIT_TEMPLATES:
+                    url = urljoin(
+                        self.target_url, template.format(id=card_id).lstrip("/")
+                    )
+                    resp, data = self._api_json("POST", url, json=injected)
+                    if resp is None:
+                        continue
+                    blob = (json.dumps(data) if data is not None else "") + (
+                        resp.text or ""
+                    )
+                    reflected = [
+                        field
+                        for field in ("999999", "4111111111111111", "99999")
+                        if field in blob
+                    ]
+                    # A handler that builds SQL from the client-controlled
+                    # limit/balance/user_id fields answers 500 with the query
+                    # in the body. That still proves the fields are accepted
+                    # (mass assignment) and additionally leaks SQL.
+                    field_echo = re.search(
+                        r"\b(?:SET|UPDATE)\b[^\n]{0,120}\b(?:balance|user_id|card_number)\b",
+                        blob,
+                        re.I,
+                    )
+                    accepted = resp.status_code in (200, 201, 204)
+                    if accepted or (resp.status_code >= 500 and field_echo):
+                        reflected = reflected or ["SQL built from injected fields"]
+                    if reflected:
+                        self._add_finding(
+                            finding_type="MASS_ASSIGNMENT_CARD_LIMITS",
+                            severity="HIGH",
+                            endpoint=url,
+                            evidence={
+                                "message": (
+                                    "Card limit update accepted and reflected "
+                                    "fields the client must not control "
+                                    "(balance/card number/limit beyond validation)"
+                                ),
+                                "injected_fields": sorted(injected),
+                                "reflected_values": reflected,
+                                "status": resp.status_code,
+                            },
+                            confidence=0.8,
+                        )
+                    break
+
+    def check_card_activity_monitoring(self):
+        """Whether a freshly created card has any activity/audit trail."""
+        if not self._authenticated:
+            return
+        cards = getattr(self, "_probe_cards", [])
+        if not cards:
+            return
+
+        entry = cards[0]
+        card = entry.get("card") or {}
+        card_id = card.get("id") or card.get("card_id")
+        if card_id is None:
+            return
+
+        endpoint_found = False
+        empty = False
+        for template in self.CARD_ACTIVITY_TEMPLATES:
+            url = urljoin(self.target_url, template.format(id=card_id).lstrip("/"))
+            resp, data = self._api_json("GET", url)
+            if not resp or resp.status_code != 200:
+                continue
+            endpoint_found = True
+            items = data
+            if isinstance(data, dict):
+                for key in ("transactions", "activity", "data", "items"):
+                    if isinstance(data.get(key), list):
+                        items = data[key]
+                        break
+            empty = not items
+            break
+
+        if not endpoint_found or empty:
+            self._add_finding(
+                finding_type="LACK_OF_CARD_ACTIVITY_MONITORING",
+                severity="LOW",
+                endpoint=entry.get("url") or self.target_url,
+                evidence={
+                    "message": (
+                        "A newly created card has no activity/audit trail "
+                        "(creation, freeze, limit change are not recorded)"
+                        if endpoint_found
+                        else "No card activity endpoint exists for a created card"
+                    ),
+                    "card_id": card_id,
+                    "activity_endpoint_found": endpoint_found,
+                },
+                confidence=0.6,
+            )
+
+    def check_transaction_verification(self):
+        """Whether a card charge needs any verification beyond PAN/CVV.
+
+        The merchant charge API is the transaction surface a card is spent on.
+        A charge that succeeds with raw card data and no OTP/3DS/challenge in
+        the response shows the target performs no transaction verification.
+        """
+        if not self._authenticated:
+            return
+
+        pan = "4111111111111111"
+        cvv = "123"
+        expiry = "12/30"
+        cards = getattr(self, "_probe_cards", [])
+        if cards:
+            card = cards[0].get("card") or {}
+            pan = self._card_number(card) or pan
+            cvv = str(card.get("cvv") or card.get("cvv2") or cvv)
+            expiry = str(card.get("expiry_date") or card.get("expiry") or expiry)
+
+        for path in self.MERCHANT_CHARGE_PATHS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            resp, data = self._api_json(
+                "POST",
+                url,
+                json={
+                    "amount": 0.01,
+                    "currency": "USD",
+                    "card_number": pan,
+                    "cvv": cvv,
+                    "expiry_date": expiry,
+                    "merchant_order_id": f"argus-verify-{uuid.uuid4().hex[:8]}",
+                    "description": "argus transaction verification probe",
+                },
+            )
+            if resp is None:
+                continue
+            if resp.status_code not in (200, 201):
+                continue
+            blob = ((json.dumps(data) if data is not None else "") + (resp.text or "")).lower()
+            challenged = any(
+                marker in blob
+                for marker in ("otp", "3ds", "3-d", "verification_required", "challenge")
+            )
+            if not challenged:
+                self._add_finding(
+                    finding_type="NO_TRANSACTION_VERIFICATION",
+                    severity="HIGH",
+                    endpoint=url,
+                    evidence={
+                        "message": (
+                            "A card charge was approved from PAN/CVV alone — no "
+                            "OTP, 3-D Secure or other transaction verification"
+                        ),
+                        "raw_card_data_accepted": True,
+                        "status": resp.status_code,
+                    },
+                    confidence=0.75,
+                )
+            break
+
+    def check_merchant_api(self):
+        """Merchant API: key echoed in responses and payment object BOLA."""
+        if not self._authenticated:
+            return
+
+        email = f"argus-probe-{uuid.uuid4().hex[:8]}@example.com"
+        password = f"Argus-{uuid.uuid4().hex[:10]}!"
+        merchant_id = None
+
+        for path in self.MERCHANT_REGISTER_PATHS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            resp, data = self._api_json(
+                "POST",
+                url,
+                json={"name": "Argus Probe Merchant", "email": email, "password": password},
+            )
+            if resp is None or resp.status_code not in (200, 201):
+                continue
+            blob = (json.dumps(data) if data is not None else "") + (resp.text or "")
+            if isinstance(data, dict):
+                merchant_id = data.get("merchant_id") or data.get("id")
+            leaked = [
+                field
+                for field in self.MERCHANT_KEY_FIELDS
+                if re.search(rf'"{field}"\s*:\s*"[^"]{{6,}}"', blob, re.I)
+            ]
+            if leaked:
+                self._add_finding(
+                    finding_type="MERCHANT_KEY_IN_RESPONSE",
+                    severity="HIGH",
+                    endpoint=url,
+                    evidence={
+                        "message": (
+                            "Merchant registration response returns credentials "
+                            "(API key/secret or password) to the client"
+                        ),
+                        "leaked_fields": leaked,
+                    },
+                    confidence=0.9,
+                )
+            break
+
+        merchant_token = ""
+        for path in self.MERCHANT_LOGIN_PATHS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            resp, data = self._api_json(
+                "POST", url, json={"email": email, "password": password}
+            )
+            if resp is None or resp.status_code != 200 or not isinstance(data, dict):
+                continue
+            blob = json.dumps(data)
+            leaked = [
+                field
+                for field in self.MERCHANT_KEY_FIELDS
+                if re.search(rf'"{field}"\s*:\s*"[^"]{{6,}}"', blob, re.I)
+            ]
+            if leaked:
+                self._add_finding(
+                    finding_type="MERCHANT_KEY_IN_RESPONSE",
+                    severity="HIGH",
+                    endpoint=url,
+                    evidence={
+                        "message": "Merchant login response returns the API key/secret",
+                        "leaked_fields": leaked,
+                    },
+                    confidence=0.9,
+                )
+            merchant_id = merchant_id or data.get("merchant_id") or data.get("id")
+            merchant_token = (
+                data.get("token") or data.get("access_token") or data.get("api_key") or ""
+            )
+            break
+
+        if not merchant_token:
+            return
+
+        # Object-level authorization: ask for other merchants' payments.
+        merchant_session = requests.Session()
+        merchant_session.headers.update(
+            {
+                "Authorization": f"Bearer {merchant_token}",
+                "Content-Type": "application/json",
+                "User-Agent": self.session.headers.get("User-Agent", "Argus-Scanner/1.0"),
+            }
+        )
+        own = str(merchant_id) if merchant_id is not None else ""
+        bola_found = False
+        for template in self.MERCHANT_PAYMENT_TEMPLATES:
+            for other_id in (1, 2, 999):
+                if own and str(other_id) == own:
+                    continue
+                url = urljoin(
+                    self.target_url, template.format(id=other_id).lstrip("/")
+                )
+                try:
+                    resp = merchant_session.get(
+                        url, timeout=self.timeout, verify=self.verify
+                    )
+                except requests.RequestException:
+                    continue
+                if resp.status_code != 200:
+                    continue
+                try:
+                    body = resp.json()
+                except (ValueError, json.JSONDecodeError):
+                    continue
+                text = json.dumps(body)
+                if not re.search(r"payment|amount|card", text, re.I):
+                    continue
+                self._add_finding(
+                    finding_type="BOLA",
+                    severity="HIGH",
+                    endpoint=url,
+                    evidence={
+                        "message": (
+                            "Merchant token read another merchant's payments — "
+                            "object-level authorization missing on the merchant "
+                            "payment lookup"
+                        ),
+                        "merchant_id": own or "unknown",
+                        "requested_id": other_id,
+                        "response_preview": self._redact_for_llm(text)[:300],
+                    },
+                    confidence=0.7,
+                )
+                bola_found = True
+                break
+            if bola_found:
+                break
+
+        # A merchant charge made with raw PAN/CVV and no challenge shows that
+        # transaction verification stops at the card fields themselves. The
+        # charge is issued with the merchant token and our own probe card.
+        cards = getattr(self, "_probe_cards", [])
+        if not cards:
+            return
+        card = cards[0].get("card") or {}
+        pan = self._card_number(card)
+        if not pan:
+            return
+        challenge_markers = ("otp", "3ds", "3-d", "verification_required", "challenge")
+        for path in self.MERCHANT_CHARGE_PATHS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            try:
+                resp = merchant_session.post(
+                    url,
+                    json={
+                        "amount": 0.01,
+                        "currency": "USD",
+                        "card_number": pan,
+                        "cvv": str(card.get("cvv") or card.get("cvv2") or "123"),
+                        "expiry_date": str(
+                            card.get("expiry_date") or card.get("expiry") or "12/30"
+                        ),
+                        "merchant_order_id": f"argus-verify-{uuid.uuid4().hex[:8]}",
+                        "description": "argus transaction verification probe",
+                    },
+                    timeout=self.timeout,
+                    verify=self.verify,
+                )
+            except requests.RequestException:
+                continue
+            text = resp.text or ""
+            lower = text.lower()
+            if any(marker in lower for marker in challenge_markers):
+                break
+            card_processed = any(
+                marker in lower
+                for marker in ("card_id", "payment_id", "failure_reason", "approved", "declined")
+            )
+            if card_processed:
+                self._add_finding(
+                    finding_type="NO_TRANSACTION_VERIFICATION",
+                    severity="HIGH",
+                    endpoint=url,
+                    evidence={
+                        "message": (
+                            "A card charge was processed from PAN/CVV alone — no "
+                            "OTP, 3-D Secure or other transaction verification"
+                        ),
+                        "raw_card_data_accepted": True,
+                        "status": resp.status_code,
+                        "decline_reason": (
+                            "failure_reason present" if "failure_reason" in lower else ""
+                        ),
+                    },
+                    confidence=0.8,
+                )
+            if "debug_info" in lower or "failure_reason" in lower:
+                self._add_finding(
+                    finding_type="VERBOSE_API_ERROR",
+                    severity="MEDIUM",
+                    endpoint=url,
+                    evidence={
+                        "message": (
+                            "Payment decline response discloses debug data and the "
+                            "detailed failure reason to the merchant client"
+                        ),
+                        "response_preview": self._redact_for_llm(text)[:300],
+                    },
+                    confidence=0.8,
+                )
+            break
+
+    def check_token_invalidation(self):
+        """Replay a session after logout to test server-side invalidation."""
+        if not self._authenticated:
+            return
+
+        probe_url = ""
+        for path in self.BOLA_IDENTITY_PATHS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            resp = self._safe_request("GET", url)
+            # NB: requests.Response is falsy for 4xx/5xx, so compare explicitly.
+            if resp is not None and resp.status_code == 200:
+                probe_url = url
+                break
+
+        token = self.session.headers.get("Authorization", "")
+        cookies = list(self.session.cookies)
+        if not token and not cookies:
+            return
+
+        logout_confirmed = False
+        for path in self.LOGOUT_PATHS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            try:
+                resp = self.session.request(
+                    "POST", url, timeout=self.timeout, allow_redirects=True, verify=self.verify
+                )
+            except requests.RequestException:
+                continue
+            if resp.status_code < 400:
+                logout_confirmed = True
+                break
+        if not logout_confirmed:
+            # No logout/revocation endpoint at all. A stateless JWT without a
+            # revocation id (jti) has no server-side mechanism to be
+            # invalidated: this is weaker evidence than a replay, so it is
+            # reported as a medium-severity gap rather than a confirmed issue.
+            raw = token.replace("Bearer", "").strip()
+            parts = raw.split(".")
+            claims = {}
+            if len(parts) == 3:
+                try:
+                    import base64 as _b64
+
+                    padded = parts[1] + "=" * (-len(parts[1]) % 4)
+                    claims = json.loads(_b64.urlsafe_b64decode(padded).decode("utf-8"))
+                except Exception:
+                    claims = {}
+            if claims and "jti" not in claims:
+                self._add_finding(
+                    finding_type="NO_SERVER_SIDE_TOKEN_INVALIDATION",
+                    severity="MEDIUM",
+                    endpoint=probe_url or self.target_url,
+                    evidence={
+                        "message": (
+                            "No logout/revocation endpoint was found and the "
+                            "bearer JWT carries no revocation identifier (jti) — "
+                            "the server has no way to invalidate a token"
+                        ),
+                        "logout_endpoints_tried": len(self.LOGOUT_PATHS),
+                        "jwt_claims": sorted(claims)[:8],
+                    },
+                    confidence=0.55,
+                )
+            return
+
+        # Replay the exact credential material captured before logout.
+        replay = requests.Session()
+        replay.headers.update(
+            {"User-Agent": self.session.headers.get("User-Agent", "Argus-Scanner/1.0")}
+        )
+        if token:
+            replay.headers["Authorization"] = token
+        for cookie in cookies:
+            replay.cookies.set(cookie.name, cookie.value)
+        try:
+            resp = replay.get(probe_url, timeout=self.timeout, verify=self.verify)
+        except requests.RequestException:
+            return
+        if resp.status_code == 200:
+            self._add_finding(
+                finding_type="NO_SERVER_SIDE_TOKEN_INVALIDATION",
+                severity="HIGH",
+                endpoint=probe_url,
+                evidence={
+                    "message": (
+                        "The token/cookie captured before logout still authenticates "
+                        "after logout — sessions are not invalidated server-side"
+                    ),
+                    "replay_status": resp.status_code,
+                    "credential_type": "bearer" if token else "cookie",
+                },
+                confidence=0.85,
+            )
+
+    def check_token_in_url(self):
+        """Detect JWTs/session tokens placed in query strings."""
+        base_response = getattr(self, "_base_response", None)
+        texts = [base_response.text or ""] if base_response else []
+        texts.extend(self.discovered_urls[:25])
+        pattern = re.compile(
+            r"[?&](?:token|access_token|jwt|id_token|auth|session)="
+            r"(?:eyJ[A-Za-z0-9._-]{10,}|[A-Za-z0-9._-]{16,})",
+            re.I,
+        )
+        for text in texts:
+            match = pattern.search(text or "")
+            if not match:
+                continue
+            self._add_finding(
+                finding_type="TOKEN_IN_URL",
+                severity="MEDIUM",
+                endpoint=self.target_url,
+                evidence={
+                    "message": (
+                        "A session token appears in a URL query string — it leaks "
+                        "through logs, Referer headers and browser history"
+                    ),
+                    "snippet": self._redact_for_llm(match.group(0))[:120],
+                },
+                confidence=0.8,
+            )
+            return
 
     def check_predictable_identifiers(self):
         """Detect predictable object IDs via entropy analysis of sequential requests."""

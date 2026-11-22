@@ -1,0 +1,25 @@
+name: ai_vuln_scanner
+command: python3
+args:
+  - argus-workers/tools/run_agent_tool.py
+  - ai_vuln_scanner
+description: "ai_vuln_scanner - prompt injection, AI information disclosure and AI authorization testing"
+parameters:
+  - name: target
+    type: string
+    description: "Target URL or scope"
+    required: true
+    flag: "--target"
+  - name: extra
+    type: string
+    description: 'JSON-encoded extra parameters (e.g. {"ai_endpoints":["/api/chat"]})'
+    required: false
+    flag: "--extra"
+capabilities:
+  - security_analysis
+signal_quality: PROBABLE
+risk_level: low
+priority: 85
+cost: low
+enabled: true
+timeout: 300

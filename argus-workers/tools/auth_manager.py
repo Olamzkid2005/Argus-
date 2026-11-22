@@ -8,6 +8,7 @@ so all subsequent scanner requests carry the authenticated context.
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urljoin
@@ -81,6 +82,121 @@ CSRF_TOKEN_FIELDS = [
     "csrfKey",
     "csrf_param",
 ]
+
+
+# Credential keys an engagement may supply through ``--extra``. The executor
+# turns each key into a ``_<key>`` attribute on ToolContext, and a direct caller
+# may instead pass a ``_credentials`` mapping.
+ENGAGEMENT_CREDENTIAL_KEYS = (
+    "email",
+    "username",
+    "password",
+    "token",
+    "cookie",
+    "login_url",
+    "api_key",
+)
+
+JJWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+
+
+def extract_engagement_credentials(ctx: Any) -> dict[str, str]:
+    """Credentials the engagement supplied for this tool call.
+
+    Accepts the executor shape (one ``_<key>`` attribute per ``--extra``
+    entry) and the direct-caller shape (``_credentials`` as a dict or JSON
+    string). Shared by the web and AI scanners so an authenticated scan is
+    possible on every path.
+    """
+    values: dict[str, str] = {}
+
+    direct = getattr(ctx, "_credentials", None)
+    if isinstance(direct, str):
+        try:
+            direct = json.loads(direct)
+        except (TypeError, ValueError):
+            direct = None
+    if isinstance(direct, dict):
+        values.update(
+            {str(k): str(v) for k, v in direct.items() if isinstance(v, (str, int))}
+        )
+
+    for key in ENGAGEMENT_CREDENTIAL_KEYS:
+        value = getattr(ctx, f"_{key}", None)
+        if isinstance(value, str) and value:
+            values.setdefault(key, value)
+
+    return values
+
+
+def json_api_login(
+    session: requests.Session,
+    base_url: str,
+    username: str,
+    password: str,
+    *,
+    timeout: int = 15,
+    verify: bool = True,
+    login_path: str = "",
+) -> requests.Session | None:
+    """Log in against a JSON API, attaching the returned credential.
+
+    ``AuthManager`` speaks form-encoded logins first, which JSON-only APIs
+    reject; this is the fallback both HTTP scanners use. It tries the common
+    login paths with ``username`` and ``email`` field names, keeps a returned
+    bearer token (or a JWT embedded in the body), and returns the session with
+    a session cookie otherwise.
+
+    Returns None when no path accepted the credentials.
+    """
+    paths: list[str] = []
+    if login_path:
+        paths.append(login_path)
+    paths += ["/login", "/api/login", "/api/auth/login", "/auth/login"]
+
+    seen: set[str] = set()
+    for path in paths:
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        url = urljoin(base_url, path.lstrip("/"))
+        for payload in (
+            {"username": username, "password": password},
+            {"email": username, "password": password},
+        ):
+            try:
+                resp = session.post(
+                    url,
+                    json=payload,
+                    timeout=timeout,
+                    verify=verify,
+                    allow_redirects=True,
+                )
+            except (ConnectionError, Timeout, RequestException):
+                continue
+            if resp.status_code not in (200, 201):
+                continue
+
+            token = ""
+            try:
+                data = resp.json()
+            except (json.JSONDecodeError, ValueError):
+                data = {}
+            if isinstance(data, dict):
+                for key in ("token", "access_token", "jwt", "session_token", "api_key"):
+                    value = data.get(key)
+                    if isinstance(value, str) and value:
+                        token = value
+                        break
+            if not token:
+                match = JJWT_RE.search(resp.text or "")
+                token = match.group(0) if match else ""
+            if token:
+                session.headers["Authorization"] = f"Bearer {token}"
+                return session
+            if len(session.cookies) > 0:
+                return session
+    return None
 
 
 class AuthManager:

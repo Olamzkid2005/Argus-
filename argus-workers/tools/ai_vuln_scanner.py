@@ -118,6 +118,13 @@ class AIVulnScanner(AbstractTool):
 
     # Default AI endpoint paths to probe if none specified
     DEFAULT_AI_ENDPOINTS = [
+        # Banking/assistant surfaces mount the chat under /api/ai and often
+        # expose a system-info endpoint next to it; without these paths the
+        # authenticated assistant was never probed at all.
+        "/api/ai/chat",
+        "/api/ai/chat/anonymous",
+        "/api/ai/support",
+        "/api/support/chat",
         "/api/chat",
         "/api/ai",
         "/api/llm",
@@ -191,13 +198,30 @@ class AIVulnScanner(AbstractTool):
 
         target_url = ctx.target
         self.target_url = target_url.rstrip("/")
-        ai_endpoints = getattr(self, "_scan_ai_endpoints", None) or self.DEFAULT_AI_ENDPOINTS
+
+        # Engagement credentials: a hinted endpoint behind login is otherwise
+        # probed anonymously, answered with 401 and reported as "no AI".
+        self._credentials = self._extract_credentials(ctx)
+        auth_session = self._session_from_credentials(self._credentials)
+        if auth_session is not None:
+            self._provided_session = auth_session
+
+        ai_endpoints = (
+            self._hint_endpoints(ctx)
+            or getattr(self, "_scan_ai_endpoints", None)
+            or self.DEFAULT_AI_ENDPOINTS
+        )
         slog = ScanLogger("ai_vuln_scanner", engagement_id=self.engagement_id)
 
         slog.phase_header("AI VULN SCAN", target=self.target_url, endpoints=len(ai_endpoints))
 
         # Discover which AI endpoints actually exist
         active_endpoints = self._discover_ai_endpoints(ai_endpoints)
+
+        # Endpoints that publish the model, provider, prompt or key are an
+        # information-disclosure class of their own and need no chat call.
+        self._check_system_info_exposure()
+
         if not active_endpoints:
             slog.info("No AI endpoints detected — skipping AI scan")
         else:
@@ -216,10 +240,26 @@ class AIVulnScanner(AbstractTool):
                         **{k: v for k, v in f.items() if k not in _CORE},
                     )
 
+                # A chat reply that ships its model/provider/context metadata
+                # is system-information exposure from the assistant itself.
+                self._check_endpoint_metadata(url)
+
                 slog.tool_start("info_disclosure", [endpoint])
                 disclosure_findings = self._test_information_disclosure(url)
                 slog.tool_complete("info_disclosure", success=True, findings=len(disclosure_findings))
                 for f in disclosure_findings:
+                    _CORE = {"type", "severity", "endpoint", "evidence", "confidence"}
+                    self._builder.add(
+                        f["type"], f["severity"], f["endpoint"],
+                        f["evidence"], confidence=f["confidence"],
+                        **{k: v for k, v in f.items() if k not in _CORE},
+                    )
+
+                # Authorization: an assistant that answers without a session
+                # is a broken-authorization finding (CWE-862) when the path is
+                # not explicitly public.
+                authz_findings = self._test_ai_authorization(url, endpoint)
+                for f in authz_findings:
                     _CORE = {"type", "severity", "endpoint", "evidence", "confidence"}
                     self._builder.add(
                         f["type"], f["severity"], f["endpoint"],
@@ -264,6 +304,216 @@ class AIVulnScanner(AbstractTool):
         return result.findings
 
     # --- Private helpers ---
+
+    @staticmethod
+    def _extract_credentials(ctx: ToolContext) -> dict[str, str]:
+        """Credentials supplied by the engagement (``--extra`` attributes)."""
+        from tools.auth_manager import extract_engagement_credentials
+
+        return extract_engagement_credentials(ctx)
+
+    def _session_from_credentials(
+        self, creds: dict[str, str]
+    ) -> requests.Session | None:
+        """Authenticated session for the hinted AI endpoint, or None.
+
+        Token/cookie/API-key credentials attach directly. Username/password
+        performs a JSON login against the usual paths and keeps the returned
+        bearer token or session cookie.
+        """
+        if not creds:
+            return None
+        session = requests.Session()
+        session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+        )
+
+        token = creds.get("token", "")
+        if token:
+            session.headers["Authorization"] = f"Bearer {token}"
+            return session
+
+        cookie = creds.get("cookie", "")
+        if cookie:
+            for pair in cookie.split(";"):
+                if "=" in pair:
+                    name, value = pair.split("=", 1)
+                    session.cookies.set(name.strip(), value.strip())
+            return session
+
+        api_key = creds.get("api_key", "")
+        if api_key:
+            session.headers["X-API-Key"] = api_key
+            return session
+
+        username = creds.get("username") or creds.get("email", "")
+        password = creds.get("password", "")
+        if not (username and password):
+            return None
+
+        from tools.auth_manager import json_api_login
+
+        return json_api_login(
+            session,
+            self.target_url,
+            username,
+            password,
+            timeout=self.timeout,
+            login_path=creds.get("login_url", ""),
+        )
+
+    def _check_endpoint_metadata(self, url: str) -> None:
+        """Report a chat endpoint that returns model/provider/context metadata."""
+        resp = self._safe_request("POST", url, json={"message": "hello"})
+        if resp is None or resp.status_code not in (200, 201):
+            return
+        try:
+            body = resp.json()
+        except (json.JSONDecodeError, ValueError):
+            return
+        blob = json.dumps(body).lower()
+        fields = [
+            key
+            for key in (
+                "system_prompt",
+                "api_provider",
+                "api_used",
+                "database_accessed",
+                "context_included",
+                "user_context_included",
+                "model",
+                "temperature",
+                "max_tokens",
+            )
+            if f'"{key}"' in blob
+        ]
+        if len(fields) < 2:
+            return
+        self._builder.add(
+            "AI_SYSTEM_INFO_EXPOSURE",
+            "MEDIUM",
+            url,
+            {
+                "message": (
+                    "AI chat response exposes internal system metadata (model, "
+                    "provider, prompt or database/context flags)"
+                ),
+                "fields": fields,
+                "authenticated_probe": self._provided_session is not None,
+                "response_preview": (resp.text or "")[:300],
+            },
+            confidence=0.75,
+            cwe="CWE-200",
+        )
+
+    SYSTEM_INFO_PATHS = [
+        "/api/ai/system-info",
+        "/api/ai/system",
+        "/api/ai/info",
+        "/api/ai/config",
+        "/api/ai/debug",
+        "/api/ai/status",
+    ]
+
+    @staticmethod
+    def _hint_endpoints(ctx: ToolContext) -> list[str]:
+        """AI endpoints the engagement supplied via ``extra``.
+
+        The executor turns each ``--extra`` key into a ``_<key>`` attribute, so
+        an authenticated assistant is reachable by passing
+        ``{"ai_endpoints": ["/api/ai/chat"]}`` without editing the scan.
+        """
+        for attr in ("_ai_endpoints", "_ai_endpoint"):
+            raw = getattr(ctx, attr, None)
+            if isinstance(raw, str) and raw.strip():
+                try:
+                    raw = json.loads(raw)
+                except (TypeError, ValueError):
+                    raw = [raw]
+            if isinstance(raw, str):
+                raw = [raw]
+            if isinstance(raw, list):
+                paths = [str(p) for p in raw if str(p).strip()]
+                if paths:
+                    return paths
+        return []
+
+    def _check_system_info_exposure(self) -> None:
+        """Report an AI system-info endpoint that leaks model/prompt/keys."""
+        for path in self.SYSTEM_INFO_PATHS:
+            url = urljoin(self.target_url, path.lstrip("/"))
+            resp = self._safe_request("GET", url)
+            if not resp or resp.status_code != 200:
+                continue
+            text = resp.text or ""
+            markers = (
+                "model",
+                "provider",
+                "system_prompt",
+                "api_key",
+                "temperature",
+                "max_tokens",
+                "base_url",
+            )
+            hit = [m for m in markers if m in text.lower()]
+            if len(hit) >= 2:
+                self._builder.add(
+                    "AI_SYSTEM_INFO_EXPOSURE",
+                    "HIGH",
+                    url,
+                    {
+                        "message": (
+                            "Unauthenticated AI system-info endpoint exposes model "
+                            "configuration/system prompt details"
+                        ),
+                        "fields": hit,
+                        "response_preview": text[:300],
+                    },
+                    confidence=0.85,
+                    cwe="CWE-200",
+                )
+            break
+
+    def _test_ai_authorization(self, url: str, endpoint: str) -> list[dict]:
+        """Whether an assistant endpoint answered with no credentials."""
+        if "anonymous" in endpoint.lower() or "public" in endpoint.lower():
+            return []
+        # Authorization is only meaningful without credentials: send this
+        # probe on a fresh anonymous session even when the scan is logged in.
+        anon = requests.Session()
+        anon.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (compatible; Argus/1.0)",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+        )
+        resp = self._safe_request(
+            "POST", url, session=anon, json={"message": "hello"}
+        )
+        if not resp or resp.status_code not in (200, 201):
+            return []
+        return [
+            {
+                "type": "AI_BROKEN_AUTHORIZATION",
+                "severity": "HIGH",
+                "endpoint": url,
+                "evidence": {
+                    "message": (
+                        "AI assistant answered an unauthenticated request on a "
+                        "path that is not marked anonymous/public"
+                    ),
+                    "status": resp.status_code,
+                    "response_preview": (resp.text or "")[:200],
+                },
+                "confidence": 0.75,
+                "cwe": "CWE-862",
+            }
+        ]
 
     def _safe_request(
         self,
@@ -313,13 +563,15 @@ class AIVulnScanner(AbstractTool):
         for endpoint in endpoints[:8]:  # Limit probes
             url = urljoin(self.target_url, endpoint.lstrip("/"))
             resp = self._safe_request("GET", url)
-            if resp and resp.status_code in (200, 400, 401, 403, 405):
+            # requests.Response is falsy for 4xx: compare explicitly, or a
+            # login-gated endpoint (401/403) is treated as absent.
+            if resp is not None and resp.status_code in (200, 400, 401, 403, 405):
                 # 400/405 = endpoint exists but wrong method
                 # 401/403 = endpoint exists but needs auth
                 active.append(endpoint)
                 if resp.status_code in (400, 405):
                     resp = self._safe_request("POST", url, json={"message": "hello"})
-                    if resp and resp.status_code == 200:
+                    if resp is not None and resp.status_code == 200:
                         break  # Found a working POST endpoint
         return active
 

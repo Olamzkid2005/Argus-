@@ -33,6 +33,8 @@ export enum Capability {
 
   SECURITY_ANALYSIS = "security_analysis",
   AI_SURFACE_MAPPING = "ai_surface_mapping",
+  /** Prompt-injection, AI information disclosure and AI authorization testing. */
+  AI_VULNERABILITY_TESTING = "ai_vulnerability_testing",
   SECRET_DETECTION = "secret_detection",
   SAST = "sast",
   SCA = "sca",
@@ -89,6 +91,9 @@ export function guessCapability(key: string): Capability | undefined {
     "PHISHING": Capability.PHISHING_CHAIN,
     "REPORT": Capability.REPORT_GENERATION,
     "DATABASE_EXFIL": Capability.DATABASE_EXFILTRATION,
+    "AI_VULNERABILITY_TESTING": Capability.AI_VULNERABILITY_TESTING,
+    "AI_PROMPT_INJECTION": Capability.AI_VULNERABILITY_TESTING,
+    "PROMPT_INJECTION": Capability.AI_VULNERABILITY_TESTING,
   }
 
   if (known[upper]) return known[upper]

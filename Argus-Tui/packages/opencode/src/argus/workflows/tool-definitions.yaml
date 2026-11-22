@@ -965,6 +965,23 @@ tools:
     signal_quality: PROBABLE
     priority: 80
 
+  - name: ai_vuln_scanner
+    label: AI Vulnerability Scanner
+    description: Prompt injection, AI information disclosure, role override and AI authorization testing
+    capabilities:
+      - ai_vulnerability_testing
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 70
+      coverage_score: 80
+    signal_quality: PROBABLE
+    priority: 85
+
   - name: browser_security_operator
     label: Browser Security Operator
     capabilities:
