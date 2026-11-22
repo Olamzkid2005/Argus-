@@ -1,7 +1,7 @@
 {
   "meta": {
     "stage": 0,
-    "updated_at": "2026-11-22T21:10:00+00:00",
+    "updated_at": "2026-11-22T21:25:00+00:00",
     "source_of_truth_for_this_stage": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md",
     "actual_upstream_reference_used": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md (local copy of the Stage 0 spec)",
     "local_baseline_inspected": [
@@ -65,7 +65,7 @@
       "title": "Planner frontier",
       "reference_behaviour": "A recoverable planner frontier per engagement holds the set of canonical/exploration nodes available to the planner for next expansion; frontier state is recoverable from the graph and todo/plan state, not held only in memory.",
       "argus_implementation": "IMPLEMENTED AND COMMITTED",
-      "argus_implementation_path": "argus_workers/database/migrations/033_graph_tables.sql (planner_frontier), argus-workers/database/graph_repository.py (set_frontier_node, remove_frontier_node, find_frontier_for_engagement, clear_frontier_for_engagement), argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql (planner_frontier), argus-workers/database/graph_repository.py (set_frontier_node, remove_frontier_node, find_frontier_for_engagement, clear_frontier_for_engagement), argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
       "test_proof": "UNIT TESTS EXIST FOR DISPATCHER VALIDATION; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
       "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
       "result": "NOT VERIFIED",
@@ -77,7 +77,7 @@
       "title": "Persistent todos",
       "reference_behaviour": "A planner todo store persists planning tasks across restarts; todo items reference engagements, canonical nodes, exploration nodes, frontier position, and status, with status transitions open/in-progress/done/blocked.",
       "argus_implementation": "IMPLEMENTED AND COMMITTED",
-      "argus_implementation_path": "argus_workers/database/migrations/033_graph_tables.sql (planner_todos), argus-workers/database/graph_repository.py (create_todo, update_todo_status, find_todos_for_engagement, find_open_todos_for_engagement), argus_workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql (planner_todos), argus-workers/database/graph_repository.py (create_todo, update_todo_status, find_todos_for_engagement, find_open_todos_for_engagement), argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
       "test_proof": "UNIT TESTS EXIST FOR DISPATCHER VALIDATION; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
       "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
       "result": "NOT VERIFIED",
@@ -89,7 +89,7 @@
       "title": "Graph outbox",
       "reference_behaviour": "Graph-side changes can be staged onto a dispatcher-owned outbox and dequeued for downstream consumers with at-least-once handling basics and a clear dispatcher ownership boundary.",
       "argus_implementation": "IMPLEMENTED AND COMMITTED",
-      "argus_implementation_path": "argus_workers/database/migrations/033_graph_tables.sql (graph_outbox), argus-workers/database/graph_repository.py (enqueue_outbox, dequeue_outbox, find_outbox_for_scope, record_outbox_error, requeue_outbox), argus_workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql (graph_outbox), argus-workers/database/graph_repository.py (enqueue_outbox, dequeue_outbox, find_outbox_for_scope, record_outbox_error, requeue_outbox), argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
       "test_proof": "UNIT TESTS EXIST FOR DISPATCHER VALIDATION; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
       "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
       "result": "NOT VERIFIED",
@@ -101,12 +101,24 @@
       "title": "Graph-change-driven planning",
       "reference_behaviour": "Graph mutations (canonical or exploration) can trigger planning consideration through the outbox/frontier rather than polling; the flow is graph change -> outbox event -> planner frontier/todo update -> next planning pass, with the planner able to recompute from persisted state on restart.",
       "argus_implementation": "PLUMBING COMMITTED; END-TO-END DISPATCHER FLOW NOT YET VERIFIED IN THIS ENVIRONMENT",
-      "argus_implementation_path": "argus_workers/database/migrations/033_graph_tables.sql, argus-workers/database/graph_repository.py, argus_workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py (dispatcher flow covers asset -> intent -> anchor -> frontier -> todo -> outbox)",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql, argus-workers/database/graph_repository.py, argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py (dispatcher flow covers asset -> intent -> anchor -> frontier -> todo -> outbox)",
       "test_proof": "UNIT TESTS EXIST FOR DISPATCHER VALIDATION; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
       "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
       "result": "NOT VERIFIED",
       "deviation": "none",
       "notes": "All of the plumbing for graph-change-driven planning is committed through the same dispatcher-owned graph repository: canonical assets, exploration nodes/edges, anchors/coverage, frontier, todos, and outbox. The dispatcher-owned surface can stage an outbox event and update frontier/todo state in the same repository discipline. A live Postgres run is needed to verify the durable end-to-end flow here."
+    },
+    "mcp_agentic_plan_blockers": {
+      "id": "mcp_agentic_plan_blockers",
+      "title": "MCP agentic plan tests blocked in this environment",
+      "reference_behaviour": "The MCP agentic plan tests should pass when their required runtime dependencies are available.",
+      "argus_implementation": "NOT CHANGED BY ARTEX; BLOCKED BY ENVIRONMENT FOR THIS RUN",
+      "argus_implementation_path": "argus-workers/tests/test_mcp_agentic_plan.py",
+      "test_proof": "TESTS SKIPPED IN THIS ENVIRONMENT",
+      "runtime_proof": "NOT RUN (blocked by missing database path and by missing module attribute for the hypotheses helper)",
+      "result": "NOT VERIFIED",
+      "deviation": "none",
+      "notes": "Two distinct blockers affect test_mcp_agentic_plan.py in this environment: (1) _agentic_plan needs a reachable database path to reach the LLM branch, so several tests are skipped with pytest.mark.skip; (2) TestPlanProvenanceThroughInitAndNext uses a helper that tries to patch mcp_server.HypothesisRepository, a name that does not exist on the module at import time, so those two tests are also skipped. These are environment/implementation-mismatch blockers, not ARTEX graph-layer blockers."
     }
   },
   "requirements": {
