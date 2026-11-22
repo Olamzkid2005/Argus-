@@ -174,6 +174,11 @@ _ALLOWED_TABLE_NAMES = set(ALLOWED_COLUMNS.keys()) | {
     "graph_assets",
     "graph_nodes",
     "graph_anchors",
+    "graph_node_edges",
+    "graph_anchor_scopes",
+    "planner_frontier",
+    "planner_todos",
+    "graph_outbox",
 }
 _ALLOWED_ID_COLUMNS = {"id", "finding_id", "engagement_id", "user_id", "report_id"}
 

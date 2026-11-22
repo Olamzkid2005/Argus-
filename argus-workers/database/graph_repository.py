@@ -1,5 +1,5 @@
 """
-Argus graph repository — canonical asset graph + exploration graph + anchors.
+Argus graph repository — canonical asset graph + exploration graph + anchors + coverage + planner frontier + todos + outbox.
 
 This is the dispatcher-owned persistence contract for the first exploration
 implementation pass. Workers/agents should not commit graph state directly;
@@ -13,6 +13,10 @@ from typing import Any
 
 from database.repositories.base import BaseRepository
 from psycopg2.extras import RealDictCursor
+
+
+class GraphMutationError(Exception):
+    """Dispatched graph mutation was invalid or rejected."""
 
 
 class GraphAssetState(str):
@@ -35,6 +39,25 @@ class GraphNodeState(str):
     CANCELLED = "cancelled"
 
 
+class AnchorCoverageState(str):
+    PENDING = "pending"
+    INCORPORATED = "incorporated"
+    COVERED = "covered"
+    ARCHIVED = "archived"
+
+
+class TodoStatus(str):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    BLOCKED = "blocked"
+
+
+class OutboxStatus(str):
+    QUEUED = "queued"
+    DEQUEUED = "dequeued"
+
+
 class ExplorationGraphRepository(BaseRepository):
     """
     Canonical exploration graph persistence.
@@ -43,6 +66,11 @@ class ExplorationGraphRepository(BaseRepository):
       - canonical asset upsert by identity
       - exploration node create/read by id/engagement
       - explicit anchors between nodes and assets
+      - anchor scopes and coverage metadata
+      - per-engagement exploration edges
+      - planner frontier rows
+      - planner todos
+      - graph outbox
 
     This repository is dispatcher-owned. It does not implement claim/lease/cancellation
     semantics itself; those stay in the dispatcher control plane and use this repo
@@ -180,12 +208,16 @@ class ExplorationGraphRepository(BaseRepository):
                 clauses.append("state = %s")
                 values.append(state)
 
-            query = """
+            query = (
+                """
                 SELECT * FROM graph_nodes
-                WHERE """ + " AND ".join(clauses) + """
+                WHERE """
+                + " AND ".join(clauses)
+                + """
                 ORDER BY created_at DESC
                 LIMIT %s OFFSET %s
                 """
+            )
             values.append(limit)
             values.append(offset)
             cursor.execute(query, values)
@@ -261,3 +293,489 @@ class ExplorationGraphRepository(BaseRepository):
 
     def update_node_state(self, node_id: str, state: str) -> dict[str, Any] | None:
         return self.update_by_id(node_id, {"state": state})
+
+    # --- anchors + coverage ---
+
+    def attach_anchor_scope(
+        self,
+        anchor_id: str,
+        scope_id: str,
+        *,
+        incorporated_by: str | None = None,
+        coverage_state: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Attach an engagement-scoped anchor handle + coverage metadata on top of a canonical anchor.
+
+        Returns the anchor scope row.
+        """
+        if coverage_state is None:
+            coverage_state = AnchorCoverageState.PENDING
+
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                INSERT INTO graph_anchor_scopes
+                    (anchor_id, scope_id, incorporated_by, coverage_state)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (anchor_id, scope_id) DO UPDATE SET
+                    incorporated_by = COALESCE(EXCLUDED.incorporated_by, graph_anchor_scopes.incorporated_by),
+                    coverage_state = EXCLUDED.coverage_state,
+                    updated_at = NOW()
+                RETURNING *
+                """,
+                (anchor_id, scope_id, incorporated_by, coverage_state),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("graph_anchor_scopes upsert did not return a row")
+            return dict(row)
+
+    def update_anchor_coverage(
+        self,
+        anchor_id: str,
+        scope_id: str,
+        *,
+        coverage_state: str,
+        incorporated_by: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Update an anchor scope's coverage state."""
+        set_clause = ["coverage_state = %s", "updated_at = NOW()"]
+        values: list[Any] = [coverage_state]
+        if incorporated_by is not None:
+            set_clause.append("incorporated_by = %s")
+            values.append(incorporated_by)
+        values.append(scope_id)
+        values.append(anchor_id)
+
+        with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (conn, cursor):
+            cursor.execute(
+                f"UPDATE graph_anchor_scopes SET {', '.join(set_clause)} WHERE anchor_id = %s AND scope_id = %s RETURNING *",
+                values,
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def find_anchor_scopes_for_anchor(
+        self, anchor_id: str, *, scope_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Return anchor scopes for a canonical anchor, optionally filtered by scope."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            clauses = ["anchor_id = %s"]
+            values: list[Any] = [anchor_id]
+            if scope_id is not None:
+                clauses.append("scope_id = %s")
+                values.append(scope_id)
+            cursor.execute(
+                f"SELECT * FROM graph_anchor_scopes WHERE {' AND '.join(clauses)} ORDER BY created_at DESC",
+                values,
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def asset_coverage_for_scope(
+        self, asset_id: str, scope_id: str
+    ) -> list[dict[str, Any]]:
+        """Return canonical asset coverage from the perspective of one engagement scope."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT a.id, a.canonical_key, a.asset_type, a.display_value,
+                       s.coverage_state, s.incorporated_by, s.incorporated_at
+                FROM graph_assets AS a
+                JOIN graph_anchors AS ga ON ga.asset_id = a.id
+                LEFT JOIN graph_anchor_scopes AS s
+                    ON s.anchor_id = ga.node_id AND s.scope_id = %s
+                WHERE a.id = %s
+                ORDER BY s.created_at DESC
+                """,
+                (scope_id, asset_id),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    # --- exploration edges ---
+
+    def attach_edge(
+        self,
+        engagement_id: str,
+        source_node_id: str,
+        target_node_id: str,
+        *,
+        edge_type: str = "related",
+    ) -> dict[str, Any]:
+        """
+        Attach a per-engagement exploration edge between two nodes.
+
+        Exploration edges are separate from canonical anchors: they describe how
+        an engagement links exploration nodes to each other, traceable back to the
+        canonical node(s) they derive from.
+        """
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                INSERT INTO graph_node_edges
+                    (engagement_id, source_node_id, target_node_id, edge_type)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (source_node_id, target_node_id, edge_type) DO UPDATE SET created_at = NOW()
+                RETURNING *
+                """,
+                (engagement_id, source_node_id, target_node_id, edge_type),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("graph_node_edges attach did not return a row")
+            return dict(row)
+
+    def find_edges_for_engagement(
+        self,
+        engagement_id: str,
+        *,
+        source_node_id: str | None = None,
+        target_node_id: str | None = None,
+        edge_type: str | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """List exploration edges for an engagement with optional filters."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            clauses = ["engagement_id = %s"]
+            values: list[Any] = [engagement_id]
+            if source_node_id is not None:
+                clauses.append("source_node_id = %s")
+                values.append(source_node_id)
+            if target_node_id is not None:
+                clauses.append("target_node_id = %s")
+                values.append(target_node_id)
+            if edge_type is not None:
+                clauses.append("edge_type = %s")
+                values.append(edge_type)
+            cursor.execute(
+                f"SELECT * FROM graph_node_edges WHERE {' AND '.join(clauses)} ORDER BY created_at DESC LIMIT %s",
+                values + [limit],
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def find_edges_for_node(self, node_id: str) -> list[dict[str, Any]]:
+        """Return exploration edges touching a node (as source or target)."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT * FROM graph_node_edges
+                WHERE source_node_id = %s OR target_node_id = %s
+                ORDER BY created_at DESC
+                """,
+                (node_id, node_id),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    # --- planner frontier ---
+
+    def set_frontier_node(
+        self,
+        engagement_id: str,
+        node_id: str,
+        *,
+        kind: str,
+        state: str | None = None,
+        priority: int = 0,
+        frontier_reason: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Insert or refresh a node in the recoverable per-engagement frontier.
+        """
+        if state is None:
+            state = GraphNodeState.OPEN
+
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                INSERT INTO planner_frontier
+                    (engagement_id, node_id, kind, state, priority, frontier_reason)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (engagement_id, node_id) DO UPDATE SET
+                    kind = EXCLUDED.kind,
+                    state = EXCLUDED.state,
+                    priority = EXCLUDED.priority,
+                    frontier_reason = EXCLUDED.frontier_reason,
+                    incorporated_at = NOW()
+                RETURNING *
+                """,
+                (engagement_id, node_id, kind, state, priority, frontier_reason),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("planner_frontier upsert did not return a row")
+            return dict(row)
+
+    def remove_frontier_node(self, engagement_id: str, node_id: str) -> bool:
+        """Remove a node from the frontier. Returns True if a row was removed."""
+        with self.db_operation(commit=True) as (conn, cursor):
+            cursor.execute(
+                "DELETE FROM planner_frontier WHERE engagement_id = %s AND node_id = %s",
+                (engagement_id, node_id),
+            )
+            return cursor.rowcount > 0
+
+    def find_frontier_for_engagement(
+        self,
+        engagement_id: str,
+        *,
+        state: str | None = None,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Return the current planner frontier for an engagement."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            clauses = ["engagement_id = %s"]
+            values: list[Any] = [engagement_id]
+            if state is not None:
+                clauses.append("state = %s")
+                values.append(state)
+            cursor.execute(
+                f"SELECT pf.*, n.kind AS node_kind, n.state AS node_state FROM planner_frontier pf JOIN graph_nodes n ON n.id = pf.node_id WHERE {' AND '.join(clauses)} ORDER BY pf.priority DESC, pf.incorporated_at ASC LIMIT %s",
+                values + [limit],
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def clear_frontier_for_engagement(self, engagement_id: str) -> int:
+        """Clear the frontier for an engagement and return the number of removed rows."""
+        with self.db_operation(commit=True) as (conn, cursor):
+            cursor.execute("DELETE FROM planner_frontier WHERE engagement_id = %s", (engagement_id,))
+            return cursor.rowcount
+
+    # --- planner todos ---
+
+    def create_todo(
+        self,
+        engagement_id: str,
+        *,
+        todo_type: str = "plan",
+        canonical_node_id: str | None = None,
+        exploration_node_id: str | None = None,
+        frontier_position: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
+        depends_on: str | None = None,
+        owner: str | None = None,
+    ) -> dict[str, Any]:
+        if payload is None:
+            payload = {}
+        if frontier_position is None:
+            frontier_position = {}
+
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                INSERT INTO planner_todos
+                    (engagement_id, todo_type, canonical_node_id, exploration_node_id,
+                     frontier_position, payload, depends_on, owner, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING *
+                """,
+                (
+                    engagement_id,
+                    todo_type,
+                    canonical_node_id,
+                    exploration_node_id,
+                    frontier_position,
+                    payload,
+                    depends_on,
+                    owner,
+                    TodoStatus.OPEN,
+                ),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("planner_todos create did not return a row")
+            return dict(row)
+
+    def update_todo_status(
+        self,
+        todo_id: str,
+        status: str,
+        *,
+        owner: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Transition a todo status; sets started_at/completed_at as appropriate."""
+        set_parts: list[str] = ["status = %s", "updated_at = NOW()"]
+        values: list[Any] = [status]
+
+        if status == TodoStatus.IN_PROGRESS:
+            set_parts.append("started_at = NOW()")
+        elif status == TodoStatus.DONE:
+            set_parts.append("completed_at = NOW()")
+
+        if owner is not None:
+            set_parts.append("owner = %s")
+            values.append(owner)
+
+        values.append(todo_id)
+
+        with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (conn, cursor):
+            cursor.execute(
+                f"UPDATE planner_todos SET {', '.join(set_parts)} WHERE id = %s RETURNING *",
+                values,
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def find_todos_for_engagement(
+        self,
+        engagement_id: str,
+        *,
+        status: str | None = None,
+        todo_type: str | None = None,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Return todos for an engagement with optional filters."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            clauses = ["engagement_id = %s"]
+            values: list[Any] = [engagement_id]
+            if status is not None:
+                clauses.append("status = %s")
+                values.append(status)
+            if todo_type is not None:
+                clauses.append("todo_type = %s")
+                values.append(todo_type)
+            cursor.execute(
+                f"SELECT * FROM planner_todos WHERE {' AND '.join(clauses)} ORDER BY created_at DESC LIMIT %s",
+                values + [limit],
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def find_open_todos_for_engagement(self, engagement_id: str) -> list[dict[str, Any]]:
+        return self.find_todos_for_engagement(
+            engagement_id, status=TodoStatus.OPEN
+        )
+
+    # --- graph outbox ---
+
+    def enqueue_outbox(
+        self,
+        scope_type: str = "graph",
+        scope_id: str = "",
+        *,
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+        cause_node_id: str | None = None,
+        cause_engagement_id: str | None = None,
+    ) -> dict[str, Any]:
+        if payload is None:
+            payload = {}
+
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                INSERT INTO graph_outbox
+                    (scope_type, scope_id, event_type, payload, cause_node_id, cause_engagement_id)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING *
+                """,
+                (
+                    scope_type,
+                    scope_id,
+                    event_type,
+                    payload,
+                    cause_node_id,
+                    cause_engagement_id,
+                ),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("graph_outbox enqueue did not return a row")
+            return dict(row)
+
+    def dequeue_outbox(
+        self,
+        scope_type: str = "graph",
+        scope_id: str = "",
+        *,
+        batch: int = 50,
+    ) -> list[dict[str, Any]]:
+        """
+        Claim and return queued outbox rows for a scope.
+
+        This is at-least-once friendly: dequeued rows are marked dequeued and
+        timestamped, but they are not deleted, so downstream consumers can
+        reconcile against the outbox if needed.
+        """
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                UPDATE graph_outbox
+                SET status = %s, dequeued_at = NOW(), attempts = attempts + 1, updated_at = NOW()
+                WHERE id IN (
+                    SELECT id FROM graph_outbox
+                    WHERE scope_type = %s AND scope_id = %s AND status = %s
+                    ORDER BY created_at ASC
+                    LIMIT %s
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING *
+                """,
+                (OutboxStatus.DEQUEUED, scope_type, scope_id, OutboxStatus.QUEUED, batch),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def find_outbox_for_scope(
+        self,
+        scope_type: str = "graph",
+        scope_id: str = "",
+        *,
+        status: str | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Read outbox rows for a scope without claiming them."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            clauses = ["scope_type = %s", "scope_id = %s"]
+            values: list[Any] = [scope_type, scope_id]
+            if status is not None:
+                clauses.append("status = %s")
+                values.append(status)
+            cursor.execute(
+                f"SELECT * FROM graph_outbox WHERE {' AND '.join(clauses)} ORDER BY created_at DESC LIMIT %s",
+                values + [limit],
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def record_outbox_error(self, outbox_id: str, error: str) -> dict[str, Any] | None:
+        """Record a dequeue error on an outbox row."""
+        with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (conn, cursor):
+            cursor.execute(
+                "UPDATE graph_outbox SET last_error = %s, updated_at = NOW() WHERE id = %s RETURNING *",
+                (error, outbox_id),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def requeue_outbox(self, outbox_id: str) -> dict[str, Any] | None:
+        """Put a dequeued/errored outbox row back into the queue."""
+        with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (conn, cursor):
+            cursor.execute(
+                "UPDATE graph_outbox SET status = %s, dequeued_at = NULL, updated_at = NOW() WHERE id = %s RETURNING *",
+                (OutboxStatus.QUEUED, outbox_id),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None

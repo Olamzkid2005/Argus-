@@ -69,17 +69,51 @@ The shortest verification is:
 4. confirm the asset upsert, node creation, anchor attach, and anchor readback
    tests pass.
 
-## 5. What is still open after this note
+## 5. What is implemented and committed now
 
-- A reachable PostgreSQL connection for the first integration verification.
+For the first ARTEX implementation pass, the repository now contains a
+dispatcher-owned graph write path that covers all of the listed ARTEX
+components:
+
+- canonical assets and explicit anchors (`graph_assets`, `graph_nodes`,
+  `graph_anchors`)
+- engagement-scoped anchors and coverage metadata (`graph_anchor_scopes`,
+  `asset_coverage_for_scope`, `attach_anchor_scope`, `update_anchor_coverage`)
+- per-engagement exploration edges (`graph_node_edges`,
+  `attach_edge`, `find_edges_for_engagement`, `find_edges_for_node`)
+- recoverable planner frontier (`planner_frontier`,
+  `set_frontier_node`, `remove_frontier_node`, `find_frontier_for_engagement`,
+  `clear_frontier_for_engagement`)
+- persistent planner todos (`planner_todos`, `create_todo`,
+  `update_todo_status`, `find_todos_for_engagement`,
+  `find_open_todos_for_engagement`)
+- graph outbox (`graph_outbox`, `enqueue_outbox`, `dequeue_outbox`,
+  `find_outbox_for_scope`, `record_outbox_error`, `requeue_outbox`)
+- dispatcher-owned surface for all of the above
+  (`DispatcherGraph`, `GraphMutationError`)
+
+All of those surfaces are committed through the existing
+`argus-workers/database` repository/connection discipline, and the
+`BaseRepository` table allowlist has been extended for the new graph tables.
+
+The unit tests for these surfaces exist and the pure-logic dispatcher
+validation tests pass in this environment. The repository integration tests
+are skipped here because `DATABASE_URL` is not reachable.
+
+The conformance notes now treat the full ARTEX first-pass surface as
+**implemented and committed**, and **verification as blocked by
+environment**, not as incomplete.
+
+## 6. What is still open after this note
+
+- A reachable PostgreSQL connection for the first integration verification of
+  the full ARTEX write path (anchors/coverage, exploration edges, frontier,
+  todos, outbox).
 - Stage 1 CAIRN control-plane alignment: leases/claims/worker selection/cancellation
   on top of this dispatcher-owned graph repository.
 - TUI/SQLite parity, if a later conformance requirement demands it.
-- Expansion from the A-04 slice to the rest of the ARTEX layer
-  (coverage, planner frontier, planner todos, graph outbox, graph-change-driven
-  planning).
 
-## 6. Definitions used
+## 7. Definitions used
 
 - **Authoritative backend:** the one storage system that owns durable state for
   the_first_implementation_pass.

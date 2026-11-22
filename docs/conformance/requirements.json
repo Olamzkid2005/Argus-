@@ -1,10 +1,18 @@
 {
   "meta": {
     "stage": 0,
-    "updated_at": "2026-11-22T20:45:00+00:00",
+    "updated_at": "2026-11-22T21:10:00+00:00",
     "source_of_truth_for_this_stage": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md",
     "actual_upstream_reference_used": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md (local copy of the Stage 0 spec)",
-    "local_baseline_inspected": ["Makefile", "argus-workers/README.md", ".github/workflows/lint.yml", "argus-workers/database/connection.py", "argus-workers/database/repositories/base.py", "argus-workers/database/repositories/engagement_repository.py", "argus-workers/tests/test_attack_graph_db.py"]
+    "local_baseline_inspected": [
+      "Makefile",
+      "argus-workers/README.md",
+      ".github/workflows/lint.yml",
+      "argus-workers/database/connection.py",
+      "argus-workers/database/repositories/base.py",
+      "argus-workers/database/repositories/engagement_repository.py",
+      "argus-workers/tests/test_attack_graph_db.py"
+    ]
   },
   "stage0_decisions": {
     "first_deployment_mode_for_artrex_pass": "Python/PostgreSQL",
@@ -14,44 +22,105 @@
     "attack_graph_relationship": "separate; attack_graph_db.py is not repurposed as the exploration graph",
     "c18_means_for_artrex_first_pass": "one dispatcher-owned graph repository interface; workers/agents return structured output and never commit graph state directly; first tests prove that boundary with a real repository call path"
   },
-  "first_requirement": {
-    "id": "A-04",
-    "title": "Create an intent/fact/finding anchored to an asset",
-    "reference_behaviour": "ARTEX exploration graph nodes can be anchored to one or more asset IDs, and graph queries return the exact relationship.",
-    "upstream_proof": "Plan Section 3.1 and 3.4; ARTEX db/exploration.go and db/assets.go cited in plan Section 1",
-    "argus_implementation": "PARTIALLY IMPLEMENTED AND COMMITTED",
-    "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql, argus-workers/database/graph_repository.py, argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
-    "test_proof": "UNIT TESTS EXIST; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
-    "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
-    "result": "NOT VERIFIED",
-    "deviation": "none",
-    "notes": "First ARTEX implementation target is committed: migration, dispatcher-owned graph repository, dispatcher surface, and unit tests. The tests are correct, but verification is blocked here because the environment has no reachable PostgreSQL; pytest fails on connection setup, not on graph-write logic."
-  },
-  "authoritative_state_backend_note": {
-    "file": "docs/conformance/authoritative-state-backend-note.md",
-    "short_answer": "Python/PostgreSQL owns the first ARTEX durable write.",
-    "current_repository_reality": "TUI/local path uses per-engagement SQLite; Python service-backed path uses PostgreSQL/Redis/Celery. The plan forbids dual-writing both or creating a third store.",
-    "planned_first_cut": "One dispatcher-owned graph repository interface (asset graph, exploration graph, anchors, planner todos, graph outbox), first backed by PostgreSQL using the existing repository/connection discipline. SQLite parity is out of scope for the first pass unless a later requirement demands it.",
-    "current_verification_state": "blocked_by_environment",
-    "open_after_this_note": [
-      "A reachable PostgreSQL connection for the first integration verification",
-      "Stage 1 CAIRN control-plane alignment (leases/claims/worker selection/cancellation)",
-      "TUI/SQLite parity, if a later requirement demands it",
-      "Expansion from the A-04 slice to the rest of the ARTEX layer"
-    ]
+  "artrex_first_pass_surfaces": {
+    "A-04": {
+      "id": "A-04",
+      "title": "Create an intent/fact/finding anchored to an asset",
+      "reference_behaviour": "ARTEX exploration graph nodes can be anchored to one or more asset IDs, and graph queries return the exact relationship.",
+      "upstream_proof": "Plan Section 3.1 and 3.4; ARTEX db/exploration.go and db/assets.go cited in plan Section 1",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql, argus-workers/database/graph_repository.py, argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+      "test_proof": "UNIT TESTS EXIST AND PASS WITHOUT A DATABASE; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
+      "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
+      "result": "NOT VERIFIED",
+      "deviation": "none",
+      "notes": "First ARTEX implementation target is committed and expanded: migration, dispatcher-owned graph repository, dispatcher surface, and unit tests. The pure-logic dispatcher validation tests pass here; the repository integration tests are skipped because DATABASE_URL is not reachable in this environment."
+    },
+    "anchors_and_coverage": {
+      "id": "anchors_and_coverage",
+      "title": "Canonical shared asset graph — anchors and coverage",
+      "reference_behaviour": "Each canonical asset can carry engagement-scoped anchor handles and coverage metadata; engagements read and reference the canonical graph through anchors, not by copying subgraphs.",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql (graph_anchor_scopes), argus-workers/database/graph_repository.py (anchor_scope CRUD + asset_coverage_for_scope), argus-workers/database/dispatcher_graph.py (attach_anchor_scope, update_anchor_coverage), argus-workers/tests/test_graph_repository.py",
+      "test_proof": "UNIT TESTS EXIST FOR DISPATCHER VALIDATION; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
+      "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
+      "result": "NOT VERIFIED",
+      "deviation": "none",
+      "notes": "Anchor scopes and coverage metadata are committed on top of the canonical anchor table. Coverage is queried from the perspective of one engagement scope through graph_anchor_scopes, not by copying subgraphs."
+    },
+    "per_engagement_exploration_graph": {
+      "id": "per_engagement_exploration_graph",
+      "title": "Per-engagement exploration graph",
+      "reference_behaviour": "An engagement explores by pulling a frontier from the canonical graph into its own exploration space; exploration nodes and edges are traceable back to the canonical node(s) they derive from.",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql (graph_node_edges), argus-workers/database/graph_repository.py (attach_edge, find_edges_for_engagement, find_edges_for_node), argus-workers/database/dispatcher_graph.py (attach_edge), argus-workers/tests/test_graph_repository.py",
+      "test_proof": "UNIT TESTS EXIST FOR DISPATCHER VALIDATION; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
+      "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
+      "result": "NOT VERIFIED",
+      "deviation": "none",
+      "notes": "Per-engagement exploration edges are committed and separate from canonical anchors. They describe how an engagement links exploration nodes to each other, traceable back to the canonical node(s) they derive from."
+    },
+    "planner_frontier": {
+      "id": "planner_frontier",
+      "title": "Planner frontier",
+      "reference_behaviour": "A recoverable planner frontier per engagement holds the set of canonical/exploration nodes available to the planner for next expansion; frontier state is recoverable from the graph and todo/plan state, not held only in memory.",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus_workers/database/migrations/033_graph_tables.sql (planner_frontier), argus-workers/database/graph_repository.py (set_frontier_node, remove_frontier_node, find_frontier_for_engagement, clear_frontier_for_engagement), argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+      "test_proof": "UNIT TESTS EXIST FOR DISPATCHER VALIDATION; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
+      "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
+      "result": "NOT VERIFIED",
+      "deviation": "none",
+      "notes": "The frontier is committed as durable per-engagement rows, not in-memory state. Frontier UPSERT/clear/remove/read are implemented in the dispatcher-owned repository path."
+    },
+    "persistent_todos": {
+      "id": "persistent_todos",
+      "title": "Persistent todos",
+      "reference_behaviour": "A planner todo store persists planning tasks across restarts; todo items reference engagements, canonical nodes, exploration nodes, frontier position, and status, with status transitions open/in-progress/done/blocked.",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus_workers/database/migrations/033_graph_tables.sql (planner_todos), argus-workers/database/graph_repository.py (create_todo, update_todo_status, find_todos_for_engagement, find_open_todos_for_engagement), argus_workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+      "test_proof": "UNIT TESTS EXIST FOR DISPATCHER VALIDATION; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
+      "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
+      "result": "NOT VERIFIED",
+      "deviation": "none",
+      "notes": "Todos are the durable representation of planner work. Status transitions set started_at/completed_at appropriately and go through the dispatcher-owned repository path."
+    },
+    "graph_outbox": {
+      "id": "graph_outbox",
+      "title": "Graph outbox",
+      "reference_behaviour": "Graph-side changes can be staged onto a dispatcher-owned outbox and dequeued for downstream consumers with at-least-once handling basics and a clear dispatcher ownership boundary.",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus_workers/database/migrations/033_graph_tables.sql (graph_outbox), argus-workers/database/graph_repository.py (enqueue_outbox, dequeue_outbox, find_outbox_for_scope, record_outbox_error, requeue_outbox), argus_workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+      "test_proof": "UNIT TESTS EXIST FOR DISPATCHER VALIDATION; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
+      "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
+      "result": "NOT VERIFIED",
+      "deviation": "none",
+      "notes": "The outbox is dispatcher-owned. Dequeued rows are marked dequeued and timestamped but not deleted, so downstream consumers can reconcile against the outbox. Error recording and requeue are provided."
+    },
+    "graph_change_driven_planning": {
+      "id": "graph_change_driven_planning",
+      "title": "Graph-change-driven planning",
+      "reference_behaviour": "Graph mutations (canonical or exploration) can trigger planning consideration through the outbox/frontier rather than polling; the flow is graph change -> outbox event -> planner frontier/todo update -> next planning pass, with the planner able to recompute from persisted state on restart.",
+      "argus_implementation": "PLUMBING COMMITTED; END-TO-END DISPATCHER FLOW NOT YET VERIFIED IN THIS ENVIRONMENT",
+      "argus_implementation_path": "argus_workers/database/migrations/033_graph_tables.sql, argus-workers/database/graph_repository.py, argus_workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py (dispatcher flow covers asset -> intent -> anchor -> frontier -> todo -> outbox)",
+      "test_proof": "UNIT TESTS EXIST FOR DISPATCHER VALIDATION; INTEGRATION TEST BLOCKED IN THIS ENVIRONMENT",
+      "runtime_proof": "NOT RUN (no reachable PostgreSQL in this environment)",
+      "result": "NOT VERIFIED",
+      "deviation": "none",
+      "notes": "All of the plumbing for graph-change-driven planning is committed through the same dispatcher-owned graph repository: canonical assets, exploration nodes/edges, anchors/coverage, frontier, todos, and outbox. The dispatcher-owned surface can stage an outbox event and update frontier/todo state in the same repository discipline. A live Postgres run is needed to verify the durable end-to-end flow here."
+    }
   },
   "requirements": {
     "C-18": {
       "status": "NOT VERIFIED",
       "tests": [],
       "runtime_evidence": null,
-      "notes": "Dispatcher-owned surface exists and is committed for the first pass; full CAIRN ownership not yet proven end to end. Verification is blocked by environment, not by missing dispatcher surface."
+      "notes": "Dispatcher-owned graph surface now covers the full first-pass ARTEX write path; workers/agents still must not import/use the graph repository directly to commit state. Verification is blocked by environment, not by missing dispatcher surface."
     },
     "A-04": {
       "status": "NOT VERIFIED",
       "tests": ["tests/test_graph_repository.py"],
       "runtime_evidence": null,
-      "notes": "Committed: migration, repository, dispatcher surface, unit tests. Verification is blocked in this environment because the runtime has no reachable PostgreSQL; pytest fails on connection setup, not on the graph write logic."
+      "notes": "Committed and expanded: migration, repository, dispatcher surface, unit tests. Pure-logic dispatcher validation tests pass here; repository integration tests are skipped because DATABASE_URL is not reachable in this environment."
     }
   }
 }
