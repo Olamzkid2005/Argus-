@@ -35,17 +35,24 @@ _UA = "Mozilla/5.0 (Argus recon)"
 _CDX = "http://web.archive.org/cdx/search/cdx"
 _CRTSH = "https://crt.sh/?q=%25.{domain}&output=json"
 
-#: Edge fingerprints: header name/value, cookie, or body marker.
+#: Edge fingerprints. These are matched against the response *headers*
+#: only — never the body. A page that happens to contain the short string
+#: "f5" is not behind F5, and claiming a vendor the fingerprint cannot
+#: support sends an operator to harden an edge that is not there. That is
+#: exactly what happened on www.hisdayspringfamily.org (Caddy + Next.js,
+#: reported as "F5 BIG-IP"): the old signature matched bare "f5" anywhere in
+#: the body.
 _WAF_SIGNATURES = [
-    (re.compile(r"cloudflare", re.I), "Cloudflare"),
-    (re.compile(r"akamai|ak-bmsc", re.I), "Akamai"),
-    (re.compile(r"incap_ses|visid_incap|imperva", re.I), "Imperva Incapsula"),
-    (re.compile(r"x-sucuri|sucuri", re.I), "Sucuri"),
-    (re.compile(r"x-amzn-waf|awselb", re.I), "AWS WAF"),
-    (re.compile(r"x-f5|big-ip|f5", re.I), "F5 BIG-IP"),
-    (re.compile(r"barracuda|barra", re.I), "Barracuda"),
-    (re.compile(r"citrix|netscaler", re.I), "Citrix NetScaler"),
-    (re.compile(r"fortiweb|fortigate", re.I), "FortiWeb"),
+    (re.compile(r"\bcloudflare\b|cf-ray|cf-cache-status|__cfduid", re.I), "Cloudflare"),
+    (re.compile(r"\bakamai\b|ak-bmsc|x-akamai", re.I), "Akamai"),
+    (re.compile(r"incap_ses|visid_incap|x-iinfo", re.I), "Imperva Incapsula"),
+    (re.compile(r"x-sucuri", re.I), "Sucuri"),
+    (re.compile(r"x-amzn-waf|awselb|x-amz-cf", re.I), "AWS WAF"),
+    # F5 is identified by its cookie and connection headers, not by "f5".
+    (re.compile(r"bigipserver|x-cnection|big-?ip", re.I), "F5 BIG-IP"),
+    (re.compile(r"\bbarracuda\b|\bbarra\b", re.I), "Barracuda"),
+    (re.compile(r"\bcitrix\b|\bnetscaler\b", re.I), "Citrix NetScaler"),
+    (re.compile(r"fortiweb", re.I), "FortiWeb"),
     (re.compile(r"mod_security|modsecurity", re.I), "ModSecurity"),
 ]
 
@@ -154,13 +161,27 @@ def waf_signature(target: str) -> list[str]:
         print(f"recon: WAF probe failed: {exc}", file=sys.stderr)
         return []
 
-    haystack = f"{headers}\n{body}"
-    found = [name for pattern, name in _WAF_SIGNATURES if pattern.search(haystack)]
+    found = fingerprint_headers(headers)
     # A block page for a hostile query is itself an edge signature, but only
     # when nothing identified the vendor.
-    if not found and status in (403, 406, 429, 503) and re.search(r"blocked|denied|firewall|waf", body, re.I):
+    if not found and is_edge_block(status, body):
         found.append(f"Unidentified edge filter (HTTP {status})")
     return found
+
+
+def fingerprint_headers(headers: str) -> list[str]:
+    """Name the WAF vendors whose signature appears in these headers.
+
+    Headers only: a vendor name in the page body is content, not an edge.
+    """
+    return [name for pattern, name in _WAF_SIGNATURES if pattern.search(headers)]
+
+
+def is_edge_block(status: int, body: str) -> bool:
+    """True when a hostile probe was answered with an edge block page."""
+    return status in (403, 406, 429, 503) and bool(
+        re.search(r"blocked|denied|firewall|waf", body, re.I)
+    )
 
 
 def emit(tool: str, finding: dict) -> None:

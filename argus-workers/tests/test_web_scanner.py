@@ -197,12 +197,16 @@ class TestCheckSecurityHeaders:
             scanner.check_security_headers()
 
         findings = scanner._builder.findings if scanner._builder else []
-        assert len(findings) == 1
-        f = findings[0]
-        assert f["type"] == "MISSING_SECURITY_HEADERS"
-        assert f["severity"] == "MEDIUM"
-        # Should list missing headers
-        assert len(f["evidence"]["missing_headers"]) >= 1
+        # One finding per header, each at LOW: absence of a header is not a
+        # MEDIUM vulnerability on its own.
+        assert len(findings) == 5
+        assert {f["severity"] for f in findings} == {"LOW"}
+        assert {f["evidence"]["header"] for f in findings} == set(
+            scanner.SECURITY_HEADERS
+        )
+        for f in findings:
+            assert f["type"].startswith("MISSING_")
+            assert f["evidence"]["missing_headers"] == [f["evidence"]["header"]]
 
     def test_all_headers_present_no_finding(self):
         scanner = WebScanner()
@@ -746,7 +750,7 @@ class TestGoldenScan:
 
         finding_types = {f["type"] for f in result.findings}
         # These should be reliably detected from the baseline response above.
-        assert "MISSING_SECURITY_HEADERS" in finding_types
+        assert "MISSING_HSTS" in finding_types
         assert "WILDCARD_CORS" in finding_types
         assert "INSECURE_COOKIE" in finding_types
 

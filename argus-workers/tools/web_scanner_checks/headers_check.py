@@ -13,15 +13,25 @@ logger = logging.getLogger(__name__)
 _DEFAULT_TIMEOUT = SSL_TIMEOUT
 _DEFAULT_RATE_LIMIT = RATE_LIMIT_DELAY_MS / 1000.0
 
-SECURITY_HEADERS = [
-    "Strict-Transport-Security",
-    "X-Frame-Options",
-    "X-Content-Type-Options",
-    "Referrer-Policy",
-    "Permissions-Policy",
-    "X-XSS-Protection",
-    "Content-Security-Policy",
-]
+#: Header -> severity of its absence. Capped at LOW: a missing header is not a
+#: MEDIUM vulnerability by itself. X-XSS-Protection is obsolete and CSP is
+#: scored by _check_csp, so neither is demanded here. Kept in sync with
+#: web_scanner.py and config_check.py.
+SECURITY_HEADERS = {
+    "Strict-Transport-Security": "LOW",
+    "X-Frame-Options": "LOW",
+    "X-Content-Type-Options": "LOW",
+    "Referrer-Policy": "LOW",
+    "Permissions-Policy": "LOW",
+}
+
+HEADER_FINDING_TYPES = {
+    "Strict-Transport-Security": "MISSING_HSTS",
+    "X-Frame-Options": "MISSING_X_FRAME_OPTIONS",
+    "X-Content-Type-Options": "MISSING_X_CONTENT_TYPE_OPTIONS",
+    "Referrer-Policy": "MISSING_REFERRER_POLICY",
+    "Permissions-Policy": "MISSING_PERMISSIONS_POLICY",
+}
 
 
 def run_check(target_url: str, session, findings: list) -> list[dict]:
@@ -35,21 +45,20 @@ def _check_security_headers(target_url, session, findings):
     if not resp:
         return
     headers = {k.lower(): v for k, v in resp.headers.items()}
-    missing = []
-    for header in SECURITY_HEADERS:
-        if header.lower() not in headers:
-            missing.append(header)
-    if missing:
+    present = [h for h in SECURITY_HEADERS if h.lower() in headers]
+    for header, severity in SECURITY_HEADERS.items():
+        if header.lower() in headers:
+            continue
         findings.append(
             make_finding(
-                finding_type="MISSING_SECURITY_HEADERS",
-                severity="MEDIUM",
+                finding_type=HEADER_FINDING_TYPES[header],
+                severity=severity,
                 endpoint=target_url,
                 evidence={
-                    "missing_headers": missing,
-                    "present_headers": [
-                        h for h in SECURITY_HEADERS if h.lower() in headers
-                    ],
+                    "header": header,
+                    "missing_headers": [header],
+                    "present_headers": present,
+                    "message": f"{header} is not set on this response",
                 },
                 confidence=0.95,
             )

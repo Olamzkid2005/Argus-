@@ -252,6 +252,8 @@ class FindingBuilder:
             "AUTH_DETECTED",
             "MISSING_X_FRAME_OPTIONS",
             "MISSING_X_CONTENT_TYPE_OPTIONS",
+            "MISSING_REFERRER_POLICY",
+            "MISSING_PERMISSIONS_POLICY",
             # Infrastructure security analyzer
             "INFRA_SERVER_HEADER",
             "INFRA_VIA_HEADER",

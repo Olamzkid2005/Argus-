@@ -237,12 +237,12 @@ class TestMediumFindingsCarryResponseEvidence:
             scanner.check_security_headers()
 
         finding = scanner._builder.findings[0]
-        assert finding["severity"] == "MEDIUM"
+        assert finding["severity"] == "LOW"
         assert finding["evidence"]["http_response"]["status_code"] == 200
         assert finding["evidence"]["http_response"]["body_bytes"] == 5
 
-    def test_info_findings_carry_no_response_block(self):
-        """The rule is for MEDIUM+; INFO stays lightweight."""
+    def test_info_findings_also_carry_the_response_they_came_from(self):
+        """Every finding derived from a response keeps that response."""
         scanner = WebScanner()
         scanner.target_url = "https://example.com/"
         response = _mock_response(text="hello", url="https://example.com/")
@@ -255,7 +255,8 @@ class TestMediumFindingsCarryResponseEvidence:
             evidence={"parameter": "q"},
         )
 
-        assert "http_response" not in scanner._builder.findings[0]["evidence"]
+        evidence = scanner._builder.findings[0]["evidence"]
+        assert evidence["http_response"]["body_bytes"] == 5
 
     def test_response_block_is_omitted_when_nothing_was_observed(self):
         """No response (e.g. a TLS-only finding) must not invent one."""
@@ -268,3 +269,92 @@ class TestMediumFindingsCarryResponseEvidence:
         )
 
         assert "http_response" not in scanner._builder.findings[0]["evidence"]
+
+
+class TestSecurityHeadersAreScoredIndividually:
+    """Each absent header is its own LOW finding; obsolete demands are gone."""
+
+    def test_five_missing_headers_are_five_low_findings(self):
+        scanner = WebScanner()
+        scanner.target_url = "https://www.hisdayspringfamily.org"
+        response = _mock_response(
+            headers={"Content-Type": "text/html"},
+            text=HOME_PAGE,
+            url="https://www.hisdayspringfamily.org/",
+        )
+
+        with patch.object(scanner, "_safe_request", return_value=response):
+            scanner.check_security_headers()
+
+        findings = scanner._builder.findings
+        assert len(findings) == 5
+        assert {f["severity"] for f in findings} == {"LOW"}
+        assert {f["type"] for f in findings} == {
+            "MISSING_HSTS",
+            "MISSING_X_FRAME_OPTIONS",
+            "MISSING_X_CONTENT_TYPE_OPTIONS",
+            "MISSING_REFERRER_POLICY",
+            "MISSING_PERMISSIONS_POLICY",
+        }
+        assert all(f["evidence"]["header"] for f in findings)
+        assert all(
+            f["evidence"]["http_response"]["status_code"] == 200 for f in findings
+        )
+
+    def test_the_three_header_lists_agree_and_drop_deprecated_demands(self):
+        from tools.web_scanner_checks import config_check, headers_check
+
+        assert WebScanner.SECURITY_HEADERS == config_check.SECURITY_HEADERS
+        assert WebScanner.SECURITY_HEADERS == headers_check.SECURITY_HEADERS
+        assert "X-XSS-Protection" not in WebScanner.SECURITY_HEADERS
+        assert "Content-Security-Policy" not in WebScanner.SECURITY_HEADERS
+
+
+def _recon_shim():
+    """Load tools/scripts/recon_shim.py, which is a script, not a package."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "tools" / "scripts" / "recon_shim.py"
+    spec = importlib.util.spec_from_file_location("argus_recon_shim_test", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestWafFingerprintDoesNotGuess:
+    """The church site was reported as F5 BIG-IP; it runs Caddy + Next.js."""
+
+    def test_a_body_mentioning_f5_is_not_an_f5_appliance(self):
+        shim = _recon_shim()
+        assert shim.fingerprint_headers("Content-Type: text/html\r\nX-Powered-By: f5") == []
+
+    def test_f5_is_named_from_its_connection_headers_and_cookies(self):
+        shim = _recon_shim()
+        assert shim.fingerprint_headers(
+            "Server: BIG-IP\r\nSet-Cookie: BIGipServer=abc"
+        ) == ["F5 BIG-IP"]
+
+    def test_a_block_page_is_an_unidentified_edge_filter(self):
+        shim = _recon_shim()
+        assert shim.is_edge_block(403, "Request blocked by the firewall") is True
+        assert shim.is_edge_block(200, "Request blocked by the firewall") is False
+
+
+class TestNiktoGetsTls:
+    def test_https_target_gets_ssl_flag(self):
+        from agent.tool_arguments import build_tool_argv
+
+        assert "-ssl" in build_tool_argv("nikto", "https://vulnbank.org/")
+
+    def test_http_target_does_not(self):
+        from agent.tool_arguments import build_tool_argv
+
+        assert "-ssl" not in build_tool_argv("nikto", "http://vulnbank.org/")
+
+    def test_ssl_is_not_duplicated_when_already_requested(self):
+        from agent.tool_arguments import build_tool_argv
+
+        argv = build_tool_argv("nikto", "https://vulnbank.org/", {"ssl": True})
+        assert argv.count("-ssl") == 1

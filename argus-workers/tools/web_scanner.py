@@ -64,7 +64,10 @@ logger = logging.getLogger(__name__)
 
 #: Findings at or above these severities must carry the HTTP response they were
 #: derived from, so a human can check the claim instead of trusting the label.
-RESPONSE_EVIDENCE_SEVERITIES = frozenset({"CRITICAL", "HIGH", "MEDIUM"})
+#: Attach the observed response to any finding that was derived from one.
+#: It used to be limited to MEDIUM and above, which meant a LOW finding that
+#: came from a real response could not be checked by the reader.
+RESPONSE_EVIDENCE_SEVERITIES = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"})
 
 #: How the property a prototype-pollution payload sets would appear if the
 #: server actually merged the input into an object. Used as a differential
@@ -120,16 +123,34 @@ class WebScanner(AbstractTool):
 
     tool_name = "web_scanner"
 
-    # Security headers to check
-    SECURITY_HEADERS = [
-        "Strict-Transport-Security",
-        "X-Frame-Options",
-        "X-Content-Type-Options",
-        "Referrer-Policy",
-        "Permissions-Policy",
-        "X-XSS-Protection",
-        "Content-Security-Policy",
-    ]
+    # Security headers to check, each with the severity its absence justifies.
+    #
+    # One aggregate MEDIUM for every absent header is a bad score: a site with
+    # HSTS and frame options missing is not in the same state as one that has
+    # nothing, and the report could not say which header was which.
+    #
+    # ``X-XSS-Protection`` is deliberately absent. The header is obsolete, and
+    # the value browsers recommend (``0``) would otherwise read as "missing".
+    # ``Content-Security-Policy`` is scored by ``check_csp``, which knows the
+    # difference between a missing policy (MEDIUM) and a weak one.
+    SECURITY_HEADERS = {
+        "Strict-Transport-Security": "LOW",
+        "X-Frame-Options": "LOW",
+        "X-Content-Type-Options": "LOW",
+        "Referrer-Policy": "LOW",
+        "Permissions-Policy": "LOW",
+    }
+
+    # One finding type per header, so two absent headers stay two findings
+    # instead of overwriting each other (the store treats title+tool+url as
+    # the identity of a finding).
+    HEADER_FINDING_TYPES = {
+        "Strict-Transport-Security": "MISSING_HSTS",
+        "X-Frame-Options": "MISSING_X_FRAME_OPTIONS",
+        "X-Content-Type-Options": "MISSING_X_CONTENT_TYPE_OPTIONS",
+        "Referrer-Policy": "MISSING_REFERRER_POLICY",
+        "Permissions-Policy": "MISSING_PERMISSIONS_POLICY",
+    }
 
     # Sensitive file patterns
     SENSITIVE_FILES = [
@@ -1212,22 +1233,20 @@ class WebScanner(AbstractTool):
             return
 
         headers = {k.lower(): v for k, v in resp.headers.items()}
-        missing = []
+        present = [h for h in self.SECURITY_HEADERS if h.lower() in headers]
 
-        for header in self.SECURITY_HEADERS:
-            if header.lower() not in headers:
-                missing.append(header)
-
-        if missing:
+        for header, severity in self.SECURITY_HEADERS.items():
+            if header.lower() in headers:
+                continue
             self._add_finding(
-                finding_type="MISSING_SECURITY_HEADERS",
-                severity="MEDIUM",
+                finding_type=self.HEADER_FINDING_TYPES[header],
+                severity=severity,
                 endpoint=self.target_url,
                 evidence={
-                    "missing_headers": missing,
-                    "present_headers": [
-                        h for h in self.SECURITY_HEADERS if h.lower() in headers
-                    ],
+                    "header": header,
+                    "missing_headers": [header],
+                    "present_headers": present,
+                    "message": f"{header} is not set on this response",
                 },
                 confidence=0.95,
                 response=resp,

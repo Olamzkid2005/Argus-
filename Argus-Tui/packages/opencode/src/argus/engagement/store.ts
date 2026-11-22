@@ -306,6 +306,49 @@ const INVENTORY_LABELS: Record<string, string> = {
   TECHNOLOGY_DETECTED: "Technology",
 }
 
+/**
+ * INFO rows that are observations, not defects, and whose emitting tool never
+ * set a subtype. dnsx wrote eleven separate "Host resolves: … -> no A record"
+ * rows and the recon shims wrote one negative per check; both read as findings
+ * in the report. Classified at the write choke point so new tools that report
+ * a sentence instead of a subtype still collapse.
+ */
+const OBSERVATION_TITLE_PATTERNS: [RegExp, string][] = [
+  [/^host resolves:/i, "DNS_OBSERVATION"],
+  [/^dns resolution complete/i, "DNS_OBSERVATION"],
+  [/^subdomain enumeration complete/i, "SUBDOMAIN_CHECK_NEGATIVE"],
+  [/^url discovery complete/i, "URL_CHECK_NEGATIVE"],
+  [/^parameter discovery complete/i, "PARAMETER_CHECK_NEGATIVE"],
+  [/^waf (fingerprint|detection) complete/i, "WAF_CHECK_NEGATIVE"],
+]
+
+const OBSERVATION_LABELS: Record<string, string> = {
+  DNS_OBSERVATION: "DNS observation",
+  SUBDOMAIN_CHECK_NEGATIVE: "Subdomain check",
+  URL_CHECK_NEGATIVE: "URL check",
+  PARAMETER_CHECK_NEGATIVE: "Parameter check",
+  WAF_CHECK_NEGATIVE: "WAF check",
+}
+
+/**
+ * The inventory type a finding belongs to, or undefined when it is not
+ * inventory. Explicit subtypes always win; the title fallback only applies to
+ * an INFO row that never got one.
+ */
+function inventorySubtypeFor(finding: NormalizedFinding): string | undefined {
+  // Anything a scanner rated LOW or above keeps its own row, whatever its
+  // subtype says.
+  if (finding.severity > Severity.INFO) return undefined
+  const subtype = (finding.subtype ?? "").toUpperCase()
+  if (INVENTORY_SUBTYPES.has(subtype)) return subtype
+  if (subtype) return undefined
+  const title = finding.title ?? ""
+  for (const [pattern, name] of OBSERVATION_TITLE_PATTERNS) {
+    if (pattern.test(title)) return name
+  }
+  return undefined
+}
+
 /** How many concrete URLs an inventory row shows before summarising. */
 const INVENTORY_SAMPLE_SIZE = 10
 
@@ -325,8 +368,8 @@ export function rollupInventoryFindings(records: NormalizedFinding[]): Normalize
   >()
 
   for (const record of records) {
-    const subtype = (record.subtype ?? "").toUpperCase()
-    if (!INVENTORY_SUBTYPES.has(subtype) || record.severity > Severity.INFO) {
+    const subtype = inventorySubtypeFor(record)
+    if (!subtype) {
       kept.push(record)
       continue
     }
@@ -346,7 +389,7 @@ export function rollupInventoryFindings(records: NormalizedFinding[]): Normalize
 
   for (const [key, group] of groups) {
     const subtype = key.slice(key.indexOf("::") + 2)
-    const label = INVENTORY_LABELS[subtype] ?? "Asset"
+    const label = INVENTORY_LABELS[subtype] ?? OBSERVATION_LABELS[subtype] ?? "Asset"
     const count = Math.max(group.urls.size, group.seen)
     const samples = [...group.urls].slice(0, INVENTORY_SAMPLE_SIZE)
     const sampleText = samples.length > 0 ? `\n\nFirst ${samples.length}:\n${samples.map((u) => `- ${u}`).join("\n")}` : ""
@@ -365,6 +408,103 @@ export function rollupInventoryFindings(records: NormalizedFinding[]): Normalize
   }
 
   return kept
+}
+
+/**
+ * The host a finding is about, for grouping duplicates. Falls back to the URL
+ * embedded in the title ("Missing csp: https://host/") because most scanner
+ * findings carry no separate url field.
+ */
+function hostFromFinding(finding: NormalizedFinding): string {
+  const sources = [finding.url ?? "", finding.title ?? "", finding.description ?? ""]
+  for (const source of sources) {
+    const match = source.match(/https?:\/\/([^/\s]+)/i)
+    if (match) return match[1]!.toLowerCase()
+  }
+  return ""
+}
+
+/**
+ * The problem a finding names, when its title states it plainly. Deliberately
+ * narrow: only defects that two tools routinely describe in different words.
+ * Anything not in this table keeps its own row.
+ */
+function duplicateRootCauseProblem(finding: NormalizedFinding): string | undefined {
+  const title = (finding.title ?? "").toLowerCase()
+
+  if (/missing csp|content-security-policy/.test(title)) return "missing-csp"
+  if (/missing hsts|strict-transport-security/.test(title)) return "missing-hsts"
+  if (/x-frame-options/.test(title)) return "missing-x-frame-options"
+  if (/x-content-type-options/.test(title)) return "missing-x-content-type-options"
+  if (/referrer-policy/.test(title)) return "missing-referrer-policy"
+  if (/permissions-policy/.test(title)) return "missing-permissions-policy"
+  if (/prototype pollution/.test(title)) return "prototype-pollution"
+  if (/insecure cookie/.test(title)) return "insecure-cookie"
+  const port = title.match(/open port[^0-9]*(\d+)/)
+  if (port) return `open-port-${port[1]}`
+  return undefined
+}
+
+/**
+ * Collapse the same problem reported by two tools into one finding, keeping
+ * the most severe assessment and whatever response evidence came with it.
+ *
+ * The church-site engagement listed missing CSP twice (web_scanner and
+ * browser_security_operator) and ports 22/80/443 three times (nmap, naabu,
+ * uncover). A reader cannot tell whether that is two problems or one.
+ */
+export function mergeDuplicateFindings(records: NormalizedFinding[]): NormalizedFinding[] {
+  const groups = new Map<string, { finding: NormalizedFinding; tools: Set<string>; count: number }>()
+  const untouched: NormalizedFinding[] = []
+
+  for (const record of records) {
+    const problem = duplicateRootCauseProblem(record)
+    if (!problem) {
+      untouched.push(record)
+      continue
+    }
+    const host = hostFromFinding(record)
+    const key = `${problem}::${host || "*"}`
+    // "Missing csp: /" carries no host while the same problem from another
+    // tool names the site. Within one engagement, a hostless finding of the
+    // same problem belongs to that problem's group.
+    let group = groups.get(key)
+    if (!group && host) group = groups.get(`${problem}::*`)
+    if (!group) {
+      groups.set(key, {
+        finding: { ...record },
+        tools: new Set([record.tool]),
+        count: 1,
+      })
+      continue
+    }
+    group.count += 1
+    group.tools.add(record.tool)
+    const kept = group.finding
+    if (record.severity > kept.severity) {
+      // Keep the id stable across writes, but take the worse assessment.
+      group.finding = {
+        ...record,
+        id: kept.id,
+        responseEvidence: record.responseEvidence ?? kept.responseEvidence,
+      }
+    } else if (!kept.responseEvidence && record.responseEvidence) {
+      kept.responseEvidence = record.responseEvidence
+    }
+  }
+
+  const merged: NormalizedFinding[] = []
+  for (const group of groups.values()) {
+    const finding = group.finding
+    if (group.count > 1) {
+      const tools = [...group.tools].join(", ")
+      const note = `Reported by ${tools} (${group.count} findings merged).`
+      finding.description = finding.description ? `${finding.description}\n\n${note}` : note
+    }
+    merged.push(finding)
+  }
+
+  return [...untouched, ...merged]
 }
 
 export class EngagementStore implements IEngagementStore {
@@ -1148,9 +1288,10 @@ export class EngagementStore implements IEngagementStore {
   // ── Findings (per-engagement DB with fallback) ──
 
   saveFindings(engagementId: string, records: NormalizedFinding[]): void {
-    // Inventory noise is collapsed before anything is written, so a crawl of
-    // 782 URLs costs one row instead of 782.
-    records = rollupInventoryFindings(records)
+    // The same problem found by two tools is one finding, and inventory noise
+    // is collapsed before anything is written, so a crawl of 782 URLs costs
+    // one row instead of 782.
+    records = rollupInventoryFindings(mergeDuplicateFindings(records))
     const pe = this._ensureEngagementDb(engagementId)
     // An finding nobody can attribute cannot be reproduced or defended, and it
     // used to reach the report as an anonymous LOW. Refuse it here rather than

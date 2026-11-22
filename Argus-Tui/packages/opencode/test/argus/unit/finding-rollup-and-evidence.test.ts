@@ -15,7 +15,11 @@ import { mkdtempSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { Database } from "bun:sqlite"
-import { EngagementStore, rollupInventoryFindings } from "../../../src/argus/engagement/store"
+import {
+  EngagementStore,
+  mergeDuplicateFindings,
+  rollupInventoryFindings,
+} from "../../../src/argus/engagement/store"
 import { StoragePaths } from "../../../src/argus/storage/paths"
 import { normalizeFinding } from "../../../src/argus/reporting/normalizer"
 import { Severity } from "../../../src/argus/shared/types"
@@ -266,5 +270,91 @@ describe("EngagementStore — inventory rows and response evidence", () => {
     })
 
     expect(normalized.responseEvidence).toBeUndefined()
+  })
+})
+
+describe("duplicate root causes", () => {
+  test("missing CSP from two tools is one finding", () => {
+    const merged = mergeDuplicateFindings([
+      finding({ title: "Missing csp: /", severity: Severity.MEDIUM, tool: "web_scanner" }),
+      finding({
+        title: "Missing csp: https://www.hisdayspringfamily.org",
+        severity: Severity.MEDIUM,
+        tool: "browser_security_operator",
+        responseEvidence: { statusCode: 200 },
+      }),
+    ])
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0].responseEvidence?.statusCode).toBe(200)
+    expect(merged[0].description).toContain("browser_security_operator")
+  })
+
+  test("the same port from two tools is one finding at the worst severity", () => {
+    const merged = mergeDuplicateFindings([
+      finding({ title: "Open port: www.hisdayspringfamily.org:443", severity: Severity.MEDIUM, tool: "naabu" }),
+      finding({ title: "Open port: 443/tcp (https)", severity: Severity.INFO, tool: "nmap" }),
+      // The attack-surface row names the host but no port, so it is a different
+      // statement and must not be folded into port 443.
+      finding({ title: "Open port: www.hisdayspringfamily.org", severity: Severity.INFO, tool: "attack_surface_mapper" }),
+    ])
+
+    expect(merged).toHaveLength(2)
+    expect(merged.find((f) => f.tool === "naabu")?.severity).toBe(Severity.MEDIUM)
+  })
+
+  test("different problems and different ports stay separate", () => {
+    const merged = mergeDuplicateFindings([
+      finding({ title: "Missing security headers", severity: Severity.LOW }),
+      finding({ title: "Missing csp: /", severity: Severity.MEDIUM }),
+      finding({ title: "Open port: 22/tcp (ssh)", severity: Severity.INFO }),
+      finding({ title: "Open port: 443/tcp (https)", severity: Severity.INFO }),
+    ])
+
+    expect(merged).toHaveLength(4)
+  })
+
+  test("a full crawl plus duplicates writes one row per problem", () => {
+    const store = makeStore()
+    const eng = store.createEngagement("https://www.hisdayspringfamily.org", "assessment")
+
+    store.saveFindings(eng.id, [
+      ...churchSiteFindings(),
+      finding({ title: "Missing csp: https://www.hisdayspringfamily.org", severity: Severity.MEDIUM, tool: "browser_security_operator" }),
+      finding({ title: "Open port: 443/tcp (https)", severity: Severity.INFO, tool: "nmap" }),
+      finding({ title: "Open port: www.hisdayspringfamily.org:443", severity: Severity.MEDIUM, tool: "naabu" }),
+    ])
+
+    const rows = store.getFindings(eng.id)
+    expect(rows.filter((f) => f.subtype === "MISSING_CSP")).toHaveLength(1)
+    // 5 base rows, both CSP reports merged, and the two 443 reports merged.
+    expect(rows).toHaveLength(6)
+  })
+})
+
+describe("observations are not findings", () => {
+  test("ten negative DNS answers become one observation row", () => {
+    const dns = Array.from({ length: 10 }, (_, i) =>
+      finding({
+        title: `Host resolves: api${i}.hisdayspringfamily.org -> no A record`,
+        severity: Severity.INFO,
+        tool: "dnsx",
+      }),
+    )
+
+    const rolled = rollupInventoryFindings(mergeDuplicateFindings(dns))
+    expect(rolled).toHaveLength(1)
+    expect(rolled[0].title).toBe("DNS observation inventory — dnsx")
+    expect(rolled[0].description).toContain("10 dns observations")
+  })
+
+  test("a clean-negative recon check collapses to one row", () => {
+    const rolled = rollupInventoryFindings([
+      finding({ title: "Subdomain enumeration complete for www.hisdayspringfamily.org: no certificate-transparency hosts", severity: Severity.INFO, tool: "amass" }),
+      finding({ title: "Subdomain enumeration complete for www.hisdayspringfamily.org: no certificate-transparency hosts", severity: Severity.INFO, tool: "subfinder" }),
+    ])
+
+    expect(rolled.map((f) => f.tool).sort()).toEqual(["amass", "subfinder"])
+    expect(rolled.every((f) => f.title.includes("Subdomain check inventory"))).toBe(true)
   })
 })

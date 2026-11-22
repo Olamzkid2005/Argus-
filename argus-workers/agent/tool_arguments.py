@@ -72,4 +72,11 @@ def build_tool_argv(
     if target and "target" not in declared:
         argv.append(str(target))
 
+    # nikto does not infer TLS from an https:// target on every build, and
+    # without -ssl it reports a successful scan of a port it never spoke TLS
+    # on (the church-site run lost its HTTPS checks this way). Say it
+    # explicitly rather than trusting the URL scheme to be honoured.
+    if tool_name == "nikto" and str(target).lower().startswith("https://") and "-ssl" not in argv:
+        argv.append("-ssl")
+
     return argv
