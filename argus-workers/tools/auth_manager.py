@@ -844,8 +844,40 @@ class AuthManager:
         return session
 
     # ------------------------------------------------------------------
-    # Session validity / re-authentication
+    # Session material / validity / re-authentication
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def session_has_auth(
+        session: requests.Session,
+        *,
+        api_key: str = "",
+        cookie: str = "",
+        token: str = "",
+    ) -> bool:
+        """Whether *session* carries credential material worth treating as
+        authenticated for vulnerability scanning.
+
+        This is deliberately a transport/schema check: it answers "does this
+        session have an API key, cookie, bearer token, or any cookies at all"
+        without performing a live request against the target. WebScanner uses
+        it after AuthManager.authenticate() to decide whether to fall back to
+        a JSON login or to continue scanning anonymously.
+
+        Args:
+            session: requests session to inspect.
+            api_key: an engagement-supplied API key, if any.
+            cookie: an engagement-supplied cookie string, if any.
+            token: an engagement-supplied bearer token, if any.
+
+        Returns:
+            True when the session is worth treating as authenticated.
+        """
+        if api_key or cookie or token:
+            return True
+        if session.headers.get("Authorization"):
+            return True
+        return len(session.cookies) > 0
 
     @staticmethod
     def session_valid(session: requests.Session, test_url: str) -> bool:

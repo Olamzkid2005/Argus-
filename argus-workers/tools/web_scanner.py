@@ -863,12 +863,20 @@ class WebScanner(AbstractTool):
         cookie: str = "",
         token: str = "",
     ) -> bool:
-        """Whether a session actually carries credential material."""
-        if token or cookie or api_key:
-            return True
-        if session.headers.get("Authorization"):
-            return True
-        return len(session.cookies) > 0
+        """Whether a session actually carries credential material.
+
+        Delegates to ``AuthManager.session_has_auth`` so the "what counts as
+        authenticated material" rule lives in one place; this helper only
+        decides which engagement credential values to hand to it.
+        """
+        from tools.auth_manager import AuthManager
+
+        return AuthManager.session_has_auth(
+            session,
+            api_key=api_key,
+            cookie=cookie,
+            token=token,
+        )
 
     def _json_login(
         self, session: requests.Session, username: str, password: str
