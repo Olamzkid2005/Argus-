@@ -78,6 +78,7 @@ import type { EngagementCheckpoint } from "./checkpoint"
 import type { ExecutionMode } from "../shared/types"
 import { Severity } from "../shared/types"
 import type { FindingAnalysis, NormalizedFinding } from "../shared/types"
+import { responseEvidenceFrom } from "../reporting/normalizer"
 
 function defaultDbPath(): string {
   return StoragePaths.db
@@ -238,7 +239,13 @@ function toFindingRow(finding: NormalizedFinding, engagementId: string): typeof 
     tool: finding.tool,
     phase: finding.phase,
     url: finding.url,
-    response_evidence: finding.responseEvidence ?? null,
+    // The workflow runner hands the store the worker's raw finding, whose
+    // evidence still contains the http_response block; only a normalized
+    // finding has it hoisted. Derive it here so no producer has to know.
+    response_evidence:
+      finding.responseEvidence ??
+      responseEvidenceFrom(finding as unknown as Record<string, unknown>) ??
+      null,
     negative: finding.negative ?? false,
     created_at: finding.created_at ? new Date(finding.created_at).getTime() : Date.now(),
     updated_at: finding.updated_at ? new Date(finding.updated_at).getTime() : Date.now(),
@@ -432,12 +439,14 @@ function hostFromFinding(finding: NormalizedFinding): string {
 function duplicateRootCauseProblem(finding: NormalizedFinding): string | undefined {
   const title = (finding.title ?? "").toLowerCase()
 
-  if (/missing csp|content-security-policy/.test(title)) return "missing-csp"
-  if (/missing hsts|strict-transport-security/.test(title)) return "missing-hsts"
-  if (/x-frame-options/.test(title)) return "missing-x-frame-options"
-  if (/x-content-type-options/.test(title)) return "missing-x-content-type-options"
-  if (/referrer-policy/.test(title)) return "missing-referrer-policy"
-  if (/permissions-policy/.test(title)) return "missing-permissions-policy"
+  // Titles spell the header either way — "Missing x frame options" from the
+  // type-derived headline, "X-Frame-Options" from a tool's own wording.
+  if (/missing csp|content[- ]security[- ]policy/.test(title)) return "missing-csp"
+  if (/missing hsts|strict[- ]transport[- ]security/.test(title)) return "missing-hsts"
+  if (/x[- ]frame[- ]options/.test(title)) return "missing-x-frame-options"
+  if (/x[- ]content[- ]type[- ]options/.test(title)) return "missing-x-content-type-options"
+  if (/referrer[- ]policy/.test(title)) return "missing-referrer-policy"
+  if (/permissions[- ]policy/.test(title)) return "missing-permissions-policy"
   if (/prototype pollution/.test(title)) return "prototype-pollution"
   if (/insecure cookie/.test(title)) return "insecure-cookie"
   const port = title.match(/open port[^0-9]*(\d+)/)
@@ -1314,6 +1323,28 @@ export class EngagementStore implements IEngagementStore {
       if (records.length === 0) return
     }
     pe.drizzle.transaction((tx) => {
+      // Duplicates can arrive in different phases (web_scanner in vuln_scan,
+      // browser_security_operator later), so the earlier row has to be found
+      // in storage, not only in this batch.
+      const storedByProblem = new Map<string, { id: string; severity: number }>()
+      const storedRows = tx
+        .select()
+        .from(findingsTable)
+        .where(eq(findingsTable.engagement_id, engagementId))
+        .all()
+      for (const stored of storedRows) {
+        const normalized = toNormalizedFinding(stored)
+        const problem = duplicateRootCauseProblem(normalized)
+        if (!problem) continue
+        const host = hostFromFinding(normalized)
+        if (!storedByProblem.has(`${problem}::${host || "*"}`)) {
+          storedByProblem.set(`${problem}::${host || "*"}`, { id: stored.id, severity: stored.severity })
+        }
+        if (!storedByProblem.has(`${problem}::*`)) {
+          storedByProblem.set(`${problem}::*`, { id: stored.id, severity: stored.severity })
+        }
+      }
+
       for (const record of records) {
         // The same thing found twice is one finding. recon crawls a page and
         // api_discovery crawls it again, and each phase hands its finding in
@@ -1335,7 +1366,23 @@ export class EngagementStore implements IEngagementStore {
             ),
           )
           .all()
-        const row = toFindingRow(existing.length > 0 ? { ...record, id: existing[0]!.id } : record, engagementId)
+        // Same problem already stored under a different title or tool?
+        let merged: { id: string; severity: number } | undefined
+        if (existing.length === 0) {
+          const problem = duplicateRootCauseProblem(record)
+          if (problem) {
+            const host = hostFromFinding(record)
+            merged =
+              storedByProblem.get(`${problem}::${host || "*"}`) ??
+              (host ? storedByProblem.get(`${problem}::*`) : undefined)
+          }
+        }
+        const target = existing.length > 0
+          ? { ...record, id: existing[0]!.id }
+          : merged
+            ? { ...record, id: merged.id, severity: Math.max(record.severity, merged.severity) }
+            : record
+        const row = toFindingRow(target, engagementId)
         const { id, engagement_id, ...updateFields } = row
         tx.insert(findingsTable).values(row).onConflictDoUpdate({
           target: findingsTable.id,

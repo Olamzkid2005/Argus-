@@ -260,6 +260,40 @@ describe("EngagementStore — inventory rows and response evidence", () => {
     }
   })
 
+  test("raw worker evidence is lifted into response_evidence on write", () => {
+    const store = makeStore()
+    const eng = store.createEngagement("https://www.hisdayspringfamily.org", "assessment")
+
+    // The workflow runner saves worker findings without normalizing them first,
+    // so the http_response block is still inside evidence.
+    store.saveFindings(eng.id, [
+      {
+        ...finding({ id: "raw-1", title: "Missing csp: /", severity: Severity.MEDIUM }),
+        evidence: [
+          {
+            http_response: {
+              url: "https://www.hisdayspringfamily.org/",
+              status_code: 200,
+              headers: { server: "Caddy" },
+              body_bytes: 10,
+              body_sha256: "d".repeat(64),
+              body_preview: "hello",
+            },
+          },
+        ],
+      } as unknown as NormalizedFinding,
+    ])
+
+    expect(store.getFindings(eng.id)[0].responseEvidence).toEqual({
+      url: "https://www.hisdayspringfamily.org/",
+      statusCode: 200,
+      headers: { server: "Caddy" },
+      bodyBytes: 10,
+      bodySha256: "d".repeat(64),
+      preview: "hello",
+    })
+  })
+
   test("a finding with no http_response evidence has none invented", () => {
     const normalized = normalizeFinding({
       title: "Certificate expired",
@@ -312,6 +346,26 @@ describe("duplicate root causes", () => {
     ])
 
     expect(merged).toHaveLength(4)
+  })
+
+  test("a duplicate arriving in a later phase merges into the stored row", () => {
+    const store = makeStore()
+    const eng = store.createEngagement("https://www.hisdayspringfamily.org", "assessment")
+
+    store.saveFindings(eng.id, [
+      finding({ title: "Missing x frame options: /", severity: Severity.LOW, tool: "web_scanner" }),
+    ])
+    store.saveFindings(eng.id, [
+      finding({
+        title: "Missing x frame options: https://www.hisdayspringfamily.org/",
+        severity: Severity.LOW,
+        tool: "browser_security_operator",
+      }),
+    ])
+
+    const rows = store.getFindings(eng.id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].title).toContain("x frame options")
   })
 
   test("a full crawl plus duplicates writes one row per problem", () => {
