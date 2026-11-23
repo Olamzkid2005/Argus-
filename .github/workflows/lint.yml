@@ -265,7 +265,7 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt -q
 
-      - name: Apply graph migration 033
+      - name: Apply graph migrations 033 and 034
         run: |
           python - <<'PY'
           import os
@@ -273,9 +273,13 @@ jobs:
 
           import psycopg2
 
-          migration = pathlib.Path("database/migrations/033_graph_tables.sql")
+          migrations = [
+              pathlib.Path("database/migrations/033_graph_tables.sql"),
+              pathlib.Path("database/migrations/034_graph_asset_observations.sql"),
+          ]
           expected = {
               "graph_assets",
+              "graph_asset_observations",
               "graph_nodes",
               "graph_anchors",
               "graph_anchor_scopes",
@@ -288,20 +292,32 @@ jobs:
           conn = psycopg2.connect(os.environ["DATABASE_URL"])
           try:
               with conn, conn.cursor() as cur:
-                  cur.execute(migration.read_text(encoding="utf-8"))
+                  for migration in migrations:
+                      cur.execute(migration.read_text(encoding="utf-8"))
                   cur.execute(
                       "SELECT table_name FROM information_schema.tables "
                       "WHERE table_schema = 'public'"
                   )
                   found = {row[0] for row in cur.fetchall()}
+                  cur.execute(
+                      "SELECT indexname FROM pg_indexes "
+                      "WHERE schemaname = 'public' "
+                      "AND indexname = 'idx_graph_assets_scoped_identity'"
+                  )
+                  scoped_identity = cur.fetchone() is not None
           finally:
               conn.close()
 
           missing = sorted(expected - found)
           if missing:
-              raise SystemExit(f"migration 033 did not create: {missing}")
-          print("Migration 033 tables present: " + ", ".join(sorted(expected)))
+              raise SystemExit(f"graph migrations did not create: {missing}")
+          if not scoped_identity:
+              raise SystemExit("migration 034 did not create the scoped asset identity index")
+          print("Graph tables present: " + ", ".join(sorted(expected)))
           PY
+
+      - name: Check C-18 graph import boundary
+        run: python scripts/check_graph_import_boundary.py
 
       - name: Run graph repository tests against PostgreSQL
         run: |

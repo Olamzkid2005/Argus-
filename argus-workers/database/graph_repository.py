@@ -13,6 +13,8 @@ from typing import Any
 
 from psycopg2.extras import Json, RealDictCursor
 
+from database.graph_identity import ASSET_TYPES, asset_in_scope
+from database.graph_ownership import require_graph_write_owner
 from database.repositories.base import BaseRepository
 
 
@@ -89,12 +91,17 @@ class ExplorationGraphRepository(BaseRepository):
         display_value: str | None = None,
         scope_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        parent_asset_id: str | None = None,
+        parent_relationship: str | None = None,
     ) -> dict[str, Any]:
         """
         Insert or update a canonical asset by identity.
 
-        Returns the current asset row.
+        Identity is (scope, canonical_key, asset_type): the same asset discovered
+        under two different scopes stays two rows (A-03), while unscoped assets
+        share one bucket. Returns the current asset row.
         """
+        require_graph_write_owner("upsert_asset")
         if metadata is None:
             metadata = {}
 
@@ -104,12 +111,18 @@ class ExplorationGraphRepository(BaseRepository):
             cursor.execute(
                 """
                 INSERT INTO graph_assets
-                    (scope_id, canonical_key, asset_type, display_value, metadata, last_seen_at)
-                VALUES (%s, %s, %s, %s, %s, NOW())
-                ON CONFLICT (canonical_key, asset_type) DO UPDATE SET
-                    scope_id = COALESCE(EXCLUDED.scope_id, graph_assets.scope_id),
-                    display_value = EXCLUDED.display_value,
+                    (scope_id, canonical_key, asset_type, display_value, metadata,
+                     last_seen_at, parent_asset_id, parent_relationship)
+                VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s)
+                ON CONFLICT (
+                    COALESCE(scope_id, '00000000-0000-0000-0000-000000000000'::uuid),
+                    canonical_key,
+                    asset_type
+                ) DO UPDATE SET
+                    display_value = COALESCE(EXCLUDED.display_value, graph_assets.display_value),
                     metadata = EXCLUDED.metadata,
+                    parent_asset_id = COALESCE(EXCLUDED.parent_asset_id, graph_assets.parent_asset_id),
+                    parent_relationship = COALESCE(EXCLUDED.parent_relationship, graph_assets.parent_relationship),
                     last_seen_at = NOW(),
                     updated_at = NOW()
                 RETURNING *
@@ -120,12 +133,158 @@ class ExplorationGraphRepository(BaseRepository):
                     asset_type,
                     display_value,
                     Json(metadata),
+                    parent_asset_id,
+                    parent_relationship,
                 ),
             )
             row = cursor.fetchone()
             if row is None:
                 raise RuntimeError("graph_assets upsert did not return a row")
             return dict(row)
+
+    def find_asset_by_identity(
+        self,
+        canonical_key: str,
+        asset_type: str,
+        *,
+        scope_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return one canonical asset by its identity, if it exists."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT * FROM graph_assets
+                WHERE canonical_key = %s AND asset_type = %s
+                  AND scope_id IS NOT DISTINCT FROM %s
+                """,
+                (canonical_key, asset_type, scope_id),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def find_assets_for_scope(
+        self,
+        scope_id: str,
+        *,
+        asset_type: str | None = None,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """
+        List canonical assets owned by one scope.
+
+        Strictly scoped: assets belonging to another scope are never returned, so
+        two tenants cannot see each other's graph (A-03).
+        """
+        if not scope_id:
+            raise GraphMutationError("scope_id is required")
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            clauses = ["scope_id = %s"]
+            values: list[Any] = [scope_id]
+            if asset_type is not None:
+                clauses.append("asset_type = %s")
+                values.append(asset_type)
+            cursor.execute(
+                f"SELECT * FROM graph_assets WHERE {' AND '.join(clauses)} "
+                "ORDER BY asset_type, canonical_key LIMIT %s",
+                values + [limit],
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def record_asset_observation(
+        self,
+        *,
+        asset_id: str | None,
+        asset_type: str,
+        observed_value: str,
+        source: str,
+        scope_id: str | None = None,
+        parser_version: str | None = None,
+        confidence: float | None = None,
+        accepted: bool = True,
+        rejection_reason: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Record a raw asset observation, merging replays onto one row (A-16).
+
+        Rejected observations keep asset_id NULL: they are retained for audit but
+        never become schedulable assets.
+        """
+        require_graph_write_owner("record_asset_observation")
+        if accepted and asset_id is None:
+            raise GraphMutationError("an accepted observation requires asset_id")
+        if not accepted and not rejection_reason:
+            raise GraphMutationError("a rejected observation requires a reason")
+
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                INSERT INTO graph_asset_observations
+                    (asset_id, scope_id, asset_type, observed_value, source,
+                     parser_version, confidence, accepted, rejection_reason)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (
+                    COALESCE(scope_id, '00000000-0000-0000-0000-000000000000'::uuid),
+                    asset_type,
+                    observed_value,
+                    source
+                ) DO UPDATE SET
+                    asset_id = COALESCE(EXCLUDED.asset_id, graph_asset_observations.asset_id),
+                    accepted = EXCLUDED.accepted OR graph_asset_observations.accepted,
+                    rejection_reason = CASE
+                        WHEN EXCLUDED.accepted THEN NULL
+                        ELSE COALESCE(EXCLUDED.rejection_reason, graph_asset_observations.rejection_reason)
+                    END,
+                    parser_version = COALESCE(EXCLUDED.parser_version, graph_asset_observations.parser_version),
+                    confidence = COALESCE(EXCLUDED.confidence, graph_asset_observations.confidence),
+                    observation_count = graph_asset_observations.observation_count + 1,
+                    last_observed_at = NOW(),
+                    updated_at = NOW()
+                RETURNING *
+                """,
+                (
+                    asset_id,
+                    scope_id,
+                    asset_type,
+                    observed_value,
+                    source,
+                    parser_version,
+                    confidence,
+                    accepted,
+                    rejection_reason,
+                ),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("graph_asset_observations write did not return a row")
+            return dict(row)
+
+    def find_observations_for_asset(
+        self,
+        asset_id: str,
+        *,
+        accepted: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return the raw observations merged onto one canonical asset."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            clauses = ["asset_id = %s"]
+            values: list[Any] = [asset_id]
+            if accepted is not None:
+                clauses.append("accepted = %s")
+                values.append(accepted)
+            cursor.execute(
+                f"SELECT * FROM graph_asset_observations WHERE {' AND '.join(clauses)} "
+                "ORDER BY last_observed_at DESC",
+                values,
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def create_node(
         self,
@@ -144,6 +303,7 @@ class ExplorationGraphRepository(BaseRepository):
         payload is used together with engagement_id and kind to form the unique
         node identity for the first pass.
         """
+        require_graph_write_owner("create_node")
         if payload is None:
             payload = {}
         if state is None:
@@ -230,6 +390,7 @@ class ExplorationGraphRepository(BaseRepository):
 
         Returns the anchor row.
         """
+        require_graph_write_owner("attach_anchor")
         with self.db_operation(
             commit=True, cursor_factory=RealDictCursor
         ) as (conn, cursor):
@@ -286,6 +447,7 @@ class ExplorationGraphRepository(BaseRepository):
             return [dict(row) for row in rows]
 
     def update_node_state(self, node_id: str, state: str) -> dict[str, Any] | None:
+        require_graph_write_owner("update_node_state")
         return self.update_by_id(node_id, {"state": state})
 
     # --- anchors + coverage ---
@@ -303,6 +465,7 @@ class ExplorationGraphRepository(BaseRepository):
 
         Returns the anchor scope row.
         """
+        require_graph_write_owner("attach_anchor_scope")
         if coverage_state is None:
             coverage_state = AnchorCoverageState.PENDING
 
@@ -355,6 +518,7 @@ class ExplorationGraphRepository(BaseRepository):
         incorporated_by: str | None = None,
     ) -> dict[str, Any] | None:
         """Update an anchor scope's coverage state."""
+        require_graph_write_owner("update_anchor_coverage")
         set_clause = ["coverage_state = %s", "updated_at = NOW()"]
         values: list[Any] = [coverage_state]
         if coverage_state != AnchorCoverageState.PENDING:
@@ -396,16 +560,29 @@ class ExplorationGraphRepository(BaseRepository):
             return [dict(row) for row in cursor.fetchall()]
 
     def asset_coverage_for_scope(
-        self, asset_id: str, scope_id: str
+        self,
+        asset_id: str,
+        scope_id: str,
+        *,
+        authorized_scope: dict | str | None = None,
     ) -> list[dict[str, Any]]:
-        """Return canonical asset coverage from the perspective of one engagement scope."""
+        """
+        Return canonical asset coverage from the perspective of one engagement scope.
+
+        Each row reports the scope's anchor coverage and, when ``authorized_scope``
+        is supplied, whether the asset itself is inside the approved scope
+        (``in_scope``) and still uncovered (``untested``).
+        """
         with self.db_operation(
             commit=False, cursor_factory=RealDictCursor
         ) as (conn, cursor):
             cursor.execute(
                 """
                 SELECT a.id, a.canonical_key, a.asset_type, a.display_value,
-                       s.coverage_state, s.incorporated_by, s.incorporated_at
+                       a.scope_id, a.parent_asset_id,
+                       s.coverage_state, s.incorporated_by, s.incorporated_at,
+                       BOOL_OR(s.coverage_state IN ('incorporated', 'covered'))
+                           OVER (PARTITION BY a.id) AS covered
                 FROM graph_assets AS a
                 JOIN graph_anchors AS ga ON ga.asset_id = a.id
                 LEFT JOIN graph_anchor_scopes AS s
@@ -418,7 +595,111 @@ class ExplorationGraphRepository(BaseRepository):
                 """,
                 (scope_id, asset_id),
             )
-            return [dict(row) for row in cursor.fetchall()]
+            rows = [dict(row) for row in cursor.fetchall()]
+
+        for row in rows:
+            covered = bool(row.get("covered"))
+            in_scope = (
+                asset_in_scope(row["asset_type"], row["canonical_key"], authorized_scope)
+                if authorized_scope is not None
+                else True
+            )
+            row["covered"] = covered
+            row["in_scope"] = in_scope
+            row["untested"] = in_scope and not covered
+        return rows
+
+    def compute_scope_coverage(
+        self,
+        scope_id: str,
+        *,
+        authorized_scope: dict | str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Compute discovered-asset coverage for one scope (A2).
+
+        Unlike :meth:`asset_coverage_for_scope` this does not start from anchors:
+        every asset discovered for the scope is counted, then classified as
+        covered (an anchor in this scope reached incorporated/covered) or untested.
+        With ``authorized_scope`` supplied, assets outside the approved scope are
+        reported separately instead of being counted as work.
+        """
+        if not scope_id:
+            raise GraphMutationError("scope_id is required")
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT a.id, a.canonical_key, a.asset_type, a.display_value,
+                       a.scope_id, a.parent_asset_id,
+                       COALESCE(
+                           BOOL_OR(s.coverage_state IN ('incorporated', 'covered')),
+                           FALSE
+                       ) AS covered,
+                       COUNT(DISTINCT ga.id) AS anchor_count,
+                       COUNT(DISTINCT s.id) AS scoped_anchor_count
+                FROM graph_assets AS a
+                LEFT JOIN graph_anchors AS ga ON ga.asset_id = a.id
+                LEFT JOIN graph_anchor_scopes AS s
+                    ON s.anchor_id = ga.id AND s.scope_id = %s
+                WHERE a.scope_id = %s
+                GROUP BY a.id
+                ORDER BY a.asset_type, a.canonical_key
+                """,
+                (scope_id, scope_id),
+            )
+            rows = cursor.fetchall()
+
+        assets: list[dict[str, Any]] = []
+        by_asset_type: dict[str, dict[str, int]] = {}
+        for row in rows:
+            covered = bool(row["covered"])
+            in_scope = (
+                asset_in_scope(row["asset_type"], row["canonical_key"], authorized_scope)
+                if authorized_scope is not None
+                else True
+            )
+            untested = in_scope and not covered
+            entry = {
+                "id": row["id"],
+                "canonical_key": row["canonical_key"],
+                "asset_type": row["asset_type"],
+                "display_value": row["display_value"],
+                "scope_id": row["scope_id"],
+                "parent_asset_id": row["parent_asset_id"],
+                "covered": covered,
+                "in_scope": in_scope,
+                "untested": untested,
+                "anchor_count": int(row["anchor_count"]),
+                "scoped_anchor_count": int(row["scoped_anchor_count"]),
+            }
+            assets.append(entry)
+            bucket = by_asset_type.setdefault(
+                entry["asset_type"],
+                {"total": 0, "in_scope": 0, "covered": 0, "untested": 0},
+            )
+            bucket["total"] += 1
+            bucket["in_scope"] += int(in_scope)
+            bucket["covered"] += int(covered)
+            bucket["untested"] += int(untested)
+
+        return {
+            "scope_id": scope_id,
+            "assets_total": len(assets),
+            "assets_in_scope": sum(1 for asset in assets if asset["in_scope"]),
+            "assets_out_of_scope": sum(1 for asset in assets if not asset["in_scope"]),
+            "assets_covered": sum(1 for asset in assets if asset["covered"]),
+            "assets_untested": sum(1 for asset in assets if asset["untested"]),
+            "by_asset_type": by_asset_type,
+            "untested_asset_types": sorted(
+                asset_type
+                for asset_type, counts in by_asset_type.items()
+                if counts["untested"]
+            ),
+            "undiscovered_asset_types": sorted(ASSET_TYPES - set(by_asset_type)),
+            "assets": assets,
+        }
 
     # --- exploration edges ---
 
@@ -440,6 +721,7 @@ class ExplorationGraphRepository(BaseRepository):
         Both endpoints must be exploration nodes of the same engagement; an edge
         that crossed engagements would leak one engagement's graph into another.
         """
+        require_graph_write_owner("attach_edge")
         with self.db_operation(
             commit=True, cursor_factory=RealDictCursor
         ) as (conn, cursor):
@@ -531,6 +813,7 @@ class ExplorationGraphRepository(BaseRepository):
         """
         Insert or refresh a node in the recoverable per-engagement frontier.
         """
+        require_graph_write_owner("set_frontier_node")
         if state is None:
             state = GraphNodeState.OPEN
 
@@ -559,6 +842,7 @@ class ExplorationGraphRepository(BaseRepository):
 
     def remove_frontier_node(self, engagement_id: str, node_id: str) -> bool:
         """Remove a node from the frontier. Returns True if a row was removed."""
+        require_graph_write_owner("remove_frontier_node")
         with self.db_operation(commit=True) as (conn, cursor):
             cursor.execute(
                 "DELETE FROM planner_frontier WHERE engagement_id = %s AND node_id = %s",
@@ -593,6 +877,7 @@ class ExplorationGraphRepository(BaseRepository):
 
     def clear_frontier_for_engagement(self, engagement_id: str) -> int:
         """Clear the frontier for an engagement and return the number of removed rows."""
+        require_graph_write_owner("clear_frontier_for_engagement")
         with self.db_operation(commit=True) as (conn, cursor):
             cursor.execute("DELETE FROM planner_frontier WHERE engagement_id = %s", (engagement_id,))
             return cursor.rowcount
@@ -611,6 +896,7 @@ class ExplorationGraphRepository(BaseRepository):
         depends_on: str | None = None,
         owner: str | None = None,
     ) -> dict[str, Any]:
+        require_graph_write_owner("create_todo")
         if payload is None:
             payload = {}
         if frontier_position is None:
@@ -652,6 +938,7 @@ class ExplorationGraphRepository(BaseRepository):
         owner: str | None = None,
     ) -> dict[str, Any] | None:
         """Transition a todo status; sets started_at/completed_at as appropriate."""
+        require_graph_write_owner("update_todo_status")
         set_parts: list[str] = ["status = %s", "updated_at = NOW()"]
         values: list[Any] = [status]
 
@@ -717,6 +1004,7 @@ class ExplorationGraphRepository(BaseRepository):
         cause_node_id: str | None = None,
         cause_engagement_id: str | None = None,
     ) -> dict[str, Any]:
+        require_graph_write_owner("enqueue_outbox")
         if payload is None:
             payload = {}
         if not scope_id:
@@ -762,6 +1050,7 @@ class ExplorationGraphRepository(BaseRepository):
         timestamped, but they are not deleted, so downstream consumers can
         reconcile against the outbox if needed.
         """
+        require_graph_write_owner("dequeue_outbox")
         if not scope_id:
             raise GraphMutationError("scope_id is required")
         with self.db_operation(
@@ -811,6 +1100,7 @@ class ExplorationGraphRepository(BaseRepository):
 
     def record_outbox_error(self, outbox_id: str, error: str) -> dict[str, Any] | None:
         """Record a dequeue error on an outbox row."""
+        require_graph_write_owner("record_outbox_error")
         with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (conn, cursor):
             cursor.execute(
                 "UPDATE graph_outbox SET last_error = %s, updated_at = NOW() WHERE id = %s RETURNING *",
@@ -821,6 +1111,7 @@ class ExplorationGraphRepository(BaseRepository):
 
     def requeue_outbox(self, outbox_id: str) -> dict[str, Any] | None:
         """Put a dequeued/errored outbox row back into the queue."""
+        require_graph_write_owner("requeue_outbox")
         with self.db_operation(commit=True, cursor_factory=RealDictCursor) as (conn, cursor):
             cursor.execute(
                 "UPDATE graph_outbox SET status = %s, dequeued_at = NULL, updated_at = NOW() WHERE id = %s RETURNING *",

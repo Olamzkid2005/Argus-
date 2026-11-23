@@ -170,16 +170,60 @@ The conformance notes now treat the full ARTEX first-pass surface as
 **implemented and committed**, and **verification as blocked by
 environment**, not as incomplete.
 
-## 6. What is still open after this note
+## 6. A2 ingestion, coverage and enforced C-18 (23 November 2026)
 
-- A reachable PostgreSQL connection for the first integration verification of
-  the full ARTEX write path (anchors/coverage, exploration edges, frontier,
-  todos, outbox).
-- Stage 1 CAIRN control-plane alignment: leases/claims/worker selection/cancellation
-  on top of this dispatcher-owned graph repository.
+A2 is implemented on top of the graph tables:
+
+- `database/graph_identity.py` — deterministic canonicalizers for `root_domain`,
+  `subdomain`, `ip`, `service`, `app` and `endpoint`: Unicode NFKC/IDNA hosts,
+  lower case, no trailing dot, default-port stripping, userinfo removal,
+  trailing-slash normalization, compressed IP form and `protocol://host:port`
+  service identity. Parent chains are computed here (`endpoint -> subdomain ->
+  root_domain`, `ip/service -> ip`). Authorized-scope matching mirrors
+  `tools/scope_validator.py`: an exact host, or `*.domain` matching exactly one
+  label, plus CIDR `ipRanges`; an empty scope is fail-closed.
+- `database/graph_ingest.py` — the only path from raw observations to canonical
+  assets. It canonicalizes, enforces scope, links parents, upserts the asset and
+  merges the observation. Out-of-scope discoveries are stored as rejected
+  observations (`accepted = false`, `rejection_reason = out_of_scope`) and never
+  become schedulable assets.
+- `database/migrations/034_graph_asset_observations.sql` —
+  `graph_asset_observations`, self-referencing parent columns on `graph_assets`,
+  and a scope-aware unique identity index. The 033 global
+  `(canonical_key, asset_type)` constraint is replaced by
+  `(COALESCE(scope_id, ...), canonical_key, asset_type)`, so the same domain in
+  two scopes stays two assets (A-03) while unscoped assets keep one shared
+  bucket.
+- Coverage: `compute_scope_coverage(scope_id, authorized_scope=...)` reports
+  discovered assets per type, covered vs untested, in-scope vs out-of-scope, and
+  `untested_asset_types` / `undiscovered_asset_types`.
+  `asset_coverage_for_scope` now also reports `in_scope` and `untested`.
+
+C-18 is now enforced twice:
+
+- Runtime: every mutating repository method calls
+  `require_graph_write_owner`; only `dispatcher_write_scope`, opened by
+  `DispatcherGraph`'s `@dispatcher_owned` methods, satisfies it. Direct
+  repository writes, including through `GraphIngestor`, raise
+  `GraphOwnershipError`.
+- Static: `scripts/check_graph_import_boundary.py` fails CI when a module outside
+  the dispatcher-owned allowlist imports `graph_repository`, `dispatcher_graph`
+  or `graph_ingest`.
+
+Verification: the `graph-repository-db` CI job applies migrations 033 and 034 to
+Postgres 16, runs the import-boundary check and runs the graph tests. Locally the
+same steps give **69 passed, 0 skipped** (34 passed / 35 skipped without a
+database).
+
+## 7. What is still open after this note
+
+- A3: planner frontier event loop (debounced graph-change wake, intent proposal
+  contract, prerequisite-aware chains, verifier-backed goal proof).
+- A4: claim leases, fencing tokens, heartbeat/expiry, cross-worker trace reuse.
+- A5: shadow-mode rollout against the legacy phase plan.
 - TUI/SQLite parity, if a later conformance requirement demands it.
 
-## 7. Definitions used
+## 8. Definitions used
 
 - **Authoritative backend:** the one storage system that owns durable state for
   the_first_implementation_pass.

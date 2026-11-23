@@ -6,14 +6,19 @@ graph write for A-04 and the rest of the ARTEX first-pass surfaces. It exists
 so workers/agents return structured output and the dispatcher decides what
 actually gets committed through the graph repository.
 
-Direct imports of database.graph_repository by worker/agent code paths are
-still a C-18 concern; this module is the intended owner for the first pass.
+Every mutating method runs inside ``dispatcher_write_scope`` (C-18): the graph
+repository rejects mutations outside that scope at runtime, and
+``scripts/check_graph_import_boundary.py`` rejects direct imports of the graph
+write surface from worker/agent modules.
 """
 
 from __future__ import annotations
 
+import functools
 from typing import Any
 
+from database.graph_ingest import GraphIngestor
+from database.graph_ownership import dispatcher_write_scope
 from database.graph_repository import (
     AnchorCoverageState,
     ExplorationGraphRepository,
@@ -21,6 +26,17 @@ from database.graph_repository import (
     GraphNodeKind,
     GraphNodeState,
 )
+
+
+def dispatcher_owned(method):
+    """Run a dispatcher mutation inside the C-18 graph write-ownership scope."""
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with dispatcher_write_scope():
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 class DispatcherGraph:
@@ -34,8 +50,14 @@ class DispatcherGraph:
     def __init__(self, repository: ExplorationGraphRepository) -> None:
         self._repo = repository
 
+    @property
+    def repository(self) -> ExplorationGraphRepository:
+        """The dispatcher-owned repository, for reads and tests."""
+        return self._repo
+
     # ----- canonical assets -----
 
+    @dispatcher_owned
     def ensure_asset(
         self,
         canonical_key: str,
@@ -63,6 +85,7 @@ class DispatcherGraph:
 
     # ----- exploration nodes -----
 
+    @dispatcher_owned
     def create_intent(
         self,
         engagement_id: str,
@@ -87,6 +110,7 @@ class DispatcherGraph:
             owner=owner,
         )
 
+    @dispatcher_owned
     def create_node(
         self,
         engagement_id: str,
@@ -116,6 +140,7 @@ class DispatcherGraph:
             origin=origin,
         )
 
+    @dispatcher_owned
     def update_node_state(self, node_id: str, state: str) -> dict[str, Any] | None:
         if not node_id or not state:
             raise GraphMutationError("node_id and state are required")
@@ -123,6 +148,7 @@ class DispatcherGraph:
 
     # ----- anchors + coverage -----
 
+    @dispatcher_owned
     def attach_anchor(
         self,
         node_id: str,
@@ -139,6 +165,7 @@ class DispatcherGraph:
             raise GraphMutationError("node_id and asset_id are required")
         return self._repo.attach_anchor(node_id, asset_id, role=role)
 
+    @dispatcher_owned
     def attach_anchor_scope(
         self,
         anchor_id: str,
@@ -165,6 +192,7 @@ class DispatcherGraph:
             coverage_state=coverage_state,
         )
 
+    @dispatcher_owned
     def update_anchor_coverage(
         self,
         anchor_id: str,
@@ -184,6 +212,7 @@ class DispatcherGraph:
 
     # ----- exploration edges -----
 
+    @dispatcher_owned
     def attach_edge(
         self,
         engagement_id: str,
@@ -209,6 +238,7 @@ class DispatcherGraph:
 
     # ----- planner frontier -----
 
+    @dispatcher_owned
     def set_frontier_node(
         self,
         engagement_id: str,
@@ -233,6 +263,7 @@ class DispatcherGraph:
             frontier_reason=frontier_reason,
         )
 
+    @dispatcher_owned
     def remove_frontier_node(self, engagement_id: str, node_id: str) -> bool:
         """
         Remove a node from the frontier in the dispatcher-owned path.
@@ -241,6 +272,7 @@ class DispatcherGraph:
             raise GraphMutationError("engagement_id and node_id are required")
         return self._repo.remove_frontier_node(engagement_id, node_id)
 
+    @dispatcher_owned
     def clear_frontier_for_engagement(self, engagement_id: str) -> int:
         """
         Clear the frontier for an engagement through the dispatcher-owned path.
@@ -251,6 +283,7 @@ class DispatcherGraph:
 
     # ----- planner todos -----
 
+    @dispatcher_owned
     def create_todo(
         self,
         engagement_id: str,
@@ -282,6 +315,7 @@ class DispatcherGraph:
             owner=owner,
         )
 
+    @dispatcher_owned
     def update_todo_status(
         self,
         todo_id: str,
@@ -314,6 +348,7 @@ class DispatcherGraph:
 
     # ----- graph outbox -----
 
+    @dispatcher_owned
     def enqueue_outbox(
         self,
         *,
@@ -343,6 +378,7 @@ class DispatcherGraph:
             cause_engagement_id=cause_engagement_id,
         )
 
+    @dispatcher_owned
     def dequeue_outbox(
         self,
         *,
@@ -363,6 +399,7 @@ class DispatcherGraph:
             scope_type=scope_type, scope_id=scope_id, batch=batch
         )
 
+    @dispatcher_owned
     def record_outbox_error(self, outbox_id: str, error: str) -> dict[str, Any] | None:
         """
         Record a dequeue error on an outbox row through the dispatcher-owned path.
@@ -371,6 +408,7 @@ class DispatcherGraph:
             raise GraphMutationError("outbox_id and error are required")
         return self._repo.record_outbox_error(outbox_id, error)
 
+    @dispatcher_owned
     def requeue_outbox(self, outbox_id: str) -> dict[str, Any] | None:
         """
         Put a dequeued/errored outbox row back into the queue.
@@ -378,3 +416,49 @@ class DispatcherGraph:
         if not outbox_id:
             raise GraphMutationError("outbox_id is required")
         return self._repo.requeue_outbox(outbox_id)
+
+    # ----- asset ingestion + coverage (A2) -----
+
+    @dispatcher_owned
+    def ingest_observation(
+        self,
+        asset_type: str,
+        observed_value: str,
+        *,
+        source: str,
+        scope_id: str | None = None,
+        parser_version: str | None = None,
+        confidence: float | None = None,
+        authorized_scope: dict | str | None = None,
+        create_parents: bool = True,
+    ) -> dict[str, Any]:
+        """
+        Ingest one raw observation as canonical graph data.
+
+        Canonicalization, authorized-scope enforcement, parent linking and
+        observation merging all happen inside this dispatcher-owned call, so a
+        tool cannot add assets to the graph by itself.
+        """
+        return GraphIngestor(self._repo).ingest_observation(
+            asset_type,
+            observed_value,
+            source=source,
+            scope_id=scope_id,
+            parser_version=parser_version,
+            confidence=confidence,
+            authorized_scope=authorized_scope,
+            create_parents=create_parents,
+        )
+
+    def compute_coverage(
+        self,
+        scope_id: str,
+        *,
+        authorized_scope: dict | str | None = None,
+    ) -> dict[str, Any]:
+        """Read discovered-asset coverage and untested asset classes for a scope."""
+        if not scope_id:
+            raise GraphMutationError("scope_id is required")
+        return self._repo.compute_scope_coverage(
+            scope_id, authorized_scope=authorized_scope
+        )
