@@ -16,13 +16,10 @@ from typing import Any
 
 from database.graph_repository import (
     AnchorCoverageState,
-    GraphAssetState,
+    ExplorationGraphRepository,
     GraphMutationError,
     GraphNodeKind,
     GraphNodeState,
-    OutboxStatus,
-    TodoStatus,
-    ExplorationGraphRepository,
 )
 
 
@@ -319,10 +316,10 @@ class DispatcherGraph:
 
     def enqueue_outbox(
         self,
-        scope_type: str = "graph",
-        scope_id: str = "",
         *,
         event_type: str,
+        scope_id: str,
+        scope_type: str = "graph",
         payload: dict[str, Any] | None = None,
         cause_node_id: str | None = None,
         cause_engagement_id: str | None = None,
@@ -335,6 +332,8 @@ class DispatcherGraph:
         """
         if not event_type:
             raise GraphMutationError("event_type is required")
+        if not scope_id:
+            raise GraphMutationError("scope_id is required")
         return self._repo.enqueue_outbox(
             scope_type=scope_type,
             scope_id=scope_id,
@@ -346,9 +345,9 @@ class DispatcherGraph:
 
     def dequeue_outbox(
         self,
-        scope_type: str = "graph",
-        scope_id: str = "",
         *,
+        scope_id: str,
+        scope_type: str = "graph",
         batch: int = 50,
     ) -> list[dict[str, Any]]:
         """
@@ -358,6 +357,8 @@ class DispatcherGraph:
         timestamped, but not deleted, so downstream consumers can reconcile
         against the outbox if needed.
         """
+        if not scope_id:
+            raise GraphMutationError("scope_id is required")
         return self._repo.dequeue_outbox(
             scope_type=scope_type, scope_id=scope_id, batch=batch
         )

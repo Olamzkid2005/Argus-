@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import Any
 
 import pytest
 
@@ -185,7 +184,21 @@ class TestDispatcherGraphValidation:
         dispatcher = DispatcherGraph(repo)
 
         with pytest.raises(GraphMutationError):
-            dispatcher.enqueue_outbox(event_type="")
+            dispatcher.enqueue_outbox(event_type="", scope_id="scope-1")
+
+    def test_enqueue_outbox_rejects_missing_scope(self):
+        repo = ExplorationGraphRepository()
+        dispatcher = DispatcherGraph(repo)
+
+        with pytest.raises(GraphMutationError, match="scope_id"):
+            dispatcher.enqueue_outbox(event_type="node.created", scope_id="")
+
+    def test_dequeue_outbox_rejects_missing_scope(self):
+        repo = ExplorationGraphRepository()
+        dispatcher = DispatcherGraph(repo)
+
+        with pytest.raises(GraphMutationError, match="scope_id"):
+            dispatcher.dequeue_outbox(scope_id="")
 
     def test_requeue_outbox_rejects_empty_id(self):
         repo = ExplorationGraphRepository()
@@ -323,9 +336,20 @@ class TestAnchorCoverage:
         engagement_id = uuid.uuid4().hex
         node = repo.create_node(engagement_id, GraphNodeKind.INTENT, payload={"objective": "x"})
         anchor = repo.attach_anchor(node["id"], asset["id"])
-        scope = repo.attach_anchor_scope(anchor["node_id"], uuid.uuid4().hex, coverage_state="incorporated")
-        assert scope["anchor_id"] == anchor["node_id"]
+        scope = repo.attach_anchor_scope(anchor["id"], uuid.uuid4().hex, coverage_state="incorporated")
+        assert scope["anchor_id"] == anchor["id"]
         assert scope["coverage_state"] == "incorporated"
+        assert scope["incorporated_at"] is not None
+
+    def test_reattaching_pending_scope_does_not_regress_coverage(self):
+        repo = ExplorationGraphRepository()
+        asset = repo.upsert_asset("api.example.com", "endpoint")
+        node = repo.create_node(uuid.uuid4().hex, GraphNodeKind.INTENT, payload={"objective": "x"})
+        anchor = repo.attach_anchor(node["id"], asset["id"])
+        scope_id = uuid.uuid4().hex
+        repo.attach_anchor_scope(anchor["id"], scope_id, coverage_state="covered")
+        again = repo.attach_anchor_scope(anchor["id"], scope_id)
+        assert again["coverage_state"] == "covered"
 
     def test_coverage_for_scope_reads_from_anchor_scopes(self):
         repo = ExplorationGraphRepository()
@@ -334,7 +358,7 @@ class TestAnchorCoverage:
         engagement_id = uuid.uuid4().hex
         node = repo.create_node(engagement_id, GraphNodeKind.FINDING, payload={"x": 1})
         anchor = repo.attach_anchor(node["id"], asset["id"])
-        repo.attach_anchor_scope(anchor["node_id"], scope_id, coverage_state="covered")
+        repo.attach_anchor_scope(anchor["id"], scope_id, coverage_state="covered")
         coverage = repo.asset_coverage_for_scope(asset["id"], scope_id)
         assert len(coverage) >= 1
         assert coverage[0]["coverage_state"] == "covered"
@@ -351,6 +375,16 @@ class TestExplorationEdges:
         assert edge["source_node_id"] == node_a["id"]
         assert edge["target_node_id"] == node_b["id"]
         assert edge["edge_type"] == "follows"
+
+    def test_edge_rejects_nodes_from_another_engagement(self):
+        repo = ExplorationGraphRepository()
+        engagement_a = uuid.uuid4().hex
+        engagement_b = uuid.uuid4().hex
+        node_a = repo.create_node(engagement_a, GraphNodeKind.INTENT, payload={"objective": "a"})
+        node_b = repo.create_node(engagement_b, GraphNodeKind.FACT, payload={"fact": "b"})
+
+        with pytest.raises(GraphMutationError):
+            repo.attach_edge(engagement_a, node_a["id"], node_b["id"])
 
     def test_edges_for_engagement_return_linked_nodes(self):
         repo = ExplorationGraphRepository()

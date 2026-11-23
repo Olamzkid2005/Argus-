@@ -9,8 +9,10 @@
 --  - graph_assets: canonical asset identity, deduplicated by canonical_key + asset_type.
 --  - graph_nodes: per-engagement exploration nodes (goal/intent/fact/finding/hint).
 --  - graph_anchors: explicit many-to-many links from a node to one or more assets.
-
-BEGIN;
+--
+-- NOTE: no explicit BEGIN/COMMIT here. migration runner wraps each file in its own
+-- implicit transaction; an embedded COMMIT would end the runner's transaction early
+-- and let a later failing statement leave a half-applied migration behind.
 
 CREATE TABLE IF NOT EXISTS graph_assets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -59,14 +61,20 @@ CREATE INDEX IF NOT EXISTS idx_graph_nodes_engagement ON graph_nodes(engagement_
 CREATE INDEX IF NOT EXISTS idx_graph_nodes_state ON graph_nodes(engagement_id, state);
 
 CREATE TABLE IF NOT EXISTS graph_anchors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     node_id UUID NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
     asset_id UUID NOT NULL REFERENCES graph_assets(id) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'related',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (node_id, asset_id, role)
+    CONSTRAINT graph_anchors_unique_anchor UNIQUE (node_id, asset_id, role)
 );
 
 COMMENT ON TABLE graph_anchors IS 'Argus explicit anchors from exploration nodes to canonical assets.';
+COMMENT ON COLUMN graph_anchors.id IS 'Surrogate anchor identity; engagement-scoped anchor/coverage handles reference this.';
+
+CREATE INDEX IF NOT EXISTS idx_graph_anchors_node ON graph_anchors(node_id);
+CREATE INDEX IF NOT EXISTS idx_graph_anchors_asset ON graph_anchors(asset_id);
+
 CREATE TABLE IF NOT EXISTS graph_node_edges (
     engagement_id UUID NOT NULL,
     source_node_id UUID NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
@@ -76,9 +84,14 @@ CREATE TABLE IF NOT EXISTS graph_node_edges (
     PRIMARY KEY (source_node_id, target_node_id, edge_type)
 );
 
+COMMENT ON TABLE graph_node_edges IS 'Per-engagement exploration edges; traceable to canonical nodes.';
+COMMENT ON COLUMN graph_node_edges.edge_type IS 'Typed relationship between exploration nodes.';
+
+-- anchor_id references the surrogate graph_anchors.id (not graph_anchors.node_id,
+-- which is not unique on its own and cannot be a foreign-key target).
 CREATE TABLE IF NOT EXISTS graph_anchor_scopes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    anchor_id UUID NOT NULL REFERENCES graph_anchors(node_id) ON DELETE CASCADE,
+    anchor_id UUID NOT NULL REFERENCES graph_anchors(id) ON DELETE CASCADE,
     scope_id UUID NOT NULL,
     incorporated_by UUID,
     coverage_state TEXT NOT NULL DEFAULT 'pending',
@@ -87,6 +100,9 @@ CREATE TABLE IF NOT EXISTS graph_anchor_scopes (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT graph_anchor_scopes_unique UNIQUE (anchor_id, scope_id)
 );
+
+COMMENT ON TABLE graph_anchor_scopes IS 'Engagement-scoped anchors + coverage metadata on top of canonical anchors.';
+COMMENT ON COLUMN graph_anchor_scopes.coverage_state IS 'How an engagement has incorporated a canonical anchor: pending, incorporated, covered, archived.';
 
 CREATE TABLE IF NOT EXISTS planner_frontier (
     engagement_id UUID NOT NULL,
@@ -98,6 +114,8 @@ CREATE TABLE IF NOT EXISTS planner_frontier (
     incorporated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (engagement_id, node_id)
 );
+
+COMMENT ON TABLE planner_frontier IS 'Recoverable planner frontier per engagement, derived from graph and todo state.';
 
 CREATE TABLE IF NOT EXISTS planner_todos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -116,6 +134,10 @@ CREATE TABLE IF NOT EXISTS planner_todos (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+COMMENT ON TABLE planner_todos IS 'Persistent planner todo store; durable representation of planner work.';
+COMMENT ON COLUMN planner_todos.todo_type IS 'Kind of todo: plan, expand, verify, report, reconcile.';
+COMMENT ON COLUMN planner_todos.status IS 'Todo lifecycle: open, in_progress, done, blocked.';
+
 CREATE TABLE IF NOT EXISTS graph_outbox (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     scope_type TEXT NOT NULL DEFAULT 'graph',
@@ -131,18 +153,6 @@ CREATE TABLE IF NOT EXISTS graph_outbox (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-COMMENT ON TABLE graph_node_edges IS 'Per-engagement exploration edges; traceable to canonical nodes.';
-COMMENT ON COLUMN graph_node_edges.edge_type IS 'Typed relationship between exploration nodes.';
-
-COMMENT ON TABLE graph_anchor_scopes IS 'Engagement-scoped anchors + coverage metadata on top of canonical anchors.';
-COMMENT ON COLUMN graph_anchor_scopes.coverage_state IS 'How an engagement has incorporated a canonical anchor: pending, incorporated, covered, archived.';
-
-COMMENT ON TABLE planner_frontier IS 'Recoverable planner frontier per engagement, derived from graph and todo state.';
-
-COMMENT ON TABLE planner_todos IS 'Persistent planner todo store; durable representation of planner work.';
-COMMENT ON COLUMN planner_todos.todo_type IS 'Kind of todo: plan, expand, verify, report, reconcile.';
-COMMENT ON COLUMN planner_todos.status IS 'Todo lifecycle: open, in_progress, done, blocked.';
 
 COMMENT ON TABLE graph_outbox IS 'Graph-side change outbox for downstream planning/exploration/reconciliation.';
 
@@ -162,5 +172,3 @@ CREATE INDEX IF NOT EXISTS idx_planner_todos_depends ON planner_todos(depends_on
 
 CREATE INDEX IF NOT EXISTS idx_graph_outbox_status ON graph_outbox(status);
 CREATE INDEX IF NOT EXISTS idx_graph_outbox_scope ON graph_outbox(scope_type, scope_id);
-
-COMMIT;

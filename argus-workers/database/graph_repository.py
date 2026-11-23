@@ -11,8 +11,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from psycopg2.extras import Json, RealDictCursor
+
 from database.repositories.base import BaseRepository
-from psycopg2.extras import RealDictCursor
 
 
 class GraphMutationError(Exception):
@@ -102,30 +103,23 @@ class ExplorationGraphRepository(BaseRepository):
         ) as (conn, cursor):
             cursor.execute(
                 """
-                INSERT INTO graph_assets AS a
-                    (id, scope_id, canonical_key, asset_type, display_value, metadata, last_seen_at)
-                VALUES (
-                    coalesce((
-                        SELECT id FROM graph_assets
-                        WHERE canonical_key = %s AND asset_type = %s
-                    ), gen_random_uuid()),
-                    %s, %s, %s, %s, %s, NOW()
-                )
+                INSERT INTO graph_assets
+                    (scope_id, canonical_key, asset_type, display_value, metadata, last_seen_at)
+                VALUES (%s, %s, %s, %s, %s, NOW())
                 ON CONFLICT (canonical_key, asset_type) DO UPDATE SET
+                    scope_id = COALESCE(EXCLUDED.scope_id, graph_assets.scope_id),
                     display_value = EXCLUDED.display_value,
                     metadata = EXCLUDED.metadata,
                     last_seen_at = NOW(),
                     updated_at = NOW()
-                RETURNING a.*
+                RETURNING *
                 """,
                 (
-                    canonical_key,
-                    asset_type,
                     scope_id,
                     canonical_key,
                     asset_type,
                     display_value,
-                    metadata,
+                    Json(metadata),
                 ),
             )
             row = cursor.fetchone()
@@ -168,7 +162,7 @@ class ExplorationGraphRepository(BaseRepository):
                 (
                     engagement_id,
                     kind,
-                    payload,
+                    Json(payload),
                     state,
                     priority,
                     origin,
@@ -318,15 +312,34 @@ class ExplorationGraphRepository(BaseRepository):
             cursor.execute(
                 """
                 INSERT INTO graph_anchor_scopes
-                    (anchor_id, scope_id, incorporated_by, coverage_state)
-                VALUES (%s, %s, %s, %s)
+                    (anchor_id, scope_id, incorporated_by, coverage_state, incorporated_at)
+                VALUES (
+                    %s, %s, %s, %s,
+                    CASE WHEN %s = 'pending' THEN NULL ELSE NOW() END
+                )
                 ON CONFLICT (anchor_id, scope_id) DO UPDATE SET
                     incorporated_by = COALESCE(EXCLUDED.incorporated_by, graph_anchor_scopes.incorporated_by),
-                    coverage_state = EXCLUDED.coverage_state,
+                    -- Re-attaching with the default 'pending' must not regress
+                    -- coverage an engagement already established.
+                    coverage_state = CASE
+                        WHEN EXCLUDED.coverage_state = 'pending'
+                        THEN graph_anchor_scopes.coverage_state
+                        ELSE EXCLUDED.coverage_state
+                    END,
+                    incorporated_at = COALESCE(
+                        graph_anchor_scopes.incorporated_at,
+                        EXCLUDED.incorporated_at
+                    ),
                     updated_at = NOW()
                 RETURNING *
                 """,
-                (anchor_id, scope_id, incorporated_by, coverage_state),
+                (
+                    anchor_id,
+                    scope_id,
+                    incorporated_by,
+                    coverage_state,
+                    coverage_state,
+                ),
             )
             row = cursor.fetchone()
             if row is None:
@@ -344,6 +357,12 @@ class ExplorationGraphRepository(BaseRepository):
         """Update an anchor scope's coverage state."""
         set_clause = ["coverage_state = %s", "updated_at = NOW()"]
         values: list[Any] = [coverage_state]
+        if coverage_state != AnchorCoverageState.PENDING:
+            # First time an engagement actually incorporates/records coverage,
+            # stamp it; never overwrite the original incorporation time.
+            set_clause.append(
+                "incorporated_at = COALESCE(graph_anchor_scopes.incorporated_at, NOW())"
+            )
         if incorporated_by is not None:
             set_clause.append("incorporated_by = %s")
             values.append(incorporated_by)
@@ -390,7 +409,7 @@ class ExplorationGraphRepository(BaseRepository):
                 FROM graph_assets AS a
                 JOIN graph_anchors AS ga ON ga.asset_id = a.id
                 LEFT JOIN graph_anchor_scopes AS s
-                    ON s.anchor_id = ga.node_id AND s.scope_id = %s
+                    ON s.anchor_id = ga.id AND s.scope_id = %s
                 WHERE a.id = %s
                 ORDER BY s.created_at DESC
                 """,
@@ -414,10 +433,26 @@ class ExplorationGraphRepository(BaseRepository):
         Exploration edges are separate from canonical anchors: they describe how
         an engagement links exploration nodes to each other, traceable back to the
         canonical node(s) they derive from.
+
+        Both endpoints must be exploration nodes of the same engagement; an edge
+        that crossed engagements would leak one engagement's graph into another.
         """
         with self.db_operation(
             commit=True, cursor_factory=RealDictCursor
         ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT id FROM graph_nodes
+                WHERE engagement_id = %s AND id IN (%s, %s)
+                """,
+                (engagement_id, source_node_id, target_node_id),
+            )
+            owned = {row["id"] for row in cursor.fetchall()}
+            if source_node_id not in owned or target_node_id not in owned:
+                raise GraphMutationError(
+                    "source_node_id and target_node_id must be nodes of engagement "
+                    f"{engagement_id}"
+                )
             cursor.execute(
                 """
                 INSERT INTO graph_node_edges
@@ -539,10 +574,13 @@ class ExplorationGraphRepository(BaseRepository):
         with self.db_operation(
             commit=False, cursor_factory=RealDictCursor
         ) as (conn, cursor):
-            clauses = ["engagement_id = %s"]
+            # Both planner_frontier and graph_nodes carry engagement_id/state, so
+            # these predicates must be qualified or Postgres rejects the query as
+            # ambiguous.
+            clauses = ["pf.engagement_id = %s"]
             values: list[Any] = [engagement_id]
             if state is not None:
-                clauses.append("state = %s")
+                clauses.append("pf.state = %s")
                 values.append(state)
             cursor.execute(
                 f"SELECT pf.*, n.kind AS node_kind, n.state AS node_state FROM planner_frontier pf JOIN graph_nodes n ON n.id = pf.node_id WHERE {' AND '.join(clauses)} ORDER BY pf.priority DESC, pf.incorporated_at ASC LIMIT %s",
@@ -591,8 +629,8 @@ class ExplorationGraphRepository(BaseRepository):
                     todo_type,
                     canonical_node_id,
                     exploration_node_id,
-                    frontier_position,
-                    payload,
+                    Json(frontier_position),
+                    Json(payload),
                     depends_on,
                     owner,
                     TodoStatus.OPEN,
@@ -668,16 +706,20 @@ class ExplorationGraphRepository(BaseRepository):
 
     def enqueue_outbox(
         self,
-        scope_type: str = "graph",
-        scope_id: str = "",
         *,
         event_type: str,
+        scope_id: str,
+        scope_type: str = "graph",
         payload: dict[str, Any] | None = None,
         cause_node_id: str | None = None,
         cause_engagement_id: str | None = None,
     ) -> dict[str, Any]:
         if payload is None:
             payload = {}
+        if not scope_id:
+            # scope_id is a UUID column; an empty string is not a valid uuid and
+            # used to fail deep inside the driver.
+            raise GraphMutationError("scope_id is required")
 
         with self.db_operation(
             commit=True, cursor_factory=RealDictCursor
@@ -693,7 +735,7 @@ class ExplorationGraphRepository(BaseRepository):
                     scope_type,
                     scope_id,
                     event_type,
-                    payload,
+                    Json(payload),
                     cause_node_id,
                     cause_engagement_id,
                 ),
@@ -705,9 +747,9 @@ class ExplorationGraphRepository(BaseRepository):
 
     def dequeue_outbox(
         self,
-        scope_type: str = "graph",
-        scope_id: str = "",
         *,
+        scope_id: str,
+        scope_type: str = "graph",
         batch: int = 50,
     ) -> list[dict[str, Any]]:
         """
@@ -717,6 +759,8 @@ class ExplorationGraphRepository(BaseRepository):
         timestamped, but they are not deleted, so downstream consumers can
         reconcile against the outbox if needed.
         """
+        if not scope_id:
+            raise GraphMutationError("scope_id is required")
         with self.db_operation(
             commit=True, cursor_factory=RealDictCursor
         ) as (conn, cursor):
@@ -739,13 +783,15 @@ class ExplorationGraphRepository(BaseRepository):
 
     def find_outbox_for_scope(
         self,
-        scope_type: str = "graph",
-        scope_id: str = "",
         *,
+        scope_id: str,
+        scope_type: str = "graph",
         status: str | None = None,
         limit: int = 200,
     ) -> list[dict[str, Any]]:
         """Read outbox rows for a scope without claiming them."""
+        if not scope_id:
+            raise GraphMutationError("scope_id is required")
         with self.db_operation(
             commit=False, cursor_factory=RealDictCursor
         ) as (conn, cursor):
