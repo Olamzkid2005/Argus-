@@ -369,6 +369,57 @@ class DispatcherGraph:
             engagement_id, status=status, todo_type=todo_type
         )
 
+    # ----- coverage-gap recon execution (A2) -----
+
+    @dispatcher_owned
+    def claim_recon_todo(
+        self,
+        engagement_id: str,
+        *,
+        owner: str,
+        lease_seconds: int = 300,
+        gap_key: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Claim the next scheduled coverage-gap todo for an engagement."""
+        if not engagement_id or not owner:
+            raise GraphMutationError("engagement_id and owner are required")
+        return self._repo.claim_recon_todo(
+            engagement_id,
+            owner=owner,
+            lease_seconds=lease_seconds,
+            gap_key=gap_key,
+        )
+
+    @dispatcher_owned
+    def complete_recon_todo(
+        self,
+        engagement_id: str,
+        todo_id: str,
+        *,
+        asset_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Close a claimed coverage-gap todo and record coverage of its results."""
+        if not engagement_id or not todo_id:
+            raise GraphMutationError("engagement_id and todo_id are required")
+        return self._repo.complete_recon_todo(
+            engagement_id, todo_id, asset_ids=asset_ids
+        )
+
+    @dispatcher_owned
+    def release_recon_todo(
+        self,
+        engagement_id: str,
+        todo_id: str,
+        *,
+        reason: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Release a claimed todo back to the frontier after a dispatch failure."""
+        if not engagement_id or not todo_id:
+            raise GraphMutationError("engagement_id and todo_id are required")
+        return self._repo.release_recon_todo(
+            engagement_id, todo_id, reason=reason
+        )
+
     # ----- graph outbox -----
 
     @dispatcher_owned

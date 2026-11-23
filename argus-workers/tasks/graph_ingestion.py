@@ -14,6 +14,7 @@ must not abort a scan.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 from typing import Any
 from urllib.parse import urlsplit
@@ -63,6 +64,14 @@ def _service_identity(host: str, entry: dict) -> str | None:
     return f"{bracketed}:{port}/{protocol}"
 
 
+def _is_ip(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        return False
+
+
 def _candidates(context: Any) -> list[tuple[str, str]]:
     """Flatten a recon context into (asset_type, observed_value) pairs."""
     pairs: list[tuple[str, str]] = []
@@ -94,12 +103,24 @@ def _candidates(context: Any) -> list[tuple[str, str]]:
 
     host = _target_host(target_url if isinstance(target_url, str) else "")
     if host:
+        # A target that is itself an IP proves the approved ip_range was reached.
+        if _is_ip(host):
+            add("ip", host)
         for entry in _field(context, "open_ports", []):
             if not isinstance(entry, dict):
                 continue
+            entry_host = entry.get("host") or entry.get("ip")
+            if isinstance(entry_host, str) and _is_ip(entry_host.strip()):
+                add("ip", entry_host.strip())
             identity = _service_identity(host, entry)
             if identity:
                 add("service", identity)
+
+    # Recon runners that expand an approved CIDR report the reached addresses
+    # here; without this an ip_range gap could never be proven discovered.
+    for value in _field(context, "ips", []):
+        if isinstance(value, str) and _is_ip(value.strip()):
+            add("ip", value.strip())
 
     return pairs
 

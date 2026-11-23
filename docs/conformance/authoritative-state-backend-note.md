@@ -225,11 +225,23 @@ A2 is implemented on top of the graph tables:
 - Coverage-driven planning (A2): `schedule_coverage_gaps(engagement_id)` turns
   each approved-but-undiscovered target into an `expand` planner todo and each
   asset class with untested discoveries into a `verify` todo, and puts both on
-  the recoverable `planner_frontier` with a `coverage_gap:<gap key>` reason, so
-  gaps become recon the planner can pick up. It is idempotent per
-  `coverage_gap_key`, so repeated recon passes do not duplicate work. The recon
-  bridge calls it after every ingestion pass, and
+  the recoverable `planner_frontier` with a `coverage_gap:<gap key>` reason. It
+  is idempotent per `coverage_gap_key`, so repeated recon passes do not
+  duplicate work. The recon bridge calls it after every ingestion pass, and
   `argus graph-coverage --schedule` runs it on demand.
+- Coverage-gap execution loop (A2): `claim_recon_todo` selects the next gap from
+  the frontiers/todo queue (highest frontier priority, then oldest), leases it
+  with an owner and `started_at` (expired leases are reclaimable) and marks its
+  frontier node running. `tasks.graph_planner.dispatch_next_coverage_gap` derives
+  recon targets — `https://<host>` for an approved domain, the CIDR unchanged for
+  an approved range, and the discovered assets of an untested class — then sends
+  `tasks.recon.expand_recon` with the gap's todo id. The recon task's graph
+  ingestion hook calls `complete_recon_todo`: the ingested assets (plus the
+  class's discovered assets) are anchored to the node and marked `covered`, the
+  todo reaches `done`, its node concludes and its frontier row is deleted. A
+  dispatch failure releases the claim back to `open`. Selection is scoped by
+  engagement, so a gap scheduled for one engagement is never claimed or
+  dispatched for another.
 
 C-18 is now enforced twice:
 
@@ -245,12 +257,14 @@ C-18 is now enforced twice:
 Verification: the `graph-repository-db` CI job runs the full migration runner
 through 035 against Postgres 16 (and asserts the scoped identity index and both
 `tenant_id` columns exist), runs the import-boundary check and runs the graph
-tests. Locally the same steps give **90 passed, 0 skipped** (many skipped without
+tests. Locally the same steps give **94 passed, 0 skipped** (many skipped without
 a database). The DB-backed suites include two-tool merges across case, default
 port, trailing slash, IDNA/punycode hosts and differently shaped service keys
 (`TestCrossToolMerge`), computed coverage gaps plus rejected out-of-scope
 discoveries (`TestComputedCoverage`), coverage gaps becoming frontier/todo work
-(`TestCoverageDrivenPlanning`), and cross-tenant asset/observation
+(`TestCoverageDrivenPlanning`), the claimed → dispatched → ingested → closed gap
+loop for an approved domain, CIDR and untested asset class
+(`TestCoverageGapReconLoop`), and cross-tenant asset/observation
 rejection (`TestTenantBoundary`).
 
 ## 7. What is still open after this note

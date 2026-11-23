@@ -199,7 +199,9 @@ class TestReconGraphIngestion:
             repository=repo,
         )
 
-        assert summary["accepted"] == 2
+        # The endpoint, the IPv6 address itself and the service are all ingested;
+        # the address asset is what proves an approved ip_range was reached.
+        assert summary["accepted"] == 3
         assert summary["rejected"] == 0
         service = next(
             observation
@@ -207,6 +209,11 @@ class TestReconGraphIngestion:
             if observation["asset_type"] == "service"
         )
         assert service["observed_value"] == "[2001:db8::1]:443/tcp"
+        assert any(
+            observation["asset_type"] == "ip"
+            and observation["observed_value"] == "2001:db8::1"
+            for observation in repo.observations
+        )
 
     def test_bridge_canonicalizes_case_port_slash_and_idna(self):
         repo = _StubRepository()
