@@ -211,6 +211,7 @@ app = Celery(
         "tasks.maintenance",
         "tasks.security",
         "tasks.asset_discovery",
+        "tasks.graph_planner",
         "tasks.scheduled",
         "tasks.replay",
         "tasks.diff",

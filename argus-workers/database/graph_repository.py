@@ -924,6 +924,7 @@ class ExplorationGraphRepository(BaseRepository):
                     "coverage_gap_key": spec["gap_key"],
                     "gap_type": spec["gap_type"],
                     "objective": spec["objective"],
+                    "scope_id": scope_id,
                     **spec["details"],
                 },
                 owner=owner,
@@ -1242,6 +1243,267 @@ class ExplorationGraphRepository(BaseRepository):
         return self.find_todos_for_engagement(
             engagement_id, status=TodoStatus.OPEN
         )
+
+    # --- coverage-gap recon execution (A2) ---
+
+    def claim_recon_todo(
+        self,
+        engagement_id: str,
+        *,
+        owner: str,
+        lease_seconds: int = 300,
+        gap_key: str | None = None,
+    ) -> dict[str, Any] | None:
+        """
+        Claim the next scheduled coverage-gap todo for an engagement.
+
+        Selection is the planner's normal frontier/todo order: highest frontier
+        priority first, then oldest todo. Claiming sets the todo in_progress with
+        an owner and a ``started_at`` lease starting point, and marks its frontier
+        node running. An in_progress todo whose lease has expired is reclaimable,
+        so a crashed dispatch does not strand the work.
+
+        The engagement filter is part of the claim, so work scheduled for one
+        engagement can never be claimed for another.
+        """
+        require_graph_write_owner("claim_recon_todo")
+        if not engagement_id or not owner:
+            raise GraphMutationError("engagement_id and owner are required")
+        if lease_seconds <= 0:
+            raise GraphMutationError("lease_seconds must be positive")
+
+        gap_clause = ""
+        values: list[Any] = [owner, engagement_id]
+        if gap_key is not None:
+            gap_clause = "AND candidate.payload->>'coverage_gap_key' = %s"
+            values.append(gap_key)
+        values.append(lease_seconds)
+
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                f"""
+                UPDATE planner_todos AS t
+                SET status = 'in_progress',
+                    owner = %s,
+                    started_at = NOW(),
+                    updated_at = NOW()
+                WHERE t.id = (
+                    SELECT candidate.id
+                    FROM planner_todos AS candidate
+                    LEFT JOIN planner_frontier AS pf
+                        ON pf.engagement_id = candidate.engagement_id
+                       AND pf.node_id = candidate.exploration_node_id
+                    WHERE candidate.engagement_id = %s
+                      AND candidate.todo_type IN ('expand', 'verify')
+                      AND candidate.payload ? 'coverage_gap_key'
+                      {gap_clause}
+                      AND (
+                          candidate.status = 'open'
+                          OR (
+                              candidate.status = 'in_progress'
+                              AND (
+                                  candidate.started_at IS NULL
+                                  OR candidate.started_at
+                                     < NOW() - (%s * INTERVAL '1 second')
+                              )
+                          )
+                      )
+                    ORDER BY COALESCE(pf.priority, 0) DESC,
+                             candidate.created_at ASC,
+                             candidate.id ASC
+                    FOR UPDATE OF candidate SKIP LOCKED
+                    LIMIT 1
+                )
+                RETURNING t.*
+                """,
+                values,
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            todo = dict(row)
+            cursor.execute(
+                """
+                UPDATE planner_frontier
+                SET state = 'running'
+                WHERE engagement_id = %s AND node_id = %s
+                """,
+                (engagement_id, todo["exploration_node_id"]),
+            )
+            cursor.execute(
+                "UPDATE graph_nodes SET state = 'running', updated_at = NOW() WHERE id = %s",
+                (todo["exploration_node_id"],),
+            )
+            return todo
+
+    def complete_recon_todo(
+        self,
+        engagement_id: str,
+        todo_id: str,
+        *,
+        asset_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Close a dispatched coverage-gap todo after its recon results were ingested.
+
+        The todo reaches ``done``, its node concludes and its frontier row is
+        removed, so no orphaned frontier entry is left behind. Assets the recon
+        pass produced (plus, for an untested asset class, the class's discovered
+        assets) are anchored to the node and marked ``covered`` for the scope, so
+        recomputed coverage no longer reports them as untested.
+        """
+        require_graph_write_owner("complete_recon_todo")
+        if not engagement_id or not todo_id:
+            raise GraphMutationError("engagement_id and todo_id are required")
+
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT * FROM planner_todos
+                WHERE id = %s AND engagement_id = %s
+                FOR UPDATE
+                """,
+                (todo_id, engagement_id),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise GraphMutationError(
+                    f"todo {todo_id} is not part of engagement {engagement_id}"
+                )
+            todo = dict(row)
+            if todo["status"] not in (TodoStatus.OPEN, TodoStatus.IN_PROGRESS):
+                raise GraphMutationError(
+                    f"todo {todo_id} is {todo['status']}; only open/in_progress work can complete"
+                )
+
+            payload = todo.get("payload") or {}
+            scope_id = payload.get("scope_id") or engagement_id
+            node_id = todo["exploration_node_id"]
+            covered_ids = {str(asset_id) for asset_id in (asset_ids or [])}
+            if payload.get("gap_type") == "untested_asset_class" and payload.get(
+                "asset_type"
+            ):
+                cursor.execute(
+                    "SELECT id FROM graph_assets WHERE scope_id = %s AND asset_type = %s",
+                    (scope_id, payload["asset_type"]),
+                )
+                covered_ids.update(str(found["id"]) for found in cursor.fetchall())
+
+            covered_count = 0
+            if node_id is not None:
+                for asset_id in sorted(covered_ids):
+                    # Anchoring through a scope-filtered SELECT means an asset
+                    # id from another scope is never pulled into this scope.
+                    cursor.execute(
+                        """
+                        INSERT INTO graph_anchors (node_id, asset_id, role)
+                        SELECT %s, id, 'tested' FROM graph_assets
+                        WHERE id = %s AND scope_id = %s
+                        ON CONFLICT (node_id, asset_id, role) DO UPDATE SET
+                            created_at = NOW()
+                        RETURNING id
+                        """,
+                        (node_id, asset_id, scope_id),
+                    )
+                    anchor = cursor.fetchone()
+                    if anchor is None:
+                        continue
+                    cursor.execute(
+                        """
+                        INSERT INTO graph_anchor_scopes
+                            (anchor_id, scope_id, incorporated_by, coverage_state,
+                             incorporated_at)
+                        VALUES (%s, %s, %s, 'covered', NOW())
+                        ON CONFLICT (anchor_id, scope_id) DO UPDATE SET
+                            coverage_state = 'covered',
+                            incorporated_by = COALESCE(
+                                EXCLUDED.incorporated_by,
+                                graph_anchor_scopes.incorporated_by
+                            ),
+                            incorporated_at = COALESCE(
+                                graph_anchor_scopes.incorporated_at, NOW()
+                            ),
+                            updated_at = NOW()
+                        """,
+                        # incorporated_by is a UUID column; the todo owner is a
+                        # worker identifier, so attribution stays on the todo.
+                        (anchor["id"], scope_id, None),
+                    )
+                    covered_count += 1
+
+                cursor.execute(
+                    "UPDATE graph_nodes SET state = 'concluded', updated_at = NOW() WHERE id = %s",
+                    (node_id,),
+                )
+                cursor.execute(
+                    "DELETE FROM planner_frontier WHERE engagement_id = %s AND node_id = %s",
+                    (engagement_id, node_id),
+                )
+
+            cursor.execute(
+                """
+                UPDATE planner_todos
+                SET status = 'done', completed_at = NOW(), updated_at = NOW()
+                WHERE id = %s
+                RETURNING *
+                """,
+                (todo_id,),
+            )
+            completed = dict(cursor.fetchone())
+            completed["covered_asset_count"] = covered_count
+            return completed
+
+    def release_recon_todo(
+        self,
+        engagement_id: str,
+        todo_id: str,
+        *,
+        reason: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Release a claimed todo back to the frontier after a dispatch failure."""
+        require_graph_write_owner("release_recon_todo")
+        if not engagement_id or not todo_id:
+            raise GraphMutationError("engagement_id and todo_id are required")
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                UPDATE planner_todos
+                SET status = 'open', owner = NULL, started_at = NULL, updated_at = NOW()
+                WHERE id = %s AND engagement_id = %s AND status = 'in_progress'
+                RETURNING *
+                """,
+                (todo_id, engagement_id),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            todo = dict(row)
+            cursor.execute(
+                "UPDATE graph_nodes SET state = 'open', updated_at = NOW() WHERE id = %s",
+                (todo["exploration_node_id"],),
+            )
+            cursor.execute(
+                """
+                UPDATE planner_frontier
+                SET state = 'open'
+                WHERE engagement_id = %s AND node_id = %s
+                """,
+                (engagement_id, todo["exploration_node_id"]),
+            )
+            if reason:
+                logger.warning(
+                    "Released recon todo %s for engagement %s: %s",
+                    todo_id,
+                    engagement_id,
+                    reason,
+                )
+            return todo
 
     # --- graph outbox ---
 

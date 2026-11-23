@@ -86,6 +86,9 @@ _ALLOWED_REFERENCES = frozenset(
         # Trusted recon bridge: delegates every write to DispatcherGraph rather
         # than committing graph state itself.
         "tasks/graph_ingestion.py",
+        # Coverage-gap planner: claims/dispatches/completes recon work through
+        # DispatcherGraph rather than committing graph state itself.
+        "tasks/graph_planner.py",
         # Read-only operator reporting surface (no mutations).
         "cli/cmd/graph_coverage.py",
     }

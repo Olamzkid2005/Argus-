@@ -1087,6 +1087,311 @@ class TestCoverageDrivenPlanning:
         assert dispatcher.find_todos_for_engagement(engagement_id) == []
 
 
+class TestGraphPlannerDispatchTransport:
+    def test_default_dispatch_uses_the_celery_task_dispatcher(self, monkeypatch):
+        import dispatch_task
+        from tasks import graph_planner
+
+        calls: list[tuple[str, list]] = []
+
+        def _fake_send_task(task_name, args):
+            calls.append((task_name, args))
+            return {"task_id": "task-1", "state": "PENDING"}
+
+        monkeypatch.setattr(dispatch_task, "dispatch_task", _fake_send_task)
+
+        result = graph_planner._default_dispatch(
+            graph_planner.RECON_TASK_NAME, ["eng-1", ["https://missing.example.com"]]
+        )
+
+        assert calls == [
+            (
+                "tasks.recon.expand_recon",
+                ["eng-1", ["https://missing.example.com"]],
+            )
+        ]
+        assert result["task_id"] == "task-1"
+
+
+@pytest.mark.skipif(not DB_AVAILABLE, reason="DATABASE_URL not reachable in this environment")
+class TestCoverageGapReconLoop:
+    """The scheduled gaps must be claimed, dispatched and closed for real."""
+
+    def _seed_engagement(self, authorized_scope: dict) -> tuple[str, DispatcherGraph, ExplorationGraphRepository]:
+        engagement_id = str(uuid.uuid4())
+        _create_engagement(engagement_id, str(uuid.uuid4()), authorized_scope)
+        repo = ExplorationGraphRepository()
+        dispatcher = DispatcherGraph(repo)
+        dispatcher.ingest_observation(
+            "endpoint",
+            "https://api.example.com/v1",
+            source="httpx",
+            scope_id=engagement_id,
+        )
+        dispatcher.ingest_observation(
+            "service",
+            "api.example.com:8443/tcp",
+            source="naabu",
+            scope_id=engagement_id,
+        )
+        return engagement_id, dispatcher, repo
+
+    def test_domain_ip_range_and_asset_class_gaps_close_end_to_end(self):
+        from tasks.graph_planner import RECON_TASK_NAME, dispatch_next_coverage_gap
+        from tasks.recon import _ingest_recon_graph
+
+        authorized_scope = {
+            "domains": ["api.example.com", "missing.example.com"],
+            "ipRanges": ["10.9.0.0/24"],
+        }
+        engagement_id, dispatcher, repo = self._seed_engagement(authorized_scope)
+
+        scheduled = dispatcher.schedule_coverage_gaps(engagement_id)
+        by_key = {entry["gap_key"]: entry for entry in scheduled["scheduled"]}
+        sent: list[tuple[str, list]] = []
+
+        def _record(task_name, args):
+            sent.append((task_name, args))
+            return {"task_id": f"task-{len(sent)}", "state": "PENDING"}
+
+        # --- An approved domain nobody discovered is recon'd and closed. ---
+        domain_gap = "undiscovered_scope_entry:domain:missing.example.com"
+        assert domain_gap in by_key
+        dispatched = dispatch_next_coverage_gap(
+            engagement_id, worker_id="worker-a", dispatch=_record, gap_key=domain_gap
+        )
+        assert dispatched["status"] == "dispatched"
+        assert dispatched["targets"] == ["https://missing.example.com"]
+        assert sent[-1][0] == RECON_TASK_NAME
+        assert sent[-1][1][0] == engagement_id
+        assert sent[-1][1][1] == ["https://missing.example.com"]
+        assert sent[-1][1][4] == dispatched["todo_id"]
+
+        claimed = repo.find_todos_for_engagement(
+            engagement_id, status=TodoStatus.IN_PROGRESS
+        )
+        assert [todo["id"] for todo in claimed] == [dispatched["todo_id"]]
+        assert claimed[0]["owner"] == "worker-a"
+        assert claimed[0]["started_at"] is not None
+        frontier = {
+            row["node_id"]: row
+            for row in repo.find_frontier_for_engagement(engagement_id)
+        }
+        assert frontier[claimed[0]["exploration_node_id"]]["state"] == "running"
+
+        # Run the recon task's real ingestion+completion hook for this todo.
+        recon_result = _ingest_recon_graph(
+            engagement_id,
+            {
+                "recon_context": {
+                    "target_url": "https://missing.example.com",
+                    "live_endpoints": ["https://missing.example.com/status"],
+                }
+            },
+            graph_todo_id=dispatched["todo_id"],
+        )
+        assert recon_result["accepted"] > 0
+        assert recon_result["gap_completion"]["status"] == "completed"
+        assert recon_result["gap_completion"]["covered_assets"] >= 1
+        completed = next(
+            todo
+            for todo in dispatcher.find_todos_for_engagement(engagement_id)
+            if todo["id"] == dispatched["todo_id"]
+        )
+        assert completed["status"] == TodoStatus.DONE
+        assert completed["completed_at"] is not None
+        assert completed["exploration_node_id"] not in {
+            row["node_id"] for row in repo.find_frontier_for_engagement(engagement_id)
+        }
+        report = dispatcher.coverage_report(engagement_id)
+        assert ("domain", "missing.example.com") not in {
+            (gap["kind"], gap["value"])
+            for gap in report["approved_but_undiscovered"]
+        }
+
+        # --- An approved CIDR nobody discovered is recon'd and closed. ---
+        ip_gap = "undiscovered_scope_entry:ip_range:10.9.0.0/24"
+        assert ip_gap in by_key
+        dispatched = dispatch_next_coverage_gap(
+            engagement_id, worker_id="worker-a", dispatch=_record, gap_key=ip_gap
+        )
+        assert dispatched["status"] == "dispatched"
+        assert dispatched["targets"] == ["10.9.0.0/24"]
+        recon_result = _ingest_recon_graph(
+            engagement_id,
+            {
+                "recon_context": {
+                    "target_url": "https://10.9.0.7",
+                    "ips": ["10.9.0.7"],
+                }
+            },
+            graph_todo_id=dispatched["todo_id"],
+        )
+        assert recon_result["gap_completion"]["status"] == "completed"
+        assert (
+            repo.find_asset_by_identity("10.9.0.7", "ip", scope_id=engagement_id)
+            is not None
+        )
+        report = dispatcher.coverage_report(engagement_id)
+        assert ("ip_range", "10.9.0.0/24") not in {
+            (gap["kind"], gap["value"])
+            for gap in report["approved_but_undiscovered"]
+        }
+
+        # --- An untested asset class is re-tested and marked covered. ---
+        class_gap = "untested_asset_class:service"
+        assert class_gap in by_key
+        assert "service" in dispatcher.coverage_report(engagement_id)[
+            "untested_asset_types"
+        ]
+        dispatched = dispatch_next_coverage_gap(
+            engagement_id, worker_id="worker-a", dispatch=_record, gap_key=class_gap
+        )
+        assert dispatched["status"] == "dispatched"
+        assert dispatched["targets"], "class gap must target its discovered assets"
+        recon_result = _ingest_recon_graph(
+            engagement_id,
+            {
+                "recon_context": {
+                    "target_url": "https://api.example.com",
+                    "open_ports": [{"port": 8443, "protocol": "tcp"}],
+                }
+            },
+            graph_todo_id=dispatched["todo_id"],
+        )
+        assert recon_result["gap_completion"]["status"] == "completed"
+        assert recon_result["gap_completion"]["covered_assets"] >= 1
+        report = dispatcher.coverage_report(engagement_id)
+        assert "service" not in report["untested_asset_types"]
+
+        # --- Later passes neither duplicate nor orphan the closed work. ---
+        todos_before = dispatcher.find_todos_for_engagement(engagement_id)
+        again = dispatcher.schedule_coverage_gaps(engagement_id)
+        assert again["scheduled"] == []
+        assert again["already_scheduled"] == again["gaps"]
+        assert len(dispatcher.find_todos_for_engagement(engagement_id)) == len(
+            todos_before
+        )
+        closed_keys = {domain_gap, ip_gap, class_gap}
+        for key in closed_keys:
+            matching = [
+                todo
+                for todo in todos_before
+                if todo["payload"].get("coverage_gap_key") == key
+            ]
+            assert len(matching) == 1
+            assert matching[0]["status"] == TodoStatus.DONE
+        frontier_nodes = {
+            row["node_id"] for row in repo.find_frontier_for_engagement(engagement_id)
+        }
+        for entry in by_key.values():
+            if entry["gap_key"] in closed_keys:
+                assert entry["node_id"] not in frontier_nodes
+
+    def test_gap_for_one_engagement_is_never_selected_for_another(self):
+        from tasks.graph_planner import dispatch_next_coverage_gap
+
+        authorized_scope = {
+            "domains": ["api.example.com", "missing.example.com"],
+            "ipRanges": [],
+        }
+        engagement_a, dispatcher, repo = self._seed_engagement(authorized_scope)
+        engagement_b = str(uuid.uuid4())
+        _create_engagement(engagement_b, str(uuid.uuid4()), authorized_scope)
+        dispatcher.schedule_coverage_gaps(engagement_a)
+
+        sent: list[tuple[str, list]] = []
+
+        def _record(task_name, args):
+            sent.append((task_name, args))
+            return {"task_id": "task-b", "state": "PENDING"}
+
+        assert dispatcher.claim_recon_todo(engagement_b, owner="worker-b") is None
+        idle = dispatch_next_coverage_gap(
+            engagement_b, worker_id="worker-b", dispatch=_record
+        )
+        assert idle["status"] == "idle"
+        assert sent == []
+        assert dispatcher.find_todos_for_engagement(engagement_b) == []
+
+        todo_a = dispatcher.find_todos_for_engagement(
+            engagement_a, status=TodoStatus.OPEN
+        )[0]
+        with pytest.raises(GraphMutationError):
+            dispatcher.complete_recon_todo(engagement_b, todo_a["id"])
+
+        claimed = dispatcher.claim_recon_todo(engagement_a, owner="worker-a")
+        assert claimed is not None
+        assert claimed["engagement_id"] == engagement_a
+        assert claimed["id"] in {
+            todo["id"]
+            for todo in dispatcher.find_todos_for_engagement(engagement_a)
+        }
+        assert repo.find_frontier_for_engagement(engagement_b) == []
+
+    def test_expired_claim_is_reclaimed_and_failed_dispatch_is_released(self):
+        import psycopg2
+
+        from tasks.graph_planner import dispatch_next_coverage_gap
+
+        authorized_scope = {
+            "domains": ["api.example.com", "missing.example.com"],
+            "ipRanges": [],
+        }
+        engagement_id, dispatcher, repo = self._seed_engagement(authorized_scope)
+        gap_key = "undiscovered_scope_entry:domain:missing.example.com"
+        dispatcher.schedule_coverage_gaps(engagement_id)
+
+        first = dispatcher.claim_recon_todo(
+            engagement_id, owner="worker-1", gap_key=gap_key
+        )
+        assert first is not None
+        # A held lease blocks a second worker.
+        assert (
+            dispatcher.claim_recon_todo(engagement_id, owner="worker-2", gap_key=gap_key)
+            is None
+        )
+
+        # An expired lease lets the work be reclaimed instead of stranded.
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        try:
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE planner_todos SET started_at = NOW() - INTERVAL '10 minutes' WHERE id = %s",
+                    (first["id"],),
+                )
+        finally:
+            conn.close()
+        reclaimed = dispatcher.claim_recon_todo(
+            engagement_id, owner="worker-2", gap_key=gap_key, lease_seconds=300
+        )
+        assert reclaimed is not None
+        assert reclaimed["id"] == first["id"]
+        assert reclaimed["owner"] == "worker-2"
+
+        def _boom(task_name, args):
+            raise RuntimeError("broker unavailable")
+
+        dispatcher.release_recon_todo(engagement_id, reclaimed["id"], reason="test reset")
+        outcome = dispatch_next_coverage_gap(
+            engagement_id, worker_id="worker-3", dispatch=_boom, gap_key=gap_key
+        )
+        assert outcome["status"] == "dispatch_failed"
+        todo = next(
+            row
+            for row in dispatcher.find_todos_for_engagement(engagement_id)
+            if row["payload"].get("coverage_gap_key") == gap_key
+        )
+        assert todo["status"] == TodoStatus.OPEN
+        assert todo["owner"] is None
+        assert todo["started_at"] is None
+        frontier = {
+            row["node_id"]: row
+            for row in repo.find_frontier_for_engagement(engagement_id)
+        }
+        assert frontier[todo["exploration_node_id"]]["state"] == "open"
+
+
 # ---------------------------------------------------------------------------
 # A-02 — two tools, one canonical asset, both provenances
 # ---------------------------------------------------------------------------

@@ -12,11 +12,15 @@ from tasks.base import task_context
 logger = logging.getLogger(__name__)
 
 
-def _ingest_recon_graph(engagement_id: str, result) -> dict:
+def _ingest_recon_graph(
+    engagement_id: str, result, graph_todo_id: str | None = None
+) -> dict:
     """Feed recon outcomes into the ARTEX asset graph (A2), best-effort.
 
     The graph is additive: an ingestion failure is logged and returned, never
-    raised into the recon task.
+    raised into the recon task. When ``graph_todo_id`` is set, this pass was
+    dispatched to close a scheduled coverage gap, so the ingested assets are
+    recorded as coverage and the gap todo reaches a terminal state.
     """
     try:
         from tasks.graph_ingestion import ingest_recon_result
@@ -36,6 +40,34 @@ def _ingest_recon_graph(engagement_id: str, result) -> dict:
             engagement_id,
             summary["accepted"],
         )
+
+    if graph_todo_id:
+        try:
+            from tasks.graph_planner import complete_coverage_gap
+
+            completed = complete_coverage_gap(
+                engagement_id,
+                graph_todo_id,
+                asset_ids=[
+                    asset["id"]
+                    for asset in summary.get("assets", [])
+                    if asset.get("id")
+                ],
+            )
+        except Exception as exc:  # noqa: BLE001 - completion must not abort recon
+            logger.warning(
+                "Closing coverage gap todo %s for engagement %s failed: %s",
+                graph_todo_id,
+                engagement_id,
+                exc,
+            )
+            summary["gap_completion"] = {"status": "failed", "error": str(exc)}
+        else:
+            summary["gap_completion"] = {
+                "status": "completed",
+                "todo_id": completed["id"],
+                "covered_assets": completed["covered_asset_count"],
+            }
     return summary
 
 
@@ -227,7 +259,12 @@ def run_recon(
     bind=True, name="tasks.recon.expand_recon", soft_time_limit=2400, time_limit=3600
 )
 def expand_recon(
-    self, engagement_id: str, targets: list, budget: dict, trace_id: str = None
+    self,
+    engagement_id: str,
+    targets: list,
+    budget: dict,
+    trace_id: str = None,
+    graph_todo_id: str | None = None,
 ):
     """
     Expand reconnaissance with additional targets
@@ -324,7 +361,7 @@ def expand_recon(
     ) as ctx:
         result = ctx.orchestrator.run_recon(ctx.job)
 
-        _ingest_recon_graph(engagement_id, result)
+        _ingest_recon_graph(engagement_id, result, graph_todo_id=graph_todo_id)
 
         # Save updated recon context BEFORE dispatching scan to eliminate
         # race condition. The orchestrator.run_recon() already persists it
