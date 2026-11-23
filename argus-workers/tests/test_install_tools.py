@@ -50,9 +50,36 @@ class TestAssetUrl:
             "nuclei_3.2.0_linux_amd64.zip"
         ) in url
 
-    def test_ffuf_darwin_arm64(self):
-        url = install_tools.asset_url("ffuf", "Darwin", "arm64")
-        assert "ffuf_2.1.0_darwin_arm64.zip" in url
+    def test_macos_uses_capitalised_asset_name(self):
+        # ProjectDiscovery publishes macOS assets as `..._macOS_amd64.zip`.
+        url = install_tools.asset_url("nuclei", "Darwin", "arm64")
+        assert (
+            "github.com/projectdiscovery/nuclei/releases/download/v3.2.0/"
+            "nuclei_3.2.0_macOS_arm64.zip"
+        ) in url
+
+    def test_darwin_arm64_never_builds_darwin_asset_name(self):
+        for tool in ("nuclei", "httpx", "katana", "subfinder"):
+            url = install_tools.asset_url(tool, "Darwin", "arm64")
+            assert "_darwin_" not in url
+            assert "_macOS_" in url
+
+    def test_tarball_tools_use_tar_gz(self):
+        assert install_tools.asset_url("dalfox", "Linux", "x86_64").endswith(
+            "dalfox_2.10.0_linux_amd64.tar.gz"
+        )
+        assert install_tools.asset_url("dalfox", "Darwin", "arm64").endswith(
+            "dalfox_2.10.0_darwin_arm64.tar.gz"
+        )
+        assert install_tools.asset_url("ffuf", "Linux", "x86_64").endswith(
+            "ffuf_2.1.0_linux_amd64.tar.gz"
+        )
+
+    def test_ffuf_darwin_has_no_asset(self):
+        # ffuf publishes no darwin build at v2.1.0 — raise so the caller can
+        # print the brew alternative instead of downloading a 404 page.
+        with pytest.raises(RuntimeError, match="brew install ffuf"):
+            install_tools.asset_url("ffuf", "Darwin", "arm64")
 
     def test_unknown_tool_raises(self):
         with pytest.raises(KeyError):
@@ -158,3 +185,32 @@ class TestInstallGoTool:
 
         assert ok is False
         assert not (tmp_path / "cache" / "nuclei" / "nuclei").exists()
+
+
+class TestGitToolWrapper:
+    """The wrapper must use the real checkout, not a hardcoded cache path.
+
+    ``ARGUS_TOOL_CACHE_DIR`` can move the cache, so baking ``~/.argus/tools``
+    into the wrapper silently breaks the git-only tools.
+    """
+
+    @pytest.mark.parametrize(
+        ("tool", "script"), [("jwt_tool", "jwt_tool.py"), ("sn1per", "sniper")]
+    )
+    def test_wrapper_uses_the_actual_checkout_path(
+        self, monkeypatch, tmp_path, tool, script
+    ):
+        cache = tmp_path / "custom-cache"
+        checkout = cache / tool
+        checkout.mkdir(parents=True)
+        (checkout / script).write_text("#!/bin/sh\n")
+        monkeypatch.setattr(install_tools, "TOOL_CACHE_DIR", cache)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.setattr(install_tools.shutil, "which", lambda _name: None)
+
+        assert install_tools.install_git_tool(tool) is True
+
+        wrapper = tmp_path / "home" / ".local" / "bin" / tool
+        body = wrapper.read_text()
+        assert str(checkout) in body
+        assert "~/.argus/tools" not in body

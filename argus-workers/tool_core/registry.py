@@ -149,6 +149,7 @@ class ToolRegistry:
         """Build augmented PATH including venv/bin, ~/go/bin, Homebrew."""
         venv_bin = str(Path(sys.executable).parent)
         go_bin = os.path.expanduser("~/go/bin")
+        local_bin = os.path.expanduser("~/.local/bin")
 
         project_venv = os.path.abspath(
             os.path.join(
@@ -157,15 +158,26 @@ class ToolRegistry:
         )
 
         extra_dirs = [
+            go_bin,
+            local_bin,
             venv_bin,
             project_venv,
-            go_bin,
-            "/usr/local/bin",
             "/opt/homebrew/bin",
+            "/usr/local/bin",
         ]
 
         current_path = os.environ.get("PATH", "")
+        # Keep the extra dirs in the listed priority order. Prepending in a
+        # loop reverses it, which made ``venv/bin/httpx`` (the Python HTTPX
+        # CLI) shadow ProjectDiscovery's ``~/go/bin/httpx``.
+        ordered: list[str] = []
+        seen: set[str] = set()
         for d in extra_dirs:
-            if d not in current_path and os.path.isdir(d):
-                current_path = f"{d}:{current_path}"
-        return current_path
+            if os.path.isdir(d) and d not in seen:
+                ordered.append(d)
+                seen.add(d)
+        for part in current_path.split(os.pathsep):
+            if part and part not in seen:
+                ordered.append(part)
+                seen.add(part)
+        return os.pathsep.join(ordered)

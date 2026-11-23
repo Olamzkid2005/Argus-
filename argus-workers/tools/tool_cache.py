@@ -16,9 +16,70 @@ from utils.logging_utils import ScanLogger
 
 logger = logging.getLogger(__name__)
 
-# Tool cache directory
-TOOL_CACHE_DIR = Path(tempfile.gettempdir()) / "argus_tool_cache"
-TOOL_CACHE_DIR.mkdir(exist_ok=True)
+# Tool cache directory.
+#
+# Persistent, NOT $TMPDIR: this directory holds downloaded tool binaries that are
+# symlinked into ~/go/bin. macOS purges its per-user temp directory on reboot
+# and periodically while idle, which left those symlinks dangling and made
+# every tool look uninstalled until the next re-download. ``~/.argus`` is the
+# same home the CLI uses for engagements (see cli/_local_mode.py), so the cache
+# lives alongside it. Override with ARGUS_TOOL_CACHE_DIR if needed.
+def _resolve_tool_cache_dir() -> Path:
+    override = os.environ.get("ARGUS_TOOL_CACHE_DIR")
+    if override:
+        return Path(override).expanduser()
+    try:
+        return Path.home() / ".argus" / "tools"
+    except RuntimeError:
+        # No HOME and no passwd entry (minimal container). tempdir is volatile,
+        # but a cache that cannot be created at all breaks every import of this
+        # module, which is far worse than a cache that needs re-downloading.
+        return Path(tempfile.gettempdir()) / "argus_tool_cache"
+
+
+TOOL_CACHE_DIR = _resolve_tool_cache_dir()
+try:
+    TOOL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+except OSError as e:  # read-only HOME, exhausted quota, etc.
+    _fallback = Path(tempfile.gettempdir()) / "argus_tool_cache"
+    logger.warning(
+        "Cannot create tool cache %s (%s) — falling back to %s, which is NOT "
+        "persistent across reboots",
+        TOOL_CACHE_DIR,
+        e,
+        _fallback,
+    )
+    _fallback.mkdir(parents=True, exist_ok=True)
+    TOOL_CACHE_DIR = _fallback
+
+
+def _migrate_legacy_cache() -> None:
+    """Move binaries left in the old $TMPDIR cache into the persistent one.
+
+    Best-effort and idempotent: a tool is only moved when the destination does
+    not already have it, so a partial migration can be re-run safely.
+    """
+    legacy = Path(tempfile.gettempdir()) / "argus_tool_cache"
+    if legacy == TOOL_CACHE_DIR or not legacy.is_dir():
+        return
+    for entry in legacy.iterdir():
+        dest = TOOL_CACHE_DIR / entry.name
+        try:
+            if entry.is_dir() and not dest.exists():
+                shutil.move(str(entry), str(dest))
+                logger.info("Migrated cached tool %s from %s", entry.name, legacy)
+            elif entry.is_dir():
+                # Destination wins; drop the duplicate so we do not grow forever.
+                shutil.rmtree(entry, ignore_errors=True)
+        except OSError as e:  # noqa: PERF203 — one bad entry must not abort the rest
+            logger.warning("Could not migrate cached tool %s: %s", entry.name, e)
+    try:
+        legacy.rmdir()
+    except OSError:
+        pass  # still has entries, or another process is using it
+
+
+_migrate_legacy_cache()
 
 # Strict allowlist of tool names that can be installed via pip.
 # Only known, vetted tool names are allowed to prevent supply-chain injection.

@@ -26,9 +26,17 @@ def get_augmented_path() -> str:
     Returns the PATH with extra directories prepended so that tools installed
     via pip, go install, or Homebrew are findable regardless of the current
     shell environment.
+
+    ``~/go/bin`` comes first on purpose, mirroring
+    ``mcp_server._augmented_tool_path()``: the venv ships Python console
+    scripts whose names collide with the Go security binaries — ``venv/bin/httpx``
+    is the *Python* HTTPX CLI, not ProjectDiscovery's httpx — so with the venv
+    first this resolver returned a different program than the worker's
+    discovery check, and execution failed with ``Error: No such option: -s``.
     """
     venv_bin = str(Path(sys.executable).parent)
     go_bin = os.path.expanduser("~/go/bin")
+    local_bin = os.path.expanduser("~/.local/bin")
 
     # Also check the project-level venv (in case system python is used)
     project_venv_bin = os.path.abspath(
@@ -36,18 +44,30 @@ def get_augmented_path() -> str:
     )
 
     extra_dirs = [
+        go_bin,
+        local_bin,
         venv_bin,
         project_venv_bin,
-        go_bin,
-        "/usr/local/bin",
         "/opt/homebrew/bin",
+        "/usr/local/bin",
     ]
 
     current_path = os.environ.get("PATH", "")
+    # Prepend the extra dirs *in priority order*. Appending to a string in a
+    # loop reverses the priority (the last dir ends up first), which put
+    # ``venv/bin`` ahead of ``~/go/bin`` and resolved ``httpx`` to the Python
+    # HTTPX CLI instead of ProjectDiscovery's binary.
+    ordered: list[str] = []
+    seen: set[str] = set()
     for d in extra_dirs:
-        if d not in current_path and os.path.isdir(d):
-            current_path = f"{d}:{current_path}"
-    return current_path
+        if os.path.isdir(d) and d not in seen:
+            ordered.append(d)
+            seen.add(d)
+    for part in current_path.split(os.pathsep):
+        if part and part not in seen:
+            ordered.append(part)
+            seen.add(part)
+    return os.pathsep.join(ordered)
 
 
 # Tools whose real implementation is a native binary. A pip console script of

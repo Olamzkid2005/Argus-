@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -151,6 +152,9 @@ def _augmented_tool_path() -> str:
     by both (previously it was only consulted for discovery).
     """
     _go_bin = os.path.expanduser("~/go/bin")
+    # User-installed wrappers (commix, jwt_tool, sn1per, testssl) live here;
+    # without it they are found in an interactive shell but not by the worker.
+    _local_bin = os.path.expanduser("~/.local/bin")
     _venv_bin = str(Path(sys.executable).parent)
     _homebrew_bin = "/opt/homebrew/bin"
     _project_venv = str(Path(__file__).resolve().parent.parent / "venv" / "bin")
@@ -165,6 +169,7 @@ def _augmented_tool_path() -> str:
         _go_bin,
         os.environ.get("ARGUS_EXTRA_PATH", ""),
         os.environ.get("PATH", ""),
+        _local_bin,
         _venv_bin,
         _homebrew_bin,
         _project_venv,
@@ -181,6 +186,76 @@ def _augmented_tool_path() -> str:
             seen.add(entry)
             ordered.append(entry)
     return os.pathsep.join(ordered)
+
+
+def _resolve_timeout_binary() -> str | None:
+    """Locate a ``timeout(1)`` binary, if this platform has one.
+
+    ``timeout`` is GNU coreutils and is absent on stock macOS (``gtimeout``
+    only exists once coreutils is installed). Wall-limited scanners used to
+    prefix it unconditionally, so on a Mac every nuclei/dalfox/katana run died
+    instantly with ``FileNotFoundError: 'timeout'`` before the scanner started.
+    """
+    for name in ("timeout", "gtimeout"):
+        found = shutil.which(name)
+        # Only trust a hit for the name we asked for. A stubbed or shadowing
+        # ``shutil.which`` (tests, alias wrappers) can otherwise hand back an
+        # unrelated binary that cannot parse ``-s INT``.
+        if found and Path(found).name in (name, f"{name}.exe"):
+            return found
+    return None
+
+
+def _run_with_wall_limit(
+    cmd: list[str],
+    wall_seconds: int,
+    env: dict[str, str],
+    hard_timeout: float,
+) -> subprocess.CompletedProcess:
+    """Run *cmd* in its own process group and stop it after *wall_seconds*.
+
+    Portable replacement for ``timeout -s INT -k 15 N cmd`` on platforms
+    without GNU coreutils. SIGINT first so scanners flush the findings they
+    already printed, SIGKILL after a short grace period for the ones that
+    ignore it. The return code mirrors ``timeout``: 124 when the process exits
+    on our SIGINT, 137 when it had to be killed, so the caller's existing
+    wall-clock handling keeps working.
+    """
+    proc = subprocess.Popen(  # noqa: S603 — list form, validated by _validate_args_safe()
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+    def _signal_group(sig: int) -> None:
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+    try:
+        out, err = proc.communicate(timeout=wall_seconds)
+        return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+    except subprocess.TimeoutExpired:
+        logger.debug("Wall clock hit for %s; sending SIGINT", cmd[0])
+
+    _signal_group(signal.SIGINT)
+    try:
+        out, err = proc.communicate(timeout=15)
+        return subprocess.CompletedProcess(cmd, 124, out, err)
+    except subprocess.TimeoutExpired:
+        logger.debug("%s ignored SIGINT; killing", cmd[0])
+
+    _signal_group(signal.SIGKILL)
+    try:
+        out, err = proc.communicate(timeout=min(15, hard_timeout or 15))
+    except subprocess.TimeoutExpired:  # pragma: no cover - unreapable child
+        out, err = "", ""
+    return subprocess.CompletedProcess(cmd, 137, out, err)
 
 
 def _tool_environment_overrides() -> dict[str, str]:
@@ -1075,7 +1150,11 @@ class MCPServer:
             if not tool.enabled:
                 continue
             entry = tool.to_dict()
-            entry["available"] = self._tool_is_available(tool)
+            # A tool the declarative registry has disabled is not available to
+            # dispatch even when it has no binary to look for (in-process steps
+            # and declared-but-unimplemented tools): the planner must never
+            # schedule it, and `available` is the flag it reads.
+            entry["available"] = self._tool_is_available(tool) and not tool.disabled_reason
             tools.append(entry)
         return tools
 
@@ -1482,33 +1561,49 @@ class MCPServer:
             # already printed. Python tools and tools that need their full run
             # (sqlmap, nmap) are untouched.
             _wall = 0  # set below only for bounded scanners; the exit check reads it
+            _timeout_bin: str | None = None
             if tool.name in WALL_LIMITED_TOOLS and os.name != "nt":
                 _wall = int(os.environ.get("ARGUS_TOOL_WALL_SECONDS", "240"))
-                if _wall > 0 and cmd and cmd[0] != "timeout":
-                    # `-k` matters: without it `timeout` waits forever for a
-                    # child that ignores SIGINT, which is exactly what nuclei
-                    # does mid-request (measured: still alive at the 300s MCP
-                    # call budget). 15s is enough for it to flush its JSONL.
-                    cmd = ["timeout", "-s", "INT", "-k", "15", str(_wall), *cmd]
-                    logger.debug(
-                        "Bounding %s to %ss of wall clock (ARGUS_TOOL_WALL_SECONDS)",
-                        tool.name,
-                        _wall,
-                    )
+                if _wall > 0 and cmd and Path(cmd[0]).name not in ("timeout", "gtimeout"):
+                    _timeout_bin = _resolve_timeout_binary()
+                    if _timeout_bin:
+                        # `-k` matters: without it `timeout` waits forever for a
+                        # child that ignores SIGINT, which is exactly what nuclei
+                        # does mid-request (measured: still alive at the 300s MCP
+                        # call budget). 15s is enough for it to flush its JSONL.
+                        cmd = [_timeout_bin, "-s", "INT", "-k", "15", str(_wall), *cmd]
+                        logger.debug(
+                            "Bounding %s to %ss of wall clock (ARGUS_TOOL_WALL_SECONDS)",
+                            tool.name,
+                            _wall,
+                        )
+                    else:
+                        # No GNU timeout (stock macOS): bound it in-process
+                        # instead of failing with FileNotFoundError: 'timeout'.
+                        logger.debug(
+                            "No timeout(1) available; bounding %s to %ss in-process",
+                            tool.name,
+                            _wall,
+                        )
 
-            result = subprocess.run(  # noqa: S603 — safe: cmd is list form, validated by _validate_args_safe()
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout or tool.timeout,
-                env=_env,
-                # Never hand the worker's stdin to a scanner: tools like alterx
-                # switch to stdin input mode when stdin is any pipe (even at
-                # EOF) and then report "no input found" instead of using their
-                # flags. The MCP path never feeds stdin deliberately, so
-                # /dev/null is both deterministic and correct.
-                stdin=subprocess.DEVNULL,
-            )
+            if _wall and not _timeout_bin:
+                result = _run_with_wall_limit(
+                    cmd, _wall, _env, timeout or tool.timeout
+                )
+            else:
+                result = subprocess.run(  # noqa: S603 — safe: cmd is list form, validated by _validate_args_safe()
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout or tool.timeout,
+                    env=_env,
+                    # Never hand the worker's stdin to a scanner: tools like alterx
+                    # switch to stdin input mode when stdin is any pipe (even at
+                    # EOF) and then report "no input found" instead of using their
+                    # flags. The MCP path never feeds stdin deliberately, so
+                    # /dev/null is both deterministic and correct.
+                    stdin=subprocess.DEVNULL,
+                )
             duration_ms = int((time.time() - start) * 1000)
 
             # Always dispatch findings parsing — even on non-zero exit if
