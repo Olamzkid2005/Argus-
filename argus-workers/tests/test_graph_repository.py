@@ -269,7 +269,9 @@ class TestCanonicalAssetUpsert:
 class TestExplorationNodeCreate:
     def test_node_can_be_reposited_and_read_back(self):
         repo = ExplorationGraphRepository()
-        engagement_id = uuid.uuid4().hex
+        # Postgres returns UUIDs in canonical dashed form, so compare against
+        # that form rather than the 32-char hex input.
+        engagement_id = str(uuid.uuid4())
         node = repo.create_node(
             engagement_id,
             GraphNodeKind.INTENT,
@@ -319,7 +321,9 @@ class TestAnchors:
 
     def test_nodes_for_asset_return_anchored_nodes(self):
         repo = ExplorationGraphRepository()
-        asset = repo.upsert_asset("api.example.com", "endpoint")
+        # Canonical assets are deduplicated globally, so each test needs its
+        # own identity to stay isolated from anchors created by other tests.
+        asset = repo.upsert_asset("nodes-for-asset.example.com", "endpoint")
         engagement_id = uuid.uuid4().hex
         node = repo.create_node(engagement_id, GraphNodeKind.FACT, payload={"x": 1})
         repo.attach_anchor(node["id"], asset["id"], role="affects")
@@ -353,7 +357,7 @@ class TestAnchorCoverage:
 
     def test_coverage_for_scope_reads_from_anchor_scopes(self):
         repo = ExplorationGraphRepository()
-        asset = repo.upsert_asset("api.example.com", "endpoint")
+        asset = repo.upsert_asset("coverage-read.example.com", "endpoint")
         scope_id = uuid.uuid4().hex
         engagement_id = uuid.uuid4().hex
         node = repo.create_node(engagement_id, GraphNodeKind.FINDING, payload={"x": 1})
@@ -434,7 +438,7 @@ class TestPlannerFrontier:
 class TestPlannerTodos:
     def test_todo_can_be_created_with_graph_references(self):
         repo = ExplorationGraphRepository()
-        engagement_id = uuid.uuid4().hex
+        engagement_id = str(uuid.uuid4())
         node = repo.create_node(engagement_id, GraphNodeKind.INTENT, payload={"objective": "x"})
         todo = repo.create_todo(
             engagement_id,
@@ -480,8 +484,10 @@ class TestGraphOutbox:
             scope_id=scope_id,
             event_type="node.created",
             payload={"kind": "intent"},
-            cause_node_id="node-1",
-            cause_engagement_id="eng-1",
+            # cause_* columns are UUID; string labels only surface as an
+            # invalid-input error once a real Postgres is connected.
+            cause_node_id=uuid.uuid4().hex,
+            cause_engagement_id=uuid.uuid4().hex,
         )
         assert event["status"] == OutboxStatus.QUEUED
         assert event["event_type"] == "node.created"

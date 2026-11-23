@@ -411,7 +411,10 @@ class ExplorationGraphRepository(BaseRepository):
                 LEFT JOIN graph_anchor_scopes AS s
                     ON s.anchor_id = ga.id AND s.scope_id = %s
                 WHERE a.id = %s
-                ORDER BY s.created_at DESC
+                -- Anchors from other scopes left-join to NULL coverage. Put the
+                -- requested scope's rows first so callers reading row 0 see the
+                -- scope's real coverage state rather than an unrelated NULL.
+                ORDER BY s.created_at DESC NULLS LAST
                 """,
                 (scope_id, asset_id),
             )

@@ -85,32 +85,55 @@ not a defect in the graph write path itself.
 
 ## 3. What that means for the requirements
 
-- **C-18** is still `NOT VERIFIED`. The dispatcher-owned surface now exists, but
-  the boundary is not yet proven end to end in a live run.
-- **A-04** is `NOT VERIFIED`. The migration, repository, dispatcher surface, and
-  unit tests are committed; the integration verification is blocked by the missing
-  PostgreSQL connection.
-- The conformance notes now record this as a **blocked verification state**, not
-  as a completed implementation.
+Superseded by the DB-backed run below: A-04 and the six graph surfaces are now
+verified against a real PostgreSQL, and C-18 is partially verified.
 
-## 4. How to finish verification
+- **A-04** is `VERIFIED (DB-BACKED)`.
+- **Anchors/coverage, per-engagement exploration graph, frontier, todos,
+  outbox** are `VERIFIED (DB-BACKED)`.
+- **Graph-change-driven planning** is `PARTIALLY VERIFIED (DB-BACKED)`: the
+  durable flow up to the outbox is exercised, but no automatic
+  mutation-triggered planning pass exists yet.
+- **C-18** is `PARTIALLY VERIFIED`: every verified graph write goes through
+  `DispatcherGraph`, but the "workers never import the repository" rule is
+  still enforced by convention and review, not by an import boundary.
 
-To move A-04 out of `NOT VERIFIED`, run the graph tests against a reachable
-PostgreSQL database with the migration applied, for example:
+## 3a. DB-backed verification (23 November 2026)
 
-- a real service-backed Postgres available to this environment, or
-- a local/CI Postgres whose connection string is supplied through
-  `TEST_DATABASE_URL` or `DATABASE_URL`, matching how other repository tests in
-  this repo are run.
+The blocking condition above was resolved by running the tests against a real
+PostgreSQL 16 instance (`pgserver` bundled binaries) with
+`database/migrations/033_graph_tables.sql` applied directly:
 
-The shortest verification is:
+```
+46 passed, 0 skipped
+```
+
+That run surfaced four failures that the skip path had hidden, all now fixed:
+
+1. `asset_coverage_for_scope` ordered `s.created_at DESC`, so anchors from other
+   scopes (NULL coverage) sorted ahead of the requested scope's row. Changed to
+   `DESC NULLS LAST`.
+2. `enqueue_outbox` tests passed non-UUID strings (`node-1`, `eng-1`) into UUID
+   columns; the test now uses real UUIDs.
+3. Two tests compared a Postgres-canonical dashed UUID against a 32-char hex
+   input; they now build the engagement id as `str(uuid.uuid4())`.
+4. Two tests anchored to the globally deduplicated canonical asset
+   `api.example.com/endpoint`, so anchors from other tests leaked into their
+   result sets. They now use their own asset identities.
+
+## 4. How to run the verification
+
+CI now does this automatically: the `graph-repository-db` job in
+`.github/workflows/lint.yml` starts a `postgres:16` service, applies migration
+033, runs `tests/test_graph_repository.py`, and fails if any test is skipped.
+
+To reproduce locally:
 
 1. provide a reachable `DATABASE_URL`,
 2. apply `database/migrations/033_graph_tables.sql` (or let
    `run_migrations()` apply pending migrations),
-3. run `tests/test_graph_repository.py`,
-4. confirm the asset upsert, node creation, anchor attach, and anchor readback
-   tests pass.
+3. run `python -m pytest tests/test_graph_repository.py`,
+4. confirm 0 tests are skipped.
 
 ## 5. What is implemented and committed now
 

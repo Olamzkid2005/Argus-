@@ -226,6 +226,115 @@ jobs:
           retention-days: 14
           path: argus-workers/python-test-results.xml
 
+  graph-repository-db:
+    name: Python Workers (graph repository, PostgreSQL)
+    # The graph repository integration tests skip themselves unless DATABASE_URL
+    # is reachable, so without a real Postgres in CI the ARTEX persistence layer
+    # is never exercised. This job provisions Postgres, applies migration 033 and
+    # runs the tests so a skip cannot hide a broken query.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: argus-workers
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: argus_graph_test
+          POSTGRES_USER: argus
+          POSTGRES_PASSWORD: argus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://argus:argus_test@localhost:5432/argus_graph_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libpq-dev
+
+      - name: Install test dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt -q
+
+      - name: Apply graph migration 033
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+
+          import psycopg2
+
+          migration = pathlib.Path("database/migrations/033_graph_tables.sql")
+          expected = {
+              "graph_assets",
+              "graph_nodes",
+              "graph_anchors",
+              "graph_anchor_scopes",
+              "graph_node_edges",
+              "planner_frontier",
+              "planner_todos",
+              "graph_outbox",
+          }
+
+          conn = psycopg2.connect(os.environ["DATABASE_URL"])
+          try:
+              with conn, conn.cursor() as cur:
+                  cur.execute(migration.read_text(encoding="utf-8"))
+                  cur.execute(
+                      "SELECT table_name FROM information_schema.tables "
+                      "WHERE table_schema = 'public'"
+                  )
+                  found = {row[0] for row in cur.fetchall()}
+          finally:
+              conn.close()
+
+          missing = sorted(expected - found)
+          if missing:
+              raise SystemExit(f"migration 033 did not create: {missing}")
+          print("Migration 033 tables present: " + ", ".join(sorted(expected)))
+          PY
+
+      - name: Run graph repository tests against PostgreSQL
+        run: |
+          python -m pytest tests/test_graph_repository.py \
+            -v --timeout=180 --tb=long --junit-xml=graph-repository-results.xml
+
+      - name: Confirm graph tests did not skip
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("graph-repository-results.xml").getroot()
+          suite = root.find("testsuite") if root.tag == "testsuites" else root
+          skipped = int(suite.get("skipped", "0"))
+          tests = int(suite.get("tests", "0"))
+          print(f"graph repository tests: {tests} run, {skipped} skipped")
+          if tests == 0:
+              raise SystemExit("no graph repository tests were collected")
+          if skipped:
+              raise SystemExit(
+                  f"{skipped} graph repository test(s) skipped — DATABASE_URL is not reachable"
+              )
+          PY
+
+      - name: Upload graph repository results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graph-repository-results-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: argus-workers/graph-repository-results.xml
+
   collection-order-check:
     name: Python Workers (collection-order randomized)
     needs: [argus-workers-lint]
