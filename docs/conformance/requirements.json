@@ -127,8 +127,8 @@
       "upstream_proof": "Plan Section 3.3 (asset identity and write rules) and A-01",
       "argus_implementation": "IMPLEMENTED AND COMMITTED",
       "argus_implementation_path": "argus-workers/database/graph_identity.py, argus-workers/database/graph_ingest.py, argus-workers/tests/test_graph_repository.py (TestAssetCanonicalization, TestAssetIngestion.test_canonical_variants_share_parent_assets)",
-      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py (canonicalization matrix + ingestion + coverage + ownership boundary).",
-      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with migrations 033 and 034 applied; 69 graph tests passed, 0 skipped (CI job graph-repository-db).",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py ran against PostgreSQL 16 (TestAssetCanonicalization, TestCrossToolMerge, TestComputedCoverage, TestTenantBoundary, TestDispatcherOwnershipBoundary) and none skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 88 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
       "result": "VERIFIED (DB-BACKED)",
       "deviation": "root_domain uses a last-two-label heuristic instead of a public-suffix list",
       "notes": "Hostnames are NFKC/IDNA-normalized, lower-cased and stripped of trailing dots; URLs drop userinfo and default ports and normalize trailing slashes; IPs are compressed. Parent chains are derived in application code."
@@ -140,11 +140,11 @@
       "upstream_proof": "Plan Section 3.3 and A-02",
       "argus_implementation": "IMPLEMENTED AND COMMITTED",
       "argus_implementation_path": "argus-workers/database/migrations/034_graph_asset_observations.sql, argus-workers/database/graph_ingest.py, argus-workers/database/graph_repository.py (record_asset_observation, find_observations_for_asset)",
-      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py (canonicalization matrix + ingestion + coverage + ownership boundary).",
-      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with migrations 033 and 034 applied; 69 graph tests passed, 0 skipped (CI job graph-repository-db).",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py ran against PostgreSQL 16 (TestAssetCanonicalization, TestCrossToolMerge, TestComputedCoverage, TestTenantBoundary, TestDispatcherOwnershipBoundary) and none skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 88 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
       "result": "VERIFIED (DB-BACKED)",
       "deviation": "none",
-      "notes": "Observations are unique per (scope, asset_type, raw value, source); replays increment observation_count instead of creating duplicate rows."
+      "notes": "Observations are unique per (scope, asset_type, raw value, source); replays increment observation_count instead of creating duplicate rows. Two tools observing the same asset through case, default-port, trailing-slash, IDNA/punycode or differently shaped service keys land on one graph_assets row with both provenance rows (TestCrossToolMerge)."
     },
     "tenant_scoped_asset_isolation": {
       "id": "A-03",
@@ -152,12 +152,12 @@
       "reference_behaviour": "The same domain discovered under two different tenant/workspace scopes has no cross-tenant visibility and is not merged into one asset.",
       "upstream_proof": "Plan Section 3.3 and A-03",
       "argus_implementation": "IMPLEMENTED AND COMMITTED",
-      "argus_implementation_path": "argus-workers/database/migrations/034_graph_asset_observations.sql (scoped identity index), argus-workers/database/graph_repository.py (find_assets_for_scope, find_asset_by_identity)",
-      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py (canonicalization matrix + ingestion + coverage + ownership boundary).",
-      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with migrations 033 and 034 applied; 69 graph tests passed, 0 skipped (CI job graph-repository-db).",
+      "argus_implementation_path": "argus-workers/database/migrations/035_graph_tenant_boundary.sql (tenant_id on graph_assets/graph_asset_observations), argus-workers/database/graph_repository.py (GraphTenantViolation, tenant checks in upsert_asset/record_asset_observation, resolve_scope_tenant), argus-workers/database/dispatcher_graph.py (_resolve_tenant)",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py ran against PostgreSQL 16 (TestAssetCanonicalization, TestCrossToolMerge, TestComputedCoverage, TestTenantBoundary, TestDispatcherOwnershipBoundary) and none skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 88 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
       "result": "VERIFIED (DB-BACKED)",
       "deviation": "none",
-      "notes": "Asset identity is unique per scope with unscoped assets in one shared bucket; find_assets_for_scope never returns another scope's assets. Out-of-scope observations are audited as rejected and never become schedulable."
+      "notes": "Asset identity is unique per scope with unscoped assets in one shared bucket; find_assets_for_scope never returns another scope's assets. A write naming a tenant other than the scope owner (engagements.org_id) raises GraphTenantViolation at the dispatcher and repository layers instead of silently writing or re-owning. Out-of-scope observations are audited as rejected and never become schedulable."
     },
     "scope_coverage_reporting": {
       "id": "A2-coverage",
@@ -165,12 +165,12 @@
       "reference_behaviour": "Coverage compares discovered assets against the approved scope and reports untested assets and asset classes.",
       "upstream_proof": "Plan Section 3.7 milestone A2",
       "argus_implementation": "IMPLEMENTED AND COMMITTED",
-      "argus_implementation_path": "argus-workers/database/graph_repository.py (compute_scope_coverage, asset_coverage_for_scope), argus-workers/database/dispatcher_graph.py (compute_coverage)",
-      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py (canonicalization matrix + ingestion + coverage + ownership boundary).",
-      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with migrations 033 and 034 applied; 69 graph tests passed, 0 skipped (CI job graph-repository-db).",
+      "argus_implementation_path": "argus-workers/database/graph_repository.py (compute_scope_coverage, asset_coverage_for_scope, load_authorized_scope), argus-workers/database/dispatcher_graph.py (compute_coverage, coverage_report), argus-workers/cli/cmd/graph_coverage.py (argus graph-coverage)",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py ran against PostgreSQL 16 (TestAssetCanonicalization, TestCrossToolMerge, TestComputedCoverage, TestTenantBoundary, TestDispatcherOwnershipBoundary) and none skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 88 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
       "result": "VERIFIED (DB-BACKED)",
       "deviation": "none",
-      "notes": "Reports per-type totals, covered/untested split, in-scope vs out-of-scope assets, untested_asset_types and undiscovered_asset_types."
+      "notes": "Coverage is computed, not looked up: coverage_report reads engagements.authorized_scope and compares it with the assets actually discovered in the scope, reporting approved_but_undiscovered gaps (domains and CIDR ranges), discovered_but_unapproved assets, rejected out-of-scope observations (with reasons) and untested/undiscovered asset classes. asset_coverage_for_scope additionally reports in_scope and untested per asset. Reads are read-only over the graph tables."
     },
     "recon_ingestion_bridge": {
       "id": "A2-recon",
@@ -193,8 +193,8 @@
         "tests/test_graph_repository.py::TestDispatcherOwnershipBoundary",
         "scripts/check_graph_import_boundary.py"
       ],
-      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with migrations 033 and 034 applied; 69 graph tests passed, 0 skipped (CI job graph-repository-db).",
-      "notes": "Enforced twice: (1) every repository mutation calls require_graph_write_owner and only DispatcherGraph's @dispatcher_owned methods open that scope, so direct repository/ingestor writes raise GraphOwnershipError; (2) CI runs scripts/check_graph_import_boundary.py, which fails when a worker/agent module imports the graph write surface outside the allowlist."
+      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 88 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
+      "notes": "Enforced twice: (1) every repository mutation calls require_graph_write_owner and only DispatcherGraph's @dispatcher_owned methods open that scope, so direct repository/ingestor writes raise GraphOwnershipError; (2) CI runs scripts/check_graph_import_boundary.py, which fails when a worker/agent module imports the graph write surface outside the allowlist. The allowlist holds the recon bridge plus the read-only coverage CLI, which never mutates graph state."
     },
     "A-04": {
       "status": "VERIFIED (DB-BACKED)",
@@ -209,23 +209,25 @@
       "tests": [
         "tests/test_graph_repository.py::TestAssetCanonicalization"
       ],
-      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with migrations 033 and 034 applied; 69 graph tests passed, 0 skipped (CI job graph-repository-db).",
+      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 88 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
       "notes": "Canonicalizers cover case, IDNA, trailing dot, default port, userinfo, trailing slash and IP compression, with derived parent links."
     },
     "A-02": {
       "status": "VERIFIED (DB-BACKED)",
       "tests": [
+        "tests/test_graph_repository.py::TestCrossToolMerge",
         "tests/test_graph_repository.py::TestAssetIngestion"
       ],
-      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with migrations 033 and 034 applied; 69 graph tests passed, 0 skipped (CI job graph-repository-db).",
+      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 88 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
       "notes": "Two tools reporting the same asset merge onto one canonical row with two observations."
     },
     "A-03": {
       "status": "VERIFIED (DB-BACKED)",
       "tests": [
+        "tests/test_graph_repository.py::TestTenantBoundary",
         "tests/test_graph_repository.py::TestAssetIngestion::test_two_scopes_do_not_merge_or_leak"
       ],
-      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with migrations 033 and 034 applied; 69 graph tests passed, 0 skipped (CI job graph-repository-db).",
+      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 88 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
       "notes": "Scoped identity index prevents cross-scope merge; scoped reads never leak another scope's assets."
     }
   }

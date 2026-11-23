@@ -209,6 +209,20 @@ A2 is implemented on top of the graph tables:
   `untested_asset_types` / `undiscovered_asset_types`.
   `asset_coverage_for_scope` now also reports `in_scope` and `untested`.
 
+- Tenant boundary (A-03): `database/migrations/035_graph_tenant_boundary.sql`
+  adds `tenant_id` (the engagement's `org_id`) to `graph_assets` and
+  `graph_asset_observations`. `DispatcherGraph` resolves the scope owner and
+  raises `GraphTenantViolation` when a write names another tenant; the repository
+  repeats the check at the row level, so a mismatched asset or observation write
+  is rejected rather than silently written or re-owned.
+- Computed coverage (A2): `DispatcherGraph.coverage_report(scope_id)` loads
+  `engagements.authorized_scope` and compares it with the assets actually
+  discovered in that scope. It reports `approved_but_undiscovered` gaps
+  (domains and CIDR `ipRanges`), `discovered_but_unapproved` assets,
+  `rejected_observations` with their count, and the untested/undiscovered asset
+  classes. `argus graph-coverage -e <engagement>` exposes the same report; both
+  paths are read-only over the graph tables.
+
 C-18 is now enforced twice:
 
 - Runtime: every mutating repository method calls
@@ -220,10 +234,15 @@ C-18 is now enforced twice:
   the dispatcher-owned allowlist imports `graph_repository`, `dispatcher_graph`
   or `graph_ingest`.
 
-Verification: the `graph-repository-db` CI job applies migrations 033 and 034 to
-Postgres 16, runs the import-boundary check and runs the graph tests. Locally the
-same steps give **69 passed, 0 skipped** (34 passed / 35 skipped without a
-database).
+Verification: the `graph-repository-db` CI job runs the full migration runner
+through 035 against Postgres 16 (and asserts the scoped identity index and both
+`tenant_id` columns exist), runs the import-boundary check and runs the graph
+tests. Locally the same steps give **88 passed, 0 skipped** (many skipped without
+a database). The DB-backed suites include two-tool merges across case, default
+port, trailing slash, IDNA/punycode hosts and differently shaped service keys
+(`TestCrossToolMerge`), computed coverage gaps plus rejected out-of-scope
+discoveries (`TestComputedCoverage`), and cross-tenant asset/observation
+rejection (`TestTenantBoundary`).
 
 ## 7. What is still open after this note
 

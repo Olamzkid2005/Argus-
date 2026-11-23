@@ -338,6 +338,56 @@ def _host_for_identity(asset_type: str, canonical_key: str) -> str:
     return netloc.rsplit(":", 1)[0]
 
 
+def scope_entries(authorized_scope: dict | str | None) -> list[dict[str, str]]:
+    """
+    Flatten an authorized scope into comparable approved targets.
+
+    Each entry is ``{"kind": "domain" | "ip_range", "value": ...}`` so coverage
+    can report approved targets that were never discovered.
+    """
+    scope = parse_scope(authorized_scope)
+    if scope is None:
+        return []
+    entries = [{"kind": "domain", "value": domain} for domain in scope["domains"]]
+    entries.extend(
+        {"kind": "ip_range", "value": ip_range} for ip_range in scope["ipRanges"]
+    )
+    return entries
+
+
+def undiscovered_scope_entries(
+    discovered_assets: list[dict],
+    authorized_scope: dict | str | None,
+) -> list[dict[str, str]]:
+    """
+    Approved scope entries with no matching discovered asset (coverage gaps).
+
+    A gap means the operator approved a target but no tool ever reported anything
+    inside it, which is the opposite of an untested discovered asset.
+    """
+    gaps: list[dict[str, str]] = []
+    for entry in scope_entries(authorized_scope):
+        matched = False
+        for asset in discovered_assets:
+            asset_type = asset["asset_type"]
+            canonical_key = asset["canonical_key"]
+            if entry["kind"] == "domain":
+                if asset_type == IP:
+                    continue
+                host = _host_for_identity(asset_type, canonical_key)
+                if host and _host_matches_domains(host, [entry["value"]]):
+                    matched = True
+                    break
+            elif asset_type == IP and _host_matches_ranges(
+                canonical_key, [entry["value"]]
+            ):
+                matched = True
+                break
+        if not matched:
+            gaps.append(dict(entry))
+    return gaps
+
+
 def asset_in_scope(
     asset_type: str,
     canonical_key: str,

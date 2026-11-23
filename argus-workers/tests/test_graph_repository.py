@@ -34,6 +34,7 @@ from database.graph_identity import (
 from database.graph_ingest import GraphIngestor
 from database.graph_ownership import (
     GraphOwnershipError,
+    dispatcher_write_scope,
     find_import_boundary_violations,
 )
 from database.graph_repository import (
@@ -41,6 +42,7 @@ from database.graph_repository import (
     ExplorationGraphRepository,
     GraphNodeKind,
     GraphNodeState,
+    GraphTenantViolation,
     OutboxStatus,
     TodoStatus,
 )
@@ -896,3 +898,257 @@ class TestDispatcherOwnershipBoundary:
     def test_worker_modules_do_not_import_the_graph_write_surface(self):
         workers_root = Path(__file__).resolve().parents[1]
         assert find_import_boundary_violations(workers_root) == []
+
+
+# ---------------------------------------------------------------------------
+# Computed coverage vs the engagement's approved scope
+# ---------------------------------------------------------------------------
+
+
+def _create_engagement(
+    scope_id: str,
+    org_id: str | None,
+    authorized_scope: dict | None,
+) -> None:
+    """Persist a minimal engagement row so scope/tenant lookups are real."""
+    import psycopg2
+    from psycopg2.extras import Json
+
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO engagements (id, org_id, target, authorized_scope)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    org_id = EXCLUDED.org_id,
+                    authorized_scope = EXCLUDED.authorized_scope
+                """,
+                (
+                    scope_id,
+                    org_id,
+                    "https://api.example.com",
+                    Json(authorized_scope) if authorized_scope is not None else None,
+                ),
+            )
+    finally:
+        conn.close()
+
+
+@pytest.mark.skipif(not DB_AVAILABLE, reason="DATABASE_URL not reachable in this environment")
+class TestComputedCoverage:
+    def test_coverage_reports_gaps_rejections_and_unapproved_assets(self):
+        scope_id = str(uuid.uuid4())
+        authorized_scope = {
+            "domains": ["api.example.com", "missing.example.com"],
+            "ipRanges": ["10.9.0.0/24"],
+        }
+        _create_engagement(scope_id, str(uuid.uuid4()), authorized_scope)
+        repo = ExplorationGraphRepository()
+        dispatcher = DispatcherGraph(repo)
+
+        dispatcher.ingest_observation(
+            "endpoint",
+            "https://api.example.com/v1",
+            source="httpx",
+            scope_id=scope_id,
+        )
+        rejected = dispatcher.ingest_observation(
+            "endpoint",
+            "https://evil.test/x",
+            source="nuclei",
+            scope_id=scope_id,
+            authorized_scope=authorized_scope,
+        )
+        assert rejected["accepted"] is False
+
+        # A discovery ingested without scope enforcement later shows up as
+        # discovered-but-unapproved rather than being silently counted as work.
+        dispatcher.ingest_observation(
+            "root_domain", "legacy.test", source="subfinder", scope_id=scope_id
+        )
+
+        report = dispatcher.coverage_report(scope_id)
+
+        assert report["authorized_scope_checked"] is True
+        gaps = {(gap["kind"], gap["value"]) for gap in report["approved_but_undiscovered"]}
+        assert ("domain", "missing.example.com") in gaps
+        assert ("ip_range", "10.9.0.0/24") in gaps
+        assert ("domain", "api.example.com") not in gaps
+
+        unapproved = {
+            asset["canonical_key"] for asset in report["discovered_but_unapproved"]
+        }
+        assert "legacy.test" in unapproved
+        assert "https://api.example.com/v1" not in unapproved
+
+        assert report["rejected_observation_count"] == 1
+        assert report["rejected_observations"][0]["observed_value"] == "https://evil.test/x"
+        assert report["rejected_observations"][0]["rejection_reason"] == "out_of_scope"
+
+        assert "endpoint" in report["untested_asset_types"]
+        assert "service" in report["undiscovered_asset_types"]
+
+    def test_coverage_without_an_approved_scope_reports_no_gaps(self):
+        scope_id = str(uuid.uuid4())
+        _create_engagement(scope_id, str(uuid.uuid4()), None)
+        dispatcher = DispatcherGraph(ExplorationGraphRepository())
+        dispatcher.ingest_observation(
+            "root_domain", "no-scope.example.com", source="subfinder", scope_id=scope_id
+        )
+
+        report = dispatcher.coverage_report(scope_id)
+
+        assert report["authorized_scope_checked"] is False
+        assert report["approved_but_undiscovered"] == []
+        assert report["discovered_but_unapproved"] == []
+
+
+# ---------------------------------------------------------------------------
+# A-02 — two tools, one canonical asset, both provenances
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not DB_AVAILABLE, reason="DATABASE_URL not reachable in this environment")
+class TestCrossToolMerge:
+    def test_endpoint_variants_from_two_tools_merge_with_provenance(self):
+        scope_id = str(uuid.uuid4())
+        _create_engagement(scope_id, str(uuid.uuid4()), None)
+        repo = ExplorationGraphRepository()
+        dispatcher = DispatcherGraph(repo)
+
+        first = dispatcher.ingest_observation(
+            "endpoint",
+            "https://API.Example.com:443/v1/",
+            source="httpx",
+            scope_id=scope_id,
+            parser_version="httpx@1.2",
+            confidence=0.9,
+        )
+        second = dispatcher.ingest_observation(
+            "endpoint",
+            "https://api.example.com/v1",
+            source="nuclei",
+            scope_id=scope_id,
+            parser_version="nuclei@3.1",
+        )
+
+        assert first["asset"]["id"] == second["asset"]["id"]
+        observations = repo.find_observations_for_asset(first["asset"]["id"])
+        assert {(row["source"], row["parser_version"]) for row in observations} == {
+            ("httpx", "httpx@1.2"),
+            ("nuclei", "nuclei@3.1"),
+        }
+        assert {float(row["confidence"]) for row in observations if row["confidence"]} == {
+            0.9
+        }
+        assert len(repo.find_assets_for_scope(scope_id, asset_type="endpoint")) == 1
+
+    def test_idna_variants_from_two_tools_merge(self):
+        scope_id = str(uuid.uuid4())
+        _create_engagement(scope_id, str(uuid.uuid4()), None)
+        repo = ExplorationGraphRepository()
+        dispatcher = DispatcherGraph(repo)
+
+        unicode_host = dispatcher.ingest_observation(
+            "root_domain", "Bücher.Example", source="subfinder", scope_id=scope_id
+        )
+        punycode_host = dispatcher.ingest_observation(
+            "root_domain", "xn--bcher-kva.example", source="amass", scope_id=scope_id
+        )
+
+        assert unicode_host["asset"]["id"] == punycode_host["asset"]["id"]
+        assert unicode_host["canonical_key"] == "xn--bcher-kva.example"
+        observations = repo.find_observations_for_asset(unicode_host["asset"]["id"])
+        assert {row["source"] for row in observations} == {"subfinder", "amass"}
+
+    def test_differently_shaped_service_keys_merge(self):
+        scope_id = str(uuid.uuid4())
+        _create_engagement(scope_id, str(uuid.uuid4()), None)
+        repo = ExplorationGraphRepository()
+        dispatcher = DispatcherGraph(repo)
+
+        naabu = dispatcher.ingest_observation(
+            "service", "API.Example.com:443/TCP", source="naabu", scope_id=scope_id
+        )
+        nmap = dispatcher.ingest_observation(
+            "service", "tcp://api.example.com:443", source="nmap", scope_id=scope_id
+        )
+
+        assert naabu["asset"]["id"] == nmap["asset"]["id"]
+        assert naabu["canonical_key"] == "tcp://api.example.com:443"
+        observations = repo.find_observations_for_asset(naabu["asset"]["id"])
+        assert {row["source"] for row in observations} == {"naabu", "nmap"}
+        assert len(repo.find_assets_for_scope(scope_id, asset_type="service")) == 1
+
+
+# ---------------------------------------------------------------------------
+# A-03 — tenant boundary enforced on graph writes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not DB_AVAILABLE, reason="DATABASE_URL not reachable in this environment")
+class TestTenantBoundary:
+    def test_cross_tenant_asset_write_is_rejected(self):
+        scope_id = str(uuid.uuid4())
+        tenant_a = str(uuid.uuid4())
+        tenant_b = str(uuid.uuid4())
+        _create_engagement(scope_id, tenant_a, None)
+        repo = ExplorationGraphRepository()
+        dispatcher = DispatcherGraph(repo)
+
+        asset = dispatcher.ingest_observation(
+            "root_domain", "tenant.example.com", source="subfinder", scope_id=scope_id
+        )
+        assert str(asset["asset"]["tenant_id"]) == tenant_a
+
+        with pytest.raises(GraphTenantViolation):
+            dispatcher.ensure_asset(
+                "tenant.example.com",
+                "root_domain",
+                scope_id=scope_id,
+                tenant_id=tenant_b,
+            )
+        with pytest.raises(GraphTenantViolation):
+            dispatcher.ingest_observation(
+                "subdomain",
+                "other.example.com",
+                source="subfinder",
+                scope_id=scope_id,
+                tenant_id=tenant_b,
+            )
+
+        assets = repo.find_assets_for_scope(scope_id)
+        assert all(str(row["tenant_id"]) == tenant_a for row in assets)
+        assert (
+            repo.find_asset_by_identity(
+                "other.example.com", "subdomain", scope_id=scope_id
+            )
+            is None
+        )
+
+    def test_cross_tenant_observation_write_is_rejected(self):
+        scope_id = str(uuid.uuid4())
+        tenant_a = str(uuid.uuid4())
+        tenant_b = str(uuid.uuid4())
+        _create_engagement(scope_id, tenant_a, None)
+        repo = ExplorationGraphRepository()
+        dispatcher = DispatcherGraph(repo)
+        asset = dispatcher.ingest_observation(
+            "root_domain", "observed.example.com", source="subfinder", scope_id=scope_id
+        )
+
+        with pytest.raises(GraphTenantViolation):
+            with dispatcher_write_scope():
+                repo.record_asset_observation(
+                    asset_id=asset["asset"]["id"],
+                    asset_type="root_domain",
+                    observed_value="observed.example.com",
+                    source="intruder",
+                    scope_id=scope_id,
+                    tenant_id=tenant_b,
+                )
+
+        observations = repo.find_observations_for_asset(asset["asset"]["id"])
+        assert {row["source"] for row in observations} == {"subfinder"}

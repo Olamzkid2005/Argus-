@@ -9,6 +9,7 @@ same path persists through the dispatcher-owned repository.
 
 from __future__ import annotations
 
+import argparse
 import os
 import uuid
 
@@ -207,6 +208,40 @@ class TestReconGraphIngestion:
         )
         assert service["observed_value"] == "[2001:db8::1]:443/tcp"
 
+    def test_bridge_canonicalizes_case_port_slash_and_idna(self):
+        repo = _StubRepository()
+
+        ingest_recon_outcomes(
+            "eng-1",
+            {
+                "target_url": "https://API.Example.com:443/v1/",
+                "subdomains": ["B\u00fccher.Example"],
+            },
+            authorized_scope=None,
+            repository=repo,
+        )
+        ingest_recon_outcomes(
+            "eng-1",
+            {
+                "target_url": "https://api.example.com/v1",
+                "subdomains": ["xn--bcher-kva.example"],
+            },
+            authorized_scope=None,
+            repository=repo,
+        )
+
+        endpoint_keys = [
+            key for key in repo.assets if key[1].startswith("https://api.example.com")
+        ]
+        idna_keys = [
+            key
+            for key in repo.assets
+            if key[2] == "subdomain" and "bcher-kva" in key[1]
+        ]
+        assert len(endpoint_keys) == 1
+        assert len(idna_keys) == 1
+        assert idna_keys[0][1] == "xn--bcher-kva.example"
+
     def test_max_assets_bounds_a_single_run(self):
         repo = _StubRepository()
 
@@ -251,3 +286,14 @@ class TestReconIngestionPersistence:
         )
         observations = repo.find_observations_for_asset(endpoint["id"])
         assert any(row["source"] == "recon" for row in observations)
+
+
+class TestGraphCoverageCli:
+    def test_requires_engagement_and_database_url(self, monkeypatch, capsys):
+        from cli.cmd.graph_coverage import cmd_graph_coverage
+
+        assert cmd_graph_coverage(argparse.Namespace(engagement=None, json=False)) == 2
+
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        assert cmd_graph_coverage(argparse.Namespace(engagement="eng-1", json=False)) == 2
+        assert "DATABASE_URL" in capsys.readouterr().out

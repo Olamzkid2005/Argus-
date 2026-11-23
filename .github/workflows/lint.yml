@@ -265,18 +265,18 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt -q
 
-      - name: Apply graph migrations 033 and 034
+      - name: Apply migrations
         run: |
           python - <<'PY'
           import os
-          import pathlib
 
           import psycopg2
 
-          migrations = [
-              pathlib.Path("database/migrations/033_graph_tables.sql"),
-              pathlib.Path("database/migrations/034_graph_asset_observations.sql"),
-          ]
+          from database.migrations.runner import run_migrations
+
+          applied = run_migrations()
+          print(f"Applied {len(applied)} migrations")
+
           expected = {
               "graph_assets",
               "graph_asset_observations",
@@ -292,8 +292,6 @@ jobs:
           conn = psycopg2.connect(os.environ["DATABASE_URL"])
           try:
               with conn, conn.cursor() as cur:
-                  for migration in migrations:
-                      cur.execute(migration.read_text(encoding="utf-8"))
                   cur.execute(
                       "SELECT table_name FROM information_schema.tables "
                       "WHERE table_schema = 'public'"
@@ -305,14 +303,25 @@ jobs:
                       "AND indexname = 'idx_graph_assets_scoped_identity'"
                   )
                   scoped_identity = cur.fetchone() is not None
+                  cur.execute(
+                      "SELECT table_name, column_name FROM information_schema.columns "
+                      "WHERE table_schema = 'public' AND column_name = 'tenant_id' "
+                      "AND table_name IN ('graph_assets', 'graph_asset_observations')"
+                  )
+                  tenant_columns = {row[0] for row in cur.fetchall()}
           finally:
               conn.close()
 
           missing = sorted(expected - found)
           if missing:
-              raise SystemExit(f"graph migrations did not create: {missing}")
+              raise SystemExit(f"migrations did not create: {missing}")
           if not scoped_identity:
               raise SystemExit("migration 034 did not create the scoped asset identity index")
+          if tenant_columns != {"graph_assets", "graph_asset_observations"}:
+              raise SystemExit(
+                  "migration 035 did not add tenant_id to both graph tables: "
+                  f"{sorted(tenant_columns)}"
+              )
           print("Graph tables present: " + ", ".join(sorted(expected)))
           PY
 

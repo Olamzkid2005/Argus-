@@ -25,7 +25,12 @@ from database.graph_repository import (
     GraphMutationError,
     GraphNodeKind,
     GraphNodeState,
+    GraphTenantViolation,
+    load_authorized_scope,
+    resolve_scope_tenant,
 )
+
+_UNSET = object()
 
 
 def dispatcher_owned(method):
@@ -67,22 +72,39 @@ class DispatcherGraph:
         display_value: str | None = None,
         scope_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        tenant_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Ensure a canonical asset exists and return it.
 
         Canonical assets are authoritative. Engagements reference them through
-        anchors and coverage, not by copying subgraphs.
+        anchors and coverage, not by copying subgraphs. When the scope has a known
+        owner tenant, a write naming a different tenant is rejected (A-03).
         """
         if not canonical_key or not asset_type:
             raise GraphMutationError("canonical_key and asset_type are required")
+        tenant = self._resolve_tenant(scope_id, tenant_id)
         return self._repo.upsert_asset(
             canonical_key,
             asset_type,
             display_value=display_value,
             scope_id=scope_id,
             metadata=metadata,
+            tenant_id=tenant,
         )
+
+    def _resolve_tenant(
+        self, scope_id: str | None, tenant_id: str | None
+    ) -> str | None:
+        """Resolve the write tenant and reject a mismatch with the scope owner."""
+        if not scope_id:
+            return tenant_id
+        owner = resolve_scope_tenant(scope_id)
+        if tenant_id is not None and owner is not None and str(tenant_id) != owner:
+            raise GraphTenantViolation(
+                f"scope {scope_id} is owned by tenant {owner}, not {tenant_id}"
+            )
+        return tenant_id if tenant_id is not None else owner
 
     # ----- exploration nodes -----
 
@@ -432,14 +454,17 @@ class DispatcherGraph:
         confidence: float | None = None,
         authorized_scope: dict | str | None = None,
         create_parents: bool = True,
+        tenant_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Ingest one raw observation as canonical graph data.
 
         Canonicalization, authorized-scope enforcement, parent linking and
         observation merging all happen inside this dispatcher-owned call, so a
-        tool cannot add assets to the graph by itself.
+        tool cannot add assets to the graph by itself. A write naming a tenant
+        other than the scope owner is rejected before anything is written.
         """
+        tenant = self._resolve_tenant(scope_id, tenant_id)
         return self._ingestor.ingest_observation(
             asset_type,
             observed_value,
@@ -449,6 +474,7 @@ class DispatcherGraph:
             confidence=confidence,
             authorized_scope=authorized_scope,
             create_parents=create_parents,
+            tenant_id=tenant,
         )
 
     def compute_coverage(
@@ -463,3 +489,24 @@ class DispatcherGraph:
         return self._repo.compute_scope_coverage(
             scope_id, authorized_scope=authorized_scope
         )
+
+    def coverage_report(
+        self,
+        scope_id: str,
+        *,
+        authorized_scope: dict | str | None = _UNSET,
+    ) -> dict[str, Any]:
+        """
+        Coverage report comparing discovered assets with the engagement's approved
+        scope (A2). When no scope is supplied, ``engagements.authorized_scope`` is
+        read first, so callers cannot accidentally compare against nothing.
+        """
+        if not scope_id:
+            raise GraphMutationError("scope_id is required")
+        if authorized_scope is _UNSET:
+            authorized_scope = load_authorized_scope(scope_id)
+        report = self._repo.compute_scope_coverage(
+            scope_id, authorized_scope=authorized_scope
+        )
+        report["authorized_scope_checked"] = authorized_scope is not None
+        return report

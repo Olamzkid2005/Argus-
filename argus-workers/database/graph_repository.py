@@ -9,17 +9,28 @@ repository under the dispatcher's transaction/ownership rules.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from psycopg2.extras import Json, RealDictCursor
 
-from database.graph_identity import ASSET_TYPES, asset_in_scope
+from database.graph_identity import (
+    ASSET_TYPES,
+    asset_in_scope,
+    undiscovered_scope_entries,
+)
 from database.graph_ownership import require_graph_write_owner
 from database.repositories.base import BaseRepository
+
+logger = logging.getLogger(__name__)
 
 
 class GraphMutationError(Exception):
     """Dispatched graph mutation was invalid or rejected."""
+
+
+class GraphTenantViolation(GraphMutationError):
+    """A graph write named a tenant that does not own the scope/asset (A-03)."""
 
 
 class GraphNodeKind(str):
@@ -89,13 +100,16 @@ class ExplorationGraphRepository(BaseRepository):
         metadata: dict[str, Any] | None = None,
         parent_asset_id: str | None = None,
         parent_relationship: str | None = None,
+        tenant_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Insert or update a canonical asset by identity.
 
         Identity is (scope, canonical_key, asset_type): the same asset discovered
         under two different scopes stays two rows (A-03), while unscoped assets
-        share one bucket. Returns the current asset row.
+        share one bucket. A write naming a different tenant than the asset's
+        existing owner is rejected rather than silently re-owned. Returns the
+        current asset row.
         """
         require_graph_write_owner("upsert_asset")
         if metadata is None:
@@ -104,12 +118,32 @@ class ExplorationGraphRepository(BaseRepository):
         with self.db_operation(
             commit=True, cursor_factory=RealDictCursor
         ) as (conn, cursor):
+            if tenant_id is not None:
+                cursor.execute(
+                    """
+                    SELECT tenant_id FROM graph_assets
+                    WHERE canonical_key = %s AND asset_type = %s
+                      AND scope_id IS NOT DISTINCT FROM %s
+                    """,
+                    (canonical_key, asset_type, scope_id),
+                )
+                existing = cursor.fetchone()
+                if (
+                    existing is not None
+                    and existing["tenant_id"] is not None
+                    and str(existing["tenant_id"]) != str(tenant_id)
+                ):
+                    raise GraphTenantViolation(
+                        f"asset {asset_type}:{canonical_key} is owned by tenant "
+                        f"{existing['tenant_id']}, not {tenant_id}"
+                    )
+
             cursor.execute(
                 """
                 INSERT INTO graph_assets
                     (scope_id, canonical_key, asset_type, display_value, metadata,
-                     last_seen_at, parent_asset_id, parent_relationship)
-                VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s)
+                     last_seen_at, parent_asset_id, parent_relationship, tenant_id)
+                VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, %s)
                 ON CONFLICT (
                     COALESCE(scope_id, '00000000-0000-0000-0000-000000000000'::uuid),
                     canonical_key,
@@ -119,6 +153,7 @@ class ExplorationGraphRepository(BaseRepository):
                     metadata = EXCLUDED.metadata,
                     parent_asset_id = COALESCE(EXCLUDED.parent_asset_id, graph_assets.parent_asset_id),
                     parent_relationship = COALESCE(EXCLUDED.parent_relationship, graph_assets.parent_relationship),
+                    tenant_id = COALESCE(EXCLUDED.tenant_id, graph_assets.tenant_id),
                     last_seen_at = NOW(),
                     updated_at = NOW()
                 RETURNING *
@@ -131,6 +166,7 @@ class ExplorationGraphRepository(BaseRepository):
                     Json(metadata),
                     parent_asset_id,
                     parent_relationship,
+                    tenant_id,
                 ),
             )
             row = cursor.fetchone()
@@ -202,12 +238,14 @@ class ExplorationGraphRepository(BaseRepository):
         confidence: float | None = None,
         accepted: bool = True,
         rejection_reason: str | None = None,
+        tenant_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Record a raw asset observation, merging replays onto one row (A-16).
 
         Rejected observations keep asset_id NULL: they are retained for audit but
-        never become schedulable assets.
+        never become schedulable assets. An observation naming a tenant other than
+        the asset's owner is rejected.
         """
         require_graph_write_owner("record_asset_observation")
         if accepted and asset_id is None:
@@ -218,12 +256,27 @@ class ExplorationGraphRepository(BaseRepository):
         with self.db_operation(
             commit=True, cursor_factory=RealDictCursor
         ) as (conn, cursor):
+            if asset_id is not None and tenant_id is not None:
+                cursor.execute(
+                    "SELECT tenant_id FROM graph_assets WHERE id = %s", (asset_id,)
+                )
+                existing = cursor.fetchone()
+                if (
+                    existing is not None
+                    and existing["tenant_id"] is not None
+                    and str(existing["tenant_id"]) != str(tenant_id)
+                ):
+                    raise GraphTenantViolation(
+                        f"observation for asset {asset_id} names tenant {tenant_id}, "
+                        f"but the asset is owned by {existing['tenant_id']}"
+                    )
+
             cursor.execute(
                 """
                 INSERT INTO graph_asset_observations
                     (asset_id, scope_id, asset_type, observed_value, source,
-                     parser_version, confidence, accepted, rejection_reason)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     parser_version, confidence, accepted, rejection_reason, tenant_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (
                     COALESCE(scope_id, '00000000-0000-0000-0000-000000000000'::uuid),
                     asset_type,
@@ -238,6 +291,7 @@ class ExplorationGraphRepository(BaseRepository):
                     END,
                     parser_version = COALESCE(EXCLUDED.parser_version, graph_asset_observations.parser_version),
                     confidence = COALESCE(EXCLUDED.confidence, graph_asset_observations.confidence),
+                    tenant_id = COALESCE(EXCLUDED.tenant_id, graph_asset_observations.tenant_id),
                     observation_count = graph_asset_observations.observation_count + 1,
                     last_observed_at = NOW(),
                     updated_at = NOW()
@@ -253,6 +307,7 @@ class ExplorationGraphRepository(BaseRepository):
                     confidence,
                     accepted,
                     rejection_reason,
+                    tenant_id,
                 ),
             )
             row = cursor.fetchone()
@@ -680,6 +735,46 @@ class ExplorationGraphRepository(BaseRepository):
             bucket["covered"] += int(covered)
             bucket["untested"] += int(untested)
 
+        approved_but_undiscovered = (
+            undiscovered_scope_entries(assets, authorized_scope)
+            if authorized_scope is not None
+            else []
+        )
+        discovered_but_unapproved = [
+            {
+                "id": asset["id"],
+                "asset_type": asset["asset_type"],
+                "canonical_key": asset["canonical_key"],
+            }
+            for asset in assets
+            if not asset["in_scope"]
+        ]
+
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT id, asset_type, observed_value, source, rejection_reason,
+                       last_observed_at
+                FROM graph_asset_observations
+                WHERE scope_id = %s AND accepted = FALSE
+                ORDER BY last_observed_at DESC
+                LIMIT 100
+                """,
+                (scope_id,),
+            )
+            rejected_observations = [dict(row) for row in cursor.fetchall()]
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS rejected_count
+                FROM graph_asset_observations
+                WHERE scope_id = %s AND accepted = FALSE
+                """,
+                (scope_id,),
+            )
+            rejected_count = int(cursor.fetchone()["rejected_count"])
+
         return {
             "scope_id": scope_id,
             "assets_total": len(assets),
@@ -694,6 +789,10 @@ class ExplorationGraphRepository(BaseRepository):
                 if counts["untested"]
             ),
             "undiscovered_asset_types": sorted(ASSET_TYPES - set(by_asset_type)),
+            "approved_but_undiscovered": approved_but_undiscovered,
+            "discovered_but_unapproved": discovered_but_unapproved,
+            "rejected_observations": rejected_observations,
+            "rejected_observation_count": rejected_count,
             "assets": assets,
         }
 
@@ -1115,3 +1214,52 @@ class ExplorationGraphRepository(BaseRepository):
             )
             row = cursor.fetchone()
             return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Read-only engagement ownership lookups
+# ---------------------------------------------------------------------------
+
+
+def load_authorized_scope(scope_id: str) -> dict | str | None:
+    """
+    Read the engagement's ``authorized_scope`` column (read-only).
+
+    Returns None when the row or column is missing, which means there is no
+    approved scope to compare against.
+    """
+    try:
+        from database.connection import db_cursor
+
+        with db_cursor() as cursor:
+            cursor.execute(
+                "SELECT authorized_scope FROM engagements WHERE id = %s", (scope_id,)
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+    except Exception as exc:  # noqa: BLE001 - ownership lookup must not break reads
+        logger.warning(
+            "Could not load authorized_scope for scope %s: %s", scope_id, exc
+        )
+        return None
+
+
+def resolve_scope_tenant(scope_id: str) -> str | None:
+    """
+    Return the tenant (``engagements.org_id``) that owns a scope (read-only).
+
+    Returns None when the engagement row or org_id is unavailable, in which case
+    there is no known owner to enforce against.
+    """
+    try:
+        from database.connection import db_cursor
+
+        with db_cursor() as cursor:
+            cursor.execute(
+                "SELECT org_id FROM engagements WHERE id = %s", (scope_id,)
+            )
+            row = cursor.fetchone()
+            return str(row[0]) if row and row[0] is not None else None
+    except Exception as exc:  # noqa: BLE001 - ownership lookup must not break reads
+        logger.warning("Could not resolve tenant for scope %s: %s", scope_id, exc)
+        return None

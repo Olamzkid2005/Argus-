@@ -19,7 +19,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from database.dispatcher_graph import DispatcherGraph
-from database.graph_repository import ExplorationGraphRepository
+from database.graph_repository import ExplorationGraphRepository, load_authorized_scope
 
 logger = logging.getLogger(__name__)
 
@@ -61,30 +61,6 @@ def _service_identity(host: str, entry: dict) -> str | None:
     protocol = str(entry.get("protocol") or "tcp").strip().lower() or "tcp"
     bracketed = f"[{host}]" if ":" in host else host
     return f"{bracketed}:{port}/{protocol}"
-
-
-def load_engagement_scope(engagement_id: str) -> dict | str | None:
-    """
-    Read the engagement's ``authorized_scope`` column (migration 022).
-
-    Returns None when the row or column is missing: ingestion then has no scope
-    to enforce, matching how the graph treats an unscoped engagement.
-    """
-    try:
-        from database.connection import db_cursor
-
-        with db_cursor() as cursor:
-            cursor.execute(
-                "SELECT authorized_scope FROM engagements WHERE id = %s",
-                (engagement_id,),
-            )
-            row = cursor.fetchone()
-            return row[0] if row else None
-    except Exception as exc:  # noqa: BLE001 - scope lookup must not break recon
-        logger.warning(
-            "Could not load authorized_scope for engagement %s: %s", engagement_id, exc
-        )
-        return None
 
 
 def _candidates(context: Any) -> list[tuple[str, str]]:
@@ -154,7 +130,7 @@ def ingest_recon_outcomes(
         }
 
     if authorized_scope is _UNSET:
-        authorized_scope = load_engagement_scope(engagement_id)
+        authorized_scope = load_authorized_scope(engagement_id)
 
     dispatcher = DispatcherGraph(repository or ExplorationGraphRepository())
     accepted = 0

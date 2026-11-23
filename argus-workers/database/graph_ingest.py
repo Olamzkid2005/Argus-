@@ -46,6 +46,7 @@ class GraphIngestor:
         confidence: float | None = None,
         authorized_scope: dict | str | None = None,
         create_parents: bool = True,
+        tenant_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Ingest one raw observation.
@@ -79,6 +80,7 @@ class GraphIngestor:
                 confidence=confidence,
                 accepted=False,
                 rejection_reason=REJECTION_OUT_OF_SCOPE,
+                tenant_id=tenant_id,
             )
             return {
                 "accepted": False,
@@ -94,6 +96,7 @@ class GraphIngestor:
             authorized_scope=authorized_scope,
             source=source,
             create_parents=create_parents,
+            tenant_id=tenant_id,
         )
 
         asset = self._repo.upsert_asset(
@@ -104,6 +107,7 @@ class GraphIngestor:
             metadata={"last_source": source.strip()},
             parent_asset_id=parent_asset["id"] if parent_asset else None,
             parent_relationship="child_of" if parent_asset else None,
+            tenant_id=tenant_id,
         )
 
         observation = self._repo.record_asset_observation(
@@ -115,6 +119,7 @@ class GraphIngestor:
             parser_version=parser_version,
             confidence=confidence,
             accepted=True,
+            tenant_id=tenant_id,
         )
 
         return {
@@ -133,6 +138,7 @@ class GraphIngestor:
         authorized_scope: dict | str | None,
         source: str,
         create_parents: bool,
+        tenant_id: str | None,
     ) -> dict[str, Any] | None:
         if parent is None or not create_parents:
             return None
@@ -145,4 +151,5 @@ class GraphIngestor:
             display_value=parent.canonical_key,
             scope_id=scope_id,
             metadata={"origin": "parent_link", "discovered_by": source.strip()},
+            tenant_id=tenant_id,
         )
