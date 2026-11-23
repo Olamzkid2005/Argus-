@@ -38,6 +38,9 @@ ALLOWED_COLUMNS = {
         "max_depth",
     ],
     "engagement_states": ["from_state", "to_state", "reason"],
+    # Graph nodes are updated through BaseRepository.update_by_id when the
+    # schema cannot be introspected, so the mutable columns need an allowlist.
+    "graph_nodes": ["state", "priority", "owner", "origin", "payload", "updated_at"],
     "job_states": [
         "status",
         "worker_id",
@@ -171,6 +174,14 @@ _ALLOWED_TABLE_NAMES = set(ALLOWED_COLUMNS.keys()) | {
     "rate_limits",
     "tool_metrics",
     "user_settings",
+    "graph_assets",
+    "graph_nodes",
+    "graph_anchors",
+    "graph_node_edges",
+    "graph_anchor_scopes",
+    "planner_frontier",
+    "planner_todos",
+    "graph_outbox",
 }
 _ALLOWED_ID_COLUMNS = {"id", "finding_id", "engagement_id", "user_id", "report_id"}
 

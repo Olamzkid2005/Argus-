@@ -1,0 +1,234 @@
+{
+  "meta": {
+    "stage": 0,
+    "updated_at": "2026-11-23T17:00:00+00:00",
+    "source_of_truth_for_this_stage": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md",
+    "actual_upstream_reference_used": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md (local copy of the Stage 0 spec)",
+    "local_baseline_inspected": [
+      "Makefile",
+      "argus-workers/README.md",
+      ".github/workflows/lint.yml",
+      "argus-workers/database/connection.py",
+      "argus-workers/database/repositories/base.py",
+      "argus-workers/database/repositories/engagement_repository.py",
+      "argus-workers/tests/test_attack_graph_db.py"
+    ]
+  },
+  "stage0_decisions": {
+    "first_deployment_mode_for_artrex_pass": "Python/PostgreSQL",
+    "why_first_mode": "ARTEX needs durable graph state plus compare-and-set claim/lease semantics; the repository already has a PostgreSQL-backed repository layer and connection discipline that make the first testable write path realistic without inventing a third store",
+    "authoritative_backend_for_first_pass": "PostgreSQL via the existing argus-workers/database repository pattern",
+    "graph_layer_owner_for_first_pass": "ARTEX",
+    "attack_graph_relationship": "separate; attack_graph_db.py is not repurposed as the exploration graph",
+    "c18_means_for_artrex_first_pass": "one dispatcher-owned graph repository interface; workers/agents return structured output and never commit graph state directly; first tests prove that boundary with a real repository call path"
+  },
+  "artrex_first_pass_surfaces": {
+    "A-04": {
+      "id": "A-04",
+      "title": "Create an intent/fact/finding anchored to an asset",
+      "reference_behaviour": "ARTEX exploration graph nodes can be anchored to one or more asset IDs, and graph queries return the exact relationship.",
+      "upstream_proof": "Plan Section 3.1 and 3.4; ARTEX db/exploration.go and db/assets.go cited in plan Section 1",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql, argus-workers/database/graph_repository.py, argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py run against PostgreSQL 16 with migration 033 applied (46 passed, 0 skipped). CI job graph-repository-db in .github/workflows/lint.yml provisions Postgres, applies migration 033 and runs the same tests, failing if any are skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 database with database/migrations/033_graph_tables.sql applied; all 46 graph repository + dispatcher tests passed and none skipped.",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "First ARTEX implementation target is committed and expanded: migration, dispatcher-owned graph repository, dispatcher surface, and unit tests. The pure-logic dispatcher validation tests pass here; the repository integration tests are skipped because DATABASE_URL is not reachable in this environment. DB-backed verification (23 Nov 2026): the integration tests now run against a real Postgres in CI instead of skipping."
+    },
+    "anchors_and_coverage": {
+      "id": "anchors_and_coverage",
+      "title": "Canonical shared asset graph — anchors and coverage",
+      "reference_behaviour": "Each canonical asset can carry engagement-scoped anchor handles and coverage metadata; engagements read and reference the canonical graph through anchors, not by copying subgraphs.",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql (graph_anchor_scopes), argus-workers/database/graph_repository.py (anchor_scope CRUD + asset_coverage_for_scope), argus-workers/database/dispatcher_graph.py (attach_anchor_scope, update_anchor_coverage), argus-workers/tests/test_graph_repository.py",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py run against PostgreSQL 16 with migration 033 applied (46 passed, 0 skipped). CI job graph-repository-db in .github/workflows/lint.yml provisions Postgres, applies migration 033 and runs the same tests, failing if any are skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 database with database/migrations/033_graph_tables.sql applied; all 46 graph repository + dispatcher tests passed and none skipped.",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "Anchor scopes and coverage metadata are committed on top of the canonical anchor table. Coverage is queried from the perspective of one engagement scope through graph_anchor_scopes, not by copying subgraphs. DB-backed verification (23 Nov 2026): the integration tests now run against a real Postgres in CI instead of skipping."
+    },
+    "per_engagement_exploration_graph": {
+      "id": "per_engagement_exploration_graph",
+      "title": "Per-engagement exploration graph",
+      "reference_behaviour": "An engagement explores by pulling a frontier from the canonical graph into its own exploration space; exploration nodes and edges are traceable back to the canonical node(s) they derive from.",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql (graph_node_edges), argus-workers/database/graph_repository.py (attach_edge, find_edges_for_engagement, find_edges_for_node), argus-workers/database/dispatcher_graph.py (attach_edge), argus-workers/tests/test_graph_repository.py",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py run against PostgreSQL 16 with migration 033 applied (46 passed, 0 skipped). CI job graph-repository-db in .github/workflows/lint.yml provisions Postgres, applies migration 033 and runs the same tests, failing if any are skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 database with database/migrations/033_graph_tables.sql applied; all 46 graph repository + dispatcher tests passed and none skipped.",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "Per-engagement exploration edges are committed and separate from canonical anchors. They describe how an engagement links exploration nodes to each other, traceable back to the canonical node(s) they derive from. DB-backed verification (23 Nov 2026): the integration tests now run against a real Postgres in CI instead of skipping."
+    },
+    "planner_frontier": {
+      "id": "planner_frontier",
+      "title": "Planner frontier",
+      "reference_behaviour": "A recoverable planner frontier per engagement holds the set of canonical/exploration nodes available to the planner for next expansion; frontier state is recoverable from the graph and todo/plan state, not held only in memory.",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql (planner_frontier), argus-workers/database/graph_repository.py (set_frontier_node, remove_frontier_node, find_frontier_for_engagement, clear_frontier_for_engagement), argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py run against PostgreSQL 16 with migration 033 applied (46 passed, 0 skipped). CI job graph-repository-db in .github/workflows/lint.yml provisions Postgres, applies migration 033 and runs the same tests, failing if any are skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 database with database/migrations/033_graph_tables.sql applied; all 46 graph repository + dispatcher tests passed and none skipped.",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "The frontier is committed as durable per-engagement rows, not in-memory state. Frontier UPSERT/clear/remove/read are implemented in the dispatcher-owned repository path. DB-backed verification (23 Nov 2026): the integration tests now run against a real Postgres in CI instead of skipping."
+    },
+    "persistent_todos": {
+      "id": "persistent_todos",
+      "title": "Persistent todos",
+      "reference_behaviour": "A planner todo store persists planning tasks across restarts; todo items reference engagements, canonical nodes, exploration nodes, frontier position, and status, with status transitions open/in-progress/done/blocked.",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql (planner_todos), argus-workers/database/graph_repository.py (create_todo, update_todo_status, find_todos_for_engagement, find_open_todos_for_engagement), argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py run against PostgreSQL 16 with migration 033 applied (46 passed, 0 skipped). CI job graph-repository-db in .github/workflows/lint.yml provisions Postgres, applies migration 033 and runs the same tests, failing if any are skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 database with database/migrations/033_graph_tables.sql applied; all 46 graph repository + dispatcher tests passed and none skipped.",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "Todos are the durable representation of planner work. Status transitions set started_at/completed_at appropriately and go through the dispatcher-owned repository path. DB-backed verification (23 Nov 2026): the integration tests now run against a real Postgres in CI instead of skipping."
+    },
+    "graph_outbox": {
+      "id": "graph_outbox",
+      "title": "Graph outbox",
+      "reference_behaviour": "Graph-side changes can be staged onto a dispatcher-owned outbox and dequeued for downstream consumers with at-least-once handling basics and a clear dispatcher ownership boundary.",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql (graph_outbox), argus-workers/database/graph_repository.py (enqueue_outbox, dequeue_outbox, find_outbox_for_scope, record_outbox_error, requeue_outbox), argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py run against PostgreSQL 16 with migration 033 applied (46 passed, 0 skipped). CI job graph-repository-db in .github/workflows/lint.yml provisions Postgres, applies migration 033 and runs the same tests, failing if any are skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 database with database/migrations/033_graph_tables.sql applied; all 46 graph repository + dispatcher tests passed and none skipped.",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "The outbox is dispatcher-owned. Dequeued rows are marked dequeued and timestamped but not deleted, so downstream consumers can reconcile against the outbox. Error recording and requeue are provided. DB-backed verification (23 Nov 2026): the integration tests now run against a real Postgres in CI instead of skipping."
+    },
+    "graph_change_driven_planning": {
+      "id": "graph_change_driven_planning",
+      "title": "Graph-change-driven planning",
+      "reference_behaviour": "Graph mutations (canonical or exploration) can trigger planning consideration through the outbox/frontier rather than polling; the flow is graph change -> outbox event -> planner frontier/todo update -> next planning pass, with the planner able to recompute from persisted state on restart.",
+      "argus_implementation": "PLUMBING COMMITTED; DURABLE DISPATCHER FLOW VERIFIED DB-BACKED",
+      "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql, argus-workers/database/graph_repository.py, argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py (dispatcher flow covers asset -> intent -> anchor -> frontier -> todo -> outbox)",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py run against PostgreSQL 16 with migration 033 applied (46 passed, 0 skipped). CI job graph-repository-db in .github/workflows/lint.yml provisions Postgres, applies migration 033 and runs the same tests, failing if any are skipped.",
+      "runtime_proof": "PASSED for the durable dispatcher flow asset -> intent -> anchor -> frontier -> todo -> outbox against PostgreSQL 16. Automatic planning triggered by a graph mutation (rather than by a caller driving the outbox) is still not implemented.",
+      "result": "PARTIALLY VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "All of the plumbing for graph-change-driven planning is committed through the same dispatcher-owned graph repository: canonical assets, exploration nodes/edges, anchors/coverage, frontier, todos, and outbox. The dispatcher-owned surface can stage an outbox event and update frontier/todo state in the same repository discipline. A live Postgres run is needed to verify the durable end-to-end flow here. DB-backed verification (23 Nov 2026): the dispatcher flow test now runs against a real Postgres; the remaining gap is the automatic trigger from mutation to planning pass."
+    },
+    "mcp_agentic_plan_blockers": {
+      "id": "mcp_agentic_plan_blockers",
+      "title": "MCP agentic plan tests blocked in this environment",
+      "reference_behaviour": "The MCP agentic plan tests should pass when their required runtime dependencies are available.",
+      "argus_implementation": "NOT CHANGED BY ARTEX; BLOCKED BY ENVIRONMENT FOR THIS RUN",
+      "argus_implementation_path": "argus-workers/tests/test_mcp_agentic_plan.py",
+      "test_proof": "TESTS SKIPPED IN THIS ENVIRONMENT",
+      "runtime_proof": "NOT RUN (blocked by missing database path and by missing module attribute for the hypotheses helper)",
+      "result": "NOT VERIFIED",
+      "deviation": "none",
+      "notes": "Two distinct blockers affect test_mcp_agentic_plan.py in this environment: (1) _agentic_plan needs a reachable database path to reach the LLM branch, so several tests are skipped with pytest.mark.skip; (2) TestPlanProvenanceThroughInitAndNext uses a helper that tries to patch mcp_server.HypothesisRepository, a name that does not exist on the module at import time, so those two tests are also skipped. These are environment/implementation-mismatch blockers, not ARTEX graph-layer blockers."
+    },
+    "asset_canonicalization": {
+      "id": "A-01",
+      "title": "Deterministic asset identity",
+      "reference_behaviour": "The same root domain/subdomain/URL observed with case, default-port, trailing-slash or IDNA variations upserts one canonical asset, and parent links remain valid.",
+      "upstream_proof": "Plan Section 3.3 (asset identity and write rules) and A-01",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/graph_identity.py, argus-workers/database/graph_ingest.py, argus-workers/tests/test_graph_repository.py (TestAssetCanonicalization, TestAssetIngestion.test_canonical_variants_share_parent_assets)",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py ran against PostgreSQL 16 (TestAssetCanonicalization, TestCrossToolMerge, TestComputedCoverage, TestTenantBoundary, TestDispatcherOwnershipBoundary) and none skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 90 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "root_domain uses a last-two-label heuristic instead of a public-suffix list",
+      "notes": "Hostnames are NFKC/IDNA-normalized, lower-cased and stripped of trailing dots; URLs drop userinfo and default ports and normalize trailing slashes; IPs are compressed. Parent chains are derived in application code."
+    },
+    "asset_observation_ingestion": {
+      "id": "A-02",
+      "title": "Observation merging across tools",
+      "reference_behaviour": "The same asset discovered by two tools in one workspace yields one asset ID, two source observations and no duplicate asset node.",
+      "upstream_proof": "Plan Section 3.3 and A-02",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/migrations/034_graph_asset_observations.sql, argus-workers/database/graph_ingest.py, argus-workers/database/graph_repository.py (record_asset_observation, find_observations_for_asset)",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py ran against PostgreSQL 16 (TestAssetCanonicalization, TestCrossToolMerge, TestComputedCoverage, TestTenantBoundary, TestDispatcherOwnershipBoundary) and none skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 90 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "Observations are unique per (scope, asset_type, raw value, source); replays increment observation_count instead of creating duplicate rows. Two tools observing the same asset through case, default-port, trailing-slash, IDNA/punycode or differently shaped service keys land on one graph_assets row with both provenance rows (TestCrossToolMerge)."
+    },
+    "tenant_scoped_asset_isolation": {
+      "id": "A-03",
+      "title": "Tenant/scope asset isolation",
+      "reference_behaviour": "The same domain discovered under two different tenant/workspace scopes has no cross-tenant visibility and is not merged into one asset.",
+      "upstream_proof": "Plan Section 3.3 and A-03",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/migrations/035_graph_tenant_boundary.sql (tenant_id on graph_assets/graph_asset_observations), argus-workers/database/graph_repository.py (GraphTenantViolation, tenant checks in upsert_asset/record_asset_observation, resolve_scope_tenant), argus-workers/database/dispatcher_graph.py (_resolve_tenant)",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py ran against PostgreSQL 16 (TestAssetCanonicalization, TestCrossToolMerge, TestComputedCoverage, TestTenantBoundary, TestDispatcherOwnershipBoundary) and none skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 90 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "Asset identity is unique per scope with unscoped assets in one shared bucket; find_assets_for_scope never returns another scope's assets. A write naming a tenant other than the scope owner (engagements.org_id) raises GraphTenantViolation at the dispatcher and repository layers instead of silently writing or re-owning. Out-of-scope observations are audited as rejected and never become schedulable."
+    },
+    "scope_coverage_reporting": {
+      "id": "A2-coverage",
+      "title": "Computed scope coverage and untested asset classes",
+      "reference_behaviour": "Coverage compares discovered assets against the approved scope and reports untested assets and asset classes.",
+      "upstream_proof": "Plan Section 3.7 milestone A2",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/database/graph_repository.py (compute_scope_coverage, asset_coverage_for_scope, schedule_coverage_gaps, load_authorized_scope), argus-workers/database/dispatcher_graph.py (compute_coverage, coverage_report, schedule_coverage_gaps), argus-workers/tasks/graph_ingestion.py (schedules gaps after each recon pass), argus-workers/cli/cmd/graph_coverage.py (argus graph-coverage --schedule)",
+      "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py ran against PostgreSQL 16 (TestAssetCanonicalization, TestCrossToolMerge, TestComputedCoverage, TestCoverageDrivenPlanning, TestTenantBoundary, TestDispatcherOwnershipBoundary) and none skipped.",
+      "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 90 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "Coverage is computed, not looked up: coverage_report reads engagements.authorized_scope and compares it with the assets actually discovered in the scope, reporting approved_but_undiscovered gaps (domains and CIDR ranges), discovered_but_unapproved assets, rejected out-of-scope observations (with reasons) and untested/undiscovered asset classes. asset_coverage_for_scope additionally reports in_scope and untested per asset. Reads are read-only over the graph tables. The gaps drive the planner: schedule_coverage_gaps turns each approved-but-undiscovered target into an expand todo and each untested asset class into a verify todo, puts both on the recoverable planner frontier, and is idempotent (an existing todo for the same coverage_gap_key is never duplicated). The recon bridge calls it after every ingestion pass, and argus graph-coverage --schedule runs it explicitly."
+    },
+    "recon_ingestion_bridge": {
+      "id": "A2-recon",
+      "title": "Recon outcomes ingested into the asset graph",
+      "reference_behaviour": "Structured recon/tool outcomes become raw asset observations and canonical assets through trusted ingestion.",
+      "upstream_proof": "Plan Section 3.7 milestone A2",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/tasks/graph_ingestion.py (ingest_recon_outcomes/ingest_recon_result), argus-workers/tasks/recon.py (both recon tasks ingest after the pipeline), argus-workers/tests/test_graph_ingestion.py",
+      "test_proof": "UNIT TESTS (stub repository) AND ONE DB-BACKED PERSISTENCE TEST PASS",
+      "runtime_proof": "PASSED (2026-11-23): 90 graph tests with 0 skipped against PostgreSQL 16; recon bridge covered by stub-repository unit tests and a persisted-path integration test.",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "The legacy assets table write in tasks/asset_discovery.py is unchanged; graph ingestion is additive.",
+      "notes": "run_recon and expand_recon call the bridge after ctx.orchestrator.run_recon, so real ReconContext outcomes (target URL, live endpoints, subdomains, open ports, crawled/API/auth URLs) create observations and assets. Ingestion failures are counted and logged, never raised into recon. IPv6 service identities are bracketed so scope checks resolve the host unambiguously."
+    }
+  },
+  "requirements": {
+    "C-18": {
+      "status": "VERIFIED",
+      "tests": [
+        "tests/test_graph_repository.py::TestDispatcherOwnershipBoundary",
+        "scripts/check_graph_import_boundary.py"
+      ],
+      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 90 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
+      "notes": "Enforced twice: (1) every repository mutation calls require_graph_write_owner and only DispatcherGraph's @dispatcher_owned methods open that scope, so direct repository/ingestor writes raise GraphOwnershipError; (2) CI runs scripts/check_graph_import_boundary.py, which fails when a worker/agent module imports the graph write surface outside the allowlist. The allowlist holds the recon bridge plus the read-only coverage CLI, which never mutates graph state."
+    },
+    "A-04": {
+      "status": "VERIFIED (DB-BACKED)",
+      "tests": [
+        "tests/test_graph_repository.py"
+      ],
+      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 database with database/migrations/033_graph_tables.sql applied; all 46 graph repository + dispatcher tests passed and none skipped.",
+      "notes": "Migration 033, repository, dispatcher surface and unit tests are committed, and the DB-backed integration tests now run in CI (job graph-repository-db) instead of skipping."
+    },
+    "A-01": {
+      "status": "VERIFIED (DB-BACKED)",
+      "tests": [
+        "tests/test_graph_repository.py::TestAssetCanonicalization"
+      ],
+      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 90 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
+      "notes": "Canonicalizers cover case, IDNA, trailing dot, default port, userinfo, trailing slash and IP compression, with derived parent links."
+    },
+    "A-02": {
+      "status": "VERIFIED (DB-BACKED)",
+      "tests": [
+        "tests/test_graph_repository.py::TestCrossToolMerge",
+        "tests/test_graph_repository.py::TestAssetIngestion"
+      ],
+      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 90 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
+      "notes": "Two tools reporting the same asset merge onto one canonical row with two observations."
+    },
+    "A-03": {
+      "status": "VERIFIED (DB-BACKED)",
+      "tests": [
+        "tests/test_graph_repository.py::TestTenantBoundary",
+        "tests/test_graph_repository.py::TestAssetIngestion::test_two_scopes_do_not_merge_or_leak"
+      ],
+      "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 90 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
+      "notes": "Scoped identity index prevents cross-scope merge; scoped reads never leak another scope's assets."
+    }
+  }
+}

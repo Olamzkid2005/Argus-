@@ -12,6 +12,33 @@ from tasks.base import task_context
 logger = logging.getLogger(__name__)
 
 
+def _ingest_recon_graph(engagement_id: str, result) -> dict:
+    """Feed recon outcomes into the ARTEX asset graph (A2), best-effort.
+
+    The graph is additive: an ingestion failure is logged and returned, never
+    raised into the recon task.
+    """
+    try:
+        from tasks.graph_ingestion import ingest_recon_result
+
+        summary = ingest_recon_result(engagement_id, result)
+    except Exception as exc:  # noqa: BLE001 - ingestion must not abort recon
+        logger.warning(
+            "Graph ingestion from recon failed for engagement %s: %s",
+            engagement_id,
+            exc,
+        )
+        return {"status": "failed", "error": str(exc)}
+
+    if summary.get("accepted"):
+        logger.info(
+            "Graph ingestion for engagement %s accepted %s recon assets",
+            engagement_id,
+            summary["accepted"],
+        )
+    return summary
+
+
 @app.task(
     bind=True,
     name="tasks.recon.run_recon",
@@ -96,6 +123,10 @@ def run_recon(
 
         ctx.state.transition("recon", "Starting reconnaissance")
         result = ctx.orchestrator.run_recon(ctx.job)
+
+        # Turn the real recon outcomes into graph observations/assets before the
+        # scan is dispatched, so planning sees the discovered surface.
+        _ingest_recon_graph(engagement_id, result)
 
         # Dispatch asset_discovery (non-critical — only a warning on failure,
         # doesn't abort the scan)
@@ -292,6 +323,8 @@ def expand_recon(
         current_state="recon",
     ) as ctx:
         result = ctx.orchestrator.run_recon(ctx.job)
+
+        _ingest_recon_graph(engagement_id, result)
 
         # Save updated recon context BEFORE dispatching scan to eliminate
         # race condition. The orchestrator.run_recon() already persists it
