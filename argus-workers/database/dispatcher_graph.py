@@ -49,6 +49,7 @@ class DispatcherGraph:
 
     def __init__(self, repository: ExplorationGraphRepository) -> None:
         self._repo = repository
+        self._ingestor = GraphIngestor(repository)
 
     @property
     def repository(self) -> ExplorationGraphRepository:
@@ -439,7 +440,7 @@ class DispatcherGraph:
         observation merging all happen inside this dispatcher-owned call, so a
         tool cannot add assets to the graph by itself.
         """
-        return GraphIngestor(self._repo).ingest_observation(
+        return self._ingestor.ingest_observation(
             asset_type,
             observed_value,
             source=source,

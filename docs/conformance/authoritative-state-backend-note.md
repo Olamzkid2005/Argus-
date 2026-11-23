@@ -187,6 +187,16 @@ A2 is implemented on top of the graph tables:
   merges the observation. Out-of-scope discoveries are stored as rejected
   observations (`accepted = false`, `rejection_reason = out_of_scope`) and never
   become schedulable assets.
+- `tasks/graph_ingestion.py` — the recon bridge. `run_recon`/`expand_recon` call
+  `ingest_recon_result` after the recon pipeline, so real `ReconContext`
+  outcomes (target URL, live endpoints, subdomains, open ports, crawled/API/auth
+  URLs) become observations and assets through the dispatcher. Ingestion is
+  best-effort: a bad or out-of-scope value is counted and logged, never raised
+  into the recon task.
+- IPv6 service identities are bracketed (`tcp://[2001:db8::1]:443`), because an
+  unbracketed IPv6 address is ambiguous with `host:port`. Scope checks resolve
+  the host with a URL parse (brackets stripped) and still accept legacy
+  unbracketed keys.
 - `database/migrations/034_graph_asset_observations.sql` —
   `graph_asset_observations`, self-referencing parent columns on `graph_assets`,
   and a scope-aware unique identity index. The 033 global

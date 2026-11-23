@@ -609,6 +609,30 @@ class TestAssetCanonicalization:
         assert identity.parent.asset_type == "subdomain"
         assert identity.parent.canonical_key == "api.example.com"
 
+    def test_ipv6_service_hosts_are_bracketed_and_scope_checked(self):
+        identity = canonicalize_asset("service", "[2001:DB8::1]:443")
+        assert identity.canonical_key == "tcp://[2001:db8::1]:443"
+        assert identity.parent.asset_type == "ip"
+        assert identity.parent.canonical_key == "2001:db8::1"
+
+        in_range = {"domains": [], "ipRanges": ["2001:db8::/32"]}
+        assert asset_in_scope("service", identity.canonical_key, in_range)
+        assert not asset_in_scope(
+            "service", identity.canonical_key, {"domains": [], "ipRanges": ["10.0.0.0/8"]}
+        )
+        # A legacy unbracketed IPv6 key still resolves its host for scope checks.
+        assert asset_in_scope("service", "tcp://2001:db8::1:443", in_range)
+
+        # The recon bridge emits host:port/protocol, brackets included.
+        assert (
+            canonicalize_asset("service", "[2001:db8::1]:443/tcp").canonical_key
+            == identity.canonical_key
+        )
+
+        # An unbracketed IPv6 service value is ambiguous with host:port.
+        with pytest.raises(AssetIdentityError):
+            canonicalize_asset("service", "2001:db8::1:443")
+
     def test_parent_chain_is_derived(self):
         endpoint = canonicalize_asset("endpoint", "https://api.example.com/x")
         assert endpoint.parent.asset_type == "subdomain"

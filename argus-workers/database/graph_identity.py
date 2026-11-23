@@ -137,7 +137,14 @@ def _canonical_url(value: str) -> tuple[str, str]:
 
 
 def _canonical_service(value: str) -> tuple[str, str]:
-    """Canonicalize a service identity as ``protocol://host:port``."""
+    """
+    Canonicalize a service identity as ``protocol://host:port``.
+
+    IPv6 hosts must be bracketed (``[2001:db8::1]:443``) and stay bracketed in
+    the canonical key. An unbracketed IPv6 address is ambiguous with
+    ``host:port`` (``2001:db8::443`` could be a host or a host plus port 443), so
+    it is rejected rather than guessed.
+    """
     text = value.strip()
     protocol = _DEFAULT_SERVICE_PROTOCOL
     if "://" in text:
@@ -147,10 +154,25 @@ def _canonical_service(value: str) -> tuple[str, str]:
         text, protocol = text.rsplit("/", 1)
         protocol = protocol.lower()
 
-    host, separator, port = text.rpartition(":")
-    if not separator:
-        raise AssetIdentityError("service identity requires host:port")
-    host = normalize_hostname(host)
+    if text.startswith("["):
+        closing = text.find("]")
+        if closing == -1:
+            raise AssetIdentityError(f"service identity {value!r} has an unclosed IPv6 bracket")
+        host_text = text[1:closing]
+        remainder = text[closing + 1 :]
+        if not remainder.startswith(":"):
+            raise AssetIdentityError("service identity requires host:port")
+        port = remainder[1:]
+    else:
+        host_text, separator, port = text.rpartition(":")
+        if not separator:
+            raise AssetIdentityError("service identity requires host:port")
+        if ":" in host_text:
+            raise AssetIdentityError(
+                f"IPv6 service host in {value!r} must be bracketed, e.g. [2001:db8::1]:443"
+            )
+
+    host = normalize_hostname(host_text)
     if not port.isdigit():
         raise AssetIdentityError(f"service port {port!r} is not numeric")
     port_number = int(port)
@@ -158,7 +180,8 @@ def _canonical_service(value: str) -> tuple[str, str]:
         raise AssetIdentityError(f"service port {port!r} is out of range")
     if not protocol.isalnum():
         raise AssetIdentityError(f"service protocol {protocol!r} is invalid")
-    return f"{protocol}://{host}:{port_number}", host
+    netloc = f"[{host}]" if ":" in host else host
+    return f"{protocol}://{netloc}:{port_number}", host
 
 
 def root_domain_of(host: str) -> str | None:
@@ -306,9 +329,13 @@ def _host_for_identity(asset_type: str, canonical_key: str) -> str:
         return canonical_key
     if asset_type in (ENDPOINT, APP):
         return urlsplit(canonical_key).hostname or ""
-    # service keys are protocol://host:port
-    host_and_port = canonical_key.split("://", 1)[-1]
-    return host_and_port.rsplit(":", 1)[0]
+    # service keys are protocol://host:port; IPv6 hosts are bracketed, so URL
+    # parsing strips the brackets and the port correctly. Older unbracketed
+    # keys fall back to splitting the netloc on the last colon.
+    netloc = canonical_key.split("://", 1)[-1]
+    if netloc.startswith("["):
+        return urlsplit(canonical_key).hostname or ""
+    return netloc.rsplit(":", 1)[0]
 
 
 def asset_in_scope(

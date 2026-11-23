@@ -83,6 +83,9 @@ _ALLOWED_REFERENCES = frozenset(
         "database/graph_identity.py",
         "database/graph_ownership.py",
         "database/graph_repository.py",
+        # Trusted recon bridge: delegates every write to DispatcherGraph rather
+        # than committing graph state itself.
+        "tasks/graph_ingestion.py",
     }
 )
 

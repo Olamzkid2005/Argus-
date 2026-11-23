@@ -1,7 +1,7 @@
 {
   "meta": {
     "stage": 0,
-    "updated_at": "2026-11-23T15:00:00+00:00",
+    "updated_at": "2026-11-23T17:00:00+00:00",
     "source_of_truth_for_this_stage": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md",
     "actual_upstream_reference_used": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md (local copy of the Stage 0 spec)",
     "local_baseline_inspected": [
@@ -171,6 +171,19 @@
       "result": "VERIFIED (DB-BACKED)",
       "deviation": "none",
       "notes": "Reports per-type totals, covered/untested split, in-scope vs out-of-scope assets, untested_asset_types and undiscovered_asset_types."
+    },
+    "recon_ingestion_bridge": {
+      "id": "A2-recon",
+      "title": "Recon outcomes ingested into the asset graph",
+      "reference_behaviour": "Structured recon/tool outcomes become raw asset observations and canonical assets through trusted ingestion.",
+      "upstream_proof": "Plan Section 3.7 milestone A2",
+      "argus_implementation": "IMPLEMENTED AND COMMITTED",
+      "argus_implementation_path": "argus-workers/tasks/graph_ingestion.py (ingest_recon_outcomes/ingest_recon_result), argus-workers/tasks/recon.py (both recon tasks ingest after the pipeline), argus-workers/tests/test_graph_ingestion.py",
+      "test_proof": "UNIT TESTS (stub repository) AND ONE DB-BACKED PERSISTENCE TEST PASS",
+      "runtime_proof": "PASSED (2026-11-23): 79 graph tests with 0 skipped against PostgreSQL 16; recon bridge covered by stub-repository unit tests and a persisted-path integration test.",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "The legacy assets table write in tasks/asset_discovery.py is unchanged; graph ingestion is additive.",
+      "notes": "run_recon and expand_recon call the bridge after ctx.orchestrator.run_recon, so real ReconContext outcomes (target URL, live endpoints, subdomains, open ports, crawled/API/auth URLs) create observations and assets. Ingestion failures are counted and logged, never raised into recon. IPv6 service identities are bracketed so scope checks resolve the host unambiguously."
     }
   },
   "requirements": {

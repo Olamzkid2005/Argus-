@@ -322,6 +322,7 @@ jobs:
       - name: Run graph repository tests against PostgreSQL
         run: |
           python -m pytest tests/test_graph_repository.py \
+            tests/test_graph_ingestion.py \
             -v --timeout=180 --tb=long --junit-xml=graph-repository-results.xml
 
       - name: Confirm graph tests did not skip

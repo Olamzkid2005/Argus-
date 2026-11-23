@@ -22,10 +22,6 @@ class GraphMutationError(Exception):
     """Dispatched graph mutation was invalid or rejected."""
 
 
-class GraphAssetState(str):
-    pass
-
-
 class GraphNodeKind(str):
     GOAL = "goal"
     INTENT = "intent"
