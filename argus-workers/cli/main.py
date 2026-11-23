@@ -256,6 +256,11 @@ def build_parser() -> argparse.ArgumentParser:
     graph_coverage_parser.add_argument(
         "--json", action="store_true", help="Emit the full report as JSON"
     )
+    graph_coverage_parser.add_argument(
+        "--schedule",
+        action="store_true",
+        help="Create planner frontier/todo work for the reported gaps",
+    )
 
     return parser
 

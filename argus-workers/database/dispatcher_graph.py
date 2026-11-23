@@ -510,3 +510,35 @@ class DispatcherGraph:
         )
         report["authorized_scope_checked"] = authorized_scope is not None
         return report
+
+    @dispatcher_owned
+    def schedule_coverage_gaps(
+        self,
+        engagement_id: str,
+        scope_id: str | None = None,
+        *,
+        authorized_scope: dict | str | None = _UNSET,
+        priority: int = 10,
+        owner: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Schedule computed coverage gaps as planner frontier nodes and todos (A2).
+
+        Approved-but-undiscovered scope entries become ``expand`` work and
+        asset classes with discovered-but-untested assets become ``verify`` work,
+        so gaps reported by :meth:`coverage_report` turn into recon the planner
+        can pick up. ``scope_id`` defaults to the engagement, and the approved
+        scope is read from ``engagements.authorized_scope`` when not supplied.
+        """
+        if not engagement_id:
+            raise GraphMutationError("engagement_id is required")
+        scope = scope_id or engagement_id
+        if authorized_scope is _UNSET:
+            authorized_scope = load_authorized_scope(scope)
+        return self._repo.schedule_coverage_gaps(
+            engagement_id,
+            scope,
+            authorized_scope=authorized_scope,
+            priority=priority,
+            owner=owner,
+        )

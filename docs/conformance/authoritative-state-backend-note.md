@@ -222,6 +222,14 @@ A2 is implemented on top of the graph tables:
   `rejected_observations` with their count, and the untested/undiscovered asset
   classes. `argus graph-coverage -e <engagement>` exposes the same report; both
   paths are read-only over the graph tables.
+- Coverage-driven planning (A2): `schedule_coverage_gaps(engagement_id)` turns
+  each approved-but-undiscovered target into an `expand` planner todo and each
+  asset class with untested discoveries into a `verify` todo, and puts both on
+  the recoverable `planner_frontier` with a `coverage_gap:<gap key>` reason, so
+  gaps become recon the planner can pick up. It is idempotent per
+  `coverage_gap_key`, so repeated recon passes do not duplicate work. The recon
+  bridge calls it after every ingestion pass, and
+  `argus graph-coverage --schedule` runs it on demand.
 
 C-18 is now enforced twice:
 
@@ -237,11 +245,12 @@ C-18 is now enforced twice:
 Verification: the `graph-repository-db` CI job runs the full migration runner
 through 035 against Postgres 16 (and asserts the scoped identity index and both
 `tenant_id` columns exist), runs the import-boundary check and runs the graph
-tests. Locally the same steps give **88 passed, 0 skipped** (many skipped without
+tests. Locally the same steps give **90 passed, 0 skipped** (many skipped without
 a database). The DB-backed suites include two-tool merges across case, default
 port, trailing slash, IDNA/punycode hosts and differently shaped service keys
 (`TestCrossToolMerge`), computed coverage gaps plus rejected out-of-scope
-discoveries (`TestComputedCoverage`), and cross-tenant asset/observation
+discoveries (`TestComputedCoverage`), coverage gaps becoming frontier/todo work
+(`TestCoverageDrivenPlanning`), and cross-tenant asset/observation
 rejection (`TestTenantBoundary`).
 
 ## 7. What is still open after this note

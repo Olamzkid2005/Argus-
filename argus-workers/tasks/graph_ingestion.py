@@ -166,18 +166,36 @@ def ingest_recon_outcomes(
         else:
             rejected += 1
 
+    # Gaps the recon pass leaves behind become scheduled work, not just report
+    # lines: approved-but-undiscovered targets and untested asset classes get a
+    # planner frontier node plus todo. Best-effort like ingestion itself.
+    scheduled_gaps = 0
+    try:
+        scheduled_gaps = dispatcher.schedule_coverage_gaps(
+            engagement_id, engagement_id, authorized_scope=authorized_scope
+        )["scheduled_count"]
+    except Exception as exc:  # noqa: BLE001 - planning must not abort recon
+        logger.debug(
+            "Coverage gap scheduling skipped for engagement %s: %s",
+            engagement_id,
+            exc,
+        )
+
     logger.info(
-        "Graph ingestion for engagement %s: %d accepted, %d rejected, %d failed",
+        "Graph ingestion for engagement %s: %d accepted, %d rejected, %d failed, "
+        "%d coverage gap(s) scheduled",
         engagement_id,
         accepted,
         rejected,
         failed,
+        scheduled_gaps,
     )
     return {
         "status": "completed",
         "accepted": accepted,
         "rejected": rejected,
         "failed": failed,
+        "scheduled_gaps": scheduled_gaps,
         "assets": assets,
     }
 

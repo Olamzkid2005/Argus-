@@ -796,6 +796,162 @@ class ExplorationGraphRepository(BaseRepository):
             "assets": assets,
         }
 
+    # --- coverage-driven planning (A2) ---
+
+    def schedule_coverage_gaps(
+        self,
+        engagement_id: str,
+        scope_id: str,
+        *,
+        authorized_scope: dict | str | None = None,
+        priority: int = 10,
+        owner: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Convert computed coverage gaps into durable planner work (A2).
+
+        An approved target nobody discovered cannot be tested, and an asset class
+        with discovered-but-untested assets still needs recon. Both gaps become an
+        exploration node on the planner frontier plus an open planner todo, so the
+        next planning pass schedules them as recon instead of leaving them in a
+        report.
+
+        Idempotent: a gap that already carries a planner todo is left alone, so
+        re-running against the same graph creates no duplicate node, frontier row
+        or todo.
+        """
+        require_graph_write_owner("schedule_coverage_gaps")
+        if not engagement_id or not scope_id:
+            raise GraphMutationError("engagement_id and scope_id are required")
+
+        report = self.compute_scope_coverage(
+            scope_id, authorized_scope=authorized_scope
+        )
+
+        specs: list[dict[str, Any]] = []
+        for gap in report["approved_but_undiscovered"]:
+            gap_key = f"undiscovered_scope_entry:{gap['kind']}:{gap['value']}"
+            specs.append(
+                {
+                    "gap_key": gap_key,
+                    "gap_type": "approved_but_undiscovered",
+                    "todo_type": "expand",
+                    "node_kind": GraphNodeKind.INTENT,
+                    "objective": f"recon approved {gap['kind']} {gap['value']}",
+                    "details": {
+                        "entry_kind": gap["kind"],
+                        "entry_value": gap["value"],
+                    },
+                }
+            )
+        for asset_type in report["untested_asset_types"]:
+            gap_key = f"untested_asset_class:{asset_type}"
+            specs.append(
+                {
+                    "gap_key": gap_key,
+                    "gap_type": "untested_asset_class",
+                    "todo_type": "verify",
+                    "node_kind": GraphNodeKind.HINT,
+                    "objective": f"test discovered {asset_type} assets",
+                    "details": {"asset_type": asset_type},
+                }
+            )
+
+        existing_keys = {
+            (todo.get("payload") or {}).get("coverage_gap_key")
+            for todo in self.find_todos_for_engagement(engagement_id)
+        }
+
+        scheduled: list[dict[str, Any]] = []
+        already_scheduled = 0
+        for spec in specs:
+            if spec["gap_key"] in existing_keys:
+                already_scheduled += 1
+                continue
+
+            node_payload = {
+                "objective": spec["objective"],
+                "gap_type": spec["gap_type"],
+                "coverage_gap_key": spec["gap_key"],
+                **spec["details"],
+            }
+            with self.db_operation(
+                commit=True, cursor_factory=RealDictCursor
+            ) as (conn, cursor):
+                cursor.execute(
+                    """
+                    INSERT INTO graph_nodes
+                        (engagement_id, kind, payload, state, priority, origin)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (engagement_id, kind, payload) DO UPDATE SET
+                        state = CASE
+                            WHEN graph_nodes.state = 'cancelled' THEN EXCLUDED.state
+                            ELSE graph_nodes.state
+                        END,
+                        priority = EXCLUDED.priority,
+                        updated_at = NOW()
+                    RETURNING *
+                    """,
+                    (
+                        engagement_id,
+                        spec["node_kind"],
+                        Json(node_payload),
+                        GraphNodeState.OPEN,
+                        priority,
+                        "coverage_gap",
+                    ),
+                )
+                node = dict(cursor.fetchone())
+
+            self.set_frontier_node(
+                engagement_id,
+                node["id"],
+                kind=spec["node_kind"],
+                priority=priority,
+                frontier_reason=f"coverage gap: {spec['gap_key']}",
+            )
+            todo = self.create_todo(
+                engagement_id,
+                todo_type=spec["todo_type"],
+                canonical_node_id=node["id"],
+                exploration_node_id=node["id"],
+                frontier_position={
+                    "coverage_gap_key": spec["gap_key"],
+                    "gap_type": spec["gap_type"],
+                    **spec["details"],
+                },
+                payload={
+                    "coverage_gap_key": spec["gap_key"],
+                    "gap_type": spec["gap_type"],
+                    "objective": spec["objective"],
+                    **spec["details"],
+                },
+                owner=owner,
+            )
+            existing_keys.add(spec["gap_key"])
+            scheduled.append(
+                {
+                    "gap_key": spec["gap_key"],
+                    "gap_type": spec["gap_type"],
+                    "node_id": node["id"],
+                    "todo_id": todo["id"],
+                }
+            )
+
+        logger.info(
+            "Scheduled %d coverage gap(s) for engagement %s (%d already scheduled)",
+            len(scheduled),
+            engagement_id,
+            already_scheduled,
+        )
+        return {
+            "scope_id": scope_id,
+            "gaps": len(specs),
+            "scheduled": scheduled,
+            "scheduled_count": len(scheduled),
+            "already_scheduled": already_scheduled,
+        }
+
     # --- exploration edges ---
 
     def attach_edge(

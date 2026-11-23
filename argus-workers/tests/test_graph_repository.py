@@ -1005,6 +1005,88 @@ class TestComputedCoverage:
         assert report["discovered_but_unapproved"] == []
 
 
+@pytest.mark.skipif(not DB_AVAILABLE, reason="DATABASE_URL not reachable in this environment")
+class TestCoverageDrivenPlanning:
+    def test_coverage_gaps_create_frontier_and_todo_work(self):
+        engagement_id = str(uuid.uuid4())
+        authorized_scope = {
+            "domains": ["api.example.com", "missing.example.com"],
+            "ipRanges": ["10.9.0.0/24"],
+        }
+        _create_engagement(engagement_id, str(uuid.uuid4()), authorized_scope)
+        repo = ExplorationGraphRepository()
+        dispatcher = DispatcherGraph(repo)
+        dispatcher.ingest_observation(
+            "endpoint",
+            "https://api.example.com/v1",
+            source="httpx",
+            scope_id=engagement_id,
+        )
+
+        outcome = dispatcher.schedule_coverage_gaps(engagement_id)
+
+        report = dispatcher.coverage_report(engagement_id)
+        expected_keys = {
+            f"undiscovered_scope_entry:{gap['kind']}:{gap['value']}"
+            for gap in report["approved_but_undiscovered"]
+        } | {
+            f"untested_asset_class:{asset_type}"
+            for asset_type in report["untested_asset_types"]
+        }
+        scheduled_keys = {entry["gap_key"] for entry in outcome["scheduled"]}
+        assert scheduled_keys == expected_keys
+        assert outcome["scheduled_count"] == len(expected_keys)
+
+        # Approved targets with no discovered asset are on the planner frontier,
+        # so the next planning pass sees them instead of a report line.
+        frontier = repo.find_frontier_for_engagement(engagement_id)
+        assert {row["node_id"] for row in frontier} == {
+            entry["node_id"] for entry in outcome["scheduled"]
+        }
+        reasons = {row["frontier_reason"] for row in frontier}
+        assert (
+            "coverage gap: undiscovered_scope_entry:domain:missing.example.com"
+            in reasons
+        )
+        assert "coverage gap: undiscovered_scope_entry:ip_range:10.9.0.0/24" in reasons
+
+        todos = dispatcher.find_todos_for_engagement(
+            engagement_id, status=TodoStatus.OPEN
+        )
+        by_key = {todo["payload"]["coverage_gap_key"]: todo for todo in todos}
+        gap_todo = by_key["undiscovered_scope_entry:domain:missing.example.com"]
+        assert gap_todo["todo_type"] == "expand"
+        assert gap_todo["payload"]["entry_value"] == "missing.example.com"
+        assert gap_todo["frontier_position"]["entry_kind"] == "domain"
+        assert gap_todo["exploration_node_id"] is not None
+
+        class_todo = by_key["untested_asset_class:endpoint"]
+        assert class_todo["todo_type"] == "verify"
+        assert class_todo["payload"]["asset_type"] == "endpoint"
+
+        # Re-running against the same graph is a no-op, not duplicate work.
+        again = dispatcher.schedule_coverage_gaps(engagement_id)
+        assert again["scheduled"] == []
+        assert again["already_scheduled"] == len(expected_keys)
+        assert len(dispatcher.find_todos_for_engagement(engagement_id)) == len(
+            expected_keys
+        )
+        assert len(repo.find_frontier_for_engagement(engagement_id)) == len(
+            expected_keys
+        )
+
+    def test_no_approved_scope_and_no_assets_schedules_nothing(self):
+        engagement_id = str(uuid.uuid4())
+        _create_engagement(engagement_id, str(uuid.uuid4()), None)
+        dispatcher = DispatcherGraph(ExplorationGraphRepository())
+
+        outcome = dispatcher.schedule_coverage_gaps(engagement_id)
+
+        assert outcome["gaps"] == 0
+        assert outcome["scheduled"] == []
+        assert dispatcher.find_todos_for_engagement(engagement_id) == []
+
+
 # ---------------------------------------------------------------------------
 # A-02 — two tools, one canonical asset, both provenances
 # ---------------------------------------------------------------------------

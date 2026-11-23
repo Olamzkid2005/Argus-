@@ -29,13 +29,21 @@ def cmd_graph_coverage(args: argparse.Namespace) -> int:
     from database.dispatcher_graph import DispatcherGraph
     from database.graph_repository import ExplorationGraphRepository
 
+    dispatcher = DispatcherGraph(ExplorationGraphRepository())
     try:
-        report = DispatcherGraph(ExplorationGraphRepository()).coverage_report(
-            engagement_id
-        )
+        report = dispatcher.coverage_report(engagement_id)
     except Exception as exc:  # noqa: BLE001 - surface as a CLI failure
         print(f"Graph coverage failed: {exc}")
         return 1
+
+    if getattr(args, "schedule", False):
+        try:
+            report["scheduled_work"] = dispatcher.schedule_coverage_gaps(
+                engagement_id
+            )
+        except Exception as exc:  # noqa: BLE001 - surface as a CLI failure
+            print(f"Coverage gap scheduling failed: {exc}")
+            return 1
 
     if getattr(args, "json", False):
         print(json.dumps(report, indent=2, default=str))
@@ -85,4 +93,13 @@ def cmd_graph_coverage(args: argparse.Namespace) -> int:
             f"  - {observation['asset_type']}: {observation['observed_value']} "
             f"({observation['source']}, {observation['rejection_reason']})"
         )
+
+    scheduled_work = report.get("scheduled_work")
+    if scheduled_work is not None:
+        print(
+            f"Scheduled recon work: {scheduled_work['scheduled_count']} "
+            f"new todo(s), {scheduled_work['already_scheduled']} already scheduled"
+        )
+        for entry in scheduled_work["scheduled"]:
+            print(f"  - {entry['gap_type']}: {entry['gap_key']} (todo {entry['todo_id']})")
     return 0
