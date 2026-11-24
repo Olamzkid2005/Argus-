@@ -305,10 +305,14 @@ class FindingBuilder:
         source_tool: str,
         engagement_id: str = "",
         emit_finding: Callable[[str, dict, str], None] | None = None,
+        goal_node_id: str = "",
+        intent_node_id: str = "",
     ) -> None:
         self.source_tool = source_tool
         self.engagement_id = engagement_id
         self.emit_finding = emit_finding
+        self.goal_node_id = goal_node_id
+        self.intent_node_id = intent_node_id
         self._findings: list[dict[str, Any]] = []
 
     def add(
@@ -356,6 +360,12 @@ class FindingBuilder:
             "confidence": min(max(confidence, 0.0), 1.0),
             "source_tool": self.source_tool,
         }
+        # A finding built while working a claimed intent belongs to that
+        # intent's goal; explicit values in **extra still win.
+        if self.goal_node_id:
+            finding["goal_node_id"] = self.goal_node_id
+        if self.intent_node_id:
+            finding["intent_node_id"] = self.intent_node_id
         if extra:
             finding.update(extra)
 

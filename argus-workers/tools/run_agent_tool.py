@@ -81,6 +81,16 @@ def main():
         default="{}",
         help='JSON-encoded extra parameters (e.g. \'{"tech_stack":["apache"]}\')',
     )
+    parser.add_argument(
+        "--goal-node-id",
+        default="",
+        help="Goal the claimed intent serves; stamped on every finding produced",
+    )
+    parser.add_argument(
+        "--intent-node-id",
+        default="",
+        help="Intent this run works; stamped on every finding produced",
+    )
     args = parser.parse_args()
 
     extra = json.loads(args.extra)
@@ -88,9 +98,16 @@ def main():
 
     from tool_core.base import ToolContext
 
+    # Attribution may arrive as a flag (the MCP server forwards it from the
+    # intent package) or inside --extra. Flags win.
+    goal_node_id = args.goal_node_id or str(extra.get("goal_node_id") or "")
+    intent_node_id = args.intent_node_id or str(extra.get("intent_node_id") or "")
+
     ctx = ToolContext(
         target=args.target,
         engagement_id=args.engagement_id,
+        goal_node_id=goal_node_id,
+        intent_node_id=intent_node_id,
         tech_stack=extra.get("tech_stack", []),
         authorized_scope=extra.get("scope", args.target),
         timeout=extra.get("timeout", 300),
@@ -110,11 +127,22 @@ def main():
     result = tool_instance.execute(ctx)
     duration_ms = int((time.time() - start) * 1000)
 
+    # Stamp the worker's goal on the findings, including those a tool built
+    # without a FindingBuilder (the verifier's own promotion keeps an explicit
+    # attribution and is therefore never overwritten).
+    from tool_core.goal_attribution import stamp_goal_attribution
+
+    stamp_goal_attribution(
+        result.findings, goal_node_id=goal_node_id, intent_node_id=intent_node_id
+    )
+
     output = {
         "success": result.status.is_ok,
         "data": result.output,
         "findings": result.findings,
         "findings_count": result.findings_count,
+        "goal_node_id": goal_node_id,
+        "intent_node_id": intent_node_id,
         "signal_quality": getattr(result, "signal_quality", "PROBABLE"),
         "duration_ms": duration_ms,
         "error": result.error_message or "",

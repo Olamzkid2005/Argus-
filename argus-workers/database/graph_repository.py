@@ -2538,6 +2538,10 @@ class ExplorationGraphRepository(BaseRepository):
         return {
             "engagement_id": engagement_id,
             "intent": intent,
+            # The goal this intent was proposed for. The worker stamps it on
+            # the findings it produces, so the goal proof is deterministic even
+            # when the engagement has several open goals.
+            "goal_node_id": (intent.get("payload") or {}).get("goal_node_id"),
             "assets": assets,
             "prerequisite_facts": facts,
             "traces": self.search_traces(

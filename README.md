@@ -234,9 +234,16 @@ modes are also available programmatically via
 a finding to `CONFIRMED`, the save hook proves the goal that finding is
 attributed to (`goal_node_id`/`proves_goal_ids` on the finding or its evidence)
 through `prove_goal_from_findings`; the goal, its `proves` edge and the graph
-finding node are written in one dispatcher transaction. An engagement with a
-single open goal is attributed automatically. With several open goals an
-unattributed finding proves none, so work can conclude the wrong objective.
+finding node are written in one dispatcher transaction.
+
+Attribution is created where the finding is produced: a claimed intent's package
+reports the `goal_node_id` it was proposed for, and the worker stamps it on
+everything it produces — `ToolContext.goal_node_id` / `FindingBuilder(goal_node_id=...)`
+for scanner findings, and `python tools/run_agent_tool.py <tool> --target <url>
+--goal-node-id <id> --intent-node-id <id>` (or the same keys in `--extra`) for
+worker tool runs. A tool that sets its own attribution always wins. With several
+open goals an unattributed finding proves none, so the stamp is what makes a
+multi-goal engagement deterministic instead of guessed.
 
 ## Air-Gap / Offline Build
 

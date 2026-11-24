@@ -115,6 +115,46 @@ class TestFindingBuilder:
         assert finding["type"] == "XSS"
 
 
+class TestAttributionIsStampedAtCreation:
+    """An intent worker's findings must name the goal that intent serves."""
+
+    def test_builder_stamps_the_goal_and_intent(self):
+        builder = FindingBuilder(
+            "sqlmap",
+            engagement_id="e-1",
+            goal_node_id="goal-1",
+            intent_node_id="intent-1",
+        )
+
+        finding = builder.vulnerability(
+            "SQL_INJECTION", "HIGH", "https://t/api", {"payload": "x"}
+        )
+
+        assert finding["goal_node_id"] == "goal-1"
+        assert finding["intent_node_id"] == "intent-1"
+
+    def test_explicit_attribution_from_the_tool_wins(self):
+        builder = FindingBuilder("sqlmap", goal_node_id="goal-from-context")
+
+        finding = builder.add(
+            "SQL_INJECTION",
+            "HIGH",
+            "https://t/api",
+            {},
+            goal_node_id="goal-from-tool",
+        )
+
+        assert finding["goal_node_id"] == "goal-from-tool"
+
+    def test_no_attribution_leaves_findings_unchanged(self):
+        finding = FindingBuilder("sqlmap").vulnerability(
+            "SQL_INJECTION", "HIGH", "https://t/api", {}
+        )
+
+        assert "goal_node_id" not in finding
+        assert "intent_node_id" not in finding
+
+
 class TestKnownVulnTypesCoversTheCodeThatEmitsThem:
     """A scanner's finding type must be known, or the builder loses it.
 

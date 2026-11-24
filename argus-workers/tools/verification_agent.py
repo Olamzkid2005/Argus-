@@ -75,6 +75,19 @@ class VerificationAgent(AbstractTool):
                 error=reproduction.get("error"),
             )
 
+            # Attribution comes from the finding itself when its producer knew
+            # it, otherwise from the worker context (a claimed intent carries
+            # the goal it serves).
+            attribution = {
+                key: finding[key]
+                for key in ("goal_node_id", "proves_goal_ids")
+                if finding.get(key)
+            }
+            if not attribution.get("goal_node_id"):
+                ctx_goal = getattr(ctx, "goal_node_id", "")
+                if ctx_goal:
+                    attribution["goal_node_id"] = ctx_goal
+
             # Normalize promoted findings to standard FindingBuilder format (M3)
             normalized = {
                 "type": promoted.get("type", finding.get("type", "UNKNOWN")),
@@ -90,11 +103,7 @@ class VerificationAgent(AbstractTool):
                     promoted,
                     base={
                         **(promoted.get("evidence") or evidence or {}),
-                        **{
-                            key: finding[key]
-                            for key in ("goal_node_id", "proves_goal_ids")
-                            if finding.get(key)
-                        },
+                        **attribution,
                     },
                 ),
                 "confidence": promoted.get("confidence", confidence),
@@ -103,8 +112,8 @@ class VerificationAgent(AbstractTool):
                 "verification_reason": promoted.get("reason", ""),
                 # Carry the attribution at the top level as well, so any
                 # persistence path can read it without unwrapping evidence.
-                "goal_node_id": finding.get("goal_node_id"),
-                "proves_goal_ids": finding.get("proves_goal_ids"),
+                "goal_node_id": attribution.get("goal_node_id", ""),
+                "proves_goal_ids": attribution.get("proves_goal_ids", []),
             }
             verified_findings.append(normalized)
 

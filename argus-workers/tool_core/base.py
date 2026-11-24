@@ -42,6 +42,12 @@ class ToolContext:
     emit_finding: Callable[[str, dict, str], None] | None = None
     trace_id: str | None = None
 
+    # Attribution of the work that produced a finding. An intent worker sets
+    # these from the intent package it claimed, so the findings it creates can
+    # prove that goal (`orchestrator_pkg.persistence.goal_proof`).
+    goal_node_id: str = ""
+    intent_node_id: str = ""
+
     # Scanner-specific configs (only used by relevant scanners)
     dual_auth: DualAuthConfig | None = None
 

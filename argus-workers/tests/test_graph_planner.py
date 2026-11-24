@@ -1005,6 +1005,69 @@ class TestVerifierConcludesGoals:
 
         assert self._goal_state(dispatcher, engagement_id, goal_id) == "open"
 
+    def test_a_worker_stamped_finding_proves_its_goal_not_the_first_one(self):
+        """The intent worker's stamp decides, not the single-goal fallback."""
+        from tool_core.goal_attribution import stamp_goal_attribution
+
+        engagement_id, dispatcher, assets = _engagement_with_goal(assets=1)
+        dispatcher.create_node(
+            engagement_id, GraphNodeKind.GOAL, payload={"objective": "second goal"}
+        )
+        goals = [str(goal["id"]) for goal in dispatcher.planner_overview(engagement_id)["goals"]]
+        first_goal, second_goal = goals[0], goals[1]
+
+        # Exactly what a claimed intent's tool run does: the worker stamps the
+        # goal of the intent it holds.
+        stamped = stamp_goal_attribution(
+            [
+                {
+                    "type": "SQL_INJECTION",
+                    "severity": "HIGH",
+                    "endpoint": "https://api.example.com/login",
+                    "confidence": 0.8,
+                    "source_tool": "sqlmap",
+                    "evidence": {"payload": "' OR 1=1--"},
+                }
+            ],
+            goal_node_id=second_goal,
+            intent_node_id=str(assets[0]["id"]),
+        )[0]
+
+        self._save(
+            engagement_id,
+            stamped,
+            confidence=0.9,
+            reproduced=True,
+            evidence_refs=["artifacts/sqli.html"],
+        )
+
+        states = {
+            str(goal["id"]): goal["state"]
+            for goal in dispatcher.planner_overview(engagement_id)["goals"]
+        }
+        assert states[second_goal] == "concluded"
+        assert states[first_goal] == "open"
+
+    def test_the_intent_package_surfaces_the_goal_it_serves(self):
+        engagement_id, dispatcher, assets = _engagement_with_goal(assets=1)
+        goal_id = str(dispatcher.planner_overview(engagement_id)["goals"][0]["id"])
+        dispatcher.apply_intent_proposals(
+            engagement_id,
+            [
+                IntentProposal(
+                    objective="prove the goal",
+                    target_asset_ids=(str(assets[0]["id"]),),
+                    goal_node_id=goal_id,
+                )
+            ],
+        )
+        intent = dispatcher.claim_intent_node(engagement_id, "worker-goal")
+
+        package = dispatcher.worker_intent_package(engagement_id, str(intent["id"]))
+
+        # The worker reads the goal from the package instead of parsing payload.
+        assert package["goal_node_id"] == goal_id
+
     def test_attribution_to_another_engagement_goal_is_ignored(self):
         engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
         goal_id = str(dispatcher.planner_overview(engagement_id)["goals"][0]["id"])
