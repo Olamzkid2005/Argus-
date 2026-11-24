@@ -694,6 +694,11 @@ class MCPServer:
 
         self._tools: dict[str, ToolDefinition] = {}
         self._execution_stats: dict[str, dict] = {}
+        # Live intent claims, keyed by worker id. A worker that claimed an
+        # intent is inside that intent's goal, so the tools it runs are stamped
+        # with the goal automatically instead of relying on the agent to pass
+        # --goal-node-id on every call.
+        self._active_claims: dict[str, dict] = {}
         self._tools_dir = tools_dir or os.path.join(
             os.path.dirname(__file__), "tools", "definitions"
         )
@@ -1231,6 +1236,7 @@ class MCPServer:
         cache_mode: str | None = None,
         engagement_id: str | None = None,
         scope_validator: Any = None,
+        worker_id: str | None = None,
     ) -> dict:
         """
         Execute a tool by name with arguments (mcp.tools/call equivalent).
@@ -1250,6 +1256,9 @@ class MCPServer:
                              the tool's ``target`` argument is validated against the
                              authorized scope before execution. An out-of-scope
                              target is rejected with ``ScopeViolationError``.
+            worker_id: Worker whose claimed intent this call belongs to. When the
+                       worker has claimed an intent, its goal is stamped on the
+                       findings and forwarded to ``run_agent_tool`` tools.
 
         Returns:
             MCP-formatted result dict
@@ -1284,6 +1293,10 @@ class MCPServer:
         tool_signal_quality = (
             tool.signal_quality if hasattr(tool, "signal_quality") else None
         )
+
+        # A worker inside a claimed intent runs tools *for that intent's goal*.
+        # Resolving it here means attribution cannot be forgotten by the agent.
+        claim = self._claim_for_tool_call(engagement_id, worker_id)
 
         # ── Scope validation: reject out-of-scope targets before any I/O ──
         # Extract the target URL/domain from the raw arguments before argument
@@ -1350,6 +1363,17 @@ class MCPServer:
             and any(os.path.basename(arg) == "run_agent_tool.py" for arg in cmd[1:])
         ):
             cmd.extend(["--engagement-id", str(engagement_id)])
+
+        # Forward the claimed intent's goal the same way: the tool run stamps it
+        # on the findings it produced, including findings built without a
+        # FindingBuilder. An explicit flag from the caller always wins.
+        if claim and any(
+            os.path.basename(arg) == "run_agent_tool.py" for arg in cmd[1:]
+        ):
+            if claim.get("goal_node_id") and "--goal-node-id" not in cmd:
+                cmd.extend(["--goal-node-id", claim["goal_node_id"]])
+            if claim.get("intent_node_id") and "--intent-node-id" not in cmd:
+                cmd.extend(["--intent-node-id", claim["intent_node_id"]])
 
         # Arguments a tool needs from the environment rather than from the
         # caller. nuclei ships no bundled templates, so without `-t` it exits
@@ -1515,7 +1539,9 @@ class MCPServer:
                 # Zero out stale duration so consumers don't see old timestamps
                 if "meta" in _cached and isinstance(_cached["meta"], dict):
                     _cached["meta"]["duration_ms"] = 0
-                return _cached
+                # The cache key does not include the claim, so a hit from an
+                # earlier (or other) run is re-attributed to the caller's goal.
+                return self._stamp_result_attribution(_cached, claim)
 
         # Track execution
         start = time.time()
@@ -1677,10 +1703,14 @@ class MCPServer:
             )
             if structured and success:
                 # ``getattr`` keeps a parser that returns plain dicts from
-                # failing the whole tool run (see parser dispatcher).
-                mcp_result.data["structured"] = [
-                    getattr(f, "__dict__", f) for f in structured
-                ]
+                # failing the whole tool run (see parser dispatcher). Native
+                # tools produce findings here (not in run_agent_tool), so the
+                # caller's claimed goal is stamped on them too.
+                structured_dicts = [getattr(f, "__dict__", f) for f in structured]
+                self._stamp_result_attribution(
+                    {"data": {"structured": structured_dicts}}, claim
+                )
+                mcp_result.data["structured"] = structured_dicts
 
             # Cache the result (NO_CACHE mode skips writes). Failures are never
             # cached: a transient or already-fixed failure must not be replayed
@@ -2738,6 +2768,90 @@ class MCPServer:
     def _json_safe(value):
         return json.loads(json.dumps(value, default=str))
 
+    def _record_intent_claim(
+        self,
+        *,
+        engagement_id: str,
+        worker_id: str,
+        intent: dict,
+        package: dict,
+    ) -> None:
+        """Remember the intent a worker holds so its tool runs can be attributed."""
+        goal_node_id = package.get("goal_node_id")
+        if goal_node_id is None:
+            goal_node_id = (intent.get("payload") or {}).get("goal_node_id")
+        self._active_claims[worker_id] = {
+            "engagement_id": engagement_id,
+            "worker_id": worker_id,
+            "intent_node_id": str(intent.get("id", "") or ""),
+            "claim_token": str(intent.get("claim_token", "") or ""),
+            "goal_node_id": str(goal_node_id) if goal_node_id else "",
+        }
+
+    def _clear_intent_claim(
+        self, *, worker_id: str | None = None, intent_node_id: str | None = None
+    ) -> None:
+        """Drop a claim once its intent is complete (or the claim was lost)."""
+        if worker_id and worker_id in self._active_claims:
+            if not intent_node_id or (
+                self._active_claims[worker_id].get("intent_node_id") == intent_node_id
+            ):
+                self._active_claims.pop(worker_id, None)
+            return
+        if intent_node_id:
+            for wid, claim in list(self._active_claims.items()):
+                if claim.get("intent_node_id") == intent_node_id:
+                    self._active_claims.pop(wid, None)
+
+    def _claim_for_tool_call(
+        self, engagement_id: str | None, worker_id: str | None = None
+    ) -> dict | None:
+        """The claim a tool call should be attributed to, if it is unambiguous."""
+        if worker_id:
+            claim = self._active_claims.get(worker_id)
+            if claim and (not engagement_id or claim.get("engagement_id") == engagement_id):
+                return claim
+            return None
+        candidates = [
+            claim
+            for claim in self._active_claims.values()
+            if not engagement_id or claim.get("engagement_id") == engagement_id
+        ]
+        # One live claim = the worker running this call. Several claims in one
+        # shared server are ambiguous, so attribute nothing rather than the
+        # wrong goal.
+        return candidates[0] if len(candidates) == 1 else None
+
+    def _stamp_result_attribution(self, payload: dict, claim: dict | None) -> dict:
+        """Stamp a tool result's findings with the caller's claimed goal."""
+        if not claim:
+            return payload
+        from tool_core.goal_attribution import stamp_goal_attribution
+
+        goal_node_id = claim.get("goal_node_id") or ""
+        intent_node_id = claim.get("intent_node_id") or ""
+        if not goal_node_id and not intent_node_id:
+            return payload
+        # Direct MCPToolResult dicts keep their payload under meta.data; the
+        # cache stores exactly that shape, so a hit is re-attributed the same way.
+        for container in (payload.get("data"), (payload.get("meta") or {}).get("data")):
+            if not isinstance(container, dict):
+                continue
+            for key in ("structured", "findings"):
+                if isinstance(container.get(key), list):
+                    stamp_goal_attribution(
+                        container[key],
+                        goal_node_id=goal_node_id,
+                        intent_node_id=intent_node_id,
+                    )
+        if isinstance(payload.get("findings"), list):
+            stamp_goal_attribution(
+                payload["findings"],
+                goal_node_id=goal_node_id,
+                intent_node_id=intent_node_id,
+            )
+        return payload
+
     def handle_graph_claim_intent(self, params: dict) -> dict:
         """Claim exactly one intent for this worker; a worker holds one at a time."""
         engagement_id = str(params.get("engagement_id", "") or "")
@@ -2756,6 +2870,12 @@ class MCPServer:
                 return {"intent": None, "reason": "no_claimable_intent"}
             package = dispatcher.worker_intent_package(
                 engagement_id, str(intent["id"])
+            )
+            self._record_intent_claim(
+                engagement_id=engagement_id,
+                worker_id=worker_id,
+                intent=intent,
+                package=package,
             )
             return self._json_safe({"intent": intent, "package": package})
         except Exception as exc:
@@ -2798,6 +2918,11 @@ class MCPServer:
                 intent_node_id,
                 claim_token=claim_token,
                 fact_description=description,
+            )
+            # The work is done, so later tool calls must not be attributed to it.
+            self._clear_intent_claim(
+                worker_id=params.get("worker_id") or None,
+                intent_node_id=intent_node_id,
             )
             return self._json_safe(result)
         except Exception as exc:
@@ -3222,6 +3347,7 @@ def main():
         timeout = params.get("timeout")
         cache_mode = params.get("cache_mode")
         engagement_id = params.get("engagement_id", "")
+        worker_id = params.get("worker_id", "")
 
         # Create ScopeValidator when engagement_id is provided
         # This ensures target validation against authorized scope even
@@ -3244,6 +3370,7 @@ def main():
             cache_mode,
             engagement_id=engagement_id,
             scope_validator=_scope_validator,
+            worker_id=worker_id or None,
         )
 
     transport.register("list_tools", handle_list_tools)

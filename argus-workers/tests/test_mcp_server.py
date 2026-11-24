@@ -1800,3 +1800,195 @@ class TestPythonScriptDefinitionsAreLoadable:
             if spec.get("name") not in server._tools:
                 skipped.append(f"{spec.get('name')} ({path.name})")
         assert not skipped, f"python3 definitions skipped by the worker: {skipped}"
+
+
+class TestIntentClaimAttribution:
+    """A tool run inside a claimed intent belongs to that intent's goal.
+
+    The agent should never have to pass the goal itself: the server remembers
+    the claim it handed out and stamps/forwards it.
+    """
+
+    @staticmethod
+    def _server_with_claim(monkeypatch, *, goal_node_id="goal-1"):
+        server = MCPServer(tools_dir="/tmp/nonexistent_tools_dir_xyz")
+
+        class FakeRpc:
+            def claim_intent(self, engagement_id, worker_id, **_kwargs):
+                return {
+                    "id": "intent-1",
+                    "claim_token": "token-1",
+                    "payload": {"goal_node_id": goal_node_id},
+                }
+
+            def worker_intent_package(self, engagement_id, intent_node_id):
+                return {
+                    "engagement_id": engagement_id,
+                    "intent": {"id": intent_node_id},
+                    "goal_node_id": goal_node_id,
+                    "write_authority": "dispatcher-only",
+                }
+
+            def complete_intent(self, engagement_id, intent_node_id, **_kwargs):
+                return {"intent": {"id": intent_node_id, "state": "concluded"}}
+
+        monkeypatch.setattr(server, "_graph_worker_rpc", lambda: FakeRpc())
+        claimed = server.handle_graph_claim_intent(
+            {"engagement_id": "e-1", "worker_id": "w-1"}
+        )
+        assert claimed["intent"]["id"] == "intent-1"
+        return server
+
+    @staticmethod
+    def _agent_tool(server):
+        repo_root = Path(__file__).resolve().parents[1]
+        tool = ToolDefinition(
+            name="fake_agent_tool",
+            command="python3",
+            args=[str(repo_root / "tools" / "run_agent_tool.py"), "fake"],
+            parameters=[{"name": "target", "type": "string"}],
+        )
+        server.register_tool(tool)
+        return tool
+
+    def test_call_tool_forwards_the_claimed_goal_to_run_agent_tool(
+        self, monkeypatch
+    ):
+        import subprocess
+
+        server = self._server_with_claim(monkeypatch)
+        self._agent_tool(server)
+
+        captured = {}
+
+        def fake_run(cmd, **_kwargs):
+            captured["cmd"] = cmd
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr("mcp_server.subprocess.run", fake_run)
+
+        result = server.call_tool(
+            "fake_agent_tool",
+            {"target": "https://t.example.com"},
+            engagement_id="e-1",
+            cache_mode="no_cache",
+        )
+
+        assert result["isError"] is False
+        cmd = captured["cmd"]
+        assert "--goal-node-id" in cmd
+        assert cmd[cmd.index("--goal-node-id") + 1] == "goal-1"
+        assert cmd[cmd.index("--intent-node-id") + 1] == "intent-1"
+
+    def test_completing_the_intent_stops_the_attribution(self, monkeypatch):
+        import subprocess
+
+        server = self._server_with_claim(monkeypatch)
+        self._agent_tool(server)
+        server.handle_graph_complete_intent(
+            {
+                "engagement_id": "e-1",
+                "intent_node_id": "intent-1",
+                "claim_token": "token-1",
+                "fact_description": "done",
+            }
+        )
+
+        captured = {}
+        monkeypatch.setattr(
+            "mcp_server.subprocess.run",
+            lambda cmd, **_kw: (
+                captured.setdefault("cmd", cmd),
+                subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr=""),
+            )[1],
+        )
+
+        server.call_tool(
+            "fake_agent_tool",
+            {"target": "https://t.example.com"},
+            engagement_id="e-1",
+            cache_mode="no_cache",
+        )
+
+        assert "--goal-node-id" not in captured["cmd"]
+
+    def test_ambiguous_claims_attribute_nothing_without_a_worker_id(self, monkeypatch):
+        server = self._server_with_claim(monkeypatch)
+        server._record_intent_claim(
+            engagement_id="e-1",
+            worker_id="w-2",
+            intent={"id": "intent-2", "payload": {"goal_node_id": "goal-2"}},
+            package={"goal_node_id": "goal-2"},
+        )
+
+        assert server._claim_for_tool_call("e-1") is None
+        assert server._claim_for_tool_call("e-1", "w-2")["goal_node_id"] == "goal-2"
+        assert server._claim_for_tool_call("e-1", "w-1")["goal_node_id"] == "goal-1"
+
+    def test_structured_findings_from_native_tools_are_stamped(self, monkeypatch):
+        import subprocess
+
+        server = self._server_with_claim(monkeypatch)
+        server.register_tool(
+            ToolDefinition(
+                name="nuclei",
+                command="python3",
+                args=["-c", "print('finding')"],
+                parameters=[{"name": "target", "type": "string"}],
+            )
+        )
+        monkeypatch.setattr(
+            "mcp_server.subprocess.run",
+            lambda cmd, **_kw: subprocess.CompletedProcess(
+                cmd, 0, stdout="finding", stderr=""
+            ),
+        )
+        monkeypatch.setattr(
+            "mcp_server.dispatch",
+            lambda name, output, **_kw: [
+                {"type": "XSS", "severity": "HIGH", "endpoint": "https://t/x"}
+            ],
+        )
+
+        result = server.call_tool(
+            "nuclei",
+            {"target": "https://t.example.com"},
+            engagement_id="e-1",
+            cache_mode="no_cache",
+        )
+
+        structured = result["meta"]["data"]["structured"]
+        assert structured[0]["goal_node_id"] == "goal-1"
+        assert structured[0]["intent_node_id"] == "intent-1"
+
+    def test_cached_results_are_reattributed_to_the_current_claim(self, monkeypatch):
+        server = self._server_with_claim(monkeypatch)
+        server.register_tool(
+            ToolDefinition(name="cached_tool", command="python3", args=["-c", "1"])
+        )
+        monkeypatch.setattr(
+            "mcp_server._mcp_cache.get",
+            lambda _key: {
+                "content": [],
+                "isError": False,
+                # The cache stores MCPToolResult.to_dict(), whose payload lives
+                # under meta.data.
+                "meta": {
+                    "data": {
+                        "structured": [
+                            {
+                                "type": "SQL_INJECTION",
+                                "severity": "HIGH",
+                                "endpoint": "u",
+                            }
+                        ]
+                    }
+                },
+            },
+        )
+
+        result = server.call_tool(
+            "cached_tool", {"target": "https://t.example.com"}, engagement_id="e-1"
+        )
+
+        assert result["meta"]["data"]["structured"][0]["goal_node_id"] == "goal-1"
