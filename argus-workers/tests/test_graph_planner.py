@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -1162,6 +1163,59 @@ class TestProductionDrainAndFlags:
         monkeypatch.setenv("ARGUS_ORCHESTRATION_V2", "on")
         assert orchestration_flags.effective_mode() == "shadow"
         assert orchestration_flags.planner_loop_enabled() is True
+
+    def test_shipped_deployment_config_turns_the_loop_on(self):
+        """A normal deployment must not need an operator to discover the flags.
+
+        The unset fallback in ``flags.py`` is deliberately ``off`` (per-process
+        rollback), so the deployment configuration is what enables the loop.
+        Without this the drain task is registered but permanently a no-op.
+        """
+        import yaml
+
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        compose = yaml.safe_load((repo_root / "docker-compose.yml").read_text())
+
+        for service in ("worker", "celery-beat"):
+            env = compose["services"][service]["environment"]
+            assert env["ARGUS_ORCHESTRATION_V2"] == "${ARGUS_ORCHESTRATION_V2:-on}"
+            assert env["ARGUS_GRAPH_EXPLORATION"] == "${ARGUS_GRAPH_EXPLORATION:-on}"
+
+        for env_file in (repo_root / ".env.example", repo_root / "argus-workers/.env.example"):
+            values = {}
+            for line in env_file.read_text().splitlines():
+                if "=" in line and not line.lstrip().startswith("#"):
+                    key, _, value = line.partition("=")
+                    values[key.strip()] = value.strip()
+            assert values["ARGUS_ORCHESTRATION_V2"] == "on", env_file
+            assert values["ARGUS_GRAPH_EXPLORATION"] == "on", env_file
+
+        start_script = (repo_root / "start-argus.sh").read_text()
+        assert 'ARGUS_ORCHESTRATION_V2="${ARGUS_ORCHESTRATION_V2:-on}"' in start_script
+        assert 'ARGUS_GRAPH_EXPLORATION="${ARGUS_GRAPH_EXPLORATION:-on}"' in start_script
+
+    def test_resolved_modes_are_reportable(self, monkeypatch):
+        monkeypatch.setenv("ARGUS_ORCHESTRATION_V2", "on")
+        monkeypatch.setenv("ARGUS_GRAPH_EXPLORATION", "shadow")
+
+        report = orchestration_flags.mode_report()
+
+        assert report["effective"] == "shadow"
+        assert report["loop_enabled"] is True
+        assert report["dispatch"] is False
+
+    def test_disabled_drain_says_why_instead_of_silently_no_op(self, monkeypatch, caplog):
+        monkeypatch.setenv("ARGUS_ORCHESTRATION_V2", "off")
+        monkeypatch.setenv("ARGUS_GRAPH_EXPLORATION", "on")
+
+        with caplog.at_level("WARNING", logger="tasks.graph_planner"):
+            result = drain_planner_outbox()
+
+        assert result["skipped"] is True
+        joined = " ".join(record.getMessage() for record in caplog.records)
+        assert "disabled" in joined
+        assert "ARGUS_ORCHESTRATION_V2" in joined
+        assert "shadow" in joined
 
     def test_production_drain_is_registered_in_celery_beat(self):
         from celery_app import app

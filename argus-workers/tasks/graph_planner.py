@@ -425,10 +425,25 @@ def drain_planner_outbox(
     nothing, ``shadow`` records turns and proposals but creates no intents and
     dispatches no work, and ``on`` runs the live loop.
     """
-    from orchestrator_pkg.planning.flags import effective_mode, parse_mode
+    from orchestrator_pkg.planning.flags import (
+        effective_mode,
+        graph_exploration_mode,
+        orchestration_mode,
+        parse_mode,
+    )
 
     resolved = parse_mode(mode, name="mode") if mode is not None else effective_mode()
     if resolved == "off":
+        # A silent no-op here is indistinguishable from a broken queue. Say why
+        # the loop is idle and how to turn it on, once per drain.
+        logger.warning(
+            "Planner loop is disabled (ARGUS_ORCHESTRATION_V2=%r, "
+            "ARGUS_GRAPH_EXPLORATION=%r): queued graph work will not be drained. "
+            "Set ARGUS_ORCHESTRATION_V2=on (and ARGUS_GRAPH_EXPLORATION=on) to "
+            "run the loop, or shadow to record turns without dispatching.",
+            orchestration_mode(),
+            graph_exploration_mode(),
+        )
         return {
             "mode": resolved,
             "engagements": 0,

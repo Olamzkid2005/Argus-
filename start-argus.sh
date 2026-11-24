@@ -59,6 +59,12 @@ for _envfile in "$SCRIPT_DIR/.env" "$SCRIPT_DIR/argus-workers/.env"; do
   done < "$_envfile"
 done
 
+# Planner loop defaults: the beat drain only does work when these are not off.
+# .env wins (loaded above); these keep a bare checkout from silently disabling
+# the loop. ARGUS_ORCHESTRATION_V2=off is the one-switch rollback.
+export ARGUS_ORCHESTRATION_V2="${ARGUS_ORCHESTRATION_V2:-on}"
+export ARGUS_GRAPH_EXPLORATION="${ARGUS_GRAPH_EXPLORATION:-on}"
+
 ARGUS_PKG="$SCRIPT_DIR/Argus-Tui/packages/opencode"
 ARGUS_CLI_PKG="$SCRIPT_DIR/Argus-Tui/packages/cli"
 PID_DIR="$SCRIPT_DIR/.pid"

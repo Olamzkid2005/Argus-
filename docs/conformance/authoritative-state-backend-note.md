@@ -323,13 +323,22 @@ rejection (`TestTenantBoundary`).
 - **Rollout flags (A5).** `orchestrator_pkg/planning/flags.py` implements
   `ARGUS_ORCHESTRATION_V2`, `ARGUS_GRAPH_EXPLORATION`,
   `ARGUS_HIERARCHICAL_DELEGATION` and `ARGUS_CAIRN_PROTOCOL` with
-  `off|shadow|on`, default `off`; typos raise. `ARGUS_ORCHESTRATION_V2` is the
-  master switch: `off` rolls back, `shadow` keeps the loop non-mutating, and
-  only `on` lets `ARGUS_GRAPH_EXPLORATION` choose live vs shadow. On the real
-  drain path, shadow left nodes/edges/anchors/intents/conclusions unchanged
-  (0 writes) while recording one turn and consuming the burst; `off` wrote
-  nothing and left the rows queued; flipping back to `on` consumed the same
-  queued rows without any data repair.
+  `off|shadow|on`; typos raise. `ARGUS_ORCHESTRATION_V2` is the master switch:
+  `off` rolls back, `shadow` keeps the loop non-mutating, and only `on` lets
+  `ARGUS_GRAPH_EXPLORATION` choose live vs shadow. On the real drain path,
+  shadow left nodes/edges/anchors/intents/conclusions unchanged (0 writes)
+  while recording one turn and consuming the burst; `off` wrote nothing and
+  left the rows queued; flipping back to `on` consumed the same queued rows
+  without any data repair.
+- **The deployment turns the loop on (A5).** The unset fallback in `flags.py`
+  stays `off` because it is the per-process rollback switch, but the shipped
+  deployment configuration — `docker-compose.yml` (worker and `celery-beat`),
+  `.env.example` and `start-argus.sh` — sets `ARGUS_ORCHESTRATION_V2=on` and
+  `ARGUS_GRAPH_EXPLORATION=on`, so the registered 15-second drain actually does
+  work in a normal deployment instead of being a permanent no-op. A disabled
+  drain logs the resolved flag values and the variables to set, and
+  `mode_report()` exposes the same resolution for support. Shadow remains the
+  documented first step for an existing deployment.
 
 ## 7. What is still open after this note
 
@@ -339,9 +348,11 @@ rejection (`TestTenantBoundary`).
   above).
 - PentAGI hierarchical delegation: Task/Subtask/Action persistence, Generator,
   Refiner patches, Reflector, Reporter and Memorist (P-01…P-17).
-- A5 activation: shadow comparison has to run against real assessments before
-  `ARGUS_ORCHESTRATION_V2=on` is enabled; the rollback flag exists but no
-  assessment has been run in shadow yet.
+- A5 activation: the deployment now runs the loop with
+  `ARGUS_ORCHESTRATION_V2=on`/`ARGUS_GRAPH_EXPLORATION=on` by default, so the
+  remaining gate is operational rather than code: compare shadow turns against
+  the deterministic coverage scheduler on a real assessment and keep the
+  documented `off` rollback path exercised.
 - TUI/SQLite parity, if a later conformance requirement demands it.
 
 ## 8. Definitions used

@@ -1,13 +1,24 @@
 """
 V2 orchestration feature flags and shadow mode (A5).
 
-The plan keeps the integrated V2 path off until its conformance gates pass:
 ``ARGUS_ORCHESTRATION_V2``, ``ARGUS_GRAPH_EXPLORATION``,
 ``ARGUS_HIERARCHICAL_DELEGATION`` and ``ARGUS_CAIRN_PROTOCOL`` each accept
-``off``, ``shadow`` or ``on`` and default to ``off``. ``off`` is the rollback
-switch: the production planner drain task does nothing and the legacy workflow
-path keeps running. ``shadow`` may read the graph and produce proposals, but it
-must not persist or dispatch new work.
+``off``, ``shadow`` or ``on``.
+
+**Defaults.** A deployment is expected to run the planner loop, so the shipped
+deployment configuration (``docker-compose.yml``, ``.env.example``,
+``start-argus.sh``) sets ``ARGUS_ORCHESTRATION_V2=on`` and
+``ARGUS_GRAPH_EXPLORATION=on``. The unset fallback in this module is ``off``
+on purpose: it is the per-process rollback switch, so a process started
+without the deployment config (a library import, a test, a one-off worker) can
+never mutate a live graph by accident. An unset flag therefore means "this
+process was not configured to run the loop", not "the loop is unshipped".
+
+``shadow`` may read the graph and record planning turns and proposals, but it
+must not persist graph facts or dispatch new work; use it to compare the loop
+against the deterministic coverage scheduler before switching ``on``.
+``off`` is the rollback: the production planner drain task does nothing and the
+legacy workflow path keeps running.
 """
 
 from __future__ import annotations
@@ -73,6 +84,27 @@ def effective_mode() -> str:
 def planner_loop_enabled() -> bool:
     """The production planner loop only runs when the effective mode is not off."""
     return effective_mode() != "off"
+
+
+def mode_report() -> dict[str, Any]:
+    """
+    Describe the resolved modes for logs, health endpoints and support.
+
+    Returns the raw flag values next to the resolved ``effective_mode`` and
+    whether the loop will do work, so "the drain runs but does nothing" is
+    explainable without reading this module.
+    """
+    orchestration = orchestration_mode()
+    graph_exploration = graph_exploration_mode()
+    effective = effective_mode()
+    return {
+        "orchestration": orchestration,
+        "graph_exploration": graph_exploration,
+        "effective": effective,
+        "loop_enabled": effective != "off",
+        "dispatch": effective == "on",
+        "env": dict(FLAG_ENV_NAMES),
+    }
 
 
 def legacy_rollback_enabled() -> bool:

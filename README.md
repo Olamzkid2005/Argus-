@@ -197,6 +197,39 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
 This switches the worker to `network_mode: host`, giving it direct access to
 the host network interface.
 
+## Planner Loop (Graph Exploration)
+
+The ARTEX planner loop drains the graph outbox and turns coverage gaps into new
+work. Celery Beat schedules it every 15 seconds
+(`drain-planner-outbox` → `tasks.graph_planner.drain_planner_outbox`), so the
+loop runs with the normal worker/beat deployment — you do not start it by hand.
+
+It is controlled by two flags, both accepted as `off`, `shadow` or `on`:
+
+| Variable | Default in a deployment | Meaning |
+| --- | --- | --- |
+| `ARGUS_ORCHESTRATION_V2` | `on` | Master switch. `off` is the one-switch rollback and stops the loop regardless of the other flag. |
+| `ARGUS_GRAPH_EXPLORATION` | `on` | `on` runs the live loop, `shadow` records planning turns and proposals without writing graph facts or dispatching work, `off` idles the drain. |
+
+The defaults come from the deployment configuration, not from the code:
+`docker-compose.yml` (worker and `celery-beat`), `.env.example` and
+`start-argus.sh` all set both flags to `on`. A process started without that
+configuration falls back to `off`, which is why a bare library import or a test
+can never mutate a live graph.
+
+**Rolling it out on an existing deployment.** Set `ARGUS_GRAPH_EXPLORATION=shadow`
+first: the drain consumes queued rows and records one planning turn per
+engagement while writing no nodes, edges, anchors, intents or conclusions.
+Compare those turns with the deterministic coverage scheduler, then switch to
+`on`. Flipping back to `on` after a shadow run needs no data repair, and setting
+`ARGUS_ORCHESTRATION_V2=off` stops the loop immediately without losing queued
+work.
+
+If the drain runs but does nothing, check the worker log: a disabled loop logs a
+warning naming the resolved flag values and the variables to set. The resolved
+modes are also available programmatically via
+`orchestrator_pkg.planning.flags.mode_report()`.
+
 ## Air-Gap / Offline Build
 
 The `argus-workers/Dockerfile` supports air-gapped (offline) builds via the `AIRGAP` build argument.
