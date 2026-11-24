@@ -314,6 +314,7 @@ class TestExplorationNodeCreate:
 @pytest.mark.skipif(not DB_AVAILABLE, reason="DATABASE_URL not reachable in this environment")
 class TestAnchors:
     def test_node_can_be_anchored_to_an_asset(self):
+        """A-04: an intent/fact/finding anchor returns the exact asset."""
         dispatcher = DispatcherGraph(ExplorationGraphRepository())
         asset = dispatcher.ensure_asset("api.example.com", "endpoint")
         engagement_id = uuid.uuid4().hex
@@ -677,6 +678,7 @@ class TestAssetCanonicalization:
 @pytest.mark.skipif(not DB_AVAILABLE, reason="DATABASE_URL not reachable in this environment")
 class TestAssetIngestion:
     def test_two_tools_merge_onto_one_asset_with_two_observations(self):
+        """A-02: two tools reporting one identity merge into one asset."""
         dispatcher = DispatcherGraph(ExplorationGraphRepository())
         scope_id = uuid.uuid4().hex
 
@@ -719,6 +721,7 @@ class TestAssetIngestion:
         assert observations[0]["observation_count"] == 2
 
     def test_canonical_variants_share_parent_assets(self):
+        """A-01: case/default-port/trailing-slash variants are one asset."""
         dispatcher = DispatcherGraph(ExplorationGraphRepository())
         scope_id = uuid.uuid4().hex
 
@@ -737,6 +740,7 @@ class TestAssetIngestion:
         assert subdomain["asset"]["parent_asset_id"] == root["id"]
 
     def test_out_of_scope_observation_is_audited_but_not_usable(self):
+        """A-05: an out-of-scope discovery is audited, never schedulable."""
         dispatcher = DispatcherGraph(ExplorationGraphRepository())
         scope_id = uuid.uuid4().hex
 
@@ -756,6 +760,7 @@ class TestAssetIngestion:
         assert dispatcher.repository.find_assets_for_scope(scope_id) == []
 
     def test_two_scopes_do_not_merge_or_leak(self):
+        """A-03: the same domain under two scopes never merges or leaks."""
         dispatcher = DispatcherGraph(ExplorationGraphRepository())
         scope_a = uuid.uuid4().hex
         scope_b = uuid.uuid4().hex

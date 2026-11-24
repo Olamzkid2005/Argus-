@@ -1935,6 +1935,23 @@ class ExplorationGraphRepository(BaseRepository):
             )
             open_todos = int(cursor.fetchone()["open_todos"])
 
+            # Scheduled work is a commitment the planner must not duplicate
+            # (plan 3.5.5). Gap keys are how a todo names the direction it covers.
+            cursor.execute(
+                """
+                SELECT DISTINCT payload->>'coverage_gap_key' AS gap_key
+                FROM planner_todos
+                WHERE engagement_id = %s
+                  AND status IN ('open', 'in_progress')
+                  AND payload ? 'coverage_gap_key'
+                ORDER BY 1
+                """,
+                (engagement_id,),
+            )
+            open_gap_keys = [
+                row["gap_key"] for row in cursor.fetchall() if row["gap_key"]
+            ]
+
         return {
             "engagement_id": engagement_id,
             "goals": goals,
@@ -1942,6 +1959,7 @@ class ExplorationGraphRepository(BaseRepository):
             "facts": facts,
             "untested_assets": untested_assets,
             "open_todo_count": open_todos,
+            "open_gap_keys": open_gap_keys,
         }
 
     def apply_intent_proposals(

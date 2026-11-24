@@ -20,6 +20,31 @@ from database.graph_intents import IntentProposal
 DEFAULT_MAX_INTENTS = 5
 
 
+def _breadth_first(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Interleave asset classes so a capped frontier still covers every class.
+
+    The overview is ordered by asset type and key, so taking the first ``N``
+    would spend the whole budget on whichever class sorts first and leave the
+    other untested classes unrepresented. One asset per class per pass matches
+    the deterministic plan's class coverage before it goes deeper.
+    """
+    by_class: dict[str, list[dict[str, Any]]] = {}
+    for asset in assets:
+        by_class.setdefault(str(asset.get("asset_type") or "unknown"), []).append(asset)
+    ordered: list[dict[str, Any]] = []
+    index = 0
+    while len(ordered) < len(assets):
+        added = False
+        for queue in by_class.values():
+            if index < len(queue):
+                ordered.append(queue[index])
+                added = True
+        if not added:
+            break
+        index += 1
+    return ordered
+
+
 class ExplorationPlanner:
     """Turn a planner overview into at most ``max_intents`` intent proposals."""
 
@@ -43,9 +68,20 @@ class ExplorationPlanner:
             # A-09: open/running intents already cover the frontier.
             return []
 
+        # Plan 3.5.5: consult the persistent todo list and do not duplicate work
+        # the deterministic coverage scheduler already committed. A scheduled
+        # ``untested_asset_class:<type>`` gap is that class's planned work.
+        scheduled_classes = {
+            gap_key.split(":", 1)[1]
+            for gap_key in overview.get("open_gap_keys", [])
+            if gap_key.startswith("untested_asset_class:")
+        }
+
         proposals: list[IntentProposal] = []
         active_goal = unmet_goals[0]
-        for asset in overview.get("untested_assets", [])[: self.max_intents]:
+        for asset in _breadth_first(overview.get("untested_assets", [])):
+            if asset.get("asset_type") in scheduled_classes:
+                continue
             proposals.append(
                 IntentProposal(
                     objective=(
@@ -59,4 +95,6 @@ class ExplorationPlanner:
                     ),
                 )
             )
+            if len(proposals) >= self.max_intents:
+                break
         return proposals

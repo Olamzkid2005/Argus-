@@ -294,11 +294,17 @@ def run_planner_turn(
         unmet_goals = [
             goal for goal in after["goals"] if goal.get("state") != "concluded"
         ]
-        if not shadow and unmet_goals and not after["open_intents"]:
+        if (
+            not shadow
+            and unmet_goals
+            and not after["open_intents"]
+            and not after["open_todo_count"]
+        ):
             raise PlannerHardFloorError(
                 "planner turn left unmet goal(s) "
                 f"{sorted(str(goal['id']) for goal in unmet_goals)} with no open or "
-                "running intent; the planner must propose applicable work or fail"
+                "running intent and no scheduled todo; the planner must propose "
+                "applicable work or fail"
             )
 
         completed = dispatcher.complete_planner_turn(
