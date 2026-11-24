@@ -292,6 +292,17 @@ rejection (`TestTenantBoundary`).
   error-log-only artifact is a claim, not proof, and rejects the whole proof
   before any write. On success it writes the graph finding node, a `proves` edge
   and the goal conclusion in one dispatcher transaction.
+- **The verifier concludes the goal itself (A-08).** The finding persistence
+  service calls the proof hook (`orchestrator_pkg/persistence/goal_proof.py`,
+  registered in the graph-write allowlist next to the other delegators) after a save,
+  so a finding that reaches `CONFIRMED` through the real verification pipeline
+  concludes the goal it proves without an explicit dispatcher call. Attribution
+  is explicit (`goal_node_id`/`proves_goal_ids` on the finding or its evidence,
+  carried through the verification agent); a single-objective engagement
+  attributes to its one open goal, and with several open goals an unattributed
+  finding proves none — a reproduced information leak must not conclude an RCE
+  objective. A rejected or unreachable graph never fails the scan: the rows are
+  already written and the rejection is logged.
 - **Provenance and verdict reach the row (A-08).** The rule above only means
   something if the pipeline actually stores what the verifier established, so
   `promote_finding`'s output is folded into `findings.evidence` on the way to the

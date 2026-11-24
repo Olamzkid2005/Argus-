@@ -898,6 +898,137 @@ class TestPersistedProofCanConcludeAGoal:
             )
 
 
+class TestVerifierConcludesGoals:
+    """The verifier, not a manual dispatcher call, concludes what it proved."""
+
+    @staticmethod
+    def _save(engagement_id: str, finding: dict, **promote_kwargs) -> dict:
+        from orchestrator_pkg.persistence.finding_persistence_service import (
+            FindingPersistenceService,
+        )
+        from tools.verification.finding_promoter import promote_finding
+
+        promoted = promote_finding(
+            {
+                "id": str(uuid.uuid4()),
+                "type": "SQL_INJECTION",
+                "severity": "HIGH",
+                "endpoint": "https://api.example.com/login",
+                "confidence": 0.5,
+                "evidence": {"payload": "' OR 1=1--"},
+                **finding,
+            },
+            **promote_kwargs,
+        )
+        service = FindingPersistenceService(
+            engagement_id, finding_repo=FindingRepository()
+        )
+        assert service.save([promoted]) == 0
+        return promoted
+
+    @staticmethod
+    def _goal_state(dispatcher, engagement_id: str, goal_id: str) -> str:
+        goals = dispatcher.planner_overview(engagement_id)["goals"]
+        return next(g["state"] for g in goals if str(g["id"]) == goal_id)
+
+    def test_saving_a_confirmed_finding_concludes_its_goal(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal_id = str(dispatcher.planner_overview(engagement_id)["goals"][0]["id"])
+
+        self._save(
+            engagement_id,
+            {"type": "SQL_INJECTION", "goal_node_id": goal_id},
+            confidence=0.9,
+            reproduced=True,
+            evidence_refs=["artifacts/sqli-response-diff.html"],
+        )
+
+        # No explicit prove_goal_from_findings call was made by the test.
+        assert self._goal_state(dispatcher, engagement_id, goal_id) == "concluded"
+        proves_edges = _raw_query(
+            "SELECT COUNT(*) FROM graph_node_edges "
+            "WHERE engagement_id = %s AND edge_type = 'proves'",
+            (engagement_id,),
+        )[0][0]
+        assert proves_edges >= 1
+
+    def test_a_single_open_goal_is_proven_without_attribution(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal_id = str(dispatcher.planner_overview(engagement_id)["goals"][0]["id"])
+
+        self._save(
+            engagement_id,
+            {},
+            confidence=0.9,
+            reproduced=True,
+            evidence_refs=["artifacts/sqli.html"],
+        )
+
+        assert self._goal_state(dispatcher, engagement_id, goal_id) == "concluded"
+
+    def test_several_open_goals_are_never_guessed(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        dispatcher.create_node(
+            engagement_id, GraphNodeKind.GOAL, payload={"objective": "second goal"}
+        )
+        goals = dispatcher.planner_overview(engagement_id)["goals"]
+        assert len(goals) == 2
+
+        self._save(
+            engagement_id,
+            {},
+            confidence=0.9,
+            reproduced=True,
+            evidence_refs=["artifacts/sqli.html"],
+        )
+
+        # An unattributed finding cannot choose between two objectives, so the
+        # pipeline proves neither rather than concluding the wrong one.
+        assert [g["state"] for g in dispatcher.planner_overview(engagement_id)["goals"]] == [
+            "open",
+            "open",
+        ]
+
+    def test_a_finding_that_did_not_reproduce_concludes_nothing(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal_id = str(dispatcher.planner_overview(engagement_id)["goals"][0]["id"])
+
+        # This one must not raise either: the save succeeds, the goal just does
+        # not move.
+        self._save(
+            engagement_id,
+            {"goal_node_id": goal_id},
+            confidence=0.9,
+            reproduced=False,
+            completed=True,
+        )
+
+        assert self._goal_state(dispatcher, engagement_id, goal_id) == "open"
+
+    def test_attribution_to_another_engagement_goal_is_ignored(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal_id = str(dispatcher.planner_overview(engagement_id)["goals"][0]["id"])
+
+        other_engagement, other_dispatcher, _ = _engagement_with_goal(assets=1)
+        foreign_goal_id = str(
+            other_dispatcher.planner_overview(other_engagement)["goals"][0]["id"]
+        )
+
+        self._save(
+            engagement_id,
+            {"goal_node_id": foreign_goal_id},
+            confidence=0.9,
+            reproduced=True,
+            evidence_refs=["artifacts/sqli.html"],
+        )
+
+        assert self._goal_state(dispatcher, engagement_id, goal_id) == "open"
+        assert (
+            self._goal_state(other_dispatcher, other_engagement, foreign_goal_id)
+            == "open"
+        )
+
+
 class TestWriteRejectionAudit:
     def test_cross_engagement_edge_is_rejected_and_audited(self):
         engagement_a, dispatcher_a, _ = _engagement_with_goal(assets=1)

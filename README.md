@@ -230,6 +230,14 @@ warning naming the resolved flag values and the variables to set. The resolved
 modes are also available programmatically via
 `orchestrator_pkg.planning.flags.mode_report()`.
 
+**Goals are concluded by the verifier.** When the verification pipeline promotes
+a finding to `CONFIRMED`, the save hook proves the goal that finding is
+attributed to (`goal_node_id`/`proves_goal_ids` on the finding or its evidence)
+through `prove_goal_from_findings`; the goal, its `proves` edge and the graph
+finding node are written in one dispatcher transaction. An engagement with a
+single open goal is attributed automatically. With several open goals an
+unattributed finding proves none, so work can conclude the wrong objective.
+
 ## Air-Gap / Offline Build
 
 The `argus-workers/Dockerfile` supports air-gapped (offline) builds via the `AIRGAP` build argument.

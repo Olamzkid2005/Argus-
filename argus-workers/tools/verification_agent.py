@@ -83,14 +83,28 @@ class VerificationAgent(AbstractTool):
                     "endpoint", finding.get("endpoint", ctx.target)
                 ),
                 # The proof vocabulary and captured artifacts travel with the
-                # finding so the stored row can prove a goal later on.
+                # finding so the stored row can prove a goal later on. If the
+                # producer attributed the finding to a goal, that attribution is
+                # kept too — it is what the save hook proves against.
                 "evidence": evidence_with_proof(
-                    promoted, base={**(promoted.get("evidence") or evidence or {})}
+                    promoted,
+                    base={
+                        **(promoted.get("evidence") or evidence or {}),
+                        **{
+                            key: finding[key]
+                            for key in ("goal_node_id", "proves_goal_ids")
+                            if finding.get(key)
+                        },
+                    },
                 ),
                 "confidence": promoted.get("confidence", confidence),
                 "source_tool": self.tool_name,
                 "verification_status": promoted.get("status", "PENDING"),
                 "verification_reason": promoted.get("reason", ""),
+                # Carry the attribution at the top level as well, so any
+                # persistence path can read it without unwrapping evidence.
+                "goal_node_id": finding.get("goal_node_id"),
+                "proves_goal_ids": finding.get("proves_goal_ids"),
             }
             verified_findings.append(normalized)
 

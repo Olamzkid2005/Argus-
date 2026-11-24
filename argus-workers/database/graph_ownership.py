@@ -94,6 +94,10 @@ _ALLOWED_REFERENCES = frozenset(
         "tasks/graph_planner.py",
         # Read-only operator reporting surface (no mutations).
         "cli/cmd/graph_coverage.py",
+        # Save-path goal proof: trusted orchestrator code that calls
+        # DispatcherGraph.prove_goal_from_findings after a finding is
+        # persisted, so goals are concluded by the verifier itself (A-08).
+        "orchestrator_pkg/persistence/goal_proof.py",
     }
 )
 

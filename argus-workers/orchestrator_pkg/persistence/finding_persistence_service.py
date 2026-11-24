@@ -106,6 +106,12 @@ class FindingPersistenceService:
         # Phase 4 — upsert secret findings individually
         failed_count += self._upsert_secrets(secret, _finding_emitter)
 
+        # Phase 4.5 — let the verifier conclude the goals it just proved. This
+        # is what makes `prove_goal_from_findings` part of the pipeline rather
+        # than an operator-only call: a finding that reaches CONFIRMED here
+        # concludes the goal it is attributed to.
+        self._conclude_proven_goals(findings_to_save)
+
         # Phase 5 — fire webhooks for HIGH / CRITICAL findings
         self._fire_webhooks(findings_to_save)
 
@@ -117,6 +123,31 @@ class FindingPersistenceService:
                 self.engagement_id,
             )
         return failed_count
+
+    def _conclude_proven_goals(self, findings: list[dict]) -> None:
+        """Conclude graph goals from the findings this save just proved (A-08).
+
+        Best-effort by design: the rows are already written, so a graph that is
+        unavailable or rejects the proof must not turn a successful scan into a
+        failed one. Rejections are logged by the helper.
+        """
+        from orchestrator_pkg.persistence.goal_proof import conclude_proven_goals
+
+        try:
+            summary = conclude_proven_goals(self.engagement_id, findings)
+        except Exception as exc:  # never fail a save over a goal write
+            logger.warning(
+                "Goal proof after save failed for %s: %s", self.engagement_id, exc
+            )
+            return
+        if summary.get("concluded") or summary.get("failed"):
+            logger.info(
+                "Goal proof after save for %s: %d concluded, %d failed, %d skipped",
+                self.engagement_id,
+                len(summary.get("concluded", [])),
+                len(summary.get("failed", [])),
+                len(summary.get("skipped", [])),
+            )
 
     # ------------------------------------------------------------------
     # Internal phases
