@@ -741,17 +741,24 @@ If you want `testssl` to run in a specific workflow phase:
 
 No change needed if an existing phase already requires `vulnerability_scanning` — the planner will automatically pick `testssl` when it's the best match.
 
-#### Step 6 — Install the binary
+#### Step 6 — Add it to the installer (do not install by hand)
+
+`argus-workers/scripts/install_tools.py` is the only tool-install entry point.
+Add the tool to the matching manifest — `GO_TOOL_MANIFEST` (pinned GitHub
+release asset), `RELEASE_TOOL_MANIFEST` (archive with per-OS entry point),
+`GIT_TOOL_MANIFEST` (checkout + wrapper), `SYSTEM_TOOL_MANIFEST`
+(brew/npm/gem, with a Windows package in `_WINDOWS_SYSTEM_PACKAGES`), or
+`PIP_TOOL_MANIFEST` (PyPI) — and a platform-specific asset name to
+`_MACOS_ASSET_NAME` / `_ARCHIVE_SUFFIX` if the publisher renames it. Then run:
 
 ```bash
-# macOS
-brew install testssl
-
-# Linux
-apt install testssl.sh  # or download from https://testssl.sh
+python scripts/install_tools.py           # installs the new tool everywhere
 ```
 
-The MCP server discovers tools via PATH (augmented with `~/go/bin`, `/opt/homebrew/bin`, `venv/bin`).
+The MCP server discovers tools via PATH (augmented with `~/go/bin`,
+`~/.local/bin`, venv, Homebrew and pip script dirs); `install_tools.py` also
+looks in the Windows package-manager shim dirs (`scoop`, winget, choco) when
+installing, which on Windows are normally on PATH already.
 
 #### Step 7 — Verify
 

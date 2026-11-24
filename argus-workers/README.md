@@ -58,21 +58,19 @@ cp .env.example .env
 
 ### 4. Install Security Tools
 
-The workers require several security tools to be installed:
+`scripts/install_tools.py` is the single entry point for provisioning every
+tool (pinned Go binaries, release archives, git checkouts, package-manager and
+pip tools, plus the nuclei template set). It works on Linux, macOS and Windows:
 
 ```bash
-# Install Go (required for many tools)
-brew install go
-
-# Install security tools
-go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
-go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
-go install -v github.com/ffuf/ffuf/v2@latest
-
-# Install sqlmap
-brew install sqlmap
+python scripts/install_tools.py           # install everything
+python scripts/install_tools.py --check   # report anything missing
 ```
+
+Do not install these tools by hand or from another script — version drift
+between a manual install and the pinned manifests is what `--check` exists to
+catch. The run exits non-zero if a required tool could not be provisioned on
+this host (tools with no build for the current OS are reported separately).
 
 ## Running Workers
 
