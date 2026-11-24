@@ -1,0 +1,340 @@
+{
+  "generated_at": "2026-11-24",
+  "gate": "A5 shadow comparison",
+  "scenarios": {
+    "with_scheduler": {
+      "scenario": "with_scheduler",
+      "engagement_id": "4fd0a98c-0848-57b1-a273-0f1bc4fe301f",
+      "mode": "shadow",
+      "scope": {
+        "domains": [
+          "shadow-lab.internal",
+          "www.shadow-lab.internal",
+          "api.shadow-lab.internal"
+        ],
+        "ipRanges": [
+          "10.42.0.0/28"
+        ]
+      },
+      "ingestion": {
+        "accepted": 10,
+        "rejected": 1,
+        "failed": 0
+      },
+      "assets": {
+        "total": 10,
+        "in_scope": 10,
+        "out_of_scope": 0,
+        "untested": 10,
+        "by_asset_type": {
+          "endpoint": {
+            "total": 5,
+            "in_scope": 5,
+            "covered": 0,
+            "untested": 5
+          },
+          "ip": {
+            "total": 1,
+            "in_scope": 1,
+            "covered": 0,
+            "untested": 1
+          },
+          "root_domain": {
+            "total": 1,
+            "in_scope": 1,
+            "covered": 0,
+            "untested": 1
+          },
+          "service": {
+            "total": 2,
+            "in_scope": 2,
+            "covered": 0,
+            "untested": 2
+          },
+          "subdomain": {
+            "total": 1,
+            "in_scope": 1,
+            "covered": 0,
+            "untested": 1
+          }
+        },
+        "untested_asset_types": [
+          "endpoint",
+          "ip",
+          "root_domain",
+          "service",
+          "subdomain"
+        ]
+      },
+      "deterministic_plan": {
+        "gaps": 6,
+        "scheduled_count": 0,
+        "already_scheduled": 6,
+        "gap_details": [
+          {
+            "gap_key": "untested_asset_class:subdomain",
+            "gap_type": "untested_asset_class",
+            "legacy_targets": [
+              "www.shadow-lab.internal"
+            ],
+            "planner_covers": false,
+            "note": "class work is already scheduled; planner stays quiet"
+          },
+          {
+            "gap_key": "untested_asset_class:service",
+            "gap_type": "untested_asset_class",
+            "legacy_targets": [
+              "tcp://shadow-lab.internal:22",
+              "tcp://shadow-lab.internal:443"
+            ],
+            "planner_covers": false,
+            "note": "class work is already scheduled; planner stays quiet"
+          },
+          {
+            "gap_key": "untested_asset_class:root_domain",
+            "gap_type": "untested_asset_class",
+            "legacy_targets": [
+              "shadow-lab.internal"
+            ],
+            "planner_covers": false,
+            "note": "class work is already scheduled; planner stays quiet"
+          },
+          {
+            "gap_key": "untested_asset_class:ip",
+            "gap_type": "untested_asset_class",
+            "legacy_targets": [
+              "10.42.0.3"
+            ],
+            "planner_covers": false,
+            "note": "class work is already scheduled; planner stays quiet"
+          },
+          {
+            "gap_key": "untested_asset_class:endpoint",
+            "gap_type": "untested_asset_class",
+            "legacy_targets": [
+              "https://shadow-lab.internal",
+              "https://shadow-lab.internal/admin",
+              "https://shadow-lab.internal/api/v1/users",
+              "https://shadow-lab.internal/login",
+              "https://www.shadow-lab.internal"
+            ],
+            "planner_covers": false,
+            "note": "class work is already scheduled; planner stays quiet"
+          },
+          {
+            "gap_key": "undiscovered_scope_entry:domain:api.shadow-lab.internal",
+            "gap_type": "approved_but_undiscovered",
+            "legacy_targets": [
+              "https://api.shadow-lab.internal"
+            ],
+            "planner_covers": false,
+            "note": "api.shadow-lab.internal was never discovered, so an asset-driven planner has nothing to propose; the deterministic scope-entry gap is the only path that can dispatch it"
+          }
+        ],
+        "open_gap_keys": [
+          "undiscovered_scope_entry:domain:api.shadow-lab.internal",
+          "untested_asset_class:endpoint",
+          "untested_asset_class:ip",
+          "untested_asset_class:root_domain",
+          "untested_asset_class:service",
+          "untested_asset_class:subdomain"
+        ]
+      },
+      "planner_shadow": {
+        "turn_id": "81febd40-86a4-40b8-85a1-5d0e05858c40",
+        "turn_status": "completed",
+        "events_consumed": 11,
+        "proposals_received": 0,
+        "proposals": [],
+        "proposal_classes": [],
+        "intents_created": 0
+      },
+      "state_before": {
+        "goals": 1,
+        "open_intents": 1,
+        "facts": 0,
+        "untested_assets": 10,
+        "todos": 6,
+        "todos_by_status": {
+          "open": 6
+        },
+        "queued_outbox": 11
+      },
+      "state_after": {
+        "goals": 1,
+        "open_intents": 1,
+        "facts": 0,
+        "untested_assets": 10,
+        "todos": 6,
+        "todos_by_status": {
+          "open": 6
+        },
+        "queued_outbox": 0
+      },
+      "shadow_wrote_nothing": true
+    },
+    "planner_only": {
+      "scenario": "planner_only",
+      "engagement_id": "22d5316e-3604-5bee-8d03-e8b3549e58fa",
+      "mode": "shadow",
+      "scope": {
+        "domains": [
+          "shadow-lab.internal",
+          "www.shadow-lab.internal",
+          "api.shadow-lab.internal"
+        ],
+        "ipRanges": [
+          "10.42.0.0/28"
+        ]
+      },
+      "ingestion": {
+        "accepted": 10,
+        "rejected": 1,
+        "failed": 0
+      },
+      "assets": {
+        "total": 10,
+        "in_scope": 10,
+        "out_of_scope": 0,
+        "untested": 10,
+        "by_asset_type": {
+          "endpoint": {
+            "total": 5,
+            "in_scope": 5,
+            "covered": 0,
+            "untested": 5
+          },
+          "ip": {
+            "total": 1,
+            "in_scope": 1,
+            "covered": 0,
+            "untested": 1
+          },
+          "root_domain": {
+            "total": 1,
+            "in_scope": 1,
+            "covered": 0,
+            "untested": 1
+          },
+          "service": {
+            "total": 2,
+            "in_scope": 2,
+            "covered": 0,
+            "untested": 2
+          },
+          "subdomain": {
+            "total": 1,
+            "in_scope": 1,
+            "covered": 0,
+            "untested": 1
+          }
+        },
+        "untested_asset_types": [
+          "endpoint",
+          "ip",
+          "root_domain",
+          "service",
+          "subdomain"
+        ]
+      },
+      "deterministic_plan": {
+        "gaps": 0,
+        "scheduled_count": 0,
+        "already_scheduled": 0,
+        "gap_details": [],
+        "open_gap_keys": []
+      },
+      "planner_shadow": {
+        "turn_id": "1f82a4c5-3c87-4d41-808c-b44e3411f4a7",
+        "turn_status": "completed",
+        "events_consumed": 11,
+        "proposals_received": 5,
+        "proposals": [
+          {
+            "objective": "test endpoint https://shadow-lab.internal",
+            "asset_ids": [
+              "2eba4afa-8f4d-4e5a-a82c-6a214114cb46"
+            ],
+            "rationale": "untested in-scope asset selected from the planner overview"
+          },
+          {
+            "objective": "test ip 10.42.0.3",
+            "asset_ids": [
+              "94504948-9d0b-4668-8dae-e0136e010942"
+            ],
+            "rationale": "untested in-scope asset selected from the planner overview"
+          },
+          {
+            "objective": "test root_domain shadow-lab.internal",
+            "asset_ids": [
+              "706baf4c-a659-4391-9af9-05080de6caf1"
+            ],
+            "rationale": "untested in-scope asset selected from the planner overview"
+          },
+          {
+            "objective": "test service tcp://shadow-lab.internal:22",
+            "asset_ids": [
+              "2c7f4e82-012a-481e-93a9-de1986784bd7"
+            ],
+            "rationale": "untested in-scope asset selected from the planner overview"
+          },
+          {
+            "objective": "test subdomain www.shadow-lab.internal",
+            "asset_ids": [
+              "b3d77bfa-87fa-4f23-95e9-fd2544e0db53"
+            ],
+            "rationale": "untested in-scope asset selected from the planner overview"
+          }
+        ],
+        "proposal_classes": [
+          "endpoint",
+          "ip",
+          "root_domain",
+          "service",
+          "subdomain"
+        ],
+        "intents_created": 0
+      },
+      "state_before": {
+        "goals": 1,
+        "open_intents": 0,
+        "facts": 0,
+        "untested_assets": 10,
+        "todos": 0,
+        "todos_by_status": {},
+        "queued_outbox": 11
+      },
+      "state_after": {
+        "goals": 1,
+        "open_intents": 0,
+        "facts": 0,
+        "untested_assets": 10,
+        "todos": 0,
+        "todos_by_status": {},
+        "queued_outbox": 0
+      },
+      "shadow_wrote_nothing": true
+    }
+  },
+  "agreement": {
+    "deterministic_untested_classes": [
+      "endpoint",
+      "ip",
+      "root_domain",
+      "service",
+      "subdomain"
+    ],
+    "planner_proposed_classes": [
+      "endpoint",
+      "ip",
+      "root_domain",
+      "service",
+      "subdomain"
+    ],
+    "same_classes": true,
+    "missing_from_planner": [],
+    "extra_from_planner": [],
+    "duplicate_direction_suppressed": true
+  },
+  "shadow_wrote_nothing": true
+}

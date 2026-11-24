@@ -133,6 +133,7 @@ def ingest_recon_outcomes(
     source: str = "recon",
     repository: ExplorationGraphRepository | None = None,
     max_assets: int = _MAX_ASSETS_PER_RUN,
+    schedule_gaps: bool = True,
 ) -> dict[str, Any]:
     """
     Ingest one recon context into the canonical asset graph.
@@ -190,17 +191,20 @@ def ingest_recon_outcomes(
     # Gaps the recon pass leaves behind become scheduled work, not just report
     # lines: approved-but-undiscovered targets and untested asset classes get a
     # planner frontier node plus todo. Best-effort like ingestion itself.
+    # ``schedule_gaps=False`` is for callers that compare the ARTEX planner's
+    # proposals against an unscheduled frontier (the A5 shadow gate).
     scheduled_gaps = 0
-    try:
-        scheduled_gaps = dispatcher.schedule_coverage_gaps(
-            engagement_id, engagement_id, authorized_scope=authorized_scope
-        )["scheduled_count"]
-    except Exception as exc:  # noqa: BLE001 - planning must not abort recon
-        logger.debug(
-            "Coverage gap scheduling skipped for engagement %s: %s",
-            engagement_id,
-            exc,
-        )
+    if schedule_gaps:
+        try:
+            scheduled_gaps = dispatcher.schedule_coverage_gaps(
+                engagement_id, engagement_id, authorized_scope=authorized_scope
+            )["scheduled_count"]
+        except Exception as exc:  # noqa: BLE001 - planning must not abort recon
+            logger.debug(
+                "Coverage gap scheduling skipped for engagement %s: %s",
+                engagement_id,
+                exc,
+            )
 
     logger.info(
         "Graph ingestion for engagement %s: %d accepted, %d rejected, %d failed, "
@@ -217,6 +221,7 @@ def ingest_recon_outcomes(
         "rejected": rejected,
         "failed": failed,
         "scheduled_gaps": scheduled_gaps,
+        "gap_scheduling_enabled": schedule_gaps,
         "assets": assets,
     }
 

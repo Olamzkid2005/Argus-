@@ -265,6 +265,48 @@ class TestReconGraphIngestion:
 
 
 @pytest.mark.skipif(not DB_AVAILABLE, reason="DATABASE_URL not reachable in this environment")
+class TestGapSchedulingToggle:
+    def test_gap_scheduling_can_be_disabled_for_a_comparison_run(self, monkeypatch):
+        """The A5 gate needs an unscheduled frontier (default stays on)."""
+        calls: list[str] = []
+
+        class _Dispatcher:
+            def __init__(self, *args, **kwargs) -> None:
+                pass
+
+            def schedule_coverage_gaps(self, *args, **kwargs):
+                calls.append("scheduled")
+                return {"scheduled_count": 1}
+
+        monkeypatch.setattr(
+            "tasks.graph_ingestion.DispatcherGraph", lambda *a, **k: _Dispatcher()
+        )
+        monkeypatch.setattr(
+            "tasks.graph_ingestion.ExplorationGraphRepository", lambda: object()
+        )
+
+        disabled = ingest_recon_outcomes(
+            "eng-1",
+            _context(),
+            authorized_scope={"domains": ["example.com"], "ipRanges": []},
+            repository=object(),
+            schedule_gaps=False,
+        )
+        assert disabled["scheduled_gaps"] == 0
+        assert disabled["gap_scheduling_enabled"] is False
+        assert calls == []
+
+        enabled = ingest_recon_outcomes(
+            "eng-1",
+            _context(),
+            authorized_scope={"domains": ["example.com"], "ipRanges": []},
+            repository=object(),
+        )
+        assert enabled["scheduled_gaps"] == 1
+        assert enabled["gap_scheduling_enabled"] is True
+        assert calls == ["scheduled"]
+
+
 class TestReconIngestionPersistence:
     def test_recon_outcomes_persist_to_the_canonical_graph(self):
         from database.graph_repository import ExplorationGraphRepository
