@@ -339,7 +339,11 @@ class TestAnchors:
         repo = dispatcher.repository
         # Canonical assets are deduplicated globally, so each test needs its
         # own identity to stay isolated from anchors created by other tests.
-        asset = dispatcher.ensure_asset("nodes-for-asset.example.com", "endpoint")
+        # A fixed key would accumulate anchors across runs and make this assert
+        # fail on the second run against the same database.
+        asset = dispatcher.ensure_asset(
+            f"nodes-for-asset-{uuid.uuid4().hex[:12]}.example.com", "endpoint"
+        )
         engagement_id = uuid.uuid4().hex
         node = dispatcher.create_node(engagement_id, GraphNodeKind.FACT, payload={"x": 1})
         dispatcher.attach_anchor(node["id"], asset["id"], role="affects")
