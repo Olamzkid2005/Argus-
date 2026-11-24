@@ -235,6 +235,7 @@ def run_planner_turn(
     planner: ExplorationPlanner | None = None,
     trigger: str = "outbox",
     consume_events: bool = True,
+    shadow: bool = False,
 ) -> dict[str, Any]:
     """
     Run one persisted planning turn.
@@ -256,13 +257,22 @@ def run_planner_turn(
         )
         overview = dispatcher.planner_overview(engagement_id)
         proposals = planner.plan(overview)
-        applied = dispatcher.apply_intent_proposals(engagement_id, proposals)
+        if shadow:
+            # Shadow mode records what would have been proposed without creating
+            # intents, dispatching work or tripping the live hard floor.
+            applied = {
+                "created": [],
+                "suppressed": [],
+                "proposals_received": len(proposals),
+            }
+        else:
+            applied = dispatcher.apply_intent_proposals(engagement_id, proposals)
 
         after = dispatcher.planner_overview(engagement_id)
         unmet_goals = [
             goal for goal in after["goals"] if goal.get("state") != "concluded"
         ]
-        if unmet_goals and not after["open_intents"]:
+        if not shadow and unmet_goals and not after["open_intents"]:
             raise PlannerHardFloorError(
                 "planner turn left unmet goal(s) "
                 f"{sorted(str(goal['id']) for goal in unmet_goals)} with no open or "
@@ -286,6 +296,7 @@ def run_planner_turn(
         "event_ids": [str(event["id"]) for event in consumed],
         "created": applied["created"],
         "suppressed": applied["suppressed"],
+        "shadow": shadow,
     }
 
 
@@ -295,6 +306,7 @@ def run_planner_loop(
     max_turns: int = 10,
     dispatcher: DispatcherGraph | None = None,
     planner: ExplorationPlanner | None = None,
+    shadow: bool = False,
 ) -> dict[str, Any]:
     """
     Consume queued outbox work in bounded, debounced planning turns.
@@ -321,7 +333,10 @@ def run_planner_loop(
                 "stopped_reason": "idle",
             }
         result = run_planner_turn(
-            engagement_id, dispatcher=dispatcher, planner=planner
+            engagement_id,
+            dispatcher=dispatcher,
+            planner=planner,
+            shadow=shadow,
         )
         turns += 1
         events_consumed += result["events_consumed"]
@@ -358,4 +373,106 @@ dispatch_coverage_gap = (
     )
     if app is not None
     else _dispatch_coverage_gap
+)
+
+
+def drain_planner_outbox(
+    *,
+    dispatcher: DispatcherGraph | None = None,
+    planner: ExplorationPlanner | None = None,
+    max_engagement_turns: int = 10,
+    mode: str | None = None,
+) -> dict[str, Any]:
+    """
+    Consume every engagement's queued outbox work in bounded planning turns.
+
+    This is the production entry point the Celery beat task calls. It is the
+    floor that guarantees committed graph changes are never stranded: even if an
+    immediate wake dispatch is missed, the next drain consumes the queue.
+
+    ``mode`` follows the V2 flags: ``off`` is the rollback switch and does
+    nothing, ``shadow`` records turns and proposals but creates no intents and
+    dispatches no work, and ``on`` runs the live loop.
+    """
+    from orchestrator_pkg.planning.flags import graph_exploration_mode, parse_mode
+
+    resolved = parse_mode(mode, name="mode") if mode is not None else graph_exploration_mode()
+    if resolved == "off":
+        return {
+            "mode": resolved,
+            "engagements": 0,
+            "turns": 0,
+            "results": [],
+            "skipped": True,
+        }
+
+    dispatcher = dispatcher or DispatcherGraph(ExplorationGraphRepository())
+    planner = planner or ExplorationPlanner()
+
+    results: list[dict[str, Any]] = []
+    total_turns = 0
+    for engagement_id in dispatcher.find_engagements_with_queued_outbox():
+        try:
+            loop = run_planner_loop(
+                engagement_id,
+                max_turns=max_engagement_turns,
+                dispatcher=dispatcher,
+                planner=planner,
+                shadow=resolved == "shadow",
+            )
+        except PlannerHardFloorError as exc:
+            logger.error(
+                "Planner hard floor for engagement %s: %s", engagement_id, exc
+            )
+            results.append({"engagement_id": engagement_id, "error": str(exc)})
+            continue
+        total_turns += loop["turns"]
+        results.append(
+            {
+                "engagement_id": engagement_id,
+                "turns": loop["turns"],
+                "events_consumed": loop["events_consumed"],
+                "stopped_reason": loop["stopped_reason"],
+            }
+        )
+
+    return {
+        "mode": resolved,
+        "engagements": len(results),
+        "turns": total_turns,
+        "results": results,
+        "skipped": False,
+    }
+
+
+def _run_planner_loop_task(self, engagement_id: str, max_turns: int = 10):
+    """Celery entry point: drain one engagement's queued outbox burst."""
+    return run_planner_loop(engagement_id, max_turns=max_turns)
+
+
+def _drain_planner_outbox_task(self, max_turns: int = 10):
+    """Celery beat entry point: drain every engagement with queued wakes."""
+    return drain_planner_outbox(max_engagement_turns=max_turns)
+
+
+run_planner_loop_task = (
+    app.task(
+        bind=True,
+        name="tasks.graph_planner.run_planner_loop",
+        soft_time_limit=240,
+        time_limit=300,
+    )(_run_planner_loop_task)
+    if app is not None
+    else _run_planner_loop_task
+)
+
+drain_planner_outbox_task = (
+    app.task(
+        bind=True,
+        name="tasks.graph_planner.drain_planner_outbox",
+        soft_time_limit=240,
+        time_limit=300,
+    )(_drain_planner_outbox_task)
+    if app is not None
+    else _drain_planner_outbox_task
 )

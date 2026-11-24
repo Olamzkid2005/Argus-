@@ -15,6 +15,8 @@ write surface from worker/agent modules.
 from __future__ import annotations
 
 import functools
+import logging
+import os
 import uuid
 from typing import Any
 
@@ -32,6 +34,8 @@ from database.graph_repository import (
 )
 
 _UNSET = object()
+
+logger = logging.getLogger(__name__)
 
 
 def _outbox_scope(value: str | None) -> str | None:
@@ -290,9 +294,22 @@ class DispatcherGraph:
             raise GraphMutationError(
                 "engagement_id, source_node_id and target_node_id are required"
             )
-        return self._repo.attach_edge(
-            engagement_id, source_node_id, target_node_id, edge_type=edge_type
-        )
+        try:
+            return self._repo.attach_edge(
+                engagement_id, source_node_id, target_node_id, edge_type=edge_type
+            )
+        except GraphMutationError as exc:
+            self._repo.record_write_rejection(
+                engagement_id,
+                "attach_edge",
+                str(exc),
+                detail={
+                    "source_node_id": str(source_node_id),
+                    "target_node_id": str(target_node_id),
+                    "edge_type": edge_type,
+                },
+            )
+            raise
 
     # ----- planner frontier -----
 
@@ -580,7 +597,225 @@ class DispatcherGraph:
         """Validate and persist typed planner intent proposals."""
         if not engagement_id:
             raise GraphMutationError("engagement_id is required")
-        return self._repo.apply_intent_proposals(engagement_id, proposals)
+        try:
+            return self._repo.apply_intent_proposals(engagement_id, proposals)
+        except GraphMutationError as exc:
+            self._repo.record_write_rejection(
+                engagement_id,
+                "apply_intent_proposals",
+                str(exc),
+                detail={"proposals": [getattr(p, "objective", None) for p in proposals]},
+            )
+            raise
+
+    # ----- worker protocol: action ledger, traces, intent claims, proofs (A4) -----
+
+    @dispatcher_owned
+    def record_action(
+        self,
+        engagement_id: str,
+        action_id: str,
+        *,
+        intent_node_id: str | None = None,
+        worker_id: str | None = None,
+        tool: str | None = None,
+        canonical_arguments: dict[str, Any] | None = None,
+        outcome: str = "completed",
+        result: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Record one worker action/result idempotently (A-16)."""
+        if not engagement_id or not action_id:
+            raise GraphMutationError("engagement_id and action_id are required")
+        return self._repo.record_action(
+            engagement_id,
+            action_id,
+            intent_node_id=intent_node_id,
+            worker_id=worker_id,
+            tool=tool,
+            canonical_arguments=canonical_arguments,
+            outcome=outcome,
+            result=result,
+        )
+
+    def find_action(self, engagement_id: str, action_id: str) -> dict[str, Any] | None:
+        """Read one recorded action/result."""
+        if not engagement_id or not action_id:
+            raise GraphMutationError("engagement_id and action_id are required")
+        return self._repo.find_action(engagement_id, action_id)
+
+    @dispatcher_owned
+    def record_trace(
+        self,
+        engagement_id: str,
+        summary: str,
+        *,
+        intent_node_id: str | None = None,
+        worker_id: str | None = None,
+        tool: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Store a redacted trace summary other workers may reuse (A-13)."""
+        if not engagement_id or not summary:
+            raise GraphMutationError("engagement_id and summary are required")
+        return self._repo.record_trace(
+            engagement_id,
+            summary,
+            intent_node_id=intent_node_id,
+            worker_id=worker_id,
+            tool=tool,
+            payload=payload,
+        )
+
+    def search_traces(
+        self,
+        engagement_id: str,
+        *,
+        query: str | None = None,
+        intent_node_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Search engagement-scoped, untrusted trace summaries."""
+        if not engagement_id:
+            raise GraphMutationError("engagement_id is required")
+        return self._repo.search_traces(
+            engagement_id,
+            query=query,
+            intent_node_id=intent_node_id,
+            limit=limit,
+        )
+
+    @dispatcher_owned
+    def claim_intent_node(
+        self,
+        engagement_id: str,
+        worker_id: str,
+        *,
+        intent_node_id: str | None = None,
+        lease_seconds: int = 90,
+    ) -> dict[str, Any] | None:
+        """Claim exactly one intent for a worker, with a fencing token and lease."""
+        if not engagement_id or not worker_id:
+            raise GraphMutationError("engagement_id and worker_id are required")
+        return self._repo.claim_intent_node(
+            engagement_id,
+            worker_id,
+            intent_node_id=intent_node_id,
+            lease_seconds=lease_seconds,
+        )
+
+    @dispatcher_owned
+    def heartbeat_intent_node(
+        self,
+        engagement_id: str,
+        intent_node_id: str,
+        *,
+        claim_token: str,
+        lease_seconds: int = 90,
+    ) -> dict[str, Any]:
+        """Renew a worker intent claim; stale tokens get CLAIM_LOST."""
+        if not engagement_id or not intent_node_id or not claim_token:
+            raise GraphMutationError(
+                "engagement_id, intent_node_id and claim_token are required"
+            )
+        return self._repo.heartbeat_intent_node(
+            engagement_id,
+            intent_node_id,
+            claim_token=claim_token,
+            lease_seconds=lease_seconds,
+        )
+
+    @dispatcher_owned
+    def complete_intent_node(
+        self,
+        engagement_id: str,
+        intent_node_id: str,
+        *,
+        claim_token: str,
+        fact_description: str,
+    ) -> dict[str, Any]:
+        """Close a claimed intent with one conclusion fact and a yields edge."""
+        if not engagement_id or not intent_node_id or not claim_token:
+            raise GraphMutationError(
+                "engagement_id, intent_node_id and claim_token are required"
+            )
+        completed = self._repo.complete_intent_node(
+            engagement_id,
+            intent_node_id,
+            claim_token=claim_token,
+            fact_description=fact_description,
+        )
+        wake_scope = _outbox_scope(engagement_id)
+        if wake_scope:
+            self.enqueue_outbox(
+                scope_type="graph",
+                scope_id=wake_scope,
+                event_type="graph.intent.completed",
+                payload={"intent_node_id": str(intent_node_id)},
+                cause_node_id=intent_node_id,
+                cause_engagement_id=wake_scope,
+            )
+        return completed
+
+    def worker_intent_package(
+        self,
+        engagement_id: str,
+        intent_node_id: str,
+        *,
+        trace_limit: int = 5,
+    ) -> dict[str, Any]:
+        """Build the bounded, read-only work package for one claimed intent."""
+        if not engagement_id or not intent_node_id:
+            raise GraphMutationError("engagement_id and intent_node_id are required")
+        return self._repo.worker_intent_package(
+            engagement_id, intent_node_id, trace_limit=trace_limit
+        )
+
+    @dispatcher_owned
+    def prove_goal_from_findings(
+        self,
+        engagement_id: str,
+        goal_id: str,
+        finding_ids: list[str],
+        *,
+        proof_summary: str = "",
+    ) -> dict[str, Any]:
+        """Prove a goal only from verified findings, then conclude it (A-08)."""
+        if not engagement_id or not goal_id or not finding_ids:
+            raise GraphMutationError(
+                "engagement_id, goal_id and at least one verified finding are required"
+            )
+        proven = self._repo.prove_goal_from_findings(
+            engagement_id, goal_id, finding_ids, proof_summary=proof_summary
+        )
+        wake_scope = _outbox_scope(engagement_id)
+        if wake_scope:
+            self.enqueue_outbox(
+                scope_type="graph",
+                scope_id=wake_scope,
+                event_type="graph.goal.proven",
+                payload={"goal_id": str(goal_id), "finding_ids": finding_ids},
+                cause_node_id=goal_id,
+                cause_engagement_id=wake_scope,
+            )
+        return proven
+
+    def find_engagements_with_queued_outbox(self, *, limit: int = 100) -> list[str]:
+        """List engagements with queued planner wake events (production drain)."""
+        return self._repo.find_engagements_with_queued_outbox(limit=limit)
+
+    @dispatcher_owned
+    def record_write_rejection(
+        self,
+        engagement_id: str | None,
+        operation: str,
+        reason: str,
+        *,
+        detail: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Record a rejected graph write for audit (A-05)."""
+        return self._repo.record_write_rejection(
+            engagement_id, operation, reason, detail=detail
+        )
 
     # ----- graph outbox -----
 
@@ -605,7 +840,7 @@ class DispatcherGraph:
             raise GraphMutationError("event_type is required")
         if not scope_id:
             raise GraphMutationError("scope_id is required")
-        return self._repo.enqueue_outbox(
+        event = self._repo.enqueue_outbox(
             scope_type=scope_type,
             scope_id=scope_id,
             event_type=event_type,
@@ -613,6 +848,25 @@ class DispatcherGraph:
             cause_node_id=cause_node_id,
             cause_engagement_id=cause_engagement_id,
         )
+        self._wake_planner(scope_id, scope_type=scope_type)
+        return event
+
+    def _wake_planner(self, scope_id: str, *, scope_type: str = "graph") -> None:
+        """Optionally wake the drain task immediately; the beat drain is the floor."""
+        if scope_type != "graph":
+            return
+        if os.getenv("ARGUS_PLANNER_WAKE_DISPATCH", "").lower() not in ("1", "true"):
+            return
+        try:
+            from celery_app import app
+
+            app.send_task(
+                "tasks.graph_planner.run_planner_loop",
+                args=[scope_id],
+                kwargs={"max_turns": 5},
+            )
+        except Exception as exc:  # pragma: no cover - broker may be unavailable
+            logger.debug("Planner wake dispatch skipped for %s: %s", scope_id, exc)
 
     @dispatcher_owned
     def dequeue_outbox(

@@ -288,6 +288,9 @@ jobs:
               "planner_todos",
               "planner_turns",
               "graph_outbox",
+              "graph_actions",
+              "graph_traces",
+              "graph_write_rejections",
           }
 
           conn = psycopg2.connect(os.environ["DATABASE_URL"])
@@ -310,6 +313,18 @@ jobs:
                       "AND table_name IN ('graph_assets', 'graph_asset_observations')"
                   )
                   tenant_columns = {row[0] for row in cur.fetchall()}
+                  cur.execute(
+                      "SELECT column_name FROM information_schema.columns "
+                      "WHERE table_schema = 'public' AND table_name = 'graph_nodes' "
+                      "AND column_name IN ('claim_token', 'lease_expires_at')"
+                  )
+                  intent_claim_columns = {row[0] for row in cur.fetchall()}
+                  cur.execute(
+                      "SELECT indexname FROM pg_indexes "
+                      "WHERE schemaname = 'public' "
+                      "AND indexname = 'idx_graph_nodes_claim_token'"
+                  )
+                  intent_claim_index = cur.fetchone() is not None
                   cur.execute(
                       "SELECT table_name, column_name FROM information_schema.columns "
                       "WHERE table_schema = 'public' AND "
@@ -350,6 +365,13 @@ jobs:
               )
           if not claim_index:
               raise SystemExit("migration 036 did not create the claim token index")
+          if intent_claim_columns != {"claim_token", "lease_expires_at"}:
+              raise SystemExit(
+                  "migration 037 did not add intent claim columns: "
+                  f"{sorted(intent_claim_columns)}"
+              )
+          if not intent_claim_index:
+              raise SystemExit("migration 037 did not create the intent claim index")
           print("Graph tables present: " + ", ".join(sorted(expected)))
           PY
 

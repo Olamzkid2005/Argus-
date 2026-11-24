@@ -2726,6 +2726,139 @@ class MCPServer:
             "fallback": True,  # Signal to TypeScript that this is degraded (non-LLM) response
         }
 
+    # ----- CAIRN worker protocol: one intent at a time (A4) -----
+
+    @staticmethod
+    def _graph_worker_rpc():
+        from database import graph_worker_rpc
+
+        return graph_worker_rpc
+
+    @staticmethod
+    def _json_safe(value):
+        return json.loads(json.dumps(value, default=str))
+
+    def handle_graph_claim_intent(self, params: dict) -> dict:
+        """Claim exactly one intent for this worker; a worker holds one at a time."""
+        engagement_id = str(params.get("engagement_id", "") or "")
+        worker_id = str(params.get("worker_id", "") or "")
+        if not engagement_id or not worker_id:
+            return {"error": "engagement_id and worker_id are required"}
+        try:
+            dispatcher = self._graph_worker_rpc()
+            intent = dispatcher.claim_intent(
+                engagement_id,
+                worker_id,
+                intent_node_id=params.get("intent_node_id") or None,
+                lease_seconds=int(params.get("lease_seconds", 90)),
+            )
+            if intent is None:
+                return {"intent": None, "reason": "no_claimable_intent"}
+            package = dispatcher.worker_intent_package(
+                engagement_id, str(intent["id"])
+            )
+            return self._json_safe({"intent": intent, "package": package})
+        except Exception as exc:
+            logger.warning("graph_claim_intent failed: %s", exc)
+            return {"error": str(exc)}
+
+    def handle_graph_heartbeat_intent(self, params: dict) -> dict:
+        """Renew a worker's live intent claim; stale tokens are rejected."""
+        engagement_id = str(params.get("engagement_id", "") or "")
+        intent_node_id = str(params.get("intent_node_id", "") or "")
+        claim_token = str(params.get("claim_token", "") or "")
+        if not engagement_id or not intent_node_id or not claim_token:
+            return {
+                "error": "engagement_id, intent_node_id and claim_token are required"
+            }
+        try:
+            node = self._graph_worker_rpc().heartbeat_intent(
+                engagement_id,
+                intent_node_id,
+                claim_token=claim_token,
+                lease_seconds=int(params.get("lease_seconds", 90)),
+            )
+            return self._json_safe({"intent": node})
+        except Exception as exc:
+            return {"error": str(exc), "code": "CLAIM_LOST"}
+
+    def handle_graph_complete_intent(self, params: dict) -> dict:
+        """Conclude one claimed intent with exactly one fact (CAIRN explore)."""
+        engagement_id = str(params.get("engagement_id", "") or "")
+        intent_node_id = str(params.get("intent_node_id", "") or "")
+        claim_token = str(params.get("claim_token", "") or "")
+        description = str(params.get("fact_description", "") or "")
+        if not engagement_id or not intent_node_id or not claim_token:
+            return {
+                "error": "engagement_id, intent_node_id and claim_token are required"
+            }
+        try:
+            result = self._graph_worker_rpc().complete_intent(
+                engagement_id,
+                intent_node_id,
+                claim_token=claim_token,
+                fact_description=description,
+            )
+            return self._json_safe(result)
+        except Exception as exc:
+            return {"error": str(exc), "code": "CLAIM_LOST"}
+
+    def handle_graph_report_trace(self, params: dict) -> dict:
+        """Store a redacted trace summary another worker may reuse."""
+        engagement_id = str(params.get("engagement_id", "") or "")
+        summary = str(params.get("summary", "") or "")
+        if not engagement_id or not summary:
+            return {"error": "engagement_id and summary are required"}
+        try:
+            trace = self._graph_worker_rpc().report_trace(
+                engagement_id,
+                summary,
+                intent_node_id=params.get("intent_node_id") or None,
+                worker_id=params.get("worker_id") or None,
+                tool=params.get("tool") or None,
+                payload=params.get("payload") or {},
+            )
+            return self._json_safe({"trace": trace})
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    def handle_graph_search_traces(self, params: dict) -> dict:
+        """Search this engagement's untrusted trace summaries."""
+        engagement_id = str(params.get("engagement_id", "") or "")
+        if not engagement_id:
+            return {"error": "engagement_id is required"}
+        try:
+            traces = self._graph_worker_rpc().search_traces(
+                engagement_id,
+                query=params.get("query") or None,
+                intent_node_id=params.get("intent_node_id") or None,
+                limit=int(params.get("limit", 20)),
+            )
+            return self._json_safe({"traces": traces})
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    def handle_graph_record_action(self, params: dict) -> dict:
+        """Record one action/result idempotently; a replay returns the original."""
+        engagement_id = str(params.get("engagement_id", "") or "")
+        action_id = str(params.get("action_id", "") or "")
+        if not engagement_id or not action_id:
+            return {"error": "engagement_id and action_id are required"}
+        try:
+            result = self._graph_worker_rpc().record_action(
+                engagement_id,
+                action_id,
+                intent_node_id=params.get("intent_node_id") or None,
+                worker_id=params.get("worker_id") or None,
+                tool=params.get("tool") or None,
+                canonical_arguments=params.get("canonical_arguments") or {},
+                outcome=params.get("outcome") or "completed",
+                result=params.get("result") or {},
+            )
+            return self._json_safe(result)
+        except Exception as exc:
+            return {"error": str(exc)}
+
     @staticmethod
     def _build_attack_graph(
         engagement_id: str,
@@ -3128,6 +3261,31 @@ def main():
     transport.register("agent_init", handle_agent_init)
     transport.register("agent_next", handle_agent_next)
     transport.register("agent_observe", handle_agent_observe)
+
+    def handle_graph_claim_intent(params):
+        return server.handle_graph_claim_intent(params)
+
+    def handle_graph_heartbeat_intent(params):
+        return server.handle_graph_heartbeat_intent(params)
+
+    def handle_graph_complete_intent(params):
+        return server.handle_graph_complete_intent(params)
+
+    def handle_graph_report_trace(params):
+        return server.handle_graph_report_trace(params)
+
+    def handle_graph_search_traces(params):
+        return server.handle_graph_search_traces(params)
+
+    def handle_graph_record_action(params):
+        return server.handle_graph_record_action(params)
+
+    transport.register("graph_claim_intent", handle_graph_claim_intent)
+    transport.register("graph_heartbeat_intent", handle_graph_heartbeat_intent)
+    transport.register("graph_complete_intent", handle_graph_complete_intent)
+    transport.register("graph_report_trace", handle_graph_report_trace)
+    transport.register("graph_search_traces", handle_graph_search_traces)
+    transport.register("graph_record_action", handle_graph_record_action)
 
     def handle_get_attack_graph(params):
         return server.handle_get_attack_graph(params)

@@ -85,6 +85,9 @@ _ALLOWED_REFERENCES = frozenset(
         "database/graph_repository.py",
         # Trusted recon bridge: delegates every write to DispatcherGraph rather
         # than committing graph state itself.
+        # Worker-facing RPC facade: dispatcher-backed claim/heartbeat/complete
+        # calls, so worker runtimes never import the write surface directly.
+        "database/graph_worker_rpc.py",
         "tasks/graph_ingestion.py",
         # Coverage-gap planner: claims/dispatches/completes recon work through
         # DispatcherGraph rather than committing graph state itself.

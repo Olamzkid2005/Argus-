@@ -255,24 +255,68 @@ C-18 is now enforced twice:
   or `graph_ingest`.
 
 Verification: the `graph-repository-db` CI job runs the full migration runner
-through 035 against Postgres 16 (and asserts the scoped identity index and both
-`tenant_id` columns exist), runs the import-boundary check and runs the graph
-tests. Locally the same steps give **94 passed, 0 skipped** (many skipped without
-a database). The DB-backed suites include two-tool merges across case, default
-port, trailing slash, IDNA/punycode hosts and differently shaped service keys
-(`TestCrossToolMerge`), computed coverage gaps plus rejected out-of-scope
-discoveries (`TestComputedCoverage`), coverage gaps becoming frontier/todo work
-(`TestCoverageDrivenPlanning`), the claimed → dispatched → ingested → closed gap
-loop for an approved domain, CIDR and untested asset class
-(`TestCoverageGapReconLoop`), and cross-tenant asset/observation
+through 037 against Postgres 16 (and asserts the scoped identity index, both
+`tenant_id` columns, the claim/turn columns and the intent claim index), runs
+the import-boundary check and runs the graph tests. Locally the same steps give
+**121 passed, 0 skipped, 38 migrations applied**. The DB-backed suites include
+two-tool merges across case, default port, trailing slash, IDNA/punycode hosts
+and differently shaped service keys (`TestCrossToolMerge`), computed coverage
+gaps plus rejected out-of-scope discoveries (`TestComputedCoverage`), coverage
+gaps becoming frontier/todo work (`TestCoverageDrivenPlanning`), the claimed →
+dispatched → ingested → closed gap loop for an approved domain, CIDR and untested
+asset class (`TestCoverageGapReconLoop`), and cross-tenant asset/observation
 rejection (`TestTenantBoundary`).
+
+## 6.1 Production planner loop, worker protocol and rollout flags (A3–A5)
+
+- **The loop runs in production.** `tasks.graph_planner.drain_planner_outbox` is
+  registered as the Celery beat entry `drain-planner-outbox` (every 15 s) and
+  scans `graph_outbox` for engagements with queued wakes, then runs bounded
+  turns for each. `tasks.graph_planner.run_planner_loop` is also registered for
+  an optional immediate wake (`ARGUS_PLANNER_WAKE_DISPATCH=1`); the beat drain is
+  the floor, so a missed wake is never stranded.
+- **Goal proof is verifier-backed (A-08).** `prove_goal_from_findings` only
+  accepts findings that belong to the engagement and are `CONFIRMED`/`VERIFIED`
+  in the existing `findings` table. It writes the graph finding node, a `proves`
+  edge and the goal conclusion in one dispatcher transaction; unverified or
+  foreign findings reject the whole proof before any write.
+- **Rejected writes are audited (A-05).** Cross-engagement edges, unknown
+  endpoints and out-of-scope intent anchors raise `GraphMutationError` and are
+  recorded in `graph_write_rejections` with the operation and reason.
+- **Worker protocol and isolation (A4).** `claim_intent_node` gives a worker at
+  most one live intent, with a random fencing token and a 90-second
+  database-clock lease; `heartbeat_intent_node` renews it and
+  `complete_intent_node` writes exactly one conclusion fact plus a `yields` edge,
+  rejecting stale tokens with `GraphClaimLostError`. The MCP transport exposes
+  `graph_claim_intent`, `graph_heartbeat_intent`, `graph_complete_intent`,
+  `graph_report_trace`, `graph_search_traces` and `graph_record_action` through
+  the allow-listed `database/graph_worker_rpc.py` facade.
+- **Trace reuse (A-13).** `graph_traces` stores redacted, engagement-scoped
+  summaries; `worker_intent_package` includes the intent, anchored assets,
+  prerequisite facts and recent traces, all marked `trust: untrusted` and bounded
+  by `sanitize_untrusted_text`, so a worker reuses another's observation without
+  repeating it or following it as an instruction (A-14).
+- **Idempotent results (A-16).** `graph_actions` is unique on
+  `(engagement_id, action_id)`; replaying an action returns the originally
+  committed result instead of a second logical update.
+- **Rollout flags (A5).** `orchestrator_pkg/planning/flags.py` implements
+  `ARGUS_ORCHESTRATION_V2`, `ARGUS_GRAPH_EXPLORATION`,
+  `ARGUS_HIERARCHICAL_DELEGATION` and `ARGUS_CAIRN_PROTOCOL` with
+  `off|shadow|on`, default `off`; typos raise. `off` is the rollback switch that
+  stops the drain task and leaves the legacy workflow path in charge; `shadow`
+  records turns and proposals but creates no intents and dispatches no work.
 
 ## 7. What is still open after this note
 
-- A3: planner frontier event loop (debounced graph-change wake, intent proposal
-  contract, prerequisite-aware chains, verifier-backed goal proof).
-- A4: claim leases, fencing tokens, heartbeat/expiry, cross-worker trace reuse.
-- A5: shadow-mode rollout against the legacy phase plan.
+- CAIRN protocol work proper: typed `bootstrap`/`reason`/`explore` result
+  contracts, reason lease/checkpoint scheduling, worker registry and single
+  dispatcher leader election (C-01…C-22 apart from the ownership/lease pieces
+  above).
+- PentAGI hierarchical delegation: Task/Subtask/Action persistence, Generator,
+  Refiner patches, Reflector, Reporter and Memorist (P-01…P-17).
+- A5 activation: shadow comparison has to run against real assessments before
+  `ARGUS_ORCHESTRATION_V2=on` is enabled; the rollback flag exists but no
+  assessment has been run in shadow yet.
 - TUI/SQLite parity, if a later conformance requirement demands it.
 
 ## 8. Definitions used

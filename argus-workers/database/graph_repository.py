@@ -38,6 +38,23 @@ class GraphClaimLostError(GraphMutationError):
     """A write presented a stale or expired claim token (A-11/A-12)."""
 
 
+def sanitize_untrusted_text(value: str, *, limit: int = 500) -> str:
+    """
+    Flatten untrusted text into bounded data (A-13/A-14).
+
+    Trace and tool output is never an instruction. Control characters and
+    newlines are collapsed so a trace summary cannot smuggle prompt structure,
+    and the value is truncated to a bounded size.
+    """
+    cleaned = "".join(
+        " " if (ch.isspace() or ord(ch) < 32) else ch for ch in str(value or "")
+    )
+    return " ".join(cleaned.split())[:limit]
+
+
+_INTENT_LEASE_SECONDS = 90
+
+
 class GraphNodeKind(str):
     GOAL = "goal"
     INTENT = "intent"
@@ -1990,6 +2007,562 @@ class ExplorationGraphRepository(BaseRepository):
             "suppressed": suppressed,
             "proposals_received": len(validated),
         }
+
+    # --- worker protocol: action ledger, traces, intent claims, proofs ---
+
+    def record_action(
+        self,
+        engagement_id: str,
+        action_id: str,
+        *,
+        intent_node_id: str | None = None,
+        worker_id: str | None = None,
+        tool: str | None = None,
+        canonical_arguments: dict[str, Any] | None = None,
+        outcome: str = "completed",
+        result: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Record one worker action/result exactly once (A-16).
+
+        ``(engagement_id, action_id)`` is unique. Re-delivering the same action
+        returns ``recorded=False`` and the originally committed result, so a
+        replay never creates a second logical graph update.
+        """
+        require_graph_write_owner("record_action")
+        if not engagement_id or not action_id:
+            raise GraphMutationError("engagement_id and action_id are required")
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                INSERT INTO graph_actions
+                    (engagement_id, action_id, intent_node_id, worker_id, tool,
+                     canonical_arguments, outcome, result)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (engagement_id, action_id) DO NOTHING
+                RETURNING *
+                """,
+                (
+                    engagement_id,
+                    action_id,
+                    intent_node_id,
+                    worker_id,
+                    tool,
+                    Json(canonical_arguments or {}),
+                    outcome,
+                    Json(result or {}),
+                ),
+            )
+            row = cursor.fetchone()
+            recorded = row is not None
+            if row is None:
+                cursor.execute(
+                    "SELECT * FROM graph_actions "
+                    "WHERE engagement_id = %s AND action_id = %s",
+                    (engagement_id, action_id),
+                )
+                row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("graph_actions upsert did not return a row")
+            return {"recorded": recorded, "action": dict(row)}
+
+    def find_action(
+        self, engagement_id: str, action_id: str
+    ) -> dict[str, Any] | None:
+        """Read a recorded action/result, if any."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                "SELECT * FROM graph_actions "
+                "WHERE engagement_id = %s AND action_id = %s",
+                (engagement_id, action_id),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def record_trace(
+        self,
+        engagement_id: str,
+        summary: str,
+        *,
+        intent_node_id: str | None = None,
+        worker_id: str | None = None,
+        tool: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Store a redacted, engagement-scoped trace summary for reuse (A-13)."""
+        require_graph_write_owner("record_trace")
+        cleaned = sanitize_untrusted_text(summary)
+        if not engagement_id or not cleaned:
+            raise GraphMutationError("engagement_id and a non-empty summary are required")
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                INSERT INTO graph_traces
+                    (engagement_id, intent_node_id, worker_id, tool, summary, payload)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING *
+                """,
+                (
+                    engagement_id,
+                    intent_node_id,
+                    worker_id,
+                    tool,
+                    cleaned,
+                    Json(payload or {}),
+                ),
+            )
+            return dict(cursor.fetchone())
+
+    def search_traces(
+        self,
+        engagement_id: str,
+        *,
+        query: str | None = None,
+        intent_node_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """
+        Search trace summaries for one engagement only (A-13/A-14).
+
+        Another worker's trace is reusable data, so every row is returned with
+        ``trust: untrusted`` and a sanitised summary, never as an instruction.
+        """
+        if not engagement_id:
+            raise GraphMutationError("engagement_id is required")
+        clauses = ["engagement_id = %s"]
+        values: list[Any] = [engagement_id]
+        if intent_node_id is not None:
+            clauses.append("intent_node_id = %s")
+            values.append(intent_node_id)
+        if query:
+            clauses.append("(summary ILIKE %s OR tool ILIKE %s)")
+            pattern = f"%{query}%"
+            values.extend([pattern, pattern])
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                f"SELECT * FROM graph_traces WHERE {' AND '.join(clauses)} "
+                "ORDER BY created_at DESC LIMIT %s",
+                values + [max(1, min(int(limit), 100))],
+            )
+            traces = []
+            for row in cursor.fetchall():
+                trace = dict(row)
+                trace["summary"] = sanitize_untrusted_text(trace["summary"])
+                trace["trust"] = "untrusted"
+                traces.append(trace)
+            return traces
+
+    def record_write_rejection(
+        self,
+        engagement_id: str | None,
+        operation: str,
+        reason: str,
+        *,
+        detail: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Record a rejected graph write for audit before re-raising (A-05)."""
+        require_graph_write_owner("record_write_rejection")
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                INSERT INTO graph_write_rejections
+                    (engagement_id, operation, reason, detail)
+                VALUES (%s, %s, %s, %s)
+                RETURNING *
+                """,
+                (engagement_id, operation, sanitize_untrusted_text(reason, limit=1000), Json(detail or {})),
+            )
+            return dict(cursor.fetchone())
+
+    def claim_intent_node(
+        self,
+        engagement_id: str,
+        worker_id: str,
+        *,
+        intent_node_id: str | None = None,
+        lease_seconds: int = _INTENT_LEASE_SECONDS,
+    ) -> dict[str, Any] | None:
+        """
+        Claim exactly one open intent for a worker (A4).
+
+        A worker may hold at most one live intent: asking for another while its
+        lease is live raises instead of double-routing. The claim carries a
+        random fencing token and a database-clock lease, so an expired claim is
+        reclaimable while stale writes are rejected.
+        """
+        require_graph_write_owner("claim_intent_node")
+        if not engagement_id or not worker_id:
+            raise GraphMutationError("engagement_id and worker_id are required")
+        if lease_seconds < 1:
+            raise GraphMutationError("lease_seconds must be positive")
+
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT id FROM graph_nodes
+                WHERE engagement_id = %s AND kind = 'intent' AND state = 'running'
+                  AND owner = %s AND lease_expires_at > NOW()
+                """,
+                (engagement_id, worker_id),
+            )
+            held = cursor.fetchone()
+            if held is not None:
+                if intent_node_id and str(held["id"]) != str(intent_node_id):
+                    raise GraphMutationError(
+                        f"worker {worker_id} already holds live intent {held['id']}"
+                    )
+                cursor.execute("SELECT * FROM graph_nodes WHERE id = %s", (held["id"],))
+                return dict(cursor.fetchone())
+
+            cursor.execute(
+                """
+                UPDATE graph_nodes
+                SET state = 'running', owner = %s,
+                    claim_token = gen_random_uuid(),
+                    lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
+                    last_heartbeat_at = NOW(), updated_at = NOW()
+                WHERE id = (
+                    SELECT id FROM graph_nodes
+                    WHERE engagement_id = %s AND kind = 'intent'
+                      AND (%s::uuid IS NULL OR id = %s::uuid)
+                      AND (
+                          state = 'open'
+                          OR (state = 'running' AND lease_expires_at < NOW())
+                      )
+                    ORDER BY priority DESC, created_at ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING *
+                """,
+                (worker_id, lease_seconds, engagement_id, intent_node_id, intent_node_id),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def heartbeat_intent_node(
+        self,
+        engagement_id: str,
+        intent_node_id: str,
+        *,
+        claim_token: str,
+        lease_seconds: int = _INTENT_LEASE_SECONDS,
+    ) -> dict[str, Any]:
+        """Renew a worker's live intent claim; a stale token is CLAIM_LOST."""
+        require_graph_write_owner("heartbeat_intent_node")
+        if not engagement_id or not intent_node_id or not claim_token:
+            raise GraphMutationError(
+                "engagement_id, intent_node_id and claim_token are required"
+            )
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                UPDATE graph_nodes
+                SET lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
+                    last_heartbeat_at = NOW(), updated_at = NOW()
+                WHERE engagement_id = %s AND id = %s AND kind = 'intent'
+                  AND state = 'running' AND claim_token = %s
+                  AND lease_expires_at > NOW()
+                RETURNING *
+                """,
+                (lease_seconds, engagement_id, intent_node_id, claim_token),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise GraphClaimLostError(
+                    f"intent {intent_node_id} claim token is expired or no longer current"
+                )
+            return dict(row)
+
+    def complete_intent_node(
+        self,
+        engagement_id: str,
+        intent_node_id: str,
+        *,
+        claim_token: str,
+        fact_description: str,
+    ) -> dict[str, Any]:
+        """
+        Close a claimed intent with exactly one conclusion fact (CAIRN explore).
+
+        The token must still match and the lease must be live. The fact and the
+        ``yields`` edge are committed with the intent transition in one
+        transaction, and the fact payload is stable per intent so a repeated
+        conclusion cannot create a second fact.
+        """
+        require_graph_write_owner("complete_intent_node")
+        description = sanitize_untrusted_text(fact_description, limit=1000)
+        if not description:
+            raise GraphMutationError("fact_description is required")
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT * FROM graph_nodes
+                WHERE engagement_id = %s AND id = %s AND kind = 'intent'
+                  AND state = 'running' AND claim_token = %s
+                  AND lease_expires_at > NOW()
+                FOR UPDATE
+                """,
+                (engagement_id, intent_node_id, claim_token),
+            )
+            intent = cursor.fetchone()
+            if intent is None:
+                raise GraphClaimLostError(
+                    f"intent {intent_node_id} claim token is expired or no longer current"
+                )
+
+            payload = {"intent_node_id": str(intent_node_id), "summary": description}
+            cursor.execute(
+                """
+                INSERT INTO graph_nodes
+                    (engagement_id, kind, payload, state, origin, source_task_id)
+                VALUES (%s, 'fact', %s, 'open', 'worker', %s)
+                ON CONFLICT (engagement_id, kind, payload) DO UPDATE SET
+                    updated_at = NOW()
+                RETURNING *
+                """,
+                (engagement_id, Json(payload), intent_node_id),
+            )
+            fact = dict(cursor.fetchone())
+
+            cursor.execute(
+                """
+                INSERT INTO graph_node_edges
+                    (engagement_id, source_node_id, target_node_id, edge_type)
+                VALUES (%s, %s, %s, 'yields')
+                ON CONFLICT (source_node_id, target_node_id, edge_type) DO NOTHING
+                """,
+                (engagement_id, intent_node_id, fact["id"]),
+            )
+
+            cursor.execute(
+                """
+                UPDATE graph_nodes
+                SET state = 'concluded', claim_token = NULL,
+                    lease_expires_at = NULL, updated_at = NOW()
+                WHERE id = %s
+                RETURNING *
+                """,
+                (intent_node_id,),
+            )
+            concluded = dict(cursor.fetchone())
+
+        return {"intent": concluded, "fact": fact}
+
+    def worker_intent_package(
+        self,
+        engagement_id: str,
+        intent_node_id: str,
+        *,
+        trace_limit: int = 5,
+    ) -> dict[str, Any]:
+        """
+        Build the bounded payload a worker receives for one claimed intent (A4).
+
+        It contains the intent, its anchored target assets, the facts its
+        proposal was derived from, and a few redacted trace summaries other
+        workers already produced. It contains no scope-widening authority: the
+        package is read-only and the dispatcher remains the only writer.
+        """
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                "SELECT * FROM graph_nodes WHERE engagement_id = %s AND id = %s "
+                "AND kind = 'intent'",
+                (engagement_id, intent_node_id),
+            )
+            intent = cursor.fetchone()
+            if intent is None:
+                raise GraphMutationError(
+                    f"intent {intent_node_id} is not an intent of engagement {engagement_id}"
+                )
+            intent = dict(intent)
+
+            cursor.execute(
+                """
+                SELECT a.id, a.canonical_key, a.asset_type, a.display_value
+                FROM graph_anchors AS ga
+                JOIN graph_assets AS a ON a.id = ga.asset_id
+                WHERE ga.node_id = %s AND ga.role = 'targets'
+                ORDER BY a.canonical_key
+                """,
+                (intent_node_id,),
+            )
+            assets = [dict(row) for row in cursor.fetchall()]
+
+        fact_ids = [str(v) for v in (intent.get("payload") or {}).get("from_fact_ids", [])]
+        facts: list[dict[str, Any]] = []
+        if fact_ids:
+            with self.db_operation(
+                commit=False, cursor_factory=RealDictCursor
+            ) as (conn, cursor):
+                cursor.execute(
+                    "SELECT id, payload, state FROM graph_nodes "
+                    "WHERE engagement_id = %s AND kind = 'fact' "
+                    "AND id::text = ANY(%s)",
+                    (engagement_id, fact_ids),
+                )
+                facts = [dict(row) for row in cursor.fetchall()]
+
+        return {
+            "engagement_id": engagement_id,
+            "intent": intent,
+            "assets": assets,
+            "prerequisite_facts": facts,
+            "traces": self.search_traces(
+                engagement_id, intent_node_id=intent_node_id, limit=trace_limit
+            ),
+            "write_authority": "dispatcher-only",
+            "one_intent_per_worker": True,
+        }
+
+    def prove_goal_from_findings(
+        self,
+        engagement_id: str,
+        goal_id: str,
+        finding_ids: list[str],
+        *,
+        proof_summary: str = "",
+    ) -> dict[str, Any]:
+        """
+        Prove a goal only from verified findings (A-08).
+
+        Each referenced ``findings`` row must belong to the engagement and be in
+        a verified terminal state (CONFIRMED/VERIFIED, as set by Argus's existing
+        verification pipeline). Only then does the dispatcher create/refresh the
+        graph finding node, add a ``proves`` edge and conclude the goal. An
+        unverified or foreign finding rejects the whole proof before any write.
+        """
+        require_graph_write_owner("prove_goal_from_findings")
+        if not engagement_id or not goal_id or not finding_ids:
+            raise GraphMutationError(
+                "engagement_id, goal_id and at least one verified finding are required"
+            )
+        summary = sanitize_untrusted_text(proof_summary, limit=1000)
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                "SELECT * FROM graph_nodes WHERE engagement_id = %s AND id = %s "
+                "AND kind = 'goal'",
+                (engagement_id, goal_id),
+            )
+            goal = cursor.fetchone()
+            if goal is None:
+                raise GraphMutationError(
+                    f"goal {goal_id} is not a goal of engagement {engagement_id}"
+                )
+
+            finding_nodes: list[dict[str, Any]] = []
+            for finding_id in finding_ids:
+                cursor.execute(
+                    "SELECT id, title, severity, status FROM findings "
+                    "WHERE engagement_id = %s AND id = %s",
+                    (engagement_id, finding_id),
+                )
+                finding = cursor.fetchone()
+                if finding is None:
+                    raise GraphMutationError(
+                        f"finding {finding_id} is not a finding of engagement {engagement_id}"
+                    )
+                if str(finding["status"]).upper() not in ("CONFIRMED", "VERIFIED"):
+                    raise GraphMutationError(
+                        f"finding {finding_id} is not verified "
+                        f"(status={finding['status']}); it cannot prove a goal"
+                    )
+
+                payload = {
+                    "finding_id": str(finding["id"]),
+                    "title": sanitize_untrusted_text(finding["title"], limit=200),
+                    "severity": finding["severity"],
+                }
+                cursor.execute(
+                    """
+                    INSERT INTO graph_nodes (engagement_id, kind, payload, state, origin)
+                    VALUES (%s, 'finding', %s, 'verified', 'verifier')
+                    ON CONFLICT (engagement_id, kind, payload) DO UPDATE SET
+                        state = 'verified', updated_at = NOW()
+                    RETURNING *
+                    """,
+                    (engagement_id, Json(payload)),
+                )
+                finding_node = dict(cursor.fetchone())
+                finding_nodes.append(finding_node)
+
+                cursor.execute(
+                    """
+                    INSERT INTO graph_node_edges
+                        (engagement_id, source_node_id, target_node_id, edge_type)
+                    VALUES (%s, %s, %s, 'proves')
+                    ON CONFLICT (source_node_id, target_node_id, edge_type) DO NOTHING
+                    """,
+                    (engagement_id, finding_node["id"], goal_id),
+                )
+
+            cursor.execute(
+                """
+                UPDATE graph_nodes
+                SET state = 'concluded',
+                    payload = payload || %s::jsonb,
+                    updated_at = NOW()
+                WHERE id = %s
+                RETURNING *
+                """,
+                (
+                    Json(
+                        {
+                            "proof": {
+                                "finding_ids": [str(v) for v in finding_ids],
+                                "summary": summary,
+                            }
+                        }
+                    ),
+                    goal_id,
+                ),
+            )
+            concluded = dict(cursor.fetchone())
+
+        return {
+            "goal": concluded,
+            "finding_nodes": finding_nodes,
+            "proves_edges": len(finding_nodes),
+        }
+
+    def find_engagements_with_queued_outbox(
+        self, *, limit: int = 100, scope_type: str = "graph"
+    ) -> list[str]:
+        """List engagement ids that still have queued outbox work (production drain)."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT DISTINCT scope_id
+                FROM graph_outbox
+                WHERE scope_type = %s AND status = 'queued'
+                ORDER BY scope_id
+                LIMIT %s
+                """,
+                (scope_type, limit),
+            )
+            return [str(row["scope_id"]) for row in cursor.fetchall()]
 
     # --- graph outbox ---
 

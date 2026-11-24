@@ -340,6 +340,13 @@ app.conf.update(
             "task": "tasks.maintenance.check_shadow_convergence",
             "schedule": 300.0,  # every 5 minutes
         },
+        # Consume committed graph-change wakes every 15 seconds. This is the
+        # production floor for the ARTEX planner loop: a queued outbox row is
+        # never stranded even when an immediate wake dispatch is missed.
+        "drain-planner-outbox": {
+            "task": "tasks.graph_planner.drain_planner_outbox",
+            "schedule": 15.0,
+        },
         # Autonomous DLQ replay every 10 minutes
         "replay-eligible-dlq-tasks": {
             "task": "tasks.replay.replay_eligible_dlq_tasks",

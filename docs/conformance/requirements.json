@@ -1,7 +1,7 @@
 {
   "meta": {
     "stage": 0,
-    "updated_at": "2026-11-23T17:00:00+00:00",
+    "updated_at": "2026-11-24T12:00:00+00:00",
     "source_of_truth_for_this_stage": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md",
     "actual_upstream_reference_used": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md (local copy of the Stage 0 spec)",
     "local_baseline_inspected": [
@@ -38,7 +38,7 @@
     },
     "anchors_and_coverage": {
       "id": "anchors_and_coverage",
-      "title": "Canonical shared asset graph — anchors and coverage",
+      "title": "Canonical shared asset graph \u2014 anchors and coverage",
       "reference_behaviour": "Each canonical asset can carry engagement-scoped anchor handles and coverage metadata; engagements read and reference the canonical graph through anchors, not by copying subgraphs.",
       "argus_implementation": "IMPLEMENTED AND COMMITTED",
       "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql (graph_anchor_scopes), argus-workers/database/graph_repository.py (anchor_scope CRUD + asset_coverage_for_scope), argus-workers/database/dispatcher_graph.py (attach_anchor_scope, update_anchor_coverage), argus-workers/tests/test_graph_repository.py",
@@ -229,6 +229,126 @@
       ],
       "runtime_evidence": "PASSED (2026-11-23): PostgreSQL 16 with the full migration runner through 035; 94 graph/recon tests passed, 0 skipped (CI job graph-repository-db).",
       "notes": "Scoped identity index prevents cross-scope merge; scoped reads never leak another scope's assets."
+    },
+    "A-05": {
+      "id": "A-05",
+      "title": "Reject invalid/cross-engagement edges and out-of-scope anchors, with audit",
+      "argus_implementation_path": "argus-workers/database/dispatcher_graph.py (attach_edge, apply_intent_proposals), argus-workers/database/graph_repository.py (record_write_rejection), migrations/037",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestWriteRejectionAudit",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "Rejections are committed to graph_write_rejections outside the failed transaction before the error is re-raised."
+    },
+    "A-06": {
+      "id": "A-06",
+      "title": "Burst of graph updates: debounced planner wake, no lost event, bounded turns",
+      "argus_implementation_path": "tasks/graph_planner.py (run_planner_loop, drain_planner_outbox), database/graph_repository.py (planner_turns, consume_planner_events), celery_app.py beat entry drain-planner-outbox",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestOutboxPlanningLoop, argus-workers/tests/test_graph_planner.py::TestProductionDrainAndFlags",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "A turn coalesces every queued event for the engagement; the loop stops on empty queue or max_turns, and the 15s beat drain is the production floor."
+    },
+    "A-07": {
+      "id": "A-07",
+      "title": "Unmet goal with no open/running intent must propose or hard-fail",
+      "argus_implementation_path": "tasks/graph_planner.py (PlannerHardFloorError), orchestrator_pkg/planning/exploration_planner.py",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestHardFloorAndProposalContract::test_unmet_goal_with_no_intent_hard_fails_loudly",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "The failed turn is persisted with its error; the planner cannot silently no-op."
+    },
+    "A-08": {
+      "id": "A-08",
+      "title": "Goal proven only by verified evidence; later wakes create no new intent",
+      "argus_implementation_path": "database/graph_repository.py (prove_goal_from_findings), database/dispatcher_graph.py (prove_goal_from_findings)",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestGoalProofFromVerifiedEvidence",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "Proof reads the existing findings table and accepts CONFIRMED/VERIFIED as the verifier-backed terminal states."
+    },
+    "A-09": {
+      "id": "A-09",
+      "title": "No duplicate intent when open/running intent already covers the direction",
+      "argus_implementation_path": "database/graph_repository.py (apply_intent_proposals stable intent_key suppression)",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestHardFloorAndProposalContract::test_duplicate_and_already_proven_intents_are_suppressed",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "Suppression is checked against open/running/concluded intents and existing facts."
+    },
+    "A-10": {
+      "id": "A-10",
+      "title": "Dependent investigation steps dispatch only after their prerequisite",
+      "argus_implementation_path": "database/graph_repository.py (claim_recon_todo depends_on clause)",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestDependencyAwareClaims",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "A dependent todo stays open until its prerequisite row is done."
+    },
+    "A-11": {
+      "id": "A-11",
+      "title": "Claim heartbeat and expiry: live claims are not stolen, stale ones are reclaimable",
+      "argus_implementation_path": "database/graph_repository.py (claim_recon_todo, heartbeat_recon_todo), migrations/036",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestClaimFencingAndHeartbeat::test_heartbeat_keeps_live_claim_and_expired_lease_reports_loss",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "Default lease is 300s for recon todos and 90s for intents rather than ARTEX's 90s/15s pair; both are configurable via lease_seconds.",
+      "notes": "Expiry uses the database clock (lease_expires_at < NOW())."
+    },
+    "A-12": {
+      "id": "A-12",
+      "title": "Old worker submitting after takeover is fenced out",
+      "argus_implementation_path": "database/graph_repository.py (GraphClaimLostError, token checks on complete/heartbeat/release)",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestClaimFencingAndHeartbeat::test_stale_token_write_is_rejected_after_reclaim, argus-workers/tests/test_graph_planner.py::TestWorkerIntentProtocol",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "No fact, edge, anchor or completion is written for a stale token."
+    },
+    "A-13": {
+      "id": "A-13",
+      "title": "Worker B reuses Worker A's discovery without repeating the action",
+      "argus_implementation_path": "database/graph_repository.py (record_trace, search_traces, worker_intent_package), database/graph_worker_rpc.py, mcp_server.py (graph_search_traces)",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestWorkerIntentProtocol::test_trace_search_is_engagement_scoped_and_untrusted",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "Trace search is engagement-scoped and returns bounded, untrusted summaries."
+    },
+    "A-14": {
+      "id": "A-14",
+      "title": "Prompt injection in tool output or traces is data, not authority",
+      "argus_implementation_path": "database/graph_repository.py (sanitize_untrusted_text, trust markers), orchestrator_pkg/planning/exploration_planner.py",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestPromptInjectionIsolation, argus-workers/tests/test_graph_planner.py::TestWorkerIntentProtocol::test_trace_search_is_engagement_scoped_and_untrusted",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "Coverage is structural (typed nodes, bounded text, no instruction channel) plus adversarial DB tests; no live LLM prompt-injection run was performed.",
+      "notes": "Hostile asset/fact text cannot create a goal, conclude a goal, or enter a proposal objective."
+    },
+    "A-15": {
+      "id": "A-15",
+      "title": "Planner todo state and dependency order survive a restart",
+      "argus_implementation_path": "database/graph_repository.py (planner_todos, depends_on), migrations/036",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestDependencyAwareClaims::test_pending_chain_survives_restart_without_early_dispatch",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "Fresh dispatcher/repository instances see the same persisted state."
+    },
+    "A-16": {
+      "id": "A-16",
+      "title": "Re-delivered action/result is one logical graph update",
+      "argus_implementation_path": "database/graph_repository.py (graph_actions unique (engagement_id, action_id)), database/graph_worker_rpc.py, migrations/037",
+      "test_proof": "argus-workers/tests/test_graph_planner.py::TestActionLedgerIdempotency",
+      "runtime_proof": "PostgreSQL 16, full migration runner through 037 (38 migrations); 121 passed, 0 skipped",
+      "result": "VERIFIED (DB-BACKED)",
+      "deviation": "none",
+      "notes": "A replay returns recorded=False with the originally committed result."
     }
   }
 }
