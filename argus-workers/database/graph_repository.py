@@ -26,16 +26,22 @@ from database.repositories.base import BaseRepository
 logger = logging.getLogger(__name__)
 
 
-class GraphMutationError(Exception):
-    """Dispatched graph mutation was invalid or rejected."""
-
-
-class GraphTenantViolation(GraphMutationError):
-    """A graph write named a tenant that does not own the scope/asset (A-03)."""
-
-
-class GraphClaimLostError(GraphMutationError):
-    """A write presented a stale or expired claim token (A-11/A-12)."""
+# Re-exported: callers import these from the repository module.
+from database.graph_claims import (
+    DEFAULT_INTENT_LEASE_SECONDS,
+    DEFAULT_TODO_LEASE_SECONDS,
+    LEASE_CLEAR_SQL,
+    LEASE_GRANT_SQL,
+    claim_token_matches,
+    claimable_sql,
+    live_claim_sql,
+    validate_lease_seconds,
+)
+from database.graph_errors import (  # noqa: F401  (re-export)
+    GraphClaimLostError,
+    GraphMutationError,
+    GraphTenantViolation,
+)
 
 
 def sanitize_untrusted_text(value: str, *, limit: int = 500) -> str:
@@ -147,7 +153,7 @@ def verifier_provenance_error(evidence: Any) -> str | None:
     )
 
 
-_INTENT_LEASE_SECONDS = 90
+_INTENT_LEASE_SECONDS = DEFAULT_INTENT_LEASE_SECONDS
 
 
 class GraphNodeKind(str):
@@ -1368,7 +1374,7 @@ class ExplorationGraphRepository(BaseRepository):
         engagement_id: str,
         *,
         owner: str,
-        lease_seconds: int = 300,
+        lease_seconds: int = DEFAULT_TODO_LEASE_SECONDS,
         gap_key: str | None = None,
     ) -> dict[str, Any] | None:
         """
@@ -1386,8 +1392,7 @@ class ExplorationGraphRepository(BaseRepository):
         require_graph_write_owner("claim_recon_todo")
         if not engagement_id or not owner:
             raise GraphMutationError("engagement_id and owner are required")
-        if lease_seconds <= 0:
-            raise GraphMutationError("lease_seconds must be positive")
+        lease_seconds = validate_lease_seconds(lease_seconds)
 
         gap_clause = ""
         values: list[Any] = [owner, lease_seconds, engagement_id]
@@ -1405,8 +1410,7 @@ class ExplorationGraphRepository(BaseRepository):
                     owner = %s,
                     started_at = NOW(),
                     claim_token = gen_random_uuid(),
-                    lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
-                    last_heartbeat_at = NOW(),
+                    {LEASE_GRANT_SQL},
                     attempts = t.attempts + 1,
                     updated_at = NOW()
                 WHERE t.id = (
@@ -1419,16 +1423,12 @@ class ExplorationGraphRepository(BaseRepository):
                       AND candidate.todo_type IN ('expand', 'verify')
                       AND candidate.payload ? 'coverage_gap_key'
                       {gap_clause}
-                      AND (
-                          candidate.status = 'open'
-                          OR (
-                              candidate.status = 'in_progress'
-                              AND (
-                                  candidate.lease_expires_at IS NULL
-                                  OR candidate.lease_expires_at < NOW()
-                              )
-                          )
-                      )
+                      AND {claimable_sql(
+                          state_column="status",
+                          open_states=("open",),
+                          running_state="in_progress",
+                          prefix="candidate.",
+                      )}
                       AND (
                           candidate.depends_on IS NULL
                           OR EXISTS (
@@ -1471,7 +1471,7 @@ class ExplorationGraphRepository(BaseRepository):
         todo_id: str,
         *,
         claim_token: str,
-        lease_seconds: int = 300,
+        lease_seconds: int = DEFAULT_TODO_LEASE_SECONDS,
     ) -> dict[str, Any]:
         """Renew a live claim's lease; a stale token or expired lease is CLAIM_LOST."""
         require_graph_write_owner("heartbeat_recon_todo")
@@ -1479,23 +1479,20 @@ class ExplorationGraphRepository(BaseRepository):
             raise GraphMutationError(
                 "engagement_id, todo_id and claim_token are required"
             )
-        if lease_seconds <= 0:
-            raise GraphMutationError("lease_seconds must be positive")
+        lease_seconds = validate_lease_seconds(lease_seconds)
 
         with self.db_operation(
             commit=True, cursor_factory=RealDictCursor
         ) as (conn, cursor):
             cursor.execute(
-                """
+                f"""
                 UPDATE planner_todos
-                SET lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
-                    last_heartbeat_at = NOW(),
+                SET {LEASE_GRANT_SQL},
                     updated_at = NOW()
                 WHERE id = %s AND engagement_id = %s
-                  AND status = 'in_progress'
-                  AND claim_token::text = %s
-                  AND lease_expires_at IS NOT NULL
-                  AND lease_expires_at > NOW()
+                  AND {live_claim_sql(
+                      state_column="status", running_state="in_progress"
+                  )}
                 RETURNING *
                 """,
                 (lease_seconds, todo_id, engagement_id, str(claim_token)),
@@ -1550,9 +1547,7 @@ class ExplorationGraphRepository(BaseRepository):
                     f"todo {todo_id} is {todo['status']}; only open/in_progress work can complete"
                 )
             stored_token = todo.get("claim_token")
-            if stored_token is not None and (
-                not claim_token or str(claim_token) != str(stored_token)
-            ):
+            if not claim_token_matches(stored_token, claim_token):
                 raise GraphClaimLostError(
                     f"CLAIM_LOST: todo {todo_id} is not leased to token {claim_token}"
                 )
@@ -1622,13 +1617,11 @@ class ExplorationGraphRepository(BaseRepository):
                 )
 
             cursor.execute(
-                """
+                f"""
                 UPDATE planner_todos
                 SET status = 'done',
                     completed_at = NOW(),
-                    claim_token = NULL,
-                    lease_expires_at = NULL,
-                    last_heartbeat_at = NULL,
+                    {LEASE_CLEAR_SQL},
                     updated_at = NOW()
                 WHERE id = %s
                 RETURNING *
@@ -1665,22 +1658,17 @@ class ExplorationGraphRepository(BaseRepository):
             current = cursor.fetchone()
             if current is None:
                 return None
-            stored_token = current["claim_token"]
-            if stored_token is not None and (
-                not claim_token or str(claim_token) != str(stored_token)
-            ):
+            if not claim_token_matches(current["claim_token"], claim_token):
                 raise GraphClaimLostError(
                     f"CLAIM_LOST: todo {todo_id} is not leased to token {claim_token}"
                 )
             cursor.execute(
-                """
+                f"""
                 UPDATE planner_todos
                 SET status = 'open',
                     owner = NULL,
                     started_at = NULL,
-                    claim_token = NULL,
-                    lease_expires_at = NULL,
-                    last_heartbeat_at = NULL,
+                    {LEASE_CLEAR_SQL},
                     updated_at = NOW()
                 WHERE id = %s AND engagement_id = %s AND status = 'in_progress'
                 RETURNING *
@@ -2317,8 +2305,7 @@ class ExplorationGraphRepository(BaseRepository):
         require_graph_write_owner("claim_intent_node")
         if not engagement_id or not worker_id:
             raise GraphMutationError("engagement_id and worker_id are required")
-        if lease_seconds < 1:
-            raise GraphMutationError("lease_seconds must be positive")
+        lease_seconds = validate_lease_seconds(lease_seconds)
 
         with self.db_operation(
             commit=True, cursor_factory=RealDictCursor
@@ -2341,20 +2328,16 @@ class ExplorationGraphRepository(BaseRepository):
                 return dict(cursor.fetchone())
 
             cursor.execute(
-                """
+                f"""
                 UPDATE graph_nodes
                 SET state = 'running', owner = %s,
                     claim_token = gen_random_uuid(),
-                    lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
-                    last_heartbeat_at = NOW(), updated_at = NOW()
+                    {LEASE_GRANT_SQL}, updated_at = NOW()
                 WHERE id = (
                     SELECT id FROM graph_nodes
                     WHERE engagement_id = %s AND kind = 'intent'
                       AND (%s::uuid IS NULL OR id = %s::uuid)
-                      AND (
-                          state = 'open'
-                          OR (state = 'running' AND lease_expires_at < NOW())
-                      )
+                      AND {claimable_sql()}
                     ORDER BY priority DESC, created_at ASC
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
@@ -2380,17 +2363,16 @@ class ExplorationGraphRepository(BaseRepository):
             raise GraphMutationError(
                 "engagement_id, intent_node_id and claim_token are required"
             )
+        lease_seconds = validate_lease_seconds(lease_seconds)
         with self.db_operation(
             commit=True, cursor_factory=RealDictCursor
         ) as (conn, cursor):
             cursor.execute(
-                """
+                f"""
                 UPDATE graph_nodes
-                SET lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
-                    last_heartbeat_at = NOW(), updated_at = NOW()
+                SET {LEASE_GRANT_SQL}, updated_at = NOW()
                 WHERE engagement_id = %s AND id = %s AND kind = 'intent'
-                  AND state = 'running' AND claim_token = %s
-                  AND lease_expires_at > NOW()
+                  AND {live_claim_sql()}
                 RETURNING *
                 """,
                 (lease_seconds, engagement_id, intent_node_id, claim_token),
@@ -2426,11 +2408,10 @@ class ExplorationGraphRepository(BaseRepository):
             commit=True, cursor_factory=RealDictCursor
         ) as (conn, cursor):
             cursor.execute(
-                """
+                f"""
                 SELECT * FROM graph_nodes
                 WHERE engagement_id = %s AND id = %s AND kind = 'intent'
-                  AND state = 'running' AND claim_token = %s
-                  AND lease_expires_at > NOW()
+                  AND {live_claim_sql()}
                 FOR UPDATE
                 """,
                 (engagement_id, intent_node_id, claim_token),
@@ -2466,10 +2447,9 @@ class ExplorationGraphRepository(BaseRepository):
             )
 
             cursor.execute(
-                """
+                f"""
                 UPDATE graph_nodes
-                SET state = 'concluded', claim_token = NULL,
-                    lease_expires_at = NULL, updated_at = NOW()
+                SET state = 'concluded', {LEASE_CLEAR_SQL}, updated_at = NOW()
                 WHERE id = %s
                 RETURNING *
                 """,

@@ -1209,6 +1209,59 @@ class TestWorkerIntentProtocol:
                 claim_token=first["claim_token"],
             )
 
+    def test_an_expired_intent_claim_is_reclaimable_and_fenced_like_a_todo(self):
+        """Intent claims use the same lease/fencing rules as planner todos."""
+        engagement_id, dispatcher, assets = _engagement_with_goal(assets=1)
+        dispatcher.apply_intent_proposals(
+            engagement_id,
+            [
+                IntentProposal(
+                    objective="test the only asset",
+                    target_asset_ids=(str(assets[0]["id"]),),
+                )
+            ],
+        )
+
+        first = dispatcher.claim_intent_node(engagement_id, "worker-1")
+        assert first is not None
+        intent_id = str(first["id"])
+
+        # Expiring the lease (same clock the todo path relies on) frees the claim.
+        _raw_query(
+            "UPDATE graph_nodes "
+            "SET lease_expires_at = NOW() - INTERVAL '1 second' "
+            "WHERE id = %s",
+            (intent_id,),
+        )
+
+        second = dispatcher.claim_intent_node(engagement_id, "worker-2")
+        assert second is not None
+        assert str(second["id"]) == intent_id
+        assert str(second["claim_token"]) != str(first["claim_token"])
+
+        with pytest.raises(GraphClaimLostError):
+            dispatcher.heartbeat_intent_node(
+                engagement_id, intent_id, claim_token=first["claim_token"]
+            )
+        with pytest.raises(GraphClaimLostError):
+            dispatcher.complete_intent_node(
+                engagement_id,
+                intent_id,
+                claim_token=first["claim_token"],
+                fact_description="stale conclusion",
+            )
+
+        # The live claim completes and drops its token and lease together.
+        completed = dispatcher.complete_intent_node(
+            engagement_id,
+            intent_id,
+            claim_token=second["claim_token"],
+            fact_description="current conclusion",
+        )
+        assert completed["intent"]["state"] == "concluded"
+        assert completed["intent"]["claim_token"] is None
+        assert completed["intent"]["lease_expires_at"] is None
+
     def test_trace_search_is_engagement_scoped_and_untrusted(self):
         engagement_id, dispatcher, _ = _engagement_with_goal(assets=1)
         other_id, other, _ = _engagement_with_goal(assets=1)
