@@ -56,14 +56,28 @@ def orchestration_mode() -> str:
     return flag_mode("orchestration")
 
 
+def effective_mode() -> str:
+    """
+    Resolve the mode the production drain actually runs in.
+
+    ``ARGUS_ORCHESTRATION_V2`` is the master switch: ``off`` rolls back and
+    ``shadow`` keeps the loop non-mutating. Only when it is ``on`` does
+    ``ARGUS_GRAPH_EXPLORATION`` decide whether the loop runs live or shadow.
+    """
+    orchestration = orchestration_mode()
+    if orchestration != "on":
+        return orchestration
+    return graph_exploration_mode()
+
+
 def planner_loop_enabled() -> bool:
-    """The production planner loop only runs when graph exploration is enabled."""
-    return graph_exploration_mode() != "off"
+    """The production planner loop only runs when the effective mode is not off."""
+    return effective_mode() != "off"
 
 
 def legacy_rollback_enabled() -> bool:
     """The one-switch rollback: V2 off means the legacy workflow path runs."""
-    return orchestration_mode() == "off"
+    return effective_mode() == "off"
 
 
 def shadow_plan(

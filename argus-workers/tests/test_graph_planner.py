@@ -848,6 +848,11 @@ class TestProductionDrainAndFlags:
             orchestration_flags.graph_exploration_mode()
 
         monkeypatch.setenv("ARGUS_GRAPH_EXPLORATION", "shadow")
+        # The master switch is still off, so the loop does not run yet.
+        assert orchestration_flags.planner_loop_enabled() is False
+
+        monkeypatch.setenv("ARGUS_ORCHESTRATION_V2", "on")
+        assert orchestration_flags.effective_mode() == "shadow"
         assert orchestration_flags.planner_loop_enabled() is True
 
     def test_production_drain_is_registered_in_celery_beat(self):
@@ -871,6 +876,201 @@ class TestProductionDrainAndFlags:
             "handle_graph_record_action",
         ):
             assert callable(getattr(MCPServer, method, None))
+
+    def test_production_drain_task_consumes_a_committed_outbox_row_once(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("ARGUS_ORCHESTRATION_V2", "on")
+        monkeypatch.setenv("ARGUS_GRAPH_EXPLORATION", "on")
+        engagement_id, dispatcher, assets = _engagement_with_goal(assets=1)
+        repo = dispatcher.repository
+        queued_before = repo.find_outbox_for_scope(
+            scope_type="graph", scope_id=engagement_id, status="queued"
+        )
+        assert len(queued_before) >= 2
+
+        # The exact callable the Celery beat schedule registers, executed
+        # eagerly in-process against the real database (no injected dispatch).
+        from tasks.graph_planner import drain_planner_outbox_task
+
+        result = drain_planner_outbox_task.apply(kwargs={"max_turns": 10}).get()
+        assert result["mode"] == "on"
+
+        turns = dispatcher.find_planner_turns(engagement_id)
+        assert len(turns) == 1
+        assert turns[0]["status"] == "completed"
+        assert turns[0]["events_consumed"] == len(queued_before)
+        assert turns[0]["intents_created"] >= 1
+
+        consumed = repo.find_outbox_for_scope(
+            scope_type="graph", scope_id=engagement_id, status="dequeued"
+        )
+        assert len(consumed) == len(queued_before)
+        assert {str(row["planner_turn_id"]) for row in consumed} == {turns[0]["id"]}
+        assert (
+            repo.find_outbox_for_scope(
+                scope_type="graph", scope_id=engagement_id, status="queued"
+            )
+            == []
+        )
+        intents_after_first = _raw_query(
+            "SELECT COUNT(*) FROM graph_nodes WHERE engagement_id = %s "
+            "AND kind = 'intent'",
+            (engagement_id,),
+        )[0][0]
+        assert intents_after_first >= 1
+
+        second = drain_planner_outbox_task.apply(kwargs={"max_turns": 10}).get()
+        assert second["mode"] == "on"
+        assert len(dispatcher.find_planner_turns(engagement_id)) == 1
+        assert (
+            _raw_query(
+                "SELECT COUNT(*) FROM graph_nodes WHERE engagement_id = %s "
+                "AND kind = 'intent'",
+                (engagement_id,),
+            )[0][0]
+            == intents_after_first
+        )
+        assert len(
+            repo.find_outbox_for_scope(
+                scope_type="graph", scope_id=engagement_id, status="dequeued"
+            )
+        ) == len(queued_before)
+
+    def test_concurrent_drains_do_not_lose_or_double_consume_a_wake(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        engagement_id, dispatcher, assets = _engagement_with_goal(assets=3)
+        repo = dispatcher.repository
+        total_queued = len(
+            repo.find_outbox_for_scope(
+                scope_type="graph", scope_id=engagement_id, status="queued"
+            )
+        )
+        assert total_queued >= 4
+
+        def _drain():
+            return drain_planner_outbox(mode="on", max_engagement_turns=5)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: _drain(), range(2)))
+
+        consumed = repo.find_outbox_for_scope(
+            scope_type="graph", scope_id=engagement_id, status="dequeued"
+        )
+        # Every committed row is consumed exactly once; nothing is lost and no
+        # row is processed by both drains.
+        assert len(consumed) == total_queued
+        assert len({str(row["id"]) for row in consumed}) == total_queued
+        assert sum(result["turns"] for result in results) >= 1
+        assert (
+            repo.find_outbox_for_scope(
+                scope_type="graph", scope_id=engagement_id, status="queued"
+            )
+            == []
+        )
+
+        intent_count = _raw_query(
+            "SELECT COUNT(*) FROM graph_nodes WHERE engagement_id = %s "
+            "AND kind = 'intent'",
+            (engagement_id,),
+        )[0][0]
+        assert intent_count == len(assets)
+
+        total_events = _raw_query(
+            "SELECT COALESCE(SUM(events_consumed), 0) FROM planner_turns "
+            "WHERE engagement_id = %s",
+            (engagement_id,),
+        )[0][0]
+        assert total_events == total_queued
+
+    def test_shadow_and_off_write_counts_on_the_real_drain(self, monkeypatch):
+        def _counts(engagement_id):
+            row = _raw_query(
+                """
+                SELECT
+                  (SELECT COUNT(*) FROM graph_nodes WHERE engagement_id = %(e)s),
+                  (SELECT COUNT(*) FROM graph_node_edges WHERE engagement_id = %(e)s),
+                  (SELECT COUNT(*) FROM graph_anchors ga JOIN graph_nodes n
+                     ON n.id = ga.node_id WHERE n.engagement_id = %(e)s),
+                  (SELECT COUNT(*) FROM graph_nodes WHERE engagement_id = %(e)s
+                     AND kind = 'intent'),
+                  (SELECT COUNT(*) FROM graph_nodes WHERE engagement_id = %(e)s
+                     AND kind = 'goal' AND state = 'concluded'),
+                  (SELECT COUNT(*) FROM planner_turns WHERE engagement_id = %(e)s)
+                """,
+                {"e": engagement_id},
+            )[0]
+            return dict(
+                zip(
+                    ["nodes", "edges", "anchors", "intents", "conclusions", "turns"],
+                    row,
+                    strict=True,
+                )
+            )
+
+        shadow_engagement, shadow_dispatcher, _ = _engagement_with_goal(assets=2)
+        before = _counts(shadow_engagement)
+        monkeypatch.setenv("ARGUS_ORCHESTRATION_V2", "shadow")
+        monkeypatch.delenv("ARGUS_GRAPH_EXPLORATION", raising=False)
+
+        shadow = drain_planner_outbox()
+        after = _counts(shadow_engagement)
+
+        assert shadow["mode"] == "shadow"
+        assert shadow["skipped"] is False
+        assert after["nodes"] == before["nodes"]
+        assert after["edges"] == before["edges"]
+        assert after["anchors"] == before["anchors"]
+        assert after["intents"] == before["intents"] == 0
+        assert after["conclusions"] == before["conclusions"] == 0
+        assert after["turns"] == before["turns"] + 1
+        assert (
+            shadow_dispatcher.count_queued_outbox(shadow_engagement) == 0
+        )
+
+        off_engagement, off_dispatcher, _ = _engagement_with_goal(assets=1)
+        off_before = _counts(off_engagement)
+        queued_before = off_dispatcher.count_queued_outbox(off_engagement)
+        assert queued_before >= 2
+        monkeypatch.setenv("ARGUS_ORCHESTRATION_V2", "off")
+        monkeypatch.setenv("ARGUS_GRAPH_EXPLORATION", "on")
+
+        off = drain_planner_outbox()
+        off_after = _counts(off_engagement)
+
+        assert off["skipped"] is True
+        assert off["mode"] == "off"
+        assert off_after == off_before
+        assert off_dispatcher.count_queued_outbox(off_engagement) == queued_before
+
+    def test_rollback_is_one_switch_and_needs_no_data_repair(self, monkeypatch):
+        engagement_id, dispatcher, _ = _engagement_with_goal(assets=1)
+        monkeypatch.setenv("ARGUS_ORCHESTRATION_V2", "on")
+        monkeypatch.setenv("ARGUS_GRAPH_EXPLORATION", "on")
+
+        live = drain_planner_outbox()
+        assert live["skipped"] is False
+        assert len(dispatcher.find_planner_turns(engagement_id)) == 1
+        assert dispatcher.count_queued_outbox(engagement_id) == 0
+
+        # One env flip rolls back: a new wake stays queued and nothing is written.
+        monkeypatch.setenv("ARGUS_ORCHESTRATION_V2", "off")
+        dispatcher.ensure_asset(
+            "rollback.example.com", "subdomain", scope_id=engagement_id
+        )
+        turns_before = len(dispatcher.find_planner_turns(engagement_id))
+        rolled_back = drain_planner_outbox()
+        assert rolled_back["skipped"] is True
+        assert dispatcher.count_queued_outbox(engagement_id) == 1
+        assert len(dispatcher.find_planner_turns(engagement_id)) == turns_before
+
+        # Flipping back restores the prior behavior with the same queued wake.
+        monkeypatch.setenv("ARGUS_ORCHESTRATION_V2", "on")
+        restored = drain_planner_outbox()
+        assert restored["skipped"] is False
+        assert len(dispatcher.find_planner_turns(engagement_id)) == turns_before + 1
+        assert dispatcher.count_queued_outbox(engagement_id) == 0
 
     def test_shadow_plan_writes_nothing(self):
         engagement_id, dispatcher, _ = _engagement_with_goal(assets=1)

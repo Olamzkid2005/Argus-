@@ -255,6 +255,28 @@ def run_planner_turn(
             if consume_events
             else []
         )
+        if consume_events and not consumed:
+            # Another drain won the race for this engagement's burst. Finish the
+            # turn without planning, so a concurrent double drain neither
+            # double-applies the wake nor plans against unchanged state.
+            skipped = dispatcher.complete_planner_turn(
+                turn["id"],
+                events_consumed=0,
+                proposals_received=0,
+                intents_created=0,
+                duplicates_suppressed=0,
+            )
+            return {
+                "turn": skipped,
+                "events_consumed": 0,
+                "event_ids": [],
+                "created": [],
+                "suppressed": [],
+                "shadow": shadow,
+                "skipped": True,
+                "reason": "no_events",
+            }
+
         overview = dispatcher.planner_overview(engagement_id)
         proposals = planner.plan(overview)
         if shadow:
@@ -297,6 +319,7 @@ def run_planner_turn(
         "created": applied["created"],
         "suppressed": applied["suppressed"],
         "shadow": shadow,
+        "skipped": False,
     }
 
 
@@ -338,6 +361,14 @@ def run_planner_loop(
             planner=planner,
             shadow=shadow,
         )
+        if result["skipped"]:
+            # Lost the race for the burst; the winning drain owns this wake.
+            return {
+                "engagement_id": engagement_id,
+                "turns": turns,
+                "events_consumed": events_consumed,
+                "stopped_reason": "contended",
+            }
         turns += 1
         events_consumed += result["events_consumed"]
 
@@ -394,9 +425,9 @@ def drain_planner_outbox(
     nothing, ``shadow`` records turns and proposals but creates no intents and
     dispatches no work, and ``on`` runs the live loop.
     """
-    from orchestrator_pkg.planning.flags import graph_exploration_mode, parse_mode
+    from orchestrator_pkg.planning.flags import effective_mode, parse_mode
 
-    resolved = parse_mode(mode, name="mode") if mode is not None else graph_exploration_mode()
+    resolved = parse_mode(mode, name="mode") if mode is not None else effective_mode()
     if resolved == "off":
         return {
             "mode": resolved,

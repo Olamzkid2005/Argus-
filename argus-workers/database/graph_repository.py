@@ -1975,11 +1975,30 @@ class ExplorationGraphRepository(BaseRepository):
                     INSERT INTO graph_nodes
                         (engagement_id, kind, payload, state, priority, origin)
                     VALUES (%s, 'intent', %s, 'open', %s, 'planner')
+                    ON CONFLICT (engagement_id, kind, payload) DO NOTHING
                     RETURNING *
                     """,
                     (engagement_id, Json(proposal.to_payload()), proposal.priority),
                 )
-                node = dict(cursor.fetchone())
+                inserted = cursor.fetchone()
+                if inserted is None:
+                    # A concurrent drain committed the same intent between our
+                    # duplicate check and insert. Suppress it instead of failing.
+                    cursor.execute(
+                        "SELECT id FROM graph_nodes WHERE engagement_id = %s "
+                        "AND kind = 'intent' AND payload->>'intent_key' = %s",
+                        (engagement_id, key),
+                    )
+                    winner = cursor.fetchone()
+                    suppressed.append(
+                        {
+                            "intent_key": key,
+                            "reason": "concurrent_duplicate",
+                            "node_id": str(winner["id"]) if winner else None,
+                        }
+                    )
+                    continue
+                node = dict(inserted)
 
                 for asset_id in proposal.target_asset_ids:
                     cursor.execute(

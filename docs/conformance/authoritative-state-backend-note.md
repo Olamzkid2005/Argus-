@@ -274,7 +274,13 @@ rejection (`TestTenantBoundary`).
   scans `graph_outbox` for engagements with queued wakes, then runs bounded
   turns for each. `tasks.graph_planner.run_planner_loop` is also registered for
   an optional immediate wake (`ARGUS_PLANNER_WAKE_DISPATCH=1`); the beat drain is
-  the floor, so a missed wake is never stranded.
+  the floor, so a missed wake is never stranded. Verified against a fresh
+  PostgreSQL database through 037 by invoking the registered task itself
+  (`drain_planner_outbox_task.apply`): a committed burst of 3 queued rows became
+  3 dequeued rows linked to one completed turn (`events_consumed=3`,
+  `intents_created=2`), a second drain reported 0 turns/0 engagements and left
+  the graph unchanged, and two concurrent drains consumed 4/4 committed rows
+  with one turn and exactly 3 intents (no loss, no double-apply).
 - **Goal proof is verifier-backed (A-08).** `prove_goal_from_findings` only
   accepts findings that belong to the engagement and are `CONFIRMED`/`VERIFIED`
   in the existing `findings` table. It writes the graph finding node, a `proves`
@@ -302,9 +308,13 @@ rejection (`TestTenantBoundary`).
 - **Rollout flags (A5).** `orchestrator_pkg/planning/flags.py` implements
   `ARGUS_ORCHESTRATION_V2`, `ARGUS_GRAPH_EXPLORATION`,
   `ARGUS_HIERARCHICAL_DELEGATION` and `ARGUS_CAIRN_PROTOCOL` with
-  `off|shadow|on`, default `off`; typos raise. `off` is the rollback switch that
-  stops the drain task and leaves the legacy workflow path in charge; `shadow`
-  records turns and proposals but creates no intents and dispatches no work.
+  `off|shadow|on`, default `off`; typos raise. `ARGUS_ORCHESTRATION_V2` is the
+  master switch: `off` rolls back, `shadow` keeps the loop non-mutating, and
+  only `on` lets `ARGUS_GRAPH_EXPLORATION` choose live vs shadow. On the real
+  drain path, shadow left nodes/edges/anchors/intents/conclusions unchanged
+  (0 writes) while recording one turn and consuming the burst; `off` wrote
+  nothing and left the rows queued; flipping back to `on` consumed the same
+  queued rows without any data repair.
 
 ## 7. What is still open after this note
 
