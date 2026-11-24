@@ -438,6 +438,7 @@ def _auto_verify_findings(
 
             try:
                 from tools.verification.finding_promoter import promote_finding
+                from tools.verification.proof_status import evidence_with_proof
 
                 # Same rule as the verification agent: a verifier's answer
                 # confirms only with captured evidence and no verifier error
@@ -471,13 +472,17 @@ def _auto_verify_findings(
                     finding_type=original.get("type", ""),
                     severity=original.get("severity", "INFO"),
                     endpoint=original.get("endpoint", ""),
-                    evidence={
-                        **(original.get("evidence") or {}),
-                        "verification": verification,
-                        "verification_status": promoted.get("status", "UNKNOWN"),
-                    },
+                    evidence=evidence_with_proof(
+                        promoted,
+                        base={
+                            **(original.get("evidence") or {}),
+                            "verification": verification,
+                            "verification_status": promoted.get("status", "UNKNOWN"),
+                        },
+                    ),
                     confidence=min(new_confidence, 1.0),
                     source_tool=original.get("source_tool", "verification"),
+                    status=promoted.get("status"),
                 )
 
                 verified_count += 1

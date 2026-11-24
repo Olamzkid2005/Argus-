@@ -282,10 +282,25 @@ rejection (`TestTenantBoundary`).
   the graph unchanged, and two concurrent drains consumed 4/4 committed rows
   with one turn and exactly 3 intents (no loss, no double-apply).
 - **Goal proof is verifier-backed (A-08).** `prove_goal_from_findings` only
-  accepts findings that belong to the engagement and are `CONFIRMED`/`VERIFIED`
-  in the existing `findings` table. It writes the graph finding node, a `proves`
-  edge and the goal conclusion in one dispatcher transaction; unverified or
-  foreign findings reject the whole proof before any write.
+  accepts findings that belong to the engagement, are `CONFIRMED`/`VERIFIED` in
+  the existing `findings` table, **and** carry verifier provenance in their
+  `evidence` JSONB (`verifier_provenance_error`): a `proof_status` of
+  `reproduced` with captured evidence/control refs, a `verification` result with
+  `verified: true` and no verifier error, or a `verification_status` of
+  `CONFIRMED` next to the artifacts the verifier captured. A status column, a
+  scanner's self-reported `verified` flag, an analyst feedback verdict or an
+  error-log-only artifact is a claim, not proof, and rejects the whole proof
+  before any write. On success it writes the graph finding node, a `proves` edge
+  and the goal conclusion in one dispatcher transaction.
+- **Provenance and verdict reach the row (A-08).** The rule above only means
+  something if the pipeline actually stores what the verifier established, so
+  `promote_finding`'s output is folded into `findings.evidence` on the way to the
+  database (`tools.verification.proof_status.evidence_with_proof`, applied by
+  the orchestrator persistence service, the verification agent and local mode)
+  and the promoted verdict is written to the `status` column by both the
+  PostgreSQL and SQLite repositories. Re-reporting a finding never downgrades an
+  existing `CONFIRMED`/`VERIFIED` row, so a later unverified scan cannot erase
+  the proof a goal rests on.
 - **Rejected writes are audited (A-05).** Cross-engagement edges, unknown
   endpoints and out-of-scope intent anchors raise `GraphMutationError` and are
   recorded in `graph_write_rejections` with the operation and reason.

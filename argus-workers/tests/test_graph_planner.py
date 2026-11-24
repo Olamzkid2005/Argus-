@@ -26,6 +26,7 @@ from database.graph_repository import (
     GraphNodeKind,
     TodoStatus,
 )
+from database.repositories.finding_repository import FindingRepository
 from orchestrator_pkg.planning import flags as orchestration_flags
 from tasks.graph_planner import (
     PlannerHardFloorError,
@@ -511,18 +512,60 @@ def _raw_query(sql: str, params: tuple = ()) -> list[tuple]:
         conn.close()
 
 
+#: Evidence a real verifier writes when it reproduces an issue. Used by the
+#: tests that need a finding which can actually prove a goal.
+REPRODUCED_EVIDENCE = {
+    "proof_status": "reproduced",
+    "proof_evidence_refs": ["artifacts/sqli-response-diff.html"],
+    "verification": {
+        "verified": True,
+        "confidence": "high",
+        "reason": "payload reflected unescaped in response body",
+    },
+}
+
+
 def _create_finding(
-    engagement_id: str, *, status: str = "PENDING", title: str = "SQL injection"
+    engagement_id: str,
+    *,
+    status: str = "PENDING",
+    title: str = "SQL injection",
+    evidence: dict | None = None,
 ) -> str:
+    """Insert a finding straight into the table, as a scan or a human would.
+
+    ``evidence`` defaults to none at all, which is what a row that was never
+    verified looks like — status alone must not be able to prove a goal.
+    """
+    from psycopg2.extras import Json
+
     rows = _raw_query(
         """
-        INSERT INTO findings (engagement_id, type, title, severity, confidence, status)
-        VALUES (%s, 'SQL_INJECTION', %s, 'HIGH', 0.9, %s)
+        INSERT INTO findings
+            (engagement_id, type, title, severity, confidence, status, evidence)
+        VALUES (%s, 'SQL_INJECTION', %s, 'HIGH', 0.9, %s, %s)
         RETURNING id
         """,
-        (engagement_id, title, status),
+        (engagement_id, title, status, Json(evidence) if evidence is not None else None),
     )
     return str(rows[0][0])
+
+
+def _proves_edge_count(engagement_id: str, goal_id: str) -> int:
+    rows = _raw_query(
+        "SELECT COUNT(*) FROM graph_node_edges "
+        "WHERE engagement_id = %s AND target_node_id = %s AND edge_type = 'proves'",
+        (engagement_id, goal_id),
+    )
+    return int(rows[0][0])
+
+
+def _finding_node_count(engagement_id: str) -> int:
+    rows = _raw_query(
+        "SELECT COUNT(*) FROM graph_nodes WHERE engagement_id = %s AND kind = 'finding'",
+        (engagement_id,),
+    )
+    return int(rows[0][0])
 
 
 class TestGoalProofFromVerifiedEvidence:
@@ -542,7 +585,9 @@ class TestGoalProofFromVerifiedEvidence:
     def test_confirmed_finding_proves_the_goal_and_stops_new_intents(self):
         engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
         goal = dispatcher.planner_overview(engagement_id)["goals"][0]
-        finding = _create_finding(engagement_id, status="CONFIRMED")
+        finding = _create_finding(
+            engagement_id, status="CONFIRMED", evidence=REPRODUCED_EVIDENCE
+        )
 
         proven = dispatcher.prove_goal_from_findings(
             engagement_id,
@@ -586,6 +631,269 @@ class TestGoalProofFromVerifiedEvidence:
         with pytest.raises(GraphMutationError):
             dispatcher.prove_goal_from_findings(
                 engagement_id, str(goal["id"]), [foreign]
+            )
+
+
+class TestGoalProofRequiresVerifierProvenance:
+    """A CONFIRMED status is a claim; only recorded verification is proof."""
+
+    def test_hand_inserted_confirmed_row_without_evidence_cannot_conclude_a_goal(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal = dispatcher.planner_overview(engagement_id)["goals"][0]
+        goal_id = str(goal["id"])
+        # Exactly what an attacker-ish path or a careless promoter leaves
+        # behind: the terminal status, no verification, no artifact.
+        unproven = _create_finding(engagement_id, status="CONFIRMED", evidence=None)
+
+        with pytest.raises(GraphMutationError) as rejected:
+            dispatcher.prove_goal_from_findings(
+                engagement_id, goal_id, [unproven], proof_summary="trust me"
+            )
+        assert "no verifier proof" in str(rejected.value)
+
+        # Nothing was written: the goal is still open, with no proves edge and
+        # no finding node claiming verification.
+        assert (
+            dispatcher.planner_overview(engagement_id)["goals"][0]["state"]
+            != "concluded"
+        )
+        assert _proves_edge_count(engagement_id, goal_id) == 0
+        assert _finding_node_count(engagement_id) == 0
+        goal_row = _raw_query(
+            "SELECT payload FROM graph_nodes WHERE id = %s", (goal_id,)
+        )[0][0]
+        assert "proof" not in (goal_row or {})
+
+    def test_scanner_self_reported_verified_flag_is_not_provenance(self):
+        # web_scanner.py writes ``evidence.verified`` when a signature matched.
+        # That is the scanner grading its own claim, not a verifier reproducing
+        # the issue, so it must not conclude a goal.
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal = dispatcher.planner_overview(engagement_id)["goals"][0]
+        goal_id = str(goal["id"])
+        self_reported = _create_finding(
+            engagement_id,
+            status="CONFIRMED",
+            evidence={"verified": True, "matched_signatures": ["sql-error-banner"]},
+        )
+
+        with pytest.raises(GraphMutationError):
+            dispatcher.prove_goal_from_findings(
+                engagement_id, goal_id, [self_reported]
+            )
+        assert _proves_edge_count(engagement_id, goal_id) == 0
+
+    def test_reproduced_without_captured_refs_is_not_enough(self):
+        # Same rule the promoter enforces: a reproduction with no artifact to
+        # audit is a claim.
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal = dispatcher.planner_overview(engagement_id)["goals"][0]
+        no_artifact = _create_finding(
+            engagement_id,
+            status="CONFIRMED",
+            evidence={"proof_status": "reproduced", "proof_evidence_refs": []},
+        )
+
+        with pytest.raises(GraphMutationError) as rejected:
+            dispatcher.prove_goal_from_findings(
+                engagement_id, str(goal["id"]), [no_artifact]
+            )
+        assert "no evidence or control reference" in str(rejected.value)
+
+    def test_a_verifier_error_blocks_the_proof(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal = dispatcher.planner_overview(engagement_id)["goals"][0]
+        errored = _create_finding(
+            engagement_id,
+            status="CONFIRMED",
+            evidence={
+                "verification": {
+                    "verified": True,
+                    "error": "connection reset before the payload was sent",
+                }
+            },
+        )
+
+        with pytest.raises(GraphMutationError) as rejected:
+            dispatcher.prove_goal_from_findings(
+                engagement_id, str(goal["id"]), [errored]
+            )
+        assert "verifier reported an error" in str(rejected.value)
+
+    def test_verification_status_alone_is_not_provenance(self):
+        # A hand-written "verification_status": "CONFIRMED" is as self-asserted
+        # as the status column, so it cannot conclude a goal on its own.
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal = dispatcher.planner_overview(engagement_id)["goals"][0]
+        self_declared = _create_finding(
+            engagement_id,
+            status="CONFIRMED",
+            evidence={"verification_status": "CONFIRMED"},
+        )
+
+        with pytest.raises(GraphMutationError) as rejected:
+            dispatcher.prove_goal_from_findings(
+                engagement_id, str(goal["id"]), [self_declared]
+            )
+        assert "no artifact was captured" in str(rejected.value)
+
+    def test_verification_agent_evidence_with_artifacts_concludes_the_goal(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal = dispatcher.planner_overview(engagement_id)["goals"][0]
+        goal_id = str(goal["id"])
+        # The shape VerificationEvidenceCollector produces for a confirmed run.
+        agent_evidence = {
+            "finding_id": "f-1",
+            "reproduced": True,
+            "hash": "abc123",
+            "collector": "verification_agent",
+            "verification_status": "CONFIRMED",
+            "artifacts": [
+                {"path": "/tmp/argus_evidence/f-1/evidence.json", "type": "evidence_data"}
+            ],
+        }
+        proven_finding = _create_finding(
+            engagement_id, status="CONFIRMED", evidence=agent_evidence
+        )
+
+        proven = dispatcher.prove_goal_from_findings(
+            engagement_id, goal_id, [proven_finding]
+        )
+
+        assert proven["goal"]["state"] == "concluded"
+        assert _proves_edge_count(engagement_id, goal_id) == 1
+
+    def test_an_error_log_artifact_is_not_a_reproduction(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal = dispatcher.planner_overview(engagement_id)["goals"][0]
+        only_error = _create_finding(
+            engagement_id,
+            status="CONFIRMED",
+            evidence={
+                "verification_status": "CONFIRMED",
+                "artifacts": [
+                    {"path": "/tmp/argus_evidence/f-2/error.txt", "type": "error_log"}
+                ],
+            },
+        )
+
+        with pytest.raises(GraphMutationError):
+            dispatcher.prove_goal_from_findings(
+                engagement_id, str(goal["id"]), [only_error]
+            )
+
+    def test_reproduced_proof_with_a_captured_ref_concludes_the_goal(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal = dispatcher.planner_overview(engagement_id)["goals"][0]
+        goal_id = str(goal["id"])
+        proven_finding = _create_finding(
+            engagement_id, status="CONFIRMED", evidence=REPRODUCED_EVIDENCE
+        )
+
+        proven = dispatcher.prove_goal_from_findings(
+            engagement_id, goal_id, [proven_finding]
+        )
+
+        assert proven["goal"]["state"] == "concluded"
+        assert _proves_edge_count(engagement_id, goal_id) == 1
+
+    def test_one_unproven_finding_rejects_the_whole_proof(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal = dispatcher.planner_overview(engagement_id)["goals"][0]
+        goal_id = str(goal["id"])
+        good = _create_finding(
+            engagement_id, status="CONFIRMED", evidence=REPRODUCED_EVIDENCE
+        )
+        bad = _create_finding(engagement_id, status="CONFIRMED", evidence=None)
+
+        with pytest.raises(GraphMutationError):
+            dispatcher.prove_goal_from_findings(engagement_id, goal_id, [good, bad])
+
+        # The good finding must not have been written either.
+        assert _proves_edge_count(engagement_id, goal_id) == 0
+        assert _finding_node_count(engagement_id) == 0
+        assert (
+            dispatcher.planner_overview(engagement_id)["goals"][0]["state"]
+            != "concluded"
+        )
+
+
+class TestPersistedProofCanConcludeAGoal:
+    """A proof the promoter produced must survive into the findings row."""
+
+    @staticmethod
+    def _save_promoted(engagement_id: str, finding: dict, **promote_kwargs) -> str:
+        from orchestrator_pkg.persistence.finding_persistence_service import (
+            FindingPersistenceService,
+        )
+        from tools.verification.finding_promoter import promote_finding
+
+        promoted = promote_finding(
+            {
+                "id": str(uuid.uuid4()),
+                "type": "SQL_INJECTION",
+                "severity": "HIGH",
+                "endpoint": "https://api.example.com/login",
+                "confidence": 0.5,
+                "evidence": {"payload": "' OR 1=1--"},
+                **finding,
+            },
+            **promote_kwargs,
+        )
+
+        service = FindingPersistenceService(
+            engagement_id, finding_repo=FindingRepository()
+        )
+        assert service.save([promoted]) == 0
+
+        rows = _raw_query(
+            "SELECT id FROM findings WHERE engagement_id = %s", (engagement_id,)
+        )
+        assert len(rows) == 1
+        return str(rows[0][0])
+
+    def test_reproduced_finding_that_was_saved_can_prove_a_goal(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal = dispatcher.planner_overview(engagement_id)["goals"][0]
+        finding_id = self._save_promoted(
+            engagement_id,
+            {},
+            confidence=0.9,
+            reproduced=True,
+            evidence_refs=["artifacts/sqli-response-diff.html"],
+        )
+
+        surviving = _raw_query(
+            "SELECT evidence FROM findings WHERE id = %s", (finding_id,)
+        )[0][0]
+        assert surviving["proof_status"] == "reproduced"
+        assert surviving["proof_evidence_refs"] == ["artifacts/sqli-response-diff.html"]
+
+        proven = dispatcher.prove_goal_from_findings(
+            engagement_id, str(goal["id"]), [finding_id]
+        )
+
+        assert proven["goal"]["state"] == "concluded"
+
+    def test_a_saved_finding_that_did_not_reproduce_cannot_prove_a_goal(self):
+        engagement_id, dispatcher, _assets = _engagement_with_goal(assets=1)
+        goal = dispatcher.planner_overview(engagement_id)["goals"][0]
+        finding_id = self._save_promoted(
+            engagement_id,
+            {},
+            confidence=0.9,
+            reproduced=False,
+            completed=True,
+        )
+
+        surviving = _raw_query(
+            "SELECT evidence FROM findings WHERE id = %s", (finding_id,)
+        )[0][0]
+        assert surviving["proof_status"] == "not_reproduced"
+
+        with pytest.raises(GraphMutationError):
+            dispatcher.prove_goal_from_findings(
+                engagement_id, str(goal["id"]), [finding_id]
             )
 
 

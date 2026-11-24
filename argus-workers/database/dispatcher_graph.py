@@ -779,7 +779,11 @@ class DispatcherGraph:
         *,
         proof_summary: str = "",
     ) -> dict[str, Any]:
-        """Prove a goal only from verified findings, then conclude it (A-08)."""
+        """Prove a goal only from verifier-proven findings, then conclude it (A-08).
+
+        A CONFIRMED/VERIFIED status is not enough: the finding's evidence must also
+        record the verification (see ``verifier_provenance_error``).
+        """
         if not engagement_id or not goal_id or not finding_ids:
             raise GraphMutationError(
                 "engagement_id, goal_id and at least one verified finding are required"

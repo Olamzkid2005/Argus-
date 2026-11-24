@@ -48,6 +48,7 @@ class FindingRepository(BaseRepository):
         evidence_strength: str | None = None,
         tool_agreement_level: str | None = None,
         fp_likelihood: float | None = None,
+        status: str | None = None,
     ) -> str:
         """
         Create a new finding in the database.
@@ -66,6 +67,9 @@ class FindingRepository(BaseRepository):
             evidence_strength: Optional evidence strength
             tool_agreement_level: Optional tool agreement level
             fp_likelihood: Optional false positive likelihood
+            status: Verification verdict to persist (PENDING/CONFIRMED/...).
+                Defaults to the column default when omitted, and an existing
+                CONFIRMED/VERIFIED row is never downgraded by a later re-report.
 
         Returns:
             The ID of the created finding
@@ -112,6 +116,10 @@ class FindingRepository(BaseRepository):
                     evidence_strength = %s,
                     tool_agreement_level = %s,
                     fp_likelihood = %s,
+                    status = CASE
+                        WHEN findings.status IN ('CONFIRMED', 'VERIFIED') THEN findings.status
+                        ELSE COALESCE(%s, findings.status)
+                    END,
                     updated_at = NOW()
                 WHERE engagement_id = %s
                   AND endpoint = %s
@@ -130,6 +138,7 @@ class FindingRepository(BaseRepository):
                     evidence_strength,
                     tool_agreement_level,
                     fp_likelihood,
+                    status,
                     engagement_id,
                     endpoint,
                     finding_type,
@@ -147,12 +156,18 @@ class FindingRepository(BaseRepository):
                         id, engagement_id, type, severity, confidence,
                         endpoint, evidence, source_tool, cvss_score,
                         owasp_category, cwe_id, evidence_strength,
-                        tool_agreement_level, fp_likelihood, verified, created_at
+                        tool_agreement_level, fp_likelihood, verified, created_at,
+                        status
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW()
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW(),
+                        COALESCE(%s, 'PENDING')
                     )
                     ON CONFLICT (engagement_id, endpoint, type, source_tool)
-                    DO UPDATE SET id = findings.id
+                    DO UPDATE SET id = findings.id,
+                        status = CASE
+                            WHEN findings.status IN ('CONFIRMED', 'VERIFIED') THEN findings.status
+                            ELSE COALESCE(%s, findings.status)
+                        END
                     RETURNING id
                     """,
                     (
@@ -170,6 +185,8 @@ class FindingRepository(BaseRepository):
                         evidence_strength,
                         tool_agreement_level,
                         fp_likelihood,
+                        status,
+                        status,
                     ),
                 )
             except (
@@ -198,9 +215,11 @@ class FindingRepository(BaseRepository):
                             id, engagement_id, type, severity, confidence,
                             endpoint, evidence, source_tool, cvss_score,
                             owasp_category, cwe_id, evidence_strength,
-                            tool_agreement_level, fp_likelihood, verified, created_at
+                            tool_agreement_level, fp_likelihood, verified, created_at,
+                            status
                         ) VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW()
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW(),
+                            COALESCE(%s, 'PENDING')
                         )
                         RETURNING id
                         """,
@@ -219,6 +238,7 @@ class FindingRepository(BaseRepository):
                             evidence_strength,
                             tool_agreement_level,
                             fp_likelihood,
+                            status,
                         ),
                     )
                     row = cursor.fetchone()
@@ -713,6 +733,7 @@ class FindingRepository(BaseRepository):
                 _ev_strength = f.get("evidence_strength")
                 _tool_agree = f.get("tool_agreement_level")
                 _fp_like = f.get("fp_likelihood")
+                _status = f.get("status")
                 try:
                     # Create a savepoint before each finding so individual
                     # failures can be rolled back without aborting the batch.
@@ -724,9 +745,11 @@ class FindingRepository(BaseRepository):
                             id, engagement_id, type, severity, confidence,
                             endpoint, evidence, source_tool, cvss_score,
                             owasp_category, cwe_id, evidence_strength,
-                            tool_agreement_level, fp_likelihood, verified, created_at
+                            tool_agreement_level, fp_likelihood, verified, created_at,
+                            status
                         ) VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW()
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, NOW(),
+                            COALESCE(%s, 'PENDING')
                         )
                         ON CONFLICT (engagement_id, endpoint, type, source_tool)
                         DO UPDATE SET
@@ -739,6 +762,11 @@ class FindingRepository(BaseRepository):
                             evidence_strength = EXCLUDED.evidence_strength,
                             tool_agreement_level = EXCLUDED.tool_agreement_level,
                             fp_likelihood = EXCLUDED.fp_likelihood,
+                            -- A re-report must not erase a verifier's verdict.
+                            status = CASE
+                                WHEN findings.status IN ('CONFIRMED', 'VERIFIED') THEN findings.status
+                                ELSE COALESCE(EXCLUDED.status, findings.status)
+                            END,
                             updated_at = NOW()
                         RETURNING id, (xmax = 0) AS is_insert
                         """,
@@ -757,6 +785,7 @@ class FindingRepository(BaseRepository):
                             _ev_strength,
                             _tool_agree,
                             _fp_like,
+                            _status,
                         ),
                     )
                     row = cursor.fetchone()

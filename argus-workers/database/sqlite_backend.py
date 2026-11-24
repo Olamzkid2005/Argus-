@@ -63,6 +63,7 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
             evidence_strength TEXT,
             tool_agreement_level TEXT,
             fp_likelihood REAL,
+            status TEXT DEFAULT 'UNVERIFIED',
             verified INTEGER DEFAULT 0,
             llm_reviewed INTEGER DEFAULT 0,
             created_at TEXT,
@@ -104,6 +105,11 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
     if "title" not in _existing_columns:
         conn.execute("ALTER TABLE findings ADD COLUMN title TEXT DEFAULT ''")
         logger.info("Migrated SQLite findings table: added 'title' column")
+    if "status" not in _existing_columns:
+        conn.execute(
+            "ALTER TABLE findings ADD COLUMN status TEXT DEFAULT 'UNVERIFIED'"
+        )
+        logger.info("Migrated SQLite findings table: added 'status' column")
 
 
 class SQLiteEngagementRepo:
@@ -278,6 +284,7 @@ class SQLiteFindingRepo:
         tool_agreement_level: str | None = None,
         fp_likelihood: float | None = None,
         title: str = "",
+        status: str | None = None,
     ) -> str:
         finding_id = str(uuid.uuid4())
         now = _now()
@@ -286,13 +293,18 @@ class SQLiteFindingRepo:
             cursor = self._conn.execute(
                 """UPDATE findings SET severity=?, confidence=?, evidence=?,
                    cvss_score=?, owasp_category=?, cwe_id=?,
-                   title=COALESCE(NULLIF(?, ''), title), updated_at=?
+                   title=COALESCE(NULLIF(?, ''), title),
+                   status=CASE
+                       WHEN status IN ('CONFIRMED', 'VERIFIED') THEN status
+                       ELSE COALESCE(?, status)
+                   END,
+                   updated_at=?
                    WHERE engagement_id=? AND endpoint=? AND type=? AND source_tool=?
                    RETURNING id""",
                 (
                     severity, confidence, json.dumps(evidence) if isinstance(evidence, dict) else evidence,
                     cvss_score, owasp_category, cwe_id,
-                    title or "", now,
+                    title or "", status, now,
                     engagement_id, endpoint or "", finding_type or "", source_tool or "",
                 ),
             )
@@ -305,15 +317,16 @@ class SQLiteFindingRepo:
                    (id, engagement_id, type, title, severity, confidence, endpoint,
                     evidence, source_tool, cvss_score, owasp_category, cwe_id,
                     evidence_strength, tool_agreement_level, fp_likelihood,
-                    verified, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)""",
+                    verified, created_at, updated_at, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?,
+                           COALESCE(?, 'UNVERIFIED'))""",
                 (
                     finding_id, engagement_id, finding_type or "", title or "", severity,
                     confidence, endpoint or "",
                     json.dumps(evidence) if isinstance(evidence, dict) else evidence,
                     source_tool or "", cvss_score, owasp_category, cwe_id,
                     evidence_strength, tool_agreement_level, fp_likelihood,
-                    now, now,
+                    now, now, status,
                 ),
             )
             self._conn.commit()
@@ -334,14 +347,17 @@ class SQLiteFindingRepo:
                 f_tool = f.get("source_tool", "")
                 f_cvss = f.get("cvss_score")
                 f_title = f.get("title", "") or ""
+                f_status = f.get("status")
 
                 # Upsert — SQLite doesn't distinguish insert vs update
                 # (no xmax equivalent), so we return approximate counts.
                 self._conn.execute(
                     """INSERT INTO findings
                        (id, engagement_id, type, title, severity, confidence, endpoint,
-                        evidence, source_tool, cvss_score, verified, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                        evidence, source_tool, cvss_score, verified, created_at,
+                        updated_at, status)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?,
+                               COALESCE(?, 'UNVERIFIED'))
                        ON CONFLICT(engagement_id, endpoint, type, source_tool)
                        DO UPDATE SET
                            severity=excluded.severity,
@@ -349,12 +365,17 @@ class SQLiteFindingRepo:
                            evidence=excluded.evidence,
                            cvss_score=excluded.cvss_score,
                            title=COALESCE(NULLIF(excluded.title, ''), title),
+                           -- A re-report must not erase a verifier's verdict.
+                           status=CASE
+                               WHEN status IN ('CONFIRMED', 'VERIFIED') THEN status
+                               ELSE COALESCE(excluded.status, status)
+                           END,
                            updated_at=excluded.updated_at""",
                     (
                         f_id, engagement_id, f_type, f_title, f_severity, f_confidence,
                         f_endpoint,
                         json.dumps(f_evidence) if isinstance(f_evidence, dict) else f_evidence,
-                        f_tool, f_cvss, now, now,
+                        f_tool, f_cvss, now, now, f_status,
                     ),
                 )
             self._conn.commit()

@@ -52,6 +52,101 @@ def sanitize_untrusted_text(value: str, *, limit: int = 500) -> str:
     return " ".join(cleaned.split())[:limit]
 
 
+#: ``evidence.proof_status`` value that means a verifier observed the exploit.
+#: Mirrors ``tools.verification.proof_status.ProofStatus`` without importing it:
+#: the graph repository only needs the one word it accepts.
+_REPRODUCED_PROOF_STATUS = "reproduced"
+
+
+def _captured_artifact_refs(evidence: dict) -> list[str]:
+    """Paths of artifacts a verifier captured, excluding error logs.
+
+    Mirrors the filter ``tools/verification_agent.py`` applies before it hands
+    proof references to the promoter: an error log records a failed attempt, not
+    a reproduction.
+    """
+    refs: list[str] = []
+    artifacts = evidence.get("artifacts")
+    if not isinstance(artifacts, list):
+        return refs
+    for artifact in artifacts:
+        if isinstance(artifact, str):
+            if artifact:
+                refs.append(artifact)
+            continue
+        if not isinstance(artifact, dict):
+            continue
+        if str(artifact.get("type") or "") == "error_log":
+            continue
+        path = artifact.get("path")
+        if path:
+            refs.append(str(path))
+    return refs
+
+
+def verifier_provenance_error(evidence: Any) -> str | None:
+    """Explain why *evidence* is not verifier proof (``None`` when it is).
+
+    A goal may only be concluded from findings whose evidence records an actual
+    verification, in the shapes Argus's verifier pipeline persists:
+
+    - ``proof_status: "reproduced"`` plus at least one ``proof_evidence_refs``
+      or ``proof_control_refs`` entry — the same rule
+      ``tools/verification/finding_promoter.py`` uses to write CONFIRMED;
+    - ``verification: {verified: true, ...}`` from the HTTP verifiers;
+    - ``verification_status: "CONFIRMED"`` from the verification agent *and* the
+      artifacts it captured (error logs are failed attempts, not proof).
+
+    Everything else is a claim, not proof: the ``findings.status`` column on its
+    own, a scanner's self-reported ``verified`` flag, an analyst feedback verdict
+    (``findings.verified``) or a reproduction with no captured artifact.
+    """
+    if not isinstance(evidence, dict) or not evidence:
+        return "no verification evidence was recorded"
+
+    captured = _captured_artifact_refs(evidence)
+
+    proof_status = str(evidence.get("proof_status") or "").strip().lower()
+    if proof_status:
+        if proof_status != _REPRODUCED_PROOF_STATUS:
+            return f"proof_status is {proof_status!r}, not 'reproduced'"
+        refs = evidence.get("proof_evidence_refs") or []
+        control_refs = evidence.get("proof_control_refs") or []
+        if not isinstance(refs, list):
+            refs = [refs]
+        if not isinstance(control_refs, list):
+            control_refs = [control_refs]
+        if not (refs or control_refs or captured):
+            return "proof_status is 'reproduced' but no evidence or control reference was captured"
+        return None
+
+    verification_status = str(evidence.get("verification_status") or "").upper()
+    if verification_status == "CONFIRMED":
+        # The verification agent records CONFIRMED next to the artifacts it
+        # captured. The word alone is as self-asserted as the status column.
+        if not captured:
+            return (
+                "verification_status is 'CONFIRMED' but no artifact was captured"
+            )
+        return None
+
+    verification = evidence.get("verification")
+    if isinstance(verification, dict):
+        error = verification.get("error")
+        if error:
+            return f"the verifier reported an error: {sanitize_untrusted_text(error, limit=120)}"
+        verified = verification.get("verified")
+        if verified is True or str(verified).strip().lower() == "true":
+            return None
+        return f"verification.verified is {verified!r}"
+
+    return (
+        "no verifier provenance (expected evidence.proof_status='reproduced' with "
+        "captured refs, evidence.verification.verified=true, or "
+        "evidence.verification_status='CONFIRMED')"
+    )
+
+
 _INTENT_LEASE_SECONDS = 90
 
 
@@ -2461,13 +2556,16 @@ class ExplorationGraphRepository(BaseRepository):
         proof_summary: str = "",
     ) -> dict[str, Any]:
         """
-        Prove a goal only from verified findings (A-08).
+        Prove a goal only from findings a verifier actually proved (A-08).
 
-        Each referenced ``findings`` row must belong to the engagement and be in
-        a verified terminal state (CONFIRMED/VERIFIED, as set by Argus's existing
-        verification pipeline). Only then does the dispatcher create/refresh the
-        graph finding node, add a ``proves`` edge and conclude the goal. An
-        unverified or foreign finding rejects the whole proof before any write.
+        Each referenced ``findings`` row must belong to the engagement, be in a
+        verified terminal state (CONFIRMED/VERIFIED), **and** carry verifier
+        provenance in its ``evidence`` — see :func:`verifier_provenance_error`.
+        A row whose status merely says CONFIRMED (hand-inserted, promoted by
+        confidence, or marked by an analyst) cannot conclude a goal. Only when
+        both hold does the dispatcher create/refresh the graph finding node, add
+        a ``proves`` edge and conclude the goal. An unproven or foreign finding
+        rejects the whole proof before any write.
         """
         require_graph_write_owner("prove_goal_from_findings")
         if not engagement_id or not goal_id or not finding_ids:
@@ -2492,7 +2590,7 @@ class ExplorationGraphRepository(BaseRepository):
             finding_nodes: list[dict[str, Any]] = []
             for finding_id in finding_ids:
                 cursor.execute(
-                    "SELECT id, title, severity, status FROM findings "
+                    "SELECT id, title, severity, status, evidence FROM findings "
                     "WHERE engagement_id = %s AND id = %s",
                     (engagement_id, finding_id),
                 )
@@ -2505,6 +2603,13 @@ class ExplorationGraphRepository(BaseRepository):
                     raise GraphMutationError(
                         f"finding {finding_id} is not verified "
                         f"(status={finding['status']}); it cannot prove a goal"
+                    )
+                provenance_error = verifier_provenance_error(finding["evidence"])
+                if provenance_error is not None:
+                    raise GraphMutationError(
+                        f"finding {finding_id} has no verifier proof "
+                        f"(status={finding['status']} is a claim, not proof): "
+                        f"{provenance_error}"
                     )
 
                 payload = {

@@ -38,6 +38,7 @@ class VerificationAgent(AbstractTool):
         from .verification.confidence_scorer import score_confidence
         from .verification.evidence_collector import VerificationEvidenceCollector
         from .verification.finding_promoter import promote_finding
+        from .verification.proof_status import evidence_with_proof
         from .verification.reproduction_engine import ReproductionEngine
 
         engine = ReproductionEngine()
@@ -81,7 +82,11 @@ class VerificationAgent(AbstractTool):
                 "endpoint": promoted.get(
                     "endpoint", finding.get("endpoint", ctx.target)
                 ),
-                "evidence": promoted.get("evidence", evidence),
+                # The proof vocabulary and captured artifacts travel with the
+                # finding so the stored row can prove a goal later on.
+                "evidence": evidence_with_proof(
+                    promoted, base={**(promoted.get("evidence") or evidence or {})}
+                ),
                 "confidence": promoted.get("confidence", confidence),
                 "source_tool": self.tool_name,
                 "verification_status": promoted.get("status", "PENDING"),

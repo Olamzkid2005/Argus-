@@ -12,6 +12,8 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from tools.verification.proof_status import evidence_with_proof
+
 logger = logging.getLogger(__name__)
 
 
@@ -165,6 +167,8 @@ class FindingPersistenceService:
         - Estimates CVSS score when missing.
         - Assigns OWASP category and CWE ID when missing.
         - Ensures ``source_tool`` is set.
+        - Folds a verifier's proof vocabulary into ``evidence`` so the stored
+          row can back a graph goal proof later.
         """
         _ = self.SECRET_TOOLS  # retained for interface consistency
         processed: list[dict] = []
@@ -198,6 +202,11 @@ class FindingPersistenceService:
             st = finding.get("tool") or finding.get("source_tool") or "unknown"
             if not finding.get("source_tool"):
                 finding["source_tool"] = st
+
+            # A proof that only lives on the in-memory dict cannot conclude a
+            # graph goal: `prove_goal_from_findings` reads `findings.evidence`,
+            # so the promoter's proof_status/refs are written with the row.
+            finding["evidence"] = evidence_with_proof(finding)
 
             processed.append(finding)
 

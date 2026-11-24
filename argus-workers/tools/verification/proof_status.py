@@ -62,3 +62,44 @@ def proof_status_for(
     if reproduced is False:
         return ProofStatus.NOT_REPRODUCED
     return ProofStatus.SUSPECTED
+
+
+#: Keys ``promote_finding`` writes on a finding to describe its proof. They have
+#: to survive into ``findings.evidence``: the graph only accepts a goal proof it
+#: can see in the row (``database.graph_repository.verifier_provenance_error``),
+#: so a proof that lives only in the in-memory dict cannot conclude anything.
+PROOF_EVIDENCE_KEYS = (
+    "proof_status",
+    "proof_evidence_refs",
+    "proof_control_refs",
+    "proof_error",
+)
+
+
+def evidence_with_proof(
+    finding: dict, *, base: dict | None = None
+) -> dict:
+    """Return the evidence dict to persist for *finding*, proof included.
+
+    The proof vocabulary is how a downstream reader tells "a verifier saw this"
+    from "something called it CONFIRMED", so it is written next to the rest of
+    the evidence rather than dropped when the finding leaves memory.
+
+    Args:
+        finding: A finding dict, usually the output of ``promote_finding``.
+        base: Evidence to start from when the caller has already assembled some
+            (for example the original evidence plus this run's verification).
+
+    Returns:
+        A new dict. ``finding`` and *base* are not mutated.
+    """
+    evidence: dict = dict(base if base is not None else (finding.get("evidence") or {}))
+    for key in PROOF_EVIDENCE_KEYS:
+        if key in finding and finding[key] is not None:
+            evidence[key] = finding[key]
+    # The verifier's own result travels too: it is what ``verifier_provenance_error``
+    # reads as ``evidence.verification.verified``.
+    verification = finding.get("verification")
+    if isinstance(verification, dict) and "verification" not in evidence:
+        evidence["verification"] = verification
+    return evidence

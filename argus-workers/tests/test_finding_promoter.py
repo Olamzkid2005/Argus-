@@ -120,3 +120,54 @@ class TestLowConfidenceRejection:
 
         assert promoted["status"] == "REJECTED"
         assert promoted["verification"] == "LOW_CONFIDENCE"
+
+
+class TestProofTravelsWithTheRow:
+    """A proof that stays in memory cannot back a goal, so it is persisted."""
+
+    def test_reproduced_proof_is_added_to_the_evidence(self):
+        from tools.verification.proof_status import evidence_with_proof
+
+        promoted = promote_finding(
+            {**make_finding(), "evidence": {"payload": "' OR 1=1--"}},
+            confidence=0.9,
+            reproduced=True,
+            evidence_refs=["artifacts/sqli.html"],
+        )
+
+        evidence = evidence_with_proof(promoted)
+
+        assert evidence["payload"] == "' OR 1=1--"
+        assert evidence["proof_status"] == "reproduced"
+        assert evidence["proof_evidence_refs"] == ["artifacts/sqli.html"]
+        # The evidence that will be written now satisfies the graph's rule.
+        from database.graph_repository import verifier_provenance_error
+
+        assert verifier_provenance_error(evidence) is None
+
+    def test_a_refused_proof_is_persisted_as_refused(self):
+        from tools.verification.proof_status import evidence_with_proof
+
+        promoted = promote_finding(
+            make_finding(), confidence=0.9, reproduced=False, completed=True
+        )
+
+        evidence = evidence_with_proof(promoted)
+
+        assert evidence["proof_status"] == "not_reproduced"
+        from database.graph_repository import verifier_provenance_error
+
+        assert verifier_provenance_error(evidence) is not None
+
+    def test_caller_evidence_and_finding_are_not_mutated(self):
+        from tools.verification.proof_status import evidence_with_proof
+
+        promoted = promote_finding(
+            make_finding(), confidence=0.9, reproduced=True, evidence_refs=["a"]
+        )
+        base = {"kept": True}
+        evidence = evidence_with_proof(promoted, base=base)
+
+        assert base == {"kept": True}
+        assert "proof_status" not in promoted["evidence"] if "evidence" in promoted else True
+        assert evidence["kept"] is True
