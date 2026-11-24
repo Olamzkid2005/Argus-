@@ -45,7 +45,17 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
     try:
         result = orch.run(job)
-        print(json.dumps(result, indent=2, default=str))
+        if getattr(args, "format", "json") == "text":
+            findings = result.get("findings", []) if isinstance(result, dict) else []
+            print(f"Scan of {target} complete: {len(findings)} finding(s)")
+            for finding in findings:
+                print(
+                    f"  [{finding.get('severity', 'INFO')}] "
+                    f"{finding.get('type', 'UNKNOWN')} "
+                    f"{finding.get('endpoint', '')}"
+                )
+        else:
+            print(json.dumps(result, indent=2, default=str))
         return 0
     except Exception as e:
         logger.error("Scan failed: %s", e)

@@ -11,9 +11,15 @@ we want to test that the real SSRF detection works end-to-end.
 Mock only external dependencies (DB lookups, subprocess, HTTP).
 """
 
+import shutil
 from unittest import mock
 
 import pytest
+
+# A real executable to hand to ToolRunner: subprocess is mocked, but the runner
+# refuses to start a tool whose binary does not exist (which is what it should
+# do). /usr/bin/echo only exists on Linux, so resolve it per platform.
+ECHO_BIN = shutil.which("echo") or "/bin/echo"
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -367,7 +373,7 @@ class TestSandboxScope:
         mock_runner._locked_env.return_value = {}
         mock_runner._redact_sensitive_args.return_value = ([], {})
         mock_runner.is_tool_available.return_value = True
-        mock_runner._resolve_tool_path.return_value = "/usr/bin/echo"
+        mock_runner._resolve_tool_path.return_value = ECHO_BIN
         mock_runner.sandbox_dir = "/tmp"
         runner._runner = mock_runner
         return runner
@@ -745,7 +751,7 @@ class TestToolRunnerScope:
 
     def test_blocks_out_of_scope_url_arg(self, tool_runner, mock_db_scope_lookup):
         """URL arg outside scope returns SCOPE_ERROR status."""
-        with mock.patch.object(tool_runner, "_resolve_tool_path", return_value="/usr/bin/echo"):
+        with mock.patch.object(tool_runner, "_resolve_tool_path", return_value=ECHO_BIN):
             with mock.patch.object(tool_runner, "is_dangerous", return_value=False):
                 result = tool_runner.run(
                     "echo", ["https://evil.com/api"], timeout=30,
@@ -755,7 +761,7 @@ class TestToolRunnerScope:
 
     def test_allows_in_scope_url_arg(self, tool_runner, mock_db_scope_lookup):
         """URL arg within scope proceeds past validation."""
-        with mock.patch.object(tool_runner, "_resolve_tool_path", return_value="/usr/bin/echo"):
+        with mock.patch.object(tool_runner, "_resolve_tool_path", return_value=ECHO_BIN):
             with mock.patch.object(tool_runner, "is_dangerous", return_value=False):
                 with mock.patch("subprocess.run") as mock_subprocess:
                     mock_subprocess.return_value.returncode = 0
@@ -770,7 +776,7 @@ class TestToolRunnerScope:
 
     def test_blocks_internal_ip_scope(self, tool_runner, mock_db_scope_lookup):
         """Bare internal IP is checked by ScopeValidator's is_in_scope."""
-        with mock.patch.object(tool_runner, "_resolve_tool_path", return_value="/usr/bin/echo"):
+        with mock.patch.object(tool_runner, "_resolve_tool_path", return_value=ECHO_BIN):
             with mock.patch.object(tool_runner, "is_dangerous", return_value=False):
                 result = tool_runner.run(
                     "echo", ["http://10.0.0.1"], timeout=30,
@@ -783,7 +789,7 @@ class TestToolRunnerScope:
         from tools.tool_runner import ToolRunner
         runner = ToolRunner(sandbox_dir="/tmp/test_sandbox")
 
-        with mock.patch.object(runner, "_resolve_tool_path", return_value="/usr/bin/echo"):
+        with mock.patch.object(runner, "_resolve_tool_path", return_value=ECHO_BIN):
             with mock.patch.object(runner, "is_dangerous", return_value=False):
                 with mock.patch("subprocess.run") as mock_subprocess:
                     result = runner.run(

@@ -91,6 +91,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--db", "-d", default=None,
         help="SQLite database path",
     )
+    scan_parser.add_argument(
+        "--format", "-f",
+        choices=["json", "text"],
+        default="json",
+        help="Output format (json is the machine-readable default)",
+    )
+    scan_parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help=argparse.SUPPRESS,  # accepted for automation callers; scans always run fresh
+    )
 
     # argus report
     report_parser = subparsers.add_parser(

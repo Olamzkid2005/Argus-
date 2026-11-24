@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -185,17 +184,27 @@ def run_scan_against_fixture(base_url: str, timeout: int = 120) -> dict:
     Returns:
         Parsed JSON dict with scan results.
 
-    Skips the test if the argus CLI is not found on PATH.
+    Runs the in-repo Python CLI (``python -m cli.main scan``) rather than whatever
+    ``argus`` happens to be on PATH: the TUI ships its own ``argus`` binary with
+    a different command surface, so resolving by name tested the wrong program.
     """
-    argus_cli = shutil.which("argus")
-    if not argus_cli:
-        pytest.skip("argus CLI not found on PATH — skipping smoke test")
-
-    cmd = [argus_cli, "scan", base_url, "--no-cache", "--format", "json"]
+    repo_root = Path(__file__).resolve().parent.parent
+    cmd = [
+        sys.executable,
+        "-m",
+        "cli.main",
+        "scan",
+        base_url,
+        "--no-cache",
+        "--format",
+        "json",
+    ]
     logger.info("Running: %s", " ".join(cmd))
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout, cwd=repo_root
+        )
     except subprocess.TimeoutExpired:
         pytest.fail(f"argus scan timed out after {timeout}s")
 
