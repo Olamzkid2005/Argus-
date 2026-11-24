@@ -1189,6 +1189,7 @@ class TestCoverageGapReconLoop:
                 }
             },
             graph_todo_id=dispatched["todo_id"],
+            graph_claim_token=dispatched["claim_token"],
         )
         assert recon_result["accepted"] > 0
         assert recon_result["gap_completion"]["status"] == "completed"
@@ -1226,6 +1227,7 @@ class TestCoverageGapReconLoop:
                 }
             },
             graph_todo_id=dispatched["todo_id"],
+            graph_claim_token=dispatched["claim_token"],
         )
         assert recon_result["gap_completion"]["status"] == "completed"
         assert (
@@ -1258,6 +1260,7 @@ class TestCoverageGapReconLoop:
                 }
             },
             graph_todo_id=dispatched["todo_id"],
+            graph_claim_token=dispatched["claim_token"],
         )
         assert recon_result["gap_completion"]["status"] == "completed"
         assert recon_result["gap_completion"]["covered_assets"] >= 1
@@ -1357,7 +1360,7 @@ class TestCoverageGapReconLoop:
         try:
             with conn, conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE planner_todos SET started_at = NOW() - INTERVAL '10 minutes' WHERE id = %s",
+                    "UPDATE planner_todos SET lease_expires_at = NOW() - INTERVAL '10 minutes' WHERE id = %s",
                     (first["id"],),
                 )
         finally:
@@ -1372,7 +1375,12 @@ class TestCoverageGapReconLoop:
         def _boom(task_name, args):
             raise RuntimeError("broker unavailable")
 
-        dispatcher.release_recon_todo(engagement_id, reclaimed["id"], reason="test reset")
+        dispatcher.release_recon_todo(
+            engagement_id,
+            reclaimed["id"],
+            claim_token=reclaimed["claim_token"],
+            reason="test reset",
+        )
         outcome = dispatch_next_coverage_gap(
             engagement_id, worker_id="worker-3", dispatch=_boom, gap_key=gap_key
         )

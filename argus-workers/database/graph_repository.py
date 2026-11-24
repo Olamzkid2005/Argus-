@@ -19,6 +19,7 @@ from database.graph_identity import (
     asset_in_scope,
     undiscovered_scope_entries,
 )
+from database.graph_intents import IntentProposal, IntentProposalError
 from database.graph_ownership import require_graph_write_owner
 from database.repositories.base import BaseRepository
 
@@ -31,6 +32,10 @@ class GraphMutationError(Exception):
 
 class GraphTenantViolation(GraphMutationError):
     """A graph write named a tenant that does not own the scope/asset (A-03)."""
+
+
+class GraphClaimLostError(GraphMutationError):
+    """A write presented a stale or expired claim token (A-11/A-12)."""
 
 
 class GraphNodeKind(str):
@@ -1255,13 +1260,13 @@ class ExplorationGraphRepository(BaseRepository):
         gap_key: str | None = None,
     ) -> dict[str, Any] | None:
         """
-        Claim the next scheduled coverage-gap todo for an engagement.
+        Claim the next scheduled planner todo for an engagement.
 
         Selection is the planner's normal frontier/todo order: highest frontier
-        priority first, then oldest todo. Claiming sets the todo in_progress with
-        an owner and a ``started_at`` lease starting point, and marks its frontier
-        node running. An in_progress todo whose lease has expired is reclaimable,
-        so a crashed dispatch does not strand the work.
+        priority first, then oldest todo. A claim mints a random fencing token and
+        a database-clock lease; an expired lease is reclaimable, so a crashed
+        worker does not strand the work. A todo whose ``depends_on`` prerequisite
+        has not reached ``done`` is never selected (A-10).
 
         The engagement filter is part of the claim, so work scheduled for one
         engagement can never be claimed for another.
@@ -1273,11 +1278,10 @@ class ExplorationGraphRepository(BaseRepository):
             raise GraphMutationError("lease_seconds must be positive")
 
         gap_clause = ""
-        values: list[Any] = [owner, engagement_id]
+        values: list[Any] = [owner, lease_seconds, engagement_id]
         if gap_key is not None:
             gap_clause = "AND candidate.payload->>'coverage_gap_key' = %s"
             values.append(gap_key)
-        values.append(lease_seconds)
 
         with self.db_operation(
             commit=True, cursor_factory=RealDictCursor
@@ -1288,6 +1292,10 @@ class ExplorationGraphRepository(BaseRepository):
                 SET status = 'in_progress',
                     owner = %s,
                     started_at = NOW(),
+                    claim_token = gen_random_uuid(),
+                    lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
+                    last_heartbeat_at = NOW(),
+                    attempts = t.attempts + 1,
                     updated_at = NOW()
                 WHERE t.id = (
                     SELECT candidate.id
@@ -1304,10 +1312,17 @@ class ExplorationGraphRepository(BaseRepository):
                           OR (
                               candidate.status = 'in_progress'
                               AND (
-                                  candidate.started_at IS NULL
-                                  OR candidate.started_at
-                                     < NOW() - (%s * INTERVAL '1 second')
+                                  candidate.lease_expires_at IS NULL
+                                  OR candidate.lease_expires_at < NOW()
                               )
+                          )
+                      )
+                      AND (
+                          candidate.depends_on IS NULL
+                          OR EXISTS (
+                              SELECT 1 FROM planner_todos AS prereq
+                              WHERE prereq.id = candidate.depends_on
+                                AND prereq.status = 'done'
                           )
                       )
                     ORDER BY COALESCE(pf.priority, 0) DESC,
@@ -1338,11 +1353,54 @@ class ExplorationGraphRepository(BaseRepository):
             )
             return todo
 
+    def heartbeat_recon_todo(
+        self,
+        engagement_id: str,
+        todo_id: str,
+        *,
+        claim_token: str,
+        lease_seconds: int = 300,
+    ) -> dict[str, Any]:
+        """Renew a live claim's lease; a stale token or expired lease is CLAIM_LOST."""
+        require_graph_write_owner("heartbeat_recon_todo")
+        if not engagement_id or not todo_id or not claim_token:
+            raise GraphMutationError(
+                "engagement_id, todo_id and claim_token are required"
+            )
+        if lease_seconds <= 0:
+            raise GraphMutationError("lease_seconds must be positive")
+
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                UPDATE planner_todos
+                SET lease_expires_at = NOW() + (%s * INTERVAL '1 second'),
+                    last_heartbeat_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s AND engagement_id = %s
+                  AND status = 'in_progress'
+                  AND claim_token::text = %s
+                  AND lease_expires_at IS NOT NULL
+                  AND lease_expires_at > NOW()
+                RETURNING *
+                """,
+                (lease_seconds, todo_id, engagement_id, str(claim_token)),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise GraphClaimLostError(
+                    f"CLAIM_LOST: todo {todo_id} is not leased to token {claim_token}"
+                )
+            return dict(row)
+
     def complete_recon_todo(
         self,
         engagement_id: str,
         todo_id: str,
         *,
+        claim_token: str | None = None,
         asset_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """
@@ -1378,6 +1436,13 @@ class ExplorationGraphRepository(BaseRepository):
             if todo["status"] not in (TodoStatus.OPEN, TodoStatus.IN_PROGRESS):
                 raise GraphMutationError(
                     f"todo {todo_id} is {todo['status']}; only open/in_progress work can complete"
+                )
+            stored_token = todo.get("claim_token")
+            if stored_token is not None and (
+                not claim_token or str(claim_token) != str(stored_token)
+            ):
+                raise GraphClaimLostError(
+                    f"CLAIM_LOST: todo {todo_id} is not leased to token {claim_token}"
                 )
 
             payload = todo.get("payload") or {}
@@ -1447,7 +1512,12 @@ class ExplorationGraphRepository(BaseRepository):
             cursor.execute(
                 """
                 UPDATE planner_todos
-                SET status = 'done', completed_at = NOW(), updated_at = NOW()
+                SET status = 'done',
+                    completed_at = NOW(),
+                    claim_token = NULL,
+                    lease_expires_at = NULL,
+                    last_heartbeat_at = NULL,
+                    updated_at = NOW()
                 WHERE id = %s
                 RETURNING *
                 """,
@@ -1462,6 +1532,7 @@ class ExplorationGraphRepository(BaseRepository):
         engagement_id: str,
         todo_id: str,
         *,
+        claim_token: str | None = None,
         reason: str | None = None,
     ) -> dict[str, Any] | None:
         """Release a claimed todo back to the frontier after a dispatch failure."""
@@ -1473,8 +1544,32 @@ class ExplorationGraphRepository(BaseRepository):
         ) as (conn, cursor):
             cursor.execute(
                 """
+                SELECT claim_token FROM planner_todos
+                WHERE id = %s AND engagement_id = %s
+                FOR UPDATE
+                """,
+                (todo_id, engagement_id),
+            )
+            current = cursor.fetchone()
+            if current is None:
+                return None
+            stored_token = current["claim_token"]
+            if stored_token is not None and (
+                not claim_token or str(claim_token) != str(stored_token)
+            ):
+                raise GraphClaimLostError(
+                    f"CLAIM_LOST: todo {todo_id} is not leased to token {claim_token}"
+                )
+            cursor.execute(
+                """
                 UPDATE planner_todos
-                SET status = 'open', owner = NULL, started_at = NULL, updated_at = NOW()
+                SET status = 'open',
+                    owner = NULL,
+                    started_at = NULL,
+                    claim_token = NULL,
+                    lease_expires_at = NULL,
+                    last_heartbeat_at = NULL,
+                    updated_at = NOW()
                 WHERE id = %s AND engagement_id = %s AND status = 'in_progress'
                 RETURNING *
                 """,
@@ -1504,6 +1599,397 @@ class ExplorationGraphRepository(BaseRepository):
                     reason,
                 )
             return todo
+
+    # --- planner turns and typed intent proposals (A3) ---
+
+    def begin_planner_turn(
+        self, engagement_id: str, *, trigger: str = "outbox"
+    ) -> dict[str, Any]:
+        """Record the start of one planning turn; returns the turn row."""
+        require_graph_write_owner("begin_planner_turn")
+        if not engagement_id:
+            raise GraphMutationError("engagement_id is required")
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                INSERT INTO planner_turns (engagement_id, trigger, status)
+                VALUES (%s, %s, 'running')
+                RETURNING *
+                """,
+                (engagement_id, trigger),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("planner_turns insert did not return a row")
+            return dict(row)
+
+    def consume_planner_events(
+        self,
+        engagement_id: str,
+        turn_id: str,
+        *,
+        scope_type: str = "graph",
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """
+        Claim every queued outbox event for an engagement into one planning turn.
+
+        The whole burst is consumed atomically (debounce/coalesce): one turn sees
+        all queued rows and each row records the turn that consumed it. Events
+        that arrive after this call wait for the next turn, and a later loop pass
+        finds any wake that happened while no consumer was running.
+        """
+        require_graph_write_owner("consume_planner_events")
+        if not engagement_id or not turn_id:
+            raise GraphMutationError("engagement_id and turn_id are required")
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                UPDATE graph_outbox
+                SET status = 'dequeued',
+                    dequeued_at = NOW(),
+                    attempts = attempts + 1,
+                    planner_turn_id = %s,
+                    updated_at = NOW()
+                WHERE id IN (
+                    SELECT id FROM graph_outbox
+                    WHERE scope_type = %s AND scope_id = %s AND status = 'queued'
+                    ORDER BY created_at ASC
+                    LIMIT %s
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING *
+                """,
+                (turn_id, scope_type, engagement_id, limit),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def complete_planner_turn(
+        self,
+        turn_id: str,
+        *,
+        events_consumed: int,
+        proposals_received: int,
+        intents_created: int,
+        duplicates_suppressed: int,
+    ) -> dict[str, Any]:
+        """Mark a planning turn completed with its counts."""
+        require_graph_write_owner("complete_planner_turn")
+        if not turn_id:
+            raise GraphMutationError("turn_id is required")
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                UPDATE planner_turns
+                SET status = 'completed',
+                    events_consumed = %s,
+                    proposals_received = %s,
+                    intents_created = %s,
+                    duplicates_suppressed = %s,
+                    completed_at = NOW()
+                WHERE id = %s
+                RETURNING *
+                """,
+                (
+                    events_consumed,
+                    proposals_received,
+                    intents_created,
+                    duplicates_suppressed,
+                    turn_id,
+                ),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise GraphMutationError(f"planner turn {turn_id} does not exist")
+            return dict(row)
+
+    def fail_planner_turn(self, turn_id: str, error: str) -> dict[str, Any]:
+        """Mark a planning turn failed and record why (never a silent no-op)."""
+        require_graph_write_owner("fail_planner_turn")
+        if not turn_id:
+            raise GraphMutationError("turn_id is required")
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                UPDATE planner_turns
+                SET status = 'failed', error = %s, completed_at = NOW()
+                WHERE id = %s
+                RETURNING *
+                """,
+                (error, turn_id),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise GraphMutationError(f"planner turn {turn_id} does not exist")
+            return dict(row)
+
+    def find_planner_turns(
+        self, engagement_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """List recent planning turns for an engagement (newest first)."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT * FROM planner_turns
+                WHERE engagement_id = %s
+                ORDER BY started_at DESC, id DESC
+                LIMIT %s
+                """,
+                (engagement_id, limit),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def count_queued_outbox(
+        self, engagement_id: str, *, scope_type: str = "graph"
+    ) -> int:
+        """Count outbox events still waiting for a planning turn."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS queued FROM graph_outbox
+                WHERE scope_type = %s AND scope_id = %s AND status = 'queued'
+                """,
+                (scope_type, engagement_id),
+            )
+            return int(cursor.fetchone()["queued"])
+
+    def planner_overview(self, engagement_id: str) -> dict[str, Any]:
+        """Read the bounded planner snapshot for an engagement."""
+        if not engagement_id:
+            raise GraphMutationError("engagement_id is required")
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT * FROM graph_nodes
+                WHERE engagement_id = %s AND kind = 'goal'
+                ORDER BY created_at ASC
+                """,
+                (engagement_id,),
+            )
+            goals = [dict(row) for row in cursor.fetchall()]
+
+            cursor.execute(
+                """
+                SELECT * FROM graph_nodes
+                WHERE engagement_id = %s AND kind = 'intent'
+                  AND state IN ('open', 'running')
+                ORDER BY created_at ASC
+                """,
+                (engagement_id,),
+            )
+            open_intents = [dict(row) for row in cursor.fetchall()]
+
+            cursor.execute(
+                """
+                SELECT * FROM graph_nodes
+                WHERE engagement_id = %s AND kind = 'fact'
+                  AND state != 'cancelled'
+                ORDER BY created_at DESC
+                LIMIT 100
+                """,
+                (engagement_id,),
+            )
+            facts = [dict(row) for row in cursor.fetchall()]
+
+            cursor.execute(
+                """
+                SELECT a.id, a.canonical_key, a.asset_type, a.display_value,
+                       a.parent_asset_id
+                FROM graph_assets AS a
+                WHERE a.scope_id = %s
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM graph_anchors AS ga
+                      JOIN graph_anchor_scopes AS s ON s.anchor_id = ga.id
+                      WHERE ga.asset_id = a.id
+                        AND s.scope_id = %s
+                        AND s.coverage_state IN ('incorporated', 'covered')
+                  )
+                ORDER BY a.asset_type, a.canonical_key
+                LIMIT 50
+                """,
+                (engagement_id, engagement_id),
+            )
+            untested_assets = [dict(row) for row in cursor.fetchall()]
+
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS open_todos FROM planner_todos
+                WHERE engagement_id = %s AND status IN ('open', 'in_progress')
+                """,
+                (engagement_id,),
+            )
+            open_todos = int(cursor.fetchone()["open_todos"])
+
+        return {
+            "engagement_id": engagement_id,
+            "goals": goals,
+            "open_intents": open_intents,
+            "facts": facts,
+            "untested_assets": untested_assets,
+            "open_todo_count": open_todos,
+        }
+
+    def apply_intent_proposals(
+        self, engagement_id: str, proposals: list[IntentProposal]
+    ) -> dict[str, Any]:
+        """
+        Validate and persist typed intent proposals (A-07/A-09).
+
+        Every proposal is validated before anything is written: unknown or
+        out-of-scope target assets and unknown source facts reject the whole
+        batch. Duplicates are suppressed against any node already carrying the
+        intent's stable key (an open/running intent, a concluded intent or a fact
+        that already records the evidence), so the same intent is never created
+        twice.
+        """
+        require_graph_write_owner("apply_intent_proposals")
+        if not engagement_id:
+            raise GraphMutationError("engagement_id is required")
+
+        proposals = list(proposals or [])
+        validated: list[IntentProposal] = []
+        for proposal in proposals:
+            if not isinstance(proposal, IntentProposal):
+                raise IntentProposalError(
+                    f"expected IntentProposal, got {type(proposal).__name__}"
+                )
+            validated.append(proposal.validated())
+        if not validated:
+            return {"created": [], "suppressed": [], "proposals_received": 0}
+
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            for proposal in validated:
+                cursor.execute(
+                    "SELECT id::text AS id FROM graph_assets "
+                    "WHERE id::text = ANY(%s) AND scope_id = %s",
+                    (list(proposal.target_asset_ids), engagement_id),
+                )
+                in_scope = {row["id"] for row in cursor.fetchall()}
+                missing = set(proposal.target_asset_ids) - in_scope
+                if missing:
+                    raise GraphMutationError(
+                        "intent target asset(s) outside engagement scope "
+                        f"{engagement_id}: {sorted(missing)}"
+                    )
+
+                if proposal.from_fact_ids:
+                    cursor.execute(
+                        "SELECT id::text AS id FROM graph_nodes "
+                        "WHERE id::text = ANY(%s) AND engagement_id = %s "
+                        "AND kind = 'fact'",
+                        (list(proposal.from_fact_ids), engagement_id),
+                    )
+                    known_facts = {row["id"] for row in cursor.fetchall()}
+                    unknown_facts = set(proposal.from_fact_ids) - known_facts
+                    if unknown_facts:
+                        raise GraphMutationError(
+                            "intent references facts that are not this "
+                            f"engagement's facts: {sorted(unknown_facts)}"
+                        )
+
+                if proposal.goal_node_id:
+                    cursor.execute(
+                        "SELECT id FROM graph_nodes "
+                        "WHERE id = %s AND engagement_id = %s AND kind = 'goal'",
+                        (proposal.goal_node_id, engagement_id),
+                    )
+                    if cursor.fetchone() is None:
+                        raise GraphMutationError(
+                            "intent goal_node_id is not a goal of engagement "
+                            f"{engagement_id}"
+                        )
+
+            keys = [proposal.intent_key() for proposal in validated]
+            cursor.execute(
+                """
+                SELECT id, kind, state, payload
+                FROM graph_nodes
+                WHERE engagement_id = %s
+                  AND payload->>'intent_key' = ANY(%s)
+                """,
+                (engagement_id, keys),
+            )
+            existing = {}
+            for row in cursor.fetchall():
+                key = (row["payload"] or {}).get("intent_key")
+                if key and key not in existing:
+                    existing[key] = dict(row)
+
+            created: list[dict[str, Any]] = []
+            suppressed: list[dict[str, Any]] = []
+            for proposal in validated:
+                key = proposal.intent_key()
+                duplicate = existing.get(key)
+                if duplicate is not None:
+                    reason = (
+                        "open_intent"
+                        if duplicate["kind"] == GraphNodeKind.INTENT
+                        and duplicate["state"] in ("open", "running")
+                        else "existing_evidence"
+                    )
+                    suppressed.append(
+                        {
+                            "intent_key": key,
+                            "reason": reason,
+                            "node_id": str(duplicate["id"]),
+                        }
+                    )
+                    continue
+
+                cursor.execute(
+                    """
+                    INSERT INTO graph_nodes
+                        (engagement_id, kind, payload, state, priority, origin)
+                    VALUES (%s, 'intent', %s, 'open', %s, 'planner')
+                    RETURNING *
+                    """,
+                    (engagement_id, Json(proposal.to_payload()), proposal.priority),
+                )
+                node = dict(cursor.fetchone())
+
+                for asset_id in proposal.target_asset_ids:
+                    cursor.execute(
+                        """
+                        INSERT INTO graph_anchors (node_id, asset_id, role)
+                        SELECT %s, id, 'targets' FROM graph_assets
+                        WHERE id = %s AND scope_id = %s
+                        ON CONFLICT (node_id, asset_id, role) DO UPDATE SET
+                            created_at = NOW()
+                        RETURNING id
+                        """,
+                        (node["id"], asset_id, engagement_id),
+                    )
+                    if cursor.fetchone() is None:
+                        raise GraphMutationError(
+                            f"target asset {asset_id} left the engagement scope "
+                            "while the intent was being written"
+                        )
+
+                existing[key] = node
+                created.append(node)
+
+        return {
+            "created": created,
+            "suppressed": suppressed,
+            "proposals_received": len(validated),
+        }
 
     # --- graph outbox ---
 

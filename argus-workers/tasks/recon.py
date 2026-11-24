@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 def _ingest_recon_graph(
-    engagement_id: str, result, graph_todo_id: str | None = None
+    engagement_id: str,
+    result,
+    graph_todo_id: str | None = None,
+    graph_claim_token: str | None = None,
 ) -> dict:
     """Feed recon outcomes into the ARTEX asset graph (A2), best-effort.
 
@@ -48,6 +51,7 @@ def _ingest_recon_graph(
             completed = complete_coverage_gap(
                 engagement_id,
                 graph_todo_id,
+                claim_token=graph_claim_token,
                 asset_ids=[
                     asset["id"]
                     for asset in summary.get("assets", [])
@@ -265,6 +269,7 @@ def expand_recon(
     budget: dict,
     trace_id: str = None,
     graph_todo_id: str | None = None,
+    graph_claim_token: str | None = None,
 ):
     """
     Expand reconnaissance with additional targets
@@ -361,7 +366,12 @@ def expand_recon(
     ) as ctx:
         result = ctx.orchestrator.run_recon(ctx.job)
 
-        _ingest_recon_graph(engagement_id, result, graph_todo_id=graph_todo_id)
+        _ingest_recon_graph(
+            engagement_id,
+            result,
+            graph_todo_id=graph_todo_id,
+            graph_claim_token=graph_claim_token,
+        )
 
         # Save updated recon context BEFORE dispatching scan to eliminate
         # race condition. The orchestrator.run_recon() already persists it

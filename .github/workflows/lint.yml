@@ -286,6 +286,7 @@ jobs:
               "graph_node_edges",
               "planner_frontier",
               "planner_todos",
+              "planner_turns",
               "graph_outbox",
           }
 
@@ -309,6 +310,20 @@ jobs:
                       "AND table_name IN ('graph_assets', 'graph_asset_observations')"
                   )
                   tenant_columns = {row[0] for row in cur.fetchall()}
+                  cur.execute(
+                      "SELECT table_name, column_name FROM information_schema.columns "
+                      "WHERE table_schema = 'public' AND "
+                      "((table_name = 'planner_todos' AND column_name IN "
+                      "('claim_token', 'lease_expires_at', 'last_heartbeat_at')) "
+                      "OR (table_name = 'graph_outbox' AND column_name = 'planner_turn_id'))"
+                  )
+                  planner_columns = {(row[0], row[1]) for row in cur.fetchall()}
+                  cur.execute(
+                      "SELECT indexname FROM pg_indexes "
+                      "WHERE schemaname = 'public' "
+                      "AND indexname = 'idx_planner_todos_claim_token'"
+                  )
+                  claim_index = cur.fetchone() is not None
           finally:
               conn.close()
 
@@ -322,6 +337,19 @@ jobs:
                   "migration 035 did not add tenant_id to both graph tables: "
                   f"{sorted(tenant_columns)}"
               )
+          expected_planner_columns = {
+              ("planner_todos", "claim_token"),
+              ("planner_todos", "lease_expires_at"),
+              ("planner_todos", "last_heartbeat_at"),
+              ("graph_outbox", "planner_turn_id"),
+          }
+          unidentified = sorted(expected_planner_columns - planner_columns)
+          if unidentified:
+              raise SystemExit(
+                  f"migration 036 did not add claim/turn columns: {unidentified}"
+              )
+          if not claim_index:
+              raise SystemExit("migration 036 did not create the claim token index")
           print("Graph tables present: " + ", ".join(sorted(expected)))
           PY
 
@@ -332,6 +360,7 @@ jobs:
         run: |
           python -m pytest tests/test_graph_repository.py \
             tests/test_graph_ingestion.py \
+            tests/test_graph_planner.py \
             -v --timeout=180 --tb=long --junit-xml=graph-repository-results.xml
 
       - name: Confirm graph tests did not skip

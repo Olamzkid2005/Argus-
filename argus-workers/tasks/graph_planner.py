@@ -23,6 +23,7 @@ from typing import Any
 
 from database.dispatcher_graph import DispatcherGraph
 from database.graph_repository import ExplorationGraphRepository
+from orchestrator_pkg.planning.exploration_planner import ExplorationPlanner
 
 # Worker processes and CI have the full task stack; the planner's selection,
 # dispatch and completion helpers stay importable without it (e.g. a minimal
@@ -37,6 +38,10 @@ logger = logging.getLogger(__name__)
 
 RECON_TASK_NAME = "tasks.recon.expand_recon"
 _MAX_TARGETS = 25
+
+
+class PlannerHardFloorError(RuntimeError):
+    """A planning turn left an unmet goal with no open/running intent (A-07)."""
 
 
 def _default_dispatch(task_name: str, args: list) -> dict:
@@ -130,9 +135,13 @@ def dispatch_next_coverage_gap(
 
     payload = todo.get("payload") or {}
     targets = recon_targets_for_todo(dispatcher, engagement_id, todo)
+    claim_token = todo.get("claim_token")
     if not targets:
         dispatcher.release_recon_todo(
-            engagement_id, todo["id"], reason="no_recon_targets"
+            engagement_id,
+            todo["id"],
+            claim_token=claim_token,
+            reason="no_recon_targets",
         )
         return {
             "status": "skipped",
@@ -152,6 +161,7 @@ def dispatch_next_coverage_gap(
                 dict(budget or {}),
                 trace_id,
                 todo["id"],
+                claim_token,
             ],
         )
     except Exception as exc:  # noqa: BLE001 - dispatch failure must release the claim
@@ -162,7 +172,10 @@ def dispatch_next_coverage_gap(
             exc,
         )
         dispatcher.release_recon_todo(
-            engagement_id, todo["id"], reason=f"dispatch_failed: {exc}"
+            engagement_id,
+            todo["id"],
+            claim_token=claim_token,
+            reason=f"dispatch_failed: {exc}",
         )
         return {
             "status": "dispatch_failed",
@@ -187,6 +200,7 @@ def dispatch_next_coverage_gap(
         "gap_key": payload.get("coverage_gap_key"),
         "gap_type": payload.get("gap_type"),
         "targets": targets,
+        "claim_token": claim_token,
         "task_id": (result or {}).get("task_id"),
     }
 
@@ -195,6 +209,7 @@ def complete_coverage_gap(
     engagement_id: str,
     todo_id: str,
     *,
+    claim_token: str | None = None,
     asset_ids: list[str] | None = None,
     dispatcher: DispatcherGraph | None = None,
 ) -> dict[str, Any]:
@@ -202,12 +217,121 @@ def complete_coverage_gap(
     Close a dispatched coverage gap after its recon results were ingested.
 
     This is called by the recon task itself, so the completion always reuses the
-    same dispatcher-owned path that claimed the todo.
+    same dispatcher-owned path that claimed the todo, including its fencing token.
     """
     dispatcher = dispatcher or DispatcherGraph(ExplorationGraphRepository())
     return dispatcher.complete_recon_todo(
-        engagement_id, todo_id, asset_ids=asset_ids
+        engagement_id,
+        todo_id,
+        claim_token=claim_token,
+        asset_ids=asset_ids,
     )
+
+
+def run_planner_turn(
+    engagement_id: str,
+    *,
+    dispatcher: DispatcherGraph | None = None,
+    planner: ExplorationPlanner | None = None,
+    trigger: str = "outbox",
+    consume_events: bool = True,
+) -> dict[str, Any]:
+    """
+    Run one persisted planning turn.
+
+    The turn consumes the engagement's current outbox burst as one batch, asks the
+    planner for typed intent proposals, validates/persists them through the
+    dispatcher, enforces the hard floor and records the turn's counts. Any failure
+    marks the turn failed before re-raising, so a bad turn is visible rather than a
+    silent no-op.
+    """
+    dispatcher = dispatcher or DispatcherGraph(ExplorationGraphRepository())
+    planner = planner or ExplorationPlanner()
+    turn = dispatcher.begin_planner_turn(engagement_id, trigger=trigger)
+    try:
+        consumed = (
+            dispatcher.consume_planner_events(engagement_id, turn["id"])
+            if consume_events
+            else []
+        )
+        overview = dispatcher.planner_overview(engagement_id)
+        proposals = planner.plan(overview)
+        applied = dispatcher.apply_intent_proposals(engagement_id, proposals)
+
+        after = dispatcher.planner_overview(engagement_id)
+        unmet_goals = [
+            goal for goal in after["goals"] if goal.get("state") != "concluded"
+        ]
+        if unmet_goals and not after["open_intents"]:
+            raise PlannerHardFloorError(
+                "planner turn left unmet goal(s) "
+                f"{sorted(str(goal['id']) for goal in unmet_goals)} with no open or "
+                "running intent; the planner must propose applicable work or fail"
+            )
+
+        completed = dispatcher.complete_planner_turn(
+            turn["id"],
+            events_consumed=len(consumed),
+            proposals_received=applied["proposals_received"],
+            intents_created=len(applied["created"]),
+            duplicates_suppressed=len(applied["suppressed"]),
+        )
+    except Exception as exc:
+        dispatcher.fail_planner_turn(turn["id"], str(exc))
+        raise
+
+    return {
+        "turn": completed,
+        "events_consumed": len(consumed),
+        "event_ids": [str(event["id"]) for event in consumed],
+        "created": applied["created"],
+        "suppressed": applied["suppressed"],
+    }
+
+
+def run_planner_loop(
+    engagement_id: str,
+    *,
+    max_turns: int = 10,
+    dispatcher: DispatcherGraph | None = None,
+    planner: ExplorationPlanner | None = None,
+) -> dict[str, Any]:
+    """
+    Consume queued outbox work in bounded, debounced planning turns.
+
+    All events queued for the engagement at the start of a turn are coalesced into
+    that one turn (the debounce is the batch boundary). The loop stops when no
+    queued events remain or ``max_turns`` is reached, so a planner that keeps
+    producing graph changes cannot spin forever; leftover rows stay queued for the
+    next loop pass instead of being stranded.
+    """
+    if max_turns < 1:
+        raise ValueError("max_turns must be at least 1")
+    dispatcher = dispatcher or DispatcherGraph(ExplorationGraphRepository())
+    planner = planner or ExplorationPlanner()
+
+    turns = 0
+    events_consumed = 0
+    while turns < max_turns:
+        if dispatcher.count_queued_outbox(engagement_id) == 0:
+            return {
+                "engagement_id": engagement_id,
+                "turns": turns,
+                "events_consumed": events_consumed,
+                "stopped_reason": "idle",
+            }
+        result = run_planner_turn(
+            engagement_id, dispatcher=dispatcher, planner=planner
+        )
+        turns += 1
+        events_consumed += result["events_consumed"]
+
+    return {
+        "engagement_id": engagement_id,
+        "turns": turns,
+        "events_consumed": events_consumed,
+        "stopped_reason": "max_turns",
+    }
 
 
 def _dispatch_coverage_gap(

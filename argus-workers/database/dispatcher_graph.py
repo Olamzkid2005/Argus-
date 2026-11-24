@@ -15,6 +15,7 @@ write surface from worker/agent modules.
 from __future__ import annotations
 
 import functools
+import uuid
 from typing import Any
 
 from database.graph_ingest import GraphIngestor
@@ -31,6 +32,17 @@ from database.graph_repository import (
 )
 
 _UNSET = object()
+
+
+def _outbox_scope(value: str | None) -> str | None:
+    """Return a usable outbox scope id, or None for non-UUID/legacy ids."""
+    if not value:
+        return None
+    try:
+        uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return None
+    return str(value)
 
 
 def dispatcher_owned(method):
@@ -84,7 +96,7 @@ class DispatcherGraph:
         if not canonical_key or not asset_type:
             raise GraphMutationError("canonical_key and asset_type are required")
         tenant = self._resolve_tenant(scope_id, tenant_id)
-        return self._repo.upsert_asset(
+        asset = self._repo.upsert_asset(
             canonical_key,
             asset_type,
             display_value=display_value,
@@ -92,6 +104,18 @@ class DispatcherGraph:
             metadata=metadata,
             tenant_id=tenant,
         )
+        wake_scope = _outbox_scope(scope_id)
+        if wake_scope:
+            # A canonical asset change is a planner-relevant graph change: wake
+            # the planner through the outbox instead of polling.
+            self.enqueue_outbox(
+                scope_type="graph",
+                scope_id=wake_scope,
+                event_type="graph.asset.upserted",
+                payload={"asset_id": asset["id"], "asset_type": asset_type},
+                cause_engagement_id=wake_scope,
+            )
+        return asset
 
     def _resolve_tenant(
         self, scope_id: str | None, tenant_id: str | None
@@ -153,7 +177,7 @@ class DispatcherGraph:
             payload = {}
         if state is None:
             state = GraphNodeState.OPEN
-        return self._repo.create_node(
+        node = self._repo.create_node(
             engagement_id,
             kind,
             payload=payload,
@@ -162,6 +186,17 @@ class DispatcherGraph:
             owner=owner,
             origin=origin,
         )
+        wake_scope = _outbox_scope(engagement_id)
+        if wake_scope:
+            self.enqueue_outbox(
+                scope_type="graph",
+                scope_id=wake_scope,
+                event_type="graph.node.created",
+                payload={"node_id": node["id"], "kind": kind},
+                cause_node_id=node["id"],
+                cause_engagement_id=wake_scope,
+            )
+        return node
 
     @dispatcher_owned
     def update_node_state(self, node_id: str, state: str) -> dict[str, Any] | None:
@@ -380,7 +415,7 @@ class DispatcherGraph:
         lease_seconds: int = 300,
         gap_key: str | None = None,
     ) -> dict[str, Any] | None:
-        """Claim the next scheduled coverage-gap todo for an engagement."""
+        """Claim the next scheduled planner todo for an engagement."""
         if not engagement_id or not owner:
             raise GraphMutationError("engagement_id and owner are required")
         return self._repo.claim_recon_todo(
@@ -391,19 +426,57 @@ class DispatcherGraph:
         )
 
     @dispatcher_owned
+    def heartbeat_recon_todo(
+        self,
+        engagement_id: str,
+        todo_id: str,
+        *,
+        claim_token: str,
+        lease_seconds: int = 300,
+    ) -> dict[str, Any]:
+        """Renew a live claim's lease; stale tokens receive CLAIM_LOST."""
+        if not engagement_id or not todo_id or not claim_token:
+            raise GraphMutationError(
+                "engagement_id, todo_id and claim_token are required"
+            )
+        return self._repo.heartbeat_recon_todo(
+            engagement_id,
+            todo_id,
+            claim_token=claim_token,
+            lease_seconds=lease_seconds,
+        )
+
+    @dispatcher_owned
     def complete_recon_todo(
         self,
         engagement_id: str,
         todo_id: str,
         *,
+        claim_token: str | None = None,
         asset_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Close a claimed coverage-gap todo and record coverage of its results."""
         if not engagement_id or not todo_id:
             raise GraphMutationError("engagement_id and todo_id are required")
-        return self._repo.complete_recon_todo(
-            engagement_id, todo_id, asset_ids=asset_ids
+        completed = self._repo.complete_recon_todo(
+            engagement_id, todo_id, claim_token=claim_token, asset_ids=asset_ids
         )
+        wake_scope = _outbox_scope(engagement_id)
+        if wake_scope:
+            self.enqueue_outbox(
+                scope_type="graph",
+                scope_id=wake_scope,
+                event_type="graph.todo.completed",
+                payload={
+                    "todo_id": completed["id"],
+                    "coverage_gap_key": (completed.get("payload") or {}).get(
+                        "coverage_gap_key"
+                    ),
+                },
+                cause_node_id=completed.get("exploration_node_id"),
+                cause_engagement_id=wake_scope,
+            )
+        return completed
 
     @dispatcher_owned
     def release_recon_todo(
@@ -411,14 +484,103 @@ class DispatcherGraph:
         engagement_id: str,
         todo_id: str,
         *,
+        claim_token: str | None = None,
         reason: str | None = None,
     ) -> dict[str, Any] | None:
         """Release a claimed todo back to the frontier after a dispatch failure."""
         if not engagement_id or not todo_id:
             raise GraphMutationError("engagement_id and todo_id are required")
         return self._repo.release_recon_todo(
-            engagement_id, todo_id, reason=reason
+            engagement_id, todo_id, claim_token=claim_token, reason=reason
         )
+
+    # ----- planner turns + typed intent proposals (A3) -----
+
+    @dispatcher_owned
+    def begin_planner_turn(
+        self, engagement_id: str, *, trigger: str = "outbox"
+    ) -> dict[str, Any]:
+        """Record the start of one planning turn."""
+        if not engagement_id:
+            raise GraphMutationError("engagement_id is required")
+        return self._repo.begin_planner_turn(engagement_id, trigger=trigger)
+
+    @dispatcher_owned
+    def consume_planner_events(
+        self,
+        engagement_id: str,
+        turn_id: str,
+        *,
+        scope_type: str = "graph",
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Coalesce every queued outbox event for an engagement into one turn."""
+        if not engagement_id or not turn_id:
+            raise GraphMutationError("engagement_id and turn_id are required")
+        return self._repo.consume_planner_events(
+            engagement_id, turn_id, scope_type=scope_type, limit=limit
+        )
+
+    @dispatcher_owned
+    def complete_planner_turn(
+        self,
+        turn_id: str,
+        *,
+        events_consumed: int,
+        proposals_received: int,
+        intents_created: int,
+        duplicates_suppressed: int,
+    ) -> dict[str, Any]:
+        """Mark a planning turn completed with its counts."""
+        if not turn_id:
+            raise GraphMutationError("turn_id is required")
+        return self._repo.complete_planner_turn(
+            turn_id,
+            events_consumed=events_consumed,
+            proposals_received=proposals_received,
+            intents_created=intents_created,
+            duplicates_suppressed=duplicates_suppressed,
+        )
+
+    @dispatcher_owned
+    def fail_planner_turn(self, turn_id: str, error: str) -> dict[str, Any]:
+        """Record a loud planning-turn failure."""
+        if not turn_id:
+            raise GraphMutationError("turn_id is required")
+        return self._repo.fail_planner_turn(turn_id, error)
+
+    def find_planner_turns(
+        self, engagement_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """List recent planning turns for an engagement."""
+        if not engagement_id:
+            raise GraphMutationError("engagement_id is required")
+        return self._repo.find_planner_turns(engagement_id, limit=limit)
+
+    def count_queued_outbox(
+        self, engagement_id: str, *, scope_type: str = "graph"
+    ) -> int:
+        """Count outbox events still waiting for a planning turn."""
+        if not engagement_id:
+            raise GraphMutationError("engagement_id is required")
+        return self._repo.count_queued_outbox(
+            engagement_id, scope_type=scope_type
+        )
+
+    def planner_overview(self, engagement_id: str) -> dict[str, Any]:
+        """Read the bounded planner snapshot for an engagement."""
+        if not engagement_id:
+            raise GraphMutationError("engagement_id is required")
+        return self._repo.planner_overview(engagement_id)
+
+    @dispatcher_owned
+    def apply_intent_proposals(
+        self, engagement_id: str, proposals: list
+    ) -> dict[str, Any]:
+        """Validate and persist typed planner intent proposals."""
+        if not engagement_id:
+            raise GraphMutationError("engagement_id is required")
+        return self._repo.apply_intent_proposals(engagement_id, proposals)
 
     # ----- graph outbox -----
 
@@ -516,7 +678,7 @@ class DispatcherGraph:
         other than the scope owner is rejected before anything is written.
         """
         tenant = self._resolve_tenant(scope_id, tenant_id)
-        return self._ingestor.ingest_observation(
+        outcome = self._ingestor.ingest_observation(
             asset_type,
             observed_value,
             source=source,
@@ -527,6 +689,20 @@ class DispatcherGraph:
             create_parents=create_parents,
             tenant_id=tenant,
         )
+        wake_scope = _outbox_scope(scope_id)
+        if wake_scope and outcome.get("accepted"):
+            self.enqueue_outbox(
+                scope_type="graph",
+                scope_id=wake_scope,
+                event_type="graph.asset.observed",
+                payload={
+                    "asset_id": outcome["asset"]["id"],
+                    "asset_type": asset_type,
+                    "source": source,
+                },
+                cause_engagement_id=wake_scope,
+            )
+        return outcome
 
     def compute_coverage(
         self,
