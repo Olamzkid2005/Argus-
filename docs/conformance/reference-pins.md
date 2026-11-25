@@ -9,7 +9,7 @@ not a claim that all downstream behaviours are implemented yet.
 
 - **File:** `docs/conformance/argus_three_frameworks_implementation_conformance_plan.md`
 - **Role:** Reference specification and conformance test list for the three
-  proposed architectures (ARTEX, PentAGI, CAIRN).
+  proposed architectures (graph exploration, PentAGI, fact-and-intent).
 - **What I used it for:**
   - Section 0: layered architecture decision and non-negotiable control rule
   - Section 2: existing Argus components to preserve and the authoritative-state
@@ -28,9 +28,9 @@ before implementing the corresponding behaviour.
 
 | Project | Pinned commit | Primary files cited in the plan |
 |---|---|---|
-| ARTEX | `94757c5d7e704ac1c095ee99e97d9ac4d9d428c5` | README, `agent/planner.go`, `db/exploration.go`, `db/assets.go`, `server/engine.go` |
+| Graph exploration reference | `94757c5d7e704ac1c095ee99e97d9ac4d9d428c5` | README, `agent/planner.go`, `db/exploration.go`, `db/assets.go`, `server/engine.go` |
 | PentAGI | `cffed9485aa1cca70762cd08a57ac62a80406258` | `backend/docs/flow_execution.md`, `backend/pkg/providers/subtask_patch.go`, `backend/pkg/controller/subtask.go`, `backend/pkg/controller/task.go` |
-| CAIRN | `8e7e0ea67552383851dfcabfba0c4e9c8d007878` | `docs/specs/dispatcher-design.md`, `cairn/src/cairn/dispatcher/scheduler/loop.py`, `cairn/src/cairn/dispatcher/contracts.py`, `cairn/src/cairn/dispatcher/tasks/explore.py`, `cairn/src/cairn/dispatcher/tasks/reason.py` |
+| Fact-and-intent reference | `8e7e0ea67552383851dfcabfba0c4e9c8d007878` | `docs/specs/dispatcher-design.md`, `dispatcher/scheduler/loop.py`, `dispatcher/contracts.py`, `dispatcher/tasks/explore.py`, `dispatcher/tasks/reason.py` |
 | Argus baseline | `0e006958927c82d95d293f4e08262df79d95e921` | README, `workflow-runner.ts`, `planner/executor.ts`, `mcp_server.py`, current gaps doc |
 
 ## 3. Local repository baseline actually inspected for Stage 0

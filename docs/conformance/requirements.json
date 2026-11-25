@@ -13,15 +13,15 @@
       "argus-workers/database/repositories/engagement_repository.py",
       "argus-workers/tests/test_attack_graph_db.py"
     ],
-    "artex_ledger": "docs/conformance/artex-graph-conformance.md",
+    "graph_exploration_ledger": "docs/conformance/graph-exploration-conformance.md",
     "pentagi_ledger": "docs/conformance/pentagi-delegation-conformance.md",
     "a5_shadow_artifact": "docs/conformance/shadow-planner-comparison.json"
   },
   "stage0_decisions": {
     "first_deployment_mode_for_artrex_pass": "Python/PostgreSQL",
-    "why_first_mode": "ARTEX needs durable graph state plus compare-and-set claim/lease semantics; the repository already has a PostgreSQL-backed repository layer and connection discipline that make the first testable write path realistic without inventing a third store",
+    "why_first_mode": "Graph exploration needs durable graph state plus compare-and-set claim/lease semantics; the repository already has a PostgreSQL-backed repository layer and connection discipline that make the first testable write path realistic without inventing a third store",
     "authoritative_backend_for_first_pass": "PostgreSQL via the existing argus-workers/database repository pattern",
-    "graph_layer_owner_for_first_pass": "ARTEX",
+    "graph_layer_owner_for_first_pass": "graph_exploration",
     "attack_graph_relationship": "separate; attack_graph_db.py is not repurposed as the exploration graph",
     "c18_means_for_artrex_first_pass": "one dispatcher-owned graph repository interface; workers/agents return structured output and never commit graph state directly; first tests prove that boundary with a real repository call path"
   },
@@ -29,15 +29,15 @@
     "A-04": {
       "id": "A-04",
       "title": "Create an intent/fact/finding anchored to an asset",
-      "reference_behaviour": "ARTEX exploration graph nodes can be anchored to one or more asset IDs, and graph queries return the exact relationship.",
-      "upstream_proof": "Plan Section 3.1 and 3.4; ARTEX db/exploration.go and db/assets.go cited in plan Section 1",
+      "reference_behaviour": "Exploration graph nodes can be anchored to one or more asset IDs, and graph queries return the exact relationship.",
+      "upstream_proof": "Plan Section 3.1 and 3.4; graph exploration db/exploration.go and db/assets.go cited in plan Section 1",
       "argus_implementation": "IMPLEMENTED AND COMMITTED",
       "argus_implementation_path": "argus-workers/database/migrations/033_graph_tables.sql, argus-workers/database/graph_repository.py, argus-workers/database/dispatcher_graph.py, argus-workers/tests/test_graph_repository.py",
       "test_proof": "DB-BACKED INTEGRATION TESTS PASS: tests/test_graph_repository.py run against PostgreSQL 16 with migration 033 applied (46 passed, 0 skipped). CI job graph-repository-db in .github/workflows/lint.yml provisions Postgres, applies migration 033 and runs the same tests, failing if any are skipped.",
       "runtime_proof": "PASSED (2026-11-23): PostgreSQL 16 database with database/migrations/033_graph_tables.sql applied; all 46 graph repository + dispatcher tests passed and none skipped.",
       "result": "VERIFIED (DB-BACKED)",
       "deviation": "none",
-      "notes": "First ARTEX implementation target is committed and expanded: migration, dispatcher-owned graph repository, dispatcher surface, and unit tests. The pure-logic dispatcher validation tests pass here; the repository integration tests are skipped because DATABASE_URL is not reachable in this environment. DB-backed verification (23 Nov 2026): the integration tests now run against a real Postgres in CI instead of skipping."
+      "notes": "First graph implementation target is committed and expanded: migration, dispatcher-owned graph repository, dispatcher surface, and unit tests. The pure-logic dispatcher validation tests pass here; the repository integration tests are skipped because DATABASE_URL is not reachable in this environment. DB-backed verification (23 Nov 2026): the integration tests now run against a real Postgres in CI instead of skipping."
     },
     "anchors_and_coverage": {
       "id": "anchors_and_coverage",
@@ -115,13 +115,13 @@
       "id": "mcp_agentic_plan_blockers",
       "title": "MCP agentic plan tests blocked in this environment",
       "reference_behaviour": "The MCP agentic plan tests should pass when their required runtime dependencies are available.",
-      "argus_implementation": "NOT CHANGED BY ARTEX; BLOCKED BY ENVIRONMENT FOR THIS RUN",
+      "argus_implementation": "NOT CHANGED BY GRAPH EXPLORATION; BLOCKED BY ENVIRONMENT FOR THIS RUN",
       "argus_implementation_path": "argus-workers/tests/test_mcp_agentic_plan.py",
       "test_proof": "TESTS SKIPPED IN THIS ENVIRONMENT",
       "runtime_proof": "NOT RUN (blocked by missing database path and by missing module attribute for the hypotheses helper)",
       "result": "NOT VERIFIED",
       "deviation": "none",
-      "notes": "Two distinct blockers affect test_mcp_agentic_plan.py in this environment: (1) _agentic_plan needs a reachable database path to reach the LLM branch, so several tests are skipped with pytest.mark.skip; (2) TestPlanProvenanceThroughInitAndNext uses a helper that tries to patch mcp_server.HypothesisRepository, a name that does not exist on the module at import time, so those two tests are also skipped. These are environment/implementation-mismatch blockers, not ARTEX graph-layer blockers."
+      "notes": "Two distinct blockers affect test_mcp_agentic_plan.py in this environment: (1) _agentic_plan needs a reachable database path to reach the LLM branch, so several tests are skipped with pytest.mark.skip; (2) TestPlanProvenanceThroughInitAndNext uses a helper that tries to patch mcp_server.HypothesisRepository, a name that does not exist on the module at import time, so those two tests are also skipped. These are environment/implementation-mismatch blockers, not graph-layer blockers."
     },
     "asset_canonicalization": {
       "id": "A-01",
@@ -272,7 +272,7 @@
       ],
       "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_graph_planner.py tests/test_graph_repository.py tests/test_graph_ingestion.py -q -p no:randomly",
       "runtime_evidence": "DB-backed run: 150 passed (test_graph_planner + test_graph_repository + test_graph_ingestion), 2026-11-24",
-      "deviation": "planner now consults scheduled todos (plan 3.5.5) and covers classes breadth-first; see artex-graph-conformance.md section 3"
+      "deviation": "planner now consults scheduled todos (plan 3.5.5) and covers classes breadth-first; see graph-exploration-conformance.md section 3"
     },
     "A-08": {
       "id": "A-08",
@@ -294,7 +294,7 @@
       ],
       "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_graph_planner.py tests/test_graph_repository.py tests/test_graph_ingestion.py -q -p no:randomly",
       "runtime_evidence": "shadow gate: 6 scheduled gaps -> planner proposed 0 duplicates; unscheduled -> 5 proposals covering every untested class",
-      "deviation": "planner now consults scheduled todos (plan 3.5.5) and covers classes breadth-first; see artex-graph-conformance.md section 3"
+      "deviation": "planner now consults scheduled todos (plan 3.5.5) and covers classes breadth-first; see graph-exploration-conformance.md section 3"
     },
     "A-10": {
       "id": "A-10",
@@ -577,8 +577,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c01_bootstrap_requires_compatible_worker_or_reservation"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-02": {
@@ -587,8 +587,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c02_execute_writes_one_fact_then_completes_goal"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-03": {
@@ -597,8 +597,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c03_execute_timeout_conclude_writes_fact_only"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-04": {
@@ -607,8 +607,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c04_conclude_cannot_complete_the_goal"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-05": {
@@ -617,8 +617,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c05_both_stages_fail_releases_reservation"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-06": {
@@ -627,8 +627,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c06_complete_and_intents_conflict_writes_nothing"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-07": {
@@ -637,8 +637,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c07_unknown_fact_id_is_rejected"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-08": {
@@ -647,8 +647,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c08_empty_reason_with_no_open_intents_is_invalid"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-09": {
@@ -657,8 +657,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c09_intents_are_bounded_and_truncation_recorded"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-10": {
@@ -667,8 +667,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c10_only_one_reason_lease"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-11": {
@@ -677,8 +677,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c11_failed_reason_does_not_immediately_retrigger"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-12": {
@@ -687,8 +687,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c12_fact_or_hint_growth_triggers_reason"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-13": {
@@ -697,8 +697,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c13_last_open_intent_closing_triggers_reason"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-14": {
@@ -707,8 +707,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c14_explore_receives_exactly_one_intent"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-15": {
@@ -717,8 +717,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c15_explore_writes_one_conclusion_fact"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-16": {
@@ -727,8 +727,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c16_malformed_explore_then_conclude_writes_once"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-17": {
@@ -737,8 +737,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c17_cancellation_and_lost_lease_block_conclusion"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-18": {
@@ -748,8 +748,8 @@
         "tests/test_control_plane.py::test_c18_workers_have_no_write_path_or_credentials",
         "scripts/check_graph_import_boundary.py"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-19": {
@@ -758,8 +758,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c19_stopped_engagement_cancels_and_rejects_late_results"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-20": {
@@ -768,8 +768,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c20_scheduler_skips_full_and_unhealthy_workers"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-21": {
@@ -778,8 +778,8 @@
       "tests": [
         "tests/test_control_plane.py::test_c21_one_dispatcher_leader_per_engagement"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "ledger": "docs/conformance/control-plane-conformance.md"
     },
     "C-22": {
@@ -788,8 +788,44 @@
       "tests": [
         "tests/test_control_plane.py::test_c22_extra_fields_rejected_and_legacy_alias_opt_in"
       ],
-      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly",
-      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 25 passed, 0 skipped (2026-11-25)",
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
+      "ledger": "docs/conformance/control-plane-conformance.md"
+    },
+    "C-23": {
+      "id": "C-23",
+      "status": "PASS",
+      "tests": [
+        "tests/test_control_plane.py::test_bootstrap_result_rejected_when_engagement_stops",
+        "tests/test_control_plane.py::test_reason_result_rejected_when_engagement_stops"
+      ],
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
+      "note": "A commit is rejected after the engagement stops; no fact or intent is written.",
+      "ledger": "docs/conformance/control-plane-conformance.md"
+    },
+    "C-24": {
+      "id": "C-24",
+      "status": "PASS",
+      "tests": [
+        "tests/test_control_plane.py::test_bootstrap_result_rejected_when_task_is_cancelled",
+        "tests/test_control_plane.py::test_reason_result_rejected_when_task_is_cancelled"
+      ],
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
+      "note": "A result for a cancelled task raises LateResult and writes nothing.",
+      "ledger": "docs/conformance/control-plane-conformance.md"
+    },
+    "C-25": {
+      "id": "C-25",
+      "status": "PASS",
+      "tests": [
+        "tests/test_control_plane.py::test_control_plane_tick_runs_bootstrap_and_honours_off",
+        "tests/test_control_plane_bridge.py"
+      ],
+      "command": "cd argus-workers && python -m pytest tests/test_control_plane.py tests/test_control_plane_bridge.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
+      "note": "Typed task_* stdio MCP bridge, strict endpoint and the scheduled dispatcher tick.",
       "ledger": "docs/conformance/control-plane-conformance.md"
     }
   }

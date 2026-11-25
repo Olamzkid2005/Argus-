@@ -2,7 +2,7 @@
 Dispatcher-owned graph mutation surface.
 
 This is the smallest control-plane surface needed to own the first durable
-graph write for A-04 and the rest of the ARTEX first-pass surfaces. It exists
+graph write for A-04 and the rest of the first-pass graph surfaces. It exists
 so workers/agents return structured output and the dispatcher decides what
 actually gets committed through the graph repository.
 
@@ -62,7 +62,7 @@ def dispatcher_owned(method):
 
 class DispatcherGraph:
     """
-    Dispatcher-owned graph owner for the first ARTEX implementation pass.
+    Dispatcher-owned graph owner for the first graph implementation pass.
 
     The dispatcher (not workers/agents) is the only caller expected to use this
     directly for durable mutations.

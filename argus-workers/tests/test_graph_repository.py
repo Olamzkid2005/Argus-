@@ -1,7 +1,7 @@
 """
 Tests for the dispatcher-owned graph repository and dispatcher surface.
 
-These tests cover the ARTEX first-pass surfaces:
+These tests cover the first-pass graph surfaces:
 - canonical assets
 - exploration nodes
 - anchors + coverage

@@ -74,6 +74,19 @@ class PostgresControlPlaneStore:
             row = cur.fetchone()
         return str(row["status"]).lower() if row else None
 
+    def list_active_engagements(self, *, limit: int = 50) -> list[str]:
+        """Ids of active engagements, oldest first, for the scheduled tick."""
+        if limit < 1:
+            raise ProtocolError("limit must be positive")
+        with _cursor(False) as cur:
+            cur.execute(
+                "SELECT id FROM engagements "
+                "WHERE LOWER(status) = ANY(%s) "
+                "ORDER BY created_at ASC, id ASC LIMIT %s",
+                (sorted(ACTIVE_ENGAGEMENT_STATUSES), limit),
+            )
+            return [str(row["id"]) for row in cur.fetchall()]
+
     def graph_counts(self, engagement_id: str) -> dict[str, int]:
         with _cursor(False) as cur:
             cur.execute(
@@ -318,6 +331,30 @@ class PostgresControlPlaneStore:
             cur.execute("SELECT * FROM control_plane_tasks WHERE id = %s", (task_id,))
             row = cur.fetchone()
         return dict(row) if row else None
+
+    def _require_live_task(
+        self, task_id: str, *, engagement_id: str
+    ) -> dict[str, Any]:
+        """Reject a commit whose task or engagement stopped while it was running.
+
+        A result is only accepted for a running task whose engagement is still
+        active. The check and the write it guards are consecutive statements in
+        the same dispatcher process, so a cancellation that lands here cancels
+        the task first and never reaches the graph.
+        """
+        task = self.get_task(task_id)
+        if task is None:
+            raise ProtocolError(f"task {task_id} does not exist")
+        if str(task["engagement_id"]) != str(engagement_id):
+            raise ProtocolError(f"task {task_id} belongs to a different engagement")
+        if not self.engagement_active(engagement_id):
+            self.cancel_task(task_id, "engagement is no longer active")
+            raise LateResult(
+                f"engagement {engagement_id} is no longer active; result rejected"
+            )
+        if task["status"] != "running":
+            raise LateResult(f"task {task_id} is {task['status']}; result rejected")
+        return task
 
     def finish_task(
         self,
@@ -565,8 +602,14 @@ class PostgresControlPlaneStore:
         )
 
     def bootstrap_execute_result(
-        self, engagement_id: str, fact_description: str, complete_description: str
+        self,
+        engagement_id: str,
+        fact_description: str,
+        complete_description: str,
+        *,
+        task_id: str,
     ) -> dict[str, Any]:
+        self._require_live_task(task_id, engagement_id=engagement_id)
         row = self.bootstrap_row(engagement_id)
         if row is None or row["status"] != "reserved":
             raise ProtocolError("bootstrap is not reserved for this engagement")
@@ -585,8 +628,9 @@ class PostgresControlPlaneStore:
         return {"fact": fact, "goal_node_id": goal_id, "complete": complete_description}
 
     def bootstrap_conclude_result(
-        self, engagement_id: str, fact_description: str
+        self, engagement_id: str, fact_description: str, *, task_id: str
     ) -> dict[str, Any]:
+        self._require_live_task(task_id, engagement_id=engagement_id)
         row = self.bootstrap_row(engagement_id)
         if row is None or row["status"] != "reserved":
             raise ProtocolError("bootstrap is not reserved for this engagement")
@@ -634,7 +678,10 @@ class PostgresControlPlaneStore:
             "open_intents": intents,
         }
 
-    def apply_reason(self, engagement_id: str, decision: ReasonDecision) -> dict[str, Any]:
+    def apply_reason(
+        self, engagement_id: str, decision: ReasonDecision, *, task_id: str
+    ) -> dict[str, Any]:
+        self._require_live_task(task_id, engagement_id=engagement_id)
         if decision.kind == "noop":
             return {"kind": "noop", "created": []}
         snapshot = self.reason_snapshot(engagement_id)

@@ -97,7 +97,7 @@ services:
       DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required}"
       REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD:-change_me_in_production}@redis:6379}
       CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-4}
-      # The ARTEX planner loop is on by default so the beat drain consumes
+      # The graph planner loop is on by default so the beat drain consumes
       # queued graph work; set either to off for an instant rollback, or to
       # shadow to record turns and proposals without dispatching anything.
       ARGUS_ORCHESTRATION_V2: ${ARGUS_ORCHESTRATION_V2:-on}

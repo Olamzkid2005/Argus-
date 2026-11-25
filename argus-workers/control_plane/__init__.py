@@ -29,9 +29,23 @@ from control_plane.store import (
     NotLeader,
     PostgresControlPlaneStore,
 )
+from control_plane.task_service import (
+    METHODS as TASK_METHODS,
+)
+from control_plane.task_service import (
+    TaskRequest,
+    dispatch_task_request,
+    get_task_executor,
+    parse_task_request,
+    set_task_executor,
+)
+from control_plane.worker_bridge import MCPTaskBridge, worker_runner_from_env
 
 __all__ = [
     "DEFAULT_MAX_INTENTS",
+    "MCPTaskBridge",
+    "TASK_METHODS",
+    "TaskRequest",
     "SCHEMA_VERSION",
     "BootstrapConcludeResult",
     "BootstrapExecuteResult",
@@ -48,10 +62,15 @@ __all__ = [
     "WorkerView",
     "WorkerRunner",
     "choose_worker",
+    "dispatch_task_request",
+    "get_task_executor",
     "global_capacity_available",
+    "parse_task_request",
     "parse_bootstrap_conclude",
     "parse_bootstrap_execute",
     "parse_explore_result",
     "parse_reason_result",
     "parse_worker_result",
+    "set_task_executor",
+    "worker_runner_from_env",
 ]

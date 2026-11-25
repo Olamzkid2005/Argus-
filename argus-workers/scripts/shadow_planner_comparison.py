@@ -200,7 +200,7 @@ def _run_scenario(conn, *, scenario: str, schedule_gaps: bool) -> dict:
 
     before = _snapshot(dispatcher, engagement_id)
 
-    # --- the ARTEX planner, in shadow mode ---
+    # --- the graph planner, in shadow mode ---
     overview = dispatcher.planner_overview(engagement_id)
     proposals = [
         {

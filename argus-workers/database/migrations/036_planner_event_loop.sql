@@ -1,4 +1,4 @@
--- Migration 036: ARTEX planner event loop (A3)
+-- Migration 036: Graph planner event loop (A3)
 --
 -- Adds the durable pieces the planner event loop needs:
 --  - planner_turns: one row per debounced planning turn, so a burst of outbox
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS planner_turns (
     completed_at TIMESTAMPTZ
 );
 
-COMMENT ON TABLE planner_turns IS 'Durable ARTEX planning turns; coalesced outbox bursts and their outcome.';
+COMMENT ON TABLE planner_turns IS 'Durable graph planning turns; coalesced outbox bursts and their outcome.';
 COMMENT ON COLUMN planner_turns.status IS 'Turn lifecycle: running, completed, failed.';
 
 CREATE INDEX IF NOT EXISTS idx_planner_turns_engagement

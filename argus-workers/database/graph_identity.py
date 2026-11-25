@@ -1,5 +1,5 @@
 """
-Deterministic canonical asset identity for the ARTEX asset graph (A2).
+Deterministic canonical asset identity for the asset graph (A2).
 
 Agents submit observations; they never invent canonical IDs. This module turns a
 raw observed value into one canonical identity per asset type, so the same asset

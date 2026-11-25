@@ -3,7 +3,7 @@
 Argus maps PentAGI's hierarchy onto existing concepts (plan §4.2):
 
 * Engagement      -> Flow
-* Investigation Intent (ARTEX node) -> Task / work package
+* Investigation Intent (graph node) -> Task / work package
 * generated plan  -> ordered Subtasks
 * tool call       -> Action
 

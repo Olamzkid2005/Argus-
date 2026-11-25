@@ -208,9 +208,14 @@ class ControlPlaneDispatcher:
                 logger.exception("bootstrap conclude crashed for %s", engagement_id)
                 self._store.release_bootstrap(engagement_id, f"conclude crashed: {exc}")
                 return self._store.finish_task(task["id"], "failed", error=str(exc))
-            result = self._store.bootstrap_conclude_result(
-                engagement_id, parsed_conclude.fact_description
-            )
+            try:
+                result = self._store.bootstrap_conclude_result(
+                    engagement_id, parsed_conclude.fact_description, task_id=task["id"]
+                )
+            except LateResult as exc:
+                logger.warning("bootstrap conclude rejected for %s: %s", engagement_id, exc)
+                self._release_bootstrap(engagement_id, str(exc))
+                return "cancelled"
             return self._store.finish_task(
                 task["id"], "succeeded", result=result, conclusion_written=True
             )
@@ -218,14 +223,27 @@ class ControlPlaneDispatcher:
             logger.exception("bootstrap executor failed for %s", engagement_id)
             self._store.release_bootstrap(engagement_id, f"bootstrap crashed: {exc}")
             return self._store.finish_task(task["id"], "failed", error=str(exc))
-        result = self._store.bootstrap_execute_result(
-            engagement_id,
-            parsed.fact_description,
-            parsed.complete_description,
-        )
+        try:
+            result = self._store.bootstrap_execute_result(
+                engagement_id,
+                parsed.fact_description,
+                parsed.complete_description,
+                task_id=task["id"],
+            )
+        except LateResult as exc:
+            logger.warning("bootstrap result rejected for %s: %s", engagement_id, exc)
+            self._release_bootstrap(engagement_id, str(exc))
+            return "cancelled"
         return self._store.finish_task(
             task["id"], "succeeded", result=result, conclusion_written=True
         )
+
+    def _release_bootstrap(self, engagement_id: str, reason: str) -> None:
+        """Release a reservation a rejected result can no longer complete."""
+        try:
+            self._store.release_bootstrap(engagement_id, reason)
+        except ProtocolError:
+            logger.debug("bootstrap reservation for %s was already gone", engagement_id)
 
     # ----- reason -----
 
@@ -278,7 +296,13 @@ class ControlPlaneDispatcher:
                 max_intents=self._max_intents,
                 allow_legacy_intent=self._allow_legacy_intent,
             )
-            result = self._store.apply_reason(engagement_id, decision)
+            try:
+                result = self._store.apply_reason(
+                    engagement_id, decision, task_id=task["id"]
+                )
+            except LateResult as exc:
+                logger.warning("reason result rejected for %s: %s", engagement_id, exc)
+                return "cancelled"
             checkpoint = self._store.record_reason_checkpoint(
                 engagement_id, decision.kind
             )

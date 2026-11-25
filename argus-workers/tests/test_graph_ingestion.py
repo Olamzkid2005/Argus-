@@ -1,5 +1,5 @@
 """
-Tests for the recon -> ARTEX asset graph ingestion bridge (A2).
+Tests for the recon -> asset graph ingestion bridge (A2).
 
 The bridge turns a recon context (live endpoints, subdomains, open ports) into
 canonical assets and observations. Unit tests use a stub repository so the

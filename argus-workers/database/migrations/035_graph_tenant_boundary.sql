@@ -1,4 +1,4 @@
--- Migration 035: ARTEX tenant boundary on the canonical graph (A-03)
+-- Migration 035: Graph tenant boundary on the canonical graph (A-03)
 --
 -- A scope (engagement) belongs to one tenant (engagements.org_id). Graph assets
 -- and observations record that tenant so a write naming a different tenant than

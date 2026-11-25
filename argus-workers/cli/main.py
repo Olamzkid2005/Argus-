@@ -259,7 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
     # argus graph-coverage
     graph_coverage_parser = subparsers.add_parser(
         "graph-coverage",
-        help="Report ARTEX asset coverage against the engagement's approved scope",
+        help="Report graph asset coverage against the engagement's approved scope",
     )
     graph_coverage_parser.add_argument(
         "--engagement", "-e", required=True, help="Engagement UUID"

@@ -2691,7 +2691,7 @@ class MCPServer:
             "fallback": True,  # Signal to TypeScript that this is degraded (non-LLM) response
         }
 
-    # ----- CAIRN worker protocol: one intent at a time (A4) -----
+    # ----- fact-and-intent worker protocol: one intent at a time (A4) -----
 
     @staticmethod
     def _graph_worker_rpc():
@@ -2838,7 +2838,7 @@ class MCPServer:
             return {"error": str(exc), "code": "CLAIM_LOST"}
 
     def handle_graph_complete_intent(self, params: dict) -> dict:
-        """Conclude one claimed intent with exactly one fact (CAIRN explore)."""
+        """Conclude one claimed intent with exactly one fact (fact-and-intent explore)."""
         engagement_id = str(params.get("engagement_id", "") or "")
         intent_node_id = str(params.get("intent_node_id", "") or "")
         claim_token = str(params.get("claim_token", "") or "")
@@ -2918,6 +2918,27 @@ class MCPServer:
             return self._json_safe(result)
         except Exception as exc:
             return {"error": str(exc)}
+
+    # ----- typed worker task protocol (bootstrap / reason / explore) -----
+
+    @staticmethod
+    def _task_request(method: str, params: Any) -> dict:
+        """Validate and run one typed ``task_*`` request (see control_plane)."""
+        from control_plane.task_service import dispatch_task_request
+
+        return dispatch_task_request(method, params or {})
+
+    def handle_task_bootstrap(self, params: dict) -> dict:
+        """Run one bounded bootstrap job; the dispatcher commits the result."""
+        return self._task_request("task_bootstrap", params)
+
+    def handle_task_reason(self, params: dict) -> dict:
+        """Run one bounded reason job; the dispatcher validates and commits it."""
+        return self._task_request("task_reason", params)
+
+    def handle_task_explore(self, params: dict) -> dict:
+        """Run one claimed-intent explore job; the dispatcher writes the fact."""
+        return self._task_request("task_explore", params)
 
     @staticmethod
     def _build_attack_graph(
@@ -3348,6 +3369,19 @@ def main():
     transport.register("graph_report_trace", handle_graph_report_trace)
     transport.register("graph_search_traces", handle_graph_search_traces)
     transport.register("graph_record_action", handle_graph_record_action)
+
+    def handle_task_bootstrap(params):
+        return server.handle_task_bootstrap(params)
+
+    def handle_task_reason(params):
+        return server.handle_task_reason(params)
+
+    def handle_task_explore(params):
+        return server.handle_task_explore(params)
+
+    transport.register("task_bootstrap", handle_task_bootstrap)
+    transport.register("task_reason", handle_task_reason)
+    transport.register("task_explore", handle_task_explore)
 
     def handle_get_attack_graph(params):
         return server.handle_get_attack_graph(params)

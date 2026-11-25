@@ -1,4 +1,4 @@
-"""Graph coverage command — computed ARTEX coverage against the approved scope."""
+"""Graph coverage command — computed graph coverage against the approved scope."""
 
 from __future__ import annotations
 

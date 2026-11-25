@@ -24,7 +24,7 @@ from database.graph_errors import GraphMutationError
 
 #: Planner todo lease (a recon step can run for minutes).
 DEFAULT_TODO_LEASE_SECONDS = 300
-#: Intent lease (ARTEX reference heartbeat is 15s, claim TTL 90s).
+#: Intent lease (reference heartbeat is 15s, claim TTL 90s).
 DEFAULT_INTENT_LEASE_SECONDS = 90
 
 #: Assignment that grants a fresh lease. Takes one ``%s`` (the lease seconds).

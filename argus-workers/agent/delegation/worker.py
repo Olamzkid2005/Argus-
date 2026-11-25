@@ -1,6 +1,6 @@
 """Sequential TaskWorker: one subtask at a time, Refiner after each terminal result.
 
-Tasks are independent and may run concurrently under the ARTEX worker limits
+Tasks are independent and may run concurrently under the graph worker limits
 (two tasks have separate rows and locks). Inside one task the order is strict:
 only the first non-terminal subtask may start, and only after its declared
 dependencies are finished (P-04, P-05).

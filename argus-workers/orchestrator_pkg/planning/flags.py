@@ -2,7 +2,7 @@
 V2 orchestration feature flags and shadow mode (A5).
 
 ``ARGUS_ORCHESTRATION_V2``, ``ARGUS_GRAPH_EXPLORATION``,
-``ARGUS_HIERARCHICAL_DELEGATION`` and ``ARGUS_CAIRN_PROTOCOL`` each accept
+``ARGUS_HIERARCHICAL_DELEGATION`` and ``ARGUS_FACT_INTENT_PROTOCOL`` each accept
 ``off``, ``shadow`` or ``on``.
 
 **Defaults.** A deployment is expected to run the planner loop, so the shipped
@@ -35,7 +35,7 @@ FLAG_ENV_NAMES = {
     "orchestration": "ARGUS_ORCHESTRATION_V2",
     "graph_exploration": "ARGUS_GRAPH_EXPLORATION",
     "hierarchical_delegation": "ARGUS_HIERARCHICAL_DELEGATION",
-    "cairn_protocol": "ARGUS_CAIRN_PROTOCOL",
+    "fact_intent_protocol": "ARGUS_FACT_INTENT_PROTOCOL",
 }
 
 

@@ -18,7 +18,7 @@ def _ingest_recon_graph(
     graph_todo_id: str | None = None,
     graph_claim_token: str | None = None,
 ) -> dict:
-    """Feed recon outcomes into the ARTEX asset graph (A2), best-effort.
+    """Feed recon outcomes into the asset graph (A2), best-effort.
 
     The graph is additive: an ingestion failure is logged and returned, never
     raised into the recon task. When ``graph_todo_id`` is set, this pass was

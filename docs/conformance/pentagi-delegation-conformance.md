@@ -25,7 +25,7 @@ migration runner applied through `039_delegation_completion_condition.sql`.
 | `git diff --check` | clean |
 
 The suite is DB-backed and skipped when `DATABASE_URL` is unreachable, exactly like the
-ARTEX graph tests. The counts above are from a run with a reachable database, not from a
+graph tests. The counts above are from a run with a reachable database, not from a
 collection-only pass.
 
 ---
@@ -59,7 +59,7 @@ Design boundaries:
 
 - Agents return structured output. Only `PostgresDelegationStore` writes task state, and
   `PrimaryAgent` holds no store reference, so a specialist cannot mutate the task or graph.
-- The engagement is the Flow; a Task carries the ARTEX/CAIRN investigation intent
+- The engagement is the Flow; a Task carries the graph investigation intent
   (`delegation_tasks.intent_id`, ownership checked against `graph_nodes.engagement_id`).
 - Subtask order is an explicit `ordinal`; a unique `(task_id, ordinal)` constraint plus a
   per-task row lock serialize plan writes.
@@ -80,7 +80,7 @@ statements rather than re-read here; that limitation is recorded in §6.
 | P-02 | Generator returns 16 subtasks → explicit policy, never more than 15 persisted | `backend/docs/flow_execution.md` (15-subtask generator cap) | `agent/delegation/generator.py:validate_generated_plan` (`over_limit="reject"` default, `"clamp"` option), `store.insert_plan` guard | `TestP02GeneratorCap::test_sixteen_subtasks_are_rejected_or_clamped` | 16 → rejected; clamp → 15 rows, ordinals 1…15 | PASS | Two explicit policies instead of one; default reject, clamp opt-in. Clamping is refused when a kept subtask depends on a clamped-away draft |
 | P-03 | Generator returns unordered dependencies → dispatcher validates and stores one deterministic valid order; violations rejected | `backend/pkg/controller/task.go` (ordered subtask generation), `backend/pkg/providers/subtask_patch.go` | `generator.py:_topological_order`, `_resolve_reference`, `store._resolve_dependencies` | `TestP03DependencyOrder::test_unordered_dependencies_are_stored_in_valid_order`, `::test_dependency_violations_are_rejected` | Stored order `first, second, third`; `depends_on` holds persisted IDs; cycle/missing name rejected | PASS | Integer references are 1-based positions in the generator output; string references are titles |
 | P-04 | Three-subtask task: 2 does not start before 1 terminal; 3 before 2 | `backend/docs/flow_execution.md` (sequential subtasks) | `store.claim_next_subtask` (first active row only, dependency clause), `worker.py` | `TestP04SequentialExecution::test_subtasks_start_in_order_only_after_predecessor_is_terminal` | Second claim while RUNNING returns `running_in_progress`; each next step needs the prior FINISHED | PASS | none |
-| P-05 | Two independent intent tasks may run concurrently; each remains sequential | `backend/pkg/controller/task.go` | `store.create_task` per intent; per-task `FOR UPDATE` in `claim_next_subtask` | `TestP05ConcurrentTasks::test_two_tasks_run_concurrently_but_each_is_sequential` | Both tasks RUNNING at once; task A's second step stays blocked while its first runs | PASS | Concurrency is bounded by the ARTEX frontier/worker limits, not by this module |
+| P-05 | Two independent intent tasks may run concurrently; each remains sequential | `backend/pkg/controller/task.go` | `store.create_task` per intent; per-task `FOR UPDATE` in `claim_next_subtask` | `TestP05ConcurrentTasks::test_two_tasks_run_concurrently_but_each_is_sequential` | Both tasks RUNNING at once; task A's second step stays blocked while its first runs | PASS | Concurrency is bounded by the graph frontier/worker limits, not by this module |
 | P-06 | Complete a subtask → Refiner invoked with completed result, remaining tasks, graph/facts | `backend/pkg/controller/task.go`, `backend/docs/flow_execution.md` | `refiner.py:build_request`, `RefinerService.refine_after`; `worker.py:_after_terminal` | `TestP06RefinerInvocation::test_refiner_gets_completed_result_remaining_plan_and_facts` | Recorded request contained completed result, remaining `Second/Third`, facts and graph changes | PASS | Facts/graph changes are passed by the caller (worker passes the subtask result's `facts`); no live graph query in this module |
 | P-07 | ADD/REMOVE/MODIFY/REORDER match reference delta semantics and insertion ordering | `backend/pkg/providers/subtask_patch.go` (patch operations) | `patch.py:apply_patch`, `store.apply_plan` | `TestP07PatchTypes::test_add_remove_modify_reorder_match_delta_semantics` | Applied order `zero, one, four, between, three updated`; patch row records all five operations | PASS | `at_beginning` is the explicit beginning marker; `after_id` is the only insertion point |
 | P-08 | Patch references unknown ID → whole patch rejected, no partial corruption | `backend/pkg/providers/subtask_patch.go` | `patch.py:_find`/`apply_patch`, `refiner.py`, `store.apply_plan` transaction | `TestP08UnknownReference::test_unknown_id_rejects_patch_without_partial_corruption` | Valid ADD plus unknown REMOVE: patch rejected, plan and patch ledger unchanged | PASS | Policy is reject-all; no normalisation fallback |
@@ -140,7 +140,7 @@ keeps result, message chain and action rows (P-14).
 ## 5. Implementation decisions and adaptations
 
 1. **One hierarchy, not two.** Engagement = Flow; `delegation_tasks.intent_id` points at the
-   ARTEX/CAIRN intent node. There is no separate `Flow` table, matching plan §4.2.
+   graph intent node. There is no separate `Flow` table, matching plan §4.2.
 2. **Durable state in PostgreSQL.** The store lives next to the existing engagement
    repository; the ephemeral `AgentSessionStore` is untouched. Migration `038` is additive and
    idempotent, with no destructive changes to existing tables.
@@ -177,5 +177,5 @@ keeps result, message chain and action rows (P-14).
 - Cancellation is represented by the `cancelled` status and the task/tool executor boundary;
   no cooperative cancellation token is threaded through the worker in this pass.
 - Tests use a local PostgreSQL 16.2 instance, not the CI Postgres job. The CI job that runs the
-  ARTEX graph tests should include `tests/test_pentagi_delegation.py` and set `DATABASE_URL`;
+  graph tests should include `tests/test_pentagi_delegation.py` and set `DATABASE_URL`;
   the test module skips cleanly when it is absent.

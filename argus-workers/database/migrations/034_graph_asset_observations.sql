@@ -1,4 +1,4 @@
--- Migration 034: ARTEX A2 — asset observations, scoped identity and parent links
+-- Migration 034: Graph A2 — asset observations, scoped identity and parent links
 --
 -- Scope: graph ingestion and coverage for the canonical asset graph.
 --

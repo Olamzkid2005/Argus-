@@ -229,7 +229,7 @@ jobs:
   graph-repository-db:
     name: Python Workers (graph repository, PostgreSQL)
     # The graph and delegation integration tests skip themselves unless
-    # DATABASE_URL is reachable, so without a real Postgres in CI the ARTEX and
+    # DATABASE_URL is reachable, so without a real Postgres in CI the graph and
     # PentAGI persistence layers are never exercised. This job provisions
     # Postgres, applies every migration (including 033 and 038) and runs the
     # tests so a skip cannot hide a broken query.
@@ -408,6 +408,7 @@ jobs:
             tests/test_graph_planner.py \
             tests/test_pentagi_delegation.py \
             tests/test_control_plane.py \
+            tests/test_control_plane_bridge.py \
             -v --timeout=180 --tb=long --junit-xml=graph-repository-results.xml
 
       - name: Confirm graph tests did not skip

@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS delegation_tasks (
 );
 
 COMMENT ON TABLE delegation_tasks IS 'PentAGI-style Task / work package; engagement is the Flow.';
-COMMENT ON COLUMN delegation_tasks.intent_id IS 'ARTEX/CAIRN investigation intent node this task executes, when one exists.';
+COMMENT ON COLUMN delegation_tasks.intent_id IS 'graph investigation intent node this task executes, when one exists.';
 
 CREATE INDEX IF NOT EXISTS idx_delegation_tasks_engagement
     ON delegation_tasks(engagement_id, status);

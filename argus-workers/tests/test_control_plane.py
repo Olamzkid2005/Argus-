@@ -295,7 +295,8 @@ def test_c09_intents_are_bounded_and_truncation_recorded(store):
         max_intents=3,
     )
     assert decision.truncated and decision.received_intent_count == 5
-    result = store.apply_reason(engagement_id, decision)
+    task = store.start_task(engagement_id, "reason", "w-apply")
+    result = store.apply_reason(engagement_id, decision, task_id=task["id"])
     assert len(result["created"]) == 3
 
 
@@ -541,6 +542,118 @@ def test_bootstrap_crash_does_not_run_conclude(store):
     assert _counts(store, engagement_id)["facts"] == 0
     assert store.graph.find_node_by_id(goal["id"])["state"] == "open"
     assert store.bootstrap_row(engagement_id)["status"] == "released"
+
+
+class _FlipOnCall:
+    """Worker that stops the engagement while its task is still running."""
+
+    def __init__(self, engagement_id: str, kind: str, result) -> None:
+        self.engagement_id = engagement_id
+        self.kind = kind
+        self.result = result
+
+    def supports(self, task_type: str) -> bool:
+        return True
+
+    def _flip(self) -> None:
+        with get_db().connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE engagements SET status = 'completed' WHERE id = %s",
+                (self.engagement_id,),
+            )
+            cur.close()
+
+    def bootstrap(self, job, *, conclude=False):
+        self._flip()
+        return self.result
+
+    def reason(self, job):
+        self._flip()
+        return self.result
+
+    def explore(self, job, *, conclude=False):
+        self._flip()
+        return self.result
+
+
+def test_bootstrap_result_rejected_when_engagement_stops(store):
+    engagement_id = _engage()
+    goal = _goal(store, engagement_id)
+    store.register_worker("w-stop-boot", ["bootstrap"])
+    runner = _FlipOnCall(engagement_id, "bootstrap", SUCCESS_EXECUTE)
+    result = ControlPlaneDispatcher(store, runner).run_bootstrap(
+        engagement_id, "w-stop-boot"
+    )
+    assert result == "cancelled"
+    assert _counts(store, engagement_id)["facts"] == 0
+    assert store.graph.find_node_by_id(goal["id"])["state"] == "open"
+    assert store.bootstrap_row(engagement_id)["status"] == "released"
+
+
+def test_bootstrap_result_rejected_when_task_is_cancelled(store):
+    engagement_id = _engage()
+    _goal(store, engagement_id)
+    task = store.start_task(engagement_id, "bootstrap", "w-cancel-boot")
+    store.cancel_task(task["id"], "operator cancelled")
+    with pytest.raises(LateResult):
+        store.bootstrap_execute_result(
+            engagement_id, "must not be written", "done", task_id=task["id"]
+        )
+    assert _counts(store, engagement_id)["facts"] == 0
+
+
+def test_reason_result_rejected_when_engagement_stops(store):
+    engagement_id = _engage()
+    goal = _goal(store, engagement_id)
+    fact = _fact(store, engagement_id)
+    store.register_worker("w-stop-reason", ["reason"])
+    payload = _reason_payload(
+        intents=[{"description": "keep going", "from": [str(fact["id"])]}]
+    )
+    runner = _FlipOnCall(engagement_id, "reason", payload)
+    assert ControlPlaneDispatcher(store, runner).run_reason(
+        engagement_id, "w-stop-reason"
+    ) == "cancelled"
+    assert _counts(store, engagement_id)["open_intents"] == 0
+    assert store.graph.find_node_by_id(goal["id"])["state"] == "open"
+
+
+def test_reason_result_rejected_when_task_is_cancelled(store):
+    engagement_id = _engage()
+    fact = _fact(store, engagement_id)
+    task = store.start_task(engagement_id, "reason", "w-cancel-reason")
+    store.cancel_task(task["id"], "operator cancelled")
+    decision = parse_reason_result(
+        _reason_payload(intents=[{"description": "late", "from": [str(fact["id"])]}]),
+        valid_fact_ids=[str(fact["id"])],
+        open_intent_count=0,
+    )
+    with pytest.raises(LateResult):
+        store.apply_reason(engagement_id, decision, task_id=task["id"])
+    assert _counts(store, engagement_id)["open_intents"] == 0
+
+
+def test_control_plane_tick_runs_bootstrap_and_honours_off(store):
+    from tasks.control_plane import run_control_plane_tick
+
+    engagement_id = _engage()
+    _goal(store, engagement_id)
+    store.register_worker("tick-worker", ["bootstrap"])
+    runner = FakeRunner(bootstrap=SUCCESS_EXECUTE)
+
+    disabled = run_control_plane_tick(
+        store=store, runner=runner, mode="off", engagement_ids=[engagement_id]
+    )
+    assert disabled["dispatched"] == 0
+    assert store.bootstrap_row(engagement_id) is None
+
+    enabled = run_control_plane_tick(
+        store=store, runner=runner, mode="on", engagement_ids=[engagement_id]
+    )
+    assert enabled["dispatched"] == 1
+    assert enabled["results"][0]["outcome"] == "bootstrap"
+    assert store.bootstrap_row(engagement_id)["status"] == "completed"
 
 
 def test_explore_crash_does_not_run_conclude(store):

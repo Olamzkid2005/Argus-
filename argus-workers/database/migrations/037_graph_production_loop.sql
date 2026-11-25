@@ -1,4 +1,4 @@
--- Migration 037: ARTEX production loop, worker protocol and audit trail
+-- Migration 037: Graph production loop, worker protocol and audit trail
 --
 -- Adds the durable pieces that turn the graph planner from a testable library
 -- into a running loop and close the remaining A-/C- conformance surfaces:

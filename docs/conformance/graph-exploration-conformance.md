@@ -1,8 +1,8 @@
-# ARTEX conformance ledger — graph-backed exploration (A1–A5)
+# Graph exploration conformance ledger — graph-backed exploration (A1–A5)
 
 **Date:** 24 November 2026
 **Plan:** `docs/conformance/argus_three_frameworks_implementation_conformance_plan.md` §3
-**Reference pin:** ARTEX `94757c5d7e704ac1c095ee99e97d9ac4d9d428c5`
+**Reference pin:** graph exploration reference `94757c5d7e704ac1c095ee99e97d9ac4d9d428c5`
 **Argus baseline for this pass:** `189f6fe4` plus the changes listed under *Gate findings*
 **Authoritative backend:** PostgreSQL via `argus-workers/database` (see `authoritative-state-backend-note.md`)
 
@@ -39,7 +39,7 @@ checkout, plus runtime evidence for state-machine behaviour.
 | A-08 | Goal proven by verified evidence → goal concluded, no further intent for that goal | `database/graph_repository.py:prove_goal_from_findings` (+ provenance rule), `orchestrator_pkg/persistence/goal_proof.py` | `TestGoalProofFromVerifiedEvidence::*` (3), `TestGoalProofRequiresVerifierProvenance::*` (8), `TestPersistedProofCanConcludeAGoal::*` (2), `TestVerifierConcludesGoals::*` (6) | 150-test DB run; verifier save path concludes the goal without a dispatcher call | PASS | none |
 | A-09 | Open/running intent or existing evidence already covering the direction → no duplicate intent | `ExplorationPlanner.plan` (open intents, `open_gap_keys`), `apply_intent_proposals` duplicate suppression | `test_duplicate_and_already_proven_intents_are_suppressed`, `test_scheduled_gap_work_is_not_duplicated_by_the_planner`, `test_a_capped_frontier_still_covers_every_untested_class` | Shadow gate: with 6 gaps scheduled the planner proposed **0** duplicates; without scheduling it proposed the untested classes | PASS | Fixed during the gate, see §3 |
 | A-10 | Three-step dependent investigation: step N+1 cannot dispatch before step N's fact | `planner_todos.depends_on` prerequisite clause in `claim_recon_todo` | `TestDependencyAwareClaims::test_dependent_todo_is_refused_until_prerequisite_completes` | 150-test DB run | PASS | none |
-| A-11 | Live claim not stolen; expired claim reclaimable after the lease; heartbeat cadence default 15s / 90s TTL | `database/graph_claims.py` (one protocol for todos and intents), `claim_recon_todo`, `claim_intent_node` | `TestClaimFencingAndHeartbeat::test_heartbeat_keeps_live_claim_and_expired_lease_reports_loss`, `TestWorkerIntentProtocol::test_an_expired_intent_claim_is_reclaimable_and_fenced_like_a_todo`, `tests/test_graph_claims.py` | 150 + 15-test DB runs | PASS | Artefacts use the implemented 300 s todo lease / 90 s intent lease; the ARTEX 15 s heartbeat cadence is a deployment setting, not a code default |
+| A-11 | Live claim not stolen; expired claim reclaimable after the lease; heartbeat cadence default 15s / 90s TTL | `database/graph_claims.py` (one protocol for todos and intents), `claim_recon_todo`, `claim_intent_node` | `TestClaimFencingAndHeartbeat::test_heartbeat_keeps_live_claim_and_expired_lease_reports_loss`, `TestWorkerIntentProtocol::test_an_expired_intent_claim_is_reclaimable_and_fenced_like_a_todo`, `tests/test_graph_claims.py` | 150 + 15-test DB runs | PASS | Artefacts use the implemented 300 s todo lease / 90 s intent lease; the reference 15 s heartbeat cadence is a deployment setting, not a code default |
 | A-12 | Old worker submits after takeover → fencing token rejects, nothing committed | `claim_token::text = %s` live-claim predicate in `graph_claims.live_claim_sql`, used by heartbeat/complete/release | `TestClaimFencingAndHeartbeat::test_stale_token_write_is_rejected_after_reclaim`, `TestWorkerIntentProtocol::test_worker_claims_one_intent_at_a_time_with_token_and_lease` | 150-test DB run | PASS | none |
 | A-13 | Worker B retrieves worker A's trace instead of repeating the action | `DispatcherGraph.record_trace/search_traces`, `tests` + MCP `graph_search_traces` | `TestWorkerIntentProtocol::test_trace_search_is_engagement_scoped_and_untrusted` | 150-test DB run | PASS | none |
 | A-14 | Prompt injection in response/trace cannot add goals, change scope, prove a goal or authorise a target | `sanitize_untrusted_text`, goal nodes operator-created only, planner reads untrusted text as data | `TestPromptInjectionIsolation::*` (2), `TestGoalProofRequiresVerifierProvenance::test_scanner_self_reported_verified_flag_is_not_provenance` | 150-test DB run | PASS | none |
@@ -86,7 +86,7 @@ assets plus one out-of-scope discovery (`db.shadow-lab.internal`, correctly reje
 |---|---|---|
 | Recon ingestion | 10 accepted / 1 rejected (out of scope) / 0 failed | same |
 | Deterministic coverage scheduler | 6 gaps: 1 × `undiscovered_scope_entry`, 5 × `untested_asset_class` | not run |
-| ARTEX planner (shadow) | 11 events consumed in 1 turn, **0 proposals** (no duplicate direction) | 11 events in 1 turn, **5 proposals**, one per untested class |
+| Graph planner (shadow) | 11 events consumed in 1 turn, **0 proposals** (no duplicate direction) | 11 events in 1 turn, **5 proposals**, one per untested class |
 | Intents created / work dispatched | 0 / 0 | 0 / 0 |
 | Durable state before → after | intents 1 → 1, todos 6 → 6, outbox drained | intents 0 → 0, todos 0 → 0, outbox drained |
 
@@ -102,7 +102,7 @@ Agreement:
 (`api.shadow-lab.internal`) can only be dispatched by the deterministic scope-entry gap,
 because an asset-driven planner has no asset to anchor a proposal to. The two paths are
 therefore complementary, not interchangeable: the deterministic scheduler feeds scope
-entries, the ARTEX planner proposes class/asset work. Running both with
+entries, the graph planner proposes class/asset work. Running both with
 `ARGUS_GRAPH_EXPLORATION=on` is the intended configuration.
 
 **Gate verdict:** the shadow comparison passes. The A5 conditions for enabling execution

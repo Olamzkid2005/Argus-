@@ -199,7 +199,7 @@ the host network interface.
 
 ## Planner Loop (Graph Exploration)
 
-The ARTEX planner loop drains the graph outbox and turns coverage gaps into new
+The graph planner loop drains the graph outbox and turns coverage gaps into new
 work. Celery Beat schedules it every 15 seconds
 (`drain-planner-outbox` → `tasks.graph_planner.drain_planner_outbox`), so the
 loop runs with the normal worker/beat deployment — you do not start it by hand.

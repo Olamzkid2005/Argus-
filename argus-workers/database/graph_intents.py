@@ -1,5 +1,5 @@
 """
-Typed IntentProposal contract for ARTEX planning (A3).
+Typed IntentProposal contract for graph planning (A3).
 
 The planner is a proposal generator: it returns ``IntentProposal`` objects and
 the dispatcher validates and persists them. Validation lives here so an invalid

@@ -1,5 +1,5 @@
 # Argus Implementation and Conformance Plan
-## ARTEX graph-backed exploration · PentAGI hierarchical delegation · CAIRN fact-and-intent reasoning
+## Graph-backed exploration · PentAGI hierarchical delegation · fact-and-intent reasoning
 
 **Prepared:** 22 November 2026  
 **Purpose:** A build plan and source-conformance test plan for extending Argus without replacing its existing execution, MCP, scope, evidence, and reporting foundations.
@@ -10,19 +10,19 @@
 
 Implement the three architectures as **three layers of one assessment engine**, not as three independent planners:
 
-1. **ARTEX owns the knowledge and exploration model.** It defines the shared asset graph, per-engagement exploration graph, anchors, planner frontier, graph-change feedback loop, and persistent plan scratchpad.
+1. **Exploration-graph work owns the knowledge and exploration model.** It defines the shared asset graph, per-engagement exploration graph, anchors, planner frontier, graph-change feedback loop, and persistent plan scratchpad.
 2. **PentAGI owns the work-decomposition model.** Each claimed investigation intent becomes a task with an ordered list of up to 15 subtasks. A primary agent handles the task and delegates individual subtasks to specialists. A refiner revises the remaining subtask list after each terminal subtask result.
-3. **CAIRN owns the dispatch protocol and state transitions.** The dispatcher is the control plane and sole writer of durable protocol state. Workers receive one explicit job, return a strict structured result, and never claim work, heartbeat a lease, or write directly to the graph/database.
+3. **Fact-and-intent work owns dispatch and state transitions.** The dispatcher is the control plane and sole writer of durable protocol state. Workers receive one explicit job, return a strict structured result, and never claim work, heartbeat a lease, or write directly to the graph/database.
 
 The resulting hierarchy is:
 
 ```text
 Argus Engagement
-  = CAIRN Project / PentAGI Flow
+  = Engagement / PentAGI Flow
   |
-  +-- Goal(s)                         ARTEX Goal
+  +-- Goal(s)                         Exploration Goal
   |     |
-  |     +-- Investigation Intent(s)  ARTEX Intent / CAIRN Intent
+  |     +-- Investigation Intent(s)  Exploration Intent
   |            |                     Each intent is a PentAGI Task/work package
   |            |
   |            +-- Subtask 1          PentAGI Subtask
@@ -30,15 +30,15 @@ Argus Engagement
   |            +-- ...
   |            |
   |            +-- Actions            Tool executions
-  |            +-- Result             One CAIRN Fact conclusion, plus any validated findings
+  |            +-- Result             One fact conclusion, plus any validated findings
   |
-  +-- Shared Asset Graph             ARTEX Asset Graph
-  +-- Exploration Graph              ARTEX Exploration Graph
+  +-- Shared Asset Graph             Asset Graph
+  +-- Exploration Graph              Exploration Graph
 ```
 
-Multiple independent intents can be claimed by different workers (ARTEX frontier behaviour). **Within one intent/task, subtasks execute in PentAGI order**, one at a time. This preserves ARTEX-style parallelism across independent investigation directions while preserving PentAGI's sequential subtask/refiner lifecycle inside each task.
+Multiple independent intents can be claimed by different workers (frontier behaviour). **Within one intent/task, subtasks execute in PentAGI order**, one at a time. This preserves graph-style parallelism across independent investigation directions while preserving PentAGI's sequential subtask/refiner lifecycle inside each task.
 
-The CAIRN `reason` contract is the structured interface used by the ARTEX planner: one authoritative planner decides whether to complete a goal, create new intents, or do nothing. The PentAGI Generator creates subtasks *inside a claimed intent*; it does not create a second competing top-level intent queue.
+The fact-and-intent `reason` contract is the structured interface used by the graph planner: one authoritative planner decides whether to complete a goal, create new intents, or do nothing. The PentAGI Generator creates subtasks *inside a claimed intent*; it does not create a second competing top-level intent queue.
 
 ### Non-negotiable control rule
 
@@ -50,16 +50,16 @@ The LLM may propose goals, intents, subtask patches, facts, findings, and action
 
 The implementation agent must use pinned repository snapshots, not the latest README text alone. The pins below were resolved on 22 November 2026.
 
-| Project | Repository | Reference commit | Primary source files |
-|---|---|---|---|
-| ARTEX | [BaaRai/ARTEX](https://github.com/BaaRai/ARTEX) | `94757c5d7e704ac1c095ee99e97d9ac4d9d428c5` | [README](https://github.com/BaaRai/ARTEX/blob/94757c5d7e704ac1c095ee99e97d9ac4d9d428c5/README.md), [agent/planner.go](https://github.com/BaaRai/ARTEX/blob/94757c5d7e704ac1c095ee99e97d9ac4d9d428c5/agent/planner.go), [db/exploration.go](https://github.com/BaaRai/ARTEX/blob/94757c5d7e704ac1c095ee99e97d9ac4d9d428c5/db/exploration.go), [db/assets.go](https://github.com/BaaRai/ARTEX/blob/94757c5d7e704ac1c095ee99e97d9ac4d9d428c5/db/assets.go), [server/engine.go](https://github.com/BaaRai/ARTEX/blob/94757c5d7e704ac1c095ee99e97d9ac4d9d428c5/server/engine.go) |
-| PentAGI | [vxcontrol/pentagi](https://github.com/vxcontrol/pentagi) | `cffed9485aa1cca70762cd08a57ac62a80406258` | [Flow execution](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/docs/flow_execution.md), [subtask patch](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/pkg/providers/subtask_patch.go), [subtask worker](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/pkg/controller/subtask.go), [task worker](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/pkg/controller/task.go) |
-| CAIRN | [oritera/Cairn](https://github.com/oritera/Cairn) | `8e7e0ea67552383851dfcabfba0c4e9c8d007878` | [Dispatcher design](https://github.com/oritera/Cairn/blob/8e7e0ea67552383851dfcabfba0c4e9c8d007878/docs/specs/dispatcher-design.md), [scheduler](https://github.com/oritera/Cairn/blob/8e7e0ea67552383851dfcabfba0c4e9c8d007878/cairn/src/cairn/dispatcher/scheduler/loop.py), [contracts](https://github.com/oritera/Cairn/blob/8e7e0ea67552383851dfcabfba0c4e9c8d007878/cairn/src/cairn/dispatcher/contracts.py), [explore task](https://github.com/oritera/Cairn/blob/8e7e0ea67552383851dfcabfba0c4e9c8d007878/cairn/src/cairn/dispatcher/tasks/explore.py), [reason task](https://github.com/oritera/Cairn/blob/8e7e0ea67552383851dfcabfba0c4e9c8d007878/cairn/src/cairn/dispatcher/tasks/reason.py) |
-| Argus baseline | [Olamzkid2005/Argus-](https://github.com/Olamzkid2005/Argus-) | `0e006958927c82d95d293f4e08262df79d95e921` | [README](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/README.md), [workflow runner](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/Argus-Tui/packages/opencode/src/argus/workflow-runner.ts), [planner executor](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/Argus-Tui/packages/opencode/src/argus/planner/executor.ts), [MCP server](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/argus-workers/mcp_server.py), [current gaps](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/docs/CURRENT-REMAINING-GAPS.md) |
+| Reference | Reference commit | Primary source files |
+|---|---|---|
+| Graph exploration reference | `94757c5d7e704ac1c095ee99e97d9ac4d9d428c5` | README, `agent/planner.go`, `db/exploration.go`, `db/assets.go`, `server/engine.go` |
+| PentAGI | `cffed9485aa1cca70762cd08a57ac62a80406258` | [Flow execution](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/docs/flow_execution.md), [subtask patch](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/pkg/providers/subtask_patch.go), [subtask worker](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/pkg/controller/subtask.go), [task worker](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/pkg/controller/task.go) |
+| Fact-and-intent reference | `8e7e0ea67552383851dfcabfba0c4e9c8d007878` | `docs/specs/dispatcher-design.md`, `dispatcher/scheduler/loop.py`, `dispatcher/contracts.py`, `dispatcher/tasks/explore.py`, `dispatcher/tasks/reason.py` |
+| Argus baseline | `0e006958927c82d95d293f4e08262df79d95e921` | [README](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/README.md), [workflow runner](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/Argus-Tui/packages/opencode/src/argus/workflow-runner.ts), [planner executor](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/Argus-Tui/packages/opencode/src/argus/planner/executor.ts), [MCP server](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/argus-workers/mcp_server.py), [current gaps](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/docs/CURRENT-REMAINING-GAPS.md) |
 
 **Important source-lock rule:** If any upstream project moves after these pins, do not silently change the implementation target. Record the new SHA, identify behavioural changes, update the reference specification and conformance fixtures, then approve the change explicitly.
 
-**Meaning of “exactly”:** Reproduce the referenced framework's observable architecture, contracts, lifecycle, ordering, ownership and failure semantics. Do not copy source code, prompts, UI, deployment topology, or branding wholesale. Where the frameworks have incompatible ownership models, use the integration contract in Section 5 and document the adaptation. Review each project's license before copying any code; ARTEX and CAIRN publish AGPL-family licensing terms.
+**Meaning of “exactly”:** Reproduce the referenced framework's observable architecture, contracts, lifecycle, ordering, ownership and failure semantics. Do not copy source code, prompts, UI, deployment topology, or branding wholesale. Where the frameworks have incompatible ownership models, use the integration contract in Section 5 and document the adaptation. Review each project's license before copying any code; both references publish AGPL-family licensing terms.
 
 ---
 
@@ -80,7 +80,7 @@ The implementation starts from Argus HEAD `0e006958...`, not the earlier 21 Nove
 | `argus-workers/agent/react_agent.py` | ReAct tool-selection and observation loop | Use as the action-level agent within a delegated task; avoid adding another unconstrained tool loop |
 | `argus-workers/agent/session_store.py` | Per-phase ephemeral planning session, action ids, observations and tool history | Keep session state for live execution; durable task/subtask state belongs in the engagement store |
 | `argus-workers/agent/swarm.py` and `swarm_memory.py` | Deterministic specialist suite activation, parallel specialists and in-flight signal sharing | Reuse specialist implementations, but put them behind the new primary-agent delegation contract |
-| `argus-workers/attack_graph.py` / `attack_graph_db.py` | Finding/vulnerability attack-chain analysis and attack-path risk scoring | Retain for vulnerability chaining. Do not mistake this for ARTEX's asset graph or exploration graph |
+| `argus-workers/attack_graph.py` / `attack_graph_db.py` | Finding/vulnerability attack-chain analysis and attack-path risk scoring | Retain for vulnerability chaining. Do not mistake this for the asset graph or exploration graph |
 | `argus-workers/tools/attack_surface/asset_graph.py` and `tools/attack_paths/asset_graph_builder.py` | In-memory/derived asset graph representations | Treat as existing inputs/builders; replace or wrap them with a canonical, persistent asset graph rather than creating a competing authoritative graph |
 | `argus-workers/tools/verification_agent.py` and `tools/verification/` | Reproduction, evidence capture, confidence and finding promotion | Keep as the verifier for findings produced by delegated tasks |
 | `Argus-Tui/packages/opencode/src/argus/evidence/` and `browser/` | Artifact capture, HAR parsing, hash integrity and Playwright verifiers | Attach artifacts/evidence references to exploration nodes and findings |
@@ -102,11 +102,11 @@ Before graph implementation, define one `EngagementGraphRepository` contract and
 
 ---
 
-## 3. Workstream 1 — ARTEX graph-backed exploration
+## 3. Workstream 1 — graph-backed exploration
 
 ### 3.1 Behaviour to reproduce
 
-ARTEX has two separate but linked graphs:
+The graph model has two separate but linked graphs:
 
 **Asset graph (shared across tasks within the relevant company/workspace):** the canonical representation of what exists. The reference model includes `root_domain`, `subdomain`, `ip`, `service`, `app` and `endpoint`. Parent/child relationships and deduplication keys are computed by application code. Agents submit observations; they do not invent canonical IDs.
 
@@ -114,11 +114,11 @@ ARTEX has two separate but linked graphs:
 
 **Anchors:** a many-to-many relationship from an exploration node to one or more asset IDs. This records which asset an intent investigated, which asset a fact describes and which asset a finding affects. Asset coverage is calculated from these anchors and the approved scope.
 
-**Planner/worker loop:** a graph change wakes a debounced planner. The planner reads a compact graph overview, current frontier, coverage and scope; it may dispatch zero or more new intents. Workers claim one intent, execute only that intent, write observations/assets/facts/findings back, and stop. The write-back creates the next planner wake-up. ARTEX's planner keeps a per-task todo scratchpad across wake-ups so a sequential chain is advanced step by step rather than dispatching all dependent steps in parallel. Workers can search other workers' execution traces, but each worker stays confined to its claimed intent.
+**Planner/worker loop:** a graph change wakes a debounced planner. The planner reads a compact graph overview, current frontier, coverage and scope; it may dispatch zero or more new intents. Workers claim one intent, execute only that intent, write observations/assets/facts/findings back, and stop. The write-back creates the next planner wake-up. The planner keeps a per-task todo scratchpad across wake-ups so a sequential chain is advanced step by step rather than dispatching all dependent steps in parallel. Workers can search other workers' execution traces, but each worker stays confined to its claimed intent.
 
 **Goal rule:** an unmet goal with no open or running intent must not stall. The planner must create at least one new intent. It may emit zero new intents only if the goal is proven or current open/running work is already advancing it and no additional direction is justified.
 
-**Claim rule:** reference ARTEX uses a 15-second heartbeat and a 90-second intent claim TTL. Claims are fenced: once a worker loses its claim, a stale worker must not write results as though it still owns the intent.
+**Claim rule:** the reference implementation uses a 15-second heartbeat and a 90-second intent claim TTL. Claims are fenced: once a worker loses its claim, a stale worker must not write results as though it still owns the intent.
 
 ### 3.2 Argus data model
 
@@ -172,7 +172,7 @@ Implement deterministic canonicalizers for every asset type. Minimum behaviours:
 
 ### 3.4 Exploration graph invariants
 
-- Only the five typed node categories above are used for the ARTEX model. Keep evidence files as artifacts, not a sixth pseudo-node type unless a later schema revision explicitly requires it.
+- Only the five typed node categories above are used for the graph model. Keep evidence files as artifacts, not a sixth pseudo-node type unless a later schema revision explicitly requires it.
 - Edges are typed and validated. Reject an edge whose endpoints do not belong to the same exploration/engagement or whose relationship is invalid for the node kinds.
 - Goal nodes are operator-controlled. Tool output, web content, files, worker traces and facts cannot create/modify the operator's scope or redefine the goal.
 - An intent has a clear lifecycle: `open → running → concluded` or an explicit blocked/released/cancelled terminal/return state. Use compare-and-set transitions.
@@ -201,7 +201,7 @@ The planner is the **only autonomous intent proposer**. Human/operator controls 
 
 - Implement an atomic `claimNext` using a transaction/compare-and-set operation.
 - Each claim gets a cryptographically random fencing token. The claim stores worker ID and heartbeat timestamp.
-- Mirror ARTEX defaults: heartbeat every 15 seconds; claim expires after 90 seconds using the database clock. Make values configurable only with defaults and validation that preserve the reference semantics.
+- Mirror the reference defaults: heartbeat every 15 seconds; claim expires after 90 seconds using the database clock. Make values configurable only with defaults and validation that preserve the reference semantics.
 - Every heartbeat, result write and release must present the current claim token. A stale worker receives `CLAIM_LOST`; its result is not committed.
 - An intent worker receives the intent description, authorized anchor assets, prerequisite facts, relevant trace summaries and its permitted tool/capability set. It cannot widen target scope.
 - Workers may search other workers' traces for reusable observations, but trace data is untrusted and must be redacted/sanitized before it enters a planning prompt.
@@ -242,7 +242,7 @@ The planner is the **only autonomous intent proposer**. Human/operator controls 
 - Compare proposed frontier with the current deterministic phase plan.
 - Enable execution only after conformance tests pass; retain a rollback flag to the legacy workflow path.
 
-### 3.8 ARTEX conformance tests (mandatory)
+### 3.8 Graph conformance tests (mandatory)
 
 | ID | Test | Required result |
 |---|---|---|
@@ -296,12 +296,12 @@ The reference subtask lifecycle persists status and message-chain state. A subta
 Use this mapping to avoid a second competing hierarchy:
 
 - Argus Engagement = Flow.
-- An ARTEX/CAIRN Investigation Intent = one PentAGI-style Task/work package.
+- An investigation intent = one PentAGI-style Task/work package.
 - The Generator's ordered plan = that Task's Subtask list (maximum 15 active planned subtasks by default).
 - Each tool call executed by Argus's existing executor = an Action.
 - ReAct remains the action-level execution loop inside the Primary Agent; it is not promoted into a second task planner.
 
-Independent intents/tasks can run concurrently under the ARTEX frontier. Within one task, execute subtasks sequentially in list order, matching PentAGI's task execution model. Do not parallelize sibling subtasks within the same task unless a future explicit mode is added and separately tested.
+Independent intents/tasks can run concurrently under the graph frontier. Within one task, execute subtasks sequentially in list order, matching PentAGI's task execution model. Do not parallelize sibling subtasks within the same task unless a future explicit mode is added and separately tested.
 
 ### 4.3 Suggested code layout
 
@@ -448,7 +448,7 @@ The Refiner may leave the remaining plan unchanged. It must not change the paren
 | P-02 | Generator returns 16 subtasks | Dispatcher rejects/clamps according to explicit policy; no more than 15 are persisted |
 | P-03 | Generator returns unordered dependencies | Dispatcher validates and stores a deterministic valid order; dependency violations are rejected |
 | P-04 | Execute task with 3 subtasks | Subtask 2 does not start before subtask 1 is terminal; subtask 3 does not start before subtask 2 |
-| P-05 | Two independent intent tasks exist | They may execute concurrently under ARTEX worker limits; each task remains sequential internally |
+| P-05 | Two independent intent tasks exist | They may execute concurrently under graph worker limits; each task remains sequential internally |
 | P-06 | Complete a subtask | Refiner is invoked with completed result, remaining tasks and current graph/facts |
 | P-07 | Apply every patch type | ADD/REMOVE/MODIFY/REORDER matches the reference delta semantics and insertion ordering |
 | P-08 | Patch references unknown ID | Entire patch is rejected or normalized according to a documented deterministic policy; no partial corruption |
@@ -464,11 +464,11 @@ The Refiner may leave the remaining plan unchanged. It must not change the paren
 
 ---
 
-## 5. Workstream 3 — CAIRN fact-and-intent reasoning
+## 5. Workstream 3 — fact-and-intent reasoning
 
 ### 5.1 Behaviour to reproduce
 
-CAIRN separates three worker task types and makes the Dispatcher the control plane:
+The fact-and-intent protocol separates three worker task types and makes the Dispatcher the control plane:
 
 - The server/database is the protocol source of truth.
 - The Dispatcher reads current graph state, chooses a task type and worker, manages the process/session/lease and writes validated results back.
@@ -511,7 +511,7 @@ A valid execute result writes the Fact and then completes the goal. A `bootstrap
 
 `complete` and `intents` cannot coexist. If the open-intent list is empty and the goal is not complete, an empty/no-op result is invalid: the reasoner must propose at least one intent. Every referenced fact ID must exist in the current engagement; goal IDs are not accepted as fact sources. The LLM returns JSON; the dispatcher validates it and performs the graph/database write.
 
-**Reason scheduling:** preserve CAIRN's checkpoint rules:
+**Reason scheduling:** preserve the protocol's checkpoint rules:
 
 - Run once on initial state when there is no prior reason checkpoint.
 - Re-run when fact count increases.
@@ -548,7 +548,7 @@ accepted=true, data={}                  -> NOOP only when open intents exist
 open_intents empty + no complete/intent -> INVALID; must create an intent
 ```
 
-For compatibility, CAIRN's current parser accepts the singular `intent` spelling as a legacy alias; Argus should emit `intents` only, and may accept singular only behind an explicit compatibility switch with a deprecation log.
+For compatibility, the reference parser accepts the singular `intent` spelling as a legacy alias; Argus should emit `intents` only, and may accept singular only behind an explicit compatibility switch with a deprecation log.
 
 **Bootstrap execute:** exact `fact.description` plus `complete.description` required.  
 **Bootstrap conclude:** `fact.description` required; no completion write.  
@@ -564,12 +564,12 @@ Worker selection must:
 2. Filter out workers at `max_running`.
 3. Filter out temporarily unhealthy workers.
 4. Filter out workers temporarily rejected for the same task/project where applicable.
-5. Sort by configured priority, then current running count, then tie-break consistently (CAIRN randomizes exact ties; tests must inject a deterministic random source).
+5. Sort by configured priority, then current running count, then tie-break consistently (the reference randomizes exact ties; tests must inject a deterministic random source).
 6. Claim the intent/reason lease before starting a worker process.
 
 Respect global worker limits and per-engagement worker limits. Prefer already-running engagement workers before starting new engagement environments, while retaining a fair rotating order so one long engagement does not starve other eligible engagements.
 
-CAIRN documents a single Dispatcher instance. For Argus, implement the same **single authoritative dispatcher per engagement** invariant. A DB-backed leader/lease can allow multiple Argus processes to exist while ensuring only one owns an engagement's scheduling and graph writes. Do not allow two dispatchers to race on the same intent or reason operation.
+The reference documents a single Dispatcher instance. For Argus, implement the same **single authoritative dispatcher per engagement** invariant. A DB-backed leader/lease can allow multiple Argus processes to exist while ensuring only one owns an engagement's scheduling and graph writes. Do not allow two dispatchers to race on the same intent or reason operation.
 
 ### 5.5 Lease, heartbeat, cancellation and state ownership
 
@@ -623,7 +623,7 @@ CAIRN documents a single Dispatcher instance. For Argus, implement the same **si
 - Reclaim expired claims using the database clock and current lease token.
 - Cancel stale processes and reject late output.
 
-### 5.8 CAIRN conformance tests (mandatory)
+### 5.8 Fact-and-intent conformance tests (mandatory)
 
 | ID | Test | Required result |
 |---|---|---|
@@ -658,13 +658,13 @@ This section is the shared contract that prevents the three workstreams from bec
 
 ### 6.1 One authoritative state writer
 
-The dispatcher is the only component allowed to commit durable graph/task/intent state transitions. This is the CAIRN ownership rule.
+The dispatcher is the only component allowed to commit durable graph/task/intent state transitions. This is the dispatcher ownership rule.
 
-The agents may return structured proposals and evidence. The dispatcher validates and commits them into ARTEX's graphs. This preserves ARTEX's write-back behaviour while using CAIRN's safer API/state ownership boundary.
+The agents may return structured proposals and evidence. The dispatcher validates and commits them into the exploration graphs. This preserves the graph write-back behaviour while using the protocol's safer API/state ownership boundary.
 
 ### 6.2 One top-level planner
 
-The ARTEX-style `ExplorationPlanner` is the only autonomous generator of durable intent proposals. It uses CAIRN's `reason` output contract. The PentAGI Generator is not a second top-level intent planner; it decomposes one already-claimed intent/task into ordered subtasks.
+The graph-style `ExplorationPlanner` is the only autonomous generator of durable intent proposals. It uses the protocol's `reason` output contract. The PentAGI Generator is not a second top-level intent planner; it decomposes one already-claimed intent/task into ordered subtasks.
 
 The PentAGI Refiner may patch only that task's remaining subtasks. It cannot create an independent engagement-level intent, change scope or prove a goal.
 
@@ -675,17 +675,17 @@ The PentAGI Refiner may patch only that task's remaining subtasks. It cannot cre
    - Persist operator origin and goal.
    - Validate target/scope and initialize budget.
 
-2. CAIRN bootstrap (only if eligible/configured)
+2. Fact-and-intent bootstrap (only if eligible/configured)
    - Worker tries the initial objective.
    - Fact + Complete only if goal is actually achieved.
    - Otherwise conclude may return Fact only.
 
-3. ARTEX planner / CAIRN reason
+3. Graph planner / fact-and-intent reason
    - Read graph overview, facts, hints, anchors, open intents and coverage.
-   - Return complete, new intent proposals or no-op under CAIRN contract.
-   - Dispatcher validates and persists intents in ARTEX exploration graph.
+   - Return complete, new intent proposals or no-op under the fact-and-intent contract.
+   - Dispatcher validates and persists intents in the exploration graph.
 
-4. ARTEX frontier scheduler / CAIRN explore
+4. Graph frontier scheduler / fact-and-intent explore
    - Claim one intent with a lease.
    - Resolve its anchored assets and prerequisites.
 
@@ -698,7 +698,7 @@ The PentAGI Refiner may patch only that task's remaining subtasks. It cannot cre
    - Reflector corrects malformed outputs up to 3 times.
    - Reporter aggregates the task result.
 
-6. CAIRN explore conclusion / ARTEX graph write-back
+6. Fact-and-intent explore conclusion / graph write-back
    - Return one Fact conclusion for the claimed intent.
    - Dispatcher validates and commits Fact, Assets, Findings, edges and anchors.
    - Finding verification remains Argus's proof/verification pipeline.
@@ -741,7 +741,7 @@ The bridge must validate engagement IDs, intent IDs, task IDs, action IDs, schem
 - `ARGUS_ORCHESTRATION_V2=off|shadow|on`
 - `ARGUS_GRAPH_EXPLORATION=off|shadow|on`
 - `ARGUS_HIERARCHICAL_DELEGATION=off|shadow|on`
-- `ARGUS_CAIRN_PROTOCOL=off|shadow|on`
+- `ARGUS_FACT_INTENT_PROTOCOL=off|shadow|on`
 
 Defaults remain `off` until conformance gates pass. `shadow` can build graphs and proposals without dispatching new work. Do not enable multiple flags independently if their contracts are not ready; the integrated V2 path should be switched on only when the full state/ownership contract is satisfied.
 
@@ -823,9 +823,9 @@ argus-workers/tests/test_hierarchical_generator.py
 argus-workers/tests/test_subtask_refiner_patch.py
 argus-workers/tests/test_primary_specialist_delegation.py
 argus-workers/tests/test_reflector_contract.py
-argus-workers/tests/test_cairn_task_contracts.py
-argus-workers/tests/test_cairn_dispatcher_scheduler.py
-argus-workers/tests/test_cairn_lease_and_cancellation.py
+argus-workers/tests/test_fact_intent_task_contracts.py
+argus-workers/tests/test_fact_intent_dispatcher_scheduler.py
+argus-workers/tests/test_fact_intent_lease_and_cancellation.py
 ```
 
 For TypeScript-owned store/dispatcher code, add focused Bun tests under `Argus-Tui/packages/opencode/test/argus/` and run them from `Argus-Tui/packages/opencode` with `bun test <test-file>`.
@@ -873,7 +873,7 @@ Use an isolated local vulnerable fixture and deterministic fake tools/LLM for mo
 - Interrupt the second subtask; restart and reconcile using the saved message-chain/task state.
 - Simulate invalid tool-call output; Reflector gets no more than 3 attempts and cannot claim success without a valid result.
 
-**Scenario 6 — CAIRN contract failures**
+**Scenario 6 — Fact-and-intent contract failures**
 
 - Reason returns complete and intents together; reject.
 - Reason refers to a nonexistent fact; reject.
@@ -902,9 +902,9 @@ The implementation agent must write:
 ```text
 docs/conformance/
   reference-pins.md
-  artex-graph-conformance.md
+  graph-exploration-conformance.md
   pentagi-delegation-conformance.md
-  cairn-protocol-conformance.md
+  fact-and-intent-conformance.md
   integrated-e2e-results.md
   deviations.md
 ```
@@ -914,9 +914,9 @@ Include machine-readable JSON where helpful:
 ```json
 {
   "reference_commits": {
-    "artex": "94757c5d7e704ac1c095ee99e97d9ac4d9d428c5",
+    "graph_exploration": "94757c5d7e704ac1c095ee99e97d9ac4d9d428c5",
     "pentagi": "cffed9485aa1cca70762cd08a57ac62a80406258",
-    "cairn": "8e7e0ea67552383851dfcabfba0c4e9c8d007878",
+    "fact_intent_protocol": "8e7e0ea67552383851dfcabfba0c4e9c8d007878",
     "argus_baseline": "0e006958927c82d95d293f4e08262df79d95e921"
   },
   "requirements": {
@@ -945,7 +945,7 @@ The three workstreams should be developed in the requested conceptual order, but
 
 **Gate:** no duplicate planner or dual-write path exists in the design.
 
-### Stage 1 — CAIRN control-plane skeleton
+### Stage 1 — Fact-and-intent control-plane skeleton
 
 - Implement typed `bootstrap`, `reason`, `explore` contracts.
 - Implement intent/reason leases, worker registry, cancellation and single-dispatcher authority.
@@ -953,11 +953,11 @@ The three workstreams should be developed in the requested conceptual order, but
 
 **Gate:** all `C-*` contract/lease/cancellation tests pass against the test repository.
 
-### Stage 2 — ARTEX graph-backed exploration
+### Stage 2 — graph-backed exploration
 
 - Implement canonical asset graph and per-engagement exploration graph.
 - Add anchors, coverage, planner frontier, persistent todos, graph outbox and graph-change wake-up.
-- Wire the ARTEX planner through CAIRN reason contract.
+- Wire the graph planner through the fact-and-intent reason contract.
 
 **Gate:** all `A-*` tests pass; no goal can be marked complete without verifier-backed proof.
 
@@ -989,8 +989,8 @@ The three workstreams should be developed in the requested conceptual order, but
 ## 9. Explicit non-goals and adaptations
 
 1. **Do not replace OpenCode or the existing Argus tool execution stack.** Reuse the existing TUI, capability registry, MCP bridge, `executeHybrid`, `ReActAgent`, tool-health handling, scope checks, verifier and report generator.
-2. **Do not create three independent planners.** ARTEX is the only top-level intent planner; CAIRN defines its structured reason/dispatch protocol; PentAGI decomposes one claimed intent into subtasks.
-3. **Do not turn the existing vulnerability attack graph into the ARTEX exploration graph.** Keep vulnerability risk/chain scoring separate from the asset graph and exploration graph.
+2. **Do not create three independent planners.** The graph planner is the only top-level intent planner; the fact-and-intent protocol defines its structured reason/dispatch protocol; PentAGI decomposes one claimed intent into subtasks.
+3. **Do not turn the existing vulnerability attack graph into the exploration graph.** Keep vulnerability risk/chain scoring separate from the asset graph and exploration graph.
 4. **Do not make Docker mandatory.** Reuse Argus's execution boundary and make isolation guarantees explicit. If the configured isolation backend is unavailable, fail closed for engagements that require it; do not silently fall back to a weaker mode.
 5. **Do not let workers write graph state directly.** Agents return structured output; dispatcher validates and commits.
 6. **Do not claim complete parity from component presence.** Each behaviour needs a passing unit/contract test and an integration/runtime trace.
@@ -1010,7 +1010,7 @@ The three workstreams are complete only when all statements below are true:
 - One intent is claimed under a dispatcher lease, and stale workers cannot commit results.
 - Each intent executes through a persistent PentAGI-style Task with an ordered subtask plan of at most 15 items.
 - Subtasks run sequentially inside a task; the Primary Agent can delegate to bounded specialists; the Refiner applies deterministic patches after each terminal result; Reflector is capped at three corrections.
-- CAIRN bootstrap/reason/explore schemas and lifecycle semantics are enforced by code, not prompt text alone.
+- Fact-and-intent bootstrap/reason/explore schemas and lifecycle semantics are enforced by code, not prompt text alone.
 - The dispatcher is the sole durable graph/task/intent writer; workers have no direct write authority.
 - Facts, findings, proof, evidence, assets and task results are distinct typed records with provenance and links.
 - Scope, egress, budgets, approvals, isolation, cancellation and audit logging apply to every worker and specialist action.

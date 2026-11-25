@@ -1,11 +1,11 @@
-# Authoritative state backend plan — ARTEX first-pass decision
+# Authoritative state backend plan — graph first-pass decision
 
 **Updated:** 23 November 2026  
-**Status:** First ARTEX write path reviewed and repaired; integration verification still blocked by the missing PostgreSQL, not by implementation.
+**Status:** First graph write path reviewed and repaired; integration verification still blocked by the missing PostgreSQL, not by implementation.
 
 ## 1. What is done now
 
-For the first ARTEX implementation pass, the repository now contains a
+For the first graph implementation pass, the repository now contains a
 dispatcher-owned graph write path:
 
 - `argus-workers/database/migrations/033_graph_tables.sql` — canonical asset
@@ -137,8 +137,8 @@ To reproduce locally:
 
 ## 5. What is implemented and committed now
 
-For the first ARTEX implementation pass, the repository now contains a
-dispatcher-owned graph write path that covers all of the listed ARTEX
+For the first graph implementation pass, the repository now contains a
+dispatcher-owned graph write path that covers all of the listed graph
 components:
 
 - canonical assets and explicit anchors (`graph_assets`, `graph_nodes`,
@@ -166,7 +166,7 @@ The unit tests for these surfaces exist and the pure-logic dispatcher
 validation tests pass in this environment. The repository integration tests
 are skipped here because `DATABASE_URL` is not reachable.
 
-The conformance notes now treat the full ARTEX first-pass surface as
+The conformance notes now treat the full graph first-pass surface as
 **implemented and committed**, and **verification as blocked by
 environment**, not as incomplete.
 
@@ -333,7 +333,7 @@ rejection (`TestTenantBoundary`).
   committed result instead of a second logical update.
 - **Rollout flags (A5).** `orchestrator_pkg/planning/flags.py` implements
   `ARGUS_ORCHESTRATION_V2`, `ARGUS_GRAPH_EXPLORATION`,
-  `ARGUS_HIERARCHICAL_DELEGATION` and `ARGUS_CAIRN_PROTOCOL` with
+  `ARGUS_HIERARCHICAL_DELEGATION` and `ARGUS_FACT_INTENT_PROTOCOL` with
   `off|shadow|on`; typos raise. `ARGUS_ORCHESTRATION_V2` is the master switch:
   `off` rolls back, `shadow` keeps the loop non-mutating, and only `on` lets
   `ARGUS_GRAPH_EXPLORATION` choose live vs shadow. On the real drain path,
@@ -353,7 +353,7 @@ rejection (`TestTenantBoundary`).
 
 ## 7. What is still open after this note
 
-- CAIRN protocol work proper: typed `bootstrap`/`reason`/`explore` result
+- Fact-and-intent protocol work proper: typed `bootstrap`/`reason`/`explore` result
   contracts, reason lease/checkpoint scheduling, worker registry and single
   dispatcher leader election (C-01…C-22 apart from the ownership/lease pieces
   above).
@@ -373,7 +373,7 @@ rejection (`TestTenantBoundary`).
 
 - **Authoritative backend:** the one storage system that owns durable state for
   the_first_implementation_pass.
-- **First implementation pass:** the smallest ARTEX cut that can be tested against
+- **First implementation pass:** the smallest graph cut that can be tested against
   a real repository call path, not the full final architecture.
 - **Dispatcher-owned:** mutations are submitted to dispatcher methods; workers do
   not commit graph state directly.

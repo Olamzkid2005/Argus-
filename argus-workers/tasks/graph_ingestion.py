@@ -1,5 +1,5 @@
 """
-Recon -> ARTEX asset graph ingestion bridge (A2).
+Recon -> asset graph ingestion bridge (A2).
 
 Recon already produces a structured ``ReconContext`` (live endpoints, subdomains,
 open ports, crawled/API/auth URLs). This module feeds those outcomes into the
@@ -191,7 +191,7 @@ def ingest_recon_outcomes(
     # Gaps the recon pass leaves behind become scheduled work, not just report
     # lines: approved-but-undiscovered targets and untested asset classes get a
     # planner frontier node plus todo. Best-effort like ingestion itself.
-    # ``schedule_gaps=False`` is for callers that compare the ARTEX planner's
+    # ``schedule_gaps=False`` is for callers that compare the graph planner's
     # proposals against an unscheduled frontier (the A5 shadow gate).
     scheduled_gaps = 0
     if schedule_gaps:

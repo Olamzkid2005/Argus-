@@ -212,6 +212,7 @@ app = Celery(
         "tasks.security",
         "tasks.asset_discovery",
         "tasks.graph_planner",
+        "tasks.control_plane",
         "tasks.scheduled",
         "tasks.replay",
         "tasks.diff",
@@ -341,11 +342,18 @@ app.conf.update(
             "schedule": 300.0,  # every 5 minutes
         },
         # Consume committed graph-change wakes every 15 seconds. This is the
-        # production floor for the ARTEX planner loop: a queued outbox row is
+        # production floor for the graph planner loop: a queued outbox row is
         # never stranded even when an immediate wake dispatch is missed.
         "drain-planner-outbox": {
             "task": "tasks.graph_planner.drain_planner_outbox",
             "schedule": 15.0,
+        },
+        # Advance the fact-and-intent dispatcher once a minute. Each pass runs
+        # at most one protocol step per engagement and is a no-op unless
+        # ARGUS_FACT_INTENT_PROTOCOL=on and a worker transport is configured.
+        "control-plane-tick": {
+            "task": "tasks.control_plane.tick",
+            "schedule": 60.0,
         },
         # Autonomous DLQ replay every 10 minutes
         "replay-eligible-dlq-tasks": {

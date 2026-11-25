@@ -2443,7 +2443,7 @@ class ExplorationGraphRepository(BaseRepository):
         fact_description: str,
     ) -> dict[str, Any]:
         """
-        Close a claimed intent with exactly one conclusion fact (CAIRN explore).
+        Close a claimed intent with exactly one conclusion fact (fact-and-intent explore).
 
         The token must still match and the lease must be live. The fact and the
         ``yields`` edge are committed with the intent transition in one

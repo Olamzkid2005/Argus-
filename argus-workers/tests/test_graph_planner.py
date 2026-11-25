@@ -1,5 +1,5 @@
 """
-ARTEX planner event loop tests (A3) against PostgreSQL.
+Graph planner event loop tests (A3) against PostgreSQL.
 
 These drive the real dispatcher/repository path:
 

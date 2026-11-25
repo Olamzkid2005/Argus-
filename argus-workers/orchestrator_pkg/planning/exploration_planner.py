@@ -1,5 +1,5 @@
 """
-ARTEX ExplorationPlanner (proposal-only).
+ExplorationPlanner (proposal-only).
 
 The planner reads a persisted overview of the engagement graph and returns typed
 intent proposals. It never writes graph state: the dispatcher validates and

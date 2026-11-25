@@ -13,7 +13,9 @@ checkpoints, worker registry, cancellation).
 cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly
 ```
 
-**Result:** **25 passed, 0 skipped** (2026-11-25).
+**Result:** **38 passed, 0 skipped** (2026-11-25) across
+`tests/test_control_plane.py` (DB-backed) and
+`tests/test_control_plane_bridge.py` (typed transport, no database).
 
 ## Ownership
 
@@ -32,8 +34,32 @@ cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:random
 - `control_plane/dispatcher.py` — exactly one leadership lease per engagement,
   one protocol step per tick, result validation, same-session conclude
   fallback, lease-loss/cancellation guards.
+- `control_plane/worker_bridge.py` — the live `WorkerRunner`: a newline-delimited
+  JSON-RPC stdio client for the typed `task_bootstrap` / `task_reason` /
+  `task_explore` methods. It starts `mcp_server.py` (or
+  `ARGUS_TASK_WORKER_CMD`), enforces request/response size limits, maps a
+  read timeout to `TimeoutError` and a bad reply to `ProtocolError`.
+- `control_plane/task_service.py` — the server side of that protocol. It accepts
+  only the exact envelope (`schema_version`, `task_type`, `conclude`,
+  `request`), caps the payload at 256 KiB and runs the configured executor. No
+  executor configured means an explicit `accepted=false` rejection, never a
+  fabricated fact.
+- `tasks/control_plane.py` — the Celery beat tick. It lists active engagements,
+  takes the per-engagement dispatcher lease, runs at most one step, and reports
+  `unconfigured` when no worker transport or `ARGUS_FACT_INTENT_PROTOCOL=on` is set.
 - Workers receive only a bounded JSON job. It contains no claim token, no
   database URL and no write authority.
+
+**Commit guards.** Bootstrap and reason results are committed only when the
+engagement is still active and the task that produced them is still `running`.
+`_require_live_task` cancels the task (and the dispatcher releases the bootstrap
+reservation) when either condition fails, so a cancellation that lands while a
+worker is finishing cannot turn into a fact or a new intent. Explore already had
+the equivalent guard. Regression tests:
+`test_bootstrap_result_rejected_when_engagement_stops`,
+`test_bootstrap_result_rejected_when_task_is_cancelled`,
+`test_reason_result_rejected_when_engagement_stops`,
+`test_reason_result_rejected_when_task_is_cancelled`.
 
 **Conclude fallback policy.** Only a timeout (`TimeoutError`) or a contract
 violation (`ProtocolError`, including `accepted=false`) may invoke the
@@ -72,11 +98,33 @@ broken response into a fact. Three regression tests pin this policy
 | C-21 | Two dispatchers: only one obtains leadership | PASS |
 | C-22 | Extra fields rejected; legacy singular alias opt-in only | PASS |
 
+## Transport, endpoint and scheduling tests
+
+| Area | Test | Result |
+|---|---|---|
+| Typed methods round-trip over stdio JSON-RPC | `test_bridge_sends_typed_task_methods_and_returns_the_result` | PASS |
+| Read timeout is `TimeoutError` (conclude-eligible) | `test_bridge_timeout_is_a_timeout_error` | PASS |
+| Non-object worker reply is `ProtocolError` | `test_bridge_rejects_a_non_object_result` | PASS |
+| Exact envelope, unknown keys, schema version, task type | `test_task_request_requires_the_exact_envelope` | PASS |
+| Payload size cap | `test_task_request_is_bounded` | PASS |
+| Executor runs once; crash becomes `accepted=false` | `test_endpoint_runs_the_configured_executor_once`, `test_endpoint_turns_a_crashed_executor_into_a_rejected_result` | PASS |
+| No executor → explicit rejection | `test_endpoint_without_an_executor_rejects_instead_of_answering` | PASS |
+| Scheduled tick dispatches when `on`, no-ops when `off` | `test_control_plane_tick_runs_bootstrap_and_honours_off` | PASS |
+
 ## Known limits
 
-- Worker runner is an injected protocol; the MCP `task_*` transport and live
-  worker process adapter are not wired yet (Stage 4 integration).
-- The dispatcher loop is exercised directly; Celery scheduling of
-  `tick`/reconciliation is not part of this slice.
-- On cancellation the worker process itself must be terminated by the runner
-  adapter; this slice cancels the task record and rejects late output.
+- The tick dispatches synchronously: one engagement with a 120 s task timeout
+  can occupy a beat worker for that long. `max_engagements` is bounded and the
+  Celery task has a 240 s soft limit; horizontal scaling is still one
+  dispatcher per engagement by lease.
+- The commit guard is a pre-commit check, not a distributed transaction. The
+  dispatcher is the only writer and cancellation sets the task status first,
+  but an operator cancellation that lands between the check and the graph write
+  is not serialized against it.
+- The task executor is deployment-supplied (`ARGUS_TASK_EXECUTOR=module:callable`).
+  This slice wires the protocol and the process transport; it does not ship an
+  LLM-backed executor, so a deployment without one receives explicit rejections
+  (no facts) rather than bootstrap/reason/explore output.
+- On cancellation the task record is cancelled and late output is rejected; the
+  beat tick does not yet kill a worker process that is mid-call. The bridge
+  terminates its process on timeout or transport failure.
