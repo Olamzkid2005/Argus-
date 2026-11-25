@@ -298,6 +298,11 @@ jobs:
               "delegation_patches",
               "delegation_reports",
               "delegation_memory",
+              "control_plane_workers",
+              "control_plane_leases",
+              "control_plane_tasks",
+              "control_plane_reason_checkpoints",
+              "control_plane_bootstrap",
           }
 
           conn = psycopg2.connect(os.environ["DATABASE_URL"])
@@ -402,6 +407,7 @@ jobs:
             tests/test_graph_ingestion.py \
             tests/test_graph_planner.py \
             tests/test_pentagi_delegation.py \
+            tests/test_control_plane.py \
             -v --timeout=180 --tb=long --junit-xml=graph-repository-results.xml
 
       - name: Confirm graph tests did not skip

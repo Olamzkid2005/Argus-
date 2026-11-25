@@ -102,6 +102,9 @@ _ALLOWED_REFERENCES = frozenset(
         # DispatcherGraph.prove_goal_from_findings after a finding is
         # persisted, so goals are concluded by the verifier itself (A-08).
         "orchestrator_pkg/persistence/goal_proof.py",
+        # Fact-and-intent control plane: the dispatcher is the single writer.
+        "control_plane/store.py",
+        "control_plane/dispatcher.py",
     }
 )
 

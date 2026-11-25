@@ -584,6 +584,14 @@ class DispatcherGraph:
             engagement_id, scope_type=scope_type
         )
 
+    def find_nodes_by_engagement(self, engagement_id: str, **kwargs: Any) -> list[dict[str, Any]]:
+        """Read an engagement's exploration nodes (dispatcher-owned read)."""
+        return self._repo.find_nodes_by_engagement(engagement_id, **kwargs)
+
+    def find_node_by_id(self, node_id: str) -> dict[str, Any] | None:
+        """Read one exploration node by id (dispatcher-owned read)."""
+        return self._repo.find_node_by_id(node_id)
+
     def planner_overview(self, engagement_id: str) -> dict[str, Any]:
         """Read the bounded planner snapshot for an engagement."""
         if not engagement_id:
@@ -701,6 +709,19 @@ class DispatcherGraph:
             worker_id,
             intent_node_id=intent_node_id,
             lease_seconds=lease_seconds,
+        )
+
+    @dispatcher_owned
+    def release_intent_node(
+        self,
+        engagement_id: str,
+        intent_node_id: str,
+        *,
+        claim_token: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Release one intent claim back to the open frontier."""
+        return self._repo.release_intent_node(
+            engagement_id, intent_node_id, claim_token=claim_token
         )
 
     @dispatcher_owned

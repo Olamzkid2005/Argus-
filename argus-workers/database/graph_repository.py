@@ -2367,6 +2367,38 @@ class ExplorationGraphRepository(BaseRepository):
             row = cursor.fetchone()
             return dict(row) if row else None
 
+    def release_intent_node(
+        self,
+        engagement_id: str,
+        intent_node_id: str,
+        *,
+        claim_token: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Release an intent claim back to open work.
+
+        A stale or cancelled worker can only release the exact claim token it
+        was handed; an operator release with no token is allowed for cleanup.
+        """
+        require_graph_write_owner("release_intent_node")
+        if not engagement_id or not intent_node_id:
+            raise GraphMutationError("engagement_id and intent_node_id are required")
+        with self.db_operation(
+            commit=True, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                f"""
+                UPDATE graph_nodes
+                SET state = 'open', owner = NULL, {LEASE_CLEAR_SQL}, updated_at = NOW()
+                WHERE engagement_id = %s AND id = %s AND kind = 'intent'
+                  AND state = 'running'
+                  AND (%s::uuid IS NULL OR claim_token::text = %s)
+                RETURNING *
+                """,
+                (engagement_id, intent_node_id, claim_token, claim_token),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
     def heartbeat_intent_node(
         self,
         engagement_id: str,
