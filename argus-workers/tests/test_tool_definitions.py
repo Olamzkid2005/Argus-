@@ -468,6 +468,115 @@ class TestInlineOverridesDoNotLoseYamlData:
             _YAML_DEFINED.discard(name)
 
 
+class TestInlineRegistrationsMatchYaml:
+    """An inline _register() may add metadata, never override YAML policy.
+
+    ``_register`` deliberately keeps YAML *invocation* and lets an inline entry
+    replace execution policy. That precedence is how ``gau`` kept running
+    ``gau --json`` and how path-only scanners claimed the HTTP scan phase long
+    after their YAML said otherwise. Every policy field an inline block states
+    must therefore agree with the YAML it overrides; metadata the YAML schema
+    cannot express (parallel_safe, model_tier, …) is unaffected.
+    """
+
+    FIELDS = ("phases", "timeout", "signal_quality", "default_args", "requires")
+
+    @classmethod
+    def _literal(cls, node):
+        import ast
+
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.List):
+            return [cls._literal(element) for element in node.elts]
+        if isinstance(node, ast.Attribute):  # SignalQuality.CONFIRMED
+            return node.attr
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == "ToolRequires":
+            return {kw.arg: cls._literal(kw.value) for kw in node.keywords}
+        raise AssertionError(f"unsupported value in an inline definition: {ast.unparse(node)}")
+
+    @staticmethod
+    def _yaml_policy(spec: dict) -> dict:
+        from scripts.generate_tool_defs import CAPABILITY_TO_PHASES
+
+        phases = list(spec.get("phases") or [])
+        if spec.get("disabled"):
+            phases = []
+        elif not phases:
+            for capability in spec.get("capabilities") or []:
+                for phase in CAPABILITY_TO_PHASES.get(capability, []):
+                    if phase not in phases:
+                        phases.append(phase)
+            if not phases:
+                phases = ["scan"]
+        return {
+            "phases": phases,
+            "timeout": spec.get("timeout", 300),
+            "signal_quality": (spec.get("signal_quality") or "CANDIDATE").upper(),
+            "default_args": list(spec.get("args") or []),
+            "requires": {
+                key: value
+                for key, value in (spec.get("requires") or {}).items()
+                if value
+            },
+        }
+
+    def test_inline_blocks_do_not_override_yaml_policy(self):
+        import ast
+        from pathlib import Path
+
+        import yaml
+
+        definitions = Path(__file__).resolve().parents[1] / "tools" / "definitions"
+        source = (Path(__file__).resolve().parents[1] / "tool_definitions.py").read_text()
+
+        conflicts: list[str] = []
+        inspected: list[str] = []
+        for node in ast.parse(source).body:
+            if not isinstance(node, ast.Expr):
+                continue
+            call = node.value
+            if not isinstance(call, ast.Call) or ast.unparse(call.func) != "_register":
+                continue
+            if not call.args or not isinstance(call.args[0], ast.Call):
+                continue
+            definition = call.args[0]
+            if ast.unparse(definition.func) != "ToolDefinition":
+                continue
+            keywords = {kw.arg: kw.value for kw in definition.keywords}
+            name_node = keywords.get("name")
+            if not isinstance(name_node, ast.Constant):
+                continue
+            yaml_path = definitions / f"{name_node.value}.yaml"
+            if not yaml_path.exists():
+                continue  # inline-only tool: nothing to disagree with
+
+            inspected.append(name_node.value)
+            expected = self._yaml_policy(yaml.safe_load(yaml_path.read_text()) or {})
+            for field in self.FIELDS:
+                if field not in keywords:
+                    continue
+                actual = self._literal(keywords[field])
+                if field == "default_args" and not actual:
+                    continue  # empty inline args inherit the YAML invocation
+                if field == "requires":
+                    actual = {
+                        key: value for key, value in (actual or {}).items() if value
+                    }
+                if actual != expected[field]:
+                    conflicts.append(
+                        f"{name_node.value}.{field}: inline={actual!r} "
+                        f"yaml={expected[field]!r}"
+                    )
+
+        assert len(inspected) > 20, f"the scan found too few inline blocks: {inspected}"
+        assert "nuclei" in inspected
+        assert not conflicts, (
+            "inline _register() blocks override their YAML definition; move these "
+            "values into tools/definitions/*.yaml instead:\n  " + "\n  ".join(conflicts)
+        )
+
+
 class TestPipelineStepTools:
     """Registry entries that name an in-process step, not an executable."""
 
