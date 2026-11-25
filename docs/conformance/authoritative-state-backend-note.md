@@ -353,15 +353,14 @@ rejection (`TestTenantBoundary`).
 
 ## 7. What is still open after this note
 
-- Fact-and-intent protocol work proper: typed `bootstrap`/`reason`/`explore` result
-  contracts, reason lease/checkpoint scheduling, worker registry and single
-  dispatcher leader election (C-01…C-22 apart from the ownership/lease pieces
-  above).
-- PentAGI hierarchical delegation: P-01…P-17 pass against PostgreSQL and are
-  recorded in `pentagi-delegation-conformance.md`. What remains is integration,
-  not the workstream contract: the production dispatcher does not yet create a
-  task for each claimed intent, the MCP `task_*` bridge endpoints are not added,
-  and no live-model Generator/Refiner/specialist run has been made (Stage 4).
+- Fact-and-intent protocol work: C-01…C-25 pass and are recorded in
+  `control-plane-conformance.md`.
+- PentAGI hierarchical delegation: P-01…P-17 pass against PostgreSQL, and Stage 4
+  wires the production dispatcher to create one Task per claimed intent, persist
+  generated plans, actions and refinements, and write the task report's
+  conclusion. See `integrated-e2e-results.md`. The eight integrated scenarios
+  pass with deterministic agents; a live-model Generator/Refiner/specialist run
+  and a controlled-lab assessment remain operational steps.
 - A5 activation: the deployment now runs the loop with
   `ARGUS_ORCHESTRATION_V2=on`/`ARGUS_GRAPH_EXPLORATION=on` by default, so the
   remaining gate is operational rather than code: compare shadow turns against

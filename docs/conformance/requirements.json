@@ -1,7 +1,7 @@
 {
   "meta": {
-    "stage": "Stage 3 gate passed (PentAGI P-01…P-17)",
-    "updated_at": "2026-11-25T12:00:00+00:00",
+    "stage": "Stage 4 integrated scenarios passed (I-01…I-08)",
+    "updated_at": "2026-11-25T17:00:00+00:00",
     "source_of_truth_for_this_stage": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md",
     "actual_upstream_reference_used": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md (local copy of the Stage 0 spec)",
     "local_baseline_inspected": [
@@ -827,6 +827,97 @@
       "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 38 passed, 0 skipped in tests/test_control_plane.py + tests/test_control_plane_bridge.py (2026-11-25)",
       "note": "Typed task_* stdio MCP bridge, strict endpoint and the scheduled dispatcher tick.",
       "ledger": "docs/conformance/control-plane-conformance.md"
+    }
+  },
+  "integration_requirements": {
+    "I-01": {
+      "id": "I-01",
+      "status": "PASS",
+      "tests": [
+        "tests/test_stage4_integration.py::test_scenario1_bootstrap_reason_explore_end_to_end"
+      ],
+      "command": "cd argus-workers && python -m pytest tests/test_stage4_integration.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 9 passed, 0 skipped in tests/test_stage4_integration.py (2026-11-25)",
+      "note": "Bootstrap fact, two intents, task plan, sequential subtasks, refiner add, one explore fact and report/actions/patch persisted.",
+      "ledger": "docs/conformance/integrated-e2e-results.md"
+    },
+    "I-02": {
+      "id": "I-02",
+      "status": "PASS",
+      "tests": [
+        "tests/test_stage4_integration.py::test_scenario2_no_stall_and_no_duplicates"
+      ],
+      "command": "cd argus-workers && python -m pytest tests/test_stage4_integration.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 9 passed, 0 skipped in tests/test_stage4_integration.py (2026-11-25)",
+      "note": "Unresolved goal cannot stall; duplicate intents and replayed explore results write nothing.",
+      "ledger": "docs/conformance/integrated-e2e-results.md"
+    },
+    "I-03": {
+      "id": "I-03",
+      "status": "PASS",
+      "tests": [
+        "tests/test_stage4_integration.py::test_scenario3_dependency_chain_survives_restart"
+      ],
+      "command": "cd argus-workers && python -m pytest tests/test_stage4_integration.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 9 passed, 0 skipped in tests/test_stage4_integration.py (2026-11-25)",
+      "note": "A\u2192B\u2192C ordering holds across a restarted delegation store.",
+      "ledger": "docs/conformance/integrated-e2e-results.md"
+    },
+    "I-04": {
+      "id": "I-04",
+      "status": "PASS",
+      "tests": [
+        "tests/test_stage4_integration.py::test_scenario4_expired_claim_rejects_the_old_worker"
+      ],
+      "command": "cd argus-workers && python -m pytest tests/test_stage4_integration.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 9 passed, 0 skipped in tests/test_stage4_integration.py (2026-11-25)",
+      "note": "Expired claim rejects the old worker's fact; a fresh worker reclaims the intent.",
+      "ledger": "docs/conformance/integrated-e2e-results.md"
+    },
+    "I-05": {
+      "id": "I-05",
+      "status": "PASS",
+      "tests": [
+        "tests/test_stage4_integration.py::test_scenario5_refiner_patch_preserves_completed_evidence",
+        "tests/test_stage4_integration.py::test_scenario5_restart_reconciles_and_reflection_stops_at_three"
+      ],
+      "command": "cd argus-workers && python -m pytest tests/test_stage4_integration.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 9 passed, 0 skipped in tests/test_stage4_integration.py (2026-11-25)",
+      "note": "ADD/REMOVE/REORDER preserves completed evidence; restart reconciles; reflection stops at three attempts.",
+      "ledger": "docs/conformance/integrated-e2e-results.md"
+    },
+    "I-06": {
+      "id": "I-06",
+      "status": "PASS",
+      "tests": [
+        "tests/test_stage4_integration.py::test_scenario6_invalid_worker_results_write_nothing"
+      ],
+      "command": "cd argus-workers && python -m pytest tests/test_stage4_integration.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 9 passed, 0 skipped in tests/test_stage4_integration.py (2026-11-25)",
+      "note": "Conflicting reason and invalid conclude are rejected with no graph write.",
+      "ledger": "docs/conformance/integrated-e2e-results.md"
+    },
+    "I-07": {
+      "id": "I-07",
+      "status": "PASS",
+      "tests": [
+        "tests/test_stage4_integration.py::test_scenario7_engagements_and_dispatchers_stay_isolated"
+      ],
+      "command": "cd argus-workers && python -m pytest tests/test_stage4_integration.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 9 passed, 0 skipped in tests/test_stage4_integration.py (2026-11-25)",
+      "note": "Two engagements/workers stay isolated; only one dispatcher acquires leadership.",
+      "ledger": "docs/conformance/integrated-e2e-results.md"
+    },
+    "I-08": {
+      "id": "I-08",
+      "status": "PASS",
+      "tests": [
+        "tests/test_stage4_integration.py::test_scenario8_hostile_evidence_stays_bounded"
+      ],
+      "command": "cd argus-workers && python -m pytest tests/test_stage4_integration.py -q -p no:randomly",
+      "runtime_evidence": "PostgreSQL 16.2 with migration runner through 040; 9 passed, 0 skipped in tests/test_stage4_integration.py (2026-11-25)",
+      "note": "Hostile evidence stays data; agent/executor payloads are bounded; workers cannot write the graph.",
+      "ledger": "docs/conformance/integrated-e2e-results.md"
     }
   }
 }

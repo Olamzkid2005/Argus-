@@ -22,6 +22,11 @@ from control_plane.contracts import (
     parse_worker_result,
 )
 from control_plane.dispatcher import ControlPlaneDispatcher, WorkerRunner
+from control_plane.integrated import (
+    IntegratedWorkerRunner,
+    build_integrated_runner,
+    integrated_runner_from_env,
+)
 from control_plane.scheduler import WorkerView, choose_worker, global_capacity_available
 from control_plane.store import (
     LateResult,
@@ -51,6 +56,7 @@ __all__ = [
     "BootstrapExecuteResult",
     "ControlPlaneDispatcher",
     "ExploreResult",
+    "IntegratedWorkerRunner",
     "LateResult",
     "LeaseLost",
     "NotLeader",
@@ -61,10 +67,12 @@ __all__ = [
     "ResultRejected",
     "WorkerView",
     "WorkerRunner",
+    "build_integrated_runner",
     "choose_worker",
     "dispatch_task_request",
     "get_task_executor",
     "global_capacity_available",
+    "integrated_runner_from_env",
     "parse_task_request",
     "parse_bootstrap_conclude",
     "parse_bootstrap_execute",

@@ -27,7 +27,11 @@ from queue import Empty, Queue
 from typing import Any
 
 from control_plane.contracts import ProtocolError
-from control_plane.task_service import MAX_REQUEST_BYTES, METHODS, SCHEMA_VERSION
+from control_plane.task_service import (
+    EXECUTOR_METHODS,
+    MAX_REQUEST_BYTES,
+    SCHEMA_VERSION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +62,7 @@ class MCPTaskBridge:
         self.command = list(command or default_worker_command())
         self.worker_id = worker_id
         #: Task types this transport can execute; the tick registers them.
-        self.task_types = frozenset(METHODS.values())
+        self.task_types = frozenset(EXECUTOR_METHODS.values())
         self.timeout_seconds = float(timeout_seconds)
         self._env = dict(env) if env is not None else None
         self._cwd = str(cwd) if cwd is not None else None
@@ -80,6 +84,57 @@ class MCPTaskBridge:
 
     def explore(self, job: dict[str, Any], *, conclude: bool = False) -> Any:
         return self._call("task_explore", "explore", job, conclude)
+
+    # ----- dispatcher-owned task control -----
+
+    def generate_subtasks(
+        self,
+        task_id: str,
+        subtasks: list[dict[str, Any]],
+        *,
+        existing_titles: list[str] | None = None,
+    ) -> Any:
+        return self._call(
+            "task_generate_subtasks",
+            "generate_subtasks",
+            {
+                "task_id": task_id,
+                "subtasks": subtasks,
+                "existing_titles": list(existing_titles or []),
+            },
+            False,
+        )
+
+    def refine_subtasks(
+        self, task_id: str, operations: list[dict[str, Any]]
+    ) -> Any:
+        return self._call(
+            "task_refine_subtasks",
+            "refine_subtasks",
+            {"task_id": task_id, "operations": operations},
+            False,
+        )
+
+    def progress(
+        self,
+        task_id: str,
+        subtask_id: str,
+        event: dict[str, Any],
+    ) -> Any:
+        return self._call(
+            "task_progress",
+            "progress",
+            {"task_id": task_id, "subtask_id": subtask_id, "event": event},
+            False,
+        )
+
+    def cancel(self, task_id: str, reason: str) -> Any:
+        return self._call(
+            "task_cancel",
+            "cancel",
+            {"task_id": task_id, "reason": reason},
+            False,
+        )
 
     # ----- process lifecycle -----
 

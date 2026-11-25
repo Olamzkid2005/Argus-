@@ -121,10 +121,13 @@ broken response into a fact. Three regression tests pin this policy
   dispatcher is the only writer and cancellation sets the task status first,
   but an operator cancellation that lands between the check and the graph write
   is not serialized against it.
-- The task executor is deployment-supplied (`ARGUS_TASK_EXECUTOR=module:callable`).
-  This slice wires the protocol and the process transport; it does not ship an
-  LLM-backed executor, so a deployment without one receives explicit rejections
-  (no facts) rather than bootstrap/reason/explore output.
+- The task executor is deployment-supplied (`ARGUS_TASK_EXECUTOR=module:callable`)
+  for the stdio worker, or `ARGUS_INTEGRATED_TASK_AGENTS=module:factory` for the
+  in-process integrated runner. The integrated path (`agent/delegation/integration.py`,
+  `control_plane/integrated.py`) runs intent → Task → Subtasks → Refiner →
+  Reporter and returns one conclusion; the eight Stage 4 scenarios pass with
+  deterministic agents (`integrated-e2e-results.md`). This slice still does not
+  ship a live LLM-backed executor.
 - On cancellation the task record is cancelled and late output is rejected; the
   beat tick does not yet kill a worker process that is mid-call. The bridge
   terminates its process on timeout or transport failure.

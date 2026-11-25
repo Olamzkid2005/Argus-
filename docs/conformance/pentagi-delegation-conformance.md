@@ -154,9 +154,10 @@ keeps result, message chain and action rows (P-14).
    primary key plus `ON CONFLICT DO NOTHING` makes "runs once" a storage guarantee.
 6. **Memorist fails closed.** No tenant → no reads. Redaction runs before storage, and reads
    additionally filter `redacted = TRUE`.
-7. **Flag wiring only.** `ARGUS_HIERARCHICAL_DELEGATION` resolves through
-   `hierarchical_delegation_mode()`, but no production dispatcher path dispatches delegation
-   tasks yet; that is Stage 4 integration, not a P-requirement.
+7. **Production wiring (Stage 4).** `agent/delegation/integration.py` creates one Task per
+   claimed intent, persists the validated plan, runs the sequential worker, records returned
+   actions and returns the task report's conclusion; `control_plane/integrated.py` plugs that
+   into the dispatcher tick. See `integrated-e2e-results.md`.
 
 ---
 
@@ -168,12 +169,13 @@ keeps result, message chain and action rows (P-14).
 - No live LLM Generator/Refiner/specialist is called. The contracts are agent-agnostic and
   tested with scripted agents, which is what P-02/P-03/P-06/P-08/P-09/P-10/P-11/P-12 specify.
   A live-model run belongs to the Stage 4 integrated scenarios.
-- The production dispatcher loop does not yet create tasks for claimed intents or persist
-  action outcomes from the ReAct executor; that wiring is Stage 4 (integrated run) and is
-  deliberately outside this workstream's gate.
+- The production dispatcher creates one Task per claimed intent and persists the structured
+  actions returned by the subtask executor. It cannot persist raw ReAct tool calls yet: the
+  executor adapter must return them as `actions`, and the live ReAct-to-subtask adapter is
+  deployment-supplied alongside the LLM agents.
 - The MCP `task_generate_subtasks`, `task_refine_subtasks`, `task_progress` and `task_cancel`
-  bridge endpoints from plan §6.5 are not added yet. The contracts they would call exist and
-  are tested.
+  endpoints from plan §6.5 are implemented and typed; they validate payloads and the
+  dispatcher applies the result. The integration evidence is in `integrated-e2e-results.md`.
 - Cancellation is represented by the `cancelled` status and the task/tool executor boundary;
   no cooperative cancellation token is threaded through the worker in this pass.
 - Tests use a local PostgreSQL 16.2 instance, not the CI Postgres job. The CI job that runs the

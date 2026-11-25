@@ -409,6 +409,7 @@ jobs:
             tests/test_pentagi_delegation.py \
             tests/test_control_plane.py \
             tests/test_control_plane_bridge.py \
+            tests/test_stage4_integration.py \
             -v --timeout=180 --tb=long --junit-xml=graph-repository-results.xml
 
       - name: Confirm graph tests did not skip

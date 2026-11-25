@@ -2940,6 +2940,22 @@ class MCPServer:
         """Run one claimed-intent explore job; the dispatcher writes the fact."""
         return self._task_request("task_explore", params)
 
+    def handle_task_generate_subtasks(self, params: dict) -> dict:
+        """Validate a proposed subtask plan; the dispatcher persists it."""
+        return self._task_request("task_generate_subtasks", params)
+
+    def handle_task_refine_subtasks(self, params: dict) -> dict:
+        """Validate proposed refiner operations; the dispatcher applies them."""
+        return self._task_request("task_refine_subtasks", params)
+
+    def handle_task_progress(self, params: dict) -> dict:
+        """Accept one progress event; it is not a durable graph write."""
+        return self._task_request("task_progress", params)
+
+    def handle_task_cancel(self, params: dict) -> dict:
+        """Acknowledge a cancel request; the dispatcher owns cancellation."""
+        return self._task_request("task_cancel", params)
+
     @staticmethod
     def _build_attack_graph(
         engagement_id: str,
@@ -3379,9 +3395,25 @@ def main():
     def handle_task_explore(params):
         return server.handle_task_explore(params)
 
+    def handle_task_generate_subtasks(params):
+        return server.handle_task_generate_subtasks(params)
+
+    def handle_task_refine_subtasks(params):
+        return server.handle_task_refine_subtasks(params)
+
+    def handle_task_progress(params):
+        return server.handle_task_progress(params)
+
+    def handle_task_cancel(params):
+        return server.handle_task_cancel(params)
+
     transport.register("task_bootstrap", handle_task_bootstrap)
     transport.register("task_reason", handle_task_reason)
     transport.register("task_explore", handle_task_explore)
+    transport.register("task_generate_subtasks", handle_task_generate_subtasks)
+    transport.register("task_refine_subtasks", handle_task_refine_subtasks)
+    transport.register("task_progress", handle_task_progress)
+    transport.register("task_cancel", handle_task_cancel)
 
     def handle_get_attack_graph(params):
         return server.handle_get_attack_graph(params)

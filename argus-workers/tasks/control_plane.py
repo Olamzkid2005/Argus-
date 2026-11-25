@@ -24,6 +24,7 @@ from control_plane import (
     PostgresControlPlaneStore,
     WorkerRunner,
 )
+from control_plane.integrated import integrated_runner_from_env
 from control_plane.worker_bridge import worker_runner_from_env
 
 try:
@@ -98,11 +99,12 @@ def run_control_plane_tick(
             "skipped": True,
         }
 
-    runner = runner or worker_runner_from_env()
+    runner = runner or worker_runner_from_env() or integrated_runner_from_env()
     if runner is None:
         logger.warning(
             "Control-plane tick has no worker transport: set ARGUS_TASK_WORKER_CMD "
-            "(for example 'python mcp_server.py') to dispatch work."
+            "(for example 'python mcp_server.py') or "
+            "ARGUS_INTEGRATED_TASK_AGENTS=module:factory to dispatch work."
         )
         return {
             "mode": resolved,

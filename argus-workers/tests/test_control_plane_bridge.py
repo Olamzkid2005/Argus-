@@ -173,6 +173,93 @@ def test_endpoint_without_an_executor_rejects_instead_of_answering(monkeypatch):
     assert "executor" in result["error"]
 
 
+def _control(method: str, task_type: str, request: dict):
+    return dispatch_task_request(
+        method,
+        {
+            "schema_version": 1,
+            "task_type": task_type,
+            "request": request,
+        },
+    )
+
+
+def test_generate_subtasks_endpoint_validates_and_orders_a_plan():
+    result = _control(
+        "task_generate_subtasks",
+        "generate_subtasks",
+        {
+            "task_id": "task-1",
+            "subtasks": [
+                {"title": "Second", "description": "depends", "depends_on": [2]},
+                {"title": "First", "description": "root"},
+            ],
+        },
+    )
+    assert result["accepted"] is True
+    assert [item["title"] for item in result["data"]["subtasks"]] == [
+        "First",
+        "Second",
+    ]
+    assert result["data"]["clamped"] is False
+
+    rejected = _control(
+        "task_generate_subtasks",
+        "generate_subtasks",
+        {"task_id": "task-1", "subtasks": []},
+    )
+    assert rejected["accepted"] is False
+
+
+def test_refine_progress_and_cancel_endpoints_are_typed():
+    operations = _control(
+        "task_refine_subtasks",
+        "refine_subtasks",
+        {
+            "task_id": "task-1",
+            "operations": [
+                {"op": "ADD", "title": "Check headers", "description": "headers"}
+            ],
+        },
+    )
+    assert operations["accepted"] is True
+    bad_op = _control(
+        "task_refine_subtasks",
+        "refine_subtasks",
+        {"task_id": "task-1", "operations": [{"op": "REPLACE"}]},
+    )
+    assert bad_op["accepted"] is False
+
+    progress = _control(
+        "task_progress",
+        "progress",
+        {"task_id": "task-1", "subtask_id": "sub-1", "event": {"tool": "nmap"}},
+    )
+    assert progress["accepted"] is True
+    assert progress["data"]["event"] == {"tool": "nmap"}
+
+    cancelled = _control(
+        "task_cancel", "cancel", {"task_id": "task-1", "reason": "operator"}
+    )
+    assert cancelled["accepted"] is True
+    missing_reason = _control(
+        "task_cancel", "cancel", {"task_id": "task-1", "reason": " "}
+    )
+    assert missing_reason["accepted"] is False
+
+    extra = _control(
+        "task_progress",
+        "progress",
+        {
+            "task_id": "task-1",
+            "subtask_id": "sub-1",
+            "event": {},
+            "scope": "broaden",
+        },
+    )
+    assert extra["accepted"] is False
+
+
 def test_endpoint_turns_a_crashed_executor_into_a_rejected_result():
     def boom(*_args):
         raise RuntimeError("provider exploded")

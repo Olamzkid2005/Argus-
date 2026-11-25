@@ -34,13 +34,36 @@ logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 
-#: One MCP method per worker task type.
-METHODS: dict[str, str] = {
+#: Methods that run a worker job and return its structured result.
+EXECUTOR_METHODS: dict[str, str] = {
     "task_bootstrap": "bootstrap",
     "task_reason": "reason",
     "task_explore": "explore",
 }
-TASK_TYPES = frozenset(METHODS.values())
+
+#: Methods that validate dispatcher-owned task control payloads. They never
+#: write graph or delegation state; the dispatcher applies the result.
+CONTROL_METHODS: dict[str, str] = {
+    "task_generate_subtasks": "generate_subtasks",
+    "task_refine_subtasks": "refine_subtasks",
+    "task_progress": "progress",
+    "task_cancel": "cancel",
+}
+
+#: One MCP method per typed task protocol call.
+METHODS: dict[str, str] = {**EXECUTOR_METHODS, **CONTROL_METHODS}
+
+#: Task types a worker transport advertises to the scheduler.
+TASK_TYPES = frozenset(EXECUTOR_METHODS.values())
+
+_CONTROL_KEYS: dict[str, frozenset[str]] = {
+    "generate_subtasks": frozenset({"task_id", "subtasks", "existing_titles"}),
+    "refine_subtasks": frozenset({"task_id", "operations"}),
+    "progress": frozenset({"task_id", "subtask_id", "event"}),
+    "cancel": frozenset({"task_id", "reason"}),
+}
+
+MAX_CONTROL_ITEMS = 50
 
 #: Largest accepted request envelope (JSON bytes). A job is a bounded snapshot,
 #: not a data channel; anything larger is a contract violation.
@@ -114,6 +137,85 @@ def parse_task_request(method: str, params: Any) -> TaskRequest:
     )
 
 
+def _control_text(payload: dict[str, Any], key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ProtocolError(f"{key} must be a non-empty string")
+    return value.strip()
+
+
+def _run_control(request: TaskRequest) -> dict[str, Any]:
+    """Validate one control payload and return its normalised data."""
+    payload = request.request
+    allowed = _CONTROL_KEYS[request.task_type]
+    extras = sorted(set(payload) - allowed)
+    if extras:
+        raise ProtocolError(f"{request.task_type} has unknown field(s): {extras}")
+    task_id = _control_text(payload, "task_id")
+
+    if request.task_type == "generate_subtasks":
+        subtasks = payload.get("subtasks")
+        if not isinstance(subtasks, (list, tuple)) or not subtasks:
+            raise ProtocolError("subtasks must be a non-empty array")
+        if len(subtasks) > MAX_CONTROL_ITEMS:
+            raise ProtocolError(
+                f"subtasks has {len(subtasks)} items; the limit is {MAX_CONTROL_ITEMS}"
+            )
+        existing = payload.get("existing_titles", [])
+        if not isinstance(existing, (list, tuple)) or any(
+            not isinstance(item, str) for item in existing
+        ):
+            raise ProtocolError("existing_titles must be an array of strings")
+        from agent.delegation.generator import validate_generated_plan
+
+        try:
+            plan = validate_generated_plan(
+                list(subtasks), existing_titles=list(existing)
+            )
+        except Exception as exc:  # PlanValidationError and contract failures
+            raise ProtocolError(f"invalid subtask plan: {exc}") from exc
+        return {
+            "task_id": task_id,
+            "subtasks": [draft.as_dict() for draft in plan.drafts],
+            "dropped_duplicates": list(plan.dropped_duplicates),
+            "clamped": plan.clamped,
+        }
+
+    if request.task_type == "refine_subtasks":
+        operations = payload.get("operations")
+        if not isinstance(operations, (list, tuple)) or not operations:
+            raise ProtocolError("operations must be a non-empty array")
+        if len(operations) > MAX_CONTROL_ITEMS:
+            raise ProtocolError(
+                f"operations has {len(operations)} items; "
+                f"the limit is {MAX_CONTROL_ITEMS}"
+            )
+        from agent.delegation.patch import PATCH_TYPES
+
+        for index, operation in enumerate(operations):
+            if not isinstance(operation, Mapping):
+                raise ProtocolError(f"operations[{index}] must be an object")
+            if operation.get("op") not in PATCH_TYPES:
+                raise ProtocolError(
+                    f"operations[{index}].op must be one of {list(PATCH_TYPES)}"
+                )
+        return {"task_id": task_id, "operations": [dict(op) for op in operations]}
+
+    if request.task_type == "progress":
+        subtask_id = _control_text(payload, "subtask_id")
+        event = payload.get("event")
+        if not isinstance(event, Mapping):
+            raise ProtocolError("event must be an object")
+        return {
+            "task_id": task_id,
+            "subtask_id": subtask_id,
+            "event": dict(event),
+        }
+
+    reason = _control_text(payload, "reason")
+    return {"task_id": task_id, "reason": reason}
+
+
 def set_task_executor(executor: TaskExecutor | None) -> None:
     """Install (or clear) the in-process task executor."""
     global _executor, _executor_loaded
@@ -161,6 +263,13 @@ def dispatch_task_request(method: str, params: Any) -> dict[str, Any]:
         request = parse_task_request(method, params)
     except ProtocolError as exc:
         return {"accepted": False, "data": {}, "error": str(exc)}
+
+    if request.task_type in CONTROL_METHODS.values():
+        try:
+            data = _run_control(request)
+        except ProtocolError as exc:
+            return {"accepted": False, "data": {}, "error": str(exc)}
+        return {"accepted": True, "data": data}
 
     executor = get_task_executor()
     if executor is None:
