@@ -357,8 +357,11 @@ rejection (`TestTenantBoundary`).
   contracts, reason lease/checkpoint scheduling, worker registry and single
   dispatcher leader election (C-01…C-22 apart from the ownership/lease pieces
   above).
-- PentAGI hierarchical delegation: Task/Subtask/Action persistence, Generator,
-  Refiner patches, Reflector, Reporter and Memorist (P-01…P-17).
+- PentAGI hierarchical delegation: P-01…P-17 pass against PostgreSQL and are
+  recorded in `pentagi-delegation-conformance.md`. What remains is integration,
+  not the workstream contract: the production dispatcher does not yet create a
+  task for each claimed intent, the MCP `task_*` bridge endpoints are not added,
+  and no live-model Generator/Refiner/specialist run has been made (Stage 4).
 - A5 activation: the deployment now runs the loop with
   `ARGUS_ORCHESTRATION_V2=on`/`ARGUS_GRAPH_EXPLORATION=on` by default, so the
   remaining gate is operational rather than code: compare shadow turns against

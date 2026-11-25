@@ -67,6 +67,11 @@ def orchestration_mode() -> str:
     return flag_mode("orchestration")
 
 
+def hierarchical_delegation_mode() -> str:
+    """The PentAGI-style hierarchy switch (``off`` | ``shadow`` | ``on``)."""
+    return flag_mode("hierarchical_delegation")
+
+
 def effective_mode() -> str:
     """
     Resolve the mode the production drain actually runs in.

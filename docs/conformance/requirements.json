@@ -1,7 +1,7 @@
 {
   "meta": {
-    "stage": "A5 gate passed (ARTEX shadow comparison)",
-    "updated_at": "2026-11-24T21:30:00+00:00",
+    "stage": "Stage 3 gate passed (PentAGI P-01…P-17)",
+    "updated_at": "2026-11-25T12:00:00+00:00",
     "source_of_truth_for_this_stage": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md",
     "actual_upstream_reference_used": "docs/conformance/argus_three_frameworks_implementation_conformance_plan.md (local copy of the Stage 0 spec)",
     "local_baseline_inspected": [
@@ -14,6 +14,7 @@
       "argus-workers/tests/test_attack_graph_db.py"
     ],
     "artex_ledger": "docs/conformance/artex-graph-conformance.md",
+    "pentagi_ledger": "docs/conformance/pentagi-delegation-conformance.md",
     "a5_shadow_artifact": "docs/conformance/shadow-planner-comparison.json"
   },
   "stage0_decisions": {
@@ -375,6 +376,198 @@
       "command": "cd argus-workers && ./venv/bin/python scripts/shadow_planner_comparison.py --json ../docs/conformance/shadow-planner-comparison.json",
       "runtime_evidence": "with_scheduler: 6 gaps, 0 planner proposals, no duplicate direction; planner_only: 5 proposals, one per untested class; same_classes=true, shadow_wrote_nothing=true in both runs",
       "deviation": "approved-but-undiscovered scope entries remain the deterministic scheduler's job; the asset-driven planner cannot propose them"
+    },
+    "P-01": {
+        "id": "P-01",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP01Hierarchy::test_engagement_task_subtask_action_ownership",
+            "::test_status_transitions_are_monotonic"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "none",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-02": {
+        "id": "P-02",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP02GeneratorCap::test_sixteen_subtasks_are_rejected_or_clamped"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "see pentagi-delegation-conformance.md section 5",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-03": {
+        "id": "P-03",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP03DependencyOrder::test_unordered_dependencies_are_stored_in_valid_order",
+            "::test_dependency_violations_are_rejected"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "see pentagi-delegation-conformance.md section 5",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-04": {
+        "id": "P-04",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP04SequentialExecution::test_subtasks_start_in_order_only_after_predecessor_is_terminal"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "none",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-05": {
+        "id": "P-05",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP05ConcurrentTasks::test_two_tasks_run_concurrently_but_each_is_sequential"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "none",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-06": {
+        "id": "P-06",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP06RefinerInvocation::test_refiner_gets_completed_result_remaining_plan_and_facts"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "see pentagi-delegation-conformance.md section 5",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-07": {
+        "id": "P-07",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP07PatchTypes::test_add_remove_modify_reorder_match_delta_semantics"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "none",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-08": {
+        "id": "P-08",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP08UnknownReference::test_unknown_id_rejects_patch_without_partial_corruption"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "none",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-09": {
+        "id": "P-09",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP09CompletedEvidence::test_refiner_cannot_edit_a_completed_subtask"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "none",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-10": {
+        "id": "P-10",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP10ActiveCap::test_patch_over_the_active_cap_is_rejected"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "none",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-11": {
+        "id": "P-11",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP11SpecialistDelegation::test_specialist_gets_bounded_context_and_returns_provenance",
+            "::test_conflicting_specialist_findings_go_to_verification"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "see pentagi-delegation-conformance.md section 5",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-12": {
+        "id": "P-12",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP12ReflectionLimit::test_reflector_stops_after_three_attempts",
+            "::test_invalid_output_marks_the_subtask_failed_not_finished"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "none",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-13": {
+        "id": "P-13",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP13Waiting::test_waiting_subtask_resumes_same_task_and_chain"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "none",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-14": {
+        "id": "P-14",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP14RestartRecovery::test_interrupted_subtask_becomes_resumable_and_reuses_actions"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "see pentagi-delegation-conformance.md section 5",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-15": {
+        "id": "P-15",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP15Reporter::test_reporter_uses_persisted_state_and_runs_once"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "none",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-16": {
+        "id": "P-16",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP16Memorist::test_memorist_redacts_and_enforces_tenant_boundary"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "see pentagi-delegation-conformance.md section 5",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
+    },
+    "P-17": {
+        "id": "P-17",
+        "status": "PASS",
+        "tests": [
+            "tests/test_pentagi_delegation.py::TestP17Resolution::test_failed_subtask_needs_an_explicit_resolution",
+            "::test_skipped_subtask_without_resolution_blocks_completion"
+        ],
+        "command": "cd argus-workers && ./venv/bin/python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly",
+        "runtime_evidence": "PostgreSQL 16.2 with migration runner through 039; 45 passed, 0 skipped (2026-11-25)",
+        "deviation": "none",
+        "ledger": "docs/conformance/pentagi-delegation-conformance.md"
     }
   }
 }
