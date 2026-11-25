@@ -856,85 +856,29 @@ class MCPServer:
             "node",
             "php",
         }
-        # Agent-internal tools use a runner script — allow python3 for whitelisted scripts
+        # Agent-internal tools run a Python script from this repository. Any
+        # script inside argus-workers/tools/ is allowed; nothing else is. The
+        # per-file allowlist this replaces only meant every new shim was
+        # silently skipped until someone remembered to add it here (that is how
+        # api_spec_scan, the recon shim and bucket_upload were lost). YAML is
+        # trusted repo content, and resolving the real path before the scope
+        # check keeps `..` and symlinks from escaping the tools tree.
         server_dir = os.path.dirname(os.path.abspath(__file__))  # .../argus-workers/
         project_dir = os.path.dirname(server_dir)  # project root
-        # The YAML args use "argus-workers/tools/run_agent_tool.py" which call_tool
-        # resolves to project_dir/argus-workers/tools/run_agent_tool.py
-        allowed_python_scripts = {
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "run_agent_tool.py")
-            ),
-            os.path.normpath(
-                os.path.join(
-                    project_dir,
-                    "argus-workers",
-                    "tools",
-                    "scripts",
-                    "playwright_bola.py",
-                )
-            ),
-            os.path.normpath(
-                os.path.join(
-                    project_dir,
-                    "argus-workers",
-                    "tools",
-                    "scripts",
-                    "playwright_xss.py",
-                )
-            ),
-            os.path.normpath(
-                os.path.join(
-                    project_dir,
-                    "argus-workers",
-                    "tools",
-                    "scripts",
-                    "playwright_privesc.py",
-                )
-            ),
-            os.path.normpath(
-                os.path.join(
-                    project_dir,
-                    "argus-workers",
-                    "tools",
-                    "scripts",
-                    "run_finding_verifier.py",
-                )
-            ),
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "jwt_scan.py")
-            ),
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "session_hijack_scan.py")
-            ),
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "scripts", "whatweb_shim.py")
-            ),
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "scripts", "sqlmap_shim.py")
-            ),
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "scripts", "arjun_shim.py")
-            ),
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "scripts", "sn1per_shim.py")
-            ),
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "scripts", "bucket_upload_shim.py")
-            ),
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "scripts", "recon_shim.py")
-            ),
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "scripts", "dnsx_shim.py")
-            ),
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "scripts", "delegate_shim.py")
-            ),
-            os.path.normpath(
-                os.path.join(project_dir, "argus-workers", "tools", "api_spec_scan.py")
-            ),
-        }
+        tools_root = Path(server_dir, "tools").resolve()
+
+        def _is_tool_script(script_arg: str) -> bool:
+            """True when *script_arg* names a Python file inside tools/."""
+            if script_arg.startswith(("argus-workers/", "tools/")):
+                candidate = Path(project_dir, script_arg)
+            else:
+                candidate = Path(server_dir, script_arg)
+            try:
+                resolved = candidate.resolve(strict=True)
+                resolved.relative_to(tools_root)
+            except (OSError, ValueError):
+                return False
+            return resolved.is_file() and resolved.suffix == ".py"
 
         try:
             import yaml
@@ -955,28 +899,15 @@ class MCPServer:
                 # Allow python3 for whitelisted runner scripts, block everything else
                 if cmd_basename == "python3":
                     args = data.get("args", [])
-                    if args:
-                        # Resolve path the same way call_tool does
-                        script_arg = args[0]
-                        if script_arg.startswith(
-                            "argus-workers/"
-                        ) or script_arg.startswith("tools/"):
-                            script_path = os.path.normpath(
-                                os.path.join(project_dir, script_arg)
-                            )
-                        else:
-                            script_path = os.path.normpath(
-                                os.path.join(server_dir, script_arg)
-                            )
-                        if script_path not in allowed_python_scripts:
-                            logger.warning(
-                                "Skipping tool '%s': python3 script '%s' is not whitelisted",
-                                data.get("name", "unknown"),
-                                args[0],
-                            )
-                            continue
-                    else:
+                    if not args:
                         continue  # bare python3 with no script — blocked
+                    if not _is_tool_script(str(args[0])):
+                        logger.warning(
+                            "Skipping tool '%s': python3 script '%s' is outside the tools tree",
+                            data.get("name", "unknown"),
+                            args[0],
+                        )
+                        continue
                 elif ".." in command or cmd_basename in blocked_command_patterns:
                     logger.warning(
                         "Skipping tool '%s': command '%s' is blocked",
@@ -1078,31 +1009,35 @@ class MCPServer:
                 # The tool reads its credentials straight from the environment
                 # (chaos, uncover, github-endpoints), so running it without the
                 # key can only produce "PDCP_API_KEY not specified".
-                tool.disabled_reason = (
+                reason = (
                     f"requires environment variable(s) not set: "
                     f"{', '.join(missing_env)}"
                 )
-                disabled.append(name)
             elif is_pipeline_step(name):
                 # In-process step: the orchestrator runs it, and no install can
                 # make it a subprocess. Dispatching the name over MCP can only
                 # fail (that is how `credential_replay` reached the run as
                 # "Unknown tool").
                 tool.pipeline_step = True
-                tool.disabled_reason = (
+                reason = (
                     "in-process pipeline step — run by the orchestrator, not "
                     "dispatchable as an MCP tool"
                 )
-                disabled.append(name)
             elif not declared.phases:
                 # Prefer the registry's own explanation (needs a resolver
                 # list, segfaults, requires root) over a generic sentence the
                 # planner would print verbatim into the run log.
-                tool.disabled_reason = (
+                reason = (
                     getattr(declared, "disabled_reason", None)
                     or "no execution phase in the worker registry "
                     "(tool_definitions.TOOLS)"
                 )
+            else:
+                reason = None
+            # Assign unconditionally: a registry entry that is runnable now
+            # must not keep a reason stamped by an earlier registration.
+            tool.disabled_reason = reason
+            if reason:
                 disabled.append(name)
 
         if disabled:

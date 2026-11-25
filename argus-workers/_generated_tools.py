@@ -1173,7 +1173,7 @@ _register(ToolDefinition(
     name="wafw00f",
     description="WAF fingerprinting from edge headers, cookies and block pages (wafw00f equivalent)",
     binary="python3",
-    phases=["recon"],
+    phases=["recon", "scan"],
     default_args=["argus-workers/tools/scripts/recon_shim.py", "--mode", "waf", "--tool", "wafw00f"],
     parameters=[
     ToolParameter(name="target", description="Target URL or domain", required=True, flag="--target"),

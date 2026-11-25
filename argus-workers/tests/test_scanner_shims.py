@@ -389,6 +389,11 @@ class TestReconShim:
             assert data["args"][data["args"].index("--tool") + 1] == name, name
             assert data["parameters"][0]["flag"] == "--target", name
 
+        # The scan phase schedules WAF fingerprinting too; deriving phases
+        # from `web_recon` alone would silently drop it from that phase.
+        wafw00f = yaml.safe_load((base / "wafw00f.yaml").read_text())
+        assert wafw00f["phases"] == ["recon", "scan"]
+
 
 class TestDnsxShimAnswers:
     """dnsx was disabled: no resolvers, and -d alone is rejected."""

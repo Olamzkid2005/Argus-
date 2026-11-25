@@ -1778,13 +1778,12 @@ class TestDisabledFlagInYaml:
 
 
 class TestPythonScriptDefinitionsAreLoadable:
-    def test_every_python_script_definition_survives_the_whitelist(self):
-        """A python3 tool whose script is not whitelisted is skipped silently.
+    def test_every_python_script_definition_loads_from_the_tools_tree(self):
+        """A python3 definition whose script is outside tools/ is skipped.
 
-        The OpenAPI/GraphQL tools (``tools/api_spec_scan.py``) were added but
-        never whitelisted, so the worker dropped both and the capability could
-        not run at all. Loading every YAML definition the way the worker does
-        keeps that class of omission visible.
+        The check is directory-scoped (any .py under argus-workers/tools/), so
+        adding a shim needs no edit to mcp_server.py; a missing script must
+        still fail loudly here rather than becoming a silent skip.
         """
         import yaml
 

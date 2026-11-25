@@ -20,6 +20,12 @@ parameters:
     flag: "--target"
 capabilities:
   - web_recon
+# Fingerprinting also runs during scan: assessment_orchestrator and
+# orchestrator_pkg/scan.py schedule at that phase, and the planner may only
+# select it there if the registry lists it.
+phases:
+  - recon
+  - scan
 signal_quality: CANDIDATE
 risk_level: low
 priority: 55

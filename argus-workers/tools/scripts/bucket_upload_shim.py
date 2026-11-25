@@ -24,24 +24,20 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import secrets
 import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 
 _TIMEOUT = 20
-_KEY_RE = re.compile(r"<Key>(.*?)</Key>", re.S)
-_CODE_RE = re.compile(r"<Code>(.*?)</Code>", re.S)
-_MESSAGE_RE = re.compile(r"<Message>(.*?)</Message>", re.S)
 
 #: Endpoints tried, in order, when the target is a bare bucket name.
 _ENDPOINT_TEMPLATES = (
     "https://{name}.s3.amazonaws.com/",
     "https://s3.amazonaws.com/{name}/",
     "https://storage.googleapis.com/{name}/",
-    "https://{name}.oss.amazonaws.com/",
 )
 
 
@@ -69,12 +65,29 @@ def _request(method: str, url: str, body: bytes | None = None) -> tuple[int, str
         return 0, f"{type(exc).__name__}: {exc}", {}
 
 
+def _xml_root(text: str) -> ET.Element | None:
+    """Parse an S3/GCS XML body, or None when it is not XML."""
+    try:
+        return ET.fromstring(text.strip())
+    except ET.ParseError:
+        return None
+
+
+def _tag_name(element: ET.Element) -> str:
+    """Local tag name, without the S3/GCS namespace."""
+    return element.tag.rsplit("}", 1)[-1]
+
+
 def _s3_error(text: str) -> str:
-    code = _CODE_RE.search(text)
-    message = _MESSAGE_RE.search(text)
-    if code:
-        return f"{code.group(1)}" + (f": {message.group(1).strip()}" if message else "")
-    return ""
+    root = _xml_root(text)
+    if root is None:
+        return ""
+    values = {_tag_name(el): (el.text or "").strip() for el in root.iter()}
+    code = values.get("Code")
+    if not code:
+        return ""
+    message = values.get("Message")
+    return f"{code}: {message}" if message else code
 
 
 def candidates(target: str) -> list[str]:
@@ -92,7 +105,12 @@ def check(url: str) -> dict[str, object]:
     """Run the three anonymous-access checks against one bucket URL."""
     listing_url = f"{url}?list-type=2"
     status, body, _headers = _request("GET", listing_url)
-    keys = [key for key in _KEY_RE.findall(body) if key.strip()]
+    root = _xml_root(body)
+    keys = [
+        (el.text or "").strip()
+        for el in (root.iter() if root is not None else ())
+        if _tag_name(el) == "Key" and (el.text or "").strip()
+    ]
     result: dict[str, object] = {
         "url": url,
         "listing_status": status,

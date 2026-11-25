@@ -438,23 +438,6 @@ _register(
 
 _register(
     ToolDefinition(
-        name="whatweb",
-        description="Web technology fingerprinting",
-        phases=["recon"],
-        # No --format=json: the installed whatweb (and Ruby WhatWeb) rejects
-        # it as an unrecognized argument. Both print the text line the
-        # whatweb parser reads (URL [status] Plugin[value] ...).
-        default_args=[],
-        parameters=[
-            ToolParameter("target", "Target URL", required=True),
-        ],
-        timeout=120,
-        signal_quality=SignalQuality.CANDIDATE,
-    )
-)
-
-_register(
-    ToolDefinition(
         name="nikto",
         description="Web server vulnerability scanner",
         phases=["recon", "scan", "deep_scan"],
@@ -475,34 +458,6 @@ _register(
             ToolParameter("target", "Target URL", flag="-h", required=True),
         ],
         timeout=300,
-        signal_quality=SignalQuality.CANDIDATE,
-    )
-)
-
-_register(
-    ToolDefinition(
-        name="gau",
-        description="Get all URLs from web archives",
-        phases=["recon"],
-        default_args=["--json"],
-        parameters=[
-            ToolParameter("target", "Target domain", required=True),
-        ],
-        timeout=180,
-        signal_quality=SignalQuality.CANDIDATE,
-    )
-)
-
-_register(
-    ToolDefinition(
-        name="waybackurls",
-        description="Fetch URLs from Wayback Machine",
-        phases=["recon"],
-        default_args=[],
-        parameters=[
-            ToolParameter("target", "Target domain", required=True),
-        ],
-        timeout=120,
         signal_quality=SignalQuality.CANDIDATE,
     )
 )
@@ -542,61 +497,6 @@ _register(
             ToolParameter("depth", "Crawl depth", flag="-d", default=3),
         ],
         timeout=300,
-        signal_quality=SignalQuality.CANDIDATE,
-    )
-)
-
-_register(
-    ToolDefinition(
-        name="subfinder",
-        description="Fast passive subdomain enumeration tool",
-        phases=["recon"],
-        default_args=["-silent"],
-        parameters=[
-            ToolParameter("target", "Target domain", flag="-d", required=True),
-            ToolParameter("all", "Use all sources", flag="-all"),
-        ],
-        timeout=300,
-        signal_quality=SignalQuality.CANDIDATE,
-    )
-)
-
-_register(
-    ToolDefinition(
-        name="alterx",
-        description="Subdomain permutation generator",
-        phases=["recon"],
-        # alterx v0.0.4+ dropped -d: input goes through -l, which takes
-        # comma-separated values, a file, or stdin.
-        default_args=["-silent"],
-        parameters=[
-            ToolParameter("target", "Root domain(s) to permute", required=True),
-        ],
-        timeout=120,
-        signal_quality=SignalQuality.CANDIDATE,
-    )
-)
-
-# ── dnsx — disabled ──
-# dnsx v1.2+ refuses `-d <domain>` without `-w` ("missing wordlist(w) flag
-# required with domain(d) input"), and `-l` expects a list file or stdin. The
-# MCP arg builder passes a single target and cannot pipe stdin, so every
-# invocation either fails or silently resolves nothing. Use subfinder for
-# passive enumeration; re-enable once the definition carries a wordlist.
-_register(
-    ToolDefinition(
-        name="dnsx",
-        description="Fast DNS resolver and probe tool",
-        # Enabled: the definition runs dnsx_shim.py, which supplies the domain
-        # list and the public resolver set dnsx insists on.
-        phases=["recon"],
-        default_args=["-json", "-silent"],
-        parameters=[
-            ToolParameter(
-                "target", "Domain or subdomain list", flag="-d", required=True
-            ),
-        ],
-        timeout=120,
         signal_quality=SignalQuality.CANDIDATE,
     )
 )
@@ -875,21 +775,12 @@ _register(
 
 # ── Specialized tools ──
 
-_register(
-    ToolDefinition(
-        name="wafw00f",
-        description="Web Application Firewall fingerprinting and detection",
-        phases=["recon", "scan"],
-        binary="wafw00f",
-        default_args=["-a"],
-        parameters=[
-            ToolParameter("target", "Target URL", required=True),
-            ToolParameter("verbose", "Enable verbose output", flag="-v"),
-        ],
-        timeout=120,
-        signal_quality=SignalQuality.CONFIRMED,
-    )
-)
+# gau, waybackurls, subfinder, alterx, wafw00f, whatweb and dnsx are defined
+# only by their YAML files: each runs a repository shim (recon_shim.py,
+# whatweb_shim.py, dnsx_shim.py). Inline copies here overrode default_args and
+# binary, so the Python runner invoked `gau --json` / `wafw00f -a` — binaries
+# that do not exist — while the MCP server used the shim from the same YAML.
+# Keep invocation in the YAML; add policy here only when it differs.
 
 
 
