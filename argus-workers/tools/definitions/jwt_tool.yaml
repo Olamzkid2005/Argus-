@@ -21,3 +21,7 @@ priority: 70
 cost: low
 enabled: true
 timeout: 120
+requires:
+  recon_signals:
+    - has_api
+    - has_login_page

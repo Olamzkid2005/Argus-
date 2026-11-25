@@ -28,3 +28,5 @@ priority: 75
 cost: medium
 enabled: true
 timeout: 600
+phases:
+  - repo_scan

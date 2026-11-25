@@ -25,3 +25,5 @@ priority: 60
 cost: medium
 enabled: true
 timeout: 300
+phases:
+  - recon

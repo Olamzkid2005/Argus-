@@ -23,3 +23,6 @@ priority: 90
 cost: low
 enabled: true
 timeout: 300
+phases:
+  - deep_scan
+  - analyze

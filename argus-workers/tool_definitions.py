@@ -504,13 +504,15 @@ _register(
 
 # ── Scanning phase ──
 
+# nuclei's vendor metadata has no YAML key, so it stays here; every field the
+# YAML carries (arguments, phases, timeout, signal quality, priority) comes
+# from tools/definitions/nuclei.yaml. Do not restate default_args: doing so
+# discarded the tuned -timeout/-retries/-bulk-size flags.
 _register(
     ToolDefinition(
         name="nuclei",
         description="Vulnerability scanner based on YAML templates",
         phases=["scan", "deep_scan"],
-        # nuclei v3 removed `-json`; `-jsonl` (alias `-j`) is the JSON output.
-        default_args=["-jsonl", "-silent"],
         parameters=[
             ToolParameter("target", "Target URL", flag="-u", required=True),
             ToolParameter(
@@ -556,67 +558,6 @@ _register(
         ],
         timeout=600,
         signal_quality=SignalQuality.PROBABLE,
-    )
-)
-
-_register(
-    ToolDefinition(
-        name="sqlmap",
-        description="SQL injection detection and exploitation",
-        phases=["scan", "deep_scan"],
-        default_args=["--batch"],
-        parameters=[
-            ToolParameter("target", "Target URL", flag="-u", required=True),
-            ToolParameter("level", "Test level (1-5)", flag="--level", default=1),
-            ToolParameter("risk", "Risk level (1-3)", flag="--risk", default=1),
-        ],
-        timeout=600,
-        signal_quality=SignalQuality.CONFIRMED,
-    )
-)
-
-_register(
-    ToolDefinition(
-        name="arjun",
-        description="HTTP parameter discovery",
-        phases=["scan"],
-        default_args=["-m", "GET"],
-        parameters=[
-            ToolParameter("target", "Target URL", flag="-u", required=True),
-            ToolParameter("threads", "Thread count", flag="-t", default=10),
-        ],
-        timeout=300,
-        signal_quality=SignalQuality.CANDIDATE,
-    )
-)
-
-_register(
-    ToolDefinition(
-        name="jwt_tool",
-        description="JWT security testing tool",
-        phases=["scan"],
-        default_args=["-C", "-d"],
-        parameters=[
-            ToolParameter("target", "Target URL", flag="-u", required=True),
-        ],
-        timeout=120,
-        signal_quality=SignalQuality.PROBABLE,
-        requires=ToolRequires(recon_signals=["has_api", "has_login_page"]),
-    )
-)
-
-_register(
-    ToolDefinition(
-        name="commix",
-        description="Command injection detection",
-        phases=["scan"],
-        default_args=["--batch"],
-        parameters=[
-            ToolParameter("target", "Target URL", flag="--url", required=True),
-        ],
-        timeout=300,
-        signal_quality=SignalQuality.PROBABLE,
-        requires=ToolRequires(recon_signals=["has_file_upload"]),
     )
 )
 
@@ -766,13 +707,6 @@ _register(
 )
 
 
-
-
-
-
-
-
-
 # ── Specialized tools ──
 
 # gau, waybackurls, subfinder, alterx, wafw00f, whatweb and dnsx are defined
@@ -781,7 +715,6 @@ _register(
 # binary, so the Python runner invoked `gau --json` / `wafw00f -a` — binaries
 # that do not exist — while the MCP server used the shim from the same YAML.
 # Keep invocation in the YAML; add policy here only when it differs.
-
 
 
 # ── Playwright browser verification tools ──
@@ -869,22 +802,6 @@ _register(
     )
 )
 
-
-
-_register(
-    ToolDefinition(
-        name="npm-audit",
-        description="Node.js dependency vulnerability scanner",
-        phases=["repo_scan"],
-        default_args=["--json"],
-        parameters=[
-            ToolParameter("target", "Audit target path"),
-        ],
-        timeout=300,
-        signal_quality=SignalQuality.CANDIDATE,
-        requires=ToolRequires(tech_contains=["javascript", "typescript"]),
-    )
-)
 
 # ── Analysis / intelligence phase ──
 

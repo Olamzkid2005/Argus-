@@ -28,3 +28,7 @@ priority: 70
 cost: medium
 enabled: true
 timeout: 300
+phases:
+  - recon
+  - scan
+  - deep_scan

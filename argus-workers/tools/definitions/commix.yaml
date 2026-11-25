@@ -23,3 +23,5 @@ cost: medium
 risk_level: high
 enabled: true
 timeout: 300
+phases:
+  - scan

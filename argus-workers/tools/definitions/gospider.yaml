@@ -27,3 +27,5 @@ cost: medium
 # was tested with -v and does not segfault, so the phase is enabled.
 enabled: true
 timeout: 300
+phases:
+  - recon

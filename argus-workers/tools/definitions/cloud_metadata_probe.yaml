@@ -24,3 +24,5 @@ priority: 95
 cost: low
 enabled: true
 timeout: 60
+phases:
+  - post_exploit

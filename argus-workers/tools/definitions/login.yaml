@@ -22,4 +22,4 @@ risk_level: low
 priority: 95
 cost: low
 enabled: true
-timeout: 120
+timeout: 60

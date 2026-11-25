@@ -23,3 +23,5 @@ priority: 50
 cost: low
 enabled: true
 timeout: 300
+phases:
+  - repo_scan

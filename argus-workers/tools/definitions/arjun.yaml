@@ -21,4 +21,4 @@ risk_level: low
 priority: 70
 cost: medium
 enabled: true
-timeout: 180
+timeout: 300

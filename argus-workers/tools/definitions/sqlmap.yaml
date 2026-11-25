@@ -16,9 +16,9 @@ parameters:
     flag: "--target"
 capabilities:
   - sqli_detection
-signal_quality: CANDIDATE
+signal_quality: CONFIRMED
 risk_level: high
 priority: 70
 cost: medium
 enabled: true
-timeout: 240
+timeout: 600

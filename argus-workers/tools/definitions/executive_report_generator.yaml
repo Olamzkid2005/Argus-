@@ -23,4 +23,6 @@ risk_level: low
 priority: 90
 cost: low
 enabled: true
-timeout: 300
+timeout: 120
+phases:
+  - report
