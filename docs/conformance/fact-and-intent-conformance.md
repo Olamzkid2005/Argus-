@@ -30,6 +30,7 @@ latest is `041_…`; `delegation_subtasks` carries the `tool` / `arguments` rout
 | `cd Argus-Tui/packages/opencode && bun typecheck` (`make typecheck-v5`) | **exit 0** (`tsgo --noEmit`, no errors) |
 | `cd Argus-Tui/packages/opencode && bun test test/argus/ --timeout 30000` (`make test-v5`) | **see §6** — run launched; full-suite result recorded on completion |
 | `cd argus-workers && git diff --check` | clean (no whitespace errors introduced) |
+| `cd argus-workers && ruff check .` (§7.4) | **All checks passed** — 9 findings in Stage 4 files fixed (unused imports, import sorting, `collections.abc`, one `getattr`, one unused variable), whole tree clean |
 
 Suite counts above are from runs against the reachable test database, not from collection-only passes.
 

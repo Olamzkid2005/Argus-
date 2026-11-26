@@ -68,9 +68,10 @@ anywhere as passes.
   No TypeScript file changed in this pass, so `test-v5` outcomes are independent of it; any failure
   is checked against the pre-existing baseline, never attributed to this work. Final counts and
   exit code are recorded in `fact-and-intent-conformance.md` §6.
-- `ruff` is not installed in the `argus-workers/venv` used here, so the §7.4 `ruff check .` step
-  could not run; `git diff --check` is clean and the changed files were already lint-clean in the
-  prior pass.
+- ~~`ruff` unavailable — superseded 26 November 2026.~~ `ruff 0.15.15`
+  (`/usr/local/bin/ruff`) runs the §7.4 step: `ruff check .` → **All checks passed** after
+  fixing 9 findings, all in Stage 4 files (unused imports, import sorting, `collections.abc`,
+  one constant-`getattr`, one unused variable). `git diff --check` is clean.
 - The tool-result cache is inert in this checkout for the exercised paths (no `cache:tool_result:*`
   keys in Redis outside the single poisoned `sleep` entry found and removed during diagnosis); there
   is no Redis server dependency for the Python suites beyond the existing test fixtures.
