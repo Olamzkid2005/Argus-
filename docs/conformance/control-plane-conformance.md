@@ -13,7 +13,7 @@ checkpoints, worker registry, cancellation).
 cd argus-workers && python -m pytest tests/test_control_plane.py -q -p no:randomly
 ```
 
-**Result:** **38 passed, 0 skipped** (2026-11-25) across
+**Result:** **40 passed, 0 skipped** (2026-11-26) across
 `tests/test_control_plane.py` (DB-backed) and
 `tests/test_control_plane_bridge.py` (typed transport, no database).
 
