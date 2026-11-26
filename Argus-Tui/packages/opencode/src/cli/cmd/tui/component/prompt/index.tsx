@@ -1095,10 +1095,21 @@ export function Prompt(props: PromptProps) {
     }
     if (props.disabled) return false
     if (workspaceCreating()) return false
-    if (auto()?.visible) return false
+    // When autocomplete is open with real options, Enter belongs to it
+    // (prompt.autocomplete.select). When it is open with zero options the
+    // select handler hides itself and returns false so the key falls through
+    // here — do not block submit in that case or Enter silently does nothing.
+    if (auto()?.visible && (auto()?.hasOptions?.() ?? true)) return false
     if (!store.prompt.input) return false
     const agent = local.agent.current()
-    if (!agent) return false
+    if (!agent) {
+      toast.show({
+        variant: "warning",
+        message: "No agent available — cannot submit prompt.",
+        duration: 3000,
+      })
+      return false
+    }
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
@@ -1392,7 +1403,17 @@ export function Prompt(props: PromptProps) {
               ...nonTextParts.map(assign),
             ],
           })
-          .catch(() => {})
+          .catch((err) => {
+            // Never swallow prompt failures: previously Enter cleared the
+            // input, navigated to the session, and showed nothing.
+            console.error("[Argus] session.prompt failed:", err)
+            toast.show({
+              variant: "error",
+              title: "Failed to send prompt",
+              message: err instanceof Error ? err.message : String(err),
+              duration: 6000,
+            })
+          })
         if (editorParts.length > 0) editor.markSelectionSent()
       }
     }
