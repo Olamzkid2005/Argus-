@@ -6,9 +6,16 @@
  * those same rules, so the doctor can never describe a role differently from
  * the one that is registered.
  *
+ * Tool access is derived from the canonical registry
+ * (`@/tool/argus-tools.generated`, itself generated from
+ * `tool_definitions.TOOLS`): roles name no scanner by hand, so adding a tool
+ * to the registry automatically reaches the roles allowed to call it.
+ *
  * Per docs/cyber-harness-plan.md (Q-1): `vuln-scan` bash is auto-allowed.
  * `reporter` may write only under evidence/ and reports/ (Q-2).
  */
+
+import { REGISTRY_TOOL_SPECS } from "@/tool/argus-tools.specs.generated"
 
 export type PermissionAction = "allow" | "ask" | "deny"
 export type PermissionRule = PermissionAction | Record<string, PermissionAction>
@@ -50,12 +57,32 @@ export function describePermissionSurface(permission: Record<string, PermissionR
     .join(" | ")
 }
 
+/** Every executable registry tool, for roles that call scanners as tools. */
+function executableToolAllow(): Record<string, PermissionRule> {
+  const allow: Record<string, PermissionRule> = {}
+  for (const spec of REGISTRY_TOOL_SPECS) allow[spec.id] = "allow"
+  return allow
+}
+
+/**
+ * Read-only, low-risk recon-phase tools: the recon role maps the surface
+ * with these instead of composing raw bash. Active scanners, port scans and
+ * anything above low risk stay out — recon observes, it does not probe.
+ */
+function reconToolAllow(): Record<string, PermissionRule> {
+  const allow: Record<string, PermissionRule> = {}
+  for (const spec of REGISTRY_TOOL_SPECS) {
+    if (spec.phases.includes("recon") && spec.risk === "low") allow[spec.id] = "allow"
+  }
+  return allow
+}
+
 export const SECURITY_ROLES: readonly SecurityRole[] = [
   {
     name: "recon",
     mode: "all",
     description:
-      "Read-only reconnaissance subagent. Maps the in-scope attack surface with grep/glob/read and fetches in-scope pages. Runs no state-modifying bash and never edits files.",
+      "Read-only reconnaissance subagent. Maps the in-scope attack surface with grep/glob/read, in-scope page fetches, and the passive recon tools (httpx, katana, whatweb, ...). Runs no state-modifying bash and never edits files.",
     permission: {
       "*": "deny",
       grep: "allow",
@@ -64,13 +91,14 @@ export const SECURITY_ROLES: readonly SecurityRole[] = [
       read: "allow",
       webfetch: "allow",
       websearch: "allow",
+      ...reconToolAllow(),
     },
   },
   {
     name: "vuln-scan",
     mode: "all",
     description:
-      "Vulnerability scanning subagent. Drives scanner CLIs (nuclei, nmap, semgrep, ...) and reads their output. Bash is auto-allowed by design (plan Q-1); stay strictly inside the engagement scope and log every command.",
+      "Vulnerability scanning subagent. Calls the native scanner tools (nuclei, nmap, semgrep, ...) like any other tool, or drives scanner CLIs over bash, and reads their output. Bash is auto-allowed by design (plan Q-1); stay strictly inside the engagement scope and log every command.",
     permission: {
       "*": "deny",
       bash: "allow",
@@ -80,13 +108,14 @@ export const SECURITY_ROLES: readonly SecurityRole[] = [
       list: "allow",
       webfetch: "allow",
       websearch: "allow",
+      ...executableToolAllow(),
     },
   },
   {
     name: "verifier",
     mode: "all",
     description:
-      "Finding verification subagent. Re-runs the minimal request or command behind a candidate finding and reports whether it reproduces. Never marks a finding confirmed without an attached evidence artifact.",
+      "Finding verification subagent. Calls the native scanner and verification tools (or re-runs the minimal request or command) behind a candidate finding and reports whether it reproduces. Never marks a finding confirmed without an attached evidence artifact.",
     permission: {
       "*": "deny",
       bash: "allow",
@@ -96,6 +125,7 @@ export const SECURITY_ROLES: readonly SecurityRole[] = [
       list: "allow",
       webfetch: "allow",
       websearch: "allow",
+      ...executableToolAllow(),
     },
   },
   {

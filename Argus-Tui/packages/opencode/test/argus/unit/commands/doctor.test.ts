@@ -165,12 +165,19 @@ describe("securityAgentsCheck", () => {
     for (const role of ["recon", "vuln-scan", "verifier", "reporter"]) {
       expect(result.message).toContain(`${role} [all]`)
     }
-    // recon: read-only, no bash
+    // recon: read-only, no bash — plus the passive low-risk recon tools,
+    // derived from the registry (adding a recon tool updates this line).
     expect(result.message).toContain(
-      "recon [all] allow: glob, grep, list, read, webfetch, websearch | ask: none | deny: *",
+      "recon [all] allow: ai-surface, alterx, amass, attack-surface-mapper, chaos, cloud-enum, dnsx, gau, github-endpoints, glob, gospider, grep, httpx, katana, list, read, s3scanner, subfinder, threat-intelligence-aggregator, uncover, wafw00f, waybackurls, webfetch, websearch, whatweb | ask: none | deny: *",
     )
-    // vuln-scan: scanner bash auto-allowed (plan Q-1)
-    expect(result.message).toContain("vuln-scan [all] allow: bash, glob, grep, list, read, webfetch, websearch")
+    // vuln-scan: scanner bash auto-allowed (plan Q-1) plus every executable
+    // registry tool as a native call (adding a registry tool updates this).
+    expect(result.message).toContain(
+      "vuln-scan [all] allow: ai-surface, ai-vuln-scanner, alterx, amass, api-spec, arjun, assessment-orchestrator, attack-path-generator, attack-surface-mapper, bandit, bash, brakeman, browser-security-operator, bucket-upload, chaos, cloud-enum, cloud-metadata-probe, commix, dalfox, dnsx, engagement-analytics-engine, eslint, evidence-intelligence-engine, executive-report-generator, ffuf, finding-correlation-engine, finding-verifier, gau, github-endpoints, gitleaks, glob, gosec, gospider, graphql, grep, httpx, infrastructure-security-analyzer, jwt-tool, katana, list, login, naabu, nikto, nmap, npm-audit, nuclei, phpcs, pip-audit, playwright-bola, playwright-privesc, playwright-xss, read, register, s3scanner, secure-code-intelligence-engine, semgrep, session-hijack, sn1per, spotbugs, sqlmap, subfinder, testssl, threat-intelligence-aggregator, trivy, uncover, verification-agent, vulnerability-knowledge-engine, wafw00f, waybackurls, web-scanner, webfetch, websearch, whatweb, workflow-intelligence-engine, wpscan | ask: none | deny: *",
+    )
+    // verifier: same native tool surface as vuln-scan.
+    expect(result.message).toContain("verifier [all] allow: ai-surface, ai-vuln-scanner")
+    expect(result.message).toContain("verification-agent, vulnerability-knowledge-engine")
     // reporter: writes confined to evidence/ and reports/ (plan Q-2)
     expect(result.message).toContain("reporter [all] allow: edit(**/evidence/**, **/reports/**), glob, grep, list, read")
     expect(result.message).toContain("deny: *, edit(*)")

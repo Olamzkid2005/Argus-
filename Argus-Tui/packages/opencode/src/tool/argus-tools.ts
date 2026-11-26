@@ -1,44 +1,56 @@
 /**
- * Argus Security Tools — native OpenCode tool definitions for all 16 agent-internal tools.
+ * Registry-driven execution for Argus native tools.
  *
- * Each tool runs the corresponding Python script directly via subprocess,
- * same as how bash/grep/glob run native commands. No MCP bridge needed.
+ * The wrappers themselves are generated (`./argus-tools.generated.ts`) from
+ * the canonical Python registry (`tool_definitions.TOOLS`), so the TUI LLM
+ * calls every executable Argus tool exactly like grep/glob: a name, a
+ * description and a JSON Schema. This module holds the hand-written runtime:
+ * argv construction, subprocess execution and result shaping.
+ *
+ * `buildRegistryArgv` mirrors `agent/tool_arguments.build_tool_argv` on the
+ * Python side (static `default_args` first, then each declared parameter's
+ * flag and value in declaration order; booleans are switches; flag-less
+ * parameters stay positional). The two must stay in step — a dedicated unit
+ * test pins the parity cases.
  */
-import { Effect, Schema } from "effect"
-import * as Tool from "./tool"
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"
 import { accessSync, constants } from "fs"
 import { execFileSync } from "child_process"
 
-/**
- * Shared parameters for all argus tools.
- */
-const TargetParam = Schema.String.annotate({ description: "Target URL or scope to assess" })
-const ExtraParam = Schema.optional(
-  Schema.String.annotate({ description: 'JSON-encoded extra parameters (e.g. {"tech_stack":["apache"]})' }),
-)
+/** One declared parameter, in registry declaration order. */
+export interface RegistryToolParamSpec {
+  readonly name: string
+  readonly flag: string | null
+}
 
-/**
- * Map of native tool IDs to their MCP tool names (Python scripts).
- */
-const TOOL_SCRIPT_NAMES: Record<string, string> = {
-  "finding-correlation-engine": "finding_correlation_engine",
-  "attack-path-generator": "attack_path_generator",
-  "verification-agent": "verification_agent",
-  "browser-security-operator": "browser_security_operator",
-  "attack-surface-mapper": "attack_surface_mapper",
-  "evidence-intelligence-engine": "evidence_intelligence_engine",
-  "executive-report-generator": "executive_report_generator",
-  "threat-intelligence-aggregator": "threat_intelligence_aggregator",
-  "vulnerability-knowledge-engine": "vulnerability_knowledge_engine",
-  "secure-code-intelligence-engine": "secure_code_intelligence_engine",
-  "infrastructure-security-analyzer": "infrastructure_security_analyzer",
-  "assessment-orchestrator": "assessment_orchestrator",
-  "workflow-intelligence-engine": "workflow_intelligence_engine",
-  "engagement-analytics-engine": "engagement_analytics_engine",
-  register: "register",
-  login: "login",
+/** Everything the runner needs to invoke one registry tool. */
+export interface RegistryToolSpec {
+  /** Native tool id (kebab-case, e.g. "finding-correlation-engine"). */
+  readonly id: string
+  /** Registry name (snake_case, e.g. "finding_correlation_engine"). */
+  readonly toolName: string
+  /** Binary on PATH, or "python3" for shim/launcher tools. */
+  readonly command: string
+  /** Static argv prefix (shim scripts, subcommands, fixed flags). */
+  readonly args: readonly string[]
+  /** Declared parameters in registry order. */
+  readonly params: readonly RegistryToolParamSpec[]
+  /** Per-tool timeout in milliseconds. */
+  readonly timeoutMs: number
+  /** Env vars the tool cannot run without (e.g. an API key). */
+  readonly requiredEnv: readonly string[]
+  /** Registry phases (drives role eligibility, e.g. recon-only tools). */
+  readonly phases: readonly string[]
+  /** Registry risk tier (low, medium, high, critical). */
+  readonly risk: string
+}
+
+export interface RegistryToolResult {
+  success: boolean
+  data: string
+  error: string
+  durationMs: number
 }
 
 /**
@@ -46,196 +58,183 @@ const TOOL_SCRIPT_NAMES: Record<string, string> = {
  * This file is at: Argus-Tui/packages/opencode/src/tool/argus-tools.ts
  * Project root is: Argus Cli/ (parent of Argus-Tui/ and argus-workers/)
  */
-function findProjectRoot(): string {
+export function findProjectRoot(): string {
   // Start from this file's directory
   let dir = dirname(fileURLToPath(import.meta.url))
   // Walk up until we find a directory containing both Argus-Tui and argus-workers
   for (let i = 0; i < 10; i++) {
     try {
       accessSync(join(dir, "argus-workers", "mcp_server.py"), constants.R_OK)
-      return dir  // Found it — dir contains argus-workers/
+      return dir // Found it — dir contains argus-workers/
     } catch {
-      dir = dirname(dir)  // Go up one level
+      dir = dirname(dir) // Go up one level
     }
   }
   return ""
 }
 
 /**
- * Run an Argus tool script via subprocess.
+ * Build the argv for a registry tool from LLM-chosen parameters.
+ * Mirrors `agent/tool_arguments.build_tool_argv`: unknown names are ignored
+ * (the registry schema the LLM sees only offers declared parameters), absent
+ * parameters are not invented, and a definition without a `target` parameter
+ * still receives the target positionally.
  */
-async function runToolScript(toolName: string, target: string, extra: string): Promise<{
-  success: boolean; data: string; error: string; durationMs: number
-}> {
+export function buildRegistryArgv(
+  spec: RegistryToolSpec,
+  params: Record<string, unknown>,
+): string[] {
+  const argv = spec.args.map(String)
+  for (const param of spec.params) {
+    const value = params[param.name]
+    if (value === undefined || value === null) continue
+    // Booleans are switches: `--deep-domxss True` is not a CLI argument.
+    if (typeof value === "boolean") {
+      if (value && param.flag) argv.push(param.flag)
+      continue
+    }
+    if (param.flag) argv.push(param.flag)
+    argv.push(String(value))
+  }
+
+  // A definition without a target parameter still needs the target — several
+  // tools take it positionally without declaring it in the schema.
+  if (
+    params["target"] !== undefined &&
+    params["target"] !== null &&
+    !spec.params.some((p) => p.name === "target")
+  ) {
+    argv.push(String(params["target"]))
+  }
+
+  // nikto does not infer TLS from an https:// target on every build, and
+  // without -ssl it reports a successful scan of a port it never spoke TLS
+  // on. Say it explicitly (mirrors the Python builder).
+  if (
+    spec.toolName === "nikto" &&
+    typeof params["target"] === "string" &&
+    (params["target"] as string).toLowerCase().startsWith("https://") &&
+    !argv.includes("-ssl")
+  ) {
+    argv.push("-ssl")
+  }
+
+  return argv
+}
+
+/** True when the tool runs through the agent-tool launcher (JSON envelope). */
+function isLauncherTool(spec: RegistryToolSpec): boolean {
+  return spec.args.some((a) => a.endsWith("run_agent_tool.py"))
+}
+
+/**
+ * Execute one registry tool as a subprocess and normalise the outcome.
+ *
+ * Launcher tools print the run_agent_tool JSON envelope (findings included);
+ * binary tools print raw CLI output. Several scanners exit non-zero when they
+ * find something (nuclei, dalfox, semgrep, …) — mirroring the worker's
+ * FINDINGS_EXIT_CODES, exit 1 with output on stdout counts as success.
+ */
+export function runRegistryInvocation(
+  spec: RegistryToolSpec,
+  params: Record<string, unknown>,
+): RegistryToolResult {
   const start = Date.now()
-  const projectRoot = findProjectRoot()
-  if (!projectRoot) {
-    return {
-      success: false, data: "", error: "Could not locate Argus project root (expected argus-workers/mcp_server.py in parent directories)",
-      durationMs: Date.now() - start,
+  for (const env of spec.requiredEnv) {
+    if (!process.env[env]) {
+      return {
+        success: false,
+        data: "",
+        error: `Tool ${spec.id} requires the ${env} environment variable, which is not set.`,
+        durationMs: Date.now() - start,
+      }
     }
   }
 
-  const runnerScript = join(projectRoot, "argus-workers", "tools", "run_agent_tool.py")
-  try {
-    accessSync(runnerScript, constants.R_OK)
-  } catch {
-    return {
-      success: false, data: "", error: `Runner script not found or not readable: ${runnerScript}`,
-      durationMs: Date.now() - start,
+  const usesRepoScripts = spec.args.some((a) => a.endsWith(".py"))
+  let cwd = process.cwd()
+  if (usesRepoScripts) {
+    const root = findProjectRoot()
+    if (!root) {
+      return {
+        success: false,
+        data: "",
+        error:
+          "Could not locate Argus project root (expected argus-workers/mcp_server.py in parent directories)",
+        durationMs: Date.now() - start,
+      }
     }
+    cwd = root
   }
 
+  const argv = buildRegistryArgv(spec, params)
+  const launcher = isLauncherTool(spec)
   try {
-    const args = [runnerScript, toolName, "--target", target]
-    if (extra) {
-      args.push("--extra", extra)
-    }
-    const stdout = execFileSync("python3", args, {
+    const stdout = execFileSync(spec.command, argv, {
       encoding: "utf-8",
-      timeout: 120_000,
+      timeout: spec.timeoutMs,
       maxBuffer: 10 * 1024 * 1024,
+      cwd,
     })
-    const parsed = JSON.parse(stdout)
-    return {
-      success: parsed.success ?? true,
-      data: parsed.data || JSON.stringify(parsed.findings || [], null, 2),
-      error: parsed.error || "",
-      durationMs: Date.now() - start,
-    }
-  } catch (e: any) {
-    // Try to parse partial output on failure
-    if (e.stdout) {
+    if (launcher) {
       try {
-        const parsed = JSON.parse(e.stdout)
+        const parsed = JSON.parse(stdout)
+        return {
+          success: parsed.success ?? true,
+          data: parsed.data || JSON.stringify(parsed.findings || [], null, 2),
+          error: parsed.error || "",
+          durationMs: Date.now() - start,
+        }
+      } catch {
+        return {
+          success: false,
+          data: stdout,
+          error: "Launcher returned output that is not valid JSON.",
+          durationMs: Date.now() - start,
+        }
+      }
+    }
+    return { success: true, data: stdout, error: "", durationMs: Date.now() - start }
+  } catch (e: any) {
+    const stdout = typeof e.stdout === "string" ? e.stdout : e.stdout?.toString?.() ?? ""
+    if (launcher) {
+      // Try to parse partial output on failure
+      try {
+        const parsed = JSON.parse(stdout)
         return {
           success: false,
           data: JSON.stringify(parsed.findings || [], null, 2),
           error: parsed.error || e.message,
           durationMs: Date.now() - start,
         }
-      } catch {}
+      } catch {
+        // fall through to the generic failure below
+      }
+    } else if (e.status === 1 && stdout) {
+      // Findings-bearing exit (nuclei, dalfox, semgrep, gitleaks, trivy, …):
+      // the output is the result, not an error.
+      return { success: true, data: stdout, error: "", durationMs: Date.now() - start }
     }
     return {
-      success: false, data: "", error: e.message,
+      success: false,
+      data: stdout,
+      error: e.message,
       durationMs: Date.now() - start,
     }
   }
 }
 
-/**
- * Factory to create an Argus tool definition.
- * Each tool runs the Python script directly via subprocess — no MCP bridge needed.
- */
-function defineArgusTool(id: string, description: string) {
-  const Parameters = Schema.Struct({
-    target: TargetParam,
-    extra: ExtraParam,
-  })
-
-  return Tool.define(
-    id,
-    Effect.gen(function* () {
-      return {
-        description,
-        parameters: Parameters,
-        execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-          Effect.gen(function* () {
-            const scriptName = TOOL_SCRIPT_NAMES[id] ?? id
-            const result = yield* Effect.promise(() =>
-              runToolScript(scriptName, params.target, params.extra || "")
-            )
-            return {
-              title: `${id} completed`,
-              output: result.error
-                ? `${id} completed with issues:\n${result.error}\n\n${result.data || ""}`
-                : result.data || "No output",
-              metadata: { tool: id, duration: result.durationMs, success: result.success },
-            }
-          }).pipe(Effect.orDie),
-      }
-    }),
-  )
+/** Shape a runner outcome the way native tools present themselves to the LLM. */
+export function formatRegistryResult(id: string, result: RegistryToolResult): {
+  title: string
+  output: string
+  metadata: { tool: string; duration: number; success: boolean }
+} {
+  return {
+    title: `${id} completed`,
+    output: result.error
+      ? `${id} completed with issues:\n${result.error}\n\n${result.data || ""}`
+      : result.data || "No output",
+    metadata: { tool: id, duration: result.durationMs, success: result.success },
+  }
 }
-
-// ── Tool Exports ──────────────────────────────────────────────
-
-export const FindingCorrelationEngineTool = defineArgusTool(
-  "finding-correlation-engine",
-  "Correlates findings: semantic deduplication, root cause analysis, attack chain detection, priority ranking. Use after assessments to clean up duplicate findings.",
-)
-
-export const AttackPathGeneratorTool = defineArgusTool(
-  "attack-path-generator",
-  "Generates attack paths from findings: builds asset graph, finds exploitable paths, scores by risk, generates narrative. Use to understand how findings chain together.",
-)
-
-export const VerificationAgentTool = defineArgusTool(
-  "verification-agent",
-  "Verifies findings by attempting reproduction: replays exploits, collects evidence, scores confidence, promotes confirmed findings. Use to confirm vulnerabilities are real.",
-)
-
-export const BrowserSecurityOperatorTool = defineArgusTool(
-  "browser-security-operator",
-  "Browser-based security testing: runs Playwright for BOLA detection, XSS verification, privilege escalation checks. Requires credentials.",
-)
-
-export const AttackSurfaceMapperTool = defineArgusTool(
-  "attack-surface-mapper",
-  "Maps attack surface: subdomain discovery, port scanning, URL discovery, asset graph construction. Use for initial reconnaissance.",
-)
-
-export const EvidenceIntelligenceEngineTool = defineArgusTool(
-  "evidence-intelligence-engine",
-  "Analyzes and enriches evidence: extracts metadata, correlates across findings, generates intelligence summaries.",
-)
-
-export const ExecutiveReportGeneratorTool = defineArgusTool(
-  "executive-report-generator",
-  "Generates executive security reports: non-technical summaries, risk scoring, remediation roadmap, compliance mapping.",
-)
-
-export const ThreatIntelligenceAggregatorTool = defineArgusTool(
-  "threat-intelligence-aggregator",
-  "Aggregates threat intelligence: CVE lookup, EPSS scoring, known exploit status, threat actor profiling.",
-)
-
-export const VulnerabilityKnowledgeEngineTool = defineArgusTool(
-  "vulnerability-knowledge-engine",
-  "Vulnerability knowledge base queries: CWE mapping, remediation suggestions, exploit database references.",
-)
-
-export const SecureCodeIntelligenceEngineTool = defineArgusTool(
-  "secure-code-intelligence-engine",
-  "Secure code analysis: checks for OWASP Top 10 violations, secure coding patterns, dependency vulnerabilities.",
-)
-
-export const InfrastructureSecurityAnalyzerTool = defineArgusTool(
-  "infrastructure-security-analyzer",
-  "Infrastructure security analysis: cloud config review, network segmentation checks, identity/perimeter audit.",
-)
-
-export const AssessmentOrchestratorTool = defineArgusTool(
-  "assessment-orchestrator",
-  "Coordinates full assessment lifecycle: plans phases, sequences tools, manages state transitions across recon/scan/analyze/report.",
-)
-
-export const WorkflowIntelligenceEngineTool = defineArgusTool(
-  "workflow-intelligence-engine",
-  "Workflow intelligence: analyzes assessment patterns, suggests optimizations, detects coverage gaps in workflows.",
-)
-
-export const EngagementAnalyticsEngineTool = defineArgusTool(
-  "engagement-analytics-engine",
-  "Engagement analytics: tracks assessment metrics, identifies trends, generates engagement summaries and comparison reports.",
-)
-
-export const RegisterTool = defineArgusTool(
-  "register",
-  "Auto-creates accounts: discovers registration forms, generates credentials, submits registration, handles retries and email verification.",
-)
-
-export const LoginTool = defineArgusTool(
-  "login",
-  "Auto-authenticates: discovers login forms, submits credentials, captures session cookies/JWT, handles 2FA detection and rate limiting.",
-)
