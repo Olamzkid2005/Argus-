@@ -22,10 +22,12 @@ anywhere as passes.
    intent-generating roles remain test doubles sitting above the real executor. Single-generator
    enforcement is proven structurally (flag ownership: fact-intent `on` forces planner-loop defer;
    shared normalized-objective cross-dedupe in `apply_reason`), not by racing two live planners.
-3. **>90 s wall-clock lease renewal.** Renewal is proven with a 2-second explore lease outlasted by
-   heartbeated work (`test_heartbeat_renews_claim_across_long_task`), plus the lapse-without-renewal
-   path (`test_expired_claim_rejects_late_conclusion`). The production default claim lease is 90 s,
-   but a continuous >90 s renewal run was not executed in this pass.
+3. ~~**>90 s wall-clock lease renewal — CLOSED 26 November 2026.**~~
+   `test_heartbeat_renews_production_lease_across_long_task` runs 13 real 8-second sleeps
+   (106.9 s wall-clock, `NO_CACHE`) under the production `lease_seconds=90` and concludes
+   `succeeded` — renewal now proven past the production default lease, alongside the 2-second
+   lease proof (`test_heartbeat_renews_claim_across_long_task`) and the lapse-without-renewal
+   path (`test_expired_claim_rejects_late_conclusion`).
 4. **`semgrep` / `bandit` on the real path.** The parsers exist and are unit-tested, but the binaries
    cannot execute under the `ToolRunner` locked environment on this host: the venv-3.11
    `PYTHONPATH` pin breaks the Homebrew `python3.14` shims (`SRE module mismatch`). Real-path

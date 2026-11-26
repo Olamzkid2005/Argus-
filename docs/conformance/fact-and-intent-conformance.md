@@ -25,7 +25,7 @@ latest is `041_…`; `delegation_subtasks` carries the `tool` / `arguments` rout
 
 | Command | Result |
 |---|---|
-| `cd argus-workers && DATABASE_URL=postgresql://postgres@localhost:5432/argus_stage4 venv/bin/python -m pytest tests/test_stage4_real_boundary.py -q` | **23 passed** |
+| `cd argus-workers && DATABASE_URL=postgresql://postgres@localhost:5432/argus_stage4 venv/bin/python -m pytest tests/test_stage4_real_boundary.py -q` | **24 passed** (incl. the >90s production-lease renewal, 106.9 s wall-clock) |
 | `cd argus-workers && DATABASE_URL=… venv/bin/python -m pytest tests/test_stage4_real_boundary.py tests/test_pentagi_delegation.py tests/test_control_plane.py tests/test_control_plane_bridge.py tests/test_stage4_integration.py tests/test_tool_cache.py tests/test_install_tools.py -q` | **163 passed** |
 | `cd Argus-Tui/packages/opencode && bun typecheck` (`make typecheck-v5`) | **exit 0** (`tsgo --noEmit`, no errors) |
 | `cd Argus-Tui/packages/opencode && bun test test/argus/ --timeout 30000` (`make test-v5`) | **see §6** — run launched; full-suite result recorded on completion |
@@ -122,6 +122,7 @@ adapter with outcome `refused` in the recorded result — nothing is refused on 
 | Test | Result |
 |---|---|
 | `test_heartbeat_renews_claim_across_long_task` — three real 1-second sleeps under a **2-second** explore lease conclude `succeeded` because the dispatcher-owned heartbeat closure renews the claim in flight; without renewal the same shape lapses (next test) | PASS |
+| `test_heartbeat_renews_production_lease_across_long_task` — 13 real 8-second sleeps (**106.9 s** wall-clock, `NO_CACHE`) under the **production 90-second** explore lease conclude `succeeded`; without renewal the claim would lapse mid-run and the conclusion would be rejected as late | PASS |
 | `test_expired_claim_rejects_late_conclusion` — an un-renewed 1s lease lapses; the late `conclude_explore` raises `LateResult` (fencing token enforced, no stale write) | PASS |
 | `test_crash_self_heals_without_manual_reconcile` — a subtask stuck `RUNNING` (simulated crash between steps) is auto-reconciled on retry; all subtasks finish with no operator reconcile call | PASS |
 | `test_waiting_resumes_with_operator_answer` — `WAITING` surfaces as `waiting_in_progress`; an operator answer resumes the same task to `finished` (serial-dependency state survives the pause) | PASS |
@@ -211,8 +212,10 @@ open-gate items (live-lab target, live LLM), which this environment cannot perfo
 - No live LLM was called; Generator/Reasoner/Bootstrapper remain test doubles with the real
   executor underneath. Single-generator enforcement is proven structurally (flag ownership +
   normalized-objective dedupe), not against two live planners.
-- Lease-renewal is proven with a 2-second lease outlasted by heartbeated work (and the lapse path
-  without renewal); the production default claim lease is 90 s (`claim_explore` /
-  `dispatcher.run_explore` defaults). A >90 s wall-clock renewal run was not executed in this pass.
+- Lease-renewal was first proven with a 2-second lease outlasted by heartbeated work (and the
+  lapse path without renewal); it is now additionally proven past the production default claim
+  lease of 90 s (`claim_explore` / `dispatcher.run_explore` defaults):
+  `test_heartbeat_renews_production_lease_across_long_task` runs 106.9 s wall-clock under
+  `lease_seconds=90` and concludes `succeeded` (26 November 2026).
 - `semgrep`/`bandit` parsers exist and are unit-tested, but the binaries cannot run under the
   `ToolRunner` locked environment on this host; they are not part of the real-path evidence.
