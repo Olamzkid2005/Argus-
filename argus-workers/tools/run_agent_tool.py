@@ -12,9 +12,12 @@ Usage:
 import argparse
 import importlib
 import json
+import logging
 import os
 import sys
 import time
+
+logger = logging.getLogger(__name__)
 
 # Ensure the parent directory is on the path so tools/ can be imported
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -138,13 +141,19 @@ def main():
     goal_node_id = args.goal_node_id or str(extra.get("goal_node_id") or "")
     intent_node_id = args.intent_node_id or str(extra.get("intent_node_id") or "")
 
+    # The scope is the engagement's authorization boundary, never the target
+    # itself: defaulting to ``args.target`` let the LLM establish its own
+    # scope by supplying a target. An explicit ``extra.scope`` still wins;
+    # otherwise the context carries no scope and downstream guards fail
+    # closed (or fall back to ARGUS_ALLOW_UNSCOPED / the published run
+    # scope) instead of self-authorizing.
     ctx = ToolContext(
         target=args.target,
         engagement_id=args.engagement_id,
         goal_node_id=goal_node_id,
         intent_node_id=intent_node_id,
         tech_stack=extra.get("tech_stack", []),
-        authorized_scope=extra.get("scope", args.target),
+        authorized_scope=extra.get("scope", ""),
         timeout=extra.get("timeout", 300),
         rate_limit=extra.get("rate_limit", 0),
         aggressiveness=extra.get("aggressiveness", "moderate"),

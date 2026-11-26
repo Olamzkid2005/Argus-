@@ -175,9 +175,14 @@ describe("securityAgentsCheck", () => {
     expect(result.message).toContain(
       "vuln-scan [all] allow: ai-surface, ai-vuln-scanner, alterx, amass, api-spec, arjun, assessment-orchestrator, attack-path-generator, attack-surface-mapper, bandit, bash, brakeman, browser-security-operator, bucket-upload, chaos, cloud-enum, cloud-metadata-probe, commix, dalfox, dnsx, engagement-analytics-engine, eslint, evidence-intelligence-engine, executive-report-generator, ffuf, finding-correlation-engine, finding-verifier, gau, github-endpoints, gitleaks, glob, gosec, gospider, graphql, grep, httpx, infrastructure-security-analyzer, jwt-tool, katana, list, login, naabu, nikto, nmap, npm-audit, nuclei, phpcs, pip-audit, playwright-bola, playwright-privesc, playwright-xss, read, register, s3scanner, secure-code-intelligence-engine, semgrep, session-hijack, sn1per, spotbugs, sqlmap, subfinder, testssl, threat-intelligence-aggregator, trivy, uncover, verification-agent, vulnerability-knowledge-engine, wafw00f, waybackurls, web-scanner, webfetch, websearch, whatweb, workflow-intelligence-engine, wpscan | ask: none | deny: *",
     )
-    // verifier: same native tool surface as vuln-scan.
-    expect(result.message).toContain("verifier [all] allow: ai-surface, ai-vuln-scanner")
-    expect(result.message).toContain("verification-agent, vulnerability-knowledge-engine")
+    // verifier: deliberately narrower than vuln-scan — low/medium risk only,
+    // recon/scan/deep_scan phases only, no state-modifying auth or storage
+    // tools (register/login create accounts, bucket-upload writes objects),
+    // no high/critical injectors or post-exploit probes. Derived from the
+    // registry (reclassifying a tool updates this line).
+    expect(result.message).toContain(
+      "verifier [all] allow: ai-surface, alterx, amass, api-spec, arjun, attack-surface-mapper, bash, browser-security-operator, chaos, cloud-enum, dalfox, dnsx, ffuf, finding-verifier, gau, github-endpoints, glob, gospider, graphql, grep, httpx, jwt-tool, katana, list, naabu, nikto, nmap, nuclei, playwright-bola, playwright-privesc, playwright-xss, read, s3scanner, session-hijack, subfinder, testssl, threat-intelligence-aggregator, uncover, verification-agent, wafw00f, waybackurls, web-scanner, webfetch, websearch, whatweb, wpscan | ask: none | deny: *",
+    )
     // reporter: writes confined to evidence/ and reports/ (plan Q-2)
     expect(result.message).toContain("reporter [all] allow: edit(**/evidence/**, **/reports/**), glob, grep, list, read")
     expect(result.message).toContain("deny: *, edit(*)")

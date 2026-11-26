@@ -20,6 +20,7 @@ export const AiSurfaceToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const AiVulnScannerToolSpec: RegistryToolSpec = {
@@ -32,6 +33,7 @@ export const AiVulnScannerToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["analyze"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const AlterxToolSpec: RegistryToolSpec = {
@@ -44,6 +46,7 @@ export const AlterxToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const AmassToolSpec: RegistryToolSpec = {
@@ -56,6 +59,7 @@ export const AmassToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const ApiSpecToolSpec: RegistryToolSpec = {
@@ -68,6 +72,7 @@ export const ApiSpecToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const ArjunToolSpec: RegistryToolSpec = {
@@ -80,6 +85,7 @@ export const ArjunToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const AssessmentOrchestratorToolSpec: RegistryToolSpec = {
@@ -92,6 +98,7 @@ export const AssessmentOrchestratorToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["analyze"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const AttackPathGeneratorToolSpec: RegistryToolSpec = {
@@ -104,6 +111,7 @@ export const AttackPathGeneratorToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["analyze"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const AttackSurfaceMapperToolSpec: RegistryToolSpec = {
@@ -116,6 +124,7 @@ export const AttackSurfaceMapperToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const BanditToolSpec: RegistryToolSpec = {
@@ -128,6 +137,7 @@ export const BanditToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan"],
     risk: "low",
+    findingsExitCodes: [1],
   }
 
 export const BrakemanToolSpec: RegistryToolSpec = {
@@ -140,6 +150,7 @@ export const BrakemanToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const BrowserSecurityOperatorToolSpec: RegistryToolSpec = {
@@ -152,6 +163,7 @@ export const BrowserSecurityOperatorToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan", "deep_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const BucketUploadToolSpec: RegistryToolSpec = {
@@ -164,6 +176,7 @@ export const BucketUploadToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan", "deep_scan"],
     risk: "medium",
+    findingsExitCodes: [],
   }
 
 export const ChaosToolSpec: RegistryToolSpec = {
@@ -176,6 +189,7 @@ export const ChaosToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const CloudEnumToolSpec: RegistryToolSpec = {
@@ -188,6 +202,7 @@ export const CloudEnumToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon", "scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const CloudMetadataProbeToolSpec: RegistryToolSpec = {
@@ -200,6 +215,7 @@ export const CloudMetadataProbeToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["post_exploit"],
     risk: "high",
+    findingsExitCodes: [],
   }
 
 export const CommixToolSpec: RegistryToolSpec = {
@@ -212,6 +228,7 @@ export const CommixToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan"],
     risk: "high",
+    findingsExitCodes: [],
   }
 
 export const DalfoxToolSpec: RegistryToolSpec = {
@@ -224,6 +241,7 @@ export const DalfoxToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan", "deep_scan"],
     risk: "medium",
+    findingsExitCodes: [1],
   }
 
 export const DnsxToolSpec: RegistryToolSpec = {
@@ -236,6 +254,7 @@ export const DnsxToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const EngagementAnalyticsEngineToolSpec: RegistryToolSpec = {
@@ -248,6 +267,7 @@ export const EngagementAnalyticsEngineToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["analyze", "report"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const EslintToolSpec: RegistryToolSpec = {
@@ -260,6 +280,7 @@ export const EslintToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const EvidenceIntelligenceEngineToolSpec: RegistryToolSpec = {
@@ -272,6 +293,7 @@ export const EvidenceIntelligenceEngineToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["analyze", "report"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const ExecutiveReportGeneratorToolSpec: RegistryToolSpec = {
@@ -284,6 +306,7 @@ export const ExecutiveReportGeneratorToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["report"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const FfufToolSpec: RegistryToolSpec = {
@@ -296,6 +319,7 @@ export const FfufToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon", "scan", "deep_scan"],
     risk: "medium",
+    findingsExitCodes: [],
   }
 
 export const FindingCorrelationEngineToolSpec: RegistryToolSpec = {
@@ -308,6 +332,7 @@ export const FindingCorrelationEngineToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["analyze"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const FindingVerifierToolSpec: RegistryToolSpec = {
@@ -320,6 +345,7 @@ export const FindingVerifierToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["deep_scan", "analyze"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const GauToolSpec: RegistryToolSpec = {
@@ -332,6 +358,7 @@ export const GauToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const GithubEndpointsToolSpec: RegistryToolSpec = {
@@ -344,6 +371,7 @@ export const GithubEndpointsToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const GitleaksToolSpec: RegistryToolSpec = {
@@ -356,6 +384,7 @@ export const GitleaksToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan"],
     risk: "low",
+    findingsExitCodes: [1],
   }
 
 export const GosecToolSpec: RegistryToolSpec = {
@@ -368,6 +397,7 @@ export const GosecToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const GospiderToolSpec: RegistryToolSpec = {
@@ -380,6 +410,7 @@ export const GospiderToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const GraphqlToolSpec: RegistryToolSpec = {
@@ -392,6 +423,7 @@ export const GraphqlToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const HttpxToolSpec: RegistryToolSpec = {
@@ -404,6 +436,7 @@ export const HttpxToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const InfrastructureSecurityAnalyzerToolSpec: RegistryToolSpec = {
@@ -416,6 +449,7 @@ export const InfrastructureSecurityAnalyzerToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan", "analyze"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const JwtToolToolSpec: RegistryToolSpec = {
@@ -428,6 +462,7 @@ export const JwtToolToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const KatanaToolSpec: RegistryToolSpec = {
@@ -440,6 +475,7 @@ export const KatanaToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const LoginToolSpec: RegistryToolSpec = {
@@ -452,6 +488,7 @@ export const LoginToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const NaabuToolSpec: RegistryToolSpec = {
@@ -464,6 +501,7 @@ export const NaabuToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "medium",
+    findingsExitCodes: [],
   }
 
 export const NiktoToolSpec: RegistryToolSpec = {
@@ -476,6 +514,7 @@ export const NiktoToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon", "scan", "deep_scan"],
     risk: "medium",
+    findingsExitCodes: [],
   }
 
 export const NmapToolSpec: RegistryToolSpec = {
@@ -488,6 +527,7 @@ export const NmapToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "medium",
+    findingsExitCodes: [],
   }
 
 export const NpmAuditToolSpec: RegistryToolSpec = {
@@ -500,6 +540,7 @@ export const NpmAuditToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const NucleiToolSpec: RegistryToolSpec = {
@@ -512,6 +553,7 @@ export const NucleiToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan", "deep_scan"],
     risk: "medium",
+    findingsExitCodes: [1],
   }
 
 export const PhpcsToolSpec: RegistryToolSpec = {
@@ -524,6 +566,7 @@ export const PhpcsToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const PipAuditToolSpec: RegistryToolSpec = {
@@ -536,6 +579,7 @@ export const PipAuditToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan"],
     risk: "low",
+    findingsExitCodes: [1],
   }
 
 export const PlaywrightBolaToolSpec: RegistryToolSpec = {
@@ -548,6 +592,7 @@ export const PlaywrightBolaToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan", "deep_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const PlaywrightPrivescToolSpec: RegistryToolSpec = {
@@ -560,6 +605,7 @@ export const PlaywrightPrivescToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan", "deep_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const PlaywrightXssToolSpec: RegistryToolSpec = {
@@ -572,6 +618,7 @@ export const PlaywrightXssToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan", "deep_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const RegisterToolSpec: RegistryToolSpec = {
@@ -584,6 +631,7 @@ export const RegisterToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const S3scannerToolSpec: RegistryToolSpec = {
@@ -596,6 +644,7 @@ export const S3scannerToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon", "scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const SecureCodeIntelligenceEngineToolSpec: RegistryToolSpec = {
@@ -608,6 +657,7 @@ export const SecureCodeIntelligenceEngineToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["source_analysis", "analyze", "repo_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const SemgrepToolSpec: RegistryToolSpec = {
@@ -620,6 +670,7 @@ export const SemgrepToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan"],
     risk: "low",
+    findingsExitCodes: [1],
   }
 
 export const SessionHijackToolSpec: RegistryToolSpec = {
@@ -632,6 +683,7 @@ export const SessionHijackToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["deep_scan", "post_exploitation"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const Sn1perToolSpec: RegistryToolSpec = {
@@ -644,6 +696,7 @@ export const Sn1perToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan", "deep_scan"],
     risk: "high",
+    findingsExitCodes: [],
   }
 
 export const SpotbugsToolSpec: RegistryToolSpec = {
@@ -656,6 +709,7 @@ export const SpotbugsToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const SqlmapToolSpec: RegistryToolSpec = {
@@ -668,6 +722,7 @@ export const SqlmapToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan", "deep_scan"],
     risk: "high",
+    findingsExitCodes: [],
   }
 
 export const SubfinderToolSpec: RegistryToolSpec = {
@@ -680,6 +735,7 @@ export const SubfinderToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const TestsslToolSpec: RegistryToolSpec = {
@@ -692,6 +748,7 @@ export const TestsslToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan"],
     risk: "medium",
+    findingsExitCodes: [],
   }
 
 export const ThreatIntelligenceAggregatorToolSpec: RegistryToolSpec = {
@@ -704,6 +761,7 @@ export const ThreatIntelligenceAggregatorToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon", "analyze"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const TrivyToolSpec: RegistryToolSpec = {
@@ -716,6 +774,7 @@ export const TrivyToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["repo_scan"],
     risk: "medium",
+    findingsExitCodes: [1],
   }
 
 export const UncoverToolSpec: RegistryToolSpec = {
@@ -728,6 +787,7 @@ export const UncoverToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const VerificationAgentToolSpec: RegistryToolSpec = {
@@ -740,6 +800,7 @@ export const VerificationAgentToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["deep_scan", "analyze"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const VulnerabilityKnowledgeEngineToolSpec: RegistryToolSpec = {
@@ -752,6 +813,7 @@ export const VulnerabilityKnowledgeEngineToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["analyze"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const Wafw00fToolSpec: RegistryToolSpec = {
@@ -764,6 +826,7 @@ export const Wafw00fToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon", "scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const WaybackurlsToolSpec: RegistryToolSpec = {
@@ -776,6 +839,7 @@ export const WaybackurlsToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const WebScannerToolSpec: RegistryToolSpec = {
@@ -788,6 +852,7 @@ export const WebScannerToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["analyze", "scan", "deep_scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const WhatwebToolSpec: RegistryToolSpec = {
@@ -800,6 +865,7 @@ export const WhatwebToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["recon"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const WorkflowIntelligenceEngineToolSpec: RegistryToolSpec = {
@@ -812,6 +878,7 @@ export const WorkflowIntelligenceEngineToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["analyze", "report"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 export const WpscanToolSpec: RegistryToolSpec = {
@@ -824,6 +891,7 @@ export const WpscanToolSpec: RegistryToolSpec = {
     requiredEnv: [],
     phases: ["scan"],
     risk: "low",
+    findingsExitCodes: [],
   }
 
 /** Every executable tool's spec, for permission rulesets. */

@@ -552,6 +552,9 @@ jobs:
       - name: Check generated tools match YAML definitions
         run: python3 scripts/generate_tool_defs.py --check
 
+      - name: Check generated native TUI wrappers match the tool registry
+        run: python3 scripts/generate_argus_tools_ts.py --check
+
       - name: Validate tool definition alignment (Python vs TUI)
         run: python3 scripts/validate_tool_alignment.py --check
 

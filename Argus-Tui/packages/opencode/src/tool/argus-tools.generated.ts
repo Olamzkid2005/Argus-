@@ -14,7 +14,7 @@
  */
 import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
-import { formatRegistryResult, runRegistryInvocation } from "./argus-tools"
+import { formatRegistryResult, runRegistryInvocationAsync } from "./argus-tools"
 import {
   AiSurfaceToolSpec,
   AiVulnScannerToolSpec,
@@ -98,8 +98,8 @@ export const AiSurfaceTool = Tool.define(
       parameters: AiSurfaceToolParameters,
       execute: (params: Schema.Schema.Type<typeof AiSurfaceToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(AiSurfaceToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(AiSurfaceToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(AiSurfaceToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -119,8 +119,8 @@ export const AiVulnScannerTool = Tool.define(
       parameters: AiVulnScannerToolParameters,
       execute: (params: Schema.Schema.Type<typeof AiVulnScannerToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(AiVulnScannerToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(AiVulnScannerToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(AiVulnScannerToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -139,8 +139,8 @@ export const AlterxTool = Tool.define(
       parameters: AlterxToolParameters,
       execute: (params: Schema.Schema.Type<typeof AlterxToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(AlterxToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(AlterxToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(AlterxToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -159,8 +159,8 @@ export const AmassTool = Tool.define(
       parameters: AmassToolParameters,
       execute: (params: Schema.Schema.Type<typeof AmassToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(AmassToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(AmassToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(AmassToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -180,8 +180,8 @@ export const ApiSpecTool = Tool.define(
       parameters: ApiSpecToolParameters,
       execute: (params: Schema.Schema.Type<typeof ApiSpecToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(ApiSpecToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(ApiSpecToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(ApiSpecToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -200,8 +200,8 @@ export const ArjunTool = Tool.define(
       parameters: ArjunToolParameters,
       execute: (params: Schema.Schema.Type<typeof ArjunToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(ArjunToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(ArjunToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(ArjunToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -221,8 +221,8 @@ export const AssessmentOrchestratorTool = Tool.define(
       parameters: AssessmentOrchestratorToolParameters,
       execute: (params: Schema.Schema.Type<typeof AssessmentOrchestratorToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(AssessmentOrchestratorToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(AssessmentOrchestratorToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(AssessmentOrchestratorToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -242,8 +242,8 @@ export const AttackPathGeneratorTool = Tool.define(
       parameters: AttackPathGeneratorToolParameters,
       execute: (params: Schema.Schema.Type<typeof AttackPathGeneratorToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(AttackPathGeneratorToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(AttackPathGeneratorToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(AttackPathGeneratorToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -263,8 +263,8 @@ export const AttackSurfaceMapperTool = Tool.define(
       parameters: AttackSurfaceMapperToolParameters,
       execute: (params: Schema.Schema.Type<typeof AttackSurfaceMapperToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(AttackSurfaceMapperToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(AttackSurfaceMapperToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(AttackSurfaceMapperToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -283,8 +283,8 @@ export const BanditTool = Tool.define(
       parameters: BanditToolParameters,
       execute: (params: Schema.Schema.Type<typeof BanditToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(BanditToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(BanditToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(BanditToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -303,8 +303,8 @@ export const BrakemanTool = Tool.define(
       parameters: BrakemanToolParameters,
       execute: (params: Schema.Schema.Type<typeof BrakemanToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(BrakemanToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(BrakemanToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(BrakemanToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -324,8 +324,8 @@ export const BrowserSecurityOperatorTool = Tool.define(
       parameters: BrowserSecurityOperatorToolParameters,
       execute: (params: Schema.Schema.Type<typeof BrowserSecurityOperatorToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(BrowserSecurityOperatorToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(BrowserSecurityOperatorToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(BrowserSecurityOperatorToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -344,8 +344,8 @@ export const BucketUploadTool = Tool.define(
       parameters: BucketUploadToolParameters,
       execute: (params: Schema.Schema.Type<typeof BucketUploadToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(BucketUploadToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(BucketUploadToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(BucketUploadToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -364,8 +364,8 @@ export const ChaosTool = Tool.define(
       parameters: ChaosToolParameters,
       execute: (params: Schema.Schema.Type<typeof ChaosToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(ChaosToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(ChaosToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(ChaosToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -384,8 +384,8 @@ export const CloudEnumTool = Tool.define(
       parameters: CloudEnumToolParameters,
       execute: (params: Schema.Schema.Type<typeof CloudEnumToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(CloudEnumToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(CloudEnumToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(CloudEnumToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -405,8 +405,8 @@ export const CloudMetadataProbeTool = Tool.define(
       parameters: CloudMetadataProbeToolParameters,
       execute: (params: Schema.Schema.Type<typeof CloudMetadataProbeToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(CloudMetadataProbeToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(CloudMetadataProbeToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(CloudMetadataProbeToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -425,8 +425,8 @@ export const CommixTool = Tool.define(
       parameters: CommixToolParameters,
       execute: (params: Schema.Schema.Type<typeof CommixToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(CommixToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(CommixToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(CommixToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -447,8 +447,8 @@ export const DalfoxTool = Tool.define(
       parameters: DalfoxToolParameters,
       execute: (params: Schema.Schema.Type<typeof DalfoxToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(DalfoxToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(DalfoxToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(DalfoxToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -467,8 +467,8 @@ export const DnsxTool = Tool.define(
       parameters: DnsxToolParameters,
       execute: (params: Schema.Schema.Type<typeof DnsxToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(DnsxToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(DnsxToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(DnsxToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -488,8 +488,8 @@ export const EngagementAnalyticsEngineTool = Tool.define(
       parameters: EngagementAnalyticsEngineToolParameters,
       execute: (params: Schema.Schema.Type<typeof EngagementAnalyticsEngineToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(EngagementAnalyticsEngineToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(EngagementAnalyticsEngineToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(EngagementAnalyticsEngineToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -508,8 +508,8 @@ export const EslintTool = Tool.define(
       parameters: EslintToolParameters,
       execute: (params: Schema.Schema.Type<typeof EslintToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(EslintToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(EslintToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(EslintToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -529,8 +529,8 @@ export const EvidenceIntelligenceEngineTool = Tool.define(
       parameters: EvidenceIntelligenceEngineToolParameters,
       execute: (params: Schema.Schema.Type<typeof EvidenceIntelligenceEngineToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(EvidenceIntelligenceEngineToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(EvidenceIntelligenceEngineToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(EvidenceIntelligenceEngineToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -550,8 +550,8 @@ export const ExecutiveReportGeneratorTool = Tool.define(
       parameters: ExecutiveReportGeneratorToolParameters,
       execute: (params: Schema.Schema.Type<typeof ExecutiveReportGeneratorToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(ExecutiveReportGeneratorToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(ExecutiveReportGeneratorToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(ExecutiveReportGeneratorToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -572,8 +572,8 @@ export const FfufTool = Tool.define(
       parameters: FfufToolParameters,
       execute: (params: Schema.Schema.Type<typeof FfufToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(FfufToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(FfufToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(FfufToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -593,8 +593,8 @@ export const FindingCorrelationEngineTool = Tool.define(
       parameters: FindingCorrelationEngineToolParameters,
       execute: (params: Schema.Schema.Type<typeof FindingCorrelationEngineToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(FindingCorrelationEngineToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(FindingCorrelationEngineToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(FindingCorrelationEngineToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -617,8 +617,8 @@ export const FindingVerifierTool = Tool.define(
       parameters: FindingVerifierToolParameters,
       execute: (params: Schema.Schema.Type<typeof FindingVerifierToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(FindingVerifierToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(FindingVerifierToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(FindingVerifierToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -637,8 +637,8 @@ export const GauTool = Tool.define(
       parameters: GauToolParameters,
       execute: (params: Schema.Schema.Type<typeof GauToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(GauToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(GauToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(GauToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -657,8 +657,8 @@ export const GithubEndpointsTool = Tool.define(
       parameters: GithubEndpointsToolParameters,
       execute: (params: Schema.Schema.Type<typeof GithubEndpointsToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(GithubEndpointsToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(GithubEndpointsToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(GithubEndpointsToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -678,8 +678,8 @@ export const GitleaksTool = Tool.define(
       parameters: GitleaksToolParameters,
       execute: (params: Schema.Schema.Type<typeof GitleaksToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(GitleaksToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(GitleaksToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(GitleaksToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -698,8 +698,8 @@ export const GosecTool = Tool.define(
       parameters: GosecToolParameters,
       execute: (params: Schema.Schema.Type<typeof GosecToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(GosecToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(GosecToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(GosecToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -719,8 +719,8 @@ export const GospiderTool = Tool.define(
       parameters: GospiderToolParameters,
       execute: (params: Schema.Schema.Type<typeof GospiderToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(GospiderToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(GospiderToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(GospiderToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -739,8 +739,8 @@ export const GraphqlTool = Tool.define(
       parameters: GraphqlToolParameters,
       execute: (params: Schema.Schema.Type<typeof GraphqlToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(GraphqlToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(GraphqlToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(GraphqlToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -759,8 +759,8 @@ export const HttpxTool = Tool.define(
       parameters: HttpxToolParameters,
       execute: (params: Schema.Schema.Type<typeof HttpxToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(HttpxToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(HttpxToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(HttpxToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -780,8 +780,8 @@ export const InfrastructureSecurityAnalyzerTool = Tool.define(
       parameters: InfrastructureSecurityAnalyzerToolParameters,
       execute: (params: Schema.Schema.Type<typeof InfrastructureSecurityAnalyzerToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(InfrastructureSecurityAnalyzerToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(InfrastructureSecurityAnalyzerToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(InfrastructureSecurityAnalyzerToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -800,8 +800,8 @@ export const JwtToolTool = Tool.define(
       parameters: JwtToolToolParameters,
       execute: (params: Schema.Schema.Type<typeof JwtToolToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(JwtToolToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(JwtToolToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(JwtToolToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -821,8 +821,8 @@ export const KatanaTool = Tool.define(
       parameters: KatanaToolParameters,
       execute: (params: Schema.Schema.Type<typeof KatanaToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(KatanaToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(KatanaToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(KatanaToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -844,8 +844,8 @@ export const LoginTool = Tool.define(
       parameters: LoginToolParameters,
       execute: (params: Schema.Schema.Type<typeof LoginToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(LoginToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(LoginToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(LoginToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -866,8 +866,8 @@ export const NaabuTool = Tool.define(
       parameters: NaabuToolParameters,
       execute: (params: Schema.Schema.Type<typeof NaabuToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(NaabuToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(NaabuToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(NaabuToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -886,8 +886,8 @@ export const NiktoTool = Tool.define(
       parameters: NiktoToolParameters,
       execute: (params: Schema.Schema.Type<typeof NiktoToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(NiktoToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(NiktoToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(NiktoToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -907,8 +907,8 @@ export const NmapTool = Tool.define(
       parameters: NmapToolParameters,
       execute: (params: Schema.Schema.Type<typeof NmapToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(NmapToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(NmapToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(NmapToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -927,8 +927,8 @@ export const NpmAuditTool = Tool.define(
       parameters: NpmAuditToolParameters,
       execute: (params: Schema.Schema.Type<typeof NpmAuditToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(NpmAuditToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(NpmAuditToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(NpmAuditToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -938,7 +938,7 @@ export const NpmAuditTool = Tool.define(
 
 const NucleiToolParameters = Schema.Struct({
     "target": Schema.String.annotate({ description: "Target URL" }),
-    "severity": Schema.optional(Schema.String.annotate({ description: "Severity filter" })),
+    "severity": Schema.optional(Schema.Literals(["info", "low", "medium", "high", "critical"]).annotate({ description: "Severity filter" })),
     "templates": Schema.optional(Schema.String.annotate({ description: "Custom template directory" })),
     "tags": Schema.optional(Schema.String.annotate({ description: "Template tags to run" })),
   })
@@ -950,8 +950,8 @@ export const NucleiTool = Tool.define(
       parameters: NucleiToolParameters,
       execute: (params: Schema.Schema.Type<typeof NucleiToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(NucleiToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(NucleiToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(NucleiToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -970,8 +970,8 @@ export const PhpcsTool = Tool.define(
       parameters: PhpcsToolParameters,
       execute: (params: Schema.Schema.Type<typeof PhpcsToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(PhpcsToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(PhpcsToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(PhpcsToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -990,8 +990,8 @@ export const PipAuditTool = Tool.define(
       parameters: PipAuditToolParameters,
       execute: (params: Schema.Schema.Type<typeof PipAuditToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(PipAuditToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(PipAuditToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(PipAuditToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1019,8 +1019,8 @@ export const PlaywrightBolaTool = Tool.define(
       parameters: PlaywrightBolaToolParameters,
       execute: (params: Schema.Schema.Type<typeof PlaywrightBolaToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(PlaywrightBolaToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(PlaywrightBolaToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(PlaywrightBolaToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1046,8 +1046,8 @@ export const PlaywrightPrivescTool = Tool.define(
       parameters: PlaywrightPrivescToolParameters,
       execute: (params: Schema.Schema.Type<typeof PlaywrightPrivescToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(PlaywrightPrivescToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(PlaywrightPrivescToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(PlaywrightPrivescToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1074,8 +1074,8 @@ export const PlaywrightXssTool = Tool.define(
       parameters: PlaywrightXssToolParameters,
       execute: (params: Schema.Schema.Type<typeof PlaywrightXssToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(PlaywrightXssToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(PlaywrightXssToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(PlaywrightXssToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1095,8 +1095,8 @@ export const RegisterTool = Tool.define(
       parameters: RegisterToolParameters,
       execute: (params: Schema.Schema.Type<typeof RegisterToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(RegisterToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(RegisterToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(RegisterToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1115,8 +1115,8 @@ export const S3scannerTool = Tool.define(
       parameters: S3scannerToolParameters,
       execute: (params: Schema.Schema.Type<typeof S3scannerToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(S3scannerToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(S3scannerToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(S3scannerToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1136,8 +1136,8 @@ export const SecureCodeIntelligenceEngineTool = Tool.define(
       parameters: SecureCodeIntelligenceEngineToolParameters,
       execute: (params: Schema.Schema.Type<typeof SecureCodeIntelligenceEngineToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(SecureCodeIntelligenceEngineToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(SecureCodeIntelligenceEngineToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(SecureCodeIntelligenceEngineToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1157,8 +1157,8 @@ export const SemgrepTool = Tool.define(
       parameters: SemgrepToolParameters,
       execute: (params: Schema.Schema.Type<typeof SemgrepToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(SemgrepToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(SemgrepToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(SemgrepToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1177,8 +1177,8 @@ export const SessionHijackTool = Tool.define(
       parameters: SessionHijackToolParameters,
       execute: (params: Schema.Schema.Type<typeof SessionHijackToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(SessionHijackToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(SessionHijackToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(SessionHijackToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1197,8 +1197,8 @@ export const Sn1perTool = Tool.define(
       parameters: Sn1perToolParameters,
       execute: (params: Schema.Schema.Type<typeof Sn1perToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(Sn1perToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(Sn1perToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(Sn1perToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1217,8 +1217,8 @@ export const SpotbugsTool = Tool.define(
       parameters: SpotbugsToolParameters,
       execute: (params: Schema.Schema.Type<typeof SpotbugsToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(SpotbugsToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(SpotbugsToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(SpotbugsToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1237,8 +1237,8 @@ export const SqlmapTool = Tool.define(
       parameters: SqlmapToolParameters,
       execute: (params: Schema.Schema.Type<typeof SqlmapToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(SqlmapToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(SqlmapToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(SqlmapToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1257,8 +1257,8 @@ export const SubfinderTool = Tool.define(
       parameters: SubfinderToolParameters,
       execute: (params: Schema.Schema.Type<typeof SubfinderToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(SubfinderToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(SubfinderToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(SubfinderToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1277,8 +1277,8 @@ export const TestsslTool = Tool.define(
       parameters: TestsslToolParameters,
       execute: (params: Schema.Schema.Type<typeof TestsslToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(TestsslToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(TestsslToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(TestsslToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1298,8 +1298,8 @@ export const ThreatIntelligenceAggregatorTool = Tool.define(
       parameters: ThreatIntelligenceAggregatorToolParameters,
       execute: (params: Schema.Schema.Type<typeof ThreatIntelligenceAggregatorToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(ThreatIntelligenceAggregatorToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(ThreatIntelligenceAggregatorToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(ThreatIntelligenceAggregatorToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1319,8 +1319,8 @@ export const TrivyTool = Tool.define(
       parameters: TrivyToolParameters,
       execute: (params: Schema.Schema.Type<typeof TrivyToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(TrivyToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(TrivyToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(TrivyToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1339,8 +1339,8 @@ export const UncoverTool = Tool.define(
       parameters: UncoverToolParameters,
       execute: (params: Schema.Schema.Type<typeof UncoverToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(UncoverToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(UncoverToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(UncoverToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1360,8 +1360,8 @@ export const VerificationAgentTool = Tool.define(
       parameters: VerificationAgentToolParameters,
       execute: (params: Schema.Schema.Type<typeof VerificationAgentToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(VerificationAgentToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(VerificationAgentToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(VerificationAgentToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1381,8 +1381,8 @@ export const VulnerabilityKnowledgeEngineTool = Tool.define(
       parameters: VulnerabilityKnowledgeEngineToolParameters,
       execute: (params: Schema.Schema.Type<typeof VulnerabilityKnowledgeEngineToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(VulnerabilityKnowledgeEngineToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(VulnerabilityKnowledgeEngineToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(VulnerabilityKnowledgeEngineToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1401,8 +1401,8 @@ export const Wafw00fTool = Tool.define(
       parameters: Wafw00fToolParameters,
       execute: (params: Schema.Schema.Type<typeof Wafw00fToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(Wafw00fToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(Wafw00fToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(Wafw00fToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1421,8 +1421,8 @@ export const WaybackurlsTool = Tool.define(
       parameters: WaybackurlsToolParameters,
       execute: (params: Schema.Schema.Type<typeof WaybackurlsToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(WaybackurlsToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(WaybackurlsToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(WaybackurlsToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1442,8 +1442,8 @@ export const WebScannerTool = Tool.define(
       parameters: WebScannerToolParameters,
       execute: (params: Schema.Schema.Type<typeof WebScannerToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(WebScannerToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(WebScannerToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(WebScannerToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1462,8 +1462,8 @@ export const WhatwebTool = Tool.define(
       parameters: WhatwebToolParameters,
       execute: (params: Schema.Schema.Type<typeof WhatwebToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(WhatwebToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(WhatwebToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(WhatwebToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1483,8 +1483,8 @@ export const WorkflowIntelligenceEngineTool = Tool.define(
       parameters: WorkflowIntelligenceEngineToolParameters,
       execute: (params: Schema.Schema.Type<typeof WorkflowIntelligenceEngineToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(WorkflowIntelligenceEngineToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(WorkflowIntelligenceEngineToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(WorkflowIntelligenceEngineToolSpec.id, result)
         }).pipe(Effect.orDie),
@@ -1503,8 +1503,8 @@ export const WpscanTool = Tool.define(
       parameters: WpscanToolParameters,
       execute: (params: Schema.Schema.Type<typeof WpscanToolParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const result = yield* Effect.sync(() =>
-            runRegistryInvocation(WpscanToolSpec, params as Record<string, unknown>),
+          const result = yield* Effect.promise(() =>
+            runRegistryInvocationAsync(WpscanToolSpec, params as Record<string, unknown>),
           )
           return formatRegistryResult(WpscanToolSpec.id, result)
         }).pipe(Effect.orDie),

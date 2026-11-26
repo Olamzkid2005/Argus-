@@ -13,6 +13,8 @@ import { REGISTRY_GENERATED_TOOLS } from "../../../../src/tool/argus-tools.gener
 import { REGISTRY_TOOL_SPECS } from "../../../../src/tool/argus-tools.specs.generated"
 import {
   buildRegistryArgv,
+  checkNativeAvailability,
+  checkNativeScope,
   formatRegistryResult,
   runRegistryInvocation,
   type RegistryToolSpec,
@@ -31,6 +33,7 @@ const KATANA_LIKE: RegistryToolSpec = {
   requiredEnv: [],
   phases: ["recon"],
   risk: "low",
+  findingsExitCodes: [],
 }
 
 describe("buildRegistryArgv", () => {
@@ -113,6 +116,79 @@ describe("runRegistryInvocation", () => {
     expect(result.success).toBe(false)
     expect(result.error).toContain("ARGUS_TEST_MISSING_KEY_XYZ")
   })
+
+  test("an out-of-scope target is refused without spawning", () => {
+    const mode = process.env["ARGUS_SCOPE_MODE"]
+    const targets = process.env["ARGUS_ALLOWED_TARGETS"]
+    process.env["ARGUS_SCOPE_MODE"] = "allowlist"
+    process.env["ARGUS_ALLOWED_TARGETS"] = "https://allowed.example"
+    try {
+      const result = runRegistryInvocation(KATANA_LIKE, { target: "https://evil.example" })
+      expect(result.success).toBe(false)
+      expect(result.error).toContain("outside the engagement scope")
+    } finally {
+      if (mode === undefined) delete process.env["ARGUS_SCOPE_MODE"]
+      else process.env["ARGUS_SCOPE_MODE"] = mode
+      if (targets === undefined) delete process.env["ARGUS_ALLOWED_TARGETS"]
+      else process.env["ARGUS_ALLOWED_TARGETS"] = targets
+    }
+  })
+})
+
+describe("checkNativeScope", () => {
+  test("cloud-metadata targets are always refused", () => {
+    const verdict = checkNativeScope("http://169.254.169.254/latest/meta-data/")
+    expect(verdict.ok).toBe(false)
+  })
+
+  test("allowlist mode refuses targets outside the engagement scope", () => {
+    const mode = process.env["ARGUS_SCOPE_MODE"]
+    const targets = process.env["ARGUS_ALLOWED_TARGETS"]
+    process.env["ARGUS_SCOPE_MODE"] = "allowlist"
+    process.env["ARGUS_ALLOWED_TARGETS"] = "https://allowed.example"
+    try {
+      expect(checkNativeScope("https://allowed.example/app").ok).toBe(true)
+      const verdict = checkNativeScope("https://evil.example")
+      expect(verdict.ok).toBe(false)
+      if (!verdict.ok) expect(verdict.reason).toContain("outside the engagement scope")
+    } finally {
+      if (mode === undefined) delete process.env["ARGUS_SCOPE_MODE"]
+      else process.env["ARGUS_SCOPE_MODE"] = mode
+      if (targets === undefined) delete process.env["ARGUS_ALLOWED_TARGETS"]
+      else process.env["ARGUS_ALLOWED_TARGETS"] = targets
+    }
+  })
+
+  test("an LLM-supplied target never authorizes itself", () => {
+    // No allowlist configured: the gate stays fail-open like the TUI
+    // validator's default warn mode — but a metadata target still refuses.
+    const mode = process.env["ARGUS_SCOPE_MODE"]
+    delete process.env["ARGUS_SCOPE_MODE"]
+    try {
+      expect(checkNativeScope("https://anything.example").ok).toBe(true)
+    } finally {
+      if (mode !== undefined) process.env["ARGUS_SCOPE_MODE"] = mode
+    }
+  })
+})
+
+describe("checkNativeAvailability", () => {
+  test("a missing binary is reported, not spawned", () => {
+    const spec: RegistryToolSpec = { ...KATANA_LIKE, command: "argus-definitely-not-installed-xyz" }
+    const reason = checkNativeAvailability(spec)
+    expect(reason).toContain("not installed on PATH")
+  })
+})
+
+describe("per-tool exit codes", () => {
+  test("findings-bearing tools declare exit 1; others declare nothing", () => {
+    const byId = new Map(REGISTRY_TOOL_SPECS.map((s) => [s.id, s]))
+    for (const id of ["nuclei", "semgrep", "dalfox", "gitleaks", "trivy", "pip-audit", "bandit"]) {
+      expect(byId.get(id)?.findingsExitCodes, id).toEqual([1])
+    }
+    expect(byId.get("httpx")?.findingsExitCodes).toEqual([])
+    expect(byId.get("nmap")?.findingsExitCodes).toEqual([])
+  })
 })
 
 describe("formatRegistryResult", () => {
@@ -155,7 +231,7 @@ describe("generated registry surface", () => {
   test("phases and risk travel with the spec for role eligibility", () => {
     for (const spec of REGISTRY_TOOL_SPECS) {
       expect(spec.phases.length, `${spec.id} has no phase`).toBeGreaterThan(0)
-      expect(["low", "medium", "high", "critical"]).toContain(spec.risk)
+      expect(["low", "medium", "high", "critical", "unclassified"]).toContain(spec.risk)
     }
   })
 })

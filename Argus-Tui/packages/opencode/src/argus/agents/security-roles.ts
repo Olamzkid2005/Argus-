@@ -57,10 +57,53 @@ export function describePermissionSurface(permission: Record<string, PermissionR
     .join(" | ")
 }
 
-/** Every executable registry tool, for roles that call scanners as tools. */
-function executableToolAllow(): Record<string, PermissionRule> {
+/**
+ * Every *classified* executable registry tool, for the vulnerability scanner.
+ *
+ * `unclassified` tools (no declared risk tier) are never auto-allowed: an
+ * unknown risk level must not silently become low risk. Classifying a tool
+ * in the registry is what unlocks it here.
+ */
+function classifiedToolAllow(): Record<string, PermissionRule> {
   const allow: Record<string, PermissionRule> = {}
-  for (const spec of REGISTRY_TOOL_SPECS) allow[spec.id] = "allow"
+  for (const spec of REGISTRY_TOOL_SPECS) {
+    if (spec.risk === "unclassified") continue
+    allow[spec.id] = "allow"
+  }
+  return allow
+}
+
+/**
+ * Verification tools: a deliberately narrower set than the scanner's.
+ *
+ * The verifier re-runs the minimal request behind a candidate finding — it
+ * observes and re-probes, it does not exploit. So unlike vuln-scan it gets:
+ * low/medium risk only (no sqlmap/commix-style injectors, no cloud-metadata
+ * probing), recon/scan/deep_scan phases only (no post-exploit, no
+ * report/analyze engines), and no state-modifying auth or storage tools
+ * (register/login create accounts, bucket-upload writes objects).
+ */
+const VERIFIER_EXCLUDED_TOOLS: ReadonlySet<string> = new Set([
+  "register",
+  "login",
+  "bucket-upload",
+])
+
+const VERIFIER_PHASES: ReadonlySet<string> = new Set(["recon", "scan", "deep_scan"])
+
+function verifierToolAllow(): Record<string, PermissionRule> {
+  const allow: Record<string, PermissionRule> = {}
+  for (const spec of REGISTRY_TOOL_SPECS) {
+    if (spec.risk !== "low" && spec.risk !== "medium") continue
+    if (!spec.phases.some((p) => VERIFIER_PHASES.has(p))) continue
+    if (VERIFIER_EXCLUDED_TOOLS.has(spec.id)) continue
+    allow[spec.id] = "allow"
+  }
+  // The dedicated finding verifier is always in scope for the verifier role.
+  const findingVerifier = REGISTRY_TOOL_SPECS.find((s) => s.id === "finding-verifier")
+  if (findingVerifier && findingVerifier.risk !== "unclassified") {
+    allow[findingVerifier.id] = "allow"
+  }
   return allow
 }
 
@@ -108,7 +151,7 @@ export const SECURITY_ROLES: readonly SecurityRole[] = [
       list: "allow",
       webfetch: "allow",
       websearch: "allow",
-      ...executableToolAllow(),
+      ...classifiedToolAllow(),
     },
   },
   {
@@ -125,7 +168,7 @@ export const SECURITY_ROLES: readonly SecurityRole[] = [
       list: "allow",
       webfetch: "allow",
       websearch: "allow",
-      ...executableToolAllow(),
+      ...verifierToolAllow(),
     },
   },
   {

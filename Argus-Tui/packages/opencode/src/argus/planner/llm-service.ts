@@ -73,6 +73,11 @@ const ReplanSuggestionSchema = Schema.Struct({
   next_capabilities: Schema.Array(Schema.String),
   reasoning: Schema.String,
   stop_assessment: Schema.Boolean,
+  // Specific tools the LLM selects from the eligible-tool catalogue it was
+  // shown (e.g. "graphql" when GraphQL is discovered). Optional: when the
+  // model names tools, the planner pins them on the phase so the executor
+  // prefers them over the capability-default ordering.
+  next_tools: Schema.optional(Schema.Array(Schema.String)),
 })
 
 // ── Public Types ─────────────────────────────────────────────────────
@@ -91,6 +96,8 @@ export interface LLMReplanSuggestion {
   readonly reasoning: string
   /** Whether the assessment should stop (all important findings found). */
   readonly stopAssessment: boolean
+  /** Specific eligible tool names the LLM selected, if it named any. */
+  readonly nextTools: string[]
 }
 
 export interface LLMPhaseSuggestionResult {
@@ -136,6 +143,7 @@ const REPLAN_JSON_SCHEMA = {
     next_capabilities: { type: "array", items: { type: "string" } },
     reasoning: { type: "string" },
     stop_assessment: { type: "boolean" },
+    next_tools: { type: "array", items: { type: "string" } },
   },
   required: ["next_capabilities", "reasoning", "stop_assessment"],
 } as const
@@ -334,6 +342,7 @@ export class LLMPlannerService {
     target: string,
     targetType: string,
     techStack?: string[],
+    toolCatalogue?: string,
   ): Promise<LLMPhaseSuggestionResult> {
     if (!(await this.ensureInitialized()) || !this.model) {
       return { targetAnalysis: "", suggestedPhases: [] }
@@ -343,9 +352,17 @@ export class LLMPlannerService {
       ? `\nDetected technologies: ${techStack.join(", ")}`
       : ""
 
+    const catalogueSection = toolCatalogue
+      ? [
+          ``,
+          `Eligible tools for this engagement (only these can actually run — prefer them by name in your reasoning):`,
+          toolCatalogue,
+        ]
+      : []
     const systemPrompt = [
       `You are a security assessment planning assistant integrated into Argus, a penetration testing platform.`,
       `Your task is to analyze a target and suggest relevant assessment capabilities.`,
+      ...catalogueSection,
       ``,
       `Available capabilities (use these exact strings):`,
       `- web_recon: Web reconnaissance (whois, DNS, subdomain enumeration)`,
@@ -441,6 +458,7 @@ export class LLMPlannerService {
       subtype?: string
       confidence: number
     }>,
+    toolCatalogue?: string,
   ): Promise<LLMReplanSuggestion | null> {
     if (!(await this.ensureInitialized()) || !this.model) {
       return null
@@ -458,9 +476,18 @@ export class LLMPlannerService {
       )
       .join("\n")
 
+    const catalogueSection = toolCatalogue
+      ? [
+          ``,
+          `Eligible tools for this engagement (only these can actually run — you may name specific`,
+          `tools in next_tools when a finding calls for one, e.g. the GraphQL scanner for a GraphQL finding):`,
+          toolCatalogue,
+        ]
+      : []
     const systemPrompt = [
       `You are a security assessment replanning assistant for the Argus penetration testing platform.`,
       `Given accumulated findings, suggest the next assessment phases.`,
+      ...catalogueSection,
       ``,
       `Available capabilities (use these exact strings):`,
       `- sqli_detection: SQL injection testing`,
@@ -488,6 +515,8 @@ export class LLMPlannerService {
       `3. Set stop_assessment=true only if all important findings have been fully exploited`,
       `4. Prioritize capabilities that would have the most security impact`,
       `5. Consider what tools could provide more evidence or exploitation`,
+      `6. When a finding points at a specific eligible tool above, name it in next_tools`,
+      `   alongside the capability in next_capabilities`,
     ].join("\n")
 
     const userPrompt = [
@@ -519,6 +548,7 @@ export class LLMPlannerService {
         next_capabilities?: string[]
         reasoning?: string
         stop_assessment?: boolean
+        next_tools?: string[]
       }
       if (!data || typeof data !== "object") return null
 
@@ -526,6 +556,7 @@ export class LLMPlannerService {
         nextCapabilities: data.next_capabilities ?? [],
         reasoning: data.reasoning ?? "",
         stopAssessment: data.stop_assessment ?? false,
+        nextTools: data.next_tools ?? [],
       }
     } catch (e) {
       console.warn(`[LLMPlanner] Replan suggestion failed: ${(e as Error).message}`)

@@ -217,4 +217,10 @@ export interface PlannerContext {
   llmMaxReplans?: number
   /** Optional progress callback for emitting structured events to the TUI. */
   onProgress?: (event: ProgressEvent) => void
+  /**
+   * Specific tool names the replan LLM selected from the eligible-tool
+   * catalogue. Carried on the context so regular replan phases can pin them
+   * in `config.preferredTools` for the executor.
+   */
+  preferredTools?: string[]
 }

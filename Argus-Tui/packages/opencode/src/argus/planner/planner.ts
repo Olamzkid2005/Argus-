@@ -41,10 +41,16 @@ interface PlanOptions {
  * silently replaces the real service (see planner LLM tests).
  */
 export interface PlannerLLM {
-  suggestPhases(target: string, targetType: string, techStack?: string[]): Promise<LLMPhaseSuggestionResult>
+  suggestPhases(
+    target: string,
+    targetType: string,
+    techStack?: string[],
+    toolCatalogue?: string,
+  ): Promise<LLMPhaseSuggestionResult>
   suggestReplan(
     target: string,
     findings: ReadonlyArray<{ title: string; severity: number; subtype?: string; confidence: number }>,
+    toolCatalogue?: string,
   ): Promise<LLMReplanSuggestion | null>
   getModelId(): string
 }
@@ -148,12 +154,26 @@ export class WorkflowPlanner {
     // with the deterministic set — duplicates are removed.
     const deterministicCaps = determineRequiredCapabilities(targetType, authState, plannerContext.techStack)
 
+    // The planning LLM reasons over the actual eligible tool catalogue —
+    // not bare capability names — so its suggestions name tools that exist
+    // and can run against this target (gates already applied). Test doubles
+    // predate the catalogue methods, so their absence means "no catalogue",
+    // not a crash: the prompts degrade to capability-only mode.
+    const gateContext = {
+      techStack: plannerContext.techStack,
+      targetScheme: target.startsWith("https") ? "https" : "http",
+    }
+    const describe = (this.toolRegistry as Partial<ToolRegistry>).describeToolsForCapabilities
+    const toolCatalogue = typeof describe === "function"
+      ? describe.call(this.toolRegistry, deterministicCaps, targetType, gateContext)
+      : undefined
+
     // LLM-assisted phase suggestions (explicit false handled by early return above)
     let llmSuggested: string[] = []
     emitProgress?.({ type: "llm_planning_start", phase: "initial" })
       try {
         const llmSvc = this.plannerLLM()
-        const result = await llmSvc.suggestPhases(target, targetType, plannerContext.techStack)
+        const result = await llmSvc.suggestPhases(target, targetType, plannerContext.techStack, toolCatalogue)
         if (result.suggestedPhases.length > 0) {
           for (const phase of result.suggestedPhases) {
             llmSuggested.push(...phase.capabilities)
@@ -347,7 +367,16 @@ export class WorkflowPlanner {
     if (!llmBudgetExhausted && context.findings.length > 0) {
       try {
         const llmSvc = this.plannerLLM()
-        const llmReplan = await llmSvc.suggestReplan(context.target, context.findings)
+        // Ground the replan LLM in every tool eligible right now, so a
+        // finding (e.g. GraphQL) maps to the specific scanner that handles
+        // it instead of an abstract capability the registry resolves later.
+        const describeAll = (this.toolRegistry as Partial<ToolRegistry>).describeAllEligibleTools
+        const replanCatalogue = typeof describeAll === "function"
+          ? describeAll.call(this.toolRegistry, detectTargetType(context.target), {
+              techStack: context.techStack,
+            })
+          : undefined
+        const llmReplan = await llmSvc.suggestReplan(context.target, context.findings, replanCatalogue)
         if (llmReplan && !llmReplan.stopAssessment) {
           for (const raw of llmReplan.nextCapabilities) {
             const cap = guessCapability(raw)
@@ -356,6 +385,21 @@ export class WorkflowPlanner {
               capabilityProvenance.set(cap, { source: "replan-llm", by: "local-llm" })
               llmProducedPhases = true
             }
+          }
+          // The LLM may name specific eligible tools (next_tools). Keep only
+          // ones the registry still considers runnable — a named tool the
+          // worker blocked or that was never registered is dropped, never
+          // trusted — and pin the survivors on the replan phases below so
+          // the executor prefers them over the capability-default ordering.
+          const registry = this.toolRegistry as Partial<ToolRegistry>
+          const validTools = (llmReplan.nextTools ?? []).filter((name) => {
+            if (typeof registry.getTool === "function" && registry.getTool(name) === undefined) return false
+            if (typeof registry.isWorkerBlocked === "function" && registry.isWorkerBlocked(name)) return false
+            return true
+          })
+          if (validTools.length > 0) {
+            context.preferredTools = [...(context.preferredTools ?? []), ...validTools]
+            llmProducedPhases = true
           }
         }
         // Emit LLM replan analysis for TUI display
@@ -473,11 +517,22 @@ export class WorkflowPlanner {
 
     // Combine regular replan phases with chain exploitation phases
     const nextReplanCount = context.replanCount + 1
+    // Tools the replan LLM picked by name, pinned so the executor tries them
+    // before the capability-default ordering. Only tools that provide the
+    // phase's capability are pinned — a named tool that serves another
+    // capability stays available to its own phase, never forced elsewhere.
+    const preferredTools = context.preferredTools ?? []
+    const capsOf = (this.toolRegistry as Partial<ToolRegistry>).getCapabilities
+    const toolsFor = (cap: Capability): string[] =>
+      typeof capsOf === "function"
+        ? preferredTools.filter((name) => (capsOf.call(this.toolRegistry, name) as string[]).includes(cap))
+        : []
     const regularPhases = unhandled.filter((cap) => !chainedCapabilities.has(cap)).map((cap) => {
       const provenance = capabilityProvenance.get(cap) ?? {
         source: llmProducedPhases ? ("replan-llm" as const) : ("replan-rule" as const),
         by: llmProducedPhases ? "worker-llm" : "local-planner",
       }
+      const pinned = toolsFor(cap)
       return {
         phaseId: `replan-${nextReplanCount}-${cap}`,
         name: `replan-${cap.toLowerCase()}`,
@@ -492,6 +547,7 @@ export class WorkflowPlanner {
                 ? `Rule-based replan for newly observed ${cap}`
                 : `Model suggested ${cap} after ${context.findings.length} accumulated finding(s)`,
           },
+          ...(pinned.length > 0 ? { preferredTools: pinned } : {}),
         },
         previousPhaseResults: [],
         toolExecution: "sequential" as const,

@@ -224,6 +224,50 @@ export class ToolRegistry {
     return `capability "${cap}" has no usable tool (providers: ${names}) — skipped`
   }
 
+  /**
+   * Human-readable catalogue of the tools eligible for *capabilities* — the
+   * context the workflow-planning LLM reasons over instead of bare
+   * capability names. Each line names one runnable tool, what it does, and
+   * which capabilities it provides, so the model can select specific tools
+   * (e.g. the GraphQL scanner when GraphQL is discovered) rather than only
+   * suggesting an abstract capability the registry resolves later.
+   *
+   * Only tools that survive the eligibility filters (enabled, worker-known
+   * runnable, target-type and requires gates) are listed: the LLM never sees
+   * a tool it cannot actually run.
+   */
+  describeToolsForCapabilities(capabilities: Capability[], targetType?: string, gateContext?: GateContext): string {
+    const tools = this.selectBest(capabilities, targetType, gateContext)
+    if (tools.length === 0) return "No eligible tools for the requested capabilities."
+    return tools
+      .map((t) => {
+        const caps = t.capabilities.join(", ")
+        const cost = t.cost ? `cost ${t.cost}` : "cost unknown"
+        return `- ${t.name}: ${t.label} (provides: ${caps}; ${cost})`
+      })
+      .join("\n")
+  }
+
+  /**
+   * Catalogue of every tool eligible to run against this target right now.
+   * The replan LLM sees this before suggesting next steps, so its choices
+   * are grounded in tools that exist and can run — not capability names it
+   * hopes something provides.
+   */
+  describeAllEligibleTools(targetType?: string, gateContext?: GateContext): string {
+    const seen = new Map<string, ToolDef>()
+    for (const cap of Object.values(Capability)) {
+      for (const tool of this.selectBest([cap], targetType, gateContext)) {
+        seen.set(tool.name, tool)
+      }
+    }
+    if (seen.size === 0) return "No eligible tools for this target."
+    return Array.from(seen.values())
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((t) => `- ${t.name}: ${t.label} (provides: ${t.capabilities.join(", ")})`)
+      .join("\n")
+  }
+
   getCapabilities(toolName: string): string[] {
     return this.toolsByName.get(toolName)?.capabilities ?? []
   }

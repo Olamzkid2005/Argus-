@@ -32,7 +32,7 @@ def test_static_allowlist_matches_registry():
     when the registry cannot be imported. Any drift fails here so the fallback
     is updated instead of silently diverging.
     """
-    assert _STATIC_ALLOWED_TOOLS == _registry_agent_tools()
+    assert _registry_agent_tools() == _STATIC_ALLOWED_TOOLS
 
 
 def test_every_allowed_tool_resolves_to_a_tool_class():

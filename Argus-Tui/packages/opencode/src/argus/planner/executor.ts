@@ -758,10 +758,22 @@ export class InProcessExecutor implements PhaseExecutor {
       const registry = this.toolRegistry as ToolRegistry & {
         selectBest?: (caps: Capability[], targetType?: string) => ToolDef[]
       }
+      // Tools the planning LLM selected by name ride on the phase config.
+      // They were validated as runnable when pinned, but eligibility is
+      // re-checked here: a binary installed at plan time may be gone by
+      // run time, and an ineligible name never jumps the queue.
+      const preferred = ((phase.config?.preferredTools as string[] | undefined) ?? [])
       for (const cap of phase.requiredCapabilities) {
-        const tools = registry.selectBest
+        const selected = registry.selectBest
           ? registry.selectBest([cap], targetType)
           : registry.getToolsByCapability(cap)
+        const tools = preferred.length > 0
+          ? [...selected].sort((a, b) => {
+              const aPref = preferred.includes(a.name) ? 0 : 1
+              const bPref = preferred.includes(b.name) ? 0 : 1
+              return aPref - bPref
+            })
+          : selected
         if (tools.length === 0) {
           // No local tools registered for this capability — it's handled
           // externally (e.g., post-exploitation → Python Celery pipeline).

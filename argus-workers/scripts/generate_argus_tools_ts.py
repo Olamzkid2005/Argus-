@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -53,12 +52,38 @@ def _var_name(tool_id: str) -> str:
     return "".join(p[:1].upper() + p[1:] for p in parts) + "Tool"
 
 
-def _schema_type(param) -> str:
+def _schema_expr(param) -> str:
+    # Preserve enum constraints so the LLM receives an accurate JSON Schema
+    # (previously an enum such as nuclei's severity degraded to a plain
+    # string). Literals come first: an enum's members carry the type.
+    enum = getattr(param, "enum", None)
+    if enum:
+        # Same shape the hand-written tools use (websearch, lsp):
+        # Schema.Literals([...]) keeps the enum in the LLM's JSON Schema.
+        lits = ", ".join(json.dumps(str(v), ensure_ascii=False) for v in enum)
+        return f"Schema.Literals([{lits}])"
     if isinstance(param.default, bool):
         return "Schema.Boolean"
     if isinstance(param.default, int):
         return "Schema.Number"
     return "Schema.String"
+
+
+#: Tools whose non-zero exit still means "findings present, not an error".
+#: Single source of truth for the generated native surface; mirrors
+#: ``MCPServer.FINDINGS_EXIT_CODES`` (mcp_server.py), ``ToolRunner``'s
+#: ``findings_exit_codes`` (tools/tool_runner.py) and ``AsyncToolRunner``'s
+#: ``FINDINGS_EXIT_CODES`` (tool_core/async_runner.py) — all three agree on
+#: exactly these seven tools with exit code 1.
+FINDINGS_EXIT_CODES: dict[str, set[int]] = {
+    "semgrep": {1},
+    "bandit": {1},
+    "gitleaks": {1},
+    "dalfox": {1},
+    "trivy": {1},
+    "pip-audit": {1},
+    "nuclei": {1},
+}
 
 
 def _is_launcher(tool) -> bool:
@@ -98,7 +123,11 @@ def _emit_spec(tool) -> str:
     lines.append(f"    requiredEnv: [{env}],")
     phases = ", ".join(_ts_string(str(p)) for p in (tool.phases or []))
     lines.append(f"    phases: [{phases}],")
-    lines.append(f"    risk: {_ts_string(str(tool.risk_level or 'low'))},")
+    # An unknown risk tier must never silently become low risk: unclassified
+    # tools are ineligible for automatic execution until explicitly classified.
+    lines.append(f"    risk: {_ts_string(str(tool.risk_level or 'unclassified'))},")
+    codes = sorted(FINDINGS_EXIT_CODES.get(tool.name, ()))
+    lines.append(f"    findingsExitCodes: [{', '.join(str(c) for c in codes)}],")
     lines.append("  }")
     return "\n".join(lines)
 
@@ -109,7 +138,7 @@ def _emit_tool(tool) -> str:
     lines = [f"const {var}Parameters = Schema.Struct({{"]
 
     for param in tool.parameters:
-        schema = _schema_type(param)
+        schema = _schema_expr(param)
         desc = _ts_string(param.description or param.name)
         # Quote every key: registry names may contain dashes (attacker-username).
         key = _ts_string(param.name)
@@ -130,8 +159,8 @@ def _emit_tool(tool) -> str:
         f"      execute: (params: Schema.Schema.Type<typeof {var}Parameters>, ctx: Tool.Context) =>"
     )
     lines.append("        Effect.gen(function* () {")
-    lines.append("          const result = yield* Effect.sync(() =>")
-    lines.append(f"            runRegistryInvocation({var}Spec, params as Record<string, unknown>),")
+    lines.append("          const result = yield* Effect.promise(() =>")
+    lines.append(f"            runRegistryInvocationAsync({var}Spec, params as Record<string, unknown>),")
     lines.append("          )")
     lines.append(f"          return formatRegistryResult({var}Spec.id, result)")
     lines.append("        }).pipe(Effect.orDie),")
@@ -201,7 +230,7 @@ def generate(output_path: str) -> str:
         " */",
         'import { Effect, Schema } from "effect"',
         'import * as Tool from "./tool"',
-        'import { formatRegistryResult, runRegistryInvocation } from "./argus-tools"',
+        'import { formatRegistryResult, runRegistryInvocationAsync } from "./argus-tools"',
         'import {',
         *[
             f"  {_var_name(t.name.replace('_', '-'))}Spec,"
