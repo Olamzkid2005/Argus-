@@ -9,8 +9,11 @@ this adapter cannot commit a fact by itself.
 
 Deployments configure the agent adapters with
 ``ARGUS_INTEGRATED_TASK_AGENTS=module:factory``. The factory returns a mapping
-with ``generator``, ``executor``, ``reasoner`` and ``bootstrapper`` (plus
-optional ``refiner`` and ``reflector``). Tests build the runner directly.
+with ``generator``, ``reasoner`` and ``bootstrapper`` (plus optional
+``refiner``, ``reflector`` and ``executor``). When the factory omits
+``executor``, explore runs on the production :class:`RealToolExecutor` — the
+real tool/scope/egress/budget/approval layer, never a fake. Tests build the
+runner directly and pass explicit test doubles.
 """
 
 from __future__ import annotations
@@ -36,6 +39,9 @@ class IntegratedWorkerRunner:
 
     worker_id = "integrated-delegation"
     task_types = TASK_TYPES
+    #: The dispatcher may pass a dispatcher-owned heartbeat callback; the
+    #: runner never sees claim tokens itself (plan §5.5/§5.6).
+    supports_heartbeat = True
 
     def __init__(
         self,
@@ -61,7 +67,14 @@ class IntegratedWorkerRunner:
             raise ProtocolError("no reason agent is configured for the integrated runner")
         return self._reasoner(job)
 
-    def explore(self, job: dict[str, Any], *, conclude: bool = False) -> Any:
+    def explore(
+        self,
+        job: dict[str, Any],
+        *,
+        conclude: bool = False,
+        heartbeat: Any | None = None,
+        operator_answers: dict[str, str] | None = None,
+    ) -> Any:
         engagement_id = str(job.get("engagement_id") or "")
         intent = job.get("intent") or {}
         intent_id = str(intent.get("id") or "")
@@ -81,21 +94,33 @@ class IntegratedWorkerRunner:
                 intent,
                 facts=list(job.get("prerequisite_facts") or []),
                 hints=list(job.get("hints") or []),
+                heartbeat=heartbeat,
+                operator_answers=operator_answers,
             )
         except DelegationError as exc:
             # A delegation failure is a rejected result, not a fabricated fact.
             logger.warning("integrated explore failed for %s: %s", engagement_id, exc)
             raise ProtocolError(str(exc)) from exc
+        if result.get("status") == "waiting_in_progress":
+            raise ProtocolError(
+                "task is waiting for operator input; no conclusion may be "
+                "fabricated while the question is unanswered"
+            )
         return {
             "accepted": True,
-            "data": {"description": str(result["description"])},
+            "data": {
+                "description": str(result["description"]),
+                "findings": result.get("findings", []),
+                "anchors": result.get("anchors", []),
+                "todos": result.get("todos", []),
+            },
         }
 
 
 def build_integrated_runner(
     *,
     generator: Any,
-    executor: Any,
+    executor: Any | None = None,
     reasoner: Any | None = None,
     bootstrapper: Any | None = None,
     refiner: Any | None = None,
@@ -103,12 +128,19 @@ def build_integrated_runner(
     store: PostgresDelegationStore | None = None,
     max_steps: int = 50,
 ) -> IntegratedWorkerRunner:
-    """Build the integrated runner from agent adapters."""
+    """Build the integrated runner from agent adapters.
+
+    The executor defaults to the production :class:`RealToolExecutor` on the
+    real tool/scope/egress/budget/approval layer. Test doubles are passed
+    explicitly by tests and never wired here by default.
+    """
+    from agent.delegation.tool_executor import RealToolExecutor
+
     delegation_store = store or PostgresDelegationStore()
     intent_runner = IntentTaskRunner(
         delegation_store,
         generator=generator,
-        executor=executor,
+        executor=executor if executor is not None else RealToolExecutor(),
         refiner=refiner,
         reflector=reflector,
         max_steps=max_steps,
