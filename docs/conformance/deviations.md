@@ -18,10 +18,16 @@ anywhere as passes.
    `eslint` on a fixture, `/bin/sleep`) or gate refusals. §7.5 scenario wording that assumes "an
    authorized lab" is satisfied here only up to the hermetic boundary; the live-network remainder
    is explicitly NOT RUN.
-2. **Live LLM for Generator/Reasoner/Bootstrapper.** No LLM credentials are configured, so the
-   intent-generating roles remain test doubles sitting above the real executor. Single-generator
-   enforcement is proven structurally (flag ownership: fact-intent `on` forces planner-loop defer;
-   shared normalized-objective cross-dedupe in `apply_reason`), not by racing two live planners.
+2. **Live LLM for Generator/Reasoner/Bootstrapper.** Narrowed 26 November 2026: the worker
+   no longer needs its own key. `agent/delegation/opencode_agents.py` (`factory`, 14 tests)
+   plugs into `ARGUS_INTEGRATED_TASK_AGENTS` and makes all three roles call the local OpenCode
+   server, borrowing the TUI's auth (`auth.json` + models.dev) — proposals still pass through
+   `validate_generated_plan` and the strict contracts, and refusals/non-JSON fail the task
+   visibly. What remains is runtime, not code: start `opencode serve`, set
+   `ARGUS_OPENCODE_PROVIDER_ID`/`ARGUS_OPENCODE_MODEL_ID`, and run a scoped cohort. Until
+   then the roles remain test doubles above the real executor, and single-generator enforcement
+   is proven structurally (flag ownership: fact-intent `on` forces planner-loop defer; shared
+   normalized-objective cross-dedupe in `apply_reason`), not by racing two live planners.
 3. ~~**>90 s wall-clock lease renewal — CLOSED 26 November 2026.**~~
    `test_heartbeat_renews_production_lease_across_long_task` runs 13 real 8-second sleeps
    (106.9 s wall-clock, `NO_CACHE`) under the production `lease_seconds=90` and concludes
