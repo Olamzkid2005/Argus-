@@ -228,6 +228,22 @@ def complete_coverage_gap(
     )
 
 
+def protocol_owns_intent_creation() -> bool:
+    """True when the fact-and-intent reason path owns intent creation.
+
+    The graph planner and the control-plane reasoner must never both create
+    intents: with ``ARGUS_FACT_INTENT_PROTOCOL=on`` the planner loop records
+    its proposals but defers creation to the reason path, which validates
+    through the reason contract and shares the cross-path duplicate key.
+    """
+    from orchestrator_pkg.planning.flags import flag_mode
+
+    try:
+        return flag_mode("fact_intent_protocol") == "on"
+    except Exception:
+        return False
+
+
 def run_planner_turn(
     engagement_id: str,
     *,
@@ -236,6 +252,7 @@ def run_planner_turn(
     trigger: str = "outbox",
     consume_events: bool = True,
     shadow: bool = False,
+    defer_intent_creation: bool | None = None,
 ) -> dict[str, Any]:
     """
     Run one persisted planning turn.
@@ -248,6 +265,8 @@ def run_planner_turn(
     """
     dispatcher = dispatcher or DispatcherGraph(ExplorationGraphRepository())
     planner = planner or ExplorationPlanner()
+    if defer_intent_creation is None:
+        defer_intent_creation = protocol_owns_intent_creation()
     turn = dispatcher.begin_planner_turn(engagement_id, trigger=trigger)
     try:
         consumed = (
@@ -279,13 +298,18 @@ def run_planner_turn(
 
         overview = dispatcher.planner_overview(engagement_id)
         proposals = planner.plan(overview)
-        if shadow:
+        if shadow or defer_intent_creation:
             # Shadow mode records what would have been proposed without creating
-            # intents, dispatching work or tripping the live hard floor.
+            # intents, dispatching work or tripping the live hard floor. The
+            # same applies when creation is deferred to the reason path: the
+            # proposals are recorded and validated, but only the reason path
+            # may persist intents, so both flags on cannot double-dispatch.
+            validated = [proposal.validated() for proposal in proposals]
             applied = {
                 "created": [],
                 "suppressed": [],
-                "proposals_received": len(proposals),
+                "proposals_received": len(validated),
+                "deferred_to_reason": bool(defer_intent_creation and not shadow),
             }
         else:
             applied = dispatcher.apply_intent_proposals(engagement_id, proposals)
@@ -296,6 +320,7 @@ def run_planner_turn(
         ]
         if (
             not shadow
+            and not defer_intent_creation
             and unmet_goals
             and not after["open_intents"]
             and not after["open_todo_count"]
@@ -326,6 +351,7 @@ def run_planner_turn(
         "suppressed": applied["suppressed"],
         "shadow": shadow,
         "skipped": False,
+        "deferred_to_reason": bool(applied.get("deferred_to_reason", False)),
     }
 
 

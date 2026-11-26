@@ -2,9 +2,12 @@
 
 The beat schedule runs :func:`run_control_plane_tick`: it finds active
 engagements, acquires the per-engagement dispatcher lease and runs at most one
-protocol step (bootstrap, reason or explore). Workers come from the typed stdio
-``task_*`` MCP bridge, so the same dispatcher that the conformance tests drive
-also runs in a normal Celery worker.
+protocol step (bootstrap, reason or explore). The worker transport is the typed
+stdio ``task_*`` MCP bridge (``ARGUS_TASK_WORKER_CMD``) when configured, else
+the integrated in-process runner (``ARGUS_INTEGRATED_TASK_AGENTS``), whose
+explore path runs the production tool executor by default — so the same
+dispatcher that the conformance tests drive also runs in a normal Celery
+worker.
 
 ``ARGUS_FACT_INTENT_PROTOCOL`` is the switch (``off`` default, ``shadow`` only lists
 eligible engagements, ``on`` dispatches). With no worker transport configured
