@@ -19,7 +19,7 @@ from psycopg2.extras import Json, RealDictCursor
 from control_plane.contracts import ProtocolError, ReasonDecision
 from database.connection import get_db
 from database.dispatcher_graph import DispatcherGraph
-from database.graph_errors import GraphClaimLostError
+from database.graph_errors import GraphClaimLostError, GraphMutationError
 from database.graph_repository import ExplorationGraphRepository
 
 logger = logging.getLogger(__name__)
@@ -647,6 +647,129 @@ class PostgresControlPlaneStore:
 
     # ----- reason -----
 
+    def graph_overview(self, engagement_id: str) -> dict[str, Any]:
+        """Bounded graph context for the reason job (plan §5.2B, §6.3 step 3).
+
+        The same snapshot the graph planner proposes from — goals, open
+        intents, facts, untested assets, anchored assets with coverage, and
+        open/scheduled todo state — so reason proposals can be coverage- and
+        anchor-aware. Reads only; failures degrade to an empty overview rather
+        than blocking a reason round.
+        """
+        overview: dict[str, Any] = {
+            "goals": [],
+            "open_intents": [],
+            "facts": [],
+            "untested_assets": [],
+            "anchors": [],
+            "open_todo_count": 0,
+            "open_gap_keys": [],
+            "coverage": {},
+        }
+        try:
+            snapshot = self._graph.planner_overview(engagement_id)
+        except Exception as exc:
+            logger.warning(
+                "graph overview unavailable for %s: %s", engagement_id, exc
+            )
+            return overview
+        overview["goals"] = [
+            {
+                "id": str(row["id"]),
+                "objective": str((row.get("payload") or {}).get("objective", "")),
+                "state": str(row.get("state") or ""),
+            }
+            for row in snapshot.get("goals", [])
+        ]
+        overview["open_intents"] = [
+            {
+                "id": str(row["id"]),
+                "objective": str((row.get("payload") or {}).get("objective", "")),
+            }
+            for row in snapshot.get("open_intents", [])
+        ]
+        overview["facts"] = [
+            {"id": str(row["id"]), "summary": str((row.get("payload") or {}).get("summary", ""))[:200]}
+            for row in snapshot.get("facts", [])
+        ]
+        overview["untested_assets"] = [
+            {
+                "asset_type": str(row.get("asset_type") or ""),
+                "display": str(
+                    row.get("display_value") or row.get("canonical_key") or ""
+                ),
+            }
+            for row in snapshot.get("untested_assets", [])[:20]
+        ]
+        overview["open_todo_count"] = int(snapshot.get("open_todo_count") or 0)
+        overview["open_gap_keys"] = list(snapshot.get("open_gap_keys") or [])
+        try:
+            anchors = self._graph.anchor_summary(engagement_id, limit=50)
+        except Exception as exc:
+            logger.warning(
+                "anchor summary unavailable for %s: %s", engagement_id, exc
+            )
+            anchors = []
+        overview["anchors"] = [
+            {
+                "asset_type": str(row.get("asset_type") or ""),
+                "display": str(
+                    row.get("display_value") or row.get("canonical_key") or ""
+                ),
+                "coverage_state": str(row.get("coverage_state") or ""),
+            }
+            for row in anchors
+        ]
+        try:
+            report = self._graph.coverage_report(engagement_id)
+        except Exception as exc:
+            logger.warning(
+                "coverage report unavailable for %s: %s", engagement_id, exc
+            )
+            report = {}
+        overview["coverage"] = {
+            key: report.get(key)
+            for key in (
+                "approved_scope_checked",
+                "authorized_scope_checked",
+                "covered",
+                "uncovered",
+                "gaps",
+                "totals",
+                "summary",
+            )
+            if key in report
+        }
+        return overview
+
+    @staticmethod
+    def _normalize_objective(objective: str) -> str:
+        """Stable identity for cross-path duplicate suppression."""
+        return " ".join(str(objective or "").split()).lower()
+
+    def _intent_objective_exists(self, engagement_id: str, objective: str) -> bool:
+        """True when a live intent already carries this objective.
+
+        The single cross-path dedupe: the graph planner and the reason worker
+        propose through different writers, so neither writer's key alone can
+        see the other's intent. A normalized-objective match suppresses the
+        duplicate no matter which path created it first.
+        """
+        wanted = self._normalize_objective(objective)
+        if not wanted:
+            return False
+        with _cursor(False) as cur:
+            cur.execute(
+                "SELECT payload->>'objective' AS objective FROM graph_nodes "
+                "WHERE engagement_id = %s AND kind = 'intent' "
+                "AND state IN ('open', 'running', 'concluded')",
+                (engagement_id,),
+            )
+            return any(
+                self._normalize_objective(row["objective"] or "") == wanted
+                for row in cur.fetchall()
+            )
+
     def reason_snapshot(self, engagement_id: str) -> dict[str, Any]:
         with _cursor(False) as cur:
             cur.execute(
@@ -715,15 +838,7 @@ class PostgresControlPlaneStore:
                 "from_fact_ids": sorted(intent.from_fact_ids),
                 "goal_node_id": str(goal["id"]) if goal else None,
             }
-            with _cursor(False) as cur:
-                cur.execute(
-                    "SELECT 1 FROM graph_nodes WHERE engagement_id = %s "
-                    "AND kind = 'intent' AND state IN ('open', 'running') "
-                    "AND payload->>'objective' = %s LIMIT 1",
-                    (engagement_id, intent.description),
-                )
-                duplicate = cur.fetchone() is not None
-            if duplicate:
+            if self._intent_objective_exists(engagement_id, intent.description):
                 continue
             created.append(
                 self._graph.create_node(
@@ -783,7 +898,26 @@ class PostgresControlPlaneStore:
             "expected": "one non-empty fact description",
         }
 
-    def conclude_explore(self, task_id: str, description: str) -> dict[str, Any]:
+    def conclude_explore(
+        self,
+        task_id: str,
+        description: str,
+        *,
+        findings: tuple | list = (),
+        anchors: tuple | list = (),
+        todos: tuple | list = (),
+    ) -> dict[str, Any]:
+        """Write the full explore conclusion lifecycle (plan §6.3 step 6).
+
+        The required conclusion is exactly one Fact linked to the intent; on
+        top of it the dispatcher commits the delegation work's products:
+        unverified Finding rows (verification stays Argus's proof pipeline —
+        conclusion never marks a finding CONFIRMED/VERIFIED), derived_from
+        edges from prerequisite facts, asset anchors with coverage state, and
+        planner-todo state changes. Each additive write is attempted after the
+        fact is durable; a rejected additive write is recorded in
+        ``write_warnings`` instead of losing the conclusion.
+        """
         task = self.get_task(task_id)
         if task is None:
             raise ProtocolError(f"task {task_id} does not exist")
@@ -804,12 +938,194 @@ class PostgresControlPlaneStore:
         except GraphClaimLostError as exc:
             self.finish_task(task_id, "failed", error=str(exc))
             raise LateResult(f"claim is no longer live: {exc}") from exc
+        engagement_id = task["engagement_id"]
+        fact = completed["fact"]
+        warnings: list[str] = []
+        finding_ids = self._persist_conclusion_findings(
+            engagement_id, task_id, list(findings or []), warnings
+        )
+        anchor_ids = self._persist_conclusion_anchors(
+            engagement_id, str(fact["id"]), list(anchors or []), warnings
+        )
+        todo_updates = self._persist_conclusion_todos(
+            engagement_id, list(todos or []), warnings
+        )
+        edge_count = self._link_prerequisite_facts(
+            engagement_id, task, str(fact["id"]), warnings
+        )
         return self.finish_task(
             task_id,
             "succeeded",
-            result={"fact": completed["fact"], "intent": completed["intent"]},
+            result={
+                "fact": fact,
+                "intent": completed["intent"],
+                "finding_ids": finding_ids,
+                "anchor_ids": anchor_ids,
+                "todo_updates": todo_updates,
+                "derived_from_edges": edge_count,
+                "write_warnings": warnings,
+            },
             conclusion_written=True,
         )
+
+    def _persist_conclusion_findings(
+        self,
+        engagement_id: str,
+        task_id: str,
+        findings: list,
+        warnings: list[str],
+    ) -> list[str]:
+        """Persist unverified Finding rows from delegation evidence.
+
+        Conclusion findings are PENDING by construction: only the verifier
+        pipeline may mark CONFIRMED/VERIFIED (plan §6.4, A-08).
+        """
+        if not findings:
+            return []
+        from database.repositories.finding_repository import FindingRepository
+
+        repo = FindingRepository()
+        persisted: list[str] = []
+        for index, finding in enumerate(findings):
+            try:
+                evidence = dict(getattr(finding, "evidence", {}) or {})
+                evidence.setdefault("provenance", "delegation")
+                evidence.setdefault("delegation_task_id", task_id)
+                if getattr(finding, "source_agent", ""):
+                    evidence.setdefault(
+                        "source_agent", getattr(finding, "source_agent")
+                    )
+                persisted.append(
+                    repo.create_finding(
+                        engagement_id,
+                        str(getattr(finding, "title", "") or "")[:200],
+                        str(getattr(finding, "severity", "INFO") or "INFO"),
+                        str(getattr(finding, "endpoint", "") or ""),
+                        evidence,
+                        float(getattr(finding, "confidence", 0.0) or 0.0),
+                        str(getattr(finding, "source_tool", "") or ""),
+                    )
+                )
+            except Exception as exc:
+                warnings.append(f"finding[{index}] not persisted: {exc}")
+                logger.warning(
+                    "conclusion finding %d for task %s not persisted: %s",
+                    index,
+                    task_id,
+                    exc,
+                )
+        return persisted
+
+    def _persist_conclusion_anchors(
+        self,
+        engagement_id: str,
+        fact_id: str,
+        anchors: list,
+        warnings: list[str],
+    ) -> list[str]:
+        """Anchor the conclusion fact to the assets the work covered."""
+        if not anchors:
+            return []
+        anchored: list[str] = []
+        for index, anchor in enumerate(anchors):
+            try:
+                asset_name = str(getattr(anchor, "asset", "") or "").strip()
+                asset_type = str(getattr(anchor, "asset_type", "") or "").strip()
+                if not asset_name or not asset_type:
+                    raise GraphMutationError("anchor needs an asset and asset_type")
+                asset = self._graph.ensure_asset(
+                    asset_name,
+                    asset_type,
+                    display_value=asset_name,
+                    scope_id=engagement_id,
+                )
+                row = self._graph.attach_anchor(
+                    fact_id,
+                    str(asset["id"]),
+                    role=str(getattr(anchor, "role", "related") or "related"),
+                )
+                self._graph.attach_anchor_scope(
+                    str(row["id"]),
+                    engagement_id,
+                    coverage_state=str(
+                        getattr(anchor, "coverage_state", "covered") or "covered"
+                    ),
+                )
+                anchored.append(str(row["id"]))
+            except Exception as exc:
+                warnings.append(f"anchor[{index}] not attached: {exc}")
+                logger.warning("conclusion anchor %d not attached: %s", index, exc)
+        return anchored
+
+    def _persist_conclusion_todos(
+        self,
+        engagement_id: str,
+        todos: list,
+        warnings: list[str],
+    ) -> list[dict[str, Any]]:
+        """Apply the conclusion's planner-todo state changes."""
+        if not todos:
+            return []
+        from database.graph_repository import TodoStatus
+
+        applied: list[dict[str, Any]] = []
+        for index, todo in enumerate(todos):
+            try:
+                action = str(getattr(todo, "action", "") or "").lower()
+                if action == "complete":
+                    todo_id = str(getattr(todo, "todo_id", "") or "")
+                    if not todo_id:
+                        raise GraphMutationError(
+                            "todo complete needs a todo_id"
+                        )
+                    updated = self._graph.update_todo_status(todo_id, TodoStatus.DONE)
+                    applied.append({"action": "complete", "todo": updated})
+                elif action == "create":
+                    payload = getattr(todo, "payload", None)
+                    created = self._graph.create_todo(
+                        engagement_id,
+                        todo_type=str(
+                            getattr(todo, "todo_type", "plan") or "plan"
+                        ),
+                        payload=dict(payload) if payload else {},
+                    )
+                    applied.append({"action": "create", "todo": created})
+                else:
+                    raise GraphMutationError(
+                        f"unknown todo action {action!r}"
+                    )
+            except Exception as exc:
+                warnings.append(f"todo[{index}] not applied: {exc}")
+                logger.warning("conclusion todo %d not applied: %s", index, exc)
+        return applied
+
+    def _link_prerequisite_facts(
+        self,
+        engagement_id: str,
+        task: dict[str, Any],
+        fact_id: str,
+        warnings: list[str],
+    ) -> int:
+        """Link prerequisite facts to the conclusion (derived_from)."""
+        request = task.get("request") or {}
+        prereqs = request.get("prerequisite_facts") or []
+        linked = 0
+        for entry in prereqs:
+            prereq_id = str((entry or {}).get("id") or "") if isinstance(
+                entry, dict
+            ) else str(entry or "")
+            if not prereq_id:
+                continue
+            try:
+                self._graph.attach_edge(
+                    engagement_id, prereq_id, fact_id, edge_type="derived_from"
+                )
+                linked += 1
+            except Exception as exc:
+                warnings.append(
+                    f"derived_from edge from {prereq_id} not attached: {exc}"
+                )
+        return linked
 
     def fail_explore(self, task_id: str, error: str) -> dict[str, Any]:
         task = self.get_task(task_id)
