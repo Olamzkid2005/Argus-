@@ -600,6 +600,35 @@ class TestPipelineStepTools:
         assert is_pipeline_step("__nonexistent__") is False
 
 
+class TestInlineOnlyToolsArePipelineSteps:
+    """Every registry entry without a YAML file must be an in-process step.
+
+    YAML (tools/definitions/*.yaml) is the single source of truth for
+    executable tools. An inline-only _register() is allowed only for entries
+    the orchestrator runs itself — pipeline steps and advisory markers — so a
+    tool can never be registered yet have no invokable definition. Adding a
+    new inline-only tool fails here: either give it a YAML file or mark it a
+    pipeline step in tool_definitions._PIPELINE_STEP_TOOLS.
+    """
+
+    def test_inline_only_names_are_all_pipeline_steps(self):
+        inline_only = sorted(set(TOOLS) - _YAML_DEFINED)
+        assert inline_only == [
+            "ai_surface_detected",
+            "attack-graph",
+            "compliance-check",
+            "credential_replay",
+            "intelligence-engine",
+            "internal_probe",
+            "post_exploitation",
+            "report-generator",
+        ]
+        not_steps = [n for n in inline_only if not is_pipeline_step(n)]
+        assert not_steps == [], (
+            f"these have no YAML definition but are not pipeline steps: {not_steps}"
+        )
+
+
 class TestCrossSurfaceConsistency:
     """Every consumer must see the same tool set as the canonical registry.
 

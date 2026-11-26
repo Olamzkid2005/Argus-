@@ -1369,3 +1369,78 @@ tools:
     scoring:
       confidence_score: 70
       coverage_score: 60
+
+  # ── In-Process Analysis / Reporting Steps ──────────────────────
+  # These run inside the orchestrator (or a service), not as subprocesses:
+  # they take an engagement_id and work on stored findings. They are
+  # plannable so phases can sequence them, but never dispatched to a binary.
+  # `ai_surface_detected` is intentionally absent: it is an advisory marker
+  # with no phase, so there is nothing for the planner to select.
+
+  - name: intelligence-engine
+    label: Intelligence Engine
+    description: LLM-powered findings analysis and correlation
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 600
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CANDIDATE
+    priority: 50
+    cost: low
+
+  - name: attack-graph
+    label: Attack Graph Builder
+    description: Build attack graph from findings
+    capabilities:
+      - security_analysis
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+    signal_quality: CANDIDATE
+    priority: 50
+    cost: low
+
+  - name: report-generator
+    label: Report Generator
+    description: Generate executive security report
+    capabilities:
+      - report_generation
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 300
+    scoring:
+      confidence_score: 80
+      coverage_score: 75
+    signal_quality: CANDIDATE
+    priority: 50
+    cost: low
+
+  - name: compliance-check
+    label: Compliance Check
+    description: Check findings against compliance frameworks (SOC 2, HIPAA, PCI)
+    capabilities:
+      - report_generation
+    requires_auth: false
+    destructive: false
+    supports_api: true
+    supports_web: true
+    timeout_seconds: 120
+    scoring:
+      confidence_score: 75
+      coverage_score: 70
+    signal_quality: CANDIDATE
+    priority: 50
+    cost: low
