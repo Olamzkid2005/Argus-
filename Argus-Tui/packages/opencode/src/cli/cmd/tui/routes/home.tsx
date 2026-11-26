@@ -4,7 +4,7 @@ import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
 import { Toast, useToast } from "../ui/toast"
 import { useArgs } from "../context/args"
-import { useRouteData } from "@tui/context/route"
+import { useRoute, useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
@@ -15,9 +15,13 @@ import { useTheme } from "@tui/context/theme"
 import { logo as argusLogo } from "@/argus/logo"
 import { logo as opencodeLogo } from "@/cli/logo"
 
+function getCurrentModel(): string {
+  return process.env.ARGUS_PLANNER_MODEL?.trim() || process.env.OPENCODE_MODEL?.trim() || "OpenCode default"
+}
+
 const placeholder = process.env.ARGUS_MODE === "1"
   ? {
-      normal: ["/assess https://example.com", "/recon https://testphp.vulnweb.com", "/doctor - run health checks"],
+      normal: ["/scan https://example.com", "/recon https://testphp.vulnweb.com", "/doctor - run health checks"],
       shell: ["argus doctor", "argus status", "argus --help"],
     }
   : {
@@ -29,6 +33,7 @@ export function Home() {
   const [once, setOnce] = createSignal(false)
   const sync = useSync()
   const route = useRouteData("home")
+  const routeCtx = useRoute()
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
@@ -160,6 +165,9 @@ export function Home() {
           <box alignItems="center">
             <text fg={theme.success}>● Operational</text>
           </box>
+          <box alignItems="center">
+            <text fg={theme.textMuted}>{`planner model: ${getCurrentModel()}`}</text>
+          </box>
         </Show>
 
         <box height={1} />
@@ -200,7 +208,7 @@ export function Home() {
         <Show when={process.env.ARGUS_MODE === "1"}>
           <text fg={theme.textMuted}>Quick Actions</text>
           <box flexDirection="row" gap={1} paddingTop={1}>
-            <text fg={theme.primary}>/assess {"<target>"}</text>
+            <text fg={theme.primary}>/scan {"<target>"}</text>
             <text fg={theme.textMuted}>|</text>
             <text fg={theme.primary}>/recon {"<target>"}</text>
             <text fg={theme.textMuted}>|</text>
@@ -220,11 +228,24 @@ export function Home() {
         <Show when={process.env.ARGUS_MODE === "1"}>
           <text fg={theme.textMuted}>Recent Activity</text>
           <Show when={engagements().length > 0}
-            fallback={<text fg={theme.textMuted}>No engagements yet. Run /assess to get started.</text>}
+            fallback={<text fg={theme.textMuted}>No engagements yet. Run /scan {"<target>"} to start your first assessment.</text>}
           >
             <For each={engagements()}>
               {(eng) => (
-                <box flexDirection="row" gap={1} paddingTop={1}>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  paddingTop={1}
+                  {...({ onClick: () => {
+                    try {
+                      new URL(eng.target)
+                    } catch {
+                      toast.error(`Invalid target URL: ${eng.target}`)
+                      return
+                    }
+                    routeCtx.navigate({ type: "scan", target: eng.target, engagementId: eng.id })
+                  } } as any)}
+                >
                   <text fg={statusColor(eng.status)}>{statusIcon(eng.status)}</text>
                   <text fg={theme.textMuted}>{eng.id}</text>
                   <text fg={theme.text}>{eng.target}</text>
