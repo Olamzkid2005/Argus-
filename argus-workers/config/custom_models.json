@@ -1,0 +1,18 @@
+{
+  "_comment": "Unified registry for custom OpenAI-compatible cyber models. One entry here feeds both runtimes: the Python workers (LLM_MODEL=<name>) and the TUI planner (paste the generated opencode.json provider block, then ARGUS_PLANNER_MODEL=<provider>/<model>). See docs/custom-cyber-models.md. Entries under 'examples' are inert documentation — copy one into 'models' and point it at a real server to enable it.",
+  "models": {},
+  "examples": {
+    "local-white-rabbit": {
+      "base_url": "http://localhost:11434/v1",
+      "model": "whiterabbitneo",
+      "api_key_env": null,
+      "description": "Example: WhiteRabbitNeo-style cyber model served locally by Ollama (no key). Run `ollama serve` + `ollama pull <tag>` first."
+    },
+    "lab-vllm-cyber": {
+      "base_url": "https://llm.lab.internal/v1",
+      "model": "cyber-llama-8b",
+      "api_key_env": "CYBER_MODEL_API_KEY",
+      "description": "Example: team-hosted vLLM endpoint for a security-tuned model; export CYBER_MODEL_API_KEY."
+    }
+  }
+}

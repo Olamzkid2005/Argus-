@@ -24,6 +24,11 @@ import time
 from dataclasses import dataclass
 
 from config.constants import LLM_AGENT_COST_PER_1K_INPUT, LLM_AGENT_COST_PER_1K_OUTPUT
+from config.custom_models import (
+    chat_completions_url,
+    resolve_custom_model,
+    resolve_custom_model_key,
+)
 from config.llm_env import resolve_llm_api_key, worker_llm_config
 from exceptions import LLMUnavailableError
 from utils.logging_utils import ScanLogger
@@ -69,7 +74,9 @@ class LLMClient:
            (config/llm_env.py::set_worker_llm_config) — the model the TypeScript
            planner resolved from OpenCode's provider registry, so both runtimes
            use the same model for a run
-        3. LLM_PROVIDER / LLM_MODEL / LLM_API_URL environment variables
+        3. The custom-model registry (config/custom_models.json) when the
+           requested model name is registered there
+        4. LLM_PROVIDER / LLM_MODEL / LLM_API_URL environment variables
 
         API key resolution order:
         1. Explicit api_key parameter
@@ -120,14 +127,36 @@ class LLMClient:
         )
         endpoint_from_config = bool(api_url or run_api_url or self._uses_opencode_server)
 
-        # Resolve API key: explicit > driver handoff > Argus's own env vars > DB > Redis.
+        # Custom cyber models (config/custom_models.json): when the requested
+        # model name is registered and neither an explicit argument nor the
+        # driver's handoff named an endpoint, fill endpoint + model id from
+        # the registry. Explicit and handoff values always win; the registry
+        # only supplies what they leave unset.
+        self._custom_model = None
+        if not endpoint_from_config:
+            requested = (model or run_model or os.getenv("LLM_MODEL") or "").strip()
+            entry = resolve_custom_model(requested) if requested else None
+            if entry is not None:
+                self._custom_model = entry
+                self.api_url = chat_completions_url(entry.base_url)
+                self.model = entry.model
+                if provider is None and run_provider is None:
+                    self.provider = "generic"
+                endpoint_from_config = True
+
+        # Resolve API key: explicit > driver handoff > custom-model entry >
+        # Argus's own env vars > DB > Redis.
         # The handoff key sits ahead of LLM_API_KEY because the handoff model may
         # belong to a different provider than the one .env was written for.
         # Ambient provider vars are opt-in only (config/llm_env.py).
         # DB and Redis lookups are scoped to user_email when available (M-v5-01).
+        registry_key: str | None = None
+        if self._custom_model is not None and api_key is None and run_key is None:
+            registry_key = resolve_custom_model_key(self._custom_model)
         resolved_key: str | None = (
             (api_key if api_key and api_key.strip() else None)
             or run_key
+            or registry_key
             or resolve_llm_api_key()
         )
         if not resolved_key and not self._uses_opencode_server:
