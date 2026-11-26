@@ -61,6 +61,33 @@ it.instance("returns default native agents when no config", () =>
   }),
 )
 
+it.instance("registers the Argus security subagents", () =>
+  Effect.gen(function* () {
+    for (const name of ["recon", "vuln-scan", "verifier", "reporter"]) {
+      const agent = yield* load((svc) => svc.get(name))
+      expect(agent).toBeDefined()
+      expect(agent?.mode).toBe("subagent")
+      expect(agent?.native).toBe(true)
+      expect(agent?.prompt).toBeTruthy()
+    }
+  }),
+)
+
+it.instance("security subagents keep least privilege", () =>
+  Effect.gen(function* () {
+    const recon = yield* load((svc) => svc.get("recon"))
+    expect(evalPerm(recon, "edit")).toBe("deny")
+    expect(evalPerm(recon, "bash")).toBe("deny")
+
+    const vulnScan = yield* load((svc) => svc.get("vuln-scan"))
+    expect(evalPerm(vulnScan, "bash")).toBe("allow")
+    expect(evalPerm(vulnScan, "edit")).toBe("deny")
+
+    const reporter = yield* load((svc) => svc.get("reporter"))
+    expect(evalPerm(reporter, "edit")).toBe("deny")
+  }),
+)
+
 it.instance("build agent has correct default properties", () =>
   Effect.gen(function* () {
     const build = yield* load((svc) => svc.get("build"))

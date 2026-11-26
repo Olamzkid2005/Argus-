@@ -12,6 +12,7 @@ import { WorkersBridge, resolveDefaultPython } from "../bridge/mcp-client"
 import { PROJECT_ROOT } from "../shared/path"
 import { ToolRegistry } from "../workflows/tool-registry"
 import { LLMPlannerService } from "../planner/llm-service"
+import { SECURITY_ROLES } from "../agents/security-roles"
 import {
   ALLOW_AMBIENT_ENV_VAR,
   ignoredAmbientLlmEnvVars,
@@ -81,6 +82,7 @@ export async function doctorCommand(options?: {
   results.push(await dnsCheck())
   results.push(configValidationCheck())
   results.push(toolchainCheck())
+  results.push(securityAgentsCheck())
 
   // --online flag: runs LLM provider connectivity check
   if (options?.online) {
@@ -88,6 +90,16 @@ export async function doctorCommand(options?: {
   }
 
   return results
+}
+
+function securityAgentsCheck(): CheckResult {
+  // Report the same roster agent.ts registers, from one shared definition,
+  // so permission drift is visible without reading the agent source.
+  return {
+    name: "Security Agents",
+    status: "PASS",
+    message: SECURITY_ROLES.map((role) => `${role.name} (${role.summary})`).join("; "),
+  }
 }
 
 function runtimeCheck(): CheckResult {

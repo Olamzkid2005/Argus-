@@ -13,6 +13,11 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_RECON from "./prompt/recon.txt"
+import PROMPT_VULN_SCAN from "./prompt/vuln-scan.txt"
+import PROMPT_VERIFIER from "./prompt/verifier.txt"
+import PROMPT_REPORTER from "./prompt/reporter.txt"
+import { SECURITY_ROLES } from "@/argus/agents/security-roles"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
@@ -245,6 +250,30 @@ export const layer = Layer.effect(
             ),
             prompt: PROMPT_SUMMARY,
           },
+        }
+
+        // Security subagents (docs/cyber-harness-plan.md, Phase 2). Additive:
+        // the generic build/plan/explore agents above stay registered.
+        const securityPrompts: Record<string, string> = {
+          recon: PROMPT_RECON,
+          "vuln-scan": PROMPT_VULN_SCAN,
+          verifier: PROMPT_VERIFIER,
+          reporter: PROMPT_REPORTER,
+        }
+        for (const role of SECURITY_ROLES) {
+          agents[role.name] = {
+            name: role.name,
+            description: role.description,
+            prompt: securityPrompts[role.name],
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig(role.permission as any),
+              user,
+            ),
+            options: {},
+            mode: "subagent",
+            native: true,
+          }
         }
 
         for (const [key, value] of Object.entries(cfg.agent ?? {})) {
