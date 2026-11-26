@@ -991,10 +991,9 @@ class PostgresControlPlaneStore:
                 evidence = dict(getattr(finding, "evidence", {}) or {})
                 evidence.setdefault("provenance", "delegation")
                 evidence.setdefault("delegation_task_id", task_id)
-                if getattr(finding, "source_agent", ""):
-                    evidence.setdefault(
-                        "source_agent", getattr(finding, "source_agent")
-                    )
+                source_agent = getattr(finding, "source_agent", "")
+                if source_agent:
+                    evidence.setdefault("source_agent", source_agent)
                 persisted.append(
                     repo.create_finding(
                         engagement_id,

@@ -16,6 +16,7 @@ import json
 import os
 import threading
 import uuid
+from typing import Any
 
 import psycopg2
 import pytest
@@ -29,8 +30,6 @@ from agent.delegation import (
     validate_approval,
 )
 from agent.delegation.integration import IntentTaskRunner, _RecordingExecutor
-from agent.delegation.primary import PrimaryAgent
-from agent.delegation.registry import SpecialistRegistry
 from agent.delegation.tool_executor import (
     ToolCallSpecialistRunner,
     extract_tool_findings,
@@ -330,7 +329,6 @@ def test_specialist_eslint_merges_real_findings(delegation, tmp_path):
             return super().run(request)
 
     from agent.delegation.registry import SpecialistRegistry
-
     from tools.tool_runner import ToolRunner
 
     registry = SpecialistRegistry()
@@ -538,8 +536,8 @@ def test_unproven_finding_cannot_prove_goal(cp, delegation, tmp_path):
     dispatcher.tick(engagement_id)
     dispatcher.tick(engagement_id)
 
-    from database.repositories.finding_repository import FindingRepository
     from database.graph_errors import GraphMutationError
+    from database.repositories.finding_repository import FindingRepository
 
     rows = FindingRepository().find_by_engagement_with_details(engagement_id)
     assert rows, "conclusion must have persisted findings"
@@ -629,7 +627,7 @@ def test_expired_claim_rejects_late_conclusion(cp):
     """Without renewal the lease lapses and the late conclusion is rejected."""
     engagement_id = _engage()
     _goal(cp, engagement_id)
-    intent = _node(cp, engagement_id, "intent", {"objective": "slow work"})
+    _node(cp, engagement_id, "intent", {"objective": "slow work"})
     cp.register_worker("slow-worker", ["explore"])
     claim = cp.claim_explore(engagement_id, "slow-worker", lease_seconds=1)
     assert claim is not None
