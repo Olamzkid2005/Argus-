@@ -19,6 +19,15 @@ function getCurrentModel(): string {
   return process.env.ARGUS_PLANNER_MODEL?.trim() || process.env.OPENCODE_MODEL?.trim() || "OpenCode default"
 }
 
+const SERVICE_CHECKS = [
+  { label: "Planner", key: "planner" },
+  { label: "Workflow", key: "workflow" },
+  { label: "MCP Bridge", key: "mcp" },
+  { label: "Evidence Store", key: "evidence" },
+  { label: "Report Gen", key: "report" },
+  { label: "Browser Verify", key: "verify" },
+] as const
+
 const placeholder = process.env.ARGUS_MODE === "1"
   ? {
       normal: ["/scan https://example.com", "/recon https://testphp.vulnweb.com", "/doctor - run health checks"],
@@ -259,22 +268,22 @@ export function Home() {
 
         <box height={1} />
 
-        {/* System Health — Argus-specific */}
+        {/* System Health — Argus-specific. Two rows: six labels in one row
+            overflowed and overlapped on narrow terminals. */}
         <Show when={process.env.ARGUS_MODE === "1"}>
           <text fg={theme.textMuted}>System Status</text>
-          <box flexDirection="row" gap={2} paddingTop={1}>
-            <For each={[
-              { label: "Planner", key: "planner" },
-              { label: "Workflow", key: "workflow" },
-              { label: "MCP Bridge", key: "mcp" },
-              { label: "Evidence Store", key: "evidence" },
-              { label: "Report Gen", key: "report" },
-              { label: "Browser Verify", key: "verify" },
-            ]}>
-              {(svc) => (
-                <box flexDirection="row" gap={1}>
-                  <text fg={sec(svc.key) ? theme.success : theme.error}>●</text>
-                  <text fg={sec(svc.key) ? theme.text : theme.textMuted}>{svc.label}</text>
+          <box flexDirection="column" gap={1} paddingTop={1}>
+            <For each={[SERVICE_CHECKS.slice(0, 3), SERVICE_CHECKS.slice(3)]}>
+              {(row) => (
+                <box flexDirection="row" gap={2}>
+                  <For each={row}>
+                    {(svc) => (
+                      <box flexDirection="row" gap={1}>
+                        <text fg={sec(svc.key) ? theme.success : theme.error}>●</text>
+                        <text fg={sec(svc.key) ? theme.text : theme.textMuted}>{svc.label}</text>
+                      </box>
+                    )}
+                  </For>
                 </box>
               )}
             </For>

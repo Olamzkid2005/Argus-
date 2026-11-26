@@ -840,6 +840,10 @@ export function Autocomplete(props: {
       left={position().x}
       width={position().width}
       zIndex={100}
+      flexDirection="column"
+      // The overlay must be opaque: without a background on the positioning
+      // box the home/session content behind it bled through the rows.
+      backgroundColor={theme.backgroundMenu}
       {...SplitBorder}
       borderColor={theme.border}
     >
