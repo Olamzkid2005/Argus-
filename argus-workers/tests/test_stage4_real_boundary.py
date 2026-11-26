@@ -588,6 +588,43 @@ def test_heartbeat_renews_claim_across_long_task(cp, delegation):
     assert len(facts) >= 2
 
 
+def test_heartbeat_renews_production_lease_across_long_task(cp, delegation):
+    """A task outlasting the 90s production lease concludes on renewals."""
+    engagement_id = _engage()
+    _goal(cp, engagement_id)
+    plan = _routed_plan(
+        [
+            (
+                f"Sleep {index + 1}",
+                "sleep past the production lease",
+                "sleep",
+                {"argv": ["8"], "cache_mode": "NO_CACHE"},
+            )
+            for index in range(13)  # 13 x 8s = ~104s of real sleep, past 90s
+        ]
+    )
+    runner, _generator = _integrated_explore(
+        cp, delegation, plan=plan, intents=["sleep past ninety seconds"]
+    )
+    cp.register_worker("real-worker", ["bootstrap", "reason", "explore"])
+    dispatcher = ControlPlaneDispatcher(cp, runner)
+    dispatcher.tick(engagement_id)
+    dispatcher.tick(engagement_id)
+    import time
+
+    start = time.time()
+    result = dispatcher.run_explore(engagement_id, "real-worker", lease_seconds=90)
+    elapsed = time.time() - start
+    assert result is not None and result["status"] == "succeeded"
+    assert elapsed > 90, f"must outlast the 90s lease, ran {elapsed:.1f}s"
+    facts = [
+        row
+        for row in cp.graph.find_nodes_by_engagement(engagement_id)
+        if row["kind"] == "fact"
+    ]
+    assert len(facts) >= 2
+
+
 def test_expired_claim_rejects_late_conclusion(cp):
     """Without renewal the lease lapses and the late conclusion is rejected."""
     engagement_id = _engage()
