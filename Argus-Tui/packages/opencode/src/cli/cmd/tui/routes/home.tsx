@@ -56,8 +56,25 @@ export function Home() {
       onCleanup(() => store.close())
       const all = store.listEngagements()
       const recent = all.slice(0, 5)
+      // One undecryptable engagement (rotated keychain key, corrupted file)
+      // must not blank the whole list. Count it as 0 findings and surface
+      // a single actionable toast instead of throwing out of onMount.
+      // DECRYPT_FAILED surfaces as "Unsupported state or unable to
+      // authenticate data" when the master key rotated or the file
+      // was corrupted. Keep the row visible so the user can act.
+      const decryptFailedIds = new Set<string>()
+      const safeFindings = (engagementId: string): any[] => {
+        try {
+          return store.getFindings(engagementId)
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.warn(`[Argus] Skipping findings for ${engagementId}: ${msg}`)
+          decryptFailedIds.add(engagementId)
+          return []
+        }
+      }
       const enriched = recent.map((e: any) => {
-        const findings = store.getFindings(e.id)
+        const findings = safeFindings(e.id)
         return { id: e.id, target: e.target, status: e.status, findings: findings.length }
       })
       setEngagements(enriched as any)
@@ -65,7 +82,7 @@ export function Home() {
       const openEngagements = all.filter((e: any) => e.status === "RUNNING" || e.status === "CREATED").length
       let critical = 0; let high = 0; let medium = 0; let totalF = 0
       for (const e of all.slice(0, 20)) {
-        const findings = store.getFindings(e.id)
+        const findings = safeFindings(e.id)
         totalF += findings.length
         for (const f of findings) {
           if (f.severity >= 4) critical++
@@ -74,6 +91,14 @@ export function Home() {
         }
       }
       setStats({ targets: totalTargets, active: openEngagements, findings: totalF, critical, high, medium })
+      if (decryptFailedIds.size > 0) {
+        toast.show({
+          variant: "warning",
+          title: "Some engagements could not be decrypted",
+          message: `${decryptFailedIds.size} engagement(s) failed to decrypt (wrong master key or corrupted file). Run /doctor or \`argus encryption --help\` to re-import your master-key backup.`,
+          duration: 8000,
+        })
+      }
     } catch (e) { toast.error(e) }
     if (process.env.ARGUS_MODE === "1") {
       Promise.resolve().then(async () => {
