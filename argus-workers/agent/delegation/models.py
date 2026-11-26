@@ -1,6 +1,6 @@
 """Persistent Flow/Task/Subtask/Action contracts for hierarchical delegation.
 
-Argus maps PentAGI's hierarchy onto existing concepts (plan §4.2):
+Argus maps the task hierarchy onto existing concepts (plan §4.2):
 
 * Engagement      -> Flow
 * Investigation Intent (graph node) -> Task / work package
@@ -182,7 +182,7 @@ class SubtaskDraft:
 
 @dataclass(frozen=True)
 class Task:
-    """A PentAGI Task / work package tied to one engagement and intent."""
+    """A delegation Task / work package tied to one engagement and intent."""
 
     id: str
     engagement_id: str

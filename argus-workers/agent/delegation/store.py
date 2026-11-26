@@ -436,7 +436,7 @@ class PostgresDelegationStore(BaseRepository):
     def reconcile_stale_subtasks(self, task_id: str) -> list[dict[str, Any]]:
         """Make interrupted RUNNING subtasks resumable without losing evidence.
 
-        PentAGI reloads a still-running subtask as created and reuses its agent
+        Upstream reloads a still-running subtask as created and reuses its agent
         chain. Argus reproduces that: status returns to ``created``, the message
         chain and any persisted result/evidence stay, and the interruption is
         recorded so a blind replay is visible.

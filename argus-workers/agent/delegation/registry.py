@@ -1,6 +1,6 @@
 """Specialist roles and capabilities for bounded delegation (plan §4.6).
 
-Roles mirror PentAGI's specialist set. Registration is capability based, so the
+Roles mirror the upstream specialist set. Registration is capability based, so the
 Primary Agent can activate only the specialists a subtask actually needs instead
 of launching the whole swarm for every step.
 """

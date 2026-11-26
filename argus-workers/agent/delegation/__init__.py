@@ -1,4 +1,4 @@
-"""PentAGI-style hierarchical delegation (plan §4, P-01…P-17).
+"""Hierarchical task delegation (plan §4, P-01…P-17).
 
 Modules:
 

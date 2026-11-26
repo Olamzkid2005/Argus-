@@ -1,4 +1,4 @@
--- Migration 038: PentAGI-style hierarchical delegation
+-- Migration 038: hierarchical task delegation
 --
 -- Durable Flow/Task/Subtask/Action hierarchy (plan §4.4). The Argus engagement is
 -- the Flow, a Task is one authorized Investigation Intent / work package, and
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS delegation_tasks (
     )
 );
 
-COMMENT ON TABLE delegation_tasks IS 'PentAGI-style Task / work package; engagement is the Flow.';
+COMMENT ON TABLE delegation_tasks IS 'Delegation Task / work package; engagement is the Flow.';
 COMMENT ON COLUMN delegation_tasks.intent_id IS 'graph investigation intent node this task executes, when one exists.';
 
 CREATE INDEX IF NOT EXISTS idx_delegation_tasks_engagement

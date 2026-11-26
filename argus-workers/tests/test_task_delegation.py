@@ -1,4 +1,4 @@
-"""PentAGI hierarchical delegation conformance tests (plan §4.11, P-01…P-17).
+"""Hierarchical task delegation conformance tests (plan §4.11, P-01…P-17).
 
 DB-backed tests run against PostgreSQL with migration 038 applied. They are
 skipped when DATABASE_URL is not reachable, exactly like the graph tests,

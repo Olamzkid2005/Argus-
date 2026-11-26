@@ -68,7 +68,7 @@ def orchestration_mode() -> str:
 
 
 def hierarchical_delegation_mode() -> str:
-    """The PentAGI-style hierarchy switch (``off`` | ``shadow`` | ``on``)."""
+    """The hierarchical delegation switch (``off`` | ``shadow`` | ``on``)."""
     return flag_mode("hierarchical_delegation")
 
 
