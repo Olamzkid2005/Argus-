@@ -20,6 +20,8 @@ Prompts, `AGENTS.md`, and docs are revoiced to cyber last (cheapest slice).
   `recon`, `vuln-scan`, `verifier`, `reporter`. No deletions.
 - AD-3: Permissions per role. Each security subagent gets a least-privilege
   allowlist in `agent.ts` + `subagent-permissions.ts`; `doctor` reports them.
+  Resolved 2026-11-26: `vuln-scan` bash = auto-allow (user); `reporter`
+  writes = evidence dir + reports/ (user); model selection unchanged (user).
 - AD-4: Prompts are voice-only. Rewrites change wording and discipline
   (scope, evidence paths), never tool semantics.
 - AD-5: Models unchanged structurally. `custom_models.json` + `ARGUS_PLANNER_MODEL`
@@ -76,7 +78,8 @@ hint) reachable from home so free-limit users find the OpenRouter path.
 (tool-runner backed) subagents in `agent.ts` with cyber descriptions.
 **Acceptance criteria:**
 - [ ] `/agent` lists `recon`, `vuln-scan` as subagents.
-- [ ] Neither can edit files or run state-modifying bash.
+- [ ] `recon` cannot edit files or run state-modifying bash; `vuln-scan`
+  bash auto-allows (per user decision 2026-11-26).
 **Verification:**
 - [ ] `bun test ./test/agent/agent.test.ts` passes.
 **Dependencies:** None (parallelizable with Phase 1).
@@ -90,7 +93,8 @@ hint) reachable from home so free-limit users find the OpenRouter path.
 reporter writes findings/reports to evidence paths only.
 **Acceptance criteria:**
 - [ ] `verifier` cannot mark findings confirmed without evidence part.
-- [ ] `reporter` can write only under evidence/report globs.
+- [ ] `reporter` can write only under the engagement evidence dir + reports/
+  (per user decision 2026-11-26).
 **Verification:**
 - [ ] Agent permission tests pass.
 **Dependencies:** Task 2.1 (same file, sequential).
@@ -163,14 +167,15 @@ writes security `AGENTS.md`.
 | Prompt revoice changes behavior | Med | Wording-only diff rule; hidden agents semantics frozen |
 | Single vs multiple security roles | Low | Locked AD-2 (additive); revisit only via doc amendment |
 
-## 5. Open questions
+## 5. Open questions (resolved 2026-11-26)
 
-- Q-1: Exact tool allowlist for `vuln-scan` bash (nuclei/nmap `ask` vs `allow` on lab targets)?
-- Q-2: `reporter` write globs — which evidence/report paths are canonical?
-- Q-3: Default model after console work: free Big Pickle or OpenRouter custom model?
+- Q-1 (RESOLVED: auto-allow): `vuln-scan` bash auto-allows scanner commands.
+- Q-2 (RESOLVED: evidence + reports): `reporter` writes under evidence dir + reports/.
+- Q-3 (RESOLVED: don't change): model selection stays exactly as today.
 
 ## 6. Amendment log
 
 | Date | Change | By |
 |---|---|---|
 | 2026-11-26 | Initial draft; locked identity/agents/order per user answers | joint |
+| 2026-11-26 | Resolved Q-1 (auto-allow scan), Q-2 (evidence+reports), Q-3 (models unchanged) | user answers |
