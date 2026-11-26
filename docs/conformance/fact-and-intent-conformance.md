@@ -26,7 +26,7 @@ latest is `041_…`; `delegation_subtasks` carries the `tool` / `arguments` rout
 | Command | Result |
 |---|---|
 | `cd argus-workers && DATABASE_URL=postgresql://postgres@localhost:5432/argus_stage4 venv/bin/python -m pytest tests/test_stage4_real_boundary.py -q` | **24 passed** (incl. the >90s production-lease renewal, 106.9 s wall-clock) |
-| `cd argus-workers && DATABASE_URL=… venv/bin/python -m pytest tests/test_stage4_real_boundary.py tests/test_pentagi_delegation.py tests/test_control_plane.py tests/test_control_plane_bridge.py tests/test_stage4_integration.py tests/test_tool_cache.py tests/test_install_tools.py -q` | **163 passed** |
+| `cd argus-workers && DATABASE_URL=… venv/bin/python -m pytest tests/test_stage4_real_boundary.py tests/test_task_delegation.py tests/test_control_plane.py tests/test_control_plane_bridge.py tests/test_stage4_integration.py tests/test_tool_cache.py tests/test_install_tools.py -q` | **163 passed** |
 | `cd Argus-Tui/packages/opencode && bun typecheck` (`make typecheck-v5`) | **exit 0** (`tsgo --noEmit`, no errors) |
 | `cd Argus-Tui/packages/opencode && bun test test/argus/ --timeout 30000` (`make test-v5`) | **see §6** — run launched; full-suite result recorded on completion |
 | `cd argus-workers && git diff --check` | clean (no whitespace errors introduced) |

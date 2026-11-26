@@ -355,7 +355,7 @@ rejection (`TestTenantBoundary`).
 
 - Fact-and-intent protocol work: C-01…C-25 pass and are recorded in
   `control-plane-conformance.md`.
-- PentAGI hierarchical delegation: P-01…P-17 pass against PostgreSQL, and Stage 4
+- Hierarchical task delegation: P-01…P-17 pass against PostgreSQL, and Stage 4
   wires the production dispatcher to create one Task per claimed intent, persist
   generated plans, actions and refinements, and write the task report's
   conclusion. See `integrated-e2e-results.md`. The eight integrated scenarios

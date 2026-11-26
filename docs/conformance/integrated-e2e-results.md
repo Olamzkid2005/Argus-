@@ -14,7 +14,7 @@ cd argus-workers && \
 
 **Result:** **9 passed, 0 skipped** (2026-11-25). The same run combined with
 `tests/test_control_plane.py`, `tests/test_control_plane_bridge.py`,
-`tests/test_pentagi_delegation.py` and `tests/test_celery_app.py` reports
+`tests/test_task_delegation.py` and `tests/test_celery_app.py` reports
 **96 passed**.
 
 ## What is now integrated

@@ -1,5 +1,5 @@
 # Argus Implementation and Conformance Plan
-## Graph-backed exploration · PentAGI hierarchical delegation · fact-and-intent reasoning
+## Graph-backed exploration · hierarchical task delegation · fact-and-intent reasoning
 
 **Prepared:** 22 November 2026  
 **Purpose:** A build plan and source-conformance test plan for extending Argus without replacing its existing execution, MCP, scope, evidence, and reporting foundations.
@@ -11,22 +11,22 @@
 Implement the three architectures as **three layers of one assessment engine**, not as three independent planners:
 
 1. **Exploration-graph work owns the knowledge and exploration model.** It defines the shared asset graph, per-engagement exploration graph, anchors, planner frontier, graph-change feedback loop, and persistent plan scratchpad.
-2. **PentAGI owns the work-decomposition model.** Each claimed investigation intent becomes a task with an ordered list of up to 15 subtasks. A primary agent handles the task and delegates individual subtasks to specialists. A refiner revises the remaining subtask list after each terminal subtask result.
+2. **Hierarchical delegation owns the work-decomposition model.** Each claimed investigation intent becomes a task with an ordered list of up to 15 subtasks. A primary agent handles the task and delegates individual subtasks to specialists. A refiner revises the remaining subtask list after each terminal subtask result.
 3. **Fact-and-intent work owns dispatch and state transitions.** The dispatcher is the control plane and sole writer of durable protocol state. Workers receive one explicit job, return a strict structured result, and never claim work, heartbeat a lease, or write directly to the graph/database.
 
 The resulting hierarchy is:
 
 ```text
 Argus Engagement
-  = Engagement / PentAGI Flow
+  = Engagement / delegation Flow
   |
   +-- Goal(s)                         Exploration Goal
   |     |
   |     +-- Investigation Intent(s)  Exploration Intent
-  |            |                     Each intent is a PentAGI Task/work package
+  |            |                     Each intent is a delegation Task/work package
   |            |
-  |            +-- Subtask 1          PentAGI Subtask
-  |            +-- Subtask 2          PentAGI Subtask
+  |            +-- Subtask 1          Subtask
+  |            +-- Subtask 2          Subtask
   |            +-- ...
   |            |
   |            +-- Actions            Tool executions
@@ -36,9 +36,9 @@ Argus Engagement
   +-- Exploration Graph              Exploration Graph
 ```
 
-Multiple independent intents can be claimed by different workers (frontier behaviour). **Within one intent/task, subtasks execute in PentAGI order**, one at a time. This preserves graph-style parallelism across independent investigation directions while preserving PentAGI's sequential subtask/refiner lifecycle inside each task.
+Multiple independent intents can be claimed by different workers (frontier behaviour). **Within one intent/task, subtasks execute in plan order**, one at a time. This preserves graph-style parallelism across independent investigation directions while preserving the sequential subtask/refiner lifecycle inside each task.
 
-The fact-and-intent `reason` contract is the structured interface used by the graph planner: one authoritative planner decides whether to complete a goal, create new intents, or do nothing. The PentAGI Generator creates subtasks *inside a claimed intent*; it does not create a second competing top-level intent queue.
+The fact-and-intent `reason` contract is the structured interface used by the graph planner: one authoritative planner decides whether to complete a goal, create new intents, or do nothing. The task Generator creates subtasks *inside a claimed intent*; it does not create a second competing top-level intent queue.
 
 ### Non-negotiable control rule
 
@@ -53,7 +53,7 @@ The implementation agent must use pinned repository snapshots, not the latest RE
 | Reference | Reference commit | Primary source files |
 |---|---|---|
 | Graph exploration reference | `94757c5d7e704ac1c095ee99e97d9ac4d9d428c5` | README, `agent/planner.go`, `db/exploration.go`, `db/assets.go`, `server/engine.go` |
-| PentAGI | `cffed9485aa1cca70762cd08a57ac62a80406258` | [Flow execution](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/docs/flow_execution.md), [subtask patch](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/pkg/providers/subtask_patch.go), [subtask worker](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/pkg/controller/subtask.go), [task worker](https://github.com/vxcontrol/pentagi/blob/cffed9485aa1cca70762cd08a57ac62a80406258/backend/pkg/controller/task.go) |
+| Task delegation reference | `cffed9485aa1cca70762cd08a57ac62a80406258` | `backend/docs/flow_execution.md`, `backend/pkg/providers/subtask_patch.go`, `backend/pkg/controller/subtask.go`, `backend/pkg/controller/task.go` |
 | Fact-and-intent reference | `8e7e0ea67552383851dfcabfba0c4e9c8d007878` | `docs/specs/dispatcher-design.md`, `dispatcher/scheduler/loop.py`, `dispatcher/contracts.py`, `dispatcher/tasks/explore.py`, `dispatcher/tasks/reason.py` |
 | Argus baseline | `0e006958927c82d95d293f4e08262df79d95e921` | [README](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/README.md), [workflow runner](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/Argus-Tui/packages/opencode/src/argus/workflow-runner.ts), [planner executor](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/Argus-Tui/packages/opencode/src/argus/planner/executor.ts), [MCP server](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/argus-workers/mcp_server.py), [current gaps](https://github.com/Olamzkid2005/Argus-/blob/0e006958927c82d95d293f4e08262df79d95e921/docs/CURRENT-REMAINING-GAPS.md) |
 
@@ -73,7 +73,7 @@ The implementation starts from Argus HEAD `0e006958...`, not the earlier 21 Nove
 |---|---|---|
 | `Argus-Tui/packages/opencode/src/argus/workflow-runner.ts` | Assessment lifecycle, target validation, phase execution, checkpoints, status and reporting orchestration | Evolve behind a feature flag into the trusted dispatcher; do not create a second independent run lifecycle |
 | `.../planner/planner.ts` | Capability/phase plan, LLM suggestions and replan rules | Retain as a lower-level capability resolver for a claimed intent/subtask; stop treating it as the top-level source of all investigation directions in V2 |
-| `.../planner/executor.ts` | Tool/action execution, hybrid agent loop, action outcome accounting, timeouts and fallback | Reuse as the action executor inside a PentAGI subtask |
+| `.../planner/executor.ts` | Tool/action execution, hybrid agent loop, action outcome accounting, timeouts and fallback | Reuse as the action executor inside a delegation subtask |
 | `.../bridge/mcp-client.ts` and `.../bridge/supervisor.ts` | Python worker bridge and process supervision | Extend with typed task/graph RPCs; retain health, restart and degraded-mode semantics |
 | `.../engagement/store.ts` and `.../engagement/schema.sql.ts` | Per-engagement SQLite persistence, findings, phases, checkpoints and audit state | Extend with graph, intent, task/subtask and lease tables through migrations |
 | `argus-workers/mcp_server.py` | MCP tool server plus `agent_init` / `agent_next` / `agent_observe` hybrid planning protocol | Keep as worker/agent runtime. Make new graph writes go through dispatcher-owned RPCs rather than direct worker DB writes |
@@ -265,11 +265,11 @@ The planner is the **only autonomous intent proposer**. Human/operator controls 
 
 ---
 
-## 4. Workstream 2 — PentAGI hierarchical delegation
+## 4. Workstream 2 — hierarchical task delegation
 
 ### 4.1 Behaviour to reproduce
 
-PentAGI models work as:
+The delegation model structures work as:
 
 - **Flow:** persistent top-level engagement/session.
 - **Task:** an objective within the Flow.
@@ -296,12 +296,12 @@ The reference subtask lifecycle persists status and message-chain state. A subta
 Use this mapping to avoid a second competing hierarchy:
 
 - Argus Engagement = Flow.
-- An investigation intent = one PentAGI-style Task/work package.
+- An investigation intent = one delegation Task/work package.
 - The Generator's ordered plan = that Task's Subtask list (maximum 15 active planned subtasks by default).
 - Each tool call executed by Argus's existing executor = an Action.
 - ReAct remains the action-level execution loop inside the Primary Agent; it is not promoted into a second task planner.
 
-Independent intents/tasks can run concurrently under the graph frontier. Within one task, execute subtasks sequentially in list order, matching PentAGI's task execution model. Do not parallelize sibling subtasks within the same task unless a future explicit mode is added and separately tested.
+Independent intents/tasks can run concurrently under the graph frontier. Within one task, execute subtasks sequentially in list order, matching the delegation task execution model. Do not parallelize sibling subtasks within the same task unless a future explicit mode is added and separately tested.
 
 ### 4.3 Suggested code layout
 
@@ -404,7 +404,7 @@ The Refiner may leave the remaining plan unchanged. It must not change the paren
 ### 4.9 Restart and recovery semantics
 
 - Persist subtask order, status, task context, message-chain reference and action outcomes.
-- On restart, reconcile a stale `RUNNING` subtask. PentAGI reloads a still-running subtask as created and reuses its persisted agent chain; Argus should reproduce the safe equivalent: mark the interrupted subtask resumable, reload the same message chain, and re-enter it under the original scope/budget.
+- On restart, reconcile a stale `RUNNING` subtask. Upstream reloads a still-running subtask as created and reuses its persisted agent chain; Argus should reproduce the safe equivalent: mark the interrupted subtask resumable, reload the same message chain, and re-enter it under the original scope/budget.
 - Before replaying an action, consult Argus's action-signature ledger and execution log. Reuse a completed result when the action is idempotent and still valid; require a fresh authorized attempt where replay safety is uncertain.
 - A `WAITING` subtask remains waiting until valid operator input is recorded.
 - A failed subtask remains failed unless an explicit retry/refinement decision creates a new attempt record.
@@ -440,7 +440,7 @@ The Refiner may leave the remaining plan unchanged. It must not change the paren
 - Add 3-attempt reflection limit, ASK/WAITING resume, Reporter and Memorist adapters.
 - Wire all outputs to Argus evidence and finding verification.
 
-### 4.11 PentAGI conformance tests (mandatory)
+### 4.11 Delegation conformance tests (mandatory)
 
 | ID | Test | Required result |
 |---|---|---|
@@ -525,7 +525,7 @@ Use a project/engagement-level reason lease so at most one reason task runs for 
 
 **Input:** one claimed intent, a graph snapshot and the exact intent description/ID.
 
-**Output:** exactly one fact conclusion description. The worker explores only that claimed intent; if the task needs several tools, it can do so within its bounded PentAGI task/subtask hierarchy. When it is finished, the dispatcher writes one conclusion Fact and connects it to the intent through the appropriate `yields`/`derived_from` relationship.
+**Output:** exactly one fact conclusion description. The worker explores only that claimed intent; if the task needs several tools, it can do so within its bounded task/subtask hierarchy. When it is finished, the dispatcher writes one conclusion Fact and connects it to the intent through the appropriate `yields`/`derived_from` relationship.
 
 **Failure handling:**
 
@@ -664,9 +664,9 @@ The agents may return structured proposals and evidence. The dispatcher validate
 
 ### 6.2 One top-level planner
 
-The graph-style `ExplorationPlanner` is the only autonomous generator of durable intent proposals. It uses the protocol's `reason` output contract. The PentAGI Generator is not a second top-level intent planner; it decomposes one already-claimed intent/task into ordered subtasks.
+The graph-style `ExplorationPlanner` is the only autonomous generator of durable intent proposals. It uses the protocol's `reason` output contract. The task Generator is not a second top-level intent planner; it decomposes one already-claimed intent/task into ordered subtasks.
 
-The PentAGI Refiner may patch only that task's remaining subtasks. It cannot create an independent engagement-level intent, change scope or prove a goal.
+The task Refiner may patch only that task's remaining subtasks. It cannot create an independent engagement-level intent, change scope or prove a goal.
 
 ### 6.3 Full lifecycle
 
@@ -689,7 +689,7 @@ The PentAGI Refiner may patch only that task's remaining subtasks. It cannot cre
    - Claim one intent with a lease.
    - Resolve its anchored assets and prerequisites.
 
-5. PentAGI task hierarchy
+5. Task delegation hierarchy
    - Create one Task for that intent.
    - Generator creates 1..15 ordered subtasks.
    - Primary Agent runs each subtask sequentially.
@@ -839,7 +839,7 @@ Use an isolated local vulnerable fixture and deterministic fake tools/LLM for mo
 - Start a fresh authorized engagement with origin and goal.
 - Bootstrap is eligible and returns a valid fact but not a valid completion; verify goal remains open.
 - Reason sees no active intents and creates two valid intents from existing fact IDs.
-- Scheduler claims one intent; its PentAGI Generator creates an ordered subtask plan.
+- Scheduler claims one intent; its task Generator creates an ordered subtask plan.
 - Primary Agent executes the subtasks sequentially, delegates one to a specialist, and Refiner adjusts the remaining plan after a discovery.
 - Explore concludes with exactly one Fact; a validated vulnerability is separately recorded as a Finding with proof/evidence.
 - Asset/exploration graphs, anchors, edges, todo list and task states persist.
@@ -866,7 +866,7 @@ Use an isolated local vulnerable fixture and deterministic fake tools/LLM for mo
 - Allow the old worker to return late; its fencing token must reject the result.
 - Verify no stale Fact, Finding, anchor or edge was written.
 
-**Scenario 5 — PentAGI refinement and recovery**
+**Scenario 5 — delegation refinement and recovery**
 
 - Generate 3 subtasks; finish the first; have Refiner add one, remove one and reorder another.
 - Verify exact new order/IDs and that completed evidence remains unchanged.
@@ -903,7 +903,7 @@ The implementation agent must write:
 docs/conformance/
   reference-pins.md
   graph-exploration-conformance.md
-  pentagi-delegation-conformance.md
+  task-delegation-conformance.md
   fact-and-intent-conformance.md
   integrated-e2e-results.md
   deviations.md
@@ -915,7 +915,7 @@ Include machine-readable JSON where helpful:
 {
   "reference_commits": {
     "graph_exploration": "94757c5d7e704ac1c095ee99e97d9ac4d9d428c5",
-    "pentagi": "cffed9485aa1cca70762cd08a57ac62a80406258",
+    "task_delegation": "cffed9485aa1cca70762cd08a57ac62a80406258",
     "fact_intent_protocol": "8e7e0ea67552383851dfcabfba0c4e9c8d007878",
     "argus_baseline": "0e006958927c82d95d293f4e08262df79d95e921"
   },
@@ -961,7 +961,7 @@ The three workstreams should be developed in the requested conceptual order, but
 
 **Gate:** all `A-*` tests pass; no goal can be marked complete without verifier-backed proof.
 
-### Stage 3 — PentAGI hierarchical delegation
+### Stage 3 — hierarchical task delegation
 
 - Implement Task/Subtask/Action persistence, Generator, Primary Agent, Refiner, specialist delegation, Reflector, Reporter and Memorist adapter.
 - Map each claimed intent to one task; run subtasks sequentially within the task.
@@ -989,7 +989,7 @@ The three workstreams should be developed in the requested conceptual order, but
 ## 9. Explicit non-goals and adaptations
 
 1. **Do not replace OpenCode or the existing Argus tool execution stack.** Reuse the existing TUI, capability registry, MCP bridge, `executeHybrid`, `ReActAgent`, tool-health handling, scope checks, verifier and report generator.
-2. **Do not create three independent planners.** The graph planner is the only top-level intent planner; the fact-and-intent protocol defines its structured reason/dispatch protocol; PentAGI decomposes one claimed intent into subtasks.
+2. **Do not create three independent planners.** The graph planner is the only top-level intent planner; the fact-and-intent protocol defines its structured reason/dispatch protocol; Delegation decomposes one claimed intent into subtasks.
 3. **Do not turn the existing vulnerability attack graph into the exploration graph.** Keep vulnerability risk/chain scoring separate from the asset graph and exploration graph.
 4. **Do not make Docker mandatory.** Reuse Argus's execution boundary and make isolation guarantees explicit. If the configured isolation backend is unavailable, fail closed for engagements that require it; do not silently fall back to a weaker mode.
 5. **Do not let workers write graph state directly.** Agents return structured output; dispatcher validates and commits.
@@ -1008,7 +1008,7 @@ The three workstreams are complete only when all statements below are true:
 - An unresolved goal cannot stall with an empty frontier; proven goals cannot be reopened by untrusted tool output.
 - Dependent intents are scheduled only after prerequisite facts exist; todo/coverage/intent state survives restart.
 - One intent is claimed under a dispatcher lease, and stale workers cannot commit results.
-- Each intent executes through a persistent PentAGI-style Task with an ordered subtask plan of at most 15 items.
+- Each intent executes through a persistent delegation Task with an ordered subtask plan of at most 15 items.
 - Subtasks run sequentially inside a task; the Primary Agent can delegate to bounded specialists; the Refiner applies deterministic patches after each terminal result; Reflector is capped at three corrections.
 - Fact-and-intent bootstrap/reason/explore schemas and lifecycle semantics are enforced by code, not prompt text alone.
 - The dispatcher is the sole durable graph/task/intent writer; workers have no direct write authority.
