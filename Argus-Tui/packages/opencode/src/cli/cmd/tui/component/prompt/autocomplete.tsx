@@ -57,6 +57,8 @@ function extractLineRange(input: string) {
 export type AutocompleteRef = {
   onInput: (value: string) => void
   visible: false | "@" | "/"
+  hasOptions: () => boolean
+  hide: () => void
 }
 
 export type AutocompleteOption = {
@@ -647,8 +649,15 @@ export function Autocomplete(props: {
   }
 
   function select(mode: "select" | "complete" = "select") {
-    const selected = options()[store.selected]
-    if (!selected) return
+    const list = options()
+    const selected = list[store.selected]
+    if (!selected) {
+      // No option to pick (e.g. "No matching items"): hide so Enter falls
+      // through to input.submit instead of swallowing the keystroke.
+      // Returning false lets the keymap try the next binding for Return.
+      hide()
+      return false
+    }
     // Tab only completes, so it still clears the typed text first; Enter must
     // hand it to the command when that command acts on it (see keepPromptText).
     hide(mode === "select" && selected.keepPromptText === true)
@@ -770,6 +779,12 @@ export function Autocomplete(props: {
     props.ref({
       get visible() {
         return store.visible
+      },
+      hasOptions() {
+        return options().length > 0
+      },
+      hide() {
+        hide()
       },
       onInput(value) {
         if (store.visible) {
