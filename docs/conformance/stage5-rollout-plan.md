@@ -30,8 +30,13 @@ rollout; do not use raw finding count as the success metric").
    matching the Stage 4 lab discipline (scope, egress, budget, approval).
 3. No customer / production-target engagement enters the cohort until the gate
    in §4 passes on the lab cohort.
-4. Engagement allowlisting is a named follow-up (operator config + dispatcher
-   check, default deny). Until it lands, V2 stays `off`/`shadow` globally.
+4. Engagement allowlisting has landed: `ARGUS_V2_ENGAGEMENTS` (comma-separated
+   IDs) is consulted in `ControlPlaneDispatcher.tick` before leadership is
+   acquired (`control_plane/rollout_scope.py`, tested in
+   `tests/test_rollout_scope.py` + 2 DB tick tests). Unset/blank preserves the
+   pre-Stage-5 behaviour (unscoped, everything eligible); set means only
+   listed engagements run V2 and a set-but-empty value denies everything.
+   Until a cohort is allowlisted, V2 stays `off`/`shadow` globally.
 
 ## 3. The nine Stage 5 metrics (definitions + source tables)
 
