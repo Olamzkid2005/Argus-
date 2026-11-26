@@ -19,6 +19,7 @@ claim token or graph write authority.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Mapping
 from typing import Any, Protocol
 
 from agent.delegation.generator import validate_generated_plan
@@ -112,8 +113,28 @@ class IntentTaskRunner:
         *,
         facts: list[dict[str, Any]] | None = None,
         hints: list[Any] | None = None,
+        heartbeat: Callable[[], None] | None = None,
+        heartbeat_every: int = 1,
+        operator_answers: Mapping[str, str] | None = None,
+        auto_reconcile: bool = True,
     ) -> dict[str, Any]:
-        """Execute one intent and return its task report plus conclusion text."""
+        """Execute one intent and return its task report plus conclusion text.
+
+        The loop owns liveness while delegation work is in flight (plan §5.5
+        puts heartbeat/reconcile on the dispatcher side, never on the agent):
+
+        * *heartbeat* is a dispatcher-owned callback (usually the intent-claim
+          heartbeat bound to this claim's token). It runs before every
+          ``heartbeat_every``-th step; when it raises, the claim is lost and
+          the run aborts without a conclusion.
+        * a step that reports ``running_in_progress`` means a previous attempt
+          died mid-subtask, so the loop reconciles the stale RUNNING row back
+          to resumable and continues — no manual reconcile call needed.
+        * a step that reports ``waiting_in_progress`` resumes every WAITING
+          subtask that has an entry in *operator_answers* and continues; when
+          no answer is available the waiting outcome is returned as-is so the
+          caller can ask the operator instead of fabricating a result.
+        """
         intent_id = str(intent.get("id") or "")
         if not intent_id:
             raise DelegationError("an intent id is required to start a task")
@@ -147,13 +168,74 @@ class IntentTaskRunner:
                 hints=list(hints or []),
             )
 
-        outcome = self._worker.run(task_id, max_steps=self._max_steps)
+        if auto_reconcile:
+            # A previous run may have died mid-subtask; make it resumable now
+            # rather than stalling on the first step.
+            self._worker.reconcile(task_id)
+
+        outcome: dict[str, Any] = {"status": "not_started"}
+        for step_index in range(self._max_steps):
+            if (
+                heartbeat is not None
+                and heartbeat_every > 0
+                and step_index > 0
+                and step_index % heartbeat_every == 0
+            ):
+                heartbeat()
+            outcome = self._worker.step(task_id)
+            status = outcome.get("status")
+            if status == "running_in_progress":
+                if auto_reconcile:
+                    reconciled = self._worker.reconcile(task_id)
+                    logger.info(
+                        "reconciled %d stale subtask(s) on task %s",
+                        len(reconciled),
+                        task_id,
+                    )
+                    continue
+                raise DelegationError(
+                    f"task {task_id} stalled on a RUNNING subtask with "
+                    "auto-reconcile disabled"
+                )
+            if status == "waiting_in_progress":
+                if self._resume_waiting(task_id, operator_answers):
+                    continue
+                return outcome
+            if status in (
+                "task_finished",
+                "failed",
+                "dependency_blocked",
+                "empty_plan",
+            ):
+                break
         if outcome.get("status") != "task_finished":
             reason = outcome.get("reason") or outcome.get("status")
             raise DelegationError(
                 f"task {task_id} did not finish: {reason}"
             )
         return self._result(task_id, outcome=outcome)
+
+    def _resume_waiting(
+        self, task_id: str, operator_answers: Mapping[str, str] | None
+    ) -> bool:
+        """Resume WAITING subtasks that have an operator answer."""
+        if not operator_answers:
+            return False
+        resumed = False
+        for subtask in self._store.find_subtasks(task_id):
+            if subtask.get("status") != "waiting":
+                continue
+            answer = operator_answers.get(str(subtask["id"]))
+            if not answer:
+                continue
+            self._worker.resume_subtask(str(subtask["id"]), answer)
+            resumed = True
+            logger.info(
+                "resumed waiting subtask %s on task %s with operator input",
+                subtask["id"],
+                task_id,
+            )
+        return resumed
 
     def _result(
         self, task_id: str, *, outcome: dict[str, Any] | None = None
@@ -164,8 +246,8 @@ class IntentTaskRunner:
             report = {"body": existing["body"], "created": False} if existing else None
         body = (report or {}).get("body") or {}
         description = str(body.get("summary") or "").strip()
+        subtasks = self._store.find_subtasks(task_id)
         if not description:
-            subtasks = self._store.find_subtasks(task_id)
             description = "; ".join(
                 str((row.get("result") or {}).get("summary") or "").strip()
                 for row in subtasks
@@ -179,8 +261,38 @@ class IntentTaskRunner:
             "task_id": task_id,
             "description": description,
             "report": body,
-            "subtasks": self._store.find_subtasks(task_id),
+            "subtasks": subtasks,
+            "findings": self._merge_findings(subtasks),
+            "anchors": self._merge_proposed(subtasks, "anchors"),
+            "todos": self._merge_proposed(subtasks, "todos"),
         }
+
+    @staticmethod
+    def _merge_findings(subtasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Merge subtask-output findings with source provenance (plan §4.6)."""
+        merged: list[dict[str, Any]] = []
+        for row in subtasks:
+            result = row.get("result") or {}
+            for finding in result.get("findings") or []:
+                if not isinstance(finding, dict):
+                    continue
+                entry = dict(finding)
+                entry.setdefault("source_agent", f"subtask:{row.get('id')}")
+                merged.append(entry)
+        return merged
+
+    @staticmethod
+    def _merge_proposed(
+        subtasks: list[dict[str, Any]], key: str
+    ) -> list[dict[str, Any]]:
+        """Merge generator-proposed conclusion extras (anchors/todos)."""
+        merged: list[dict[str, Any]] = []
+        for row in subtasks:
+            arguments = row.get("arguments") or {}
+            for item in arguments.get(key) or []:
+                if isinstance(item, dict):
+                    merged.append(dict(item))
+        return merged
 
     def conclusion_for_intent(
         self, engagement_id: str, intent_id: str
@@ -213,6 +325,7 @@ class _RecordingExecutor:
         subtask_id = str(subtask.get("id") or "")
         if not subtask_id:
             return output
+        failed: list[str] = []
         for action in output.get("actions") or []:
             if not isinstance(action, dict):
                 continue
@@ -232,11 +345,28 @@ class _RecordingExecutor:
                     result=action.get("result") or {},
                     evidence_refs=action.get("evidence_refs") or (),
                 )
-            except Exception as exc:  # evidence recording must not lose the result
+            except Exception as exc:
+                # An action whose record is lost must never read as proven
+                # work: annotate the gap, and fail closed when the action
+                # claimed success without persisted evidence.
                 logger.warning(
                     "could not record action %s for subtask %s: %s",
                     action_id,
                     subtask_id,
                     exc,
                 )
+                failed.append(action_id)
+                if str(action.get("outcome") or "completed").lower() in (
+                    "completed",
+                    "success",
+                    "succeeded",
+                ):
+                    raise DelegationError(
+                        f"action {action_id} claimed success but its record "
+                        f"was lost for subtask {subtask_id} (fail closed)"
+                    ) from exc
+        if failed:
+            gaps = list(output.get("evidence_incomplete") or [])
+            gaps.extend(action_id for action_id in failed if action_id not in gaps)
+            output["evidence_incomplete"] = gaps
         return output

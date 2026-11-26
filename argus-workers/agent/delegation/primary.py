@@ -152,6 +152,7 @@ class PrimaryAgent:
         authorized_targets: list[str] | None = None,
         allowed_tools: list[str] | None = None,
         engagement_id: str = "",
+        extra: dict[str, Any] | None = None,
     ) -> PrimaryOutcome:
         specialists = self._registry.specialists_for(capabilities)
         if not specialists:
@@ -162,7 +163,7 @@ class PrimaryAgent:
 
         results: list[SpecialistResult] = []
         for specialist in specialists:
-            request = SpecialistRequest(
+            payload = SpecialistRequest(
                 role=specialist.role,
                 engagement_id=engagement_id,
                 subtask_id=str(subtask.get("id") or ""),
@@ -176,10 +177,17 @@ class PrimaryAgent:
                     (authorized_targets or [])[: self.max_targets]
                 ),
                 allowed_tools=tuple((allowed_tools or [])[: self.max_tools]),
-            )
+            ).as_payload()
+            # Caller-supplied routing (tool/argv/target) travels inside the
+            # bounded payload; the request stays a plain JSON-serializable
+            # object with no store, token or credential fields.
+            if extra:
+                payload.update(
+                    {key: value for key, value in extra.items() if key not in payload}
+                )
             results.append(
                 SpecialistResult.from_payload(
-                    specialist.role, specialist.runner.run(request.as_payload())
+                    specialist.role, specialist.runner.run(payload)
                 )
             )
 
