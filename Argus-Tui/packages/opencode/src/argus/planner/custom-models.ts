@@ -97,6 +97,16 @@ export function resolveCustomModel(
 }
 
 /**
+ * `@ai-sdk/openai-compatible` appends `/chat/completions` to `baseURL` itself,
+ * so the generated block must carry the API root. The registry (and the Python
+ * worker) also tolerates a full endpoint URL, so strip that suffix rather than
+ * letting the SDK double it.
+ */
+function openaiCompatibleBaseURL(baseURL: string): string {
+  return baseURL.replace(/\/chat\/completions\/?$/, "")
+}
+
+/**
  * Render the `opencode.json` provider block for one entry.
  *
  * The provider id is `argus-<name>` so it can never collide with a provider
@@ -113,7 +123,7 @@ export function opencodeProviderSnippet(entry: CustomModelEntry): string {
         [providerID]: {
           npm: "@ai-sdk/openai-compatible",
           name: `Argus ${entry.name}`,
-          options: { baseURL: `${entry.baseURL}/chat/completions`, apiKey },
+          options: { baseURL: openaiCompatibleBaseURL(entry.baseURL), apiKey },
           models: { [entry.model]: { name: entry.description || entry.model } },
         },
       },

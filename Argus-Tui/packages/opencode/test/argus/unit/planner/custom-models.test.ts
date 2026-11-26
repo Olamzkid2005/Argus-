@@ -75,9 +75,16 @@ describe("opencodeProviderSnippet", () => {
     const snippet = opencodeProviderSnippet(resolveCustomModel("lab", path)!)
     const parsed = JSON.parse(snippet)
     const provider = parsed.provider["argus-lab"]
-    expect(provider.options.baseURL).toBe("http://localhost:11434/v1/chat/completions")
+    // The AI SDK appends /chat/completions itself; the block must be the root.
+    expect(provider.options.baseURL).toBe("http://localhost:11434/v1")
     expect(provider.options.apiKey).toBe("{env:CYBER_KEY}")
     expect(provider.models["white-rabbit"]).toBeDefined()
+  })
+
+  test("strips a /chat/completions suffix instead of doubling it", () => {
+    const path = writeRegistry({ lab: { ...LAB, base_url: "http://localhost:11434/v1/chat/completions" } })
+    const snippet = opencodeProviderSnippet(resolveCustomModel("lab", path)!)
+    expect(JSON.parse(snippet).provider["argus-lab"].options.baseURL).toBe("http://localhost:11434/v1")
   })
 
   test("keyless endpoints get a placeholder key", () => {
