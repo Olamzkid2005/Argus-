@@ -16,8 +16,10 @@ Prompts, `AGENTS.md`, and docs are revoiced to cyber last (cheapest slice).
 - AD-1: Console-first. `routes/home.tsx` defaults to engagements/findings
   summary; chat input stays but is secondary. Empty state points at `/scan`.
 - AD-2: Additive agents. `src/agent/agent.ts` keeps `build`/`plan`/`general`/
-  `explore` (and hidden `compaction`/`title`/`summary`). New native subagents:
-  `recon`, `vuln-scan`, `verifier`, `reporter`. No deletions.
+  `explore` (and hidden `compaction`/`title`/`summary`). New native `mode: all`
+  roles: `recon`, `vuln-scan`, `verifier`, `reporter` — selectable with Tab and
+  callable as subagents. No deletions. Amended 2026-11-26: `subagent`-only made
+  the cyber roles unreachable from the Tab cycle.
 - AD-3: Permissions per role. Each security subagent gets a least-privilege
   allowlist in `agent.ts` + `subagent-permissions.ts`; `doctor` reports them.
   Resolved 2026-11-26: `vuln-scan` bash = auto-allow (user); `reporter`
@@ -77,7 +79,7 @@ hint) reachable from home so free-limit users find the OpenRouter path.
 **Description:** Read-only recon (glob/grep/read/webfetch) and scanner
 (tool-runner backed) subagents in `agent.ts` with cyber descriptions.
 **Acceptance criteria:**
-- [ ] `/agent` lists `recon`, `vuln-scan` as subagents.
+- [ ] `/agent` lists `recon`, `vuln-scan`, and Tab cycles to them.
 - [ ] `recon` cannot edit files or run state-modifying bash; `vuln-scan`
   bash auto-allows (per user decision 2026-11-26).
 **Verification:**
@@ -179,3 +181,4 @@ writes security `AGENTS.md`.
 |---|---|---|
 | 2026-11-26 | Initial draft; locked identity/agents/order per user answers | joint |
 | 2026-11-26 | Resolved Q-1 (auto-allow scan), Q-2 (evidence+reports), Q-3 (models unchanged) | user answers |
+| 2026-11-26 | Amended AD-2: security roles are `mode: all` (Tab-selectable) and rank before generic agents in ARGUS_MODE | user feedback |

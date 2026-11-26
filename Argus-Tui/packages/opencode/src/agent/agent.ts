@@ -271,7 +271,9 @@ export const layer = Layer.effect(
               user,
             ),
             options: {},
-            mode: "subagent",
+            // `all` (not `subagent`): the TUI filters subagents out of the
+            // Tab cycle, which left the cyber roles unreachable there.
+            mode: role.mode,
             native: true,
           }
         }
@@ -327,11 +329,20 @@ export const layer = Layer.effect(
 
         const list = Effect.fnUntraced(function* () {
           const cfg = yield* config.get()
+          // In Argus mode the Tab cycle starts on build and reaches the
+          // security roles before any generic/custom agent, so the harness
+          // opens on its own roles instead of coding ones.
+          const securityRank = (name: string) => {
+            if (process.env.ARGUS_MODE !== "1") return 0
+            const index = SECURITY_ROLES.findIndex((role) => role.name === name)
+            return index === -1 ? SECURITY_ROLES.length : index
+          }
           return pipe(
             agents,
             values(),
             sortBy(
               [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+              [(x) => securityRank(x.name), "asc"],
               [(x) => x.name, "asc"],
             ),
           )

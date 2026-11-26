@@ -66,7 +66,8 @@ it.instance("registers the Argus security subagents", () =>
     for (const name of ["recon", "vuln-scan", "verifier", "reporter"]) {
       const agent = yield* load((svc) => svc.get(name))
       expect(agent).toBeDefined()
-      expect(agent?.mode).toBe("subagent")
+      // mode "all", not "subagent": the TUI Tab cycle filters subagents out.
+      expect(agent?.mode).toBe("all")
       expect(agent?.native).toBe(true)
       expect(agent?.prompt).toBeTruthy()
     }
@@ -731,6 +732,12 @@ it.instance(
       agent: {
         build: { disable: true },
         plan: { disable: true },
+        // Security roles are mode "all", so they are primary-visible and
+        // must be disabled too for "no primary visible agent" to hold.
+        recon: { disable: true },
+        "vuln-scan": { disable: true },
+        verifier: { disable: true },
+        reporter: { disable: true },
       },
     },
   },
