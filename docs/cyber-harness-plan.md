@@ -79,11 +79,11 @@ hint) reachable from home so free-limit users find the OpenRouter path.
 **Description:** Read-only recon (glob/grep/read/webfetch) and scanner
 (tool-runner backed) subagents in `agent.ts` with cyber descriptions.
 **Acceptance criteria:**
-- [ ] `/agent` lists `recon`, `vuln-scan`, and Tab cycles to them.
-- [ ] `recon` cannot edit files or run state-modifying bash; `vuln-scan`
+- [x] `/agent` lists `recon`, `vuln-scan`, and Tab cycles to them.
+- [x] `recon` cannot edit files or run state-modifying bash; `vuln-scan`
   bash auto-allows (per user decision 2026-11-26).
 **Verification:**
-- [ ] `bun test ./test/agent/agent.test.ts` passes.
+- [x] `bun test ./test/agent/agent.test.ts` passes.
 **Dependencies:** None (parallelizable with Phase 1).
 **Files likely touched:**
 - `Argus-Tui/packages/opencode/src/agent/agent.ts`
@@ -94,11 +94,11 @@ hint) reachable from home so free-limit users find the OpenRouter path.
 **Description:** Verifier re-tests candidate findings (evidence-required);
 reporter writes findings/reports to evidence paths only.
 **Acceptance criteria:**
-- [ ] `verifier` cannot mark findings confirmed without evidence part.
-- [ ] `reporter` can write only under the engagement evidence dir + reports/
+- [x] `verifier` cannot mark findings confirmed without evidence part.
+- [x] `reporter` can write only under the engagement evidence dir + reports/
   (per user decision 2026-11-26).
 **Verification:**
-- [ ] Agent permission tests pass.
+- [x] Agent permission tests pass.
 **Dependencies:** Task 2.1 (same file, sequential).
 **Files likely touched:**
 - `Argus-Tui/packages/opencode/src/agent/agent.ts`
@@ -109,16 +109,20 @@ reporter writes findings/reports to evidence paths only.
 **Description:** `doctor` prints each security subagent and its allow/ask/deny
 surface so permission drift is visible.
 **Acceptance criteria:**
-- [ ] `doctor` output names all four subagents with their tool classes.
+- [x] `doctor` output names all four subagents with their tool classes.
 **Verification:**
-- [ ] Doctor unit tests pass.
+- [x] Doctor unit tests pass.
+**Note (2026-11-26):** the surface is rendered by
+`describePermissionSurface()` from each role's `permission` rules, replacing
+the hand-written `summary` strings that could drift from what `agent.ts`
+actually enforces.
 **Dependencies:** Tasks 2.1–2.2.
 **Files likely touched:**
 - `Argus-Tui/packages/opencode/src/argus/commands/doctor.ts`
 **Estimated scope:** Small.
 
 ### Checkpoint: Phase 2
-- [ ] Agent tests + doctor tests pass.
+- [x] Agent tests + doctor tests pass.
 - [ ] Human confirms role definitions before prompts work.
 
 ### Phase 3: Prompts + AGENTS.md (easiest — do last)

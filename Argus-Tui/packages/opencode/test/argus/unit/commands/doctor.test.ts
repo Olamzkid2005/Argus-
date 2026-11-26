@@ -156,3 +156,33 @@ describe("loadToolVersionChecks", () => {
     expect(map instanceof Map).toBe(true)
   })
 })
+
+describe("securityAgentsCheck", () => {
+  it("names all four roles with the surface derived from their ruleset", async () => {
+    const { securityAgentsCheck } = await import("../../../../src/argus/commands/doctor")
+    const result = securityAgentsCheck()
+    expect(result.status).toBe("PASS")
+    for (const role of ["recon", "vuln-scan", "verifier", "reporter"]) {
+      expect(result.message).toContain(`${role} [all]`)
+    }
+    // recon: read-only, no bash
+    expect(result.message).toContain(
+      "recon [all] allow: glob, grep, list, read, webfetch, websearch | ask: none | deny: *",
+    )
+    // vuln-scan: scanner bash auto-allowed (plan Q-1)
+    expect(result.message).toContain("vuln-scan [all] allow: bash, glob, grep, list, read, webfetch, websearch")
+    // reporter: writes confined to evidence/ and reports/ (plan Q-2)
+    expect(result.message).toContain("reporter [all] allow: edit(**/evidence/**, **/reports/**), glob, grep, list, read")
+    expect(result.message).toContain("deny: *, edit(*)")
+  })
+
+  it("derives the surface from the rules, so permission drift is visible", async () => {
+    const { describePermissionSurface } = await import("../../../../src/argus/agents/security-roles")
+    const surface = describePermissionSurface({
+      "*": "deny",
+      bash: "ask",
+      edit: { "*": "deny", "**/reports/**": "allow" },
+    })
+    expect(surface).toBe("allow: edit(**/reports/**) | ask: bash | deny: *, edit(*)")
+  })
+})
