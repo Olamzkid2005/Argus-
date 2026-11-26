@@ -679,3 +679,24 @@ def test_explore_crash_does_not_run_conclude(store):
     assert runner.calls == ["explore"]
     assert _counts(store, engagement_id)["facts"] == 0
     assert store.graph.find_node_by_id(intent["id"])["state"] == "open"
+
+
+def test_tick_skips_non_allowlisted_engagement(store, monkeypatch):
+    # Stage 5 scoped rollout: an engagement outside ARGUS_V2_ENGAGEMENTS is
+    # left entirely alone — no leadership, no bootstrap row, no work.
+    engagement_id = _engage()
+    _goal(store, engagement_id)
+    monkeypatch.setenv("ARGUS_V2_ENGAGEMENTS", str(uuid.uuid4()))
+    dispatcher = ControlPlaneDispatcher(store, FakeRunner(bootstrap=SUCCESS_EXECUTE))
+    assert dispatcher.tick(engagement_id) == "not_in_rollout"
+    assert store.bootstrap_row(engagement_id) is None
+
+
+def test_tick_runs_allowlisted_engagement(store, monkeypatch):
+    engagement_id = _engage()
+    _goal(store, engagement_id)
+    monkeypatch.setenv("ARGUS_V2_ENGAGEMENTS", engagement_id)
+    store.register_worker("w-scope", ["bootstrap"])
+    dispatcher = ControlPlaneDispatcher(store, FakeRunner(bootstrap=SUCCESS_EXECUTE))
+    assert dispatcher.tick(engagement_id) == "bootstrap"
+    assert store.bootstrap_row(engagement_id)["status"] == "completed"

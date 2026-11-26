@@ -19,6 +19,7 @@ from control_plane.contracts import (
     parse_explore_result,
     parse_reason_result,
 )
+from control_plane.rollout_scope import v2_enabled_for_engagement
 from control_plane.scheduler import WorkerView, choose_worker, global_capacity_available
 from control_plane.store import LateResult, NotLeader, PostgresControlPlaneStore
 from database.graph_errors import GraphClaimLostError
@@ -124,6 +125,11 @@ class ControlPlaneDispatcher:
 
     def tick(self, engagement_id: str) -> str | None:
         """Run at most one protocol step for an engagement."""
+        if not v2_enabled_for_engagement(engagement_id):
+            # Stage 5 scoped rollout: not allowlisted means the legacy path
+            # owns this engagement. Leave it entirely alone — no leadership,
+            # no tasks, no cancellation.
+            return "not_in_rollout"
         if not self._store.engagement_active(engagement_id):
             self._store.cancel_engagement_tasks(
                 engagement_id, "engagement is no longer active"

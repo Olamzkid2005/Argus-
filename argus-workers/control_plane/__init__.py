@@ -27,6 +27,7 @@ from control_plane.integrated import (
     build_integrated_runner,
     integrated_runner_from_env,
 )
+from control_plane.rollout_scope import v2_enabled_for_engagement
 from control_plane.scheduler import WorkerView, choose_worker, global_capacity_available
 from control_plane.store import (
     LateResult,
@@ -72,6 +73,7 @@ __all__ = [
     "dispatch_task_request",
     "get_task_executor",
     "global_capacity_available",
+    "v2_enabled_for_engagement",
     "integrated_runner_from_env",
     "parse_task_request",
     "parse_bootstrap_conclude",
