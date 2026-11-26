@@ -63,4 +63,13 @@ When in doubt, omit.
 
 Prefer short sections and bullets. If the repo is simple, keep the file simple. If the repo is large, summarize the few structural facts that actually change how an agent should work.
 
+## Security repositories
+
+If this repository is an Argus security-assessment harness (`ARGUS_MODE=1`),
+also capture the facts a security agent needs before it acts:
+- where the engagement scope and rules of engagement are declared
+- where evidence artifacts live and which paths agents may write
+- scanner policy: which binaries may run, rate limits, and approval rules
+- how to run a single assessment and how to verify one finding
+
 If `AGENTS.md` already exists at `${path}`, improve it in place rather than rewriting blindly. Preserve verified useful guidance, delete fluff or stale claims, and reconcile it with the current codebase.
