@@ -12,6 +12,7 @@ Modules:
 * :mod:`registry` — specialist roles and capabilities
 * :mod:`reporter` — one task report from persisted results/evidence
 * :mod:`memorist` — redacted, tenant-scoped knowledge
+* :mod:`tool_executor` — production executor on the real tool/scope/budget/approval layer
 * :mod:`worker` — sequential TaskWorker, waiting and restart reconciliation
 """
 
@@ -44,6 +45,17 @@ from agent.delegation.reflector import Reflector
 from agent.delegation.registry import Specialist, SpecialistRegistry
 from agent.delegation.reporter import Reporter
 from agent.delegation.store import PostgresDelegationStore
+from agent.delegation.tool_executor import (
+    HIGH_IMPACT_TOOLS,
+    RealToolExecutor,
+    ToolCallSpecialistRunner,
+    default_specialist_registry,
+    extract_tool_findings,
+    parse_eslint_json,
+    parse_semgrep_json,
+    tool_runner_factory,
+    validate_approval,
+)
 from agent.delegation.worker import TaskWorker
 
 __all__ = [
@@ -51,6 +63,7 @@ __all__ = [
     "Action",
     "DelegationError",
     "GeneratedPlan",
+    "HIGH_IMPACT_TOOLS",
     "InvalidTransition",
     "Memorist",
     "PatchValidationError",
@@ -62,6 +75,7 @@ __all__ = [
     "ReflectionExhausted",
     "Reflector",
     "Reporter",
+    "RealToolExecutor",
     "Specialist",
     "SpecialistRegistry",
     "SpecialistRequest",
@@ -73,10 +87,17 @@ __all__ = [
     "TaskCompletionError",
     "TaskStatus",
     "TaskWorker",
+    "ToolCallSpecialistRunner",
     "apply_patch",
+    "default_specialist_registry",
+    "extract_tool_findings",
     "is_duplicate",
     "normalize_title",
+    "parse_eslint_json",
+    "parse_semgrep_json",
     "plan_items",
     "redact_secrets",
+    "tool_runner_factory",
+    "validate_approval",
     "validate_generated_plan",
 ]
