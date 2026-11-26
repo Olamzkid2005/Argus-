@@ -21,6 +21,7 @@ from control_plane.contracts import (
 )
 from control_plane.scheduler import WorkerView, choose_worker, global_capacity_available
 from control_plane.store import LateResult, NotLeader, PostgresControlPlaneStore
+from database.graph_errors import GraphClaimLostError
 
 logger = logging.getLogger(__name__)
 
@@ -150,8 +151,8 @@ class ControlPlaneDispatcher:
         if self._store.graph_counts(engagement_id)["open_intents"] > 0:
             worker = self._select("explore")
             if worker is not None:
-                self.run_explore(engagement_id, worker.worker_id)
-                return "explore"
+                result = self.run_explore(engagement_id, worker.worker_id)
+                return "explore" if result is not None else None
             return "waiting"
         return None
 
@@ -270,6 +271,7 @@ class ControlPlaneDispatcher:
                 }
                 for row in snapshot["open_intents"]
             ],
+            "overview": self._store.graph_overview(engagement_id),
             "max_intents": self._max_intents,
             "expected": "complete, intents or noop (under the strict contract)",
         }
@@ -319,15 +321,48 @@ class ControlPlaneDispatcher:
 
     # ----- explore -----
 
-    def run_explore(self, engagement_id: str, worker_id: str) -> dict[str, Any] | str | None:
-        claim = self._store.claim_explore(engagement_id, worker_id)
+    def run_explore(
+        self,
+        engagement_id: str,
+        worker_id: str,
+        *,
+        lease_seconds: int = 90,
+    ) -> dict[str, Any] | str | None:
+        from orchestrator_pkg.planning.flags import flag_mode
+
+        if flag_mode("hierarchical_delegation") != "on":
+            # The delegation hierarchy is the only explore engine: with the
+            # flag off no delegation task may be created and nothing dispatches.
+            logger.info(
+                "explore dispatch refused for %s: hierarchical delegation is %s",
+                engagement_id,
+                flag_mode("hierarchical_delegation"),
+            )
+            return None
+        claim = self._store.claim_explore(
+            engagement_id, worker_id, lease_seconds=lease_seconds
+        )
         if claim is None:
             return None
         task = claim["task"]
         job = claim["job"]
+        explore = self._runner.explore
         try:
-            payload = self._runner.explore(job)
+            if getattr(self._runner, "supports_heartbeat", False):
+                payload = explore(
+                    job,
+                    heartbeat=self._explore_heartbeat(task, lease_seconds),
+                )
+            else:
+                payload = explore(job)
             parsed = parse_explore_result(payload)
+        except GraphClaimLostError as exc:
+            # The claim died mid-run (heartbeat or cancellation): stop the
+            # worker path without a conclusion and without a fallback.
+            current = self._store.get_task(task["id"])
+            if current is not None and current["status"] == "running":
+                self._store.fail_explore(task["id"], f"claim lost mid-run: {exc}")
+            return "cancelled"
         except CONCLUDE_FALLBACK_ERRORS as first_error:
             current = self._store.get_task(task["id"])
             if current is None or current["status"] != "running":
@@ -348,7 +383,13 @@ class ControlPlaneDispatcher:
                 self._store.fail_explore(task["id"], f"conclude crashed: {exc}")
                 return "failed"
             try:
-                return self._store.conclude_explore(task["id"], parsed.description)
+                return self._store.conclude_explore(
+                    task["id"],
+                    parsed.description,
+                    findings=parsed.findings,
+                    anchors=parsed.anchors,
+                    todos=parsed.todos,
+                )
             except LateResult:
                 return "cancelled"
         except Exception as exc:  # crash without a usable session: no fallback
@@ -356,12 +397,56 @@ class ControlPlaneDispatcher:
             self._store.fail_explore(task["id"], str(exc))
             return "failed"
         try:
-            return self._store.conclude_explore(task["id"], parsed.description)
+            return self._store.conclude_explore(
+                task["id"],
+                parsed.description,
+                findings=parsed.findings,
+                anchors=parsed.anchors,
+                todos=parsed.todos,
+            )
         except LateResult:
             return "cancelled"
+
+    def _explore_heartbeat(
+        self, task: dict[str, Any], lease_seconds: int = 90
+    ) -> Any:
+        """Dispatcher-owned intent-claim heartbeat for the run loop.
+
+        The runner invokes this while delegation work is in flight; the worker
+        never sees the claim token (plan §5.5/§5.6). A lost claim raises and
+        aborts the run without a conclusion.
+        """
+        engagement_id = str(task.get("engagement_id") or "")
+        intent_node_id = str(task.get("intent_node_id") or "")
+        claim_token = str(task.get("lease_token") or "")
+        lease_seconds = int(lease_seconds or 90)
+
+        def heartbeat() -> None:
+            self._store.graph.heartbeat_intent_node(
+                engagement_id,
+                intent_node_id,
+                claim_token=claim_token,
+                lease_seconds=lease_seconds,
+            )
+
+        return heartbeat
 
     # ----- cancellation -----
 
     def cancel(self, engagement_id: str, reason: str = "cancelled") -> list[dict[str, Any]]:
-        """Cancel every running task; no conclude fallback may run afterwards."""
-        return self._store.cancel_engagement_tasks(engagement_id, reason)
+        """Cancel every running task; no conclude fallback may run afterwards.
+
+        Engagement-owned tool processes are stopped too (plan §5.5: cancel all
+        local running tasks and clean up execution environments), so a
+        cancelled explore cannot keep a real tool running after its claim died.
+        """
+        cancelled = self._store.cancel_engagement_tasks(engagement_id, reason)
+        try:
+            from tools.tool_runner import ToolRunner
+
+            ToolRunner(engagement_id=engagement_id).cancel_engagement(engagement_id)
+        except Exception as exc:  # process cleanup must not hide the cancel
+            logger.warning(
+                "tool process cleanup for %s failed: %s", engagement_id, exc
+            )
+        return cancelled
