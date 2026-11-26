@@ -20,24 +20,45 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-ALLOWED_TOOLS = frozenset({
+_RUNNER_SCRIPT = "argus-workers/tools/run_agent_tool.py"
+
+
+def _registry_agent_tools() -> frozenset[str]:
+    """Agent-internal tool names from the canonical declarative registry.
+
+    A tool runs through this launcher when the registry (generated from
+    ``tools/definitions/*.yaml``) invokes it via this script with the tool
+    name as the next argument. Deriving the set here keeps this allowlist
+    from drifting out of sync with the YAML source of truth.
+    """
+    from tool_definitions import TOOLS
+
+    names: set[str] = set()
+    for name, tool in TOOLS.items():
+        args = list(getattr(tool, "default_args", None) or [])
+        if _RUNNER_SCRIPT in args:
+            idx = args.index(_RUNNER_SCRIPT)
+            if idx + 1 < len(args) and args[idx + 1] == name:
+                names.add(name)
+    return frozenset(names)
+
+
+#: Standalone fallback when the registry cannot be imported (e.g. the script
+#: is copied outside the worker tree). Must mirror ``_registry_agent_tools()``
+#: — ``test_static_allowlist_matches_registry`` enforces this in CI.
+_STATIC_ALLOWED_TOOLS = frozenset({
     "ai_vuln_scanner",
-    "api_scanner",
-    "arjun_scanner",
     "assessment_orchestrator",
     "attack_path_generator",
     "attack_surface_mapper",
-    "browser_scanner",
     "browser_security_operator",
-    "dual_auth_scanner",
+    "cloud_metadata_probe",
     "engagement_analytics_engine",
     "evidence_intelligence_engine",
     "executive_report_generator",
-    "ffuf_scanner",
     "finding_correlation_engine",
     "infrastructure_security_analyzer",
     "login",
-    "port_scanner",
     "register",
     "secure_code_intelligence_engine",
     "threat_intelligence_aggregator",
@@ -45,8 +66,22 @@ ALLOWED_TOOLS = frozenset({
     "vulnerability_knowledge_engine",
     "web_scanner",
     "workflow_intelligence_engine",
-    "cloud_metadata_probe",
 })
+
+
+def _load_allowed_tools() -> frozenset[str]:
+    try:
+        derived = _registry_agent_tools()
+    except Exception as exc:  # registry unavailable — stay runnable
+        logger.warning("registry unavailable (%s); using static tool allowlist", exc)
+        return _STATIC_ALLOWED_TOOLS
+    if not derived:
+        logger.warning("registry yielded no agent tools; using static tool allowlist")
+        return _STATIC_ALLOWED_TOOLS
+    return derived
+
+
+ALLOWED_TOOLS = _load_allowed_tools()
 
 
 def resolve_tool_class(tool_name: str):

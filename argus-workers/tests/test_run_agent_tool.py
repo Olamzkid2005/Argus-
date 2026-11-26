@@ -2,7 +2,12 @@
 
 import pytest
 
-from tools.run_agent_tool import main, resolve_tool_class
+from tools.run_agent_tool import (
+    _STATIC_ALLOWED_TOOLS,
+    _registry_agent_tools,
+    main,
+    resolve_tool_class,
+)
 
 
 class TestResolveToolClass:
@@ -17,6 +22,26 @@ class TestResolveToolClass:
         """Function requires arguments."""
         with pytest.raises(TypeError):
             resolve_tool_class()
+
+
+def test_static_allowlist_matches_registry():
+    """The standalone fallback must mirror the YAML-derived registry set.
+
+    The registry (tools/definitions/*.yaml via tool_definitions.TOOLS) is the
+    canonical source; the static set exists only so the script stays runnable
+    when the registry cannot be imported. Any drift fails here so the fallback
+    is updated instead of silently diverging.
+    """
+    assert _STATIC_ALLOWED_TOOLS == _registry_agent_tools()
+
+
+def test_every_allowed_tool_resolves_to_a_tool_class():
+    """Every registry-derived launcher entry must map to an AbstractTool."""
+    from tool_core.base import AbstractTool
+
+    for name in sorted(_registry_agent_tools()):
+        cls = resolve_tool_class(name)
+        assert issubclass(cls, AbstractTool), name
 
 
 class TestMain:
