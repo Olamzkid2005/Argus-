@@ -49,6 +49,14 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def _hierarchical_delegation_on(monkeypatch):
+    # Explore dispatches through the delegation hierarchy, which the
+    # hierarchical flag gates (plan §6.6). Contract tests run with it on;
+    # the flag-off refusal is covered by its own test.
+    monkeypatch.setenv("ARGUS_HIERARCHICAL_DELEGATION", "on")
+
+
 class FakeRunner:
     def __init__(
         self,

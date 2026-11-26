@@ -74,6 +74,14 @@ def delegation() -> PostgresDelegationStore:
     return PostgresDelegationStore()
 
 
+@pytest.fixture(autouse=True)
+def _hierarchical_delegation_on(monkeypatch):
+    # Explore dispatches through the delegation hierarchy, which the
+    # hierarchical flag gates (plan §6.6). Scenario tests run with it on;
+    # the flag-off refusal is covered by its own test.
+    monkeypatch.setenv("ARGUS_HIERARCHICAL_DELEGATION", "on")
+
+
 def _engage(status: str = "running") -> str:
     engagement_id = str(uuid.uuid4())
     with get_db().connection() as conn:
