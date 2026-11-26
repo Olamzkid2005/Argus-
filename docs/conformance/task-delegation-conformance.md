@@ -1,8 +1,8 @@
-# PentAGI conformance ledger — hierarchical delegation (P-01…P-17)
+# Task delegation conformance ledger — hierarchical delegation (P-01…P-17)
 
 **Date:** 25 November 2026
 **Plan:** `docs/conformance/argus_three_frameworks_implementation_conformance_plan.md` §4, §4.11
-**Reference pin:** PentAGI `cffed9485aa1cca70762cd08a57ac62a80406258`
+**Reference pin:** upstream hierarchy design `cffed9485aa1cca70762cd08a57ac62a80406258` (see `reference-pins.md`)
 **Argus baseline for this pass:** `896fb764` plus the changes listed under *Implementation surfaces*
 **Authoritative backend:** PostgreSQL via `argus-workers/database` (see `authoritative-state-backend-note.md`)
 
@@ -18,8 +18,8 @@ migration runner applied through `039_delegation_completion_condition.sql`.
 
 | Command | Result |
 |---|---|
-| `cd argus-workers && python -m pytest tests/test_pentagi_delegation.py -q -p no:randomly` | **45 passed** |
-| `cd argus-workers && python -m pytest tests/test_pentagi_delegation.py tests/test_graph_planner.py -q -p no:randomly` | **passed** (no planner regression; see §6) |
+| `cd argus-workers && python -m pytest tests/test_task_delegation.py -q -p no:randomly` | **45 passed** |
+| `cd argus-workers && python -m pytest tests/test_task_delegation.py tests/test_graph_planner.py -q -p no:randomly` | **passed** (no planner regression; see §6) |
 | `cd argus-workers && ruff check .` | clean |
 | `cd argus-workers && python scripts/check_graph_import_boundary.py` | clean (C-18 boundary) |
 | `git diff --check` | clean |
@@ -48,7 +48,7 @@ argus-workers/agent/delegation/
   store.py               PostgreSQL persistence for the whole hierarchy
 argus-workers/database/migrations/038_delegation_hierarchy.sql
 argus-workers/database/migrations/039_delegation_completion_condition.sql
-argus-workers/tests/test_pentagi_delegation.py
+argus-workers/tests/test_task_delegation.py
 ```
 
 `argus-workers/orchestrator_pkg/planning/flags.py` now exposes
@@ -70,7 +70,7 @@ Design boundaries:
 
 ## 3. Requirement ledger
 
-Upstream references are the pinned PentAGI files cited by plan §1/§4. The pinned source is
+Upstream references are the pinned hierarchy-design files cited by plan §1/§4. The pinned source is
 **not vendored in this checkout**, so symbols below are named from the plan's behaviour
 statements rather than re-read here; that limitation is recorded in §6.
 
@@ -163,7 +163,7 @@ keeps result, message chain and action rows (P-14).
 
 ## 6. Known limits (not P-requirement failures)
 
-- The PentAGI upstream commit is **not vendored** in this checkout. Upstream citations above
+- The upstream hierarchy-design commit is **not vendored** in this checkout. Upstream citations above
   name the pinned files required by plan §1 and the behaviour statements in plan §4.1; line
   ranges and symbol names were not re-read from the upstream source during this pass.
 - No live LLM Generator/Refiner/specialist is called. The contracts are agent-agnostic and
@@ -179,5 +179,5 @@ keeps result, message chain and action rows (P-14).
 - Cancellation is represented by the `cancelled` status and the task/tool executor boundary;
   no cooperative cancellation token is threaded through the worker in this pass.
 - Tests use a local PostgreSQL 16.2 instance, not the CI Postgres job. The CI job that runs the
-  graph tests should include `tests/test_pentagi_delegation.py` and set `DATABASE_URL`;
+  graph tests should include `tests/test_task_delegation.py` and set `DATABASE_URL`;
   the test module skips cleanly when it is absent.
