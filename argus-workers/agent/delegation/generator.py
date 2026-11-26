@@ -94,6 +94,34 @@ def _coerce_text(item: dict[str, Any], key: str) -> str:
     return value.strip()
 
 
+def _coerce_tool(item: dict[str, Any], index: int) -> str | None:
+    """Optional tool routing: which real tool this subtask must execute."""
+    tool = item.get("tool")
+    if tool is None:
+        return None
+    if not isinstance(tool, str) or not tool.strip():
+        raise PlanValidationError(
+            f"subtask {index} tool must be a non-empty string when present"
+        )
+    if "/" in tool or "\\" in tool or ".." in tool:
+        raise PlanValidationError(
+            f"subtask {index} tool {tool!r} must be a bare tool name"
+        )
+    return tool.strip()
+
+
+def _coerce_arguments(item: dict[str, Any], index: int) -> dict[str, Any]:
+    """Optional tool arguments object (argv, timeout, approval, specialist)."""
+    arguments = item.get("arguments")
+    if arguments is None:
+        return {}
+    if not isinstance(arguments, dict):
+        raise PlanValidationError(
+            f"subtask {index} arguments must be an object when present"
+        )
+    return dict(arguments)
+
+
 def _coerce_dependencies(item: dict[str, Any], index: int) -> list[str | int]:
     raw = item.get("depends_on", item.get("dependencies", []))
     if raw is None:
@@ -204,7 +232,7 @@ def validate_generated_plan(
 
     # 1. Parse every draft first so dependency indices always refer to the
     #    generator's original output, not to the deduplicated list.
-    parsed: list[tuple[str, str, str | None, list[str | int]]] = []
+    parsed: list[tuple[str, str, str | None, list[str | int], str | None, dict]] = []
     for index, item in enumerate(items):
         if not isinstance(item, dict):
             raise PlanValidationError(f"subtask {index} must be an object")
@@ -214,6 +242,8 @@ def validate_generated_plan(
                 _coerce_text(item, "description"),
                 item.get("completion_condition"),
                 _coerce_dependencies(item, index),
+                _coerce_tool(item, index),
+                _coerce_arguments(item, index),
             )
         )
 
@@ -221,7 +251,7 @@ def validate_generated_plan(
     dropped: list[str] = []
     seen_titles = list(existing_titles)
     kept_original_indices: list[int] = []
-    for index, (title, _description, _condition, _refs) in enumerate(parsed):
+    for index, (title, _description, _condition, _refs, _tool, _args) in enumerate(parsed):
         if is_duplicate(title, seen_titles):
             dropped.append(title)
             continue
@@ -277,6 +307,8 @@ def validate_generated_plan(
                 )
             ),
             completion_condition=parsed[kept_original_indices[position]][2],
+            tool=parsed[kept_original_indices[position]][4],
+            arguments=parsed[kept_original_indices[position]][5],
         )
         for position in ordered_positions
     )
