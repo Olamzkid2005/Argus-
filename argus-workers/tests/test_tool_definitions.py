@@ -598,3 +598,58 @@ class TestPipelineStepTools:
         assert is_pipeline_step("browser_security_operator") is False
         assert is_pipeline_step("nuclei") is False
         assert is_pipeline_step("__nonexistent__") is False
+
+
+class TestCrossSurfaceConsistency:
+    """Every consumer must see the same tool set as the canonical registry.
+
+    The LLM (phase tools + prompt catalogues), the MCP server, and the
+    run_agent_tool launcher all derive from TOOLS. These tests pin that
+    derivation so a tool can never be registered in one surface but missing
+    or uncallable in another.
+    """
+
+    def test_mcp_definitions_cover_exactly_the_registry(self):
+        names = {t.name for t in build_mcp_tool_definitions()}
+        assert names == set(TOOLS), (
+            f"mcp-only={sorted(names - set(TOOLS))} "
+            f"registry-only={sorted(set(TOOLS) - names)}"
+        )
+
+    def test_every_mcp_tool_is_described_and_addressable(self):
+        for tool in build_mcp_tool_definitions():
+            assert tool.description, f"{tool.name} has no description for the LLM"
+            params = {p.name for p in (tool.parameters or [])}
+            # Analyze/report-phase tools work on stored findings instead.
+            assert {"target", "engagement_id"} & params, (
+                f"{tool.name} takes neither target nor engagement_id"
+            )
+
+    def test_llm_phase_tools_all_resolve_in_the_registry(self):
+        phase_tools = build_phase_tools_dict()
+        names = {n for tools in phase_tools.values() for n in tools}
+        assert names <= set(TOOLS), f"unknown to registry: {sorted(names - set(TOOLS))}"
+
+    def test_prompt_catalogue_tools_all_resolve_in_the_registry(self):
+        """Tools the selection prompts offer must exist and be dispatchable."""
+        catalogue = [
+            "nuclei", "web_scanner", "dalfox", "sqlmap", "arjun",
+            "wpscan", "jwt_tool", "commix", "testssl", "ffuf", "nikto",
+            "semgrep", "gitleaks", "bandit", "brakeman", "gosec",
+            "eslint", "phpcs", "spotbugs", "trivy", "pip-audit",
+            "npm-audit", "register", "login",
+        ]
+        for name in catalogue:
+            assert name in TOOLS, f"prompt offers '{name}' which is not registered"
+            assert TOOLS[name].phases, (
+                f"prompt offers '{name}' but it has no phase and is undispatched"
+            )
+
+    def test_launcher_tools_are_registered_and_dispatchable(self):
+        from tools.run_agent_tool import ALLOWED_TOOLS
+
+        for name in sorted(ALLOWED_TOOLS):
+            assert name in TOOLS, f"launcher allows '{name}' with no registry entry"
+            assert TOOLS[name].phases, (
+                f"launcher allows '{name}' but it has no phase and is undispatched"
+            )
