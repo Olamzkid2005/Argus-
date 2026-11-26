@@ -844,7 +844,13 @@ class ToolRunner:
                         # Non-429 success — clear backpressure if active
                         PER_HOST_LIMITER.clear_backpressure(_target_host)
 
-                if cache_mode != CacheMode.NO_CACHE:
+                # Cache only successful runs: a killed or failed result (for
+                # example a process stopped by cancel-during-call, exit -15)
+                # must never be replayed to a later run.
+                _cacheable = proc_result.returncode == 0 or (
+                    proc_result.returncode in findings_exit_codes.get(tool, set())
+                )
+                if cache_mode != CacheMode.NO_CACHE and _cacheable:
                     cache.set(cache_key, tool_result.to_legacy_dict(), ttl=300)
                     slog.info("Tool cache set for %s", tool)
                 else:
