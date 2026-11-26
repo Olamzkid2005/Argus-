@@ -161,6 +161,13 @@ class SubtaskDraft:
     description: str
     depends_on: tuple[str, ...] = ()
     completion_condition: str | None = None
+    #: Tool this subtask must execute through the real tool layer (plan §4.6).
+    #: ``None`` means the subtask carries no tool call; only test doubles may
+    #: run such a subtask, never the production executor.
+    tool: str | None = None
+    #: Tool arguments as a JSON-serializable object (``argv`` list, ``timeout``,
+    #: ``approval`` record, specialist routing). Validated by the generator.
+    arguments: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -168,6 +175,8 @@ class SubtaskDraft:
             "description": self.description,
             "depends_on": list(self.depends_on),
             "completion_condition": self.completion_condition,
+            "tool": self.tool,
+            "arguments": dict(self.arguments),
         }
 
 

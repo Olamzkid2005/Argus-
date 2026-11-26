@@ -191,8 +191,8 @@ class PostgresDelegationStore(BaseRepository):
                     """
                     INSERT INTO delegation_subtasks
                         (task_id, ordinal, title, description, depends_on, status,
-                         completion_condition)
-                    VALUES (%s, %s, %s, %s, %s, 'created', %s)
+                         completion_condition, tool, arguments)
+                    VALUES (%s, %s, %s, %s, %s, 'created', %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -202,6 +202,8 @@ class PostgresDelegationStore(BaseRepository):
                         draft.description,
                         Json([normalize_title(dep) for dep in draft.depends_on]),
                         draft.completion_condition,
+                        draft.tool,
+                        Json(dict(draft.arguments or {})),
                     ),
                 )
                 cursor.fetchone()
