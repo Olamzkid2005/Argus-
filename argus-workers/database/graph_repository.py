@@ -582,6 +582,28 @@ class ExplorationGraphRepository(BaseRepository):
                 raise RuntimeError("graph_anchors attach did not return a row")
             return dict(row)
 
+    def anchor_coverage_for_scope(
+        self, scope_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Anchored assets and their engagement coverage states (read-only)."""
+        with self.db_operation(
+            commit=False, cursor_factory=RealDictCursor
+        ) as (conn, cursor):
+            cursor.execute(
+                """
+                SELECT a.id, a.canonical_key, a.asset_type, a.display_value,
+                       s.coverage_state
+                FROM graph_anchor_scopes AS s
+                JOIN graph_anchors AS ga ON ga.id = s.anchor_id
+                JOIN graph_assets AS a ON a.id = ga.asset_id
+                WHERE s.scope_id = %s
+                ORDER BY a.asset_type, a.canonical_key
+                LIMIT %s
+                """,
+                (scope_id, limit),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
     def find_anchors_for_node(self, node_id: str) -> list[dict[str, Any]]:
         """
         Return the assets a node is anchored to.

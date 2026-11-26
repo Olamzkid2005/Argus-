@@ -227,6 +227,14 @@ class DispatcherGraph:
             raise GraphMutationError("node_id and asset_id are required")
         return self._repo.attach_anchor(node_id, asset_id, role=role)
 
+    def anchor_summary(
+        self, scope_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Anchored assets and their engagement coverage states (read-only)."""
+        if not scope_id:
+            raise GraphMutationError("scope_id is required")
+        return self._repo.anchor_coverage_for_scope(scope_id, limit=limit)
+
     @dispatcher_owned
     def attach_anchor_scope(
         self,
