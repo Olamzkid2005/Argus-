@@ -38,9 +38,52 @@ class BootstrapConcludeResult:
     fact_description: str
 
 
+SEVERITIES = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"})
+
+ANCHOR_COVERAGE_STATES = frozenset(
+    {"pending", "covered", "incorporated", "excluded"}
+)
+
+
+@dataclass(frozen=True)
+class ExploreFinding:
+    """One unverified finding the delegation work produced (never verified)."""
+
+    title: str
+    severity: str
+    endpoint: str
+    evidence: dict[str, Any]
+    confidence: float
+    source_tool: str
+    source_agent: str = ""
+
+
+@dataclass(frozen=True)
+class ExploreAnchor:
+    """One asset the conclusion anchors the fact to."""
+
+    asset: str
+    asset_type: str
+    role: str = "related"
+    coverage_state: str = "covered"
+
+
+@dataclass(frozen=True)
+class ExploreTodo:
+    """One planner-todo state change the conclusion requests."""
+
+    action: str  # complete | create
+    todo_id: str | None = None
+    todo_type: str = "plan"
+    payload: dict[str, Any] | None = None
+
+
 @dataclass(frozen=True)
 class ExploreResult:
     description: str
+    findings: tuple[ExploreFinding, ...] = ()
+    anchors: tuple[ExploreAnchor, ...] = ()
+    todos: tuple[ExploreTodo, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -151,8 +194,116 @@ def parse_bootstrap_conclude(payload: Any) -> BootstrapConcludeResult:
 
 def parse_explore_result(payload: Any) -> ExploreResult:
     data = _accepted(payload, "explore")
-    _unknown(data, ("description",), "explore.data")
-    return ExploreResult(description=_text(data, "description", "explore.data"))
+    _unknown(data, ("description", "findings", "anchors", "todos"), "explore.data")
+    return ExploreResult(
+        description=_text(data, "description", "explore.data"),
+        findings=_explore_findings(data.get("findings", ()), "explore.data"),
+        anchors=_explore_anchors(data.get("anchors", ()), "explore.data"),
+        todos=_explore_todos(data.get("todos", ()), "explore.data"),
+    )
+
+
+def _explore_findings(raw: Any, where: str) -> tuple[ExploreFinding, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, (list, tuple)):
+        raise ProtocolError(f"{where}.findings must be an array")
+    findings: list[ExploreFinding] = []
+    for index, item in enumerate(raw):
+        item_where = f"{where}.findings[{index}]"
+        entry = _mapping(item, item_where)
+        _unknown(
+            entry,
+            ("title", "severity", "endpoint", "evidence", "confidence",
+             "source_tool", "source_agent"),
+            item_where,
+        )
+        severity = _text(entry, "severity", item_where).upper()
+        if severity not in SEVERITIES:
+            raise ProtocolError(
+                f"{item_where}.severity must be one of {sorted(SEVERITIES)}"
+            )
+        evidence = entry.get("evidence", {})
+        if not isinstance(evidence, Mapping):
+            raise ProtocolError(f"{item_where}.evidence must be an object")
+        try:
+            confidence = float(entry.get("confidence", 0.0) or 0.0)
+        except (TypeError, ValueError) as exc:
+            raise ProtocolError(
+                f"{item_where}.confidence must be a number"
+            ) from exc
+        if not 0.0 <= confidence <= 1.0:
+            raise ProtocolError(
+                f"{item_where}.confidence must be between 0 and 1"
+            )
+        findings.append(
+            ExploreFinding(
+                title=_text(entry, "title", item_where),
+                severity=severity,
+                endpoint=_text(entry, "endpoint", item_where),
+                evidence=dict(evidence),
+                confidence=confidence,
+                source_tool=_text(entry, "source_tool", item_where),
+                source_agent=str(entry.get("source_agent") or ""),
+            )
+        )
+    return tuple(findings)
+
+
+def _explore_anchors(raw: Any, where: str) -> tuple[ExploreAnchor, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, (list, tuple)):
+        raise ProtocolError(f"{where}.anchors must be an array")
+    anchors: list[ExploreAnchor] = []
+    for index, item in enumerate(raw):
+        item_where = f"{where}.anchors[{index}]"
+        entry = _mapping(item, item_where)
+        _unknown(entry, ("asset", "asset_type", "role", "coverage_state"), item_where)
+        coverage = str(entry.get("coverage_state", "covered") or "covered").lower()
+        if coverage not in ANCHOR_COVERAGE_STATES:
+            raise ProtocolError(
+                f"{item_where}.coverage_state must be one of "
+                f"{sorted(ANCHOR_COVERAGE_STATES)}"
+            )
+        anchors.append(
+            ExploreAnchor(
+                asset=_text(entry, "asset", item_where),
+                asset_type=_text(entry, "asset_type", item_where),
+                role=str(entry.get("role") or "related"),
+                coverage_state=coverage,
+            )
+        )
+    return tuple(anchors)
+
+
+def _explore_todos(raw: Any, where: str) -> tuple[ExploreTodo, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, (list, tuple)):
+        raise ProtocolError(f"{where}.todos must be an array")
+    todos: list[ExploreTodo] = []
+    for index, item in enumerate(raw):
+        item_where = f"{where}.todos[{index}]"
+        entry = _mapping(item, item_where)
+        _unknown(
+            entry, ("action", "todo_id", "todo_type", "payload"), item_where
+        )
+        action = _text(entry, "action", item_where).lower()
+        if action not in ("complete", "create"):
+            raise ProtocolError(f"{item_where}.action must be complete or create")
+        payload = entry.get("payload")
+        if payload is not None and not isinstance(payload, Mapping):
+            raise ProtocolError(f"{item_where}.payload must be an object")
+        todos.append(
+            ExploreTodo(
+                action=action,
+                todo_id=str(entry.get("todo_id") or "") or None,
+                todo_type=str(entry.get("todo_type") or "plan"),
+                payload=dict(payload) if payload is not None else None,
+            )
+        )
+    return tuple(todos)
 
 
 def parse_reason_result(
