@@ -66,6 +66,7 @@ const PhaseSuggestionItemSchema = Schema.Struct({
 const PhaseSuggestionResponseSchema = Schema.Struct({
   target_analysis: Schema.String,
   suggested_phases: Schema.Array(PhaseSuggestionItemSchema),
+  next_tools: Schema.optional(Schema.Array(Schema.String)),
 })
 
 /** Schema for replan suggestions from the LLM. */
@@ -103,6 +104,8 @@ export interface LLMReplanSuggestion {
 export interface LLMPhaseSuggestionResult {
   readonly targetAnalysis: string
   readonly suggestedPhases: LLMPhaseSuggestion[]
+  /** Specific eligible tool names the LLM selected, if it named any. */
+  readonly nextTools?: string[]
 }
 
 // ── Model selection env keys ─────────────────────────────────────────
@@ -132,6 +135,7 @@ const PHASE_SUGGESTION_JSON_SCHEMA = {
         required: ["capabilities", "reasoning"],
       },
     },
+    next_tools: { type: "array", items: { type: "string" } },
   },
   required: ["target_analysis", "suggested_phases"],
 } as const
@@ -345,7 +349,7 @@ export class LLMPlannerService {
     toolCatalogue?: string,
   ): Promise<LLMPhaseSuggestionResult> {
     if (!(await this.ensureInitialized()) || !this.model) {
-      return { targetAnalysis: "", suggestedPhases: [] }
+      return { targetAnalysis: "", suggestedPhases: [], nextTools: [] }
     }
 
     const techContext = techStack?.length
@@ -357,6 +361,9 @@ export class LLMPlannerService {
           ``,
           `Eligible tools for this engagement (only these can actually run — prefer them by name in your reasoning):`,
           toolCatalogue,
+          ``,
+          `When a specific eligible tool fits the target, name it in next_tools alongside`,
+          `the capability in suggested_phases (e.g. the GraphQL scanner for a GraphQL target).`,
         ]
       : []
     const systemPrompt = [
@@ -393,6 +400,7 @@ export class LLMPlannerService {
       `5. Include browser_verification when dynamic testing is needed`,
       `6. Return capabilities in priority/execution order`,
       `7. Only suggest capabilities that are relevant to the target type`,
+      `8. When a specific eligible tool above fits, name it in next_tools`,
     ].join("\n")
 
     const userPrompt = [
@@ -424,8 +432,9 @@ export class LLMPlannerService {
       const data = raw as {
         target_analysis?: string
         suggested_phases?: Array<{ capabilities?: string[]; reasoning?: string }>
+        next_tools?: string[]
       }
-      if (!data || typeof data !== "object") return { targetAnalysis: "", suggestedPhases: [] }
+      if (!data || typeof data !== "object") return { targetAnalysis: "", suggestedPhases: [], nextTools: [] }
 
       return {
         targetAnalysis: data.target_analysis ?? "",
@@ -435,10 +444,11 @@ export class LLMPlannerService {
             capabilities: p.capabilities ?? [],
             reasoning: p.reasoning ?? "",
           })),
+        nextTools: data.next_tools ?? [],
       }
     } catch (e) {
       console.warn(`[LLMPlanner] Phase suggestion failed: ${(e as Error).message}`)
-      return { targetAnalysis: "", suggestedPhases: [] }
+      return { targetAnalysis: "", suggestedPhases: [], nextTools: [] }
     }
   }
 

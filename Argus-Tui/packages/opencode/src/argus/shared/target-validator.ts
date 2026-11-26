@@ -128,12 +128,22 @@ const DEFAULT_CONFIG: SecurityConfig = {
  */
 export const SCOPE_MODE_ENV_VAR = "ARGUS_SCOPE_MODE"
 export const ALLOWED_TARGETS_ENV_VAR = "ARGUS_ALLOWED_TARGETS"
+export const BLOCKED_TARGETS_ENV_VAR = "ARGUS_BLOCKED_TARGETS"
 
 function envAllowedTargets(): string[] | undefined {
   const raw = process.env[ALLOWED_TARGETS_ENV_VAR]?.trim()
   if (!raw) return undefined
   return raw
-    .split(",")
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+}
+
+function envBlockedTargets(): string[] | undefined {
+  const raw = process.env[BLOCKED_TARGETS_ENV_VAR]?.trim()
+  if (!raw) return undefined
+  return raw
+    .split(/[\s,]+/)
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0)
 }
@@ -210,13 +220,15 @@ export class TargetValidator {
     // file exists at all.
     const envMode = process.env[SCOPE_MODE_ENV_VAR]?.trim()
     const envTargets = envAllowedTargets()
-    if (envMode || envTargets) {
+    const envBlocked = envBlockedTargets()
+    if (envMode || envTargets !== undefined || envBlocked !== undefined) {
       this.config = {
         ...this.config,
         scope: {
           ...this.config.scope,
           ...(envMode ? { mode: envMode } : {}),
-          ...(envTargets ? { allowed_targets: envTargets } : {}),
+          ...(envTargets !== undefined ? { allowed_targets: envTargets } : {}),
+          ...(envBlocked !== undefined ? { blocked_targets: envBlocked } : {}),
         },
       }
     }
@@ -446,9 +458,14 @@ export function scopeEnvironment(): Record<string, string> {
   const { scope } = getTargetValidator().load()
   if (scope?.mode !== "allowlist") return {}
   const allowed = scope.allowed_targets ?? []
-  if (allowed.length === 0) return {}
-  return {
-    ARGUS_SCOPE_MODE: "allowlist",
-    ARGUS_ALLOWED_TARGETS: allowed.join(","),
-  }
+  const blocked = scope.blocked_targets ?? []
+  // Forward even an empty allowlist: the worker must see the operator's
+  // declared boundary (fail-closed on empty) rather than an absent scope.
+  // Blocked targets ride along so both enforcement layers agree.
+  const env: Record<string, string> = { [SCOPE_MODE_ENV_VAR]: "allowlist" }
+  // An empty join would read as "unset" downstream; a single space preserves
+  // "configured but empty" so an empty allowlist still fails closed.
+  env[ALLOWED_TARGETS_ENV_VAR] = allowed.length > 0 ? allowed.join(",") : " "
+  if (blocked.length > 0) env[BLOCKED_TARGETS_ENV_VAR] = blocked.join(",")
+  return env
 }

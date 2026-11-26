@@ -99,14 +99,31 @@ class TestCveEpssCacheInMemory:
         # Clients are already disabled in setup_method
         assert self.cache.is_available is False
 
-    def test_nvd_cache_no_expiry(self):
-        """NVD data should persist indefinitely in the in-memory cache."""
-        data = {"CVE-2024-0001": {"description": "Persistent CVE"}}
+    def test_nvd_cache_bounded_ttl(self):
+        """NVD data must expire (records are mutable upstream) — 7-day TTL."""
+        from cve_cache import NVD_CACHE_TTL
+
+        assert NVD_CACHE_TTL == 7 * 86400
+        data = {"CVE-2024-0001": {"description": "Revalidatable CVE"}}
         self.cache.set_nvd_data(["CVE-2024-0001"], data)
         assert self.cache._nvd_memory.get("CVE-2024-0001") is not None
         expiry, value = self.cache._nvd_memory["CVE-2024-0001"]
-        assert expiry == float("inf")
+        assert expiry != float("inf")
+        assert expiry > time.time()
         assert value == data
+
+    def test_per_entry_helpers_partial_hits(self):
+        """Per-entry helpers support partial cache hits and KEV storage."""
+        self.cache.set_nvd_entry("CVE-2024-0001", {"description": "One"})
+        self.cache.set_epss_entry(
+            "CVE-2024-0001", {"score": 0.5, "percentile": 0.9, "date": "2024-01-01"}
+        )
+        assert self.cache.get_nvd_entry("CVE-2024-0001") == {"description": "One"}
+        assert self.cache.get_nvd_entry("CVE-2024-9999") is None
+        assert self.cache.get_epss_entry("cve-2024-0001")["score"] == 0.5
+        assert self.cache.get_kev_catalog() is None
+        self.cache.set_kev_catalog({"CVE-2024-0001": {"listed": True}})
+        assert self.cache.get_kev_catalog() == {"CVE-2024-0001": {"listed": True}}
 
     def test_epss_scores_have_finite_ttl(self):
         """EPSS scores should have a finite TTL."""
@@ -176,8 +193,8 @@ class TestCveEpssCacheInMemory:
 class TestCveEpssCacheTTL:
     """Tests for TTL constant correctness."""
 
-    def test_nvd_no_expiry(self):
-        assert NVD_CACHE_TTL == -1  # No expiry for immutable CVE data
+    def test_nvd_bounded_ttl(self):
+        assert NVD_CACHE_TTL == 7 * 86400  # Weekly revalidation, not permanent
 
     def test_epss_24h_ttl(self):
         assert EPSS_CACHE_TTL == 86400  # 24 hours for daily-updated scores

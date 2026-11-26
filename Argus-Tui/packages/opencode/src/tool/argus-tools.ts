@@ -17,6 +17,13 @@ import { join, dirname, delimiter } from "path"
 import { fileURLToPath } from "url"
 import { accessSync, constants } from "fs"
 import { execFile, execFileSync } from "child_process"
+import { isIP } from "net"
+import {
+  getTargetValidator,
+  ALLOWED_TARGETS_ENV_VAR,
+  BLOCKED_TARGETS_ENV_VAR,
+  SCOPE_MODE_ENV_VAR,
+} from "../argus/shared/target-validator"
 
 /** One declared parameter, in registry declaration order. */
 export interface RegistryToolParamSpec {
@@ -143,13 +150,16 @@ function isLauncherTool(spec: RegistryToolSpec): boolean {
 //
 // The native path used to execute with no engagement boundary at all:
 // whatever `target` the LLM supplied was scanned. Every native invocation
-// now passes this gate before a subprocess is spawned. The gate reads the
-// same declared allowlist the TUI forwards to the worker
-// (`scopeEnvironment()` in `argus/shared/target-validator.ts` →
-// ARGUS_SCOPE_MODE + ARGUS_ALLOWED_TARGETS): in `allowlist`/`enforce` mode
-// the target must match the allowlist; otherwise the run stays fail-open
-// exactly like the TUI validator's default `warn` mode. Cloud metadata and
-// link-local targets are always refused, in every mode.
+// now passes this gate before a subprocess is spawned. The gate consumes the
+// actual configured scope — `argus.config.yaml` (`security.scope`) overlaid
+// with its environment overrides — through `getTargetValidator().load()`,
+// the same source `scopeEnvironment()` forwards to the MCP worker. An
+// explicitly set worker environment (`ARGUS_SCOPE_MODE` /
+// `ARGUS_ALLOWED_TARGETS` / `ARGUS_BLOCKED_TARGETS`) wins over the file so a
+// correctly scoped worker subprocess and a directly executed native tool
+// agree. In `allowlist`/`enforce` mode an empty or unavailable allowlist
+// fails closed; blocked targets (configured plus the permanent SSRF set)
+// always refuse, in every mode.
 
 /** Hostnames that are never legitimate scan targets, in any engagement. */
 const ALWAYS_BLOCKED_HOSTS: ReadonlySet<string> = new Set([
@@ -164,10 +174,59 @@ const ALWAYS_BLOCKED_HOSTS: ReadonlySet<string> = new Set([
   "100.100.100.200",
 ])
 
+function stripZone(host: string): string {
+  return host.split("%")[0]
+}
+
 function extractHostname(target: string): string {
-  const t = target.trim().toLowerCase()
-  const withoutScheme = t.replace(/^[a-z][a-z0-9+.-]*:\/\//, "")
-  return withoutScheme.split("/")[0].split(":")[0].split("?")[0]
+  const t = target.trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, "")
+  // Authority ends at the first path/query/fragment separator.
+  const authority = t.split(/[\/?#]/)[0]
+  // Strip userinfo (user:pass@host).
+  const hostport = authority.includes("@")
+    ? authority.slice(authority.lastIndexOf("@") + 1)
+    : authority
+  // Bracketed IPv6: [::1], [fe80::1%eth0], [::1]:8080.
+  if (hostport.startsWith("[")) {
+    const close = hostport.indexOf("]")
+    if (close !== -1) return stripZone(hostport.slice(1, close))
+    return stripZone(hostport.replace(/[\[\]]/g, ""))
+  }
+  // Bare IPv6 literals contain more than one colon and carry no port
+  // separator — splitting on ":" would return only the first hextet.
+  const colons = (hostport.match(/:/g) ?? []).length
+  if (colons > 1) return stripZone(hostport)
+  return stripZone(hostport.split(":")[0])
+}
+
+function isLoopbackOrLinkLocal(host: string): boolean {
+  const h = stripZone(host.toLowerCase())
+  if (ALWAYS_BLOCKED_HOSTS.has(h)) return true
+  const version = isIP(h)
+  if (version === 4) {
+    // 127.0.0.0/8 loopback, 169.254.0.0/16 link-local (IMDS range).
+    if (h.startsWith("127.")) return true
+    if (h.startsWith("169.254.")) return true
+    return false
+  }
+  if (version === 6) {
+    // Normalize IPv4-mapped IPv6 (::ffff:127.0.0.1) before the v4 checks.
+    if (h.includes(".")) {
+      const tail = h.slice(h.lastIndexOf(":") + 1)
+      if (tail.startsWith("127.") || tail.startsWith("169.254.")) return true
+    }
+    if (h === "::1" || h === "::") return true
+    // fe80::/10 link-local: first hextet 0xfe80–0xfebf.
+    const first = h.split(":")[0]
+    if (/^[0-9a-f]{4}$/i.test(first)) {
+      const value = parseInt(first, 16)
+      if (value >= 0xfe80 && value <= 0xfebf) return true
+    }
+    return false
+  }
+  // Non-literal hostnames: link-local textual forms are covered above via
+  // ALWAYS_BLOCKED_HOSTS; nothing more to test without DNS.
+  return false
 }
 
 function matchesGlob(value: string, pattern: string): boolean {
@@ -202,38 +261,90 @@ function matchesAllowlist(target: string, pattern: string): boolean {
   return matchesGlob(extractHostname(target), pattern)
 }
 
+interface EffectiveScope {
+  mode: string
+  allowed: string[]
+  blocked: string[]
+}
+
+function readEnvScope(): EffectiveScope | null {
+  const hasMode = SCOPE_MODE_ENV_VAR in process.env
+  const hasAllowed = ALLOWED_TARGETS_ENV_VAR in process.env
+  const hasBlocked = BLOCKED_TARGETS_ENV_VAR in process.env
+  if (!hasMode && !hasAllowed && !hasBlocked) return null
+  const splitList = (raw: string | undefined): string[] =>
+    (raw ?? "")
+      .split(/[\s,]+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  return {
+    mode: (process.env[SCOPE_MODE_ENV_VAR] ?? "").trim().toLowerCase(),
+    allowed: splitList(process.env[ALLOWED_TARGETS_ENV_VAR]),
+    blocked: splitList(process.env[BLOCKED_TARGETS_ENV_VAR]),
+  }
+}
+
+function effectiveScope(): EffectiveScope {
+  // An explicitly configured worker environment wins: the MCP subprocess is
+  // spawned with scopeEnvironment(), and a native tool running inside that
+  // context must enforce the same boundary. Otherwise read the operator's
+  // configured scope (file plus env overrides) directly, so a YAML allowlist
+  // protects native execution even when no worker environment was forwarded.
+  const fromEnv = readEnvScope()
+  if (fromEnv) return fromEnv
+  try {
+    const { scope } = getTargetValidator().load()
+    return {
+      mode: (scope?.mode ?? "").trim().toLowerCase(),
+      allowed: [...(scope?.allowed_targets ?? [])],
+      blocked: [...(scope?.blocked_targets ?? [])],
+    }
+  } catch {
+    return { mode: "", allowed: [], blocked: [] }
+  }
+}
+
 /** Scope verdict for one native invocation. `{ ok: true }` runs; otherwise refused. */
 export function checkNativeScope(target: unknown): { ok: true } | { ok: false; reason: string } {
   if (typeof target !== "string" || target.trim() === "") {
     return { ok: false, reason: "refusing to run: no target was supplied" }
   }
   const host = extractHostname(target)
-  if (ALWAYS_BLOCKED_HOSTS.has(host)) {
+  if (isLoopbackOrLinkLocal(host)) {
     return {
       ok: false,
-      reason: `refusing to run: ${target} is a cloud-metadata or loopback target (SSRF prevention)`,
+      reason: `refusing to run: ${target} is a loopback, link-local or cloud-metadata target (SSRF prevention)`,
     }
   }
-  // Link-local (IMDS range) is always refused.
-  if (host.startsWith("169.254.") || host === "fe80::1") {
+  const scope = effectiveScope()
+  // Configured blocked targets refuse in every mode, before any allowlist.
+  const blockedHit = scope.blocked.find((pattern) => matchesAllowlist(target, pattern))
+  if (blockedHit) {
     return {
       ok: false,
-      reason: `refusing to run: ${target} is a link-local target (SSRF prevention)`,
+      reason:
+        `refusing to run: target ${target} matches blocked pattern ${blockedHit}. ` +
+        `Blocked targets are never scanned, in any scope mode.`,
     }
   }
-  const mode = (process.env["ARGUS_SCOPE_MODE"] ?? "").trim().toLowerCase()
+  const mode = scope.mode
   if (mode !== "allowlist" && mode !== "enforce") return { ok: true }
-  const allowed = (process.env["ARGUS_ALLOWED_TARGETS"] ?? "")
-    .split(/[\s,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  if (allowed.length === 0) return { ok: true }
-  if (allowed.some((pattern) => matchesAllowlist(target, pattern))) return { ok: true }
+  // Fail closed: an enforcement mode with no usable allowlist authorizes nothing.
+  if (scope.allowed.length === 0) {
+    return {
+      ok: false,
+      reason:
+        `refusing to run: scope mode is '${mode}' but no allowlist is configured ` +
+        `(allowlist is empty or unavailable). An empty allowlist authorizes nothing — ` +
+        `add the target to security.scope.allowed_targets in argus.config.yaml.`,
+    }
+  }
+  if (scope.allowed.some((pattern) => matchesAllowlist(target, pattern))) return { ok: true }
   return {
     ok: false,
     reason:
       `refusing to run: target ${target} is outside the engagement scope ` +
-      `(allowlist: ${allowed.join(", ")}). The scope is the engagement's authorization ` +
+      `(allowlist: ${scope.allowed.join(", ")}). The scope is the engagement's authorization ` +
       `boundary — a target the LLM supplies can never authorize itself.`,
   }
 }
@@ -276,9 +387,14 @@ export function checkNativeAvailability(spec: RegistryToolSpec): string | null {
       return `Tool ${spec.id} requires the ${env} environment variable, which is not set (missing credentials).`
     }
   }
-  // Repo scripts (python3 launcher/shim/delegate tools) must exist in the tree.
+  // Repo scripts (python3 launcher/shim/delegate tools) must exist in the tree,
+  // and their interpreter must be runnable — otherwise the failure surfaces
+  // as a bare spawn error instead of a missing-dependency report.
   const repoScripts = spec.args.filter((a) => a.endsWith(".py"))
   if (repoScripts.length > 0) {
+    if (spec.command === "python3" && !resolveOnPath("python3")) {
+      return `Tool ${spec.id} is unavailable: python3 is not installed on PATH (required to run ${repoScripts.join(", ")}).`
+    }
     const root = findProjectRoot()
     if (!root) {
       return "Could not locate Argus project root (expected argus-workers/mcp_server.py in parent directories)."

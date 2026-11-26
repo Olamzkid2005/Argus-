@@ -69,21 +69,10 @@ def _schema_expr(param) -> str:
     return "Schema.String"
 
 
-#: Tools whose non-zero exit still means "findings present, not an error".
-#: Single source of truth for the generated native surface; mirrors
-#: ``MCPServer.FINDINGS_EXIT_CODES`` (mcp_server.py), ``ToolRunner``'s
-#: ``findings_exit_codes`` (tools/tool_runner.py) and ``AsyncToolRunner``'s
-#: ``FINDINGS_EXIT_CODES`` (tool_core/async_runner.py) — all three agree on
-#: exactly these seven tools with exit code 1.
-FINDINGS_EXIT_CODES: dict[str, set[int]] = {
-    "semgrep": {1},
-    "bandit": {1},
-    "gitleaks": {1},
-    "dalfox": {1},
-    "trivy": {1},
-    "pip-audit": {1},
-    "nuclei": {1},
-}
+def _findings_codes(tool) -> list[int]:
+    """Canonical findings-exit codes from registry metadata (tool_definitions)."""
+    codes = getattr(tool, "findings_exit_codes", ()) or ()
+    return sorted(set(int(c) for c in codes))
 
 
 def _is_launcher(tool) -> bool:
@@ -126,7 +115,7 @@ def _emit_spec(tool) -> str:
     # An unknown risk tier must never silently become low risk: unclassified
     # tools are ineligible for automatic execution until explicitly classified.
     lines.append(f"    risk: {_ts_string(str(tool.risk_level or 'unclassified'))},")
-    codes = sorted(FINDINGS_EXIT_CODES.get(tool.name, ()))
+    codes = _findings_codes(tool)
     lines.append(f"    findingsExitCodes: [{', '.join(str(c) for c in codes)}],")
     lines.append("  }")
     return "\n".join(lines)

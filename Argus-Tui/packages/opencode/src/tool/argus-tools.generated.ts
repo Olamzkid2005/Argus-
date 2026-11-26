@@ -1371,7 +1371,7 @@ export const VerificationAgentTool = Tool.define(
 
 const VulnerabilityKnowledgeEngineToolParameters = Schema.Struct({
     "target": Schema.String.annotate({ description: "Target URL or scope" }),
-    "extra": Schema.optional(Schema.String.annotate({ description: "JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})" })),
+    "extra": Schema.optional(Schema.String.annotate({ description: "JSON-encoded finder input, e.g. {\"products\": [{\"vendor\": \"Apache\", \"product\": \"Log4j\", \"version\": \"2.14.1\"}], \"cve_ids\": [\"CVE-2021-44228\"]}" })),
   })
 export const VulnerabilityKnowledgeEngineTool = Tool.define(
   "vulnerability-knowledge-engine",

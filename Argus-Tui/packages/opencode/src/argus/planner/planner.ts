@@ -11,6 +11,103 @@ import { getTargetValidator } from "../shared/target-validator"
 import { LLMPlannerService } from "./llm-service"
 import type { LLMPhaseSuggestionResult, LLMReplanSuggestion } from "./llm-service"
 import type { ProgressEvent } from "../shared/progress"
+import type { GateContext } from "../workflows/tool-registry"
+
+/** Actual URL scheme of a target (http/https/ftp...), lowercased. */
+function targetSchemeOf(target: string): string {
+  const match = target.trim().toLowerCase().match(/^([a-z][a-z0-9+.-]*):\/\//)
+  if (match) return match[1]
+  return "https"
+}
+
+/** Recon signals published so far: finding subtypes plus tech fingerprints. */
+function reconSignalsOf(context: Partial<Pick<PlannerContext, "findings" | "techStack">>): string[] | undefined {
+  const signals = new Set<string>()
+  for (const finding of context.findings ?? []) {
+    const subtype = (finding as { subtype?: unknown }).subtype
+    if (typeof subtype === "string" && subtype.trim() !== "") signals.add(subtype.trim().toLowerCase())
+  }
+  for (const tech of context.techStack ?? []) {
+    if (tech.trim() !== "") signals.add(tech.trim().toLowerCase())
+  }
+  return signals.size > 0 ? [...signals] : undefined
+}
+
+/** Full activation-gate context for the current target and observations. */
+function gateContextFor(
+  target: string,
+  context: Partial<Pick<PlannerContext, "findings" | "techStack">>,
+): GateContext {
+  const reconSignals = reconSignalsOf(context)
+  return {
+    techStack: context.techStack,
+    targetScheme: targetSchemeOf(target),
+    ...(reconSignals !== undefined ? { reconSignals } : {}),
+  }
+}
+
+/**
+ * Names the LLM may pin: every tool that survives the full eligibility
+ * filters (enabled, worker-runnable, target type, activation gates) for its
+ * own capabilities. A named tool the LLM invents — or one whose gates are
+ * not satisfied in this context — is absent and therefore never pinned.
+ */
+function eligibleToolNames(
+  registry: ToolRegistry,
+  targetType: string,
+  gateContext: GateContext,
+): Set<string> {
+  const eligible = new Set<string>()
+  const partial = registry as Partial<ToolRegistry> & {
+    selectBest?: (caps: Capability[], targetType?: string, gate?: GateContext) => Array<{ name: string }>
+    listTools?: () => Array<{ name: string }>
+  }
+  if (typeof partial.selectBest === "function") {
+    // Union over every capability: selectBest returns all passing tools per
+    // capability (sorted, not top-1), so the union is every runnable tool.
+    const caps = Object.values(Capability)
+    for (const cap of caps) {
+      try {
+        for (const tool of partial.selectBest([cap], targetType, gateContext)) {
+          eligible.add(tool.name)
+        }
+      } catch {
+        // A test-double registry may throw for unknown capabilities; ignore.
+      }
+    }
+    return eligible
+  }
+  // Test doubles without selectBest: fall back to the raw tool list minus
+  // worker-blocked entries (the only signal available).
+  if (typeof partial.listTools === "function") {
+    const isBlocked = typeof registry.isWorkerBlocked === "function"
+      ? (name: string) => registry.isWorkerBlocked(name)
+      : () => false
+    for (const tool of partial.listTools()) {
+      if (!isBlocked(tool.name)) eligible.add(tool.name)
+    }
+  }
+  return eligible
+}
+
+/** Keep only LLM-named tools that are actually eligible right now. */
+function validNamedTools(
+  registry: ToolRegistry,
+  names: readonly string[] | undefined,
+  targetType: string,
+  gateContext: GateContext,
+): string[] {
+  if (!names || names.length === 0) return []
+  const eligible = eligibleToolNames(registry, targetType, gateContext)
+  const seen = new Set<string>()
+  const valid: string[] = []
+  for (const name of names) {
+    if (typeof name !== "string" || seen.has(name)) continue
+    seen.add(name)
+    if (eligible.has(name)) valid.push(name)
+  }
+  return valid
+}
 
 export const MAX_REPLANS = (() => {
   const raw = process.env.ARGUS_MAX_REPLANS
@@ -159,10 +256,7 @@ export class WorkflowPlanner {
     // and can run against this target (gates already applied). Test doubles
     // predate the catalogue methods, so their absence means "no catalogue",
     // not a crash: the prompts degrade to capability-only mode.
-    const gateContext = {
-      techStack: plannerContext.techStack,
-      targetScheme: target.startsWith("https") ? "https" : "http",
-    }
+    const gateContext = gateContextFor(target, plannerContext)
     const describe = (this.toolRegistry as Partial<ToolRegistry>).describeToolsForCapabilities
     const toolCatalogue = typeof describe === "function"
       ? describe.call(this.toolRegistry, deterministicCaps, targetType, gateContext)
@@ -170,6 +264,7 @@ export class WorkflowPlanner {
 
     // LLM-assisted phase suggestions (explicit false handled by early return above)
     let llmSuggested: string[] = []
+    let llmPinnedTools: string[] = []
     emitProgress?.({ type: "llm_planning_start", phase: "initial" })
       try {
         const llmSvc = this.plannerLLM()
@@ -180,6 +275,16 @@ export class WorkflowPlanner {
           }
           process.stderr.write(
             `[planner] LLM suggested ${result.suggestedPhases.length} additional phase(s) for ${target}\n`,
+          )
+        }
+        // Named-tool selection is structural on the initial plan too, not just
+        // on replan: validate the names against the actually eligible set
+        // (exists, enabled, worker-runnable, gates satisfied) and pin the
+        // survivors per-phase below. An ineligible name is dropped, never trusted.
+        llmPinnedTools = validNamedTools(this.toolRegistry, result.nextTools, targetType, gateContext)
+        if ((result.nextTools?.length ?? 0) > 0) {
+          process.stderr.write(
+            `[planner] LLM named ${result.nextTools?.length} tool(s); ${llmPinnedTools.length} eligible and pinned for ${target}\n`,
           )
         }
         // Emit LLM analysis results for TUI display
@@ -230,13 +335,20 @@ export class WorkflowPlanner {
     // Dropped phases are recorded on the plan just like the deterministic
     // path does, so `plan.degradations` is accurate regardless of `useLLM`.
     const droppedPhases: string[] = []
+    // Pinning helper shared with replan(): only tools that provide the
+    // phase's capability are pinned — a named tool serving another capability
+    // stays available to its own phase, never forced elsewhere.
+    const capsOfInitial = (this.toolRegistry as Partial<ToolRegistry>).getCapabilities
+    const toolsForInitial = (cap: Capability): string[] =>
+      typeof capsOfInitial === "function"
+        ? llmPinnedTools.filter((name) => (capsOfInitial.call(this.toolRegistry, name) as string[]).includes(cap))
+        : []
     for (let i = 0; i < workflow.phases.length; i++) {
       const def = workflow.phases[i]
-      // Pass gate context for tech-based and scheme-based tool filtering
-      const tools = this.toolRegistry.selectBest(def.required_capabilities, targetType, {
-        techStack: plannerContext.techStack,
-        targetScheme: target.startsWith("https") ? "https" : "http",
-      }, workflowCostFilter)
+      // Pass the full gate context (tech, actual scheme, recon signals) so
+      // the initial selection obeys the same activation gates the executor
+      // re-checks immediately before running each tool.
+      const tools = this.toolRegistry.selectBest(def.required_capabilities, targetType, gateContext, workflowCostFilter)
 
       if (tools.length === 0) {
         if (def.error_recovery !== "fail_fast") {
@@ -268,6 +380,7 @@ export class WorkflowPlanner {
         process.stderr.write(`[planner] Warning: Circular dependency detected in phase "${def.name}" — broken by priority\n`)
       }
 
+      const pinnedInitial = def.required_capabilities.flatMap((cap) => toolsForInitial(cap as Capability))
       phases.push({
         phaseId: `phase-${i}-${def.name}-${crypto.randomUUID().slice(0, 8)}`,
         name: def.name,
@@ -277,6 +390,7 @@ export class WorkflowPlanner {
         config: {
           pipelineSteps: pipeline?.steps,
           pipelineGaps: pipeline?.gaps,
+          ...(pinnedInitial.length > 0 ? { preferredTools: pinnedInitial } : {}),
         },
         previousPhaseResults: [],
         approvalGateName: def.approval_gate,
@@ -370,11 +484,14 @@ export class WorkflowPlanner {
         // Ground the replan LLM in every tool eligible right now, so a
         // finding (e.g. GraphQL) maps to the specific scanner that handles
         // it instead of an abstract capability the registry resolves later.
+        // The catalogue carries the full gate context — actual target scheme
+        // and current recon signals — so the LLM never sees a tool whose
+        // activation gates are unsatisfied in this context.
+        const replanTargetType = detectTargetType(context.target)
+        const replanGateContext = gateContextFor(context.target, context)
         const describeAll = (this.toolRegistry as Partial<ToolRegistry>).describeAllEligibleTools
         const replanCatalogue = typeof describeAll === "function"
-          ? describeAll.call(this.toolRegistry, detectTargetType(context.target), {
-              techStack: context.techStack,
-            })
+          ? describeAll.call(this.toolRegistry, replanTargetType, replanGateContext)
           : undefined
         const llmReplan = await llmSvc.suggestReplan(context.target, context.findings, replanCatalogue)
         if (llmReplan && !llmReplan.stopAssessment) {
@@ -387,16 +504,17 @@ export class WorkflowPlanner {
             }
           }
           // The LLM may name specific eligible tools (next_tools). Keep only
-          // ones the registry still considers runnable — a named tool the
-          // worker blocked or that was never registered is dropped, never
-          // trusted — and pin the survivors on the replan phases below so
-          // the executor prefers them over the capability-default ordering.
-          const registry = this.toolRegistry as Partial<ToolRegistry>
-          const validTools = (llmReplan.nextTools ?? []).filter((name) => {
-            if (typeof registry.getTool === "function" && registry.getTool(name) === undefined) return false
-            if (typeof registry.isWorkerBlocked === "function" && registry.isWorkerBlocked(name)) return false
-            return true
-          })
+          // ones that survive the full eligibility check — registered,
+          // enabled, worker-runnable, target-type compatible, and with
+          // activation gates (tech, scheme, recon signals, credentials)
+          // satisfied in this context. An existing but ineligible tool is
+          // dropped, never trusted: naming a tool can never bypass its gate.
+          const validTools = validNamedTools(
+            this.toolRegistry,
+            llmReplan.nextTools,
+            replanTargetType,
+            replanGateContext,
+          )
           if (validTools.length > 0) {
             context.preferredTools = [...(context.preferredTools ?? []), ...validTools]
             llmProducedPhases = true

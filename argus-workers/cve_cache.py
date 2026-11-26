@@ -35,16 +35,26 @@ EPSS_REDIS_URL = os.getenv("EPSS_CACHE_REDIS_URL", f"{_REDIS_URL}/{CACHE_DB_EPSS
 
 NVD_KEY_PREFIX = "threat_intel:nvd:{cve_ids}"
 EPSS_KEY_PREFIX = "threat_intel:epss:{cve_ids}"
+NVD_ENTRY_PREFIX = "threat_intel:nvd-id:"
+EPSS_ENTRY_PREFIX = "threat_intel:epss-id:"
+KEV_CATALOG_KEY = "threat_intel:kev:catalog"
 
 # ── TTL constants ──
 
-# CVE descriptions from NVD are immutable — once published they never change.
-# Cache them with no expiry (sentinel value <= 0).
-NVD_CACHE_TTL = -1  # No expiry
+# NVD records CAN be modified after publication (descriptions, CVSS scores,
+# affected-version ranges and references are all revalidated upstream), so
+# permanent caching without revalidation serves stale applicability data.
+# Revalidate weekly: fresh enough for assessment use, gentle on NVD rate
+# limits (5 req / 30 s without an API key). A value <= 0 means no expiry.
+NVD_CACHE_TTL = 7 * 86400  # 7 days
 
 # EPSS scores are updated daily by FIRST.org.
 # 24-hour TTL is safe; the dataset changes slowly (~1% of CVEs shift score per day).
 EPSS_CACHE_TTL = 86400  # 24 hours
+
+# The CISA KEV catalogue is updated as new exploited vulnerabilities are
+# confirmed. 24 hours matches the EPSS refresh cadence.
+KEV_CACHE_TTL = 86400  # 24 hours
 
 # In-memory fallback max size to prevent unbounded growth
 _IN_MEMORY_MAX_SIZE = 5000
@@ -116,12 +126,12 @@ class CveEpssCache:
         key = _normalize_cve_ids(cve_ids)
         redis_key = NVD_KEY_PREFIX.format(cve_ids=key)
 
-        # Redis — primary cache (no expiry for immutable NVD data)
+        # Redis — primary cache (bounded TTL: NVD records are mutable)
         self._nvd_client.set(redis_key, data, ttl=NVD_CACHE_TTL)
 
-        # In-memory — fallback (no expiry for NVD)
+        # In-memory — fallback (same bounded TTL)
         with self._mem_lock:
-            self._nvd_memory[key] = (float("inf"), data)
+            self._nvd_memory[key] = (_time.time() + NVD_CACHE_TTL, data)
             self._evict_if_needed(self._nvd_memory)
 
     # ── EPSS scores ──
@@ -174,6 +184,98 @@ class CveEpssCache:
         with self._mem_lock:
             self._epss_memory[key] = (_time.time() + EPSS_CACHE_TTL, scores)
             self._evict_if_needed(self._epss_memory)
+
+    # ── Per-entry access (CVE Finder) ──
+
+    def _entry_get(self, client, memory: dict, redis_key: str, mem_key: str) -> dict | None:
+        result = client.get(redis_key)
+        if result is not None:
+            return result
+        with self._mem_lock:
+            entry = memory.get(mem_key)
+            if entry is not None:
+                expiry, value = entry
+                if _time.time() < expiry:
+                    return value
+                del memory[mem_key]
+        return None
+
+    def _entry_set(self, client, memory: dict, redis_key: str, mem_key: str, value: dict, ttl: int) -> None:
+        if not value:
+            return
+        client.set(redis_key, value, ttl=ttl)
+        with self._mem_lock:
+            memory[mem_key] = (_time.time() + ttl, value)
+            self._evict_if_needed(memory)
+
+    def get_nvd_entry(self, cve_id: str) -> dict | None:
+        """Fetch one cached NVD record (supports partial cache hits)."""
+        if not cve_id:
+            return None
+        key = cve_id.strip().upper()
+        return self._entry_get(
+            self._nvd_client, self._nvd_memory, NVD_ENTRY_PREFIX + key, "id:" + key
+        )
+
+    def set_nvd_entry(self, cve_id: str, record: dict) -> None:
+        """Cache one NVD record with the bounded NVD TTL."""
+        if not cve_id or not record:
+            return
+        key = cve_id.strip().upper()
+        self._entry_set(
+            self._nvd_client,
+            self._nvd_memory,
+            NVD_ENTRY_PREFIX + key,
+            "id:" + key,
+            record,
+            NVD_CACHE_TTL,
+        )
+
+    def get_epss_entry(self, cve_id: str) -> dict | None:
+        """Fetch one cached EPSS record (score, percentile, date)."""
+        if not cve_id:
+            return None
+        key = cve_id.strip().upper()
+        return self._entry_get(
+            self._epss_client, self._epss_memory, EPSS_ENTRY_PREFIX + key, "id:" + key
+        )
+
+    def set_epss_entry(self, cve_id: str, record: dict) -> None:
+        """Cache one EPSS record with the daily EPSS TTL."""
+        if not cve_id or not record:
+            return
+        key = cve_id.strip().upper()
+        self._entry_set(
+            self._epss_client,
+            self._epss_memory,
+            EPSS_ENTRY_PREFIX + key,
+            "id:" + key,
+            record,
+            EPSS_CACHE_TTL,
+        )
+
+    def get_kev_catalog(self) -> dict | None:
+        """Fetch the cached CISA KEV catalogue ({cve_id: entry})."""
+        result = self._nvd_client.get(KEV_CATALOG_KEY)
+        if result is not None:
+            return result
+        with self._mem_lock:
+            entry = self._nvd_memory.get("kev:catalog")
+            if entry is not None:
+                expiry, value = entry
+                if _time.time() < expiry:
+                    return value
+                del self._nvd_memory["kev:catalog"]
+        return None
+
+    def set_kev_catalog(self, catalog: dict) -> None:
+        """Cache the CISA KEV catalogue with the daily KEV TTL."""
+        if not catalog:
+            return
+        self._nvd_client.set(KEV_CATALOG_KEY, catalog, ttl=KEV_CACHE_TTL)
+        with self._mem_lock:
+            self._nvd_memory["kev:catalog"] = (_time.time() + KEV_CACHE_TTL, catalog)
+            self._evict_if_needed(self._nvd_memory)
 
     # ── Utility ──
 
@@ -315,3 +417,33 @@ def get_epss_scores(cve_ids: list[str]) -> dict | None:
 def set_epss_scores(cve_ids: list[str], scores: dict) -> None:
     """Convenience: cache EPSS scores."""
     get_cve_cache().set_epss_scores(cve_ids, scores)
+
+
+def get_nvd_entry(cve_id: str) -> dict | None:
+    """Convenience: fetch one cached NVD record."""
+    return get_cve_cache().get_nvd_entry(cve_id)
+
+
+def set_nvd_entry(cve_id: str, record: dict) -> None:
+    """Convenience: cache one NVD record."""
+    get_cve_cache().set_nvd_entry(cve_id, record)
+
+
+def get_epss_entry(cve_id: str) -> dict | None:
+    """Convenience: fetch one cached EPSS record."""
+    return get_cve_cache().get_epss_entry(cve_id)
+
+
+def set_epss_entry(cve_id: str, record: dict) -> None:
+    """Convenience: cache one EPSS record."""
+    get_cve_cache().set_epss_entry(cve_id, record)
+
+
+def get_kev_catalog() -> dict | None:
+    """Convenience: fetch the cached CISA KEV catalogue."""
+    return get_cve_cache().get_kev_catalog()
+
+
+def set_kev_catalog(catalog: dict) -> None:
+    """Convenience: cache the CISA KEV catalogue."""
+    get_cve_cache().set_kev_catalog(catalog)

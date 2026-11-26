@@ -214,6 +214,12 @@ class ToolDefinition:
     #: Rate limit impact (low, medium, high)
     rate_limit_impact: str | None = None
 
+    #: Non-zero exit codes that mean "findings present, not an error".
+    #: Canonical source for every findings-exit mapping (worker ToolRunner,
+    #: AsyncToolRunner, MCP server and the TS native generator all read this
+    #: instead of keeping their own hardcoded copy).
+    findings_exit_codes: tuple[int, ...] = ()
+
     #: Optional static metadata (vendor, version, download URL, etc.)
     metadata: ToolMetadata | None = None
 
@@ -1546,6 +1552,21 @@ def build_mcp_tool_definitions() -> list:
         )
     return mcp_tools
 
+
+#: Tools whose exit code 1 means "findings present, not an error".
+#: Canonical findings-exit mapping — the single source of truth. The worker
+#: ToolRunner, AsyncToolRunner, MCP server and the TS native generator derive
+#: their mappings from ``ToolDefinition.findings_exit_codes`` (populated here)
+#: instead of maintaining parallel hardcoded copies.
+FINDINGS_EXIT_TOOLS: frozenset[str] = frozenset(
+    {"semgrep", "bandit", "gitleaks", "dalfox", "trivy", "pip-audit", "nuclei"}
+)
+
+for _findings_name in FINDINGS_EXIT_TOOLS:
+    _existing = TOOLS.get(_findings_name)
+    if _existing is not None and not _existing.findings_exit_codes:
+        TOOLS[_findings_name] = replace(_existing, findings_exit_codes=(1,))
+del _findings_name, _existing
 
 if _REGISTRY_MERGES:
     logger.debug(

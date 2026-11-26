@@ -775,6 +775,9 @@ class ToolRunner:
 
                 # Determine success
                 # Tool-specific exit codes that mean "findings present, not an error"
+                # Canonical mapping lives on ToolDefinition.findings_exit_codes
+                # (tool_definitions.FINDINGS_EXIT_TOOLS); this local copy must
+                # match it — nuclei exit 1 is findings-bearing, not a failure.
                 findings_exit_codes = {
                     "semgrep": {1},
                     "bandit": {1},
@@ -782,6 +785,7 @@ class ToolRunner:
                     "dalfox": {1},
                     "trivy": {1},
                     "pip-audit": {1},
+                    "nuclei": {1},
                 }
                 success = (
                     proc_result.returncode == 0

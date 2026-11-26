@@ -5,7 +5,7 @@ import type { SignalQuality, CacheMode } from "../bridge/types"
 import { LLMUnavailableError } from "../bridge/types"
 import type { WorkersBridge } from "../bridge/mcp-client"
 import type { ProgressEvent, ErrorHintData } from "../shared/progress"
-import type { ToolDef } from "../workflows/tool-registry"
+import type { ToolDef, GateContext } from "../workflows/tool-registry"
 import crypto from "crypto"
 import { Capability } from "../shared/capabilities"
 import { detectTargetType } from "./strategy"
@@ -14,6 +14,71 @@ import { provenanceForAction } from "./action-provenance"
 
 /** Shape of the LLM block sent to the worker in `agent_init`. */
 type AgentInitLlm = WorkerLlmConfig
+
+/** Actual URL scheme of a target (http/https/ftp...), lowercased. */
+function targetSchemeOf(target: string): string {
+  const match = target.trim().toLowerCase().match(/^([a-z][a-z0-9+.-]*):\/\//)
+  return match ? match[1] : "https"
+}
+
+function extractScopeHostname(target: string): string {
+  const withoutScheme = target
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, "")
+  return withoutScheme.split(/[\/?#]/)[0].split(":")[0]
+}
+
+function scopeGlobMatches(value: string, pattern: string): boolean {
+  const v = value.toLowerCase()
+  const p = pattern.toLowerCase().trim()
+  if (p === "*") return true
+  if (p.startsWith("*.")) {
+    const suffix = p.slice(1)
+    return v.endsWith(suffix) && v.length > suffix.length
+  }
+  if (p.endsWith(".*")) {
+    const prefix = p.slice(0, -2)
+    return v.startsWith(prefix) && v.length > prefix.length + 1
+  }
+  return v === p
+}
+
+/** Validator-consistent scope match: origin, full target, or hostname glob. */
+function scopePatternMatches(target: string, pattern: string): boolean {
+  if (pattern.includes("://")) {
+    const p = pattern.toLowerCase().replace(/\/+$/, "")
+    const t = target.toLowerCase()
+    return t === p || t.startsWith(`${p}/`)
+  }
+  if (scopeGlobMatches(target, pattern)) return true
+  return scopeGlobMatches(extractScopeHostname(target), pattern)
+}
+
+/** Recon signals + tech observed in already-completed phases. */
+function gateContextForPhase(phase: PhaseExecutionRequest): GateContext {
+  const signals = new Set<string>()
+  const tech: string[] = []
+  for (const result of phase.previousPhaseResults ?? []) {
+    for (const finding of result.findings ?? []) {
+      const subtype = (finding as { subtype?: unknown }).subtype
+      if (typeof subtype === "string" && subtype.trim() !== "") signals.add(subtype.trim().toLowerCase())
+      if (finding.title.trim() !== "") tech.push(finding.title)
+    }
+  }
+  // Phase config may carry planner-known tech (e.g. initial techStack passthrough).
+  const configuredTech = (phase.config as { techStack?: unknown }).techStack
+  if (Array.isArray(configuredTech)) {
+    for (const entry of configuredTech) {
+      if (typeof entry === "string" && entry.trim() !== "") signals.add(entry.trim().toLowerCase())
+    }
+  }
+  return {
+    ...(tech.length > 0 ? { techStack: tech } : {}),
+    targetScheme: targetSchemeOf(phase.target),
+    ...(signals.size > 0 ? { reconSignals: [...signals] } : {}),
+  }
+}
 
 /**
  * Maximum parallelism for phases marked with `execution: parallel`.
@@ -711,6 +776,19 @@ export class InProcessExecutor implements PhaseExecutor {
           deliberatelySkipped++
           continue
         }
+        // Revalidate activation gates immediately before execution: the plan
+        // was built earlier, and recon may since have disproven the tool's
+        // requirements. A tool that no longer satisfies its gates is
+        // rejected here even though the LLM named it explicitly.
+        if (!this.isToolEligibleNow(step.tool, (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability, phase)) {
+          const reason = `requirements no longer satisfied for this target (activation gate re-check at execution)`
+          if (execOptions.verbose) {
+            console.log(`[executor]  Skipping ${step.tool}: ${reason}`)
+          }
+          recordDeterministicOutcome(step.tool, (step.capabilities?.[0] ?? phase.requiredCapabilities[0]) as Capability, "blocked", reason)
+          deliberatelySkipped++
+          continue
+        }
         const notApplicable = targetNotApplicable(step.tool, phase.target, phase.name)
         if (notApplicable) {
           if (execOptions.verbose) {
@@ -753,10 +831,14 @@ export class InProcessExecutor implements PhaseExecutor {
       // applies the target-type, worker-availability and gate filters, so the
       // fallback can only pick a tool that can actually run against this target.
       const targetType = detectTargetType(phase.target)
+      // The full gate context (actual scheme, recon signals so far) is
+      // re-applied here — not just at plan time — so a tool whose
+      // requirements ceased to be satisfied is rejected at execution.
+      const gateContext = gateContextForPhase(phase)
       // Test doubles implement only the capability lookup; the registry the CLI
       // builds always provides selectBest, which is where those filters live.
       const registry = this.toolRegistry as ToolRegistry & {
-        selectBest?: (caps: Capability[], targetType?: string) => ToolDef[]
+        selectBest?: (caps: Capability[], targetType?: string, gate?: GateContext) => ToolDef[]
       }
       // Tools the planning LLM selected by name ride on the phase config.
       // They were validated as runnable when pinned, but eligibility is
@@ -765,7 +847,7 @@ export class InProcessExecutor implements PhaseExecutor {
       const preferred = ((phase.config?.preferredTools as string[] | undefined) ?? [])
       for (const cap of phase.requiredCapabilities) {
         const selected = registry.selectBest
-          ? registry.selectBest([cap], targetType)
+          ? registry.selectBest([cap], targetType, gateContext)
           : registry.getToolsByCapability(cap)
         const tools = preferred.length > 0
           ? [...selected].sort((a, b) => {
@@ -784,6 +866,15 @@ export class InProcessExecutor implements PhaseExecutor {
         for (const tool of tools) {
           if (calledTools.has(tool.name)) continue
           calledTools.add(tool.name)
+          if (!this.isToolEligibleNow(tool.name, cap, phase)) {
+            const reason = `requirements no longer satisfied for this target (activation gate re-check at execution)`
+            if (execOptions.verbose) {
+              console.log(`[executor]  Skipping ${tool.name}: ${reason}`)
+            }
+            recordDeterministicOutcome(tool.name, cap, "blocked", reason)
+            deliberatelySkipped++
+            continue
+          }
           const notApplicable = targetNotApplicable(tool.name, phase.target, phase.name)
           if (notApplicable) {
             if (execOptions.verbose) {
@@ -1562,15 +1653,31 @@ export class InProcessExecutor implements PhaseExecutor {
       const timeoutSeconds = this.toolRegistry.getToolTimeout(tool.name)
       const toolTimeout = timeoutSeconds * 1000
       try {
-        // Scope check — skip if target is not in authorized scope
-        if (this.scopeConfig?.mode === "allowlist") {
-          const isAllowed = this.scopeConfig.allowed_targets?.some(
-            (pattern: string) => phase.target.includes(pattern.replace("*.", ""))
-          ) ?? false
-          if (!isAllowed) {
-            console.warn(`[executor] Target ${phase.target} is out of scope — skipping tool ${tool.name}`)
-            return { findings: [], errors: [`Target ${phase.target} is out of scope`], failFast: false }
+        // Scope check — blocked targets refuse in every mode; an allowlist
+        // mode with an empty allowlist fails closed (authorizes nothing).
+        if (this.scopeConfig) {
+          const blockedHit = (this.scopeConfig.blocked_targets ?? []).find((pattern) =>
+            scopePatternMatches(phase.target, pattern),
+          )
+          if (blockedHit) {
+            console.warn(`[executor] Target ${phase.target} matches blocked pattern ${blockedHit} — skipping tool ${tool.name}`)
+            return { findings: [], errors: [`Target ${phase.target} matches blocked pattern ${blockedHit}`], failFast: false }
           }
+          if (this.scopeConfig.mode === "allowlist") {
+            const allowed = this.scopeConfig.allowed_targets ?? []
+            const isAllowed = allowed.some((pattern) => scopePatternMatches(phase.target, pattern))
+            if (!isAllowed) {
+              console.warn(`[executor] Target ${phase.target} is out of scope — skipping tool ${tool.name}`)
+              return { findings: [], errors: [`Target ${phase.target} is out of scope`], failFast: false }
+            }
+          }
+        }
+        // Final activation-gate re-check immediately before execution: naming
+        // a tool (via next_tools/preferredTools) can never bypass its gates.
+        if (!this.isToolEligibleNow(tool.name, cap, phase)) {
+          const reason = `Tool ${tool.name} requirements no longer satisfied for ${phase.target} (activation gate re-check at execution)`
+          if (execOptions.verbose) console.log(`[executor]  ⛔ ${reason} — skipping`)
+          return { findings: [], errors: [reason], failFast: false, skippedReason: reason }
         }
 
         // Populate extra with credentials for tools (login/register) that
@@ -1827,6 +1934,56 @@ export class InProcessExecutor implements PhaseExecutor {
    * Returns null when the tool needs no credentials or every role it names is
    * present, so callers can treat a returned list as "cannot run this tool".
    */
+  /**
+   * Whether a tool may run right now: registered, worker-runnable, and
+   * passing the full activation gates (target type, tech/scheme/recon
+   * signals) in the current phase context. Used to revalidate LLM-pinned
+   * tools immediately before execution — a named tool whose requirements
+   * ceased to be satisfied is rejected here.
+   */
+  private isToolEligibleNow(toolName: string, cap: Capability, phase: PhaseExecutionRequest): boolean {
+    if (this.toolRegistry.isWorkerBlocked?.(toolName)) return false
+    const targetType = detectTargetType(phase.target)
+    const gateContext = gateContextForPhase(phase)
+    const registry = this.toolRegistry as ToolRegistry & {
+      selectBest?: (caps: Capability[], targetType?: string, gate?: GateContext) => ToolDef[]
+    }
+    // No selectBest on test doubles: fall back to capability membership plus
+    // the worker-blocked check above. Doubles may only implement the
+    // capability lookup, so a tool the registry itself lists under this
+    // capability counts as eligible even when getTool cannot resolve it.
+    if (typeof registry.selectBest !== "function") {
+      const def = this.toolRegistry.getTool(toolName)
+      if (def !== undefined) return (def.capabilities ?? []).includes(cap as string)
+      try {
+        return this.toolRegistry.getToolsByCapability(cap).some((tool) => tool.name === toolName)
+      } catch {
+        return false
+      }
+    }
+    try {
+      const eligible = registry.selectBest([cap], targetType, gateContext)
+      if (eligible.some((tool) => tool.name === toolName)) return true
+      // A tool pinned for one capability must not leak into another phase's
+      // capability: also accept it when it is eligible under any capability
+      // it actually provides.
+      const provided = this.toolRegistry.getTool(toolName)?.capabilities ?? []
+      for (const providedCap of provided) {
+        try {
+          const candidates = registry.selectBest([providedCap as Capability], targetType, gateContext)
+          if (candidates.some((tool) => tool.name === toolName)) return true
+        } catch {
+          continue
+        }
+      }
+      return false
+    } catch {
+      // A test-double selectBest may throw for unknown capabilities:
+      // fail open here so unit doubles keep their previous behaviour.
+      return true
+    }
+  }
+
   private async missingCredentialRoles(toolName: string): Promise<string[] | null> {
     const required = this.toolRegistry.getTool(toolName)?.credential_roles
     if (!required || required.length === 0) return null

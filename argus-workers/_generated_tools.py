@@ -1154,13 +1154,13 @@ _register(ToolDefinition(
 # ── vulnerability_knowledge_engine (from vulnerability_knowledge_engine.yaml) ──
 _register(ToolDefinition(
     name="vulnerability_knowledge_engine",
-    description="vulnerability_knowledge_engine - security assessment tool",
+    description="CVE discovery and intelligence: maps detected products/versions to NVD CPEs, retrieves real CVE records with version-applicability analysis, enriches with FIRST EPSS and CISA KEV, and proposes evidence-backed candidate chains. Supply {\"products\": [{\"vendor\", \"product\", \"version\", ...}]} and/or {\"cves\"/\"cve_ids\": [\"CVE-...\"]} inside extra. Also maps CWE/OWASP knowledge for prior findings.",
     binary="python3",
     phases=["analyze"],
     default_args=["argus-workers/tools/run_agent_tool.py", "vulnerability_knowledge_engine"],
     parameters=[
     ToolParameter(name="target", description="Target URL or scope", required=True, flag="--target"),
-    ToolParameter(name="extra", description="JSON-encoded extra parameters (e.g. {\"tech_stack\":[\"apache\"]})", flag="--extra"),
+    ToolParameter(name="extra", description="JSON-encoded finder input, e.g. {\"products\": [{\"vendor\": \"Apache\", \"product\": \"Log4j\", \"version\": \"2.14.1\"}], \"cve_ids\": [\"CVE-2021-44228\"]}", flag="--extra"),
 ],
     timeout=120,
     signal_quality=SignalQuality.CONFIRMED,

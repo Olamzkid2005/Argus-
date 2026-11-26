@@ -142,18 +142,22 @@ def main():
     intent_node_id = args.intent_node_id or str(extra.get("intent_node_id") or "")
 
     # The scope is the engagement's authorization boundary, never the target
-    # itself: defaulting to ``args.target`` let the LLM establish its own
-    # scope by supplying a target. An explicit ``extra.scope`` still wins;
-    # otherwise the context carries no scope and downstream guards fail
-    # closed (or fall back to ARGUS_ALLOW_UNSCOPED / the published run
-    # scope) instead of self-authorizing.
+    # itself and never an LLM-supplied argument: ``extra`` is JSON the model
+    # composes, so reading ``extra.scope`` here let the LLM self-authorize by
+    # naming its own scope. Authorization comes only from the trusted
+    # engagement context (the engagement record / published run scope the
+    # ToolRunner consults) — this launcher carries none, so the context stays
+    # unscoped and downstream guards fail closed (or fall back to
+    # ARGUS_ALLOW_UNSCOPED / the published run scope) instead of trusting the
+    # model. ``extra`` keys that resemble an authorization boundary are dropped
+    # entirely, including the ``_<key>`` mirror below.
     ctx = ToolContext(
         target=args.target,
         engagement_id=args.engagement_id,
         goal_node_id=goal_node_id,
         intent_node_id=intent_node_id,
         tech_stack=extra.get("tech_stack", []),
-        authorized_scope=extra.get("scope", ""),
+        authorized_scope="",
         timeout=extra.get("timeout", 300),
         rate_limit=extra.get("rate_limit", 0),
         aggressiveness=extra.get("aggressiveness", "moderate"),
@@ -163,7 +167,20 @@ def main():
     )
 
     # Set extra context attributes that tools may expect (e.g. _correlation_input, _orchestrator_start_phase)
+    # Authorization-boundary keys are never mirrored: a tool reading
+    # ``ctx._scope`` would otherwise inherit the same self-authorization.
+    _SCOPE_LIKE_KEYS = {
+        "scope",
+        "authorized_scope",
+        "allowed_targets",
+        "blocked_targets",
+        "scope_mode",
+        "authorization",
+    }
     for key, value in extra.items():
+        if key in _SCOPE_LIKE_KEYS:
+            logger.warning("ignoring untrusted scope key %r from tool extra params", key)
+            continue
         setattr(ctx, f"_{key}", value)
 
     tool_class = resolve_tool_class(args.tool_name)
