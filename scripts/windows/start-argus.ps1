@@ -46,9 +46,13 @@ if ($LASTEXITCODE -eq 0 -and $RedisPing -eq "PONG") {
     $RedisServer = Join-Path $ScriptDir "redis\redis-server.exe"
     $RedisConf = Join-Path $ScriptDir "redis\redis.windows.conf"
     if (Test-Path $RedisServer) {
-        $proc = Start-Process -FilePath $RedisServer -ArgumentList $RedisConf -PassThru -NoNewWindow
-        Start-Sleep 2
-        $ping = & $RedisExe ping 2>$null
+        $proc = Start-Process -FilePath $RedisServer -ArgumentList $RedisConf -PassThru -NoNewWindow -WorkingDirectory $ScriptDir
+        $ping = ""
+        for ($i = 0; $i -lt 15; $i++) {
+            Start-Sleep 1
+            $ping = & $RedisExe ping 2>$null
+            if ($ping -eq "PONG") { break }
+        }
         if ($ping -eq "PONG") {
             Log-Ok "Redis started"
         } else {
