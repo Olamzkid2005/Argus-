@@ -258,12 +258,15 @@ _SYSTEM_BINARY_ALIASES: dict[str, str] = {
 #: Hints shown when a tool cannot be installed on the current platform even
 #: though the installer knows how to provision it elsewhere.
 MANUAL_TOOLS: dict[str, str] = {
-    "testssl": "POSIX shell script — run under WSL/Git Bash on Windows",
-    "whatweb": "Ruby/POSIX loader — run under WSL on Windows",
-    "nikto": "Perl tool — run under WSL on Windows",
-    "wpscan": "needs a Ruby toolchain (gem install wpscan)",
-    "phpcs": "needs PHP; install PHP_CodeSniffer manually when brew has no PHP bottle",
-    "sn1per": "POSIX shell script — run under WSL/Git Bash on Windows",
+    # These are scripts (Perl/bash/Ruby/PHP), so there is no binary to download.
+    # On Windows, scripts/windows/install-portable-tools.py installs the runtime
+    # plus a launcher .exe; on POSIX the package managers above cover them.
+    "testssl": "POSIX shell script — on Windows run scripts/windows/install-portable-tools.py",
+    "whatweb": "Ruby script — on Windows run scripts/windows/install-portable-tools.py",
+    "nikto": "Perl script — on Windows run scripts/windows/install-portable-tools.py",
+    "wpscan": "Ruby gem — on Windows run scripts/windows/install-portable-tools.py",
+    "phpcs": "needs PHP; on Windows run scripts/windows/install-portable-tools.py (installs PHP + phpcs.phar)",
+    "sn1per": "requires root, /usr/share/sniper and PostgreSQL — run it under WSL or in a Kali container",
 }
 
 
