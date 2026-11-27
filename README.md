@@ -279,6 +279,11 @@ The `vendor/` directory is `COPY`ed into the image and its contents should inclu
 - **Bun** 1.x — TypeScript runtime
 - **Python** 3.11+ — MCP worker
 - **Security tools** — nuclei, nmap, nikto, httpx, subfinder, etc.
+  (`./scripts/argus-setup.sh` installs them; on Windows the ones written as
+  scripts — nikto, testssl, whatweb, wpscan, phpcs — come from
+  `python scripts/windows/install-portable-tools.py`, which adds the Perl/bash/
+  Ruby/PHP runtime and a launcher `.exe` per tool. sn1per needs root and
+  PostgreSQL, so it stays on WSL or a Kali container.)
 - **Playwright** — Browser verification (`npx playwright install chromium`)
 - **Docker** — Containerized deployment (optional, for docker-compose)
 - **PostgreSQL** — Database for engagement/finding storage (docker-compose or local)
