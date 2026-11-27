@@ -258,11 +258,11 @@ describe("E2E: Target connectivity", () => {
 })
 
 describe("E2E: Doctor command", () => {
-  it("doctorCommand returns 13 checks without crashing", async () => {
+  it("doctorCommand returns 14 checks without crashing", async () => {
     if (!targetsStarted) return
     const { doctorCommand } = await import("../../../src/argus/commands/doctor")
     const results = await doctorCommand()
-    expect(results.length).toBe(13)
+    expect(results.length).toBe(14)
     for (const r of results) {
       expect(["PASS", "WARN", "FAIL"]).toContain(r.status)
       expect(r.message.length).toBeGreaterThan(0)

@@ -82,7 +82,9 @@ const commands: ArgusTuiCommand[] = [
     needsTarget: false,
     handler: async () => {
       const { doctorCommand } = await import("./commands/doctor")
-      const results = await doctorCommand()
+      // Reuse the TUI's worker across /doctor runs instead of paying its full
+      // startup cost every time.
+      const results = await doctorCommand({ sharedWorker: true })
       let output = ""
       let passes = 0, warns = 0, fails = 0
       for (const r of results) {
@@ -131,7 +133,7 @@ const commands: ArgusTuiCommand[] = [
     needsTarget: false,
     handler: async () => {
       const { doctorCommand } = await import("./commands/doctor")
-      const results = await doctorCommand()
+      const results = await doctorCommand({ sharedWorker: true })
       const mcpResult = results.find((r) => r.name === "MCP Worker")
       const toolResult = results.find((r) => r.name === "Toolchain")
       const dbResult = results.find((r) => r.name === "Database")
@@ -198,22 +200,31 @@ const commands: ArgusTuiCommand[] = [
       const wp = MCP_WORKER_PATH
       // Test seam: allows tests to inject a fake bridge instead of spawning a
       // real Python MCP worker (which requires the full Python dependency tree).
-      const bridge = _toolsBridgeFactory
-        ? _toolsBridgeFactory(wp)
-        : await (async () => {
-            const { existsSync } = await import("fs")
-            if (!existsSync(wp)) return null
-            const { WorkersBridge } = await import("./bridge/mcp-client")
-            return new WorkersBridge(wp)
-          })()
-      if (!bridge) return "MCP worker not found. Run `argus doctor` to check setup."
+      if (_toolsBridgeFactory) {
+        const bridge = _toolsBridgeFactory(wp)
+        let toolDefs: ToolDefinition[] = []
+        try {
+          await bridge.connect()
+          toolDefs = await bridge.getTools()
+          _cachedTools = toolDefs
+        } finally {
+          await bridge.disconnect()
+        }
+        return formatToolList(toolDefs)
+      }
+      const { existsSync } = await import("fs")
+      if (!existsSync(wp)) return "MCP worker not found. Run `argus doctor` to check setup."
+      // Share the worker with /doctor and /status: it is already connected and
+      // stays alive, so this command is a single list_tools round-trip.
+      const { acquireSharedWorker, disposeSharedWorkers } = await import("./bridge/shared-worker")
       let toolDefs: ToolDefinition[] = []
       try {
-        await bridge.connect()
+        const bridge = await acquireSharedWorker({ workersPath: wp })
         toolDefs = await bridge.getTools()
         _cachedTools = toolDefs
-      } finally {
-        await bridge.disconnect()
+      } catch (error) {
+        await disposeSharedWorkers().catch(() => {})
+        throw error
       }
       return formatToolList(toolDefs)
     },

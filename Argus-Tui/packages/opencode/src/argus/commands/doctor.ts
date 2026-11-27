@@ -1,14 +1,15 @@
 import { promises as dns } from "dns"
-import { existsSync, readFileSync, readdirSync } from "fs"
-import { join, resolve } from "path"
+import { accessSync, constants, existsSync, readFileSync, readdirSync, statSync } from "fs"
+import { delimiter as pathDelimiter, join, resolve } from "path"
 import { homedir } from "os"
 import { StoragePaths } from "../storage/paths"
-import { spawn, execFileSync } from "child_process"
+import { spawn } from "child_process"
 import { connect as tcpConnect } from "net"
 import { xdgData } from "xdg-basedir"
 import { EngagementStore } from "../engagement/store"
 import { CredentialStore } from "../engagement/credentials"
 import { WorkersBridge, resolveDefaultPython } from "../bridge/mcp-client"
+import { acquireSharedWorker } from "../bridge/shared-worker"
 import { PROJECT_ROOT } from "../shared/path"
 import { ToolRegistry } from "../workflows/tool-registry"
 import { LLMPlannerService } from "../planner/llm-service"
@@ -66,23 +67,33 @@ export async function doctorCommand(options?: {
   workersPath?: string
   pythonPath?: string
   online?: boolean
+  /** Already-connected worker to reuse instead of spawning. */
+  bridge?: WorkersBridge
+  /** Use the process-wide TUI worker cache and leave it running for reuse. */
+  sharedWorker?: boolean
 }): Promise<CheckResult[]> {
-  const results: CheckResult[] = []
-
-  results.push(runtimeCheck())
-  results.push(await pythonCheck(options?.pythonPath))
-  results.push(await mcpCheck(options?.workersPath, options?.pythonPath))
-  results.push(await playwrightCheck())
-  results.push(await redisCheck())
-  results.push(dbCheck())
-  results.push(credCheck())
-  results.push(envCheck())
-  results.push(scopeCheck())
-  results.push(await plannerLLMCheck())
-  results.push(await dnsCheck())
-  results.push(configValidationCheck())
-  results.push(toolchainCheck())
-  results.push(securityAgentsCheck())
+  // The checks are independent (local probes plus one shared-worker ping), so
+  // run them concurrently. Sequential awaits made /doctor the sum of its
+  // slowest checks (e.g. a 30s Playwright fallback plus worker startup).
+  const results: CheckResult[] = await Promise.all([
+    runtimeCheck(),
+    pythonCheck(options?.pythonPath),
+    mcpCheck(options?.workersPath, options?.pythonPath, {
+      bridge: options?.bridge,
+      shared: options?.sharedWorker,
+    }),
+    playwrightCheck(),
+    redisCheck(),
+    dbCheck(),
+    credCheck(),
+    envCheck(),
+    scopeCheck(),
+    plannerLLMCheck(),
+    dnsCheck(),
+    configValidationCheck(),
+    toolchainCheck(),
+    securityAgentsCheck(),
+  ])
 
   // --online flag: runs LLM provider connectivity check
   if (options?.online) {
@@ -113,20 +124,40 @@ function runtimeCheck(): CheckResult {
   }
 }
 
+/**
+ * Per-process cache for environment probes that passed. Spawning the venv
+ * Python or the Playwright CLI costs seconds on a loaded machine, and the
+ * installation does not change mid-process. Only PASS results are cached —
+ * a failure is always re-probed, so fixing the setup is picked up on the
+ * next run.
+ */
+const passCache = new Map<string, CheckResult>()
+
+/**
+ * Version-probe results keyed by `tool:path:mtimeMs`. A repeat run re-stats
+ * the binary (cheap) and skips the spawn; an upgrade changes the mtime and
+ * is always re-probed.
+ */
+const versionCache = new Map<string, string | null>()
+
 async function pythonCheck(pythonPath?: string): Promise<CheckResult> {
   // Check exactly the interpreter the worker bridge will spawn, not a separate
   // search order — a passing check on a different Python proves nothing about
   // the one that has to import the worker's dependencies.
   const py = pythonPath ?? resolveDefaultPython()
+  const cached = passCache.get(`python:${py}`)
+  if (cached) return cached
 
   try {
     const version = await execCapture(py, ["--version"])
     if (version) {
-      return {
+      const result: CheckResult = {
         name: "Python Runtime",
         status: "PASS",
         message: `${version.trim()} (via ${py})`,
       }
+      passCache.set(`python:${py}`, result)
+      return result
     }
   } catch (error) {
     process.stderr.write(`[doctor] python check failed for ${py}: ${(error as Error).message}\n`)
@@ -139,7 +170,11 @@ async function pythonCheck(pythonPath?: string): Promise<CheckResult> {
   }
 }
 
-async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<CheckResult> {
+async function mcpCheck(
+  workersPath?: string,
+  pythonPath?: string,
+  reuse?: { bridge?: WorkersBridge; shared?: boolean },
+): Promise<CheckResult> {
   const wp = workersPath ?? join(PROJECT_ROOT, "argus-workers/mcp_server.py")
 
   if (!existsSync(wp)) {
@@ -159,26 +194,54 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
   }
 
   const py = pythonPath ?? resolveDefaultPython()
-  const bridge = new WorkersBridge(wp, py)
+  let bridge = reuse?.bridge
+  if (!bridge && reuse?.shared) {
+    try {
+      bridge = await acquireSharedWorker({ workersPath: wp, pythonPath: py })
+    } catch (error) {
+      // Do not spawn a second worker here: the shared acquire already tried,
+      // and a second 45s startup would just repeat the same failure.
+      return {
+        name: "MCP Worker",
+        status: "FAIL",
+        message: `Worker error: ${(error as Error).message}`,
+      }
+    }
+  }
+  const sharedBridge = bridge
+  if (!bridge) bridge = new WorkersBridge(wp, py)
+  const ownsBridge = sharedBridge === undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
+    // A shared worker is already connected: a ping is the whole check. It must
+    // not be disconnected here, or the next slash command pays the spawn cost
+    // again.
+    const connected = ownsBridge
+      ? bridge.connect().then(async () => bridge.isHealthy())
+      : bridge.isHealthy(10000)
     // Timeout the MCP connect/health check at 10s — Python worker startup
     // can hang if the interpreter or worker script has issues.
-    const connected = bridge.connect().then(async () => bridge.isHealthy())
     // The losing side of the race still settles (or rejects) after we stop
     // awaiting it; swallow it so a timed-out connect cannot surface as an
     // unhandled rejection.
     connected.catch(() => {})
-    await Promise.race([
+    const healthy = await Promise.race([
       connected,
       new Promise<boolean>((_, reject) => {
         timer = setTimeout(() => reject(new Error("MCP worker connect timed out after 10s")), 10000)
       }),
     ])
+    if (!healthy) {
+      return {
+        name: "MCP Worker",
+        status: "FAIL",
+        message: "Worker did not answer its ping",
+      }
+    }
     return {
       name: "MCP Worker",
       status: "PASS",
-      message: "Worker responding via stdio JSON-RPC",
+      message: ownsBridge ? "Worker responding via stdio JSON-RPC" : "Reused running worker — responding via stdio JSON-RPC",
     }
   } catch (error) {
     return {
@@ -188,14 +251,18 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
     }
   } finally {
     if (timer) clearTimeout(timer)
-    // Always tear down, even when connect never resolved: the spawned worker's
-    // stdio pipes keep the process alive, so a timed-out health check would
-    // otherwise leave `argus doctor` hanging forever.
-    await bridge.disconnect().catch(() => {})
+    // Always tear down a bridge this check spawned, even when connect never
+    // resolved: the spawned worker's stdio pipes keep the process alive, so a
+    // timed-out health check would otherwise leave `argus doctor` hanging
+    // forever. A shared bridge belongs to the caller and stays alive.
+    if (ownsBridge) await bridge.disconnect().catch(() => {})
   }
 }
 
 async function playwrightCheck(): Promise<CheckResult> {
+  const cached = passCache.get("playwright")
+  if (cached) return cached
+
   // Run the package-local CLI with the current runtime instead of shelling out
   // to `npx`: npm's cold start takes 15-20s on Windows, which used to blow the
   // old 5s timeout and report Playwright missing on machines where it was
@@ -207,13 +274,15 @@ async function playwrightCheck(): Promise<CheckResult> {
     // exports map does not expose cli.js, so a subpath resolve is rejected.
     const entry = fileURLToPath(import.meta.resolve("playwright"))
     const cli = join(dirname(entry), "cli.js")
-    const output = await execCapture(process.execPath, [cli, "--version"], 15000)
-    const version = output.trim().split(/\s+/).pop()
-    return {
-      name: "Playwright",
-      status: "PASS",
-      message: `Playwright CLI available${version ? ` (${version})` : ""}`,
-    }
+          const output = await execCapture(process.execPath, [cli, "--version"], 15000)
+      const version = output.trim().split(/\s+/).pop()
+      const result: CheckResult = {
+        name: "Playwright",
+        status: "PASS",
+        message: `Playwright CLI available${version ? ` (${version})` : ""}`,
+      }
+      passCache.set("playwright", result)
+      return result
   } catch {
     // Playwright may be installed outside this package — fall back to npx.
   }
@@ -222,11 +291,13 @@ async function playwrightCheck(): Promise<CheckResult> {
     // Use --no-install to avoid npx downloading packages on check. npm's cold
     // start is slow on Windows, so give it more headroom than a bare exec.
     await execCapture("npx", ["--no-install", "playwright", "--version"], 30000)
-    return {
+    const fallback: CheckResult = {
       name: "Playwright",
       status: "PASS",
       message: "Playwright CLI available",
     }
+    passCache.set("playwright", fallback)
+    return fallback
   } catch {
     return {
       name: "Playwright",
@@ -631,6 +702,53 @@ export function loadToolVersionChecks(definitionsPath?: string): Map<string, Too
   return map
 }
 
+/**
+ * Resolve a binary via PATH without spawning `where`/`which`, returning its
+ * full path (or null).
+ *
+ * Mirrors executable lookup: the current directory plus every PATH entry, with
+ * PATHEXT suffixes on Windows and the executable bit elsewhere. Plain `stat`
+ * calls are milliseconds; one child process per tool is not.
+ */
+function findOnPath(tool: string): string | null {
+  const rawPath = process.env.PATH ?? ""
+  const dirs = [
+    process.cwd(),
+    ...rawPath
+      .split(pathDelimiter)
+      .filter(Boolean)
+      .map((d) => d.replace(/^["']|["']$/g, "")),
+  ]
+  if (process.platform === "win32") {
+    const exts = (process.env.PATHEXT ?? ".EXE;.BAT;.CMD").split(";").map((e) => e.toLowerCase())
+    const candidates = new Set<string>([tool])
+    for (const ext of exts) {
+      if (ext) candidates.add(tool.toLowerCase().endsWith(ext) ? tool : tool + ext)
+    }
+    for (const dir of dirs) {
+      for (const name of candidates) {
+        try {
+          const full = join(dir, name)
+          if (existsSync(full)) return full
+        } catch {
+          // unreadable directory — keep looking
+        }
+      }
+    }
+    return null
+  }
+  for (const dir of dirs) {
+    try {
+      const full = join(dir, tool)
+      accessSync(full, constants.X_OK)
+      return full
+    } catch {
+      // not here — keep looking
+    }
+  }
+  return null
+}
+
 export function parseSemver(version: string): number[] {
   return version.split(".").map((p) => {
     const n = parseInt(p, 10)
@@ -648,8 +766,13 @@ export function compareVersions(a: string, b: string): number {
   return 0
 }
 
-/** Toolchain check: verify security tool binaries exist on PATH and check versions */
-function toolchainCheck(): CheckResult {
+/** Toolchain check: verify security tool binaries exist on PATH and check versions.
+ *
+ * Async and parallel: the synchronous version ran `where`/`which` plus a version
+ * probe per tool back-to-back on the main thread, which alone cost tens of
+ * seconds on a loaded machine and stalled every other check behind it.
+ */
+async function toolchainCheck(): Promise<CheckResult> {
   const found: string[] = []
   const missing: string[] = []
   const versionWarnings: string[] = []
@@ -678,35 +801,60 @@ function toolchainCheck(): CheckResult {
   }
 
   // ── Check each tool ────────────────────────────────────────────────
+  // PATH scan with plain filesystem stats — spawning `where`/`which` once
+  // per tool meant 40+ child processes fighting the worker and Playwright
+  // probes for the CPU, which alone cost ~10s on a loaded machine.
+  // Resolved paths double as version-probe cache keys (see below).
+  const toolPaths = new Map<string, string>()
   for (const tool of allToolNames) {
-    try {
-      const whichCmd = process.platform === "win32" ? "where" : "which"
-      execFileSync(whichCmd, [tool], { stdio: "ignore" })
+    const full = findOnPath(tool)
+    if (full) {
       found.push(tool)
-
-      // Version check — only for tools that have a version check defined
-      const versionDef = versionCheckMap.get(tool)
-      if (versionDef?.version_cmd && versionDef?.min_version) {
-        try {
-          const parts = versionDef.version_cmd.split(/\s+/)
-          const output = execFileSync(parts[0]!, parts.slice(1), {
-            encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"],
-          })
-          const regex = versionDef.version_regex
-          const match = regex ? output.match(new RegExp(regex)) : null
-          if (match) {
-            const version = match[0]
-            if (compareVersions(version, versionDef.min_version) < 0) {
-              versionWarnings.push(`${tool} v${version} < min v${versionDef.min_version}`)
-            }
-          }
-        } catch {
-          // version check failed — skip (tool still works, just can't verify version)
-        }
-      }
-    } catch {
-      if (coreTools.has(tool)) missing.push(tool)
+      toolPaths.set(tool, full)
+    } else if (coreTools.has(tool)) {
+      missing.push(tool)
     }
+  }
+
+  // Version checks — only for found tools that have a version check defined.
+  // Also concurrent: each probe has its own 5s timeout. Results are cached
+  // against the binary's mtime, so repeats skip the spawn entirely while an
+  // upgrade (new mtime) is always re-probed.
+  const versionResults = await Promise.all(
+    found.map(async (tool): Promise<string | null> => {
+      const versionDef = versionCheckMap.get(tool)
+      if (!versionDef?.version_cmd || !versionDef?.min_version) return null
+      const full = toolPaths.get(tool)!
+      let mtimeMs = 0
+      try {
+        mtimeMs = statSync(full).mtimeMs
+      } catch {
+        return null
+      }
+      const cacheKey = `${tool}:${full}:${mtimeMs}`
+      const hit = versionCache.get(cacheKey)
+      if (hit !== undefined) return hit
+      let warning: string | null = null
+      try {
+        const parts = versionDef.version_cmd.split(/\s+/)
+        const output = await execCapture(parts[0]!, parts.slice(1), 5000)
+        const regex = versionDef.version_regex
+        const match = regex ? output.match(new RegExp(regex)) : null
+        if (match) {
+          const version = match[0]
+          if (compareVersions(version, versionDef.min_version) < 0) {
+            warning = `${tool} v${version} < min v${versionDef.min_version}`
+          }
+        }
+      } catch {
+        // version check failed — skip (tool still works, just can't verify version)
+      }
+      versionCache.set(cacheKey, warning)
+      return warning
+    }),
+  )
+  for (const warning of versionResults) {
+    if (warning) versionWarnings.push(warning)
   }
 
   // Build a clean message. The registry has 46 tools, but many are niche/optional.
