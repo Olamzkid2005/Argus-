@@ -313,7 +313,11 @@ export function Home() {
           </box>
         </Show>
 
-        <box paddingTop={2} width="100%" maxWidth={promptMaxWidth()}>
+        {/* The prompt must paint above the dashboard. OpenTUI orders siblings
+            by zIndex only, and the Show blocks above are inserted after the
+            prompt, so with equal zIndex they would otherwise cover the
+            autocomplete popup. */}
+        <box paddingTop={2} width="100%" maxWidth={promptMaxWidth()} zIndex={1}>
           <TuiPluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
             <Prompt ref={bind} right={<TuiPluginRuntime.Slot name="home_prompt_right" />} placeholders={placeholder} />
           </TuiPluginRuntime.Slot>
