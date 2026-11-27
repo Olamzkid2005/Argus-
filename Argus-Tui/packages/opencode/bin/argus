@@ -14,8 +14,17 @@
  * relative paths correctly.
  */
 import { fileURLToPath } from "url"
-import { dirname, join } from "path"
+import { delimiter, dirname, join } from "path"
 import { spawnForeground } from "../src/argus/launcher"
+
+// ARGUS_EXTRA_PATH is the documented way to point Argus at tool directories
+// outside the shell PATH (.env.example). Bun loads .env from the working
+// directory, so honour it here too: without this `argus doctor` reported nmap
+// missing while ./start-argus.sh doctor found it.
+const extraPath = process.env.ARGUS_EXTRA_PATH?.trim()
+if (extraPath) {
+  process.env.PATH = `${extraPath}${delimiter}${process.env.PATH ?? ""}`
+}
 
 // Use absolute path so bun resolves the entry regardless of CWD
 const binDir = dirname(fileURLToPath(import.meta.url))

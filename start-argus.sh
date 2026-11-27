@@ -36,9 +36,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for _dir in "$HOME/go/bin" "$HOME/.local/bin" "/opt/homebrew/bin" "/usr/local/bin" "$SCRIPT_DIR/.livefire/bin"; do
   [ -d "$_dir" ] && case ":$PATH:" in *":$_dir:"*) ;; *) PATH="$_dir:$PATH" ;; esac
 done
-if [ -n "${ARGUS_EXTRA_PATH:-}" ]; then
-  PATH="$ARGUS_EXTRA_PATH:$PATH"
-fi
 export PATH
 
 # Load .env if present. The docs tell people to copy .env.example to .env, but
@@ -58,6 +55,16 @@ for _envfile in "$SCRIPT_DIR/.env" "$SCRIPT_DIR/argus-workers/.env"; do
     fi
   done < "$_envfile"
 done
+
+
+# ARGUS_EXTRA_PATH must be applied after .env is loaded: .env.example documents
+# it as the place to add tool directories, and applying it earlier silently
+# ignored the file (nmap stayed "MISSING" because it lives outside both the
+# login PATH and the directories above).
+if [ -n "${ARGUS_EXTRA_PATH:-}" ]; then
+  PATH="$ARGUS_EXTRA_PATH:$PATH"
+  export PATH
+fi
 
 # Planner loop defaults: the beat drain only does work when these are not off.
 # .env wins (loaded above); these keep a bare checkout from silently disabling
