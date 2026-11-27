@@ -85,7 +85,9 @@ tools:
     cost: low
     version_cmd: 'whatweb --version'
     version_regex: '\d+\.\d+\.\d+'
-    min_version: "1.0.0"
+    # WhatWeb has never reached 1.0: the current release is 0.6.4, so a 1.0.0
+    # floor made every correct install report "v0.6.4 < min v1.0.0".
+    min_version: "0.4.0"
 
   - name: ffuf
     label: FFUF Content Discovery
