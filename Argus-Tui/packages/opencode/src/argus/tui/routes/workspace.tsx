@@ -5,6 +5,7 @@
  * The primary navigation hub for the Argus platform.
  */
 import { createSignal, onMount, Show, createResource } from "solid-js"
+import { useKeyboard } from "@opentui/solid"
 import { useTheme } from "@tui/context/theme"
 import { useRoute } from "@tui/context/route"
 import { Toast, useToast } from "@tui/ui/toast"
@@ -18,6 +19,20 @@ export function Workspace() {
   const [criticalCount, setCriticalCount] = createSignal(0)
   const [loading, setLoading] = createSignal(true)
   const toast = useToast()
+
+  // This view has no prompt input, so without this there is no way out
+  // except the session list. Esc (or clicking the hint) returns to the
+  // landing view: the dashboard in ARGUS mode, home (prompt) otherwise.
+  const backLabel = process.env["ARGUS_MODE"] === "1" ? "dashboard" : "home"
+  const goBack = () =>
+    route.navigate(process.env["ARGUS_MODE"] === "1" ? { type: "dashboard" } : { type: "home" })
+  useKeyboard((evt) => {
+    if (evt.name === "escape") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      goBack()
+    }
+  })
 
   const [encryptionStatus] = createResource(async () => {
     try {
@@ -138,6 +153,11 @@ export function Workspace() {
           </Show>
           <text fg={theme.success}>● Ready</text>
         </box>
+      </box>
+
+      {/* Navigation hint — this view has no prompt input, so say how to leave. */}
+      <box paddingTop={1} onMouseUp={goBack}>
+        <text fg={theme.textMuted}>esc — back to {backLabel}</text>
       </box>
 
       <Toast />
