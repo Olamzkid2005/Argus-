@@ -34,6 +34,8 @@ cd Argus-Tui/packages/opencode && bun run src/argus/main.ts doctor
 # Make the `argus` CLI available globally (optional)
 cd Argus-Tui/packages/opencode && bun link
 argus doctor           # now works anywhere
+# Windows: bun link writes %USERPROFILE%\.bun\bin\argus.exe, so that directory
+# must be on PATH (it also holds bun.exe) — open a new terminal afterwards.
 
 # Run tests
 make test-v5
