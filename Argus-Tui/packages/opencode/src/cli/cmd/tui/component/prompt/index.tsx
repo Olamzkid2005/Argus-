@@ -1328,6 +1328,20 @@ export function Prompt(props: PromptProps) {
                 }
               })()
             } else {
+              // Unlike assessments, these commands answer by posting their
+              // output into the session. On the home route nothing else
+              // navigates there, so the output used to land in a session the
+              // user never saw. Take them there and acknowledge the work.
+              if (!props.sessionID) {
+                const target = sessionID
+                setTimeout(() => route.navigate({ type: "session", sessionID: target }), 50)
+              }
+              toast.show({
+                variant: "info",
+                title: `Running /${cmdName}`,
+                message: "Results will appear in this session.",
+                duration: 15000,
+              })
               void (async () => {
                 try {
                   const output = await argusCmd.handler(arg)
@@ -1338,6 +1352,9 @@ export function Prompt(props: PromptProps) {
                     agent: agent.name,
                     model: selectedModel,
                     variant,
+                    // Command output is information, not a chat turn. Without
+                    // this the server would send the report to the model.
+                    noReply: true,
                     parts: [{ id: PartID.ascending(), type: "text" as const, text: output }],
                   })
                 } catch (err) {
@@ -1349,6 +1366,7 @@ export function Prompt(props: PromptProps) {
                     agent: agent.name,
                     model: selectedModel,
                     variant,
+                    noReply: true,
                     parts: [{ id: PartID.ascending(), type: "text" as const, text: `**Error:** ${errMsg}` }],
                   })
                 }
