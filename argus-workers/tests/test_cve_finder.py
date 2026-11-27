@@ -122,7 +122,9 @@ def _fixture_dispatcher(mapping, failures=None):
         params = params or {}
         if url.rstrip("/").endswith("/cpes/2.0"):
             kind = "cpe-search"
-        elif url.rstrip("/").endswith("/cves/2.0") and "cpeName" in params:
+        elif url.rstrip("/").endswith("/cves/2.0") and (
+            "cpeName" in params or "virtualMatchString" in params
+        ):
             kind = "by-cpe"
         elif url.rstrip("/").endswith("/cves/2.0") and "cveId" in params:
             kind = "by-id:" + str(params["cveId"]).upper()
@@ -574,7 +576,9 @@ class _StubHandler(BaseHTTPRequestHandler):
         path, _, query = parsed.path, None, parsed.query
         if path == "/rest/json/cpes/2.0":
             body = CPE_LOG4J
-        elif path == "/rest/json/cves/2.0" and "cpeName=" in query:
+        elif path == "/rest/json/cves/2.0" and (
+            "cpeName=" in query or "virtualMatchString=" in query
+        ):
             body = NVD_CVES_LOG4J
         elif path == "/rest/json/cves/2.0" and "cveId=" in query:
             body = NVD_CVE_DIRECT

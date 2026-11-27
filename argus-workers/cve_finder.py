@@ -216,12 +216,48 @@ def _score_cpe(cpe_name: str, vendor: str, product: str) -> float:
     return score
 
 
-def identify_cpe(vendor: str, product: str, component: str = "") -> dict[str, Any]:
-    """Map detected vendor/product to an NVD CPE identifier.
+_CPE_SAFE_CHAR = re.compile(r"[A-Za-z0-9._-]")
 
-    Returns ``{cpe, confidence, candidates, ambiguous}``. Never invents a
-    CPE: when nothing matches confidently, ``cpe`` is None and the caller
-    must classify applicability as unknown/potential, not confirmed.
+
+def _cpe_escape(value: str) -> str:
+    """Escape one component for a CPE 2.3 formatted string."""
+    return "".join(
+        ch if _CPE_SAFE_CHAR.fullmatch(ch) else "\\" + ch for ch in value
+    )
+
+
+def _cpe_product_line(cpe_name: str) -> str:
+    """The CPE name with version and all later fields wildcarded."""
+    bits = cpe_name.split(":")
+    if len(bits) < 6:
+        return cpe_name
+    bits[5:] = ["*"] * (len(bits) - 5)
+    return ":".join(bits)
+
+
+def _cpe_pin_version(cpe_name: str, version: str | None) -> str:
+    """CPE match string for ``version`` (the product line when None)."""
+    line = _cpe_product_line(cpe_name)
+    if not version:
+        return line
+    bits = line.split(":")
+    bits[5] = _cpe_escape(version)
+    return ":".join(bits)
+
+
+def identify_cpe(
+    vendor: str, product: str, component: str = "", version: str | None = None
+) -> dict[str, Any]:
+    """Map detected vendor/product/version to an NVD CPE identifier.
+
+    Returns ``{cpe, confidence, candidates, ambiguous}``. The CPE dictionary
+    only lists concrete versions (e.g. Log4j 2.0-alpha1), so entries are
+    collapsed into product lines and the detected version is pinned onto the
+    best line. Trusting the dictionary's version instead would query NVD for
+    the wrong release and silently miss CVEs affecting the detected one.
+    Never invents a CPE: when nothing matches confidently, ``cpe`` is None
+    and the caller must classify applicability as unknown/potential, not
+    confirmed.
     """
     alias = PRODUCT_ALIASES.get((product or "").lower().strip())
     search_vendor = alias["vendor"] if alias else (vendor or "")
@@ -235,29 +271,39 @@ def identify_cpe(vendor: str, product: str, component: str = "") -> dict[str, An
         entries = search_cpes(keyword)
     except CveFinderError as exc:
         raise exc
-    scored: list[tuple[float, str, bool]] = []
+    # Aggregate the dictionary's one-entry-per-version results by product
+    # line: alpha/beta/release CPEs of the same product are one candidate, not
+    # competing products.
+    lines: dict[str, tuple[float, bool]] = {}
     for entry in entries:
         cpe = entry.get("cpe", {})
         name = cpe.get("cpeName", "")
         if not name:
             continue
+        line = _cpe_product_line(name)
         deprecated = bool(cpe.get("deprecated", False))
-        score = _score_cpe(name, search_vendor, search_product)
+        score = _score_cpe(line, search_vendor, search_product)
         if deprecated:
             score *= 0.5
-        scored.append((score, name, deprecated))
-    scored.sort(key=lambda item: item[0], reverse=True)
+        previous = lines.get(line)
+        if previous is None or score > previous[0] or (not deprecated and previous[1]):
+            lines[line] = (score, deprecated)
+    ranked = sorted(lines.items(), key=lambda item: item[1][0], reverse=True)
     candidates = [
-        {"cpe": name, "confidence": round(score, 2), "deprecated": dep}
-        for score, name, dep in scored[:5]
+        {"cpe": line, "confidence": round(score, 2), "deprecated": dep}
+        for line, (score, dep) in ranked[:5]
     ]
-    if not scored or scored[0][0] < 0.75:
+    if not ranked or ranked[0][1][0] < 0.75:
         return {"cpe": None, "confidence": 0.0, "candidates": candidates, "ambiguous": True}
-    top = scored[0]
-    tied = [s for s in scored[1:3] if abs(s[0] - top[0]) < 1e-9 and s[1] != top[1]]
+    top_line, (top_score, _top_deprecated) = ranked[0]
+    tied = [
+        line
+        for line, (score, _dep) in ranked[1:3]
+        if abs(score - top_score) < 1e-9 and line != top_line
+    ]
     return {
-        "cpe": top[0] and top[1] or None,
-        "confidence": round(top[0], 2),
+        "cpe": _cpe_pin_version(top_line, version),
+        "confidence": round(top_score, 2),
         "candidates": candidates,
         "ambiguous": bool(tied),
     }
@@ -283,17 +329,41 @@ def lookup_cve(cve_id: str) -> dict[str, Any] | None:
     return record
 
 
-def search_cves_by_cpe(cpe_name: str, results_per_page: int = 50) -> list[dict[str, Any]]:
-    """All NVD CVE records applicable to a CPE name."""
-    data = _nvd_get(
-        "/cves/2.0", {"cpeName": cpe_name, "resultsPerPage": results_per_page}
-    )
+def _cves_for_cpe(cpe_name: str, results_per_page: int) -> list[dict[str, Any]]:
+    """One NVD CVE query for a CPE match string."""
+    params: dict[str, Any] = {"resultsPerPage": results_per_page}
+    if _criteria_version(cpe_name) is None:
+        # NVD answers 404 for a wildcard version in ``cpeName``; a virtual
+        # match string is the documented way to ask for a partial CPE.
+        params["virtualMatchString"] = cpe_name
+    else:
+        params["cpeName"] = cpe_name
+    data = _nvd_get("/cves/2.0", params)
     records = []
     for vuln in data.get("vulnerabilities", []):
         cve = vuln.get("cve", {})
         if cve.get("id"):
             records.append(parse_cve(cve))
     return records
+
+
+def search_cves_by_cpe(cpe_name: str, results_per_page: int = 50) -> list[dict[str, Any]]:
+    """All NVD CVE records applicable to a CPE name.
+
+    A version-pinned CPE is matched by NVD against each record's affected
+    version ranges, so the results are already scoped to the detected version.
+    If that version is unknown upstream (or has no records), fall back to the
+    product line and let local applicability analysis filter by version.
+    """
+    if _criteria_version(cpe_name) is None:
+        return _cves_for_cpe(cpe_name, results_per_page)
+    try:
+        records = _cves_for_cpe(cpe_name, results_per_page)
+    except CveFinderError:
+        records = []
+    if records:
+        return records
+    return _cves_for_cpe(_cpe_product_line(cpe_name), results_per_page)
 
 
 def parse_cve(cve: dict[str, Any]) -> dict[str, Any]:
@@ -836,7 +906,9 @@ class CveFinder:
                 )
                 continue
             try:
-                identification = identify_cpe(vendor, name, component)
+                identification = identify_cpe(
+                    vendor, name, component, _clean_version(product.get("version"))
+                )
             except CveFinderError:
                 nvd_failed = True
                 identification = {"cpe": None, "confidence": 0.0, "candidates": [], "ambiguous": True}
