@@ -1,8 +1,18 @@
 -- Argus Base Schema
 -- Initializes core tables required by the platform
 
--- Enable pgvector extension if available
-CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable pgvector extension if available. The control file is absent on a
+-- stock PostgreSQL install (e.g. Windows winget), where plain CREATE EXTENSION
+-- aborts even with IF NOT EXISTS — so check availability first. Similarity
+-- search degrades gracefully (see pgvector_repository.check_pgvector_available).
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector') THEN
+        CREATE EXTENSION IF NOT EXISTS vector;
+    ELSE
+        RAISE NOTICE 'pgvector not installed — skipping vector extension (similarity search disabled)';
+    END IF;
+END $$;
 
 -- Engagements table
 CREATE TABLE IF NOT EXISTS engagements (

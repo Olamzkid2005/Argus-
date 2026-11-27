@@ -224,6 +224,34 @@ def _get_migration_files() -> list[Path]:
     return sorted(sql_files + py_files, key=lambda p: p.name)
 
 
+def _required_extension(path: Path) -> str | None:
+    """Return the extension a migration declares via `-- Requires-Extension: <name>`.
+
+    Migrations whose body needs an extension that is not installed (e.g.
+    pgvector on a stock PostgreSQL) are skipped and left pending, so a
+    later install picks them up instead of aborting the whole run.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            for _ in range(8):
+                line = f.readline()
+                if not line:
+                    break
+                if line.lower().startswith("-- requires-extension:"):
+                    return line.split(":", 1)[1].strip() or None
+    except OSError:
+        return None
+    return None
+
+
+def _extension_available(conn, name: str) -> bool:
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = %s", (name,)
+        )
+        return cursor.fetchone() is not None
+
+
 def run_migrations(connection_string: str | None = None) -> list[str]:
     """Apply all pending SQL and Python migrations.
 
@@ -266,6 +294,19 @@ def run_migrations(connection_string: str | None = None) -> list[str]:
             logger.info("Applying migration: %s", path.name)
             try:
                 if path.suffix == ".sql":
+                    # Skip (but leave pending) when a declared extension is
+                    # not installed — e.g. pgvector on stock PostgreSQL.
+                    # Recording it as failed would abort setup for an
+                    # optional capability the code already degrades without.
+                    ext = _required_extension(path)
+                    if ext and not _extension_available(conn, ext):
+                        logger.warning(
+                            "Skipping migration %s: extension '%s' is not "
+                            "installed (leaving pending)",
+                            path.name,
+                            ext,
+                        )
+                        continue
                     # SQL migration — execute raw SQL directly
                     sql = path.read_text(encoding="utf-8")
                     with conn.cursor() as cursor:

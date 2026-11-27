@@ -1,5 +1,6 @@
 -- Migration 005: Add pgvector support for finding similarity search
 -- Requires: pgvector extension installed on PostgreSQL
+-- Requires-Extension: vector
 --
 -- This migration adds vector embeddings to the findings table for semantic
 -- similarity search across findings in different engagements.

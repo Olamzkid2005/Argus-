@@ -3,8 +3,17 @@
 
 BEGIN;
 
--- Enable pgvector extension if available
-CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable pgvector extension if available (see init/01-schema.sql: the control
+-- file is absent on stock PostgreSQL installs, where plain CREATE EXTENSION
+-- aborts even with IF NOT EXISTS).
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector') THEN
+        CREATE EXTENSION IF NOT EXISTS vector;
+    ELSE
+        RAISE NOTICE 'pgvector not installed — skipping vector extension (similarity search disabled)';
+    END IF;
+END $$;
 
 -- Engagements table
 CREATE TABLE IF NOT EXISTS engagements (
