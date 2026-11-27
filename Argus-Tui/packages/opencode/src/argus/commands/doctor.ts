@@ -75,25 +75,55 @@ export async function doctorCommand(options?: {
   // The checks are independent (local probes plus one shared-worker ping), so
   // run them concurrently. Sequential awaits made /doctor the sum of its
   // slowest checks (e.g. a 30s Playwright fallback plus worker startup).
-  const results: CheckResult[] = await Promise.all([
+  //
+  // Two phases: the synchronous checks plus the Redis ping run first, while
+  // the event loop is quiet. The spawn-heavy checks below (worker startup,
+  // ~40 concurrent toolchain probes, Playwright) can saturate a Windows box
+  // for seconds (Defender scans every child process), which used to trip the
+  // Redis 5s timer and the MCP 10s race even though both services answered in
+  // milliseconds when probed directly.
+  const phase1: CheckResult[] = await Promise.all([
     runtimeCheck(),
     pythonCheck(options?.pythonPath),
-    mcpCheck(options?.workersPath, options?.pythonPath, {
-      bridge: options?.bridge,
-      shared: options?.sharedWorker,
-    }),
-    playwrightCheck(),
     redisCheck(),
     dbCheck(),
     credCheck(),
     envCheck(),
     scopeCheck(),
-    plannerLLMCheck(),
-    dnsCheck(),
     configValidationCheck(),
-    toolchainCheck(),
     securityAgentsCheck(),
+    dnsCheck(),
   ])
+  const phase2: CheckResult[] = await Promise.all([
+    mcpCheck(options?.workersPath, options?.pythonPath, {
+      bridge: options?.bridge,
+      shared: options?.sharedWorker,
+    }),
+    playwrightCheck(),
+    plannerLLMCheck(),
+    toolchainCheck(),
+  ])
+  // Preserve the historical check order in the output.
+  const byName = new Map<string, CheckResult>(
+    [...phase1, ...phase2].map((r) => [r.name, r]),
+  )
+  const order = [
+    "Runtime",
+    "Python Runtime",
+    "MCP Worker",
+    "Playwright",
+    "Redis",
+    "Database",
+    "Credentials",
+    "Configuration",
+    "Scope Protection",
+    "Planner LLM",
+    "DNS Resolution",
+    "Config Validation",
+    "Toolchain",
+    "Security Agents",
+  ]
+  const results: CheckResult[] = order.map((name) => byName.get(name)!)
 
   // --online flag: runs LLM provider connectivity check
   if (options?.online) {
@@ -219,16 +249,18 @@ async function mcpCheck(
     const connected = ownsBridge
       ? bridge.connect().then(async () => bridge.isHealthy())
       : bridge.isHealthy(10000)
-    // Timeout the MCP connect/health check at 10s — Python worker startup
-    // can hang if the interpreter or worker script has issues.
-    // The losing side of the race still settles (or rejects) after we stop
-    // awaiting it; swallow it so a timed-out connect cannot surface as an
-    // unhandled rejection.
+    // Timeout the MCP connect/health check at 20s — Python worker startup
+    // can hang if the interpreter or worker script has issues. 10s was too
+    // tight on Windows: a cold start alone measures ~4s best-case (imports +
+    // Defender scans), and any concurrent load pushed a healthy worker over
+    // the line. The losing side of the race still settles (or rejects) after
+    // we stop awaiting it; swallow it so a timed-out connect cannot surface
+    // as an unhandled rejection.
     connected.catch(() => {})
     const healthy = await Promise.race([
       connected,
       new Promise<boolean>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("MCP worker connect timed out after 10s")), 10000)
+        timer = setTimeout(() => reject(new Error("MCP worker connect timed out after 20s")), 20000)
       }),
     ])
     if (!healthy) {
@@ -817,11 +849,12 @@ async function toolchainCheck(): Promise<CheckResult> {
   }
 
   // Version checks — only for found tools that have a version check defined.
-  // Also concurrent: each probe has its own 5s timeout. Results are cached
-  // against the binary's mtime, so repeats skip the spawn entirely while an
-  // upgrade (new mtime) is always re-probed.
-  const versionResults = await Promise.all(
-    found.map(async (tool): Promise<string | null> => {
+  // Concurrent in small batches: each probe has its own 5s timeout, but an
+  // unbounded Promise.all over ~40 spawns saturated Windows boxes (Defender
+  // scans every child), starving the Redis/MCP checks sharing the loop.
+  // Results are cached against the binary's mtime, so repeats skip the spawn
+  // entirely while an upgrade (new mtime) is always re-probed.
+  const probeVersion = async (tool: string): Promise<string | null> => {
       const versionDef = versionCheckMap.get(tool)
       if (!versionDef?.version_cmd || !versionDef?.min_version) return null
       const full = toolPaths.get(tool)!
@@ -851,8 +884,13 @@ async function toolchainCheck(): Promise<CheckResult> {
       }
       versionCache.set(cacheKey, warning)
       return warning
-    }),
-  )
+  }
+  const versionResults: (string | null)[] = []
+  const PROBE_CONCURRENCY = 4
+  for (let i = 0; i < found.length; i += PROBE_CONCURRENCY) {
+    const chunk = await Promise.all(found.slice(i, i + PROBE_CONCURRENCY).map(probeVersion))
+    versionResults.push(...chunk)
+  }
   for (const warning of versionResults) {
     if (warning) versionWarnings.push(warning)
   }
