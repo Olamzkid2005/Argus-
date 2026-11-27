@@ -56,6 +56,11 @@ export function Home() {
     if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
     return configured ?? 85
   })
+  // One shared width for the whole dashboard. The branding used to be centered
+  // in the terminal while the body stayed pinned to the left edge at 85 columns,
+  // leaving the right half of a wide terminal empty. 92 also keeps the
+  // 87-column Quick Actions row on a single line.
+  const contentMaxWidth = createMemo(() => Math.max(promptMaxWidth(), 92))
 
   const [engagements, setEngagements] = createSignal<Array<{ id: string; target: string; status: string; findings: number }>>([])
   const [stats, setStats] = createSignal<{ targets: number; active: number; findings: number; critical: number; high: number; medium: number } | null>(null)
@@ -68,6 +73,15 @@ export function Home() {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
       onCleanup(() => store.close())
+      const encryptionWarning = EngagementStore.takeMissingMasterKeyWarning()
+      if (encryptionWarning) {
+        toast.show({
+          variant: "warning",
+          title: "Encryption at rest is off",
+          message: encryptionWarning,
+          duration: 15000,
+        })
+      }
       const all = store.listEngagements()
       const recent = all.slice(0, 5)
       // One undecryptable engagement (rotated keychain key, corrupted file)
@@ -80,9 +94,9 @@ export function Home() {
       const safeFindings = (engagementId: string): any[] => {
         try {
           return store.getFindings(engagementId)
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err)
-          console.warn(`[Argus] Skipping findings for ${engagementId}: ${msg}`)
+        } catch {
+          // stderr would corrupt the live TUI frame; the toast after this loop
+          // reports the affected engagements instead.
           decryptFailedIds.add(engagementId)
           return []
         }
@@ -162,7 +176,15 @@ export function Home() {
 
   return (
     <>
-      <box flexGrow={1} flexDirection="column" paddingLeft={2} paddingRight={2}>
+      <box flexGrow={1} flexDirection="row" justifyContent="center">
+        <box
+          flexGrow={1}
+          flexDirection="column"
+          width="100%"
+          maxWidth={contentMaxWidth()}
+          paddingLeft={2}
+          paddingRight={2}
+        >
         {/* Logo */}
         <box alignItems="center" paddingTop={2}>
           <Logo shape={process.env.ARGUS_MODE === "1" ? argusLogo : opencodeLogo} idle />
@@ -203,6 +225,7 @@ export function Home() {
               <text fg={theme.error}><b>{stats()!.critical.toString()}</b></text>
               <text fg={theme.textMuted}>critical</text>
             </box>
+            <text fg={theme.textMuted}>|</text>
             <box flexDirection="column" alignItems="center" minWidth={6}>
               <text fg={sevColor(3)}><b>{stats()!.high.toString()}</b></text>
               <text fg={theme.textMuted}>high</text>
@@ -295,9 +318,10 @@ export function Home() {
             <Prompt ref={bind} right={<TuiPluginRuntime.Slot name="home_prompt_right" />} placeholders={placeholder} />
           </TuiPluginRuntime.Slot>
         </box>
-        <box flexGrow={1} minHeight={0} />
-        <Toast />
+          <box flexGrow={1} minHeight={0} />
+        </box>
       </box>
+      <Toast />
       <box width="100%" flexShrink={0} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} justifyContent="space-between" flexDirection="row">
         <Show when={process.env.ARGUS_MODE === "1"}>
           <text fg={theme.primary}>ARGUS v5</text>

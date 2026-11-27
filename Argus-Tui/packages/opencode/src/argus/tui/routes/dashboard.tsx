@@ -76,6 +76,15 @@ export function ArgusDashboard() {
     try {
       const { EngagementStore } = await import("@/argus/engagement/store")
       const store = new EngagementStore()
+      const encryptionWarning = EngagementStore.takeMissingMasterKeyWarning()
+      if (encryptionWarning) {
+        toast.show({
+          variant: "warning",
+          title: "Encryption at rest is off",
+          message: encryptionWarning,
+          duration: 15000,
+        })
+      }
       const engagements = store.listEngagements()
       const totalTargets = new Set(engagements.map((e) => e.target)).size
       const openEngagements = engagements.filter((e) => e.status === "RUNNING" || e.status === "CREATED").length

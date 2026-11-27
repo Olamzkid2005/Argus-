@@ -607,15 +607,45 @@ export class EngagementStore implements IEngagementStore {
    * to plaintext.
    */
   private static _warnedMissingKey = false
+  private static _missingKeyWarning: string | null = null
+
+  /**
+   * Take the startup warning for display in the TUI. Writing it to stderr
+   * while the TUI owns the terminal paints over the alternate screen and
+   * garbles the frame, so the TUI shows this through a toast instead.
+   */
+  static takeMissingMasterKeyWarning(): string | null {
+    const warning = EngagementStore._missingKeyWarning
+    EngagementStore._missingKeyWarning = null
+    return warning
+  }
+
   private static warnMissingMasterKeyOnce(): void {
     if (EngagementStore._warnedMissingKey) return
     EngagementStore._warnedMissingKey = true
+
+    const fileBased = EncryptionManager.isFileBased()
+    const location = fileBased
+      ? `key file "${join(StoragePaths.basePath, ".master-key.enc")}"`
+      : `keychain service "${keychainServiceName()}", account "${keychainAccountName()}"`
+    const fix = fileBased
+      ? "Run `argus encryption init --passphrase <your-passphrase>` to create a master key."
+      : "Run `argus encryption init` to create a master key."
+
+    EngagementStore._missingKeyWarning =
+      `No master key could be loaded (${location}). Encryption at rest is off for this run, ` +
+      `so engagement databases will be written in plaintext. ${fix}`
+
+    // The TUI owns the terminal (alternate screen + raw mode), so a stderr
+    // write lands on top of the rendered frame. Leave the message for the UI.
+    if (process.env.ARGUS_MODE === "1") return
+
     process.stderr.write(
       `[Argus] WARNING: storage.encryption.enabled is true but no master key could be loaded ` +
-      `(keychain service "${keychainServiceName()}", account "${keychainAccountName()}").\n` +
+      `(${location}).\n` +
       `         Encryption at rest is OFF for this run; engagement databases will be written in ` +
       `plaintext.\n` +
-      `         Run \`argus encryption init\` to create a master key.\n`,
+      `         ${fix}\n`,
     )
   }
 

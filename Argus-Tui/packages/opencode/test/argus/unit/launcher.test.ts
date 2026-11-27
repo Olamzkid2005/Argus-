@@ -13,7 +13,7 @@ describe("Argus launcher", () => {
     launchTui([], (command, args, options) => {
       expect(command).toBe(process.execPath)
       expect(args).toContain("--conditions=browser")
-      expect(args.some((arg) => arg.endsWith("/src/index.ts"))).toBe(true)
+      expect(args.some((arg) => /[\\/]src[\\/]index\.ts$/.test(arg))).toBe(true)
       expect(args).not.toContain("--interactive")
       expect(args.filter((arg) => arg === "run")).toHaveLength(1)
       expect(options.cwd).toBe(process.cwd())
