@@ -152,6 +152,21 @@ TRIVY_OS="Linux"
 
 mkdir -p "$BIN"
 export PATH="$BIN:$PATH"
+
+# nmap on Windows installs through winget/MSI into Program Files and must stay
+# next to its data files (nse/, nmap-services); copying just nmap.exe into
+# $BIN yields a binary that exits silently, so surface the real directory.
+if [ "$OS" = "windows" ] && [ -d "/c/Program Files (x86)/Nmap" ]; then
+  PATH="/c/Program Files (x86)/Nmap:$PATH"
+  export PATH
+fi
+
+# The bundled Windows Redis (redis/redis-cli.exe) is not on PATH either, so
+# the check below reported Redis as absent while it was serving on 6379.
+if [ -d "$ARGUS_HOME/redis" ]; then
+  PATH="$ARGUS_HOME/redis:$PATH"
+  export PATH
+fi
 need curl >/dev/null 2>&1 || die "curl is required"
 
 sha256_of() {
