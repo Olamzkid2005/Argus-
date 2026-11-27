@@ -602,7 +602,7 @@ tools:
     supports_web: false
     timeout_seconds: 600
     version_cmd: 'eslint --version'
-    version_regex: 'v?\d+\.\d+\.\d+'
+    version_regex: '\d+\.\d+\.\d+'
     min_version: "1.0.0"
     requires:
       tech_contains:
