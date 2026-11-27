@@ -455,7 +455,15 @@ if [ "$PACK" = "all" ]; then
       skip "sqlmap comes from requirements-tools.txt (worker venv)"
     elif [ "$name" = "nikto" ]; then
       if [ "$OS" = "windows" ]; then
-        skip "nikto has no native Windows build — install it under WSL if needed"
+        # nikto is a Perl script, not a missing binary: the portable installer
+        # clones it, adds XML::Writer and writes a launcher that Git's perl runs.
+        if [ -f "$ARGUS_HOME/scripts/windows/install-portable-tools.py" ]; then
+          python "$ARGUS_HOME/scripts/windows/install-portable-tools.py" nikto >"$TMP/nikto.log" 2>&1 \
+            || { tail -10 "$TMP/nikto.log"; bad "nikto install failed"; }
+          ok "nikto installed (portable launcher in ~/.local/bin)"
+        else
+          bad "scripts/windows/install-portable-tools.py missing"
+        fi
       elif [ -x "$ARGUS_HOME/scripts/livefire/install-nikto.sh" ]; then
         "$ARGUS_HOME/scripts/livefire/install-nikto.sh" >"$TMP/nikto.log" 2>&1 \
           || { tail -10 "$TMP/nikto.log"; bad "nikto install failed"; }
