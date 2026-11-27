@@ -475,6 +475,20 @@ if [ "$PACK" = "all" ]; then
       install_tool "$name"
     fi
   done
+
+  # testssl/whatweb/wpscan/phpcs are scripts (bash/Ruby/PHP), not binaries, so
+  # there is nothing for a release download to fetch on any platform. On Windows
+  # the portable installer clones them and compiles .exe launchers.
+  if [ "$OS" = "windows" ] && [ -f "$ARGUS_HOME/scripts/windows/install-portable-tools.py" ]; then
+    step "Script-based tools (testssl, whatweb, wpscan, phpcs)"
+    if [ "$MODE" = "check" ]; then
+      python "$ARGUS_HOME/scripts/windows/install-portable-tools.py" --check testssl whatweb wpscan phpcs \
+        || bad "some script-based tools are missing"
+    else
+      python "$ARGUS_HOME/scripts/windows/install-portable-tools.py" testssl whatweb wpscan phpcs \
+        || bad "some script-based tools failed to install"
+    fi
+  fi
 fi
 
 # ── 5. Redis ──────────────────────────────────────────────────────────────────
