@@ -154,15 +154,18 @@ _WINDOWS_SYSTEM_PACKAGES: dict[str, list[tuple[str, str]]] = {
         ("scoop", "trufflehog"),
         ("choco", "trufflehog"),
     ],
-    "testssl": [],  # POSIX shell script — needs WSL/Git Bash, not installed here
+    # testssl/nikto/whatweb/wpscan/phpcs are scripts: they have no Windows
+    # package, so install_tools leaves them to
+    # scripts/windows/install-portable-tools.py (runtime + launcher .exe).
+    "testssl": [],
     "nmap": [
         ("winget", "Insecure.Nmap"),
         ("scoop", "nmap"),
         ("choco", "nmap"),
     ],
-    "whatweb": [],  # Ruby tool with a POSIX-oriented loader; no Windows package
-    "nikto": [],  # Perl tool; install under WSL
-    "wpscan": [],  # gem install needs a Windows Ruby toolchain
+    "whatweb": [],  # Ruby tool: installed by the portable installer
+    "nikto": [],  # Perl tool: installed by the portable installer
+    "wpscan": [],  # Ruby gem: installed by the portable installer
     "phpcs": [
         ("scoop", "phpcs"),
         ("choco", "php-codesniffer"),
