@@ -196,17 +196,38 @@ async function mcpCheck(workersPath?: string, pythonPath?: string): Promise<Chec
 }
 
 async function playwrightCheck(): Promise<CheckResult> {
+  // Run the package-local CLI with the current runtime instead of shelling out
+  // to `npx`: npm's cold start takes 15-20s on Windows, which used to blow the
+  // old 5s timeout and report Playwright missing on machines where it was
+  // installed. Resolving the CLI directly is sub-second and platform-neutral.
   try {
-    // Use --no-install to avoid npx downloading packages on check
-    await execCapture("npx", ["--no-install", "playwright", "--version"], 5000)
+    const { fileURLToPath } = await import("node:url")
+    const { dirname } = await import("node:path")
+    // Resolve the package entry point, not "playwright/cli.js": the package's
+    // exports map does not expose cli.js, so a subpath resolve is rejected.
+    const entry = fileURLToPath(import.meta.resolve("playwright"))
+    const cli = join(dirname(entry), "cli.js")
+    const output = await execCapture(process.execPath, [cli, "--version"], 15000)
+    const version = output.trim().split(/\s+/).pop()
+    return {
+      name: "Playwright",
+      status: "PASS",
+      message: `Playwright CLI available${version ? ` (${version})` : ""}`,
+    }
+  } catch {
+    // Playwright may be installed outside this package — fall back to npx.
+  }
+
+  try {
+    // Use --no-install to avoid npx downloading packages on check. npm's cold
+    // start is slow on Windows, so give it more headroom than a bare exec.
+    await execCapture("npx", ["--no-install", "playwright", "--version"], 30000)
     return {
       name: "Playwright",
       status: "PASS",
       message: "Playwright CLI available",
     }
   } catch {
-    // Don't fall back to npx without --no-install — that would trigger a
-    // package download during a health check, which is slow and unwanted.
     return {
       name: "Playwright",
       status: "WARN",
