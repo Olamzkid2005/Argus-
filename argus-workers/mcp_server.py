@@ -22,15 +22,20 @@ from pathlib import Path
 from typing import Any
 
 # Load Argus's own worker configuration (LLM_MODEL / LLM_API_KEY / DATABASE_URL)
-# from argus-workers/.env. Without this the worker only saw whatever the parent
-# shell exported, so it fell back to an ambient provider key — or to no key at
-# all. Ambient provider keys are additionally ignored by policy
-# (config/llm_env.py); an explicitly exported variable still wins because
-# load_dotenv() does not override existing values.
+# from argus-workers/.env, falling back to the repo-root .env (the single
+# source of truth — see .env.example). Without this the worker only saw
+# whatever the parent shell exported, so it fell back to an ambient provider
+# key — or to no key at all. Ambient provider keys are additionally ignored
+# by policy (config/llm_env.py); an explicitly exported variable still wins
+# because load_dotenv() does not override existing values.
 try:
     from dotenv import load_dotenv
 
-    load_dotenv(Path(__file__).resolve().parent / ".env")
+    _worker_env = Path(__file__).resolve().parent / ".env"
+    if _worker_env.is_file():
+        load_dotenv(_worker_env)
+    else:
+        load_dotenv(_worker_env.parent.parent / ".env")
 except ImportError:  # python-dotenv is optional at runtime
     pass
 
